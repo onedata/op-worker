@@ -72,10 +72,12 @@
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
-    is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
+    is_tmp_dir_const/1, is_tmp_dir_const/2, is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
-    get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
+    get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2,
+    assert_not_trash_or_tmp_dir_const/1, assert_not_trash_or_tmp_dir_const/2,
+    assert_synchronization_enabled/1, assert_synchronization_disabled/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -85,7 +87,7 @@
 
 %% Functions modifying context
 -export([
-    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
+    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1, is_synchronization_enabled/1,
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
@@ -99,7 +101,7 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_local_storage_file_size/1
+    get_local_storage_file_size/1, ensure_synced/1
 ]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
@@ -366,6 +368,11 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 -spec set_file_doc(ctx(), file_meta:doc()) -> ctx().
 set_file_doc(FileCtx, NewDoc) ->
     FileCtx#file_ctx{file_doc = NewDoc}.
+
+-spec is_synchronization_enabled(ctx()) -> {boolean(), ctx()}.
+is_synchronization_enabled(FileCtx) ->
+    {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc(FileCtx),
+    {not Ignore, FileCtx2}.
 
 -spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.
 list_references_const(FileCtx) ->
@@ -1077,6 +1084,17 @@ is_trash_dir_const(ParentCtx, Name) ->
         andalso (Name =:= ?TRASH_DIR_NAME).
 
 
+-spec is_tmp_dir_const(ctx()) -> boolean().
+is_tmp_dir_const(#file_ctx{guid = Guid}) ->
+    fslogic_file_id:is_tmp_dir_guid(Guid).
+
+
+-spec is_tmp_dir_const(ctx(), file_meta:name()) -> boolean().
+is_tmp_dir_const(ParentCtx, Name) ->
+    file_ctx:is_space_dir_const(ParentCtx)
+        andalso (Name =:= ?TMP_DIR_NAME).
+
+
 -spec is_share_root_dir_const(ctx()) -> boolean().
 is_share_root_dir_const(#file_ctx{guid = Guid}) ->
     fslogic_file_id:is_share_root_dir_guid(Guid).
@@ -1114,6 +1132,56 @@ assert_not_trash_dir_const(ParentCtx, Name) ->
         true -> throw(?EPERM);
         false -> ok
     end.
+
+
+-spec assert_not_trash_or_tmp_dir_const(file_ctx:ctx()) -> ok.
+assert_not_trash_or_tmp_dir_const(FileCtx) ->
+    case is_trash_dir_const(FileCtx) orelse is_tmp_dir_const(FileCtx) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
+
+
+-spec assert_not_trash_or_tmp_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
+assert_not_trash_or_tmp_dir_const(ParentCtx, Name) ->
+    case is_trash_dir_const(ParentCtx, Name) orelse is_tmp_dir_const(ParentCtx, Name) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
+
+
+-spec assert_synchronization_enabled(ctx()) -> ctx().
+assert_synchronization_enabled(FileCtx) ->
+    case is_synchronization_enabled(FileCtx) of
+        {false, _} -> throw(?EINVAL);
+        {true, FileCtx2} -> FileCtx2
+    end.
+
+
+-spec assert_synchronization_disabled(ctx()) -> ctx().
+assert_synchronization_disabled(FileCtx) ->
+    case is_synchronization_enabled(FileCtx) of
+        {true, _} -> throw(?EINVAL);
+        {false, FileCtx2} -> FileCtx2
+    end.
+
+
+-spec ensure_synced(ctx()) -> ctx().
+ensure_synced(FileCtx) ->
+    Uuid = get_logical_uuid_const(FileCtx),
+    times:ensure_synced(Uuid),
+    custom_metadata:ensure_synced(Uuid),
+    case file_meta:ensure_synced(Uuid) of
+        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = Doc} ->
+            FileCtx2 = FileCtx#file_ctx{file_doc = Doc},
+            fslogic_location_cache:ensure_synced(FileCtx2),
+            FileCtx2;
+        {ok, Doc} ->
+            FileCtx#file_ctx{file_doc = Doc};
+        {error, not_found} ->
+            FileCtx
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

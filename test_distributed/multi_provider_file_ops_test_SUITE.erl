@@ -67,7 +67,10 @@
     recreate_file_on_storage/1,
     recreate_dir_on_storage/1,
     transfer_with_missing_documents/1,
-    detect_stale_replica_synchronizer_jobs_test/1
+    detect_stale_replica_synchronizer_jobs_test/1,
+    tmp_files_posix_test/1,
+    tmp_files_flat_storage_test/1,
+    tmp_files_delete_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -107,7 +110,10 @@
     truncate_on_storage_does_not_block_synchronizer,
     recreate_file_on_storage,
     recreate_dir_on_storage,
-    detect_stale_replica_synchronizer_jobs_test
+    detect_stale_replica_synchronizer_jobs_test,
+    tmp_files_posix_test,
+    tmp_files_flat_storage_test,
+    tmp_files_delete_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1463,6 +1469,114 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
     ?assertEqual(6, FetchCallsNum).
 
 
+tmp_files_posix_test(Config) ->
+    tmp_files_test_base(Config, <<"user1">>, <<"space1">>).
+
+
+tmp_files_flat_storage_test(Config) ->
+    tmp_files_test_base(Config, <<"user5">>, <<"space10">>).
+
+
+tmp_files_test_base(Config0, User, SpaceId) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+
+    {ok, SyncedDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, ?RAND_STR(), undefined)),
+
+    % Create files and dir directly in tmp_dir on worker1
+    {[DirGuid, Dir2Guid] = TmpDirs, [FileGuid1 | _] = TmpRegFiles} = create_tmp_files(Config, SpaceId),
+    TmpFiles = TmpDirs ++ TmpRegFiles,
+
+    % test file_ctx functions connected to tmp dir
+    ?assertNot(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SyncedDirGuid))),
+    ?assert(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(TmpDirGuid))),
+    ?assertNot(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SpaceGuid), <<"file_name">>)),
+    ?assert(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SpaceGuid), ?TMP_DIR_NAME)),
+    ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(SyncedDirGuid)])),
+    ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(TmpDirGuid)])),
+    ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(DirGuid)])),
+
+    wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
+
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+        Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
+    )),
+    lists:foreach(fun(G) ->
+        ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}))
+    end, TmpFiles),
+
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:mv(
+        Worker1, SessId(Worker1), #file_ref{guid = SyncedDirGuid}, #file_ref{guid = TmpDirGuid}, ?RAND_STR()
+    )),
+    ?assertMatch({ok, _}, lfm_proxy:mv(
+        Worker1, SessId(Worker1), #file_ref{guid = FileGuid1}, #file_ref{guid = SyncedDirGuid}, ?RAND_STR()
+    )),
+    ?assertMatch({ok, _}, lfm_proxy:mv(
+        Worker1, SessId(Worker1), #file_ref{guid = DirGuid}, #file_ref{guid = SyncedDirGuid}, ?RAND_STR()
+    )),
+
+    lists:foreach(fun(Worker) ->
+        lists:foreach(fun(G) ->
+            ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}), ?ATTEMPTS)
+        end, TmpFiles),
+
+        ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+            Worker, SessId(Worker), #file_ref{guid = SyncedDirGuid}, #{tune_for_large_continuous_listing => false}
+        ), ?ATTEMPTS),
+        ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+            Worker, SessId(Worker), #file_ref{guid = DirGuid}, #{tune_for_large_continuous_listing => false}
+        ), ?ATTEMPTS),
+        ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
+            Worker, SessId(Worker), #file_ref{guid = Dir2Guid}, #{tune_for_large_continuous_listing => false}
+        ), ?ATTEMPTS)
+    end, Workers).
+
+tmp_files_delete_test(Config0) ->
+    User = <<"user1">>,
+    SpaceId = <<"space1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = Workers2 = ?config(workers2, Config),
+    SessId = ?config(session, Config),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+
+    Master = self(),
+    test_utils:mock_expect(Workers2, dbsync_changes, apply, fun
+        (Doc) ->
+            Master ! {dbsync_changes_key, get_file_meta_unique_key(Doc)},
+            meck:passthrough([Doc])
+    end),
+
+    % Create files and dir directly in tmp_dir on worker1
+    {[DirGuid | _] = TmpDirs, [FileGuid1 | _] = TmpRegFiles} = create_tmp_files(Config, SpaceId),
+    TmpFiles = TmpDirs ++ TmpRegFiles,
+
+    wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
+
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+        Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
+    )),
+    lists:foreach(fun(G) ->
+        ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}))
+    end, TmpFiles),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), #file_ref{guid = FileGuid1})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker1, SessId(Worker1), #file_ref{guid = DirGuid})),
+
+    wait_for_possible_sync(Config, SpaceId, TmpFiles, true),
+
+    DbsyncChangesKeys = gather_dbsync_changes_keys(),
+    lists:foreach(fun(Guid) ->
+        Key = datastore_model:get_unique_key(file_meta, file_id:guid_to_uuid(Guid)),
+        ?assertNot(lists:member(Key, DbsyncChangesKeys))
+    end, TmpFiles).
+
+
 dir_stats_collector_test(Config0) ->
     UserId = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
@@ -1508,6 +1622,68 @@ dir_stats_collector_parallel_write_to_empty_file_test(Config0) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+create_tmp_files(Config, SpaceId) ->
+    [Worker1 | _] = ?config(workers1, Config),
+    SessId = ?config(session, Config),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined)),
+    {ok, Dir2Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, ?RAND_STR(), undefined)),
+    {ok, {FileGuid1, Handle1}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle1)),
+    {ok, {FileGuid2, Handle2}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Worker1, SessId(Worker1), DirGuid, ?RAND_STR(), undefined
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
+    {ok, {FileGuid3, Handle3}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Worker1, SessId(Worker1), Dir2Guid, ?RAND_STR(), undefined
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle3)),
+    ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+        Worker1, SessId(Worker1), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
+    )),
+
+    {[DirGuid, Dir2Guid], [FileGuid1, FileGuid2, FileGuid3]}.
+
+wait_for_possible_sync(Config, SpaceId, Guids, AreDeleted) ->
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+
+    % Wait for disc save
+    lists:foreach(fun(Guid) ->
+        Key = datastore_model:get_unique_key(file_meta, file_id:guid_to_uuid(Guid)),
+        ?assertMatch({ok, _, #document{deleted = AreDeleted}},
+            rpc:call(Worker1, couchbase_driver, get, [#{bucket => <<"onedata">>}, Key]), 30)
+    end, Guids),
+
+    % Wait for sequences sync
+    AreSeqsEqual = fun() ->
+        rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]) =:=
+            rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id])
+    end,
+    ?assertEqual(true, AreSeqsEqual(), 60).
+
+get_file_meta_unique_key(#document{value = #links_forest{key = Key}}) ->
+    Key;
+get_file_meta_unique_key(#document{value = #links_node{key = Key}}) ->
+    Key;
+get_file_meta_unique_key(#document{value = #links_mask{key = Key}}) ->
+    Key;
+get_file_meta_unique_key(#document{key = Key}) ->
+    datastore_model:get_unique_key(file_meta, Key).
+
+
+gather_dbsync_changes_keys() ->
+    receive
+        {dbsync_changes_key, Key} -> [Key | gather_dbsync_changes_keys()]
+    after
+        0 -> []
+    end.
+
 
 create_file(Path, Size, User, CreationNode, AssertionNode, SessionGetter) ->
     ChunkSize = 1024,
@@ -1726,6 +1902,10 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, test_utils:mock_new(Workers, links_tree)),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(tmp_files_delete_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, test_utils:mock_new(Workers, dbsync_changes)),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1808,6 +1988,10 @@ end_per_testcase(Case, Config) when
 ->
     Workers = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, test_utils:mock_unload(Workers, links_tree)),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(tmp_files_delete_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, dbsync_changes),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

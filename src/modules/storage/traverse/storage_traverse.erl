@@ -84,6 +84,11 @@
 -export_type([run_opts/0, info/0, master_job/0, slave_job/0, children_batch/0, next_batch_job_prehook/0, fold_children_fun/0,
     children_master_job_prehook/0, iterator_type/0, fold_children_init/0, fold_children_result/0, callback_module/0]).
 
+-define(ASYNC_CHILDREN_MASTER_JOBS(TaskId, Default),
+    proplists:get_value(TaskId, op_worker:get_env(async_children_master_jobs_override, []), Default)).
+-define(ASYNC_NEXT_BATCH_JOB(TaskId, Default),
+    proplists:get_value(TaskId, op_worker:get_env(async_next_batch_job_override, []), Default)).
+
 %%%===================================================================
 %%% Definitions of optional storage_traverse behaviour callbacks
 %%%===================================================================
@@ -282,7 +287,7 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
     fold_children_fun = FoldChildrenFun,
     fold_enabled = FoldChildrenEnabled,
     info = Info
-}, NextBatchMaterJob, ChildrenBatch, Args) ->
+}, NextBatchMaterJob, ChildrenBatch, #{task_id := TaskId} = Args) ->
     MasterJobs = maybe_schedule_next_batch_job(CurrentMasterJob, NextBatchMaterJob, Args),
     {MasterJobs2, SlaveJobs, ComputeResult} = process_children_batch(CurrentMasterJob, ChildrenBatch),
 
@@ -290,7 +295,7 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
         {true, true} -> [get_slave_job(StorageFileCtx, Info)]; %execute slave job only once per directory
         _ -> []
     end,
-    MasterJobsKey = case AsyncChildrenMasterJobs of
+    MasterJobsKey = case ?ASYNC_CHILDREN_MASTER_JOBS(TaskId, AsyncChildrenMasterJobs) of
         true -> async_master_jobs;
         false -> master_jobs
     end,
@@ -314,10 +319,13 @@ maybe_schedule_next_batch_job(#storage_traverse_master{
     callback_module = CallbackModule,
     async_next_batch_job = AsyncNextBatchJob,
     next_batch_job_prehook = NextBatchJobPrehook
-}, NextBatchMasterJob = #storage_traverse_master{}, #{master_job_starter_callback := MasterJobStarterCallback}) ->
+}, NextBatchMasterJob = #storage_traverse_master{}, #{
+    task_id := TaskId,
+    master_job_starter_callback := MasterJobStarterCallback
+}) ->
     % it is not the last batch
     NextBatchJobPrehook(NextBatchMasterJob),
-    case AsyncNextBatchJob of
+    case ?ASYNC_NEXT_BATCH_JOB(TaskId, AsyncNextBatchJob) of
         true ->
             % schedule job for next batch in this directory asynchronously
             MasterJobStarterCallback(#{

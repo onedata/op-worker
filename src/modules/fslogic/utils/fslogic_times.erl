@@ -119,8 +119,9 @@ update_times(FileCtx, TimesDiff, Verbosity) ->
             ok;
         false ->
             Times = prepare_times(TimesDiff),
-            case times:create_or_update(#document{key = FileUuid,
-                value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
+            case times:create_or_update(
+                #document{key = FileUuid, value = Times}, TimesDiff, file_ctx:get_space_id_const(FileCtx)
+            ) of
                 {ok, #document{value = FinalTimes}} ->
                     spawn(fun() ->
                         % TODO VFS-8830 - set file_ctx:is_dir in functions that update times and know file type

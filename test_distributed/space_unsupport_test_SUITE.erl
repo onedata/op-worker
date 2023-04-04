@@ -485,6 +485,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
                 ({ok, _, #document{deleted = true}}, AccIn) -> AccIn;
                 ({ok, _, #document{value = #links_forest{}}}, AccIn) -> AccIn; %% @TODO VFS-6278 Sometimes links_forest documents are not properly deleted
                 ({ok, _, #document{mutators = [M]}}, AccIn) when M =/= ProviderId-> AccIn; %% @TODO VFS-6135 Remove when stopping dbsync during unsupport is implemented
+                ({ok, _, #document{key = ?TMP_DIR_UUID(_)}}, AccIn) -> AccIn; %% @TODO VFS-10672 Handle tmp dir unsupport
                 ({ok, _, Doc}, _) ->
                     ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
                     false

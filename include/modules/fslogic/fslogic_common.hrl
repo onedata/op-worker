@@ -25,6 +25,10 @@
 
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
+%% Tmp file prefix
+-define(TMP_DIR_NAME, <<?HIDDEN_FILE_PREFIX, "tmp">>).
+-define(TMP_DIR_UUID_PREFIX, "tmp_").
+-define(TMP_DIR_UUID(SpaceId), <<?TMP_DIR_UUID_PREFIX, SpaceId/binary>>).
 
 %% Directory name for deleted opened files
 -define(DELETED_OPENED_FILES_DIR, <<?HIDDEN_FILE_PREFIX, "deleted">>).

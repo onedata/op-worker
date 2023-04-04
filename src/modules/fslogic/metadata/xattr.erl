@@ -83,10 +83,14 @@ set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
+    SyncPolicy = case file_ctx:is_synchronization_enabled(FileCtx1) of
+        {true, _} -> synchronization_enabled;
+        {false, _} -> synchronization_disabled
+    end,
     custom_metadata:set_xattr(
         file_ctx:get_logical_uuid_const(FileCtx1),
         file_ctx:get_space_id_const(FileCtx1),
-        XattrName, XattrValue, Create, Replace
+        XattrName, XattrValue, Create, Replace, SyncPolicy
     ).
 
 

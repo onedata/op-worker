@@ -245,7 +245,6 @@ create_open_race_test(Config, Mock) ->
 
 create_delete_race_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    Master = self(),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
@@ -253,40 +252,11 @@ create_delete_race_test(Config) ->
     lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/", (generator:gen_name())/binary>>),
     check_dir_init(W),
 
-    test_utils:mock_new(W, file_req, [passthrough]),
-    test_utils:mock_expect(W, file_req, create_file_doc,
-        fun(UserCtx, ParentFileCtx, Name, Mode) ->
-            Ans = meck:passthrough([UserCtx, ParentFileCtx, Name, Mode]),
-
-            Master ! {unlink, self()},
-            ok = receive
-                file_unlinked -> ok
-            after
-                5000 -> timeout
-            end,
-            Ans
-        end),
+    test_utils:mock_new(W, fslogic_event_emitter, [passthrough]),
+    test_utils:mock_expect(W, fslogic_event_emitter, emit_file_attr_changed, fun(_, _, _) -> {error, not_found} end),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
-    spawn(fun() ->
-        Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath)}
-    end),
-
-    MockProc = receive
-        {unlink, Proc} -> Proc
-    after
-        5000 -> timeout
-    end,
-    ?assert(is_pid(MockProc)),
-    ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath})),
-    MockProc ! file_unlinked,
-
-    CreateAns = receive
-        {create_ans, A} -> A
-    after
-        5000 -> timeout
-    end,
-    ?assertMatch({error, ecanceled}, CreateAns),
+    ?assertMatch({error, ecanceled}, lfm_proxy:create_and_open(W, SessId1, FilePath)),
 
     check_dir(W, 0),
     % TODO VFS-5274 - vewrify if all documents (e.g., file_location) are cleared
@@ -420,7 +390,8 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sd_utils, fslogic_times, fslogic_delete]).
+    test_utils:mock_unload(Workers,
+        [communicator, file_meta, file_req, sd_utils, fslogic_times, fslogic_delete, fslogic_event_emitter]).
 
 %%%===================================================================
 %%% Internal functions

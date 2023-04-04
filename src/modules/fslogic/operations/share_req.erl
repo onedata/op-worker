@@ -33,14 +33,15 @@
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
     {ok, od_share:id()} | no_return().
 create_share(UserCtx, FileCtx0, Name, Description) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
+    file_ctx:assert_not_trash_or_tmp_dir_const(FileCtx0),
+    FileCtx1 = file_ctx:assert_synchronization_enabled(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
 
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
         [?TRAVERSE_ANCESTORS]
     ),
-    create_share_internal(UserCtx, FileCtx1, Name, Description).
+    create_share_internal(UserCtx, FileCtx2, Name, Description).
 
 
 %%--------------------------------------------------------------------

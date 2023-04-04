@@ -136,8 +136,10 @@ query_view_using_file_meta(Config) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
+    TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
+    {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             if(type == 'file_meta')
@@ -147,6 +149,20 @@ query_view_using_file_meta(Config) ->
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
     ?assertQuery([
+        #{
+            <<"id">> := _,
+            <<"key">> := TmpObjectId,
+            <<"value">> := #{
+                <<"name">> := ?TMP_DIR_NAME,
+                <<"type">> := <<"DIR">>,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
+                <<"owner">> := SpaceOwnerId,
+                <<"provider_id">> := ProviderId,
+                <<"shares">> := [],
+                <<"deleted">> := false,
+                <<"parent_uuid">> := SpaceUuid
+            }
+        },
         #{
             <<"id">> := _,
             <<"key">> := TrashObjectId,
@@ -184,6 +200,8 @@ query_view_using_times(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
+    TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             if(type == 'times')
@@ -191,15 +209,28 @@ query_view_using_times(Config) ->
         }
     ">>,
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    ?assertQuery([#{
-        <<"id">> := _,
-        <<"key">> := CdmiId,
-        <<"value">> := #{
-            <<"atime">> := _,
-            <<"mtime">> := _,
-            <<"ctime">> := _
+    ?assertQuery([
+        #{
+            <<"id">> := _,
+            <<"key">> := TmpObjectId,
+            <<"value">> := #{
+                <<"atime">> := _,
+                <<"mtime">> := _,
+                <<"ctime">> := _
 
-        }}],Worker, SpaceId, ViewName, [{stale, false}]).
+            }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := CdmiId,
+            <<"value">> := #{
+                <<"atime">> := _,
+                <<"mtime">> := _,
+                <<"ctime">> := _
+
+            }
+        }
+    ],Worker, SpaceId, ViewName, [{stale, false}]).
 
 query_view_using_custom_metadata_when_xattr_is_not_set(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

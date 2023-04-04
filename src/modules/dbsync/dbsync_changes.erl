@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/5, apply/1]).
+-export([apply_batch/5, apply/1, get_ctx/2]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
@@ -90,7 +90,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                 links_delete(Doc);
             _ ->
                 Model = element(1, Value),
-                Ctx = get_ctx(Model),
+                Ctx = get_ctx(Model, Doc),
                 Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
                 case datastore_model:save(Ctx2, Doc) of
                     {ok, Doc2} ->
@@ -134,7 +134,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
 %%--------------------------------------------------------------------
 -spec links_save(model(), key(), doc()) -> undefined | doc().
 links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
-    Ctx = get_ctx(Model),
+    Ctx = get_ctx(Model, Doc),
     Ctx2 = Ctx#{
         sync_change => true,
         local_links_tree_id => oneprovider:get_id(),
@@ -164,7 +164,7 @@ links_delete(Doc = #document{key = Key, value = LinksMask = #links_mask{
     LocalTreeId = oneprovider:get_id(),
     case TreeId of
         LocalTreeId ->
-            Ctx = get_ctx(Model),
+            Ctx = get_ctx(Model, Doc),
             Ctx2 = Ctx#{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
@@ -185,7 +185,7 @@ links_delete(Doc = #document{
     LocalTreeId = oneprovider:get_id(),
     case TreeId of
         LocalTreeId ->
-            Ctx = get_ctx(Model),
+            Ctx = get_ctx(Model, Doc),
             Ctx2 = Ctx#{
                 sync_change => true,
                 local_links_tree_id => LocalTreeId
@@ -369,14 +369,19 @@ gather_answers(Pids, Ref, TmpAns, FinalCheck) ->
 %% has to be extended to parse #document and get callback module.
 %% @end
 %%--------------------------------------------------------------------
--spec get_ctx(model()) -> ctx().
-get_ctx(Model) ->
-    case Model of
+-spec get_ctx(model(), datastore:doc()) -> ctx().
+get_ctx(Model, Doc) ->
+    Ctx = case Model of
         traverse_task ->
-            Ctx = tree_traverse:get_sync_info(),
-            datastore_model_default:set_defaults(Ctx#{model => Model});
+            Ctx0 = tree_traverse:get_sync_info(),
+            datastore_model_default:set_defaults(Ctx0#{model => Model});
         _ ->
             datastore_model_default:get_ctx(Model)
+    end,
+
+    case Doc of
+        #document{deleted = true} -> datastore_model:ensure_expiry_set_on_delete(Ctx);
+        _ -> Ctx
     end.
 
 

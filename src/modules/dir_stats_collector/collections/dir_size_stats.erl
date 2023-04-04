@@ -36,6 +36,7 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
@@ -222,7 +223,11 @@ save(Guid, Collection, Incarnation) ->
             % NOTE: single pes process is dedicated for each guid so race resulting in
             % {error, already_exists} is impossible - match create answer to ok
             ok = datastore_time_series_collection:create(?CTX, Uuid, Config),
-            save(Guid, Collection, Incarnation)
+            save(Guid, Collection, Incarnation);
+        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+            MissingConfig = maps:with(maps:keys(MissingLayout), internal_stats_config(Guid)),
+            ok = datastore_time_series_collection:incorporate_config(?CTX, Uuid, MissingConfig),
+            ok = datastore_time_series_collection:consume_measurements(?CTX, Uuid, ConsumeSpec)
     end.
 
 
@@ -347,8 +352,17 @@ internal_stats_config(Guid) ->
 %% @private
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
-    {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    SpaceId = file_id:guid_to_space_id(Guid),
+    case space_logic:get_local_supporting_storage(SpaceId) of
+        {ok, StorageId} ->
+            [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT,
+                ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)];
+        {error, not_found} ->
+            case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
+                true -> throw({error, not_found});
+                false -> throw({error, space_unsupported})
+            end
+    end.
 
 
 %% @private

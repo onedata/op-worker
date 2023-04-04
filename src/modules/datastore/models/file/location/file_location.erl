@@ -27,7 +27,7 @@
 ]).
 -export([
     create/2,
-    save/1, save_and_bump_version/2, save_and_update_quota/2,
+    save/2, save_and_bump_version/2, save_and_update_quota/2,
     update/2, set_last_replication_timestamp/2,
     delete/1, delete_and_update_quota/1
 ]).
@@ -91,9 +91,11 @@ save_and_bump_version(FileLocationDoc, UserId) ->
         version_vector:bump_version(FileLocationDoc), UserId).
 
 
--spec save(doc()) -> {ok, id()} | {error, term()}.
-save(Doc = #document{value = #file_location{space_id = SpaceId}}) ->
-    ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
+-spec save(doc(), boolean()) -> {ok, id()} | {error, term()}.
+save(Doc = #document{value = #file_location{space_id = SpaceId}}, false = _EnsureSynced) ->
+    ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId}));
+save(Doc = #document{value = #file_location{space_id = SpaceId}}, true = _EnsureSynced) ->
+    ?extract_key(datastore_model:save(?CTX#{ignore_in_changes => false}, Doc#document{scope = SpaceId})).
 
 
 -spec save_and_update_quota(doc(), od_user:id() | undefined) -> {ok, id()} | {error, term()}.

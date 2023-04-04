@@ -40,8 +40,8 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
+    make_space_exist/1, new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
+    get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
 
@@ -77,6 +77,7 @@
 
 -define(CTX, #{
     model => ?MODULE,
+    % TODO VFS-10728 - this flag name conflicts with higher level function names - change it
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined(),
@@ -139,7 +140,10 @@ create(Parent, FileDoc) ->
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
     {ok, doc()} | {error, term()}.
-create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{name = FileName}}, TreesToCheck) ->
+create({uuid, ParentUuid}, FileDoc = #document{
+    value = FileMeta = #file_meta{name = FileName},
+    ignore_in_changes = IgnoreInChanges
+}, TreesToCheck) ->
     ?run(begin
         true = is_valid_filename(FileName),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
@@ -159,7 +163,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         % (names are checked for conflicts, not uuids)
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
-                case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
+                case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, IgnoreInChanges, TreesToCheck, FileName, FileUuid) of
                     ok ->
                         {ok, FileDocFinal};
                     {error, already_exists} = Eexists ->
@@ -528,6 +532,25 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
 
     dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
+
+-spec ensure_synced(uuid()) -> {ok, doc()} | {error, term()}.
+ensure_synced(Key) ->
+    UpdateAns = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
+        {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
+    end),
+    case UpdateAns of
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc} ->
+            case datastore_model:ensure_forest_in_changes(?CTX, Key, oneprovider:get_id()) of
+                ok -> {ok, Doc};
+                LinkError -> LinkError
+            end;
+        {ok, Doc} ->
+            {ok, Doc};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's parent document.
@@ -742,25 +765,39 @@ make_space_exist(SpaceId) ->
     },
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
-            case times:save_with_current_times(SpaceDirUuid, SpaceId) of
+            case times:save_with_current_times(SpaceDirUuid, SpaceId, false) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
             end,
+
             trash:create(SpaceId),
+
+            SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+            TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
+            TmpDirDoc = new_doc(TmpDirUuid, ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
+                ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId, true
+            ),
+            {ok, _} = save(TmpDirDoc),
+            case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
+                {ok, _} -> ok;
+                {error, already_exists} -> ok
+            end,
+
             emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
     end.
 
 
--spec new_doc(name(), type(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
-new_doc(FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
-    new_doc(undefined, FileName, FileType, Mode, Owner, ParentUuid, SpaceId).
-
-
 -spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
+    new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, false).
+
+
+-spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
+    uuid(), od_space:id(), boolean()) -> doc().
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, IgnoreInChanges) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -771,7 +808,8 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
         },
-        scope = SpaceId
+        scope = SpaceId,
+        ignore_in_changes = IgnoreInChanges
     }.
 
 

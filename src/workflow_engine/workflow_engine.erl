@@ -204,6 +204,8 @@ finish_cancel_procedure(ExecutionId) ->
     case workflow_execution_state:finish_cancel(ExecutionId) of
         {ok, EngineId} ->
             trigger_job_scheduling(EngineId);
+        ?WF_ERROR_WORKFLOW_INTERRUPTED ->
+            ok;
         ?WF_ERROR_CANCEL_NOT_INITIALIZED ->
             ?warning("Finishing not initialized cancel procedure for execution ~s", [ExecutionId]),
             ok
@@ -302,7 +304,7 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, Context,
-                "Unexpected error in ~w (args: ~p)", [Function, Args],
+                "~s", [?autoformat([Function, Args])],
                 Error, Reason, Stacktrace
             ),
             error
@@ -690,7 +692,7 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error handling task ~p for item id ~p", [TaskId, ItemId],
+                "Unexpected error handling task ~s", [?autoformat([TaskId, ItemId])],
                 Error, Reason, Stacktrace
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -718,7 +720,7 @@ process_item(ExecutionId, #execution_spec{
             % TODO VFS-7788 - use callbacks to get human readable information about item and task
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error handling task ~p for item ~p (id ~p)", [TaskId, Item, ItemId],
+                "Unexpected error handling task ~s", [?autoformat([TaskId, ItemId, Item])],
                 Error, Reason, Stacktrace
             ),
             error
@@ -755,8 +757,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error getting item or result to process task ~p result ~p",
-                [TaskId, CachedResultId],
+                "Unexpected error getting item or result to process task result ~s",
+                [?autoformat([TaskId, CachedResultId])],
                 Error2, Reason2, Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -780,7 +782,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
             Error:Reason:Stacktrace  ->
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    "Unexpected error processing task ~p data ~p", [TaskId, CachedTaskDataId],
+                    "Unexpected error processing task data ~s", [?autoformat([TaskId, CachedTaskDataId])],
                     Error, Reason, Stacktrace
                 ),
                 trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -789,7 +791,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error getting data ~p for task ~p", [CachedTaskDataId, TaskId],
+                "Unexpected error getting data for task ~s", [?autoformat([CachedTaskDataId, TaskId])],
                 Error2, Reason2, Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)

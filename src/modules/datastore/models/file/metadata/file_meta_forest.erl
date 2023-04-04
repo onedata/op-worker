@@ -24,7 +24,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 
--export([get/3, add/4, check_and_add/5]).
+-export([get/3, add/4, check_and_add/6]).
 -export([delete/4, delete_local/4, delete_remote/5]).
 -export([list/2, list_whitelisted/3]).
 -export([get_trees/1]).
@@ -67,6 +67,7 @@
 
 -define(CTX, (file_meta:get_ctx())).
 -define(CTX(Scope), ?CTX#{scope => Scope}).
+-define(CTX(Scope, IgnoreInChanges), ?CTX#{scope => Scope, ignore_in_changes => IgnoreInChanges}).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(FileName, FileUuid), {FileName, FileUuid}).
 
@@ -88,9 +89,9 @@ add(ParentUuid, Scope, FileName, FileUuid) ->
     ?extract_ok(datastore_model:add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, ?LINK(FileName, FileUuid))).
 
 
--spec check_and_add(forest(), scope(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
-check_and_add(ParentUuid, Scope, TreesToCheck, FileName, FileUuid) ->
-    ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
+-spec check_and_add(forest(), scope(), boolean(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
+check_and_add(ParentUuid, Scope, IgnoreInChanges, TreesToCheck, FileName, FileUuid) ->
+    ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope, IgnoreInChanges), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
         ?LINK(FileName, FileUuid))).
 
 

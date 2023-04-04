@@ -104,10 +104,10 @@ get_field(Key, Model, GetterFun) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_error(term()) -> term().
-normalize_error({badmatch, Reason}) ->
-    normalize_error(Reason);
-normalize_error({case_clause, Reason}) ->
-    normalize_error(Reason);
+normalize_error({badmatch, {error, _} = Error}) ->
+    normalize_error(Error);
+normalize_error({case_clause, {error, _} = Error}) ->
+    normalize_error(Error);
 normalize_error({error, Reason}) ->
     normalize_error(Reason);
 normalize_error({ok, Inv}) ->

@@ -23,8 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_or_default/1, get/1, create_or_update/2, delete/1,
-    save/1, save/5, save_with_current_times/2]).
+-export([get_or_default/1, get/1, create_or_update/3, delete/1,
+    save/1, save/5, save_with_current_times/3, ensure_synced/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -93,11 +93,25 @@ save(#document{key = Key} = Doc) ->
     datastore_model:save(?CTX#{generated_key => true},
         Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
 
--spec save_with_current_times(file_meta:uuid(), od_space:id()) -> {ok, time()} | {error, term()}.
-save_with_current_times(FileUuid, SpaceId) ->
+-spec save_with_current_times(file_meta:uuid(), od_space:id(), boolean()) -> {ok, time()} | {error, term()}.
+save_with_current_times(FileUuid, SpaceId, IgnoreInChanges) ->
     Time = global_clock:timestamp_seconds(),
-    case save(FileUuid, SpaceId, Time, Time, Time) of
-        ok -> {ok, Time};
+    SaveAns = datastore_model:save(
+        ?CTX#{generated_key => true},
+        #document{
+            key = fslogic_file_id:ensure_referenced_uuid(FileUuid),
+            value = #times{
+                atime = Time,
+                mtime = Time,
+                ctime = Time
+            },
+            scope = SpaceId,
+            ignore_in_changes = IgnoreInChanges
+        }
+    ),
+
+    case SaveAns of
+        {ok, _} -> {ok, Time};
         Error -> Error
     end.
 
@@ -107,10 +121,10 @@ save_with_current_times(FileUuid, SpaceId) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(doc(), diff()) ->
-    {ok, doc()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(Key), Diff, Default).
+-spec create_or_update(doc(), diff(), od_space:id()) -> {ok, doc()} | {error, term()}.
+create_or_update(#document{key = Key} = Doc, Diff, Scope) ->
+    ReferencedUuid = fslogic_file_id:ensure_referenced_uuid(Key),
+    datastore_model:update(?CTX, ReferencedUuid, Diff, Doc#document{key = ReferencedUuid, scope = Scope}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -129,6 +143,17 @@ get(Uuid) ->
 -spec delete(key()) -> ok | {error, term()}.
 delete(FileUuid) ->
     datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
+
+
+-spec ensure_synced(file_meta:uuid()) -> ok.
+ensure_synced(Key) ->
+    UpdateAns = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
+        {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
+    end),
+    case UpdateAns of
+        {ok, _} -> ok;
+        {error, not_found} -> ok
+    end.
 
 
 %%%===================================================================

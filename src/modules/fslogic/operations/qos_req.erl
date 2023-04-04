@@ -46,11 +46,12 @@
     qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | errors:error().
 add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
+    FileCtx1 = file_ctx:assert_synchronization_enabled(FileCtx),
     data_constraints:assert_not_readonly_mode(UserCtx),
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS]
     ),
-    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
+    add_qos_entry_insecure(FileCtx2, Expression, ReplicasNum, EntryType).
 
 
 %%--------------------------------------------------------------------

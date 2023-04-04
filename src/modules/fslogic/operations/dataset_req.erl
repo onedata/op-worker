@@ -66,10 +66,11 @@
 -spec establish(file_ctx:ctx(), data_access_control:bitmask(), user_ctx:ctx()) ->
     {ok, dataset:id()} | error().
 establish(FileCtx0, ProtectionFlags, UserCtx) ->
-    assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_MANAGE_DATASETS),
+    FileCtx1 = file_ctx:assert_synchronization_enabled(FileCtx0),
+    assert_has_eff_privilege(FileCtx1, UserCtx, ?SPACE_MANAGE_DATASETS),
 
-    FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
-    dataset_api:establish(FileCtx1, ProtectionFlags).
+    FileCtx2 = fslogic_authz:ensure_authorized(UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS]),
+    dataset_api:establish(FileCtx2, ProtectionFlags).
 
 
 -spec update(
