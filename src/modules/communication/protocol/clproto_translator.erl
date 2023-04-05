@@ -915,6 +915,10 @@ translate_from_protobuf(#'ProviderRegDistributionGetRequest'{}) ->
     #provider_reg_distribution_get_request{};
 translate_from_protobuf(#'ProviderRegStorageLocationsGetRequest'{}) ->
     #provider_reg_storage_locations_get_request{};
+translate_from_protobuf(#'ProviderQosStatusGetRequest'{qos_entry_id = QosEntryId}) ->
+    #provider_qos_status_get_request{
+        qos_entry_id = QosEntryId
+    };
 
 translate_from_protobuf(#'ProviderRpcResponse'{
     status = ok,
@@ -977,6 +981,12 @@ translate_from_protobuf(#'ProviderRegStorageLocationsResult'{
             fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
                 {StorageId, Location}
             end, Locations)
+    };
+translate_from_protobuf(#'ProviderQosStatusGetResult'{
+    status = Status
+}) ->
+    #provider_qos_status_get_result{
+        status = Status
     };
 
 
@@ -2108,6 +2118,12 @@ translate_to_protobuf(#provider_reg_distribution_get_request{}) ->
     {provider_reg_distribution_get_request, #'ProviderRegDistributionGetRequest'{}};
 translate_to_protobuf(#provider_reg_storage_locations_get_request{}) ->
     {provider_reg_storage_locations_get_request, #'ProviderRegStorageLocationsGetRequest'{}};
+translate_to_protobuf(#provider_qos_status_get_request{
+    qos_entry_id = QosEntryId
+}) ->
+    {provider_qos_status_get_request, #'ProviderQosStatusGetRequest'{
+        qos_entry_id = QosEntryId
+    }};
 
 translate_to_protobuf(#provider_rpc_response{
     status = ok,
@@ -2163,6 +2179,12 @@ translate_to_protobuf(#provider_reg_storage_locations_result{
         locations = maps:fold(fun(StorageId, Location, Acc) ->
             [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
         end, [], LocationsPerStorageMap)
+    }};
+translate_to_protobuf(#provider_qos_status_get_result{
+    status = Status
+}) ->
+    {provider_qos_status_get_result, #'ProviderQosStatusGetResult'{
+        status = Status
     }};
 
 %% PROVIDER

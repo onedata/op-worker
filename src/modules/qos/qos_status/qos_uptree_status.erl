@@ -24,8 +24,8 @@
     check/2
 ]).
 -export([
-    report_started/2, 
-    report_finished/2,
+    report_traverse_started/3,
+    report_traverse_finished/2,
     report_next_batch/5, 
     report_finished_for_dir/2,
     report_finished_for_file/3,
@@ -48,25 +48,26 @@ check(FileCtx, QosEntryDoc) ->
         check_traverses(FileCtx, QosEntryDoc).
 
 
--spec report_started(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-report_started(TraverseId, FileCtx) ->
-    {ok, case file_ctx:is_dir(FileCtx) of
-        {true, FileCtx1} ->
-            {ok, _} = qos_status_model:create(file_ctx:get_space_id_const(FileCtx), TraverseId,
-                file_ctx:get_logical_uuid_const(FileCtx), ?QOS_STATUS_TRAVERSE_START_DIR),
-            FileCtx1;
-        {false, FileCtx1} -> 
-            % No need to create qos_status doc for traverse of single file. Because there is no 
-            % parent doc and traverse_link, status will be false until traverse finish.
-            FileCtx1
-    end}.
+-spec report_traverse_started(traverse:id(), file_ctx:ctx(), [qos_entry:id()]) -> {ok, file_ctx:ctx()}.
+report_traverse_started(TraverseId, FileCtx, QosEntries) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    lists:foreach(fun(QosEntryId) ->
+        ok = qos_entry:add_to_traverses_list(QosEntryId, TraverseId, FileUuid),
+        ok = qos_entry:remove_traverse_req(QosEntryId, TraverseId)
+    end, QosEntries),
+    ok = qos_status_model:create(SpaceId, TraverseId, FileUuid, ?QOS_STATUS_TRAVERSE_START_DIR),
+    {ok, FileCtx}.
 
 
--spec report_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
-report_finished(TraverseId, FileCtx) ->
-    {Path, _} = file_ctx:get_uuid_based_path(FileCtx),
-    qos_status_links:delete_link(file_ctx:get_space_id_const(FileCtx), 
-        ?TRAVERSE_LINKS_KEY(TraverseId), Path).
+-spec report_traverse_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
+report_traverse_finished(TraverseId, FileCtx) ->
+    case get_uuid_based_path(FileCtx) of
+        not_synced ->
+            ok;
+        {Path, _} ->
+            qos_status_links:delete_link(?TRAVERSE_LINKS_KEY(TraverseId), Path)
+    end.
 
 
 -spec report_next_batch(traverse:id(), file_ctx:ctx(),
@@ -145,6 +146,17 @@ check_traverses(FileCtx, #document{key = QosEntryId}) ->
 %% @private
 -spec is_traverse_finished_for_file(traverse:id(), file_ctx:ctx(), file_meta:uuid()) -> boolean().
 is_traverse_finished_for_file(TraverseId, FileCtx, TraverseRootFileUuid) ->
+    try
+        is_traverse_finished_for_file_unsafe(TraverseId, FileCtx, TraverseRootFileUuid)
+    catch throw:{error, {file_meta_missing, _}} ->
+        % subtree of this file is disconnected from space root, no one should be checking it
+        false
+    end.
+
+
+%% @private
+-spec is_traverse_finished_for_file_unsafe(traverse:id(), file_ctx:ctx(), file_meta:uuid()) -> boolean().
+is_traverse_finished_for_file_unsafe(TraverseId, FileCtx, TraverseRootFileUuid) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TraverseRootFileCtx = file_ctx:new_by_uuid(TraverseRootFileUuid, SpaceId),
     {TraverseRootFileUuidPath, _} = file_ctx:get_uuid_based_path(TraverseRootFileCtx),
@@ -218,7 +230,7 @@ is_parent_fulfilled(TraverseId, FileCtx, _Uuid, TraverseRootFileUuid) ->
 -spec has_traverse_link(traverse:id(), file_ctx:ctx()) -> boolean().
 has_traverse_link(TraverseId, FileCtx) ->
     {Path, _} = file_ctx:get_uuid_based_path(FileCtx),
-    case qos_status_links:get_next_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1, all) of
+    case qos_status_links:get_next_local_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1) of
         {ok, [Path]} -> true;
         _ -> false
     end.
@@ -272,15 +284,30 @@ report_child_dir_traversed(TraverseId, FileCtx, OriginalRootParentCtx) ->
 %% @private
 -spec handle_traverse_finished_for_dir(traverse:id(), file_ctx:ctx(), link_strategy()) -> ok.
 handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
-    {Path, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    case LinkStrategy of
-        add_link ->
-            ok = qos_status_links:add_link( SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
-        no_link -> 
-            ok
-    end,
-    ok = qos_status_links:delete_all_local_links_with_prefix(
-        SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), <<Path/binary, "/">>),
-    ok = qos_status_model:delete(TraverseId, Uuid).
+    case get_uuid_based_path(FileCtx) of
+        not_synced ->
+            %% @TODO VFS-10747 When all ancestors are finally synced and QoS is inherited this will result in
+            %% ?PENDING status for this directory until whole parent subtree is finished.
+            ok;
+        {Path, FileCtx1} ->
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx1),
+            case LinkStrategy of
+                add_link ->
+                    ok = qos_status_links:add_link(?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
+                no_link ->
+                    ok
+            end,
+            ok = qos_status_links:delete_all_local_links_with_prefix(
+                ?TRAVERSE_LINKS_KEY(TraverseId), <<Path/binary, "/">>),
+            ok = qos_status_model:delete(TraverseId, Uuid)
+    end.
+
+
+%% @private
+-spec get_uuid_based_path(file_ctx:ctx()) -> {file_meta:uuid_based_path(), file_ctx:ctx()} | not_synced.
+get_uuid_based_path(FileCtx) ->
+    try
+        file_ctx:get_uuid_based_path(FileCtx)
+    catch throw:{error, {file_meta_missing, _}} ->
+        not_synced
+    end.

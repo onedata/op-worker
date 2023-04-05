@@ -126,7 +126,7 @@ get(SpaceId, DocOrUuid) ->
 
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc(), effective_value:get_or_calculate_options()) ->
-    {ok, synced} | {error, missing_file_meta() | missing_link()} | {error, term()}.
+    {ok, synced} | {error, missing_file_meta() | missing_link() | ancestor_deleted} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}, Opts) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1, Opts) of
@@ -174,7 +174,7 @@ calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, Calculatio
 
 %% @private
 -spec find_lowest_missing_link(missing_link(), file_meta:doc()) ->
-    missing_link().
+    missing_link() | ancestor_deleted.
 find_lowest_missing_link(
     {link_missing, ParentUuid, _} = MissingLink,
     #document{value = #file_meta{parent_uuid = ParentUuid}}
@@ -186,9 +186,10 @@ find_lowest_missing_link(
 ) ->
     case file_meta_forest:get(ParentUuid, all, Name) of
         {ok, _} ->
-            % we know that file_meta document is synced, because effective did not return file_meta_missing
-            {ok, NextDoc} = file_meta:get_parent(Doc),
-            find_lowest_missing_link(MissingLink, NextDoc);
+            case file_meta:get_parent(Doc) of
+                {ok, NextDoc} -> find_lowest_missing_link(MissingLink, NextDoc);
+                {error, not_found} -> ancestor_deleted
+            end;
         {error, _} ->
             {link_missing, ParentUuid, Name}
     end.
