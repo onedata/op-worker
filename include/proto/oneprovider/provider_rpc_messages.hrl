@@ -45,6 +45,10 @@
     stat_names = [] :: [dir_stats_collection:stat_name()]
 }).
 
+-record(provider_qos_status_get_request, {
+    qos_entry_id :: qos_entry:id()
+}).
+
 
 %%%===================================================================
 %%% Provider RPC responses
@@ -56,6 +60,10 @@
 
 -record(provider_reg_storage_locations_result, {
     locations_per_storage :: data_distribution:locations_per_storage()
+}).
+
+-record(provider_qos_status_get_result, {
+    status :: qos_status:summary()
 }).
 
 -endif.

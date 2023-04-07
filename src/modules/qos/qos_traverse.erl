@@ -74,7 +74,7 @@ start(FileCtx, QosEntries, TaskId) ->
             <<"uuid">> => file_ctx:get_referenced_uuid_const(FileCtx)
         }
     },
-    FileCtx2 = update_status_on_start(FileCtx, QosEntries, TaskId),
+    {ok, FileCtx2} = qos_status:report_traverse_started(TaskId, FileCtx, QosEntries),
     start_internal(FileCtx2, Options, ?MAX_REPEATS).
     
 
@@ -122,14 +122,7 @@ task_finished(TaskId, _PoolName) ->
         <<"uuid">> := FileUuid
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-    %% @TODO VFS-10298 - move to qos_status
-    ok = qos_status:report_reconciliation_finished(TaskId, FileCtx),
-    lists:foreach(fun(QosEntryId) ->
-        ok = qos_entry:remove_from_traverses_list(SpaceId, QosEntryId, TaskId),
-        % this call is needed for status of traverses started before upgrade to work correctly
-        ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
-    end, get_traverse_qos_entries(AdditionalData)),
-    ok = qos_status:report_traverse_finished(TaskId, FileCtx).
+    qos_status:report_traverse_finished(TaskId, FileCtx, get_traverse_qos_entries(AdditionalData)).
 
 
 -spec task_canceled(id(), traverse:pool()) -> ok.
@@ -224,27 +217,6 @@ start_internal(FileCtx, #{task_id := TaskId} = Options, Repeats) ->
         timer:sleep(timer:seconds(1)), % sleep to ensure different timestamp for traverse link
         ?warning("Conflict on QoS traverse task id ~p. Reapeting...", [TaskId]),
         start_internal(FileCtx, Options, Repeats - 1)
-    end.
-
-
-%% @private
--spec update_status_on_start(file_ctx:ctx(), [qos_entry:id()], id()) -> file_ctx:ctx().
-update_status_on_start(FileCtx, QosEntries, TaskId) ->
-    %% @TODO VFS-10298 - move to qos_status
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    
-    case file_ctx:get_type(FileCtx) of
-        {?DIRECTORY_TYPE, FileCtx2} ->
-            {ok, FileCtx3} = qos_status:report_traverse_start(TaskId, FileCtx2),
-            lists:foreach(fun(QosEntryId) ->
-                ok = qos_entry:add_to_traverses_list(SpaceId, QosEntryId, TaskId, FileUuid),
-                ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
-            end, QosEntries),
-            FileCtx3;
-        {_, FileCtx2} ->
-            ok = qos_status:report_reconciliation_started(TaskId, FileCtx2, utils:ensure_list(QosEntries)),
-            FileCtx2
     end.
 
 

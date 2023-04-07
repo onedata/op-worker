@@ -65,7 +65,7 @@
 %%%
 %%% When file has many references (i.e some hardlinks were created), status links consisting of 
 %%% uuid_based_path are added for each file reference. 
-%%% 
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_status).
@@ -74,17 +74,18 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([check/2, aggregate/1]).
--export([report_traverse_start/2, report_traverse_finished/2,
-    report_next_traverse_batch/5, report_traverse_finished_for_dir/2,
-    report_traverse_finished_for_file/3]).
--export([report_reconciliation_started/3, report_reconciliation_finished/2]).
+-export([check/2, check_local/2, aggregate/1]).
+-export([
+    report_traverse_started/3, report_traverse_finished/3,
+    report_next_traverse_batch/5, report_traverse_finished_for_dir/2, report_traverse_finished_for_file/3
+]).
 -export([report_file_transfer_failure/2]).
--export([report_file_deleted/2, report_file_deleted/3, report_entry_deleted/2]).
+-export([report_file_deleted/2, report_file_deleted/3, report_entry_deleted/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -96,9 +97,6 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    sync_enabled => true,
-    remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
@@ -108,14 +106,24 @@
 
 -spec check(file_ctx:ctx(), qos_entry:id()) -> summary().
 check(FileCtx, QosEntryId) ->
-    {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
-    
-    case qos_entry:is_possible(QosEntryDoc) of
-        false -> ?IMPOSSIBLE_QOS_STATUS;
-        true -> case check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) of
-            true -> ?FULFILLED_QOS_STATUS;
-            false -> ?PENDING_QOS_STATUS
+    StatusResponses = provider_rpc:gather_from_cosupporting_providers(
+        file_ctx:get_logical_guid_const(FileCtx),
+        #provider_qos_status_get_request{qos_entry_id = QosEntryId}
+    ),
+    aggregate(maps:fold(fun(_ProviderId, Result, Acc) ->
+        case Result of
+            {ok, #provider_qos_status_get_result{status = Status}}-> [Status | Acc];
+            %% @TODO VFS-10748 report QoS status per provider, not aggregated
+            {error, _} -> Acc
         end
+    end, [], StatusResponses)).
+
+
+-spec check_local(file_ctx:ctx(), qos_entry:id()) -> summary().
+check_local(FileCtx, QosEntryId) ->
+    case qos_entry:get(QosEntryId) of
+        {ok, QosEntryDoc} -> check_internal(FileCtx, QosEntryDoc);
+        {error, not_found} -> ?PENDING_QOS_STATUS
     end.
 
 
@@ -129,14 +137,27 @@ aggregate(Statuses) ->
         end, ?FULFILLED_QOS_STATUS, Statuses).
 
 
--spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-report_traverse_start(TraverseId, FileCtx) ->
-    qos_uptree_status:report_started(TraverseId, FileCtx).
+-spec report_traverse_started(traverse:id(), file_ctx:ctx(), [qos_entry:id()]) -> {ok, file_ctx:ctx()}.
+report_traverse_started(TraverseId, FileCtx, QosEntries) ->
+    case file_ctx:get_type(FileCtx) of
+        {?DIRECTORY_TYPE, FileCtx2} ->
+            {ok, FileCtx3} = qos_uptree_status:report_traverse_started(TraverseId, FileCtx2, QosEntries),
+            {ok, FileCtx3};
+        {_, FileCtx2} ->
+            ok = qos_downtree_status:report_started(TraverseId, FileCtx, QosEntries),
+            {ok, FileCtx2}
+    end.
 
 
--spec report_traverse_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
-report_traverse_finished(TraverseId, FileCtx) ->
-    qos_uptree_status:report_finished(TraverseId, FileCtx).
+-spec report_traverse_finished(traverse:id(), file_ctx:ctx(), [qos_entry:id()]) -> ok | {error, term()}.
+report_traverse_finished(TraverseId, FileCtx, QosEntries) ->
+    ok = qos_downtree_status:report_finished(TraverseId, FileCtx),
+    lists:foreach(fun(QosEntryId) ->
+        ok = qos_entry:remove_from_traverses_list(QosEntryId, TraverseId),
+        % this call is needed for status of traverses started before upgrade to 21.02.1 to work correctly
+        ok = qos_entry:remove_traverse_req(QosEntryId, TraverseId)
+    end, QosEntries),
+    qos_uptree_status:report_traverse_finished(TraverseId, FileCtx).
 
 
 -spec report_next_traverse_batch(traverse:id(), file_ctx:ctx(),
@@ -157,17 +178,6 @@ report_traverse_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx) ->
     qos_uptree_status:report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx).
 
 
--spec report_reconciliation_started(traverse:id(), file_ctx:ctx(), [qos_entry:id()]) -> 
-    ok | {error, term()}.
-report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
-    qos_downtree_status:report_started(TraverseId, FileCtx, QosEntries).
-
-
--spec report_reconciliation_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
-report_reconciliation_finished(TraverseId, FileCtx) ->
-    qos_downtree_status:report_finished(TraverseId, FileCtx).
-
-
 -spec report_file_transfer_failure(file_ctx:ctx(), [qos_entry:id()]) ->
     ok | {error, term()}.
 report_file_transfer_failure(FileCtx, QosEntries) ->
@@ -177,6 +187,7 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:id()) -> ok.
 report_file_deleted(FileCtx, QosEntryId) ->
     report_file_deleted(FileCtx, QosEntryId, undefined).
+
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:id(), file_ctx:ctx() | undefined) -> ok.
 report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
@@ -189,14 +200,26 @@ report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
     end.
 
 
--spec report_entry_deleted(od_space:id(), qos_entry:id()) -> ok.
-report_entry_deleted(SpaceId, QosEntryId) ->
-    qos_downtree_status:report_entry_deleted(SpaceId, QosEntryId).
+-spec report_entry_deleted(qos_entry:id()) -> ok.
+report_entry_deleted(QosEntryId) ->
+    qos_downtree_status:report_entry_deleted(QosEntryId).
     
 
 %%%===================================================================
 %%% Internal functions concerning QoS status check
 %%%===================================================================
+
+%% @private
+-spec check_internal(file_ctx:ctx(), qos_entry:doc()) -> summary().
+check_internal(FileCtx, #document{key = QosEntryId} = QosEntryDoc) ->
+    case qos_entry:is_possible(QosEntryDoc) of
+        false -> ?IMPOSSIBLE_QOS_STATUS;
+        true -> case check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) of
+            true -> ?FULFILLED_QOS_STATUS;
+            false -> ?PENDING_QOS_STATUS
+        end
+    end.
+
 
 %% @private
 -spec check_possible_entry_status(file_ctx:ctx(), qos_entry:doc(), qos_entry:id()) -> boolean().

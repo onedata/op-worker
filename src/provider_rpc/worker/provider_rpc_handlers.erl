@@ -39,4 +39,7 @@ execute(FileCtx, #provider_current_dir_size_stats_browse_request{stat_names = St
     end;
 
 execute(FileCtx, #provider_historical_dir_size_stats_browse_request{request = Request}) ->
-    dir_size_stats:browse_historical_stats_collection(file_ctx:get_logical_guid_const(FileCtx), Request).
+    dir_size_stats:browse_historical_stats_collection(file_ctx:get_logical_guid_const(FileCtx), Request);
+
+execute(FileCtx, #provider_qos_status_get_request{qos_entry_id = QosEntryId}) ->
+    {ok, #provider_qos_status_get_result{status = qos_status:check_local(FileCtx, QosEntryId)}}.

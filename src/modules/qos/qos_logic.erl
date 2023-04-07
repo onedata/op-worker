@@ -90,7 +90,7 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
     ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
     ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
     ok = qos_traverse:report_entry_deleted(QosEntryDoc),
-    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
+    ok = qos_status:report_entry_deleted(QosEntryId),
     ok = qos_entry_audit_log:destroy(QosEntryId),
     ok = qos_transfer_stats:delete(QosEntryId).
 
@@ -146,8 +146,8 @@ reevaluate_all_impossible_qos_in_space(SpaceId) ->
 retry_failed_files(SpaceId) ->
     qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
         FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-        ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid),
-        ok = reconcile_qos(FileCtx)
+        ok = reconcile_qos(FileCtx),
+        ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid)
     end).
 
 
@@ -230,11 +230,15 @@ get_eff_qos(FileCtx) ->
         {error, {file_meta_missing, _} = MissingElement} ->
             handle_missing_file_meta(FileCtx, MissingElement);
         {error, {link_missing, _, _} = MissingElement} ->
-            handle_missing_link(FileCtx, MissingElement)
+            handle_missing_link(FileCtx, MissingElement);
+        {error, ancestor_deleted} ->
+            ancestor_deleted
     end,
-    case HighestSyncedAncestorUuid of
+    try HighestSyncedAncestorUuid of
         ReferenceUuid ->
             % link to this reference is missing - ignore, as posthook to execute on this reference when link appears has been added.
+            undefined;
+        ancestor_deleted ->
             undefined;
         <<>> ->
             {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
@@ -249,12 +253,10 @@ get_eff_qos(FileCtx) ->
         _ ->
             % This reference has a missing ancestor. Calculate effective value only for this reference up to missing ancestor;
             % all other references trigger reconciliation when they synchronize.
-            try
-                {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
-                file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid)
-            catch
-                _:{badmatch, {error, not_found}} -> undefined % race with file deletion
-            end
+            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
+            file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid)
+    catch
+        _:{badmatch, {error, not_found}} -> undefined % race with file deletion
     end.
 
 

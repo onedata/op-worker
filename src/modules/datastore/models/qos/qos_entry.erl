@@ -55,7 +55,7 @@
     apply_to_all_transfers/2]).
 -export([add_to_failed_files_list/2, remove_from_failed_files_list/2, 
     apply_to_all_in_failed_files_list/2]).
--export([add_to_traverses_list/4, remove_from_traverses_list/3, fold_traverses/3]).
+-export([add_to_traverses_list/3, remove_from_traverses_list/2, fold_traverses/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2, resolve_conflict/3]).
@@ -87,22 +87,22 @@
 -compile({no_auto_import, [get/1]}).
 
 -define(LOCAL_CTX, #{
-    model => ?MODULE
+    model => ?MODULE,
+    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 -define(CTX, ?LOCAL_CTX#{
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined()
 }).
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
 -define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
 % List of ongoing traverses rooted in directories. Additionally it holds traverses
-% rooted in regular files to which it was impossible to calculate path as some
-% documents where not synced for sole purpose of QoS status calculation
-% (for more detauls consult qos_downtree_status and qos_status module doc).
+% rooted in regular files to which it was impossible to calculate path (as some
+% documents where not synced) for sole purpose of QoS status calculation
+% (for more details consult qos_downtree_status and qos_status module doc).
 -define(TRAVERSES_KEY(QosEntryId), <<"qos_traverse_key_", QosEntryId/binary>>).
 
 -define(FOLD_LINKS_BATCH_SIZE, op_worker:get_env(qos_fold_links_batch_size, 100)).
@@ -179,25 +179,11 @@ delete_local_link(Key, Links) ->
 
 
 %% @private
--spec add_synced_link(datastore_doc:scope(), datastore:key(), {datastore:link_name(), datastore:link_target()}) ->
-    ok | {error, term()}.
-add_synced_link(SpaceId, Key, Link) ->
-    ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link))).
-
-
-%% @private
--spec delete_synced_link(datastore_doc:scope(), datastore:key(), datastore:link_name()) ->
-    ok | {error, term()}.
-delete_synced_link(SpaceId, Key, LinkName) ->
-    ok = datastore_model:delete_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), LinkName).
-
-
-%% @private
--spec fold_links(id(), datastore:fold_fun(datastore:link()),
+-spec fold_local_links(id(), datastore:fold_fun(datastore:link()),
     datastore:fold_acc(), datastore:fold_opts()) -> {ok, datastore:fold_acc()} |
     {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold_links(Key, Fun, Acc, Opts) ->
-    datastore_model:fold_links(?CTX, Key, all, Fun, Acc, Opts).
+fold_local_links(Key, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?CTX, Key, oneprovider:get_id(), Fun, Acc, Opts).
 
 
 %%%===================================================================
@@ -356,14 +342,13 @@ apply_to_all_in_failed_files_list(SpaceId, Fun) ->
     apply_to_all_link_names_in_list(?FAILED_FILES_KEY(SpaceId), Fun).
 
 
--spec add_to_traverses_list(od_space:id(), id(), qos_traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
-add_to_traverses_list(SpaceId, QosEntryId, TraverseId, TraverseRootUuid) ->
-    ?ok_if_exists(?extract_ok(add_synced_link(SpaceId, ?TRAVERSES_KEY(QosEntryId), {TraverseId, TraverseRootUuid}))).
+-spec add_to_traverses_list(id(), qos_traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
+add_to_traverses_list(QosEntryId, TraverseId, TraverseRootUuid) ->
+    ?ok_if_exists(?extract_ok(add_local_link(?TRAVERSES_KEY(QosEntryId), {TraverseId, TraverseRootUuid}))).
 
--spec remove_from_traverses_list(od_space:id(), id(), qos_traverse:id()) -> ok | {error, term()}.
-remove_from_traverses_list(SpaceId, QosEntryId, TraverseId)  ->
-    delete_synced_link(SpaceId, ?TRAVERSES_KEY(QosEntryId), TraverseId).
-
+-spec remove_from_traverses_list(id(), qos_traverse:id()) -> ok | {error, term()}.
+remove_from_traverses_list(QosEntryId, TraverseId)  ->
+    delete_local_link(?TRAVERSES_KEY(QosEntryId), TraverseId).
 
 -spec fold_traverses(id(), list_fold_fun(), any()) -> any().
 fold_traverses(QosEntryId, Fun, InitialAcc) ->
@@ -405,7 +390,7 @@ list_next_batch(Key, Opts) ->
         true -> Opts;
         false -> Opts#{token => #link_token{}}
     end,
-    {{ok, Res}, Token} = fold_links(Key,
+    {{ok, Res}, Token} = fold_local_links(Key,
         fun accumulate_links/2, [],
         Opts1#{size => ?FOLD_LINKS_BATCH_SIZE}),
     NextBatchOpts = case Res of

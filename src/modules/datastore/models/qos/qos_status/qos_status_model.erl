@@ -40,12 +40,12 @@
 %%%===================================================================
 
 -spec create(od_space:id(), traverse:id(), file_meta:uuid(), dir_type()) -> 
-    {ok, doc()}.
+    ok | {error, term()}.
 create(SpaceId, TraverseId, DirUuid, DirType) ->
     Id = generate_status_doc_id(TraverseId, DirUuid),
-    datastore_model:create(?CTX, #document{key = Id, scope = SpaceId,
+    ?extract_ok(datastore_model:create(?CTX, #document{key = Id, scope = SpaceId,
         value = #qos_status{is_start_dir = DirType == ?QOS_STATUS_TRAVERSE_START_DIR}
-    }).
+    })).
 
 
 -spec update(traverse:id(), file_meta:uuid(), diff()) -> {ok, doc()} | {error, term()}.

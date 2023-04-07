@@ -35,13 +35,15 @@
     #provider_reg_distribution_get_request{} |
     #provider_current_dir_size_stats_browse_request{} |
     #provider_historical_dir_size_stats_browse_request{} |
-    #provider_reg_storage_locations_get_request{}.
+    #provider_reg_storage_locations_get_request{} |
+    #provider_qos_status_get_request{}.
 
 -type result() ::
     #provider_reg_distribution_get_result{} |
     #provider_current_dir_size_stats_browse_result{} |
     #time_series_layout_get_result{} | #time_series_slice_get_result{} |
-    #provider_reg_storage_locations_result{}.
+    #provider_reg_storage_locations_result{} |
+    #provider_qos_status_get_result{}.
 
 -export_type([request/0, result/0]).
 

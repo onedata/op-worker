@@ -1214,8 +1214,8 @@ qos_status_during_traverse_with_file_deletion_test_base(NumberOfFilesInDir, File
     ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes(ToFinish ++ [Dir1] ++ StillReferenced, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_transfers(ToDelete),
-    % These files where deleted so QoS is not fulfilled
-    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes(NoLongerReferenced, QosList, ?ERROR_NOT_FOUND), ?ATTEMPTS).
+    % These files where deleted so QoS is trivially fulfilled for them
+    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes(NoLongerReferenced, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS).
 
 
 -spec qos_status_during_traverse_with_dir_deletion_test_base(pos_integer(), file_type()) -> ok.
