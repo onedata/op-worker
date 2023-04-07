@@ -154,23 +154,28 @@ can_support_deletion(#replica_deletion{
     version_vector = VV,
     requested_blocks = RequestedBlocks
 }) ->
-    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-    {#document{deleted = Deleted} = LocalLocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-    LocalBlocks = replica_finder:get_all_blocks([LocalLocationDoc]),
-    case {Deleted, fslogic_blocks:invalidate(RequestedBlocks, LocalBlocks)} of
-        {false, []} ->
-            % todo VFS-3728 currently works only if provider has all requested blocks
-            LocalVV = file_location:get_version_vector(LocalLocationDoc),
-            case version_vector:compare(LocalVV, VV)  of
-                greater ->
-                    {true, RequestedBlocks};
-                identical ->
-                    {true, RequestedBlocks};
-                _ ->
-                    false
-            end;
-        _ ->
-            false
+    try
+        FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+        {#document{deleted = Deleted} = LocalLocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+        LocalBlocks = replica_finder:get_all_blocks([LocalLocationDoc]),
+        case {Deleted, fslogic_blocks:invalidate(RequestedBlocks, LocalBlocks)} of
+            {false, []} ->
+                % todo VFS-3728 currently works only if provider has all requested blocks
+                LocalVV = file_location:get_version_vector(LocalLocationDoc),
+                case version_vector:compare(LocalVV, VV)  of
+                    greater ->
+                        {true, RequestedBlocks};
+                    identical ->
+                        {true, RequestedBlocks};
+                    _ ->
+                        false
+                end;
+            _ ->
+                false
+        end
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception(Class, Reason, Stacktrace),
+        false
     end.
 
 %%-------------------------------------------------------------------

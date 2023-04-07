@@ -555,10 +555,10 @@ remove_file_during_eviction(Config, #scenario{
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
-    
+
     lists_utils:pforeach(fun({EvictingNode, Tid, Guid, Path}) ->
         FileKey = file_key(Guid, Path, FileKeyType),
-        await_transfer_starts(EvictingNode, Tid),
+        await_transfer_starts(EvictingNode, Tid, 1000, 10),
         ok = remove_file(EvictingNode, User, FileKey, Config)
     end, NodesTransferIdsAndFiles),
 
@@ -861,7 +861,22 @@ assert_expectations(Config, Expected = #expected{
         ?assertEqual([], transfers_test_utils:list_ongoing_transfers(AssertionNode, SpaceId), Attempts),
         ?assertEqual(AllTids, lists:sort(transfers_test_utils:list_ended_transfers(AssertionNode, SpaceId)), Attempts)
 
-    end, AssertionNodes).
+    end, AssertionNodes);
+assert_expectations(Config, ExpectedAlternatives) ->
+    Result = lists:any(fun(Expected) ->
+        try
+            assert_expectations(Config, Expected),
+            true
+        catch _:_ ->
+            false
+        end
+    end, ExpectedAlternatives),
+
+    case Result of
+        true -> ok;
+        false -> ct:fail("No transfer expectation fulfilled")
+    end.
+
 
 assert_transfer(_Config, _Node, #expected{
     expected_transfer = undefined,
@@ -1562,18 +1577,21 @@ await_replica_eviction_starts(Node, TransferId) ->
         end
     end, 60).
 
-await_transfer_starts(Node, TransferId) ->
+
+await_transfer_starts(Node, TransferId, Attempts, Interval) ->
     ?assertEqual(true, begin
         try
             #transfer{
-               start_time = StartTime
+                start_time = StartTime,
+                files_to_process = FTP
             } = transfers_test_utils:get_transfer(Node, TransferId),
-            StartTime > 0
+
+            StartTime > 0 andalso FTP > 0
         catch
             throw:transfer_not_found ->
                false
         end
-    end, 60).
+    end, Attempts, Interval).
 
 
 query_view_params_to_map(QueryViewParams) ->
