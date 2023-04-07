@@ -72,8 +72,9 @@ emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
     case event_type:get_context(Evt) of
         {file, Guid} ->
-            % Filter events connected with trash (oneclient should not see trash)
-            case fslogic_file_id:is_trash_dir_guid(Guid) of
+            % Filter events connected with trash (oneclient should not see trash) and
+            % tmp dir (it is accessed via guid - it does not appear in listing results)
+            case fslogic_file_id:is_trash_dir_guid(Guid) orelse fslogic_file_id:is_tmp_dir_guid(Guid) of
                 true -> ok;
                 false -> send_to_event_managers(Evt, get_event_managers(MgrRef))
             end;
