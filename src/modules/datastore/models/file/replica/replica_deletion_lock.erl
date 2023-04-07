@@ -81,10 +81,9 @@ acquire_write_lock(FileUuid) ->
 %%-------------------------------------------------------------------
 -spec release_read_lock(id()) -> ok.
 release_read_lock(FileUuid) ->
-    {ok, _} = update(FileUuid, fun(Lock = #replica_deletion_lock{read = Read}) ->
+    ok = update(FileUuid, fun(Lock = #replica_deletion_lock{read = Read}) ->
         {ok, Lock#replica_deletion_lock{read = max(0, Read - 1)}}
-    end),
-    ok.
+    end).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -93,10 +92,9 @@ release_read_lock(FileUuid) ->
 %%-------------------------------------------------------------------
 -spec release_write_lock(id()) -> ok.
 release_write_lock(FileUuid) ->
-    {ok, _} = update(FileUuid, fun(Lock = #replica_deletion_lock{write = Write}) ->
+    ok = update(FileUuid, fun(Lock = #replica_deletion_lock{write = Write}) ->
         {ok, Lock#replica_deletion_lock{write = max(0, Write - 1)}}
-    end),
-    ok.
+    end).
 
 %%%===================================================================
 %%% Internal functions
@@ -125,12 +123,24 @@ write_create_or_update(Key, Diff) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv datastore_model:update(?CTX, Key, Diff).
+%% Updates doc. Removes it if there are no locks after update.
 %% @end
 %%-------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+-spec update(id(), diff()) -> ok | no_return().
 update(Key, Diff) ->
-    datastore_model:update(?CTX, Key, Diff).
+    case datastore_model:update(?CTX, Key, Diff) of
+        {ok, #document{value = #replica_deletion_lock{read = 0, write = 0}}} ->
+            Pred = fun
+                (#replica_deletion_lock{read = 0, write = 0}) -> true;
+                (_) -> false
+            end,
+            case datastore_model:delete(?CTX, Key, Pred) of
+                ok -> ok;
+                {error, {not_satisfied, _}} -> ok
+            end;
+        {ok, _} ->
+            ok
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
