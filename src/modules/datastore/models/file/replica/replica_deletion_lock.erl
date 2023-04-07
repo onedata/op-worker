@@ -81,7 +81,7 @@ acquire_write_lock(FileUuid) ->
 %%-------------------------------------------------------------------
 -spec release_read_lock(id()) -> ok.
 release_read_lock(FileUuid) ->
-    ok = update(FileUuid, fun(Lock = #replica_deletion_lock{read = Read}) ->
+    update(FileUuid, fun(Lock = #replica_deletion_lock{read = Read}) ->
         {ok, Lock#replica_deletion_lock{read = max(0, Read - 1)}}
     end).
 
@@ -92,7 +92,7 @@ release_read_lock(FileUuid) ->
 %%-------------------------------------------------------------------
 -spec release_write_lock(id()) -> ok.
 release_write_lock(FileUuid) ->
-    ok = update(FileUuid, fun(Lock = #replica_deletion_lock{write = Write}) ->
+    update(FileUuid, fun(Lock = #replica_deletion_lock{write = Write}) ->
         {ok, Lock#replica_deletion_lock{write = max(0, Write - 1)}}
     end).
 
