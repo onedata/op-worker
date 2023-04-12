@@ -66,7 +66,7 @@ start_for_space(SpaceId) ->
             callback_module => ?MODULE,
             task_id => SpaceId,
             batch_size => ?TRAVERSE_BATCH_SIZE,
-            handle_interrupted_call => false
+            ignore_missing_links => false
         }))
     catch Class:Reason ->
         case datastore_runner:normalize_error(Reason) of

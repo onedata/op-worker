@@ -67,7 +67,7 @@
 -type options() :: #{
     pagination_token := pagination_token() | undefined,
     whitelist => undefined | whitelist(),
-    handle_interrupted_call => boolean(), % default: true
+    ignore_missing_links => boolean(), % default: true
     limit => limit()
 } | #{
     tune_for_large_continuous_listing := boolean(),
@@ -75,7 +75,7 @@
     offset => offset(),
     inclusive => boolean(),
     whitelist => undefined | whitelist(),
-    handle_interrupted_call => boolean(), % default: true
+    ignore_missing_links => boolean(), % default: true
     limit => limit()
 }.
 %% @formatter:on
@@ -222,7 +222,7 @@ convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     BaseOpts = index_to_datastore_list_opts(Index),
     maps_utils:remove_undefined(BaseOpts#{
         token => DatastoreToken,
-        handle_interrupted_call => sanitize_interrupted_call_opt(maps:get(handle_interrupted_call, Opts, undefined)),
+        ignore_missing_links => sanitize_interrupted_call_opt(maps:get(ignore_missing_links, Opts, undefined)),
         size => sanitize_limit(maps:get(limit, Opts, undefined))
     });
 convert_to_datastore_options(Opts) ->
@@ -246,8 +246,8 @@ convert_to_datastore_options(Opts) ->
             maps:get(whitelist, Opts, undefined)),
         inclusive => sanitize_inclusive(
             maps:get(inclusive, Opts, undefined)),
-        handle_interrupted_call => sanitize_interrupted_call_opt(
-            maps:get(handle_interrupted_call, Opts, undefined)),
+        ignore_missing_links => sanitize_interrupted_call_opt(
+            maps:get(ignore_missing_links, Opts, undefined)),
         token => DatastoreToken
     }).
 
@@ -313,7 +313,7 @@ sanitize_interrupted_call_opt(undefined) ->
     undefined;
 sanitize_interrupted_call_opt(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_BOOLEAN(handle_interrupted_call))
+    %% throw(?ERROR_BAD_VALUE_BOOLEAN(ignore_missing_links))
     throw(?EINVAL).
 
 

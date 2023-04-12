@@ -45,7 +45,7 @@
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/2, do_master_job/3, do_aborted_master_job/2, update_job_progress/6, 
+-export([do_master_job/2, do_master_job/3, do_aborted_master_job/2, update_job_progress/6,
     get_job/1, get_sync_info/1, get_timestamp/0]).
 
 %% Tracking subtree progress status API
@@ -67,11 +67,11 @@
 -type children_master_jobs_mode() :: sync | async.
 -type batch_size() :: file_listing:limit().
 -type traverse_info() :: map().
-% Symbolic links resolution policy: 
-%   * preserve - every symbolic link encountered during traverse is passed as is to the slave job; 
-%   * follow_all - every valid symbolic link is resolved and target file is passed to the slave job, 
-%                  invalid symbolic links (e.g. infinite loops or targeting non existing files) are ignored; 
-%   * follow_external - only symbolic links targeting outside of traverse subtree are resolved, 
+% Symbolic links resolution policy:
+%   * preserve - every symbolic link encountered during traverse is passed as is to the slave job;
+%   * follow_all - every valid symbolic link is resolved and target file is passed to the slave job,
+%                  invalid symbolic links (e.g. infinite loops or targeting non existing files) are ignored;
+%   * follow_external - only symbolic links targeting outside of traverse subtree are resolved,
 %                       invalid symbolic links are ignored
 -type symlink_resolution_policy() :: preserve | follow_all | follow_external.
 -type run_options() :: #{
@@ -84,12 +84,12 @@
 
     % option determining whether slave jobs should be generated also for child directories.
     % NOTE: slave job for starting directory will never be generated.
-    child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
+    child_dirs_job_generation_policy => child_dirs_job_generation_policy(),
     % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
     tune_for_large_continuous_listing => boolean(),
     % Flag determining whether interrupted call errors should be handled internally in datastore.
     % Internal handling results in omission of missing file subtrees.
-    handle_interrupted_call => boolean(),
+    ignore_missing_links => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -120,13 +120,13 @@
 
 %formatter:on
 
-% Set of encountered files on the path from the traverse root to the currently processed one. 
+% Set of encountered files on the path from the traverse root to the currently processed one.
 % It is required to efficiently prevent loops when resolving symlinks.
 % Implemented as a map with single possible value (`true`) for performance reason.
 -type encountered_files_set() :: #{file_meta:uuid() => true}.
 
 -export_type([id/0, pool/0, job/0, master_job/0, slave_job/0, child_dirs_job_generation_policy/0,
-    children_master_jobs_mode/0, batch_size/0, traverse_info/0, symlink_resolution_policy/0, 
+    children_master_jobs_mode/0, batch_size/0, traverse_info/0, symlink_resolution_policy/0,
     encountered_files_set/0, new_jobs_preprocessor/0, run_options/0]).
 
 %%%===================================================================
@@ -204,7 +204,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         file_ctx = FileCtx3,
         user_id = UserId,
         tune_for_large_continuous_listing = maps:get(tune_for_large_continuous_listing, Opts, true),
-        handle_interrupted_call = maps:get(handle_interrupted_call, Opts, true),
+        ignore_missing_links = maps:get(ignore_missing_links, Opts, true),
         pagination_token = undefined,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -295,7 +295,7 @@ do_master_job(Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
     case tree_traverse_session:acquire_for_task(UserId, maps:get(pool, TraverseInfo), TaskId) of
         {ok, UserCtx} ->
             do_master_job_internal(FileType, Job2, TaskId, NewJobsPreprocessor, UserCtx);
-        {error, ?EACCES} -> 
+        {error, ?EACCES} ->
             {ok, #{}}
     end.
 
@@ -374,11 +374,11 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
             SubtreeProcessingStatus = maybe_report_children_jobs_to_process(
                 Job, TaskId, ChildrenCount, file_listing:is_finished(ListingPaginationToken)),
-            {UpdatedSlaveJobs, UpdatedMasterJobs} = case 
-                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListingPaginationToken, SubtreeProcessingStatus) 
+            {UpdatedSlaveJobs, UpdatedMasterJobs} = case
+                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListingPaginationToken, SubtreeProcessingStatus)
             of
                 ok -> {SlaveJobs, MasterJobs};
-                {NewSlaveJobs, NewMasterJobs} -> 
+                {NewSlaveJobs, NewMasterJobs} ->
                     {NewSlaveJobs, NewMasterJobs}
             end,
             FinalMasterJobs = case file_listing:is_finished(ListingPaginationToken) of
@@ -444,14 +444,14 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %% Tracking subtree progress status API
 %%%===================================================================
 
--spec list_children(master_job(), user_ctx:ctx()) -> 
+-spec list_children(master_job(), user_ctx:ctx()) ->
     {ok, {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}} | {error, term()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     pagination_token = PaginationToken,
     tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     batch_size = BatchSize,
-    handle_interrupted_call = HandleInterruptedCall
+    ignore_missing_links = HandleInterruptedCall
 }, UserCtx) ->
     BaseListingOpts = case PaginationToken of
         undefined -> #{tune_for_large_continuous_listing => TuneForLargeContinuousListing};
@@ -460,7 +460,7 @@ list_children(#tree_traverse{
     try
         {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
             limit => BatchSize,
-            handle_interrupted_call => HandleInterruptedCall
+            ignore_missing_links => HandleInterruptedCall
         })}
     catch
         throw:?EACCES ->
@@ -468,7 +468,7 @@ list_children(#tree_traverse{
     end.
 
 
--spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()], user_ctx:ctx()) -> 
+-spec generate_children_jobs(master_job(), id(), [file_ctx:ctx()], user_ctx:ctx()) ->
     {[slave_job()], [master_job()]}.
 generate_children_jobs(MasterJob, TaskId, Children, UserCtx) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
@@ -478,7 +478,7 @@ generate_children_jobs(MasterJob, TaskId, Children, UserCtx) ->
             {Filename, ChildCtx3} = file_ctx:get_aliased_name(ChildCtx2, undefined),
             {ChildSlaves, ChildMasters} = generate_child_jobs(
                 FileType, MasterJob, TaskId, ChildCtx3, Filename, UserCtx),
-            {ChildSlaves ++ SlavesAcc, ChildMasters ++ MastersAcc}    
+            {ChildSlaves ++ SlavesAcc, ChildMasters ++ MastersAcc}
         catch
             _:{badmatch, {error, not_found}} ->
                 Acc
@@ -487,11 +487,11 @@ generate_children_jobs(MasterJob, TaskId, Children, UserCtx) ->
     {lists:reverse(SlaveJobsReversed), lists:reverse(MasterJobsReversed)}.
 
 
--spec generate_child_jobs(file_meta:type(), master_job(), id(), file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) -> 
+-spec generate_child_jobs(file_meta:type(), master_job(), id(), file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) ->
     {[slave_job()], [master_job()]}.
 generate_child_jobs(?DIRECTORY_TYPE, MasterJob, TaskId, ChildCtx, Filename, _) ->
     #tree_traverse{
-        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy, 
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         file_ctx = ParentFileCtx
     } = MasterJob,
     ChildMasterJob = get_child_master_job(MasterJob, ChildCtx, Filename),
@@ -513,7 +513,7 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{symlink_resolution_policy = fo
             {FileDoc, ResolvedCtx2} = file_ctx:get_file_doc(ResolvedCtx),
             FileType = file_meta:get_effective_type(FileDoc),
             generate_child_jobs(FileType, MasterJob, TaskId, ResolvedCtx2, Filename, UserCtx);
-        ignore -> 
+        ignore ->
             {[], []}
     end;
 generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{symlink_resolution_policy = follow_external} = MasterJob, TaskId, ChildCtx, Filename, UserCtx) ->
@@ -564,7 +564,7 @@ reset_list_options(Job) ->
     }.
 
 
--spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(), 
+-spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(),
     symlink_resolution_policy()) -> encountered_files_set().
 add_to_set_if_symlinks_followed(_Uuid, EncounteredFilesSet, preserve) ->
     % there is no need to keeping track of encountered files when there is no symlinks following

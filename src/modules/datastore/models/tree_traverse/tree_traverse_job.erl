@@ -300,7 +300,7 @@ get_record_struct(7) ->
         {user_id, string},
         {tune_for_large_continuous_listing, boolean},
         {pagination_token, {custom, string, {file_listing, encode_pagination_token, decode_pagination_token}}},
-        {handle_interrupted_call, boolean}, % new field
+        {ignore_missing_links, boolean}, % new field
         {child_dirs_job_generation_policy, atom},
         {children_master_jobs_mode, atom},
         {track_subtree_status, boolean},
@@ -541,7 +541,7 @@ upgrade_record(6, Record) ->
         UserId,
         TuneForLargeContinuousListing,
         ListingPaginationToken,
-        true, % new field - handle_interrupted_call
+        true, % new field - ignore_missing_links
         ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,

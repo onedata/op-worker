@@ -35,7 +35,7 @@
     batch_size :: tree_traverse:batch_size(),
     % When set to true interrupted call errors will be handled internally
     % in datastore - this will result in omission of missing file subtrees.
-    handle_interrupted_call = true :: boolean(),
+    ignore_missing_links = true :: boolean(),
 
     % Traverse config
     % generate slave jobs also for directories

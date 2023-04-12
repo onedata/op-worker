@@ -57,7 +57,6 @@
 -type tree_ids() :: datastore_model:tree_ids().
 
 %% @formatter:off
-% fixme uzupełnić na podstawie datastore:fold_opts()
 -type list_opts() :: #{
     % required keys
     size := size(),
@@ -67,10 +66,11 @@
     last_name => last_name(),
     % optional keys
     last_tree => last_tree(),
+    inclusive => boolean(),
     % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
     %             being down, such subtree will be ignored and NO error returned;
     % * `false` - in case described above `interrupted_call` error will be returned.
-    handle_interrupted_call => boolean() % default: true
+    ignore_missing_links => boolean() % default: true
 }.
 
 -type list_extended_info() :: #list_extended_info{}.
@@ -143,7 +143,7 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 -spec list(forest(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list(ParentUuid, Opts) ->
     ExpectedSize = maps:get(size, Opts),
-    Ctx = case maps:get(handle_interrupted_call, Opts, true) of
+    Ctx = case maps:get(ignore_missing_links, Opts, true) of
         true ->
             ?CTX;
         false ->
