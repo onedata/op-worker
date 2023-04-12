@@ -63,8 +63,6 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvid
     FileInfo = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
     await_sync(CreationProvider, SyncProviders, UserId, FileInfo),
     await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileInfo),
-    
-    timer:sleep(timer:seconds(10)),
 
     FileInfo.
 
@@ -126,9 +124,6 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-
 
 %% @private
 -spec create_shares(node(), session:id(), file_id:file_guid(), [share_spec()]) ->

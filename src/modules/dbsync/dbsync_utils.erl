@@ -132,5 +132,5 @@ compress(Docs) ->
 %%--------------------------------------------------------------------
 -spec uncompress(binary()) -> [datastore:doc()].
 uncompress(CompressedDocs) ->
-    Docs = jiffy:decode(zlib:uncompress(CompressedDocs)),
+    Docs = jiffy:decode(zlib:uncompress(CompressedDocs), [copy_strings]),
     [datastore_json:decode(Doc) || Doc <- Docs].

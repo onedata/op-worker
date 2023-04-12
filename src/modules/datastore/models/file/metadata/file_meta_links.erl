@@ -67,6 +67,9 @@
     last_name => last_name(),
     % optional keys
     last_tree => last_tree(),
+    % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
+    %             being down, such subtree will be ignored and NO error returned;
+    % * `false` - in case described above `interrupted_call` error will be returned.
     handle_interrupted_call => boolean() % default: true
 }.
 
