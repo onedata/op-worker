@@ -70,7 +70,7 @@
     % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
     %             being down, such subtree will be ignored and NO error returned;
     % * `false` - in case described above `interrupted_call` error will be returned.
-    handle_interrupted_call => boolean() % default: true
+    ignore_missing_links => boolean() % default: true
 }.
 
 % Map returned from listing functions, containing information
@@ -154,7 +154,7 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 list(ParentUuid, Opts) ->
     InternalOpts = sanitize_opts(Opts),
     ExpectedSize = maps:get(size, InternalOpts),
-    Ctx = case maps:get(handle_interrupted_call, InternalOpts, true) of
+    Ctx = case maps:get(ignore_missing_links, InternalOpts, true) of
         true ->
             ?CTX;
         false ->
@@ -398,7 +398,7 @@ sanitize_opts(Opts) ->
     InternalOpts3 = maps_utils:put_if_defined(InternalOpts2, offset, sanitize_offset(Opts)),
     InternalOpts4 = maps_utils:put_if_defined(InternalOpts3, prev_link_name, sanitize_last_name(Opts)),
     InternalOpts5 = maps_utils:put_if_defined(InternalOpts4, prev_tree_id, sanitize_last_tree(Opts)),
-    InternalOpts6 = maps_utils:put_if_defined(InternalOpts5, handle_interrupted_call, sanitize_boolean(handle_interrupted_call, Opts)),
+    InternalOpts6 = maps_utils:put_if_defined(InternalOpts5, ignore_missing_links, sanitize_boolean(ignore_missing_links, Opts)),
     validate_starting_opts(InternalOpts6).
 
 

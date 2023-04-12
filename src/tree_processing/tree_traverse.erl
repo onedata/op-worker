@@ -378,7 +378,7 @@ list_children(#tree_traverse{
                     token => Token,
                     last_name => LastName,
                     last_tree => LastTree,
-                    handle_interrupted_call => false
+                    ignore_missing_links => false
                 })}
             catch
                 throw:?EACCES ->
