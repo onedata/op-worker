@@ -31,7 +31,7 @@
 -export([
     upgrade_from_20_02_1_space_strategies/1,
     upgrade_from_20_02_1_storage_sync_monitoring/1,
-    file_links_reconciliation_traverse_test/1
+    upgrade_from_20_02_19_file_links_reconciliation_traverse_test/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -44,7 +44,7 @@
 all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
     upgrade_from_20_02_1_storage_sync_monitoring,
-    file_links_reconciliation_traverse_test
+    upgrade_from_20_02_19_file_links_reconciliation_traverse_test
 ]).
 
 %%%===================================================================
@@ -368,7 +368,7 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
 
 
-file_links_reconciliation_traverse_test(Config) ->
+upgrade_from_20_02_19_file_links_reconciliation_traverse_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
     

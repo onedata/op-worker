@@ -57,7 +57,21 @@
 -type tree_ids() :: datastore_model:tree_ids().
 
 %% @formatter:off
--type list_opts() :: datastore:fold_opts().
+% fixme uzupełnić na podstawie datastore:fold_opts()
+-type list_opts() :: #{
+    % required keys
+    size := size(),
+    % one of: token, offset, last_name is required so that we know were to start listing
+    token => token(),
+    offset => offset(),
+    last_name => last_name(),
+    % optional keys
+    last_tree => last_tree(),
+    % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
+    %             being down, such subtree will be ignored and NO error returned;
+    % * `false` - in case described above `interrupted_call` error will be returned.
+    handle_interrupted_call => boolean() % default: true
+}.
 
 -type list_extended_info() :: #list_extended_info{}.
 
