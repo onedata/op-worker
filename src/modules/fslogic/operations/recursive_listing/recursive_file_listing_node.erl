@@ -86,9 +86,9 @@ get_node_path_tokens(FileCtx) ->
         [_Separator, SpaceId | Uuids] = filename:split(UuidPath),
         {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
         PathTokens = lists:map(fun(Uuid) ->
-            case ensure_extended_name_if_needed(file_ctx:new_by_uuid(Uuid, SpaceId)) of
+            case cache_values_with_extended_name(file_ctx:new_by_uuid(Uuid, SpaceId)) of
                 not_found ->
-                    not_found;
+                    throw(not_found);
                 Ctx ->
                     {Name, _} = get_node_name(Ctx, user_ctx:new(?ROOT_SESS_ID)),
                     Name
@@ -171,7 +171,7 @@ check_non_dir_access(UserCtx, FileCtx) ->
 cache_values_in_batch([]) ->
     [];
 cache_values_in_batch([FileCtx]) ->
-    case ensure_extended_name_if_needed(FileCtx) of
+    case cache_values_with_extended_name(FileCtx) of
         not_found -> [];
         UpdatedCtx -> [UpdatedCtx]
     end;
@@ -181,6 +181,8 @@ cache_values_in_batch([FirstCtx | Tail]) ->
         {_, Ctx2} = file_ctx:get_file_doc(Ctx),
         Ctx2
     end, Rest, #{}),
+    % First and last file in batch need to be checked whether name should be extended,
+    % as conflict can be with file outside batch.
     [UpdatedFirstAsList, UpdatedLastAsList] = lists_utils:pmap(fun(Ctx) ->
         cache_values_in_batch([Ctx])
     end, [FirstCtx, LastCtx]),
@@ -188,8 +190,8 @@ cache_values_in_batch([FirstCtx | Tail]) ->
 
 
 %% @private
--spec ensure_extended_name_if_needed(file_ctx:ctx()) -> file_ctx:ctx() | not_found.
-ensure_extended_name_if_needed(FileCtx0) ->
+-spec cache_values_with_extended_name(file_ctx:ctx()) -> file_ctx:ctx() | not_found.
+cache_values_with_extended_name(FileCtx0) ->
     ?safeguard_not_synced(begin
         {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, undefined),
         {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
