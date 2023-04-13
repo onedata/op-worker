@@ -1684,16 +1684,30 @@ remove_file_during_eviction(Config, Type, FileKeyType) ->
                 evicting_nodes = [WorkerP2],
                 function = fun transfers_test_mechanism:remove_file_during_eviction/2
             },
-            expected = #expected{
-                expected_transfer = #{
-                    eviction_status => failed,
-                    files_to_process => 1,
-                    files_processed => 1,
-                    failed_files => 1,
-                    files_evicted => 0
+            expected = [
+                % File was removed before replica_deletion_master received request
+                #expected{
+                    expected_transfer = #{
+                        eviction_status => completed,
+                        files_to_process => 1,
+                        files_processed => 1,
+                        failed_files => 0,
+                        files_evicted => 0
+                    },
+                    assertion_nodes = [WorkerP1, WorkerP2]
                 },
-                assertion_nodes = [WorkerP1, WorkerP2]
-            }
+                % File was removed after replica_deletion_master received request
+                #expected{
+                    expected_transfer = #{
+                        eviction_status => failed,
+                        files_to_process => 1,
+                        files_processed => 1,
+                        failed_files => 1,
+                        files_evicted => 0
+                    },
+                    assertion_nodes = [WorkerP1, WorkerP2]
+                }
+            ]
         }
     ).
 

@@ -166,7 +166,8 @@ supports_space(SpaceId) ->
 support_space(StorageId, Token, SupportSize) ->
     support_space(StorageId, Token, SupportSize, #support_parameters{
         accounting_enabled = false,
-        dir_stats_service_enabled = false
+        dir_stats_service_enabled = false,
+        dir_stats_service_status = disabled
     }).
 
 
@@ -177,8 +178,8 @@ support_space(StorageId, Token, SupportSize) ->
     support_parameters:record()
 ) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, Token, SupportSize, Supportparameters) ->
-    rpc_api:support_space(StorageId, Token, SupportSize, Supportparameters).
+support_space(StorageId, Token, SupportSize, SupportParameters) ->
+    rpc_api:support_space(StorageId, Token, SupportSize, SupportParameters).
 
 
 -spec get_space_support_parameters(od_space:id()) ->

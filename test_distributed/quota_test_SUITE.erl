@@ -552,6 +552,7 @@ migration_of_file_bigger_than_support_should_fail(Config) ->
 
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 0}, #{<<"totalBlocksSize">> := FileSize}]},
         opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 

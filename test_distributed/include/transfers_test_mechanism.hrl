@@ -89,7 +89,7 @@ end
 
 -record(transfer_test_spec, {
     setup :: undefined | #setup{},
-    expected :: undefined | #expected{},
+    expected :: undefined | #expected{} | [#expected{}],
     scenario :: undefined | #scenario{}
 }).
 
