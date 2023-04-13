@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 -include("onenv_test_utils.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -42,12 +43,18 @@ file_links_reconciliation_traverse_test(Config) ->
         oct_background:get_provider_id(paris),
         #dir_spec{children = lists:duplicate(100, #file_spec{})}
     ),
+    timer:sleep(timer:seconds(10)), % wait for all other docs to sync (links_node documents are ignored)
     stop_op_worker(Config, paris),
     [KrakowNode | _] = oct_background:get_provider_nodes(krakow),
     ExpectedChildren = lists:sort(lists:map(fun(#object{guid = Guid}) -> Guid end, ChildrenObjects)),
     
     ListChildrenFun = fun() ->
-        {ok, Listed, _} = lfm_proxy:get_children(KrakowNode, oct_background:get_user_session_id(user1, krakow), {guid, DirGuid}, #{size => 100, offset => 0}),
+        {ok, Listed, _} = lfm_proxy:get_children(
+            KrakowNode,
+            oct_background:get_user_session_id(user1, krakow),
+            ?FILE_REF(DirGuid),
+            #{limit => 100, offset => 0, tune_for_large_continuous_listing => false}
+        ),
         lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Listed))
     end,
     

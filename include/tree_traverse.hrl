@@ -33,9 +33,7 @@
     tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token() | undefined,
     batch_size :: tree_traverse:batch_size(),
-    % When set to true interrupted call errors will be handled internally
-    % in datastore - this will result in omission of missing file subtrees.
-    ignore_missing_links = true :: boolean(),
+    listing_errors_handling_policy :: tree_traverse:listing_errors_handling_policy(),
 
     % Traverse config
     % generate slave jobs also for directories

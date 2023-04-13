@@ -1023,7 +1023,7 @@
     % Information needed to restart directory listing
     tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token(),
-    ignore_missing_links :: boolean(),
+    listing_errors_handling_policy :: tree_traverse:listing_errors_handling_policy(),
     % Traverse task specific info
     child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),

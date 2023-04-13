@@ -59,10 +59,10 @@
 %% @formatter:off
 -type list_opts() :: #{
     % required keys
-    size := size(),
+    size := non_neg_integer(),
     % one of: token, offset, last_name is required so that we know were to start listing
-    token => token(),
-    offset => offset(),
+    token => binary(),
+    offset => non_neg_integer(),
     last_name => last_name(),
     % optional keys
     last_tree => last_tree(),

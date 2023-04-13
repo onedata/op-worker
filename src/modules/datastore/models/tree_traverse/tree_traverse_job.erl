@@ -60,6 +60,7 @@ save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
     tune_for_large_continuous_listing = TuneForLargeContinuousListing,
+    listing_errors_handling_policy = ListingErrorsHandlingPolicy,
     pagination_token = ListingPaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -80,6 +81,7 @@ save_master_job(Key, Job = #tree_traverse{
         doc_id = Uuid,
         user_id = UserId,
         tune_for_large_continuous_listing = TuneForLargeContinuousListing,
+        listing_errors_handling_policy = ListingErrorsHandlingPolicy,
         pagination_token = ListingPaginationToken,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -300,7 +302,7 @@ get_record_struct(7) ->
         {user_id, string},
         {tune_for_large_continuous_listing, boolean},
         {pagination_token, {custom, string, {file_listing, encode_pagination_token, decode_pagination_token}}},
-        {ignore_missing_links, boolean}, % new field
+        {listing_errors_handling_policy, atom}, % new field
         {child_dirs_job_generation_policy, atom},
         {children_master_jobs_mode, atom},
         {track_subtree_status, boolean},
@@ -541,7 +543,7 @@ upgrade_record(6, Record) ->
         UserId,
         TuneForLargeContinuousListing,
         ListingPaginationToken,
-        true, % new field - ignore_missing_links
+        propagate, % new field - listing_errors_handling_policy
         ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,

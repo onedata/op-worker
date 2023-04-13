@@ -34,10 +34,7 @@
 
 % Use QoS pool, as this traverse is only executed once after upgrade and there is no need to keep separate pool for it.
 -define(POOL_NAME, qos_traverse:pool_name()).
--define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 40)).
-
--define(LISTING_ERROR_RETRY_INITIAL_SLEEP, timer:seconds(2)).
--define(LISTING_ERROR_RETRY_MAX_SLEEP, op_worker:get_env(file_links_reconciliation_traverse_max_retry_sleep, timer:hours(2))).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 1000)).
 
 
 %%%===================================================================
@@ -66,7 +63,7 @@ start_for_space(SpaceId) ->
             callback_module => ?MODULE,
             task_id => SpaceId,
             batch_size => ?TRAVERSE_BATCH_SIZE,
-            ignore_missing_links => false
+            listing_errors_handling_policy => retry
         }))
     catch Class:Reason ->
         case datastore_runner:normalize_error(Reason) of
@@ -111,17 +108,7 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job = #tree_traverse_slave{}, #{task_id := TaskId}) ->
     do_slave_job(Job, TaskId);
 do_master_job(Job, MasterJobArgs) ->
-    do_master_job_internal(Job, MasterJobArgs, ?LISTING_ERROR_RETRY_INITIAL_SLEEP).
-
-
-do_master_job_internal(Job, MasterJobArgs, Sleep) ->
-    try
-        tree_traverse:do_master_job(Job, MasterJobArgs)
-    catch Class:Reason ->
-        ?error_stacktrace("Error when listing children in file_links_reconciliation_traverse", Class, Reason),
-        timer:sleep(Sleep),
-        do_master_job_internal(Job, MasterJobArgs, min(Sleep * 2, ?LISTING_ERROR_RETRY_MAX_SLEEP))
-    end.
+    tree_traverse:do_master_job(Job, MasterJobArgs).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
