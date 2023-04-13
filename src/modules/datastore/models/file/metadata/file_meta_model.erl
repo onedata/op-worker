@@ -13,6 +13,8 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% datastore_model callbacks
 -export([
@@ -479,13 +481,38 @@ on_remote_doc_created(_Ctx, #document{deleted = true}) ->
 on_remote_doc_created(_Ctx, #document{
     key = Key,
     value = #file_meta{type = Type, parent_uuid = ParentUuid}, scope = SpaceId
-}) ->
-    spawn(fun() ->
+} = Doc) ->
+    try
         case fslogic_file_id:is_space_dir_uuid(Key) orelse fslogic_file_id:is_trash_dir_uuid(Key) of
-            true -> ok;
-            false -> dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
+            true ->
+                ok;
+            false ->
+                % on_remote_doc_created is executed inside tp process so calls to other tp processes result
+                % in internal_call ; getting dir_stats_service_state can call tp process if value is not cached
+                % in memory - in such a case spawn process that will cache it in memory
+                % NOTE: handling internal_call instead of spawning for each doc is to optimize dbsync changes application
+                case dir_stats_service_state:get(SpaceId) of
+                    {ok, State} ->
+                        case dir_stats_service_state:is_active(State) of
+                            true ->
+                                dir_size_stats:report_file_created_without_state_check(
+                                    Type, file_id:pack_guid(ParentUuid, SpaceId));
+                            false ->
+                                ok
+                        end;
+                    {error, not_found} ->
+                        ok;
+                    {error, internal_call} ->
+                        spawn(fun() ->
+                            dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
+                        end)
+                end
         end
-    end).
+    catch
+        Class:Reason:Stacktrace ->
+            ?critical_exception("Cannot apply file_meta:on_remote_doc_created ~s", [?autoformat([Doc])],
+                Class, Reason, Stacktrace)
+    end.
 
 
 %%%===================================================================
