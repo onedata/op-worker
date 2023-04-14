@@ -128,14 +128,18 @@ handle_cast(check_batch_stash, State = #state{
     case ets:first(Stash) of
         '$end_of_table' ->
             {noreply, State};
-        {Seq, Until} ->
-            Key = {Seq, Until},
+        {Seq, Until} = Key ->
             {Timestamp, Docs} = ets:lookup_element(Stash, Key, 2),
             ets:delete(Stash, Key),
             {noreply, apply_changes_batch(Seq, Until, Timestamp, Docs, State)};
-        {Since, _} = Key when Since < Seq ->
+        {_, Until} = Key when Until =< Seq ->
             ets:delete(Stash, Key),
             gen_server2:cast(self(), check_batch_stash);
+        {Since, Until} = Key when Since < Seq ->
+            {Timestamp, Docs} = ets:lookup_element(Stash, Key, 2),
+            ets:delete(Stash, Key),
+            FilteredDocs = lists:filter(fun(#document{seq = DocSeq}) -> DocSeq >= Seq end, Docs),
+            {noreply, apply_changes_batch(Seq, Until, Timestamp, FilteredDocs, State)};
         _ ->
             case Seq of
                 RequestedUntil ->
@@ -190,7 +194,7 @@ handle_info(request_changes, State = #state{
                 ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators
             ),
 
-            dbsync_changes:log_batch_requested(Seq, FinalUntil, SpaceId, ProviderId),
+            dbsync_logger:log_batch_requested(Seq, FinalUntil, SpaceId, ProviderId),
             {noreply, schedule_changes_request(State#state{
                 changes_request_ref = undefined,
                 requested_until = FinalUntil
@@ -247,7 +251,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_changes_batch(Since, Until, Timestamp, Docs,
     State0 = #state{seq = Seq, apply_batch = Apply, first_batch_processed = FBP,
         lower_changes_count = LCC, first_lower_seq = FLS, provider_id = ProviderId, space_id = SpaceId}) ->
-    dbsync_changes:log_batch_received(Since, Until, Seq, SpaceId, ProviderId),
+    dbsync_changes:dbsync_logger(Since, Until, Seq, SpaceId, ProviderId),
     State = State0#state{first_batch_processed = true, lower_changes_count = 0},
     case {Since, Apply} of
         {Seq, undefined} ->

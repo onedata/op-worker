@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/5, apply/1, get_ctx/2, log_batch_received/5, log_batch_requested/4]).
+-export([apply_batch/5, apply/1, get_ctx/2]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
@@ -43,7 +43,7 @@
 -spec apply_batch([datastore:doc()], {couchbase_changes:since(), couchbase_changes:until()},
     timestamp(), od_space:id(), od_provider:id()) -> ok.
 apply_batch([], BatchRange, Timestamp, _SpaceId, _ProviderId) ->
-    % Empty batch (all sequences has been overwritten by newer changes)
+    % Empty batch (all sequences have been overwritten by newer changes)
     self() ! {batch_applied, BatchRange, Timestamp, ok},
     ok;
 apply_batch(Docs, BatchRange, Timestamp, SpaceId, ProviderId) ->
@@ -70,7 +70,7 @@ apply_batch(Docs, BatchRange, Timestamp, SpaceId, ProviderId) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref),
         Ans = gather_answers(Pids, Ref),
-        log_apply(Docs, BatchRange, Ans, SpaceId, ProviderId),
+        dbsync_logger:log_apply(Docs, BatchRange, Ans, SpaceId, ProviderId),
         Master ! {batch_applied, BatchRange, Timestamp, Ans}
     end),
     ok.
@@ -385,55 +385,3 @@ get_ctx(Model, Doc) ->
         #document{deleted = true} -> datastore_model:ensure_expiry_set_on_delete(Ctx);
         _ -> Ctx
     end.
-
-
--spec log_apply(
-    [datastore:doc()],
-    {couchbase_changes:since(), couchbase_changes:until()},
-    ok | timeout | {error, datastore_doc:seq(), term()},
-    od_space:id(),
-    od_provider:id()
-) -> ok.
-log_apply(Docs, BatchRange, Ans, SpaceId, ProviderId) ->
-    case op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000) of % 500 MB
-        0 ->
-            ok;
-        MaxSize ->
-            Seqs = lists:map(fun(#document{seq = Seq}) -> Seq end, Docs),
-            Log = "Seqs range ~p applied with ans: ~p~nSeqs in range: ~w",
-            Args = [BatchRange, Ans, Seqs],
-            onedata_logger:log_with_rotation(get_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
-    end.
-
-
--spec log_batch_received(couchbase_changes:since(), couchbase_changes:until(), couchbase_changes:seq(),
-    od_space:id(), od_provider:id()) -> ok.
-log_batch_received(Seq, Seq, _CurrentSeq, _SpaceId, _ProviderId) ->
-    ok;
-log_batch_received(Since, Until, CurrentSeq, SpaceId, ProviderId) ->
-    case op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000) of % 500 MB
-        0 ->
-            ok;
-        MaxSize ->
-            Log = "Seqs range ~p received, current seq ~p",
-            Args = [{Since, Until}, CurrentSeq],
-            onedata_logger:log_with_rotation(get_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
-    end.
-
-
--spec log_batch_requested(couchbase_changes:since(), couchbase_changes:until(), od_space:id(), od_provider:id()) -> ok.
-log_batch_requested(Since, Until, SpaceId, ProviderId) ->
-    case op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000) of % 500 MB
-        0 ->
-            ok;
-        MaxSize ->
-            Log = "Seqs range ~p requested",
-            Args = [{Since, Until}],
-            onedata_logger:log_with_rotation(get_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
-    end.
-
-
--spec get_log_file(od_space:id(), od_provider:id()) -> string().
-get_log_file(SpaceId, ProviderId) ->
-    LogFilePrefix = op_worker:get_env(dbsync_changes_audit_log_file_prefix, "/tmp/dbsync_changes_"),
-    LogFilePrefix ++ str_utils:to_list(SpaceId) ++ "_" ++ str_utils:to_list(ProviderId) ++ ".log".

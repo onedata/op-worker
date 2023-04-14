@@ -221,11 +221,11 @@ start_out_stream(SpaceId) ->
     end,
     Handler = fun
         (Since, Until, Timestamp, Docs) when Since =:= Until ->
-            log_batch_sending(Since, Until, all, SpaceId),
+            dbsync_logger:log_batch_sending(Since, Until, all, SpaceId),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs);
         (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
-            log_batch_sending(Since, Until, all, SpaceId),
+            dbsync_logger:log_batch_sending(Since, Until, all, SpaceId),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
             dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp),
             ok
@@ -286,12 +286,12 @@ handle_changes_request(ProviderId, #changes_request2{
 } = Request) ->
     Handler = fun
         (BatchSince, end_of_stream, Timestamp, Docs) ->
-            log_batch_sending(BatchSince, Until, ProviderId, SpaceId),
+            dbsync_logger:log_batch_sending(BatchSince, Until, ProviderId, SpaceId),
             dbsync_communicator:send_changes(
                 ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs
             );
         (BatchSince, BatchUntil, Timestamp, Docs) ->
-            log_batch_sending(BatchSince, BatchUntil, ProviderId, SpaceId),
+            dbsync_logger:log_batch_sending(BatchSince, BatchUntil, ProviderId, SpaceId),
             dbsync_communicator:send_changes(
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
@@ -370,18 +370,3 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
-
-
--spec log_batch_sending(couchbase_changes:since(), couchbase_changes:until(), od_provider:id() | all, od_space:id()) -> ok.
-log_batch_sending(Since, Until, ProviderId, SpaceId) ->
-    case op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 524288000) of % 500 MB
-        0 ->
-            ok;
-        MaxSize ->
-            LogFilePrefix = op_worker:get_env(dbsync_out_stream_audit_log_file_prefix, "/tmp/dbsync_out_stream_"),
-            LogFile = LogFilePrefix ++ str_utils:to_list(SpaceId) ++ ".log",
-
-            Log = "Seqs range ~p sent to ~p",
-            Args = [{Since, Until}, ProviderId],
-            onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize)
-    end.
