@@ -490,7 +490,7 @@ cache_parent(ParentCtx, FileCtx) ->
     FileCtx#file_ctx{parent = ParentCtx}.
 
 
--spec cache_name(ctx(), ctx()) -> ctx().
+-spec cache_name(file_meta:name(), ctx()) -> ctx().
 cache_name(FileName, FileCtx) ->
     FileCtx#file_ctx{file_name = FileName}.
 
