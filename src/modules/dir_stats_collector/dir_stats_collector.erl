@@ -64,7 +64,8 @@
 
 %% API - single directory
 -export([get_stats/3,
-    update_stats_of_dir/3, update_stats_of_parent/3, update_stats_of_parent/4, update_stats_of_nearest_dir/3,
+    update_stats_of_dir/3, update_stats_of_dir_without_state_check/3,
+    update_stats_of_parent/3, update_stats_of_parent/4, update_stats_of_nearest_dir/3,
     flush_stats/2, delete_stats/2,
     initialize_collections/1,
     report_file_moved/4]).
@@ -217,6 +218,12 @@ update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
         false ->
             ok
     end.
+
+
+-spec update_stats_of_dir_without_state_check(file_id:file_guid(), dir_stats_collection:type(),
+    dir_stats_collection:collection()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+update_stats_of_dir_without_state_check(Guid, CollectionType, CollectionUpdate) ->
+    update_stats_of_dir(Guid, external, CollectionType, CollectionUpdate).
 
 
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
