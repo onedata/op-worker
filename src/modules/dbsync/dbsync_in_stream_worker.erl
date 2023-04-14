@@ -251,7 +251,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_changes_batch(Since, Until, Timestamp, Docs,
     State0 = #state{seq = Seq, apply_batch = Apply, first_batch_processed = FBP,
         lower_changes_count = LCC, first_lower_seq = FLS, provider_id = ProviderId, space_id = SpaceId}) ->
-    dbsync_changes:dbsync_logger(Since, Until, Seq, SpaceId, ProviderId),
+    dbsync_logger:log_batch_received(Since, Until, Seq, SpaceId, ProviderId),
     State = State0#state{first_batch_processed = true, lower_changes_count = 0},
     case {Since, Apply} of
         {Seq, undefined} ->
