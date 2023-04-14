@@ -161,11 +161,15 @@
 -define(CONNECTION_AWAIT_LOG_INTERVAL, 300). % 5 minutes
 
 -define(THROTTLE_ERROR(__SESSION_ID, __FORMAT, __ARGS),
+    ?THROTTLE_LOG(__SESSION_ID, __FORMAT, __ARGS, fun() -> ?error(__FORMAT, __ARGS) end)
+).
+-define(THROTTLE_WARNING(__SESSION_ID, __FORMAT, __ARGS),
+    ?THROTTLE_LOG(__SESSION_ID, __FORMAT, __ARGS, fun() -> ?warning(__FORMAT, __ARGS) end)
+).
+-define(THROTTLE_LOG(__SESSION_ID, __FORMAT, __ARGS, __LOG_FUN),
     begin
         ?debug(__FORMAT, __ARGS),
-        utils:throttle({?MODULE, __SESSION_ID, ?LINE}, ?CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
-            ?error(__FORMAT, __ARGS)
-        end)
+        utils:throttle({?MODULE, __SESSION_ID, ?LINE}, ?CONNECTION_AWAIT_LOG_INTERVAL, __LOG_FUN)
     end
 ).
 -define(THROTTLE_ERROR_EXCEPTION(__SESSION_ID, __FORMAT, __ARGS, __CLASS, __REASON, __STACKTRACE),
@@ -798,12 +802,18 @@ handle_client_message(#state{
             ?THROTTLE_ERROR(SessId, "Client message decoding error - ~p", [Reason]),
             {ok, State};
         throw:{translation_failed, Reason, MsgId} ->
-            ?THROTTLE_ERROR(SessId, "Client message decoding error - ~p", [Reason]),
-            InvalidArgErrorMsg = #server_message{
+            Code = case Reason of
+                {unrecognized_message, Message} ->
+                    ?THROTTLE_WARNING(SessId, "Unrecognized client message ~p", [Message]),
+                    ?EBADMSG;
+                _ ->
+                    ?THROTTLE_ERROR(SessId, "Client message decoding error - ~p", [Reason]),
+                    ?EINVAL
+            end,
+            send_response(State, #server_message{
                 message_id = MsgId,
-                message_body = #status{code = ?EINVAL}
-            },
-            send_response(State, InvalidArgErrorMsg);
+                message_body = #status{code = Code}
+            });
         Type:Reason ->
             ?THROTTLE_ERROR(SessId, "Client message handling error - ~p:~p", [Type, Reason]),
             {ok, State}
