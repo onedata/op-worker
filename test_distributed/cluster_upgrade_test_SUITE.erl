@@ -490,7 +490,7 @@ init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case = file_links_reconciliation_traverse_test, Config) ->
+init_per_testcase(Case = upgrade_from_20_02_19_file_links_reconciliation_traverse_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     test_utils:mock_new(Worker, file_links_reconciliation_traverse, [passthrough]),
