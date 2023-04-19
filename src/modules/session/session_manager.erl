@@ -45,6 +45,9 @@
 -define(SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 100).
 -define(SESSION_INITIALIZATION_RETRIES, op_worker:get_env(session_initialization_retries, 8)).
 
+% Log not more often than once every 5 min
+-define(THROTTLE_LOG(SessId, Log), utils:throttle({?MODULE, ?FUNCTION_NAME, SessId}, 300, fun() -> Log end)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -168,7 +171,7 @@ restart_session_if_dead(SessId) ->
             restart_session(SessId, SessType),
             ok;
         {error, internal_call} ->
-            ?warning("Internal call cleaning dead connections for session ~p", [SessId]),
+            ?THROTTLE_LOG(SessId, ?warning("Internal call cleaning dead connections for session ~p", [SessId])),
             % Fix session document async as it cannot be done from the inside of tp process
             spawn(fun() ->
                 restart_session_if_dead(SessId)
