@@ -115,7 +115,7 @@ mv(SessId, FileKey, TargetParentKey, TargetName) ->
     {ok, file_id:file_guid()} | lfm:error_reply().
 cp(SessId, FileKey, TargetParentKey, TargetName) ->
     Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-    TargetParentGuid = lfm_file_key:resolve_file_key(SessId, TargetParentKey, do_not_resolve_symlink),
+    TargetParentGuid = lfm_file_key:resolve_file_key(SessId, TargetParentKey, resolve_symlink),
 
     case file_copy:copy(SessId, Guid, TargetParentGuid, TargetName) of
         {ok, NewGuid, _} ->
