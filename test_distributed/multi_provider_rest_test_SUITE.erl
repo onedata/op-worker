@@ -144,15 +144,24 @@ lookup_file_objectid_in_tmp_dir(Config) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
     TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    TmpDirPath = filename:join(["/", SpaceName, ".__onedata__tmp"]),
+    {ok, 200, _, Response1} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"lookup-file-id/", TmpDirPath/binary>>, post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := TmpDirObjectId} = json_utils:decode(Response1),
+    ?assertMatch({ok, TmpDirObjectId}, file_id:guid_to_objectid(TmpDirGuid)),
+
     FileName = <<"get_file_objectid">>,
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, TmpDirGuid, FileName, undefined),
     FilePath = filename:join(["/", SpaceName, ".__onedata__tmp", FileName]),
-    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+    {ok, 200, _, Response2} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
         WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
         ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
     )),
-    #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+    #{<<"fileId">> := ObjectId} = json_utils:decode(Response2),
     ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
 
 

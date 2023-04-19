@@ -87,7 +87,7 @@ resolve_file_path(SessionId, Path) ->
                         _ ->
                             {fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), Rest}
                     end,
-                    resolve_guid_by_relative_path(SessionId, RootGuid, filename:join(RelPathTokens))
+                    resolve_guid_by_relative_path(SessionId, RootGuid, filepath_utils:join(RelPathTokens))
             end;
         _ ->
             throw(?ERROR_POSIX(?ENOENT))
