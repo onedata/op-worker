@@ -42,9 +42,7 @@ create_dir(SessionId, Path) ->
 -spec cp(session:id(), file_meta:path(), file_meta:path()) ->
     {ok, file_id:file_guid()} | no_return().
 cp(SessionId, SrcURI, DstURI) ->
-    {ok, SrcGuid} = middleware_utils:resolve_file_path(
-        SessionId, filepath_utils:ensure_begins_with_slash(SrcURI)
-    ),
+    {ok, SrcGuid} = resolve_src_path(SessionId, <<"copy">>, SrcURI),
     {DstName, DstParentPath} = filepath_utils:basename_and_parent_dir(DstURI),
     {ok, DstParentGuid} = middleware_utils:resolve_file_path(SessionId, DstParentPath),
 
@@ -54,10 +52,31 @@ cp(SessionId, SrcURI, DstURI) ->
 -spec mv(session:id(), file_meta:path(), file_meta:path()) ->
     {ok, file_id:file_guid()} | no_return().
 mv(SessionId, SrcURI, DstURI) ->
-    {ok, SrcGuid} = middleware_utils:resolve_file_path(
-        SessionId, filepath_utils:ensure_begins_with_slash(SrcURI)
-    ),
+    {ok, SrcGuid} = resolve_src_path(SessionId, <<"move">>, SrcURI),
     {DstName, DstParentPath} = filepath_utils:basename_and_parent_dir(DstURI),
     {ok, DstParentGuid} = middleware_utils:resolve_file_path(SessionId, DstParentPath),
 
     ?lfm_check(lfm:mv(SessionId, ?FILE_REF(SrcGuid), ?FILE_REF(DstParentGuid), DstName)).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec resolve_src_path(session:id(), binary(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | no_return().
+resolve_src_path(SessionId, Key, <<"/cdmi_objectid/", ObjectIdWithRelPath/binary>>) ->
+    case binary:split(ObjectIdWithRelPath, <<"/">>, [trim_all]) of
+        [ObjectId] ->
+            {ok, middleware_utils:decode_object_id(ObjectId, Key)};
+        [ObjectId, RelPath] ->
+            Guid = middleware_utils:decode_object_id(ObjectId, Key),
+            ?lfm_check(lfm:resolve_guid_by_relative_path(SessionId, Guid, RelPath))
+    end;
+
+resolve_src_path(SessionId, _Key, SrcURI) ->
+    middleware_utils:resolve_file_path(SessionId, filepath_utils:ensure_begins_with_slash(
+        SrcURI
+    )).
