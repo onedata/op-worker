@@ -38,6 +38,7 @@
 
 -export([
     lookup_file_objectid/1,
+    lookup_file_objectid_in_tmp_dir/1,
     lookup_file_objectid_duplicated_space_name/1,
     transfers_should_be_ordered_by_timestamps/1,
     metric_get/1,
@@ -56,6 +57,7 @@
 all() ->
     ?ALL([
         lookup_file_objectid,
+        lookup_file_objectid_in_tmp_dir,
         lookup_file_objectid_duplicated_space_name,
         transfers_should_be_ordered_by_timestamps,
         % @TODO VFS-8297 currently disabled
@@ -130,6 +132,22 @@ lookup_file_objectid(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     FilePath = filename:join(["/", SpaceName, "get_file_objectid"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
+    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+    ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
+
+
+lookup_file_objectid_in_tmp_dir(Config) ->
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    FileName = <<"get_file_objectid">>,
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, TmpDirGuid, FileName, undefined),
+    FilePath = filename:join(["/", SpaceName, ".__onedata__tmp", FileName]),
     {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
         WorkerP1, <<"lookup-file-id/", FilePath/binary>>, post,
         ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
