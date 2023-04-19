@@ -1287,12 +1287,12 @@ move_copy_conflict(Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    FileName = filename:join([binary_to_list(SpaceName), "move_test_file.txt"]),
+    FileName = filename:join([binary_to_list(SpaceName), "move_copy_conflict.txt"]),
     FileUri = list_to_binary(filename:join("/", FileName)),
     FileData = <<"data">>,
     create_file(Config, FileName),
     write_to_file(Config, FileName, FileData, 0),
-    NewMoveFileName = "new_move_test_file",
+    NewMoveFileName = "new_move_copy_conflict",
 
     %%--- conflicting mv/cpy ------- (we cannot move and copy at the same time)
     ?assertEqual(FileData, get_file_content(Config, FileName)),

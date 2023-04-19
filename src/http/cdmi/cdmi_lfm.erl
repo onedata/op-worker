@@ -68,10 +68,8 @@ mv(SessionId, SrcURI, DstURI) ->
 -spec resolve_src_path(session:id(), binary(), file_meta:path()) ->
     {ok, file_id:file_guid()} | no_return().
 resolve_src_path(SessionId, Key, <<"/cdmi_objectid/", ObjectIdWithRelPath/binary>>) ->
-    case binary:split(ObjectIdWithRelPath, <<"/">>) of
+    case binary:split(ObjectIdWithRelPath, <<"/">>, [trim_all]) of
         [ObjectId] ->
-            {ok, middleware_utils:decode_object_id(ObjectId, Key)};
-        [ObjectId, <<>>] ->
             {ok, middleware_utils:decode_object_id(ObjectId, Key)};
         [ObjectId, RelPath] ->
             Guid = middleware_utils:decode_object_id(ObjectId, Key),
