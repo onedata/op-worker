@@ -102,7 +102,7 @@ rm_recursive(SessId, FileKey) ->
     {ok, file_id:file_guid()} | lfm:error_reply().
 mv(SessId, FileKey, TargetParentKey, TargetName) ->
     Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-    TargetDirGuid = lfm_file_key:resolve_file_key(SessId, TargetParentKey, do_not_resolve_symlink),
+    TargetDirGuid = lfm_file_key:resolve_file_key(SessId, TargetParentKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, Guid,
         #rename{target_parent_guid = TargetDirGuid, target_name = TargetName},
