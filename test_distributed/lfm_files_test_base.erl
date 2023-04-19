@@ -1419,22 +1419,22 @@ lfm_synch_stat(Config) ->
 lfm_cp_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     SpaceName = <<"space_name2">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(<<"space_id2">>),
+
     TestCaseDir = ?FUNCTION_NAME,
     SourceFile = <<"test_cp_source_file">>,
-    TargetParent1 = <<"test_cp_target_parent1">>,
-    TargetParent2 = <<"test_cp_target_parent2">>,
     TargetFile1 = <<"test_cp_target_file1">>,
     TargetFile2 = <<"test_cp_target_file2">>,
     TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
     SourceFilePath = filename:join([TestCaseDirPath, SourceFile]),
-    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
-    TargetParentPath2 = filename:join([TestCaseDirPath, TargetParent2]),
+    TargetParentPath1 = filename:join([TestCaseDirPath, generator:gen_name()]),
+    % test cp into path with dir of the same name as cp src
+    TargetParentRelPath2 = filename:join([TestCaseDir, generator:gen_name(), SourceFile]),
     TargetFilePath1 = filename:join([TargetParentPath1, TargetFile1]),
-    TargetFilePath2 = filename:join([TargetParentPath2, TargetFile2]),
+    TargetFilePath2 = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TargetParentRelPath2, TargetFile2]),
 
     {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
 
@@ -1445,7 +1445,7 @@ lfm_cp_file(Config) ->
 
     % create target dirs
     {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
-    {ok, TargetParentGuid2} = lfm_proxy:mkdir(W, SessId1, TargetParentPath2),
+    {ok, #file_attr{guid = TargetParentGuid2}} = lfm_proxy:create_dir_at_path(W, SessId1, SpaceGuid, TargetParentRelPath2),
 
     % copy to first target
     {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, TargetParentPath1}, TargetFile1)),
