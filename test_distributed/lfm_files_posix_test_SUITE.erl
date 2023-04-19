@@ -42,6 +42,7 @@
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
     lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate_test/1,
@@ -137,6 +138,7 @@
     lfm_cp_file,
     lfm_cp_empty_dir,
     lfm_cp_dir_to_itself_should_fail,
+    lfm_cp_dir_to_symlink_to_this_dir_should_fail,
     lfm_cp_dir_to_its_child_should_fail,
     lfm_cp_dir,
     lfm_truncate_test,
@@ -284,6 +286,9 @@ lfm_cp_empty_dir(Config) ->
 
 lfm_cp_dir_to_itself_should_fail(Config) ->
     lfm_files_test_base:lfm_cp_dir_to_itself_should_fail(Config).
+
+lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config) ->
+    lfm_files_test_base:lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config).
 
 lfm_cp_dir_to_its_child_should_fail(Config) ->
     lfm_files_test_base:lfm_cp_dir_to_its_child_should_fail(Config).

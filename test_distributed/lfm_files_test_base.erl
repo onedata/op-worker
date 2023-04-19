@@ -45,6 +45,7 @@
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
     lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate/1,
@@ -1524,6 +1525,17 @@ lfm_cp_dir_to_itself_should_fail(Config) ->
     % try to copy file to itself
     ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, SourceDirPath}, SourceDir)).
 
+lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {DirGuid, SymlinkGuid} = create_dir_and_symlink_to_it(?FUNCTION_NAME, W, SessId1),
+
+    ?assertMatch(
+        {error, ?EINVAL},
+        lfm_proxy:cp(W, SessId1, ?FILE_REF(DirGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())
+    ).
+
 lfm_cp_dir_to_its_child_should_fail(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
@@ -2680,6 +2692,24 @@ readdir_plus_read_xattrs_base(Config, ReadFun) ->
         ?assertEqual(F2, maps:get(<<"name">>, Xattrs, undefined)),
         ?assertEqual(undefined, maps:get(<<"undefined">>, Xattrs, defined))
     end, lists:zip(ReadFun(Worker, SessId1, MainDirPath, [<<"name">>, <<"undefined">>]), Files)).
+
+
+%% @private
+create_dir_and_symlink_to_it(Testcase, Node, SessionId) ->
+    SpaceName = <<"space_name2">>,
+
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, Testcase]),
+    {ok, _} = lfm_proxy:mkdir(Node, SessionId, TestCaseDirPath),
+
+    SourceDirPath = filename:join([TestCaseDirPath, generator:gen_name()]),
+    {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, SourceDirPath),
+
+    {ok, #file_attr{guid = SymlinkGuid}} = lfm_proxy:make_symlink(
+        Node, SessionId, {path, TestCaseDirPath}, generator:gen_name(),
+        onenv_file_test_utils:prepare_symlink_value(Node, SessionId, DirGuid)
+    ),
+
+    {DirGuid, SymlinkGuid}.
 
 
 %%%===================================================================
