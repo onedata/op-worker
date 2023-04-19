@@ -45,6 +45,7 @@
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
     lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate/1,
@@ -102,6 +103,7 @@
     lfm_create_and_open_failure/1,
     lfm_open_in_direct_mode/1,
     lfm_mv_failure/1,
+    lfm_mv_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_open_multiple_times_failure/1,
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
@@ -372,6 +374,17 @@ lfm_mv_failure(Config) ->
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
+
+lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {DirGuid, SymlinkGuid} = create_dir_and_symlink_to_it(?FUNCTION_NAME, W, SessId1),
+
+    ?assertMatch(
+        {error, ?EINVAL},
+        lfm_proxy:mv(W, SessId1, ?FILE_REF(DirGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())
+    ).
 
 lfm_mv_failure_multiple_users(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1406,22 +1419,22 @@ lfm_synch_stat(Config) ->
 lfm_cp_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
 
     SpaceName = <<"space_name2">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(<<"space_id2">>),
+
     TestCaseDir = ?FUNCTION_NAME,
     SourceFile = <<"test_cp_source_file">>,
-    TargetParent1 = <<"test_cp_target_parent1">>,
-    TargetParent2 = <<"test_cp_target_parent2">>,
     TargetFile1 = <<"test_cp_target_file1">>,
     TargetFile2 = <<"test_cp_target_file2">>,
     TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TestCaseDir]),
     SourceFilePath = filename:join([TestCaseDirPath, SourceFile]),
-    TargetParentPath1 = filename:join([TestCaseDirPath, TargetParent1]),
-    TargetParentPath2 = filename:join([TestCaseDirPath, TargetParent2]),
+    TargetParentPath1 = filename:join([TestCaseDirPath, generator:gen_name()]),
+    % test cp into path with dir of the same name as cp src
+    TargetParentRelPath2 = filename:join([TestCaseDir, generator:gen_name(), SourceFile]),
     TargetFilePath1 = filename:join([TargetParentPath1, TargetFile1]),
-    TargetFilePath2 = filename:join([TargetParentPath2, TargetFile2]),
+    TargetFilePath2 = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, TargetParentRelPath2, TargetFile2]),
 
     {ok, _} = lfm_proxy:mkdir(W, SessId1, TestCaseDirPath),
 
@@ -1432,7 +1445,7 @@ lfm_cp_file(Config) ->
 
     % create target dirs
     {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
-    {ok, TargetParentGuid2} = lfm_proxy:mkdir(W, SessId1, TargetParentPath2),
+    {ok, #file_attr{guid = TargetParentGuid2}} = lfm_proxy:create_dir_at_path(W, SessId1, SpaceGuid, TargetParentRelPath2),
 
     % copy to first target
     {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, TargetParentPath1}, TargetFile1)),
@@ -1523,6 +1536,17 @@ lfm_cp_dir_to_itself_should_fail(Config) ->
 
     % try to copy file to itself
     ?assertMatch({error, ?EINVAL}, lfm_proxy:cp(W, SessId1, ?FILE_REF(Guid), {path, SourceDirPath}, SourceDir)).
+
+lfm_cp_dir_to_symlink_to_this_dir_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {DirGuid, SymlinkGuid} = create_dir_and_symlink_to_it(?FUNCTION_NAME, W, SessId1),
+
+    ?assertMatch(
+        {error, ?EINVAL},
+        lfm_proxy:cp(W, SessId1, ?FILE_REF(DirGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())
+    ).
 
 lfm_cp_dir_to_its_child_should_fail(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -2680,6 +2704,24 @@ readdir_plus_read_xattrs_base(Config, ReadFun) ->
         ?assertEqual(F2, maps:get(<<"name">>, Xattrs, undefined)),
         ?assertEqual(undefined, maps:get(<<"undefined">>, Xattrs, defined))
     end, lists:zip(ReadFun(Worker, SessId1, MainDirPath, [<<"name">>, <<"undefined">>]), Files)).
+
+
+%% @private
+create_dir_and_symlink_to_it(Testcase, Node, SessionId) ->
+    SpaceName = <<"space_name2">>,
+
+    TestCaseDirPath = filename:join([<<?DIRECTORY_SEPARATOR>>, SpaceName, Testcase]),
+    {ok, _} = lfm_proxy:mkdir(Node, SessionId, TestCaseDirPath),
+
+    SourceDirPath = filename:join([TestCaseDirPath, generator:gen_name()]),
+    {ok, DirGuid} = lfm_proxy:mkdir(Node, SessionId, SourceDirPath),
+
+    {ok, #file_attr{guid = SymlinkGuid}} = lfm_proxy:make_symlink(
+        Node, SessionId, {path, TestCaseDirPath}, generator:gen_name(),
+        onenv_file_test_utils:prepare_symlink_value(Node, SessionId, DirGuid)
+    ),
+
+    {DirGuid, SymlinkGuid}.
 
 
 %%%===================================================================
