@@ -21,7 +21,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
--export([create_and_sync_file_tree/3]).
+-export([create_and_sync_file_tree/3, create_and_sync_file_tree/4, create_file_tree/4]).
 
 -type share_spec() :: #share_spec{}.
 
@@ -45,11 +45,20 @@
 -spec create_and_sync_file_tree(oct_background:entity_selector(), object_selector(), object_spec()) ->
     map().
 create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
-    UserId = oct_background:get_user_id(UserSelector),
-    {ParentGuid, SpaceId} = resolve_file(ParentSelector),
-    [CreationProvider | SyncProviders] = oct_background:get_space_supporting_providers(
+    {_, SpaceId} = resolve_file(ParentSelector),
+    [CreationProvider | _] = oct_background:get_space_supporting_providers(
         SpaceId
     ),
+    create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvider).
+
+
+-spec create_and_sync_file_tree(oct_background:entity_selector(), object_selector(), object_spec(), object_selector()) ->
+    map().
+create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderPlaceholder) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    {ParentGuid, SpaceId} = resolve_file(ParentSelector),
+    CreationProvider = oct_background:get_provider_id(CreationProviderPlaceholder),
+    SyncProviders = oct_background:get_space_supporting_providers(SpaceId) -- [CreationProvider],
 
     FileInfo = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
     await_sync(CreationProvider, SyncProviders, UserId, FileInfo),
@@ -58,12 +67,6 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     FileInfo.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
 -spec create_file_tree(
     od_user:id(),
     file_id:file_guid(),
@@ -80,10 +83,10 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
-
+    
     {ok, FileGuid} = create_file(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
     Content /= <<>> andalso write_file(CreationNode, UserSessId, FileGuid, Content),
-
+    
     #object{
         guid = FileGuid,
         name = FileName,
@@ -103,9 +106,9 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
-
+    
     {ok, DirGuid} = create_dir(CreationNode, UserSessId, ParentGuid, DirName, DirMode),
-
+    
     #object{
         guid = DirGuid,
         name = DirName,
@@ -117,6 +120,10 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
         end, ChildrenDesc)
     }.
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %% @private
 -spec create_shares(node(), session:id(), file_id:file_guid(), [share_spec()]) ->

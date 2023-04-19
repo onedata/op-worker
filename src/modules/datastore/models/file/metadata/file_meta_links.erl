@@ -66,7 +66,11 @@
     offset => offset(),
     last_name => last_name(),
     % optional keys
-    last_tree => last_tree()
+    last_tree => last_tree(),
+    % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
+    %             being down, such subtree will be ignored and NO error returned;
+    % * `false` - in case described above `interrupted_call` error will be returned.
+    ignore_missing_links => boolean() % default: true
 }.
 
 % Map returned from listing functions, containing information
@@ -150,7 +154,16 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 list(ParentUuid, Opts) ->
     InternalOpts = sanitize_opts(Opts),
     ExpectedSize = maps:get(size, InternalOpts),
-    Result = fold(ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
+    Ctx = case maps:get(ignore_missing_links, InternalOpts, true) of
+        true ->
+            ?CTX;
+        false ->
+            ?CTX#{
+                handle_interrupted_call => false,
+                writer_interrupted_call_retries => 0
+            }
+    end,
+    Result = fold(Ctx, ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
         case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
             true -> {ok, {[Link | ListAcc], ListedLinksCount + 1}};
             _ -> {ok, {ListAcc, ListedLinksCount + 1}}
@@ -259,10 +272,10 @@ get_all(ParentUuid, Name) ->
 %%% Internal functions
 %%%===================================================================
 
--spec fold(forest(), fold_fun(), fold_acc(), list_opts()) ->
+-spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), list_opts()) ->
     {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold(ParentUuid, Fun, AccIn, Opts) ->
-    datastore_model:fold_links(?CTX, ParentUuid, all, Fun, AccIn, Opts).
+fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
+    datastore_model:fold_links(Ctx, ParentUuid, all, Fun, AccIn, Opts).
 
 
 %%--------------------------------------------------------------------
@@ -385,7 +398,8 @@ sanitize_opts(Opts) ->
     InternalOpts3 = maps_utils:put_if_defined(InternalOpts2, offset, sanitize_offset(Opts)),
     InternalOpts4 = maps_utils:put_if_defined(InternalOpts3, prev_link_name, sanitize_last_name(Opts)),
     InternalOpts5 = maps_utils:put_if_defined(InternalOpts4, prev_tree_id, sanitize_last_tree(Opts)),
-    validate_starting_opts(InternalOpts5).
+    InternalOpts6 = maps_utils:put_if_defined(InternalOpts5, ignore_missing_links, sanitize_boolean(ignore_missing_links, Opts)),
+    validate_starting_opts(InternalOpts6).
 
 
 -spec validate_starting_opts(datastore_model:fold_opts()) -> datastore_model:fold_opts().
@@ -462,6 +476,18 @@ sanitize_last_name(Opts) ->
 -spec sanitize_last_tree(list_opts()) -> last_tree() | undefined.
 sanitize_last_tree(Opts) ->
     sanitize_binary(last_tree, Opts).
+
+
+-spec sanitize_boolean(atom(), list_opts()) -> boolean() | undefined | no_return().
+sanitize_boolean(Key, Opts) ->
+    case maps:get(Key, Opts, undefined) of
+        Boolean when is_boolean(Boolean) -> Boolean;
+        undefined -> undefined;
+        _ ->
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            %% throw(?ERROR_BAD_VALUE_BOOLEAN(Key))
+            throw(?EINVAL)
+    end.
 
 
 -spec sanitize_binary(atom(), list_opts()) -> binary() | undefined.

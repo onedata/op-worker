@@ -45,7 +45,8 @@
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, op_worker:get_release_version()}
+    {4, ?LINE_20_02(<<"19">>)},
+    {5, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
 
@@ -157,7 +158,10 @@ upgrade_cluster(2) ->
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    {ok, 4}.
+    {ok, 4};
+upgrade_cluster(4) ->
+    await_zone_connection_and_run(fun file_links_reconciliation_traverse:start/0),
+    {ok, 5}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -174,6 +178,7 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, fslogic_worker:supervisor_flags()},
         {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
     ]},
+    {qos_worker, []},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
@@ -189,8 +194,7 @@ custom_workers() -> filter_disabled_workers([
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
-    ]},
-    {qos_worker, []}
+    ]}
 ]).
 
 %%--------------------------------------------------------------------
