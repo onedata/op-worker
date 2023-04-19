@@ -103,6 +103,7 @@
     lfm_create_and_open_failure/1,
     lfm_open_in_direct_mode/1,
     lfm_mv_failure/1,
+    lfm_mv_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_open_multiple_times_failure/1,
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
@@ -373,6 +374,17 @@ lfm_mv_failure(Config) ->
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
+
+lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {DirGuid, SymlinkGuid} = create_dir_and_symlink_to_it(?FUNCTION_NAME, W, SessId1),
+
+    ?assertMatch(
+        {error, ?EINVAL},
+        lfm_proxy:mv(W, SessId1, ?FILE_REF(DirGuid), ?FILE_REF(SymlinkGuid), generator:gen_name())
+    ).
 
 lfm_mv_failure_multiple_users(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

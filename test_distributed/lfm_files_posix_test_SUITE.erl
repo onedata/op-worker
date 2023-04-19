@@ -104,6 +104,7 @@
     lfm_create_and_open_failure_test/1,
     lfm_open_in_direct_mode_test/1,
     lfm_mv_failure_test/1,
+    lfm_mv_dir_to_symlink_to_this_dir_should_fail/1,
     lfm_open_multiple_times_failure_test/1,
     lfm_open_failure_multiple_users_test/1,
     lfm_open_and_create_open_failure_test/1,
@@ -200,6 +201,7 @@
     lfm_create_and_open_failure_test,
     lfm_open_in_direct_mode_test,
     lfm_mv_failure_test,
+    lfm_mv_dir_to_symlink_to_this_dir_should_fail,
     lfm_open_multiple_times_failure_test,
     lfm_open_failure_multiple_users_test,
     lfm_open_and_create_open_failure_test,
@@ -529,6 +531,10 @@ lfm_open_in_direct_mode_test(Config) ->
 
 lfm_mv_failure_test(Config) ->
     lfm_files_test_base:lfm_mv_failure(Config).
+
+
+lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config) ->
+    lfm_files_test_base:lfm_mv_dir_to_symlink_to_this_dir_should_fail(Config).
 
 
 lfm_open_multiple_times_failure_test(Config) ->
