@@ -54,15 +54,55 @@ is_file_access_error({error, {file_meta_missing, _Uuid}}) -> true; % error throw
 is_file_access_error(_) -> false.
 
 
+%% TODO VFS-10809 uncomment
+%%-spec resolve_file_path(session:id(), file_meta:path()) ->
+%%    {ok, file_id:file_guid()} | no_return().
+%%resolve_file_path(SessionId, Path) ->
+%%    ?lfm_check(remote_utils:call_fslogic(
+%%        SessionId,
+%%        fuse_request,
+%%        #resolve_guid_by_canonical_path{path = ensure_canonical_path(SessionId, Path)},
+%%        fun(#guid{guid = Guid}) -> {ok, Guid} end
+%%    )).
+
+
+%% TODO VFS-10809 rm
 -spec resolve_file_path(session:id(), file_meta:path()) ->
     {ok, file_id:file_guid()} | no_return().
 resolve_file_path(SessionId, Path) ->
-    ?lfm_check(remote_utils:call_fslogic(
-        SessionId,
-        fuse_request,
-        #resolve_guid_by_canonical_path{path = ensure_canonical_path(SessionId, Path)},
-        fun(#guid{guid = Guid}) -> {ok, Guid} end
-    )).
+    {ok, UserId} = session:get_user_id(SessionId),
+
+    case filepath_utils:split_and_skip_dots(Path) of
+        {ok, [<<"/">>]} ->
+            {ok, fslogic_file_id:user_root_dir_guid(UserId)};
+        {ok, [<<"/">>, SpaceName | Rest]} ->
+            case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
+                false ->
+                    throw(?ERROR_POSIX(?ENOENT));
+                {true, SpaceId} ->
+                    assert_space_supported_locally(SpaceId),
+                    {RootGuid, RelPathTokens} = case Rest of
+                        [<<".__onedata__tmp">> | Rest2] ->
+                            {fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId), Rest2};
+                        _ ->
+                            {fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), Rest}
+                    end,
+                    resolve_guid_by_relative_path(SessionId, RootGuid, filename:join(RelPathTokens))
+            end;
+        _ ->
+            throw(?ERROR_POSIX(?ENOENT))
+    end.
+
+
+%% TODO VFS-10809 rm
+%% @private
+-spec resolve_guid_by_relative_path(session:id(), file_id:file_guid(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | no_return().
+resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) ->
+    case lfm:resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) of
+        {ok, Guid} -> {ok, Guid};
+        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+    end.
 
 
 -spec switch_context_if_shared_file_request(middleware:req()) -> middleware:req().
@@ -188,21 +228,22 @@ assert_file_managed_locally(FileGuid) ->
 %%%===================================================================
 
 
-%% @private
--spec ensure_canonical_path(session:id(), file_meta:path()) -> file_meta:path() | no_return().
-ensure_canonical_path(SessionId, Path) ->
-    case filepath_utils:split_and_skip_dots(Path) of
-        {ok, [<<"/">>]} ->
-            <<"/">>;
-        {ok, [<<"/">>, SpaceName | Rest]} ->
-            {ok, UserId} = session:get_user_id(SessionId),
-            case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
-                false ->
-                    throw(?ERROR_POSIX(?ENOENT));
-                {true, SpaceId} ->
-                    assert_space_supported_locally(SpaceId),
-                    filename:join([<<"/">>, SpaceId | Rest])
-            end;
-        _ ->
-            throw(?ERROR_POSIX(?ENOENT))
-    end.
+%% TODO VFS-10809 uncomment
+%%%% @private
+%%-spec ensure_canonical_path(session:id(), file_meta:path()) -> file_meta:path() | no_return().
+%%ensure_canonical_path(SessionId, Path) ->
+%%    case filepath_utils:split_and_skip_dots(Path) of
+%%        {ok, [<<"/">>]} ->
+%%            <<"/">>;
+%%        {ok, [<<"/">>, SpaceName | Rest]} ->
+%%            {ok, UserId} = session:get_user_id(SessionId),
+%%            case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
+%%                false ->
+%%                    throw(?ERROR_POSIX(?ENOENT));
+%%                {true, SpaceId} ->
+%%                    assert_space_supported_locally(SpaceId),
+%%                    filename:join([<<"/">>, SpaceId | Rest])
+%%            end;
+%%        _ ->
+%%            throw(?ERROR_POSIX(?ENOENT))
+%%    end.
