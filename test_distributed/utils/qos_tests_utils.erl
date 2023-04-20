@@ -24,15 +24,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
-% assertions
--export([
-    assert_distribution_in_dir_structure/2,
-    assert_effective_qos/3, assert_effective_qos/4,
-    assert_file_qos_documents/3, assert_file_qos_documents/4,
-    assert_qos_entry_documents/2, assert_qos_entry_documents/3,
-    gather_not_matching_statuses_on_all_nodes/3
-]).
-
 % util functions
 -export([
     fulfill_qos_test_base/1,
@@ -43,11 +34,25 @@
     wait_for_qos_fulfillment_in_parallel/2,
     add_qos/1, add_multiple_qos/1,
     map_qos_names_to_ids/2,
-    set_qos_parameters/3, reset_qos_parameters/0,
+    set_qos_parameters/3, reset_qos_parameters/0
+]).
+
+% mock related functions
+-export([
     mock_transfers/1,
+    wait_for_file_transfer_start/1,
     finish_transfers/1, finish_transfers/2,
     finish_all_transfers/0,
     mock_replica_synchronizer/2
+]).
+
+% assertions
+-export([
+    assert_distribution_in_dir_structure/2,
+    assert_effective_qos/3, assert_effective_qos/4,
+    assert_file_qos_documents/3, assert_file_qos_documents/4,
+    assert_qos_entry_documents/2, assert_qos_entry_documents/3,
+    gather_not_matching_statuses_on_all_nodes/3
 ]).
 
 -define(USER_PLACEHOLDER, user2).
@@ -337,8 +342,11 @@ reset_qos_parameters() ->
             ok = opw_test_rpc:call(Provider, storage, set_qos_parameters, [StorageId, #{}])
         end, Storages)
     end, Providers).
-            
 
+
+%%%====================================================================
+%%% Mock related functions
+%%%====================================================================
 
 mock_transfers(Nodes) ->
     test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
@@ -353,6 +361,16 @@ mock_transfers(Nodes) ->
                     {ok, FileGuid}
             end
         end).
+
+
+% above mock (mock_transfers/1) required for this function to work
+wait_for_file_transfer_start(FileGuid) ->
+    receive {qos_slave_job, _Pid, FileGuid} = Msg ->
+        self() ! Msg
+    after timer:seconds(?ATTEMPTS) ->
+        throw(reconciliation_transfer_not_started)
+    end.
+
 
 % above mock (mock_transfers/1) required for this function to work
 finish_transfers(Files) ->
@@ -385,6 +403,8 @@ finish_transfers(Files, Mode, IgnoredMsgs) ->
         end
     end.
 
+
+% above mock (mock_transfers/1) required for this function to work
 finish_all_transfers() ->
     receive {qos_slave_job, Pid, FileGuid}->
         Pid ! {completed, FileGuid},
