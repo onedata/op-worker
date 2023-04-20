@@ -149,7 +149,8 @@ list(ParentUuid, Opts) ->
         false ->
             ?CTX#{
                 handle_interrupted_call => false,
-                writer_interrupted_call_retries => 0
+                writer_interrupted_call_retries => 0,
+                links_tree_interrupted_call_retries => 0
             }
     end,
     Result = fold(Ctx, ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->

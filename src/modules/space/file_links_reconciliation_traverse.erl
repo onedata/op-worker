@@ -63,14 +63,14 @@ start_for_space(SpaceId) ->
             callback_module => ?MODULE,
             task_id => SpaceId,
             batch_size => ?TRAVERSE_BATCH_SIZE,
-            listing_errors_handling_policy => retry
+            listing_errors_handling_policy => retry_infinitely
         }))
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         case datastore_runner:normalize_error(Reason) of
             already_exists -> ok;
             [{error, already_exists}] -> ok;
             _ ->
-                ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
+                ?error_exception(Class, Reason, Stacktrace),
                 erlang:apply(erlang, Class, [Reason])
         end
     end.

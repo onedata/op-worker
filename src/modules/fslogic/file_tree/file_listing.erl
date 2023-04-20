@@ -222,7 +222,7 @@ convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     BaseOpts = index_to_datastore_list_opts(Index),
     maps_utils:remove_undefined(BaseOpts#{
         token => DatastoreToken,
-        ignore_missing_links => sanitize_interrupted_call_opt(maps:get(ignore_missing_links, Opts, undefined)),
+        ignore_missing_links => sanitize_ignore_missing_links_opt(maps:get(ignore_missing_links, Opts, undefined)),
         size => sanitize_limit(maps:get(limit, Opts, undefined))
     });
 convert_to_datastore_options(Opts) ->
@@ -246,7 +246,7 @@ convert_to_datastore_options(Opts) ->
             maps:get(whitelist, Opts, undefined)),
         inclusive => sanitize_inclusive(
             maps:get(inclusive, Opts, undefined)),
-        ignore_missing_links => sanitize_interrupted_call_opt(
+        ignore_missing_links => sanitize_ignore_missing_links_opt(
             maps:get(ignore_missing_links, Opts, undefined)),
         token => DatastoreToken
     }).
@@ -306,12 +306,12 @@ sanitize_offset(Offset, _, _Whitelist) ->
 
 
 %% @private
--spec sanitize_interrupted_call_opt(boolean() | any()) -> boolean() | undefined.
-sanitize_interrupted_call_opt(Boolean) when is_boolean(Boolean)->
+-spec sanitize_ignore_missing_links_opt(boolean() | any()) -> boolean() | undefined.
+sanitize_ignore_missing_links_opt(Boolean) when is_boolean(Boolean)->
     Boolean;
-sanitize_interrupted_call_opt(undefined) ->
+sanitize_ignore_missing_links_opt(undefined) ->
     undefined;
-sanitize_interrupted_call_opt(_) ->
+sanitize_ignore_missing_links_opt(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
     %% throw(?ERROR_BAD_VALUE_BOOLEAN(ignore_missing_links))
     throw(?EINVAL).

@@ -153,6 +153,7 @@ upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
+    %% @TODO VFS-10810 remove below note, as no longer valid, after 21.02.2 is released
     % NOTE: version 20.02.20 also is in cluster generation 5, so in order to upgrade
     % from this version new cluster generation must be created.
     await_zone_connection_and_run(fun file_links_reconciliation_traverse:start/0),

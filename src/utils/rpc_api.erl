@@ -462,6 +462,7 @@ revoke_space_support(SpaceId) ->
     StorageId = hd(StorageIds),
     storage:revoke_space_support(StorageId, SpaceId).
 
+
 -spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
 get_spaces() ->
     provider_logic:get_spaces().

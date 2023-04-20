@@ -64,11 +64,12 @@
 -type batch_size() :: file_listing:limit().
 -type traverse_info() :: map().
 % Listing errors handling policy:
-%   * retry - listing is repeated with a backoff until successful result.
-%             NOTE: this may cause traverse to hang until underlying problem is resolved;
-%   * ignore - on listing error such subtree is ignored;
+%   * retry_infinitely - listing is repeated with a backoff until successful result.
+%                        NOTE: this may cause traverse to hang until underlying problem is resolved;
 %   * propagate - listing error is returned as a result of a master job.
--type listing_errors_handling_policy() :: retry | ignore | propagate.
+%   * ignore_known - on known listing error (see ?LISTING_KNOWN_ERRORS) such subtree is ignored,
+%                    for all other unexpected errors behaves the same as retry_infinitely.
+-type listing_errors_handling_policy() :: retry_infinitely | ignore_known | propagate.
 % Symbolic links resolution policy:
 %   * preserve - every symbolic link encountered during traverse is passed as is to the slave job;
 %   * follow_all - every valid symbolic link is resolved and target file is passed to the slave job,
@@ -89,8 +90,6 @@
     child_dirs_job_generation_policy => child_dirs_job_generation_policy(),
     % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
     tune_for_large_continuous_listing => boolean(),
-    % Flag determining whether interrupted call errors should be handled internally in datastore.
-    % Internal handling results in omission of missing file subtrees.
     listing_errors_handling_policy => listing_errors_handling_policy(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
@@ -132,8 +131,12 @@
     symlink_resolution_policy/0, encountered_files_set/0, new_jobs_preprocessor/0, run_options/0]).
 
 
--define(LISTING_ERROR_RETRY_INITIAL_SLEEP, timer:seconds(2)).
--define(LISTING_ERROR_RETRY_MAX_SLEEP, op_worker:get_env(tree_traverse_max_retry_sleep, timer:hours(2))).
+-define(LISTING_ERROR_RETRY_INITIAL_BACKOFF, timer:seconds(2)).
+-define(LISTING_ERROR_RETRY_MAX_BACKOFF, op_worker:get_env(tree_traverse_max_retry_backoff, timer:hours(2))).
+
+-define(LISTING_KNOWN_ERRORS, [
+    interrupted_call
+]).
 
 %%%===================================================================
 %%% Main API
@@ -384,7 +387,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 -spec do_master_job_internal(file_meta:type(), master_job(), id(), new_jobs_preprocessor()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
 do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor) ->
-    do_dir_master_job(Job, TaskId, NewJobsPreprocessor, ?LISTING_ERROR_RETRY_INITIAL_SLEEP);
+    do_dir_master_job(Job, TaskId, NewJobsPreprocessor, ?LISTING_ERROR_RETRY_INITIAL_BACKOFF);
 do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, _, _) ->
     % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
     {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
@@ -425,15 +428,15 @@ do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
         {error, ?EACCES, _Stacktrace} ->
             {ok, #{}}; % EACCES is expected error and can happen anytime, so error handling policy is not applied to it.
         {error, Reason, Stacktrace} ->
-            case ListingErrorsHandlingPolicy of
-                ignore ->
+            case {ListingErrorsHandlingPolicy, lists:member(Reason, ?LISTING_KNOWN_ERRORS)} of
+                {ignore_known, true} ->
                     {ok, #{}};
-                propagate ->
+                {propagate, _} ->
                     {error, Reason};
-                retry ->
+                _ ->
                     ?error_exception(error, Reason, Stacktrace),
                     timer:sleep(Sleep),
-                    do_dir_master_job(Job, TaskId, NewJobsPreprocessor, min(Sleep * 2, ?LISTING_ERROR_RETRY_MAX_SLEEP))
+                    do_dir_master_job(Job, TaskId, NewJobsPreprocessor, min(Sleep * 2, ?LISTING_ERROR_RETRY_MAX_BACKOFF))
             end
     end.
 
@@ -479,7 +482,7 @@ list_children(#tree_traverse{
         {ok, UserCtx} = acquire_user_ctx(Job, TaskId),
         {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
             limit => BatchSize,
-            ignore_missing_links => ListingErrorsHandlingPolicy == ignore
+            ignore_missing_links => ListingErrorsHandlingPolicy == ignore_known
         })}
     catch
         _Class:Reason:Stacktrace ->
