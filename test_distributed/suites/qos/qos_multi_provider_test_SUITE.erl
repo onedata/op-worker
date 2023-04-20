@@ -665,7 +665,7 @@ init_per_testcase(Case, Config) when
     Case =:= qos_entry_remote_deletion_test ->
     
     Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Nodes, qos_traverse, [passthrough]), % fixme
+    test_utils:mock_new(Nodes, qos_traverse, [passthrough]),
     qos_tests_utils:mock_transfers(Nodes),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
