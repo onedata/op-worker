@@ -45,6 +45,7 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
+-export([group_spaces_by_name/2, extend_space_name/2]).
 -export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
@@ -496,3 +497,20 @@ on_space_supported(SpaceId) ->
     ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
+-spec group_spaces_by_name(gs_client_worker:client(), [od_space:id()]) -> #{od_space:name() => [od_space:id()]}.
+group_spaces_by_name(SessId, Spaces) ->
+    lists:foldl(fun(SpaceId, Acc) ->
+        case get_name(SessId, SpaceId) of
+            {ok, SpaceName} ->
+                Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]};
+            ?ERROR_NOT_FOUND ->
+                Acc;
+            ?ERROR_FORBIDDEN ->
+                Acc
+        end
+    end, #{}, Spaces).
+
+
+-spec extend_space_name(od_space:name(), od_space:id()) -> file_meta:name().
+extend_space_name(SpaceName, SpaceId) ->
+    <<SpaceName/binary, (?SPACE_NAME_ID_SEPARATOR)/binary, SpaceId/binary>>.

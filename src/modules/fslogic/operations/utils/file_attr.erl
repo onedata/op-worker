@@ -21,7 +21,8 @@
 %% API
 -export([
     resolve/3, 
-    should_fetch_xattrs/1
+    should_fetch_xattrs/1,
+    get_space_name_and_conflicts/3
 ]).
 
 -type name_conflicts_resolution_policy() ::
@@ -130,6 +131,22 @@ should_fetch_xattrs(OptionalAttrs) ->
     end.
 
 
+-spec get_space_name_and_conflicts(user_ctx:ctx(), file_meta:name(), od_space:id()) ->
+    {file_meta:name(), file_meta:conflicts()}.
+get_space_name_and_conflicts(UserCtx, Name, SpaceId) ->
+    SpacesWithSupport = user_ctx:get_eff_supported_spaces(UserCtx),
+    SpacesByName = space_logic:group_spaces_by_name(user_ctx:get_session_id(UserCtx), SpacesWithSupport),
+    [BaseFileName | _] = binary:split(Name, ?SPACE_NAME_ID_SEPARATOR),
+    case maps:get(BaseFileName, SpacesByName, []) of
+        [_] ->
+            {BaseFileName, []};
+        Spaces ->
+            Conflicts = [{BaseFileName, fslogic_file_id:spaceid_to_space_dir_uuid(S)} || S <- Spaces -- [SpaceId]],
+            ExtendedName = space_logic:extend_space_name(BaseFileName, SpaceId),
+            {ExtendedName, Conflicts}
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -202,21 +219,34 @@ get_masked_private_attrs(ShareId, FileCtx, #document{
         file_ctx:ctx()
     }.
 resolve_file_name(UserCtx, FileDoc, FileCtx0, <<_/binary>> = ParentGuid, resolve_name_conflicts) ->
-    ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
-    ProviderId = file_meta:get_provider_id(FileDoc),
-    Scope = file_meta:get_scope(FileDoc),
-    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-
-    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
-        {conflicting, ExtendedName, ConflictingFiles} ->
-            {ExtendedName, ConflictingFiles, FileCtx1};
-        _ ->
-            {FileName, [], FileCtx1}
-    end;
+    check_name_conflicts(UserCtx, FileDoc, ParentGuid, FileCtx0);
 resolve_file_name(UserCtx, _FileDoc, FileCtx0, _ParentGuid, _NameConflictResolutionPolicy) ->
     {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
     {FileName, [], FileCtx1}.
+
+
+%% @private
+-spec check_name_conflicts(user_ctx:ctx(), file_meta:doc(), file_id:file_guid(), file_ctx:ctx()) ->
+    {file_meta:name(), file_meta:conflicts(), file_ctx:ctx()}.
+check_name_conflicts(UserCtx, FileDoc, ParentGuid, FileCtx0) ->
+    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
+    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
+    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+        true ->
+            {Name, Conflicts} = get_space_name_and_conflicts(
+                UserCtx, FileName, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+            {Name, Conflicts, FileCtx1};
+        false ->
+            ParentUuid = file_id:guid_to_uuid(ParentGuid),
+            ProviderId = file_meta:get_provider_id(FileDoc),
+            Scope = file_meta:get_scope(FileDoc),
+            case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
+                {conflicting, ExtendedName, ConflictingFiles} ->
+                    {ExtendedName, ConflictingFiles, FileCtx1};
+                _ ->
+                    {FileName, [], FileCtx1}
+            end
+    end.
 
 
 %% @private

@@ -23,7 +23,7 @@
 %%                   file existence ; filtering process differs for different event types
 -record(event_routing_keys, {
     file_ctx :: file_ctx:ctx() | undefined,
-    main_key :: subscription_manager:key(),
+    main_key :: subscription_manager:key() | [subscription_manager:key()],
     space_id_filter :: undefined | od_space:id(),
     additional_keys = [] :: [{file_id:file_guid() | file_meta:uuid(), subscription_manager:key()}],
 

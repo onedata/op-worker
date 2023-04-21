@@ -32,7 +32,8 @@
 -export([new/1]).
 -export([
     get_user/1, get_user_id/1,
-    get_eff_spaces/1, get_session_id/1,
+    get_eff_spaces/1, get_eff_supported_spaces/1,
+    get_session_id/1,
     get_credentials/1, get_data_constraints/1
 ]).
 -export([is_space_owner/2]).
@@ -121,6 +122,19 @@ get_user_id(#user_ctx{session = Session}) ->
 get_eff_spaces(UserCtx) ->
     #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
     Spaces.
+
+
+-spec get_eff_supported_spaces(ctx()) -> [od_space:id()].
+get_eff_supported_spaces(UserCtx) ->
+    AllUserSpaces = user_ctx:get_eff_spaces(UserCtx),
+    lists:filter(fun(SpaceId) ->
+        case space_logic:get_provider_ids(get_session_id(UserCtx), SpaceId) of
+            {ok, []} -> false;
+            {ok, _} -> true;
+            _ -> false
+        end
+    end, AllUserSpaces).
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -325,35 +325,23 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
+    SessId = user_ctx:get_session_id(UserCtx),
 
-    AllUserSpaces = user_ctx:get_eff_spaces(UserCtx),
+    SpacesWithSupport = user_ctx:get_eff_supported_spaces(UserCtx),
 
     FilteredSpaces = case SpaceWhiteList of
         undefined ->
-            AllUserSpaces;
+            SpacesWithSupport;
         _ ->
             lists:filter(fun(Space) ->
                 lists:member(Space, SpaceWhiteList)
-            end, AllUserSpaces)
+            end, SpacesWithSupport)
     end,
-    SessId = user_ctx:get_session_id(UserCtx),
 
     Children = case Offset < length(FilteredSpaces) of
         true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            
-            GroupedSpaces = lists:foldl(fun(SpaceId, Acc) ->
-                {ok, SpaceName} = space_logic:get_name(SessId, SpaceId),
-                Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]}
-            end, #{}, FilteredSpaces),
-
             SpacesChunk = lists:sublist(
-                lists:sort(maps:fold(
-                    fun (Name, [SpaceId], Acc) -> [{Name, SpaceId} | Acc];
-                        (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
-                            {<<Name/binary, (?SPACE_NAME_ID_SEPARATOR)/binary, SpaceId/binary>>, SpaceId}
-                        end, Spaces)
-                end, [], GroupedSpaces)),
+                get_spaces_with_unique_names(space_logic:group_spaces_by_name(SessId, FilteredSpaces)),
                 Offset + 1,
                 Limit
             ),
@@ -365,6 +353,17 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
             []
     end,
     build_listing_result(UserCtx, Children, Limit, UserRootDirCtx).
+
+
+%% @private
+-spec get_spaces_with_unique_names(#{od_space:name() => [od_space:id()]}) -> [file_meta:name()].
+get_spaces_with_unique_names(GroupedSpaces) ->
+    lists:sort(maps:fold(
+        fun (Name, [SpaceId], Acc) -> [{Name, SpaceId} | Acc];
+            (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
+                {space_logic:extend_space_name(Name, SpaceId), SpaceId}
+            end, Spaces)
+        end, [], GroupedSpaces)).
 
 
 %% @private

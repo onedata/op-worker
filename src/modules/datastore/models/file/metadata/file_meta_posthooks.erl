@@ -30,11 +30,8 @@
 %% functions operating on record using datastore model API
 -export([add_hook/6, execute_hooks/2, cleanup/1]).
 
-%% deprecated functions
--export([execute_hooks_deprecated/2]).
-
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([get_ctx/0]).
 
 -type hook_type() :: doc | link.
 -type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
@@ -98,7 +95,6 @@ execute_hooks(FileUuid, HookType) ->
 -spec cleanup(file_meta:uuid()) -> ok.
 cleanup(FileUuid) ->
     lists:foreach(fun(Key) ->
-        cleanup_deprecated(Key),
         cleanup_links(Key, #{token => #link_token{}})
     end, [FileUuid, ?LINK_KEY(FileUuid)]).
 
@@ -273,60 +269,10 @@ get_link(Key, Identifier) ->
 fold_links(Key, FoldFun, Opts) ->
     datastore_model:fold_links(?CTX, Key, all, FoldFun, [], Opts#{size => ?FOLD_LINKS_LIMIT}).
 
-
-%%%===================================================================
-%%% Deprecated functions
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
-%%%===================================================================
-
--spec execute_hooks_deprecated(file_meta:uuid(), hook_type()) -> ok | {error, term()}.
-execute_hooks_deprecated(FileUuid, HookType) ->
-    Key = gen_datastore_key(FileUuid, HookType),
-    case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-            case maps:size(Hooks) of
-                0 ->
-                    cleanup_deprecated(Key);
-                _ ->
-                    execute_hooks_deprecated_internal(Key, Hooks)
-            end;
-        _ ->
-            ok
-    end.
-
-
-%% @private
--spec execute_hooks_deprecated_internal(datastore:key(), hooks()) -> ok | {error, term()}.
-execute_hooks_deprecated_internal(Key, HooksToExecute) ->
-    FailedHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
-        case execute_hook(Key, Identifier, Module, Function, term_to_binary(Args)) of
-            ok -> Acc;
-            error -> [{Identifier, encode_hook(Module, Function, Args)} | Acc]
-        end
-    end, [], HooksToExecute),
-
-    case FailedHooks of
-        [] -> ok;
-        _ -> add_links(Key, FailedHooks)
-    end,
-    cleanup_deprecated(Key).
-
-
-%% @private
--spec cleanup_deprecated(file_meta:uuid()) -> ok | {error, term()}.
-cleanup_deprecated(Key) ->
-    case datastore_model:delete(?CTX, Key) of
-        ok -> ok;
-        {error, not_found} -> ok;
-        {error, _} = Error -> Error
-    end.
-
-
 %% @private
 -spec run_in_critical_section(file_meta:uuid(), fun (() -> Result)) -> Result.
 run_in_critical_section(FileUuid, Fun) ->
     critical_section:run({?MODULE, FileUuid}, Fun).
-
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -335,20 +281,3 @@ run_in_critical_section(FileUuid, Fun) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    1.
-
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {hooks, #{binary => {record, [
-            {module, atom},
-            {function, atom},
-            {args, binary}
-        ]}}}
-    ]}.

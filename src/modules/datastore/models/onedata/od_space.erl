@@ -41,6 +41,7 @@
 
 %% API
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
+-export([handle_space_name_appeared/5, handle_space_name_disappeared/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -52,17 +53,40 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
-    datastore_model:update(?CTX, Id, Diff, Default).
+    run_in_critical_section(Id, fun() ->
+        PrevVal = case get_from_cache(Id) of
+            {ok, #document{value = V}} -> V;
+            {error, not_found} -> #od_space{}
+        end,
+        case datastore_model:update(?CTX, Id, Diff, Default) of
+            {ok, #document{value = NewVal}} = Res ->
+                handle_new_supports(Id, PrevVal, NewVal),
+                handle_name_change(Id, PrevVal, NewVal),
+                Res;
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
-get_from_cache(Key) ->
-    datastore_model:get(?CTX, Key).
+get_from_cache(Id) ->
+    datastore_model:get(?CTX, Id).
 
 
 -spec invalidate_cache(id()) -> ok | {error, term()}.
-invalidate_cache(Key) ->
-    datastore_model:delete(?CTX, Key).
+invalidate_cache(Id) ->
+    run_in_critical_section(Id, fun() ->
+        case get_from_cache(Id) of
+            {ok, #document{value = #od_space{name = Name, eff_users = UsersMap}}} ->
+                apply_for_all_user_spaces(fun(ParentGuid, SpacesByName) ->
+                    handle_space_name_disappeared(Name, ParentGuid, SpacesByName)
+                end, maps:keys(UsersMap)),
+                datastore_model:delete(?CTX, Id);
+            {error, not_found} ->
+                ok
+        end
+    end).
 
 
 -spec list() -> {ok, [id()]} | {error, term()}.
@@ -115,6 +139,36 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
     end,
     {ok, Doc}.
 
+
+-spec handle_space_name_appeared(id(), name(), file_id:file_guid(), #{od_space:name() => [od_space:id()]},
+    create | {rename, name()}) -> ok.
+handle_space_name_appeared(SpaceId, Name, ParentGuid, SpacesByName, Operation) ->
+    FinalNewName = case maps:get(Name, SpacesByName) of
+        [SpaceId] ->
+            Name;
+        [_S1, _S2] = L ->
+            [OtherSpaceId] = L -- [SpaceId],
+            emit_renamed_event(OtherSpaceId, ParentGuid, space_logic:extend_space_name(Name, OtherSpaceId), Name),
+            space_logic:extend_space_name(Name, SpaceId);
+        _ ->
+            space_logic:extend_space_name(Name, SpaceId)
+    end,
+    case Operation of
+        create -> ok;
+        {rename, PrevName} -> emit_renamed_event(SpaceId, ParentGuid, FinalNewName, PrevName)
+    end.
+
+
+-spec handle_space_name_disappeared(name(), file_id:file_guid(), #{od_space:name() => [od_space:id()]}) -> ok.
+handle_space_name_disappeared(SpaceName, ParentGuid, SpacesByName) ->
+    case maps:get(SpaceName, SpacesByName, []) of
+        [S] ->
+            emit_renamed_event(S, ParentGuid, SpaceName, space_logic:extend_space_name(SpaceName, S));
+        _ ->
+            ok
+    end.
+
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -143,6 +197,38 @@ get_posthooks() ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec run_in_critical_section(id(), fun (() -> Result)) -> Result.
+run_in_critical_section(SpaceId, Fun) ->
+    critical_section:run({od_space, SpaceId}, Fun).
+
+
+%% @private
+-spec handle_new_supports(id(), PrevVal :: record(), NewVal :: record()) -> ok.
+handle_new_supports(SpaceId, #od_space{providers = PrevProviders}, #od_space{providers = NewProviders}) ->
+    case maps:keys(NewProviders) -- maps:keys(PrevProviders) of
+        [] ->
+            ok;
+        _ ->
+            file_meta:emit_space_dir_created(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
+    end.
+
+
+%% @private
+-spec handle_name_change(id(), PrevVal :: record(), NewVal :: record()) -> ok.
+handle_name_change(SpaceId, #od_space{name = undefined}, #od_space{name = Name, eff_users = UsersMap}) ->
+    % first appearance of this space in provider
+    apply_for_all_user_spaces(fun(ParentGuid, SpacesByName) ->
+        handle_space_name_appeared(SpaceId, Name, ParentGuid, SpacesByName, create)
+    end, maps:keys(UsersMap));
+handle_name_change(SpaceId, #od_space{name = PrevName}, #od_space{name = NewName, eff_users = UsersMap}) when PrevName =/= NewName ->
+    apply_for_all_user_spaces(fun(ParentGuid, SpacesByName) ->
+        handle_space_name_disappeared(PrevName, ParentGuid, SpacesByName),
+        handle_space_name_appeared(SpaceId, NewName, ParentGuid, SpacesByName, {rename, PrevName})
+    end, maps:keys(UsersMap));
+handle_name_change(_, _, _) ->
+    ok.
+
 
 %% @private
 -spec handle_space_support_parameters_change(oneprovider:id(), doc()) ->
@@ -162,3 +248,43 @@ handle_space_support_parameters_change(ProviderId, #document{key = SpaceId, valu
         }
     end,
     dir_stats_service_state:handle_space_support_parameters_change(SpaceId, SupportParameters).
+
+
+%% @private
+-spec emit_renamed_event(id(), file_id:file_guid(), name(), name()) -> ok.
+emit_renamed_event(SpaceId, ParentGuid, NewName, PrevName) ->
+    FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+    fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, ParentGuid, ParentGuid, NewName, PrevName).
+
+
+%% @private
+-spec apply_for_all_user_spaces(fun((file_id:file_guid(), #{od_space:name() => [od_space:id()]}) -> ok), [od_user:id()]) -> ok.
+apply_for_all_user_spaces(Fun, UsersList) ->
+    % Apply only to cached spaces, as spaces listed in oneclient must have been already fetched.
+    {ok, Spaces} = list(),
+    SpacesWithSupport = lists:filter(fun(S) ->
+        case get_from_cache(S) of
+            {ok, #document{value = #od_space{providers = P}}} ->
+                maps:size(P) > 0;
+            _ ->
+                false
+        end
+    end, Spaces),
+    maps:fold(fun(UserId, [SessId | _], _) ->
+        ParentGuid = fslogic_file_id:user_root_dir_guid(UserId),
+        SpacesByName = space_logic:group_spaces_by_name(SessId, SpacesWithSupport),
+        Fun(ParentGuid, SpacesByName)
+    end, ok, maps:with(UsersList, map_sessions_to_users())).
+
+
+%% @private
+-spec map_sessions_to_users() -> #{od_user:id() => [session:id()]}.
+map_sessions_to_users() ->
+    {ok, SessList} = session:list(),
+    lists:foldl(fun
+        (#document{key = SessId, value = #session{type = fuse, identity = ?SUB(user, UserId)}}, Acc) ->
+            Acc#{UserId => [SessId | maps:get(UserId, Acc, [])]};
+        (_, Acc) ->
+            Acc
+    end, #{}, SessList).
+    

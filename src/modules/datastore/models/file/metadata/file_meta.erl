@@ -46,6 +46,7 @@
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
 -export([get_ctx_with_remote_set/2]).
+-export([emit_space_dir_created/2, emit_space_dir_deleted/2]).
 
 
 %% datastore_model callbacks
@@ -689,46 +690,43 @@ get_mode(#file_meta{mode = Mode}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
-setup_onedata_user(UserId, EffSpaces) ->
-    ?debug("Setting up user: ~p", [UserId]),
-    critical_section:run([od_user, UserId], fun() ->
-        try
-            CTime = global_clock:timestamp_seconds(),
+setup_onedata_user(UserId, NewSpaces) ->
+    try
+        CTime = global_clock:timestamp_seconds(),
 
-            lists:foreach(fun(SpaceId) ->
-                make_space_exist(SpaceId)
-            end, EffSpaces),
+        lists:foreach(fun(SpaceId) ->
+            make_space_exist(SpaceId)
+        end, NewSpaces),
 
-            FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
-            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
-                #document{
+        FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
+        case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
+            #document{
+                key = FileUuid,
+                value = #file_meta{
+                    name = UserId,
+                    type = ?DIRECTORY_TYPE,
+                    mode = 8#1755,
+                    owner = ?ROOT_USER_ID,
+                    is_scope = true,
+                    parent_uuid = ?GLOBAL_ROOT_DIR_UUID
+                }
+            })
+        of
+            {ok, _} ->
+                {ok, _} = times:save(#document{
                     key = FileUuid,
-                    value = #file_meta{
-                        name = UserId,
-                        type = ?DIRECTORY_TYPE,
-                        mode = 8#1755,
-                        owner = ?ROOT_USER_ID,
-                        is_scope = true,
-                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-                    }
-                })
-            of
-                {ok, _} ->
-                    {ok, _} = times:save(#document{
-                        key = FileUuid,
-                        value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-                        scope = ?ROOT_DIR_SCOPE
-                    }),
-                    ok;
-                {error, already_exists} ->
-                    ok
-            end
-        catch Type:Message:Stacktrace ->
-            ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
-                UserId, Type, Message
-            ], Stacktrace)
+                    value = #times{mtime = CTime, atime = CTime, ctime = CTime},
+                    scope = ?ROOT_DIR_SCOPE
+                }),
+                ok;
+            {error, already_exists} ->
+                ok
         end
-    end).
+    catch Type:Message:Stacktrace ->
+        ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
+            UserId, Type, Message
+        ], Stacktrace)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -1159,6 +1157,24 @@ get_uuid(FileUuid) ->
 get_ctx_with_remote_set(Scope, RemoteScope) ->
     ?CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope).
 
+
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: od_space:id()) -> ok | no_return().
+emit_space_dir_created(DirUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
+    #fuse_response{fuse_response = FileAttr} =
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+            allow_deleted_files => false,
+            name_conflicts_resolution_policy => resolve_name_conflicts
+        }),
+    FileAttr2 = FileAttr#file_attr{size = 0},
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
+
+
+-spec emit_space_dir_deleted(od_space:id(), od_user:id()) -> ok | no_return().
+emit_space_dir_deleted(SpaceId, UserId) ->
+    FileCtx = file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId),
+    ok = fslogic_event_emitter:emit_file_removed(FileCtx, [], fslogic_file_id:user_root_dir_guid(UserId)).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1218,24 +1234,6 @@ get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends event about space dir creation
-%% @end
-%%--------------------------------------------------------------------
--spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: od_space:id()) -> ok | no_return().
-emit_space_dir_created(DirUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
-    #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
-            allow_deleted_files => false,
-            name_conflicts_resolution_policy => allow_name_conflicts
-        }),
-    FileAttr2 = FileAttr#file_attr{size = 0},
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 
 
 %%%===================================================================

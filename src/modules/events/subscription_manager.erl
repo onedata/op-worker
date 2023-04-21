@@ -72,7 +72,18 @@ add_subscriber(Sub, SessId) ->
         {error, Reason} -> {error, Reason}
     end.
 
--spec get_subscribers(Key :: key()) -> {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
+-spec get_subscribers(Key :: key() | Keys :: [key()]) ->
+    {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
+get_subscribers(Keys) when is_list(Keys) ->
+    lists:foldl(fun
+        (Key, {ok, Acc}) ->
+            case get_subscribers(Key) of
+                {ok, S} -> {ok, S ++ Acc};
+                {error, _} = Error -> Error
+            end;
+        (_Key, {error, _} = Error) ->
+            Error
+    end, {ok, []}, Keys);
 get_subscribers(Key) ->
     case file_subscription:get(Key) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
@@ -160,12 +171,12 @@ process_event_routing_keys(#event_routing_keys{
         SubscribersForLinks = lists:foldl(fun({Context, AdditionalKey}, Acc) ->
             case get_subscribers(AdditionalKey) of
                 {ok, []} -> Acc;
-                {ok, KeySessIds} -> [{Context, apply_filters(KeySessIds, SpaceIDFilter, AuthCheckType, Context)} | Acc]
+                {ok, KeySessIds} -> [{Context, apply_filters(MainKey, KeySessIds, SpaceIDFilter, AuthCheckType, Context)} | Acc]
             end
         end, [], AdditionalKeys),
         {ok, SessIds} = get_subscribers(MainKey),
         #event_subscribers{
-            subscribers = apply_filters(SessIds, SpaceIDFilter, AuthCheckType, FileCtx),
+            subscribers = apply_filters(MainKey, SessIds, SpaceIDFilter, AuthCheckType, FileCtx),
             subscribers_for_links = SubscribersForLinks
         }
     catch
@@ -174,10 +185,10 @@ process_event_routing_keys(#event_routing_keys{
             {error, processing_event_routing_keys_failed}
     end.
 
--spec apply_filters([session:id()], undefined | od_space:id(), event_type:auth_check_type(),
+-spec apply_filters(key(), [session:id()], undefined | od_space:id(), event_type:auth_check_type(),
     undefined | file_ctx:ctx() | link_subscription_context()) -> [session:id()].
-apply_filters(SessIds, SpaceIDFilter, AuthCheckType, AuthCheckContext) ->
-    apply_auth_filter(apply_space_id_filter(SessIds, SpaceIDFilter), AuthCheckType, AuthCheckContext).
+apply_filters(MainKey, SessIds, SpaceIDFilter, AuthCheckType, AuthCheckContext) ->
+    apply_auth_filter(apply_space_id_filter(MainKey, SessIds, SpaceIDFilter), AuthCheckType, AuthCheckContext).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -185,10 +196,10 @@ apply_filters(SessIds, SpaceIDFilter, AuthCheckType, AuthCheckContext) ->
 %% (not all clients are allowed to see particular space).
 %% @end
 %%--------------------------------------------------------------------
--spec apply_space_id_filter([session:id()], undefined | od_space:id()) -> [session:id()].
-apply_space_id_filter(SessIds, undefined) ->
+-spec apply_space_id_filter(key(), [session:id()], undefined | od_space:id()) -> [session:id()].
+apply_space_id_filter(_, SessIds, undefined) ->
     SessIds;
-apply_space_id_filter(SessIds, SpaceIDFilter) ->
+apply_space_id_filter(<<"file_attr_changed.">>, SessIds, SpaceIDFilter) ->
     lists:filter(fun(SessId) ->
         try
             UserCtx = user_ctx:new(SessId),
@@ -199,7 +210,9 @@ apply_space_id_filter(SessIds, SpaceIDFilter) ->
                 ?warning_exception("Error applying space filters for subscriptions", Class, Reason, Stacktrace),
                 false % filter this session id - user could be deleted so effective spaces cannot be get
         end
-    end, SessIds).
+    end, SessIds);
+apply_space_id_filter(_, SessIds, _) ->
+    SessIds.
 
 -spec apply_auth_filter([session:id()], event_type:auth_check_type(),
     undefined | file_ctx:ctx() | link_subscription_context()) -> [session:id()].

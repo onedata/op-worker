@@ -23,7 +23,7 @@
     emit_file_attr_changed_with_replication_status/3, emit_sizeless_file_attrs_changed/1,
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_locations_changed/2,
-    emit_file_perm_changed/1, emit_file_removed/2,
+    emit_file_perm_changed/1, emit_file_removed/2, emit_file_removed/3,
     emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
 -export([clone_event/2]).
@@ -238,8 +238,14 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
+    emit_file_removed(FileCtx, ExcludedSessions, undefined).
+
+
+-spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()], file_id:file_guid()) ->
+    ok | {error, Reason :: term()}.
+emit_file_removed(FileCtx, ExcludedSessions, ParentGuid) ->
     Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_logical_guid_const(FileCtx)},
-        #{file_ctx => FileCtx}, ExcludedSessions),
+        maps_utils:remove_undefined(#{file_ctx => FileCtx, parent => ParentGuid}), ExcludedSessions),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta:check_name_and_get_conflicting_files(Doc) of
         {conflicting, _, ConflictingFiles} ->

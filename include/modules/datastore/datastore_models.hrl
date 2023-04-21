@@ -106,7 +106,7 @@
 
 %% Model for caching space details fetched from OZ
 -record(od_space, {
-    name :: undefined | binary(),
+    name :: undefined | od_space:name(),
 
     owners = [] :: [od_user:id()],
 
