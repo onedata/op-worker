@@ -42,7 +42,8 @@
     reevaluate_impossible_qos_race_test/1,
     reevaluate_impossible_qos_conflict_test/1,
 
-    qos_traverse_cancellation_test/1,
+    qos_entry_local_deletion_test/1,
+    qos_entry_remote_deletion_test/1,
     
     qos_on_hardlink_test/1,
     effective_qos_with_hardlinks_test/1,
@@ -67,8 +68,9 @@ all() -> [
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
     reevaluate_impossible_qos_conflict_test,
-
-    qos_traverse_cancellation_test,
+    
+    qos_entry_local_deletion_test,
+    qos_entry_remote_deletion_test,
 
     qos_on_hardlink_test,
     effective_qos_with_hardlinks_test,
@@ -524,9 +526,16 @@ qos_reevaluate_assert_file_qos(StorageId, DirPath, QosNameIdMapping) ->
 %%% QoS traverse tests
 %%%===================================================================
 
-qos_traverse_cancellation_test(_Config) ->
+qos_entry_local_deletion_test(_Config) ->
+    qos_entry_deletion_test_base(local).
+
+
+qos_entry_remote_deletion_test(_Config) ->
+    qos_entry_deletion_test_base(local).
+    
+
+qos_entry_deletion_test_base(DeletionType) ->
     [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
-    P1Node = oct_background:get_random_provider_node(Provider1),
     P2Node = oct_background:get_random_provider_node(Provider2),
     Name = generator:gen_name(),
     QosRootFilePath = filename:join([<<"/">>, ?SPACE_NAME, Name]),
@@ -534,12 +543,7 @@ qos_traverse_cancellation_test(_Config) ->
     DirStructure =
         {?SPACE_NAME, [
             {Name, % Dir1
-                [
-                    {?filename(Name, 0), ?TEST_DATA, [Provider1]},
-                    {?filename(Name, 1), ?TEST_DATA, [Provider1]},
-                    {?filename(Name, 2), ?TEST_DATA, [Provider1]},
-                    {?filename(Name, 3), ?TEST_DATA, [Provider1]}
-                ]
+                [{?filename(Name, Num), ?TEST_DATA, [Provider1]} || Num <- lists:seq(1, 4)]
             }
         ]},
     
@@ -574,24 +578,23 @@ qos_traverse_cancellation_test(_Config) ->
     
     DirGuid = qos_tests_utils:get_guid(QosRootFilePath, GuidsAndPaths),
     
-    % create file and write to it on remote provider to trigger reconcile transfer
+    % create file and write to it on remote provider to trigger reconciliation transfer
     {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(P2Node, ?SESS_ID(Provider2), DirGuid, 
         generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(P2Node, FileHandle, 0, <<"new_data">>),
     ok = lfm_proxy:close(P2Node, FileHandle),
     
     % wait for reconciliation transfer to start
-    receive {qos_slave_job, _Pid, FileGuid} = Msg ->
-        self() ! Msg
-    after timer:seconds(?ATTEMPTS) ->
-        throw(reconciliation_transfer_not_started)
-    end,
+    qos_tests_utils:wait_for_file_transfer_start(FileGuid),
     
     % remove entry to trigger transfer cancellation
-    opt_qos:remove_qos_entry(P1Node, ?SESS_ID(Provider1), QosEntryId),
+    case DeletionType of
+        local -> remove_qos_entry(Provider1, QosEntryId);
+        remote -> remove_qos_entry(Provider2, QosEntryId)
+    end,
     
-    % check that 5 transfers were cancelled (4 from traverse and 1 reconciliation)
-    test_utils:mock_assert_num_calls(P1Node, replica_synchronizer, cancel, 1, 5, ?ATTEMPTS),
+    % check that 5 transfers were cancelled (4 from initial traverse and 1 reconciliation)
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), replica_synchronizer, cancel, 1, 5, ?ATTEMPTS),
     
     % check that qos_entry document is deleted
     lists:foreach(fun(Node) ->
@@ -599,7 +602,12 @@ qos_traverse_cancellation_test(_Config) ->
     end, oct_background:get_all_providers_nodes()),
     
     % finish transfers to unlock waiting slave job processes
-    ok = qos_tests_utils:finish_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)] ++ [FileGuid]).
+    ok = qos_tests_utils:finish_all_transfers(),
+    
+    % check that 1 traverse was cancelled
+    % (only initial traverse is cancelled, reconciliation traverse is started for 1 regular file so it is properly finished at this point)
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), qos_traverse, task_canceled, '_', 1, ?ATTEMPTS),
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(Provider1), qos_traverse, task_finished, '_', 2, ?ATTEMPTS).
 
 %%%===================================================================
 %%% QoS with hardlinks tests
@@ -652,9 +660,13 @@ end_per_suite(Config) ->
     dir_stats_test_utils:enable_stats_counting(Config).
 
 
-init_per_testcase(qos_traverse_cancellation_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    qos_tests_utils:mock_transfers(Workers),
+init_per_testcase(Case, Config) when
+    Case =:= qos_entry_local_deletion_test;
+    Case =:= qos_entry_remote_deletion_test ->
+    
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, qos_traverse, [passthrough]),
+    qos_tests_utils:mock_transfers(Nodes),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     qos_tests_utils:reset_qos_parameters(),
@@ -663,9 +675,10 @@ init_per_testcase(_, Config) ->
 
 
 end_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Nodes = ?config(op_worker_nodes, Config),
     qos_tests_utils:finish_all_transfers(),
-    test_utils:mock_unload(Workers, replica_synchronizer),
+    test_utils:mock_unload(Nodes, replica_synchronizer),
+    test_utils:mock_unload(Nodes, qos_traverse),
     lfm_proxy:teardown(Config).
 
 
@@ -738,6 +751,11 @@ mock_fslogic_authz_ensure_authorized(Node) ->
         fun(_, FileCtx, _) ->
             FileCtx
         end).
+
+
+remove_qos_entry(ProviderPlaceholder, QosEntryId) ->
+    opt_qos:remove_qos_entry(oct_background:get_random_provider_node(ProviderPlaceholder),
+        ?SESS_ID(ProviderPlaceholder), QosEntryId).
 
 %%%===================================================================
 %%% DBSync mocks
