@@ -130,6 +130,7 @@ op_worker_service_operation(Config, ProviderSelector, ServiceOperation) ->
         Pod = test_config:get_custom(Config, [pods, Node]),
         case shell_utils:execute([OnenvScript, "service", ServiceOperation, Pod, "-s", "worker"]) of
             {0, Stdout, _} ->
+                % propagate output of onenv service command
                 ct:pal("~s", [Stdout]);
             {ExitCode, Stdout, Stderr} ->
                 ct:pal("Error in op worker operation ~s", [?autoformat([ServiceOperation, ExitCode, Stdout, Stderr])]),

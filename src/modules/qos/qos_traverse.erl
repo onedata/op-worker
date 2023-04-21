@@ -69,7 +69,7 @@ start(FileCtx, QosEntries, TaskId) ->
         batch_size => ?TRAVERSE_BATCH_SIZE,
         children_master_jobs_mode => sync,
         %% @TODO VFS-10768 - Use failed files list for handling failed dirs listing
-        listing_errors_handling_policy => retry,
+        listing_errors_handling_policy => retry_infinitely,
         additional_data => #{
             <<"encoded_qos_entries">> => json_utils:encode(QosEntries),
             <<"space_id">> => file_ctx:get_space_id_const(FileCtx),

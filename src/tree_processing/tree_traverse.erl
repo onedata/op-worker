@@ -400,7 +400,7 @@ do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, 
                 file_ctx:get_logical_uuid_const(ResolvedCtx2)
             ),
             do_master_job_internal(FileType, Job2, TaskId, NewJobsPreprocessor);
-        unresolved ->
+        ignored ->
             % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
             {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
         unresolvable ->
@@ -538,7 +538,7 @@ generate_child_jobs(?SYMLINK_TYPE, MasterJob, TaskId, ChildCtx, Filename) ->
             {FileType, ResolvedCtx2} = file_ctx:get_effective_type(ResolvedCtx),
             MasterJob2 = append_root_uuid(MasterJob, file_ctx:get_logical_uuid_const(ResolvedCtx2)),
             generate_child_jobs(FileType, MasterJob2, TaskId, ResolvedCtx2, Filename);
-        unresolved ->
+        ignored ->
             {[get_child_slave_job(MasterJob, ChildCtx, Filename)], []};
         unresolvable ->
             {[], []}
@@ -629,9 +629,9 @@ get_child_slave_job(#tree_traverse{
 
 %% @private
 -spec resolve_symlink_based_on_policy(master_job(), file_ctx:ctx(), id()) ->
-    {resolved, file_ctx:ctx()} | unresolved | unresolvable.
+    {resolved, file_ctx:ctx()} | ignored | unresolvable.
 resolve_symlink_based_on_policy(#tree_traverse{symlink_resolution_policy = preserve}, _FileCtx, _TaskId) ->
-    unresolved;
+    ignored;
 resolve_symlink_based_on_policy(Job = #tree_traverse{symlink_resolution_policy = SymlinkResolutionPolicy}, FileCtx, TaskId) ->
     case {resolve_symlink(Job, FileCtx, TaskId), SymlinkResolutionPolicy} of
         {{ok, ResolvedCtx}, follow_all} ->
@@ -639,7 +639,7 @@ resolve_symlink_based_on_policy(Job = #tree_traverse{symlink_resolution_policy =
         {{ok, ResolvedCtx}, follow_external} ->
             {Path, ResolvedCtx2} = file_ctx:get_uuid_based_path(ResolvedCtx),
             case is_in_subtree(Job, Path) of
-                true -> unresolved;
+                true -> ignored;
                 false -> {resolved, ResolvedCtx2}
             end;
         {unresolvable, _} ->
