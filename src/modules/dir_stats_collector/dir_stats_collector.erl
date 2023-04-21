@@ -262,7 +262,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     case dir_stats_service_state:is_active(SpaceId) of
         true ->
-            case file_meta:get_including_deleted(FileUuid) of
+            case file_meta:get_including_deleted_local_or_remote(FileUuid, SpaceId) of
                 {ok, Doc} ->
                     case file_meta:get_type(Doc) of
                         ?DIRECTORY_TYPE ->
@@ -1068,7 +1068,7 @@ cache_parent(_Guid, CachedDirStats) ->
 -spec get_parent(file_id:file_guid()) -> {ok, file_id:file_guid()} | ?ERROR_NOT_FOUND.
 get_parent(Guid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    case file_meta:get_including_deleted(FileUuid) of
+    case file_meta:get_including_deleted_local_or_remote(FileUuid, SpaceId) of
         {ok, Doc} -> {ok, get_parent(Doc, SpaceId)};
         ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND
     end.

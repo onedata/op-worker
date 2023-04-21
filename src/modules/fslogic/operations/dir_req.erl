@@ -90,7 +90,8 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
+    ParentUuid = file_ctx:get_logical_uuid_const(FileCtx0),
+    SpaceId = file_ctx:get_space_id_const(FileCtx0),
     {ChildrenCtxs, ListingToken, FileCtx1} = get_children_ctxs(
         UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?list_container_mask)),
     ChildrenNum = length(ChildrenCtxs),
@@ -105,7 +106,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
                     ProviderId = file_meta:get_provider_id(FileDoc),
                     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
                     case file_meta:check_name_and_get_conflicting_files(
-                        file_id:guid_to_uuid(ParentGuid), ChildName, FileUuid, ProviderId) 
+                        ParentUuid, ChildName, FileUuid, ProviderId, SpaceId)
                     of
                         {conflicting, ExtendedName, _ConflictingFiles} ->
                             {true, #child_link{name = ExtendedName, guid = ChildGuid}};

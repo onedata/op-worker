@@ -196,10 +196,11 @@ cache_values_with_extended_name(FileCtx0) ->
         {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, undefined),
         {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
         ProviderId = file_meta:get_provider_id(FileDoc),
+        Scope = file_meta:get_scope(FileDoc),
         {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
         FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
 
-        case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId) of
+        case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
             {conflicting, ExtendedName, _ConflictingFiles} ->
                 file_ctx:cache_name(ExtendedName, FileCtx2);
             _ ->

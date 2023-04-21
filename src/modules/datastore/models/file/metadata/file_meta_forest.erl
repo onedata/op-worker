@@ -24,11 +24,11 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 
--export([get/3, add/4, check_and_add/6]).
+-export([get/3, get_local_or_remote/3, add/4, check_and_add/6]).
 -export([delete/4, delete_local/4, delete_remote/5]).
 -export([list/2, list_whitelisted/3]).
 -export([get_trees/1]).
--export([check_name_and_get_conflicting_files/4]).
+-export([check_name_and_get_conflicting_files/5]).
 
 %% Exported for mocking in CT tests
 -export([get_all/2]).
@@ -82,6 +82,12 @@
 get(ParentUuid, TreeIds, FileNames) ->
     % Scope is not passed to this function as it's irrelevant for get operations
     datastore_model:get_links(?CTX, ParentUuid, TreeIds, FileNames).
+
+
+-spec get_local_or_remote(forest(), link_name() | [link_name()], od_space:id()) ->
+    {ok, [internal_link()]} | [{ok, [internal_link()]} | {error, term()}] | {error, term()}.
+get_local_or_remote(ParentUuid, FileNames, Scope) ->
+    datastore_model:get_links(file_meta:get_ctx_with_remote_set(Scope), ParentUuid, all, FileNames).
 
 
 -spec add(forest(), scope(), link_name(), link_target()) -> ok | {error, term()}.
@@ -200,10 +206,10 @@ get_trees(ParentUuid) ->
 %% renamed file document.
 %% @end
 %%--------------------------------------------------------------------
--spec check_name_and_get_conflicting_files(forest(), link_name(), link_target(), od_provider:id()) ->
+-spec check_name_and_get_conflicting_files(forest(), link_name(), link_target(), od_provider:id(), od_space:id()) ->
     ok | {conflicting, TaggedName :: file_meta:name(), Conflicts :: [link()]}.
-check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
-    case file_meta_forest:get_all(ParentUuid, FileName) of
+check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, Scope) ->
+    case file_meta_forest:get_local_or_remote(ParentUuid, FileName, Scope) of
         {ok, [#link{target = FileUuid}]} ->
             ok;
         {ok, []} ->

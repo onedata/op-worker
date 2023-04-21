@@ -127,9 +127,10 @@ get(SpaceId, DocOrUuid) ->
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc(), effective_value:get_or_calculate_options()) ->
     {ok, synced} | {error, missing_file_meta() | missing_link() | ancestor_deleted} | {error, term()}.
-get(SpaceId, Doc = #document{value = #file_meta{}}, Opts) ->
+get(SpaceId, Doc = #document{value = #file_meta{}, scope = Scope}, Opts) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1, Opts) of
+    Opts2 = Opts#{get_remote_from_scope => Scope},
+    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1, Opts2) of
         {ok, synced, _} ->
             {ok, synced};
         {error, {link_missing, _, _} = MissingLink} ->
@@ -138,7 +139,7 @@ get(SpaceId, Doc = #document{value = #file_meta{}}, Opts) ->
             Error
     end;
 get(SpaceId, Uuid, Opts) ->
-    case file_meta:get_including_deleted(Uuid) of
+    case file_meta:get_including_deleted_local_or_remote(Uuid, SpaceId) of
         {ok, Doc} -> get(SpaceId, Doc, Opts);
         ?ERROR_NOT_FOUND -> {error, {file_meta_missing, Uuid}};
         {error, _} = Error -> Error
@@ -165,8 +166,8 @@ calculate_links_sync_status([#document{value = #file_meta{is_scope = true}}, _Pa
     % is_scope is true for space dir - parent should not be checked as it does not exist
     {ok, synced, CalculationInfo};
 calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, CalculationInfo]) ->
-    #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}} = FileMetaDoc,
-    case file_meta_forest:get(ParentUuid, all, Name) of
+    #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}, scope = Scope} = FileMetaDoc,
+    case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope) of
         {ok, _} -> {ok, synced, CalculationInfo};
         {error, _} -> {error, {link_missing, ParentUuid, Name}}
     end.
@@ -182,9 +183,9 @@ find_lowest_missing_link(
     MissingLink;
 find_lowest_missing_link(
     MissingLink,
-    #document{value = #file_meta{parent_uuid =  ParentUuid, name = Name}} = Doc
+    #document{value = #file_meta{parent_uuid =  ParentUuid, name = Name}, scope = Scope} = Doc
 ) ->
-    case file_meta_forest:get(ParentUuid, all, Name) of
+    case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope) of
         {ok, _} ->
             case file_meta:get_parent(Doc) of
                 {ok, NextDoc} -> find_lowest_missing_link(MissingLink, NextDoc);

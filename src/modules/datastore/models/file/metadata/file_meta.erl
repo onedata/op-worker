@@ -28,7 +28,7 @@
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_protection_flags/1]).
--export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
+-export([get_parent/1, get_parent_uuid/1, get_provider_id/1, get_scope/1]).
 -export([
     get_uuid/1, get_child/2, trim_filename_tree_id/2,
     get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3
@@ -39,11 +39,12 @@
     update_protection_flags/3, validate_protection_flags/1,
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
--export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
+-export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
     make_space_exist/1, new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
--export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
+-export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
+-export([get_ctx_with_remote_set/1]).
 
 
 %% datastore_model callbacks
@@ -83,6 +84,7 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
+-define(CTX_WITH_REMOTE_SCOPE(Scope), ?CTX#{scope => Scope, remote_driver_ctx => #{scope => Scope}}).
 
 % For each "normal" file (including spaces) scope is id of a space to
 % which the file belongs.
@@ -238,7 +240,16 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
-get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
+get_including_deleted(Uuid) ->
+    get_including_deleted(Uuid, ?CTX).
+
+
+-spec get_including_deleted_local_or_remote(uuid(), od_space:id()) -> {ok, doc()} | {error, term()}.
+get_including_deleted_local_or_remote(Uuid, Scope) ->
+    get_including_deleted(Uuid, ?CTX_WITH_REMOTE_SCOPE(Scope)).
+
+
+get_including_deleted(?GLOBAL_ROOT_DIR_UUID, _Ctx) ->
     {ok, #document{
         key = ?GLOBAL_ROOT_DIR_UUID,
         value = #file_meta{
@@ -249,22 +260,22 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
-get_including_deleted(Uuid) ->
+get_including_deleted(Uuid, Ctx) ->
     case fslogic_file_id:is_link_uuid(Uuid) of
         true ->
             % When hardlink document is requested it is merged using document
             % representing hardlink and document representing target file
-            case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
+            case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
                 {ok, LinkDoc} ->
                     FileUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
-                    case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
+                    case datastore_model:get(Ctx#{include_deleted => true}, FileUuid) of
                         {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
                         Error2 -> Error2
                     end;
                 Error -> Error
             end;
         false ->
-            case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
+            case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
                 {error, not_found} ->
                     case fslogic_file_id:is_space_dir_uuid(Uuid) of
                         true ->
@@ -272,7 +283,7 @@ get_including_deleted(Uuid) ->
                             % create space document here if it was requested before any user login.
                             ?debug("make_space_exist called in file_meta:get_including_deleted"),
                             make_space_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
-                            datastore_model:get(?CTX#{include_deleted => true}, Uuid);
+                            datastore_model:get(Ctx#{include_deleted => true}, Uuid);
                         false ->
                             {error, not_found}
                     end;
@@ -1004,8 +1015,10 @@ check_name_and_get_conflicting_files(#document{
         name = FileName,
         provider_id = FileProviderId,
         parent_uuid = ParentUuid
-    }}) ->
-    check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
+    },
+    scope = Scope
+}) ->
+    check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, Scope).
 
 
 %%--------------------------------------------------------------------
@@ -1018,10 +1031,10 @@ check_name_and_get_conflicting_files(#document{
 %% renamed file document.
 %% @end
 %%--------------------------------------------------------------------
--spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id()) ->
+-spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id(), od_space:id()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: conflicts()}.
-check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
-    file_meta_forest:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
+check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, Scope) ->
+    file_meta_forest:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, Scope).
 
 
 %%--------------------------------------------------------------------
@@ -1049,6 +1062,11 @@ get_provider_id(#document{value = FileMeta}) ->
     get_provider_id(FileMeta).
 
 
+-spec get_scope(doc()) -> od_space:id().
+get_scope(#document{scope = Scope}) ->
+    Scope.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns uuid form entry.
@@ -1067,6 +1085,10 @@ get_uuid({path, Path}) ->
 get_uuid(FileUuid) ->
     {ok, FileUuid}.
 
+
+-spec get_ctx_with_remote_set(od_space:id()) -> datastore:ctx().
+get_ctx_with_remote_set(Scope) ->
+    ?CTX_WITH_REMOTE_SCOPE(Scope).
 
 %%%===================================================================
 %%% Internal functions

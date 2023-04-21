@@ -38,7 +38,7 @@
     queued_traverse_cancel_test/1, queued_traverse_external_cancel_test/1, traverse_restart_test/1,
     multiple_traverse_test/1, external_multiple_traverse_test/1, mixed_multiple_traverse_test/1,
     db_sync_basic_opts_with_errors_test/1, resynchronization_test/1, initial_sync_repeat_test/1,
-    range_resynchronization_test/1
+    range_resynchronization_test/1, remote_driver_test/1
 ]).
 
 %% Pool callbacks
@@ -55,7 +55,7 @@
     rtransfer_blocking_test, traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
     traverse_restart_test, multiple_traverse_test, external_multiple_traverse_test, mixed_multiple_traverse_test,
-    db_sync_basic_opts_with_errors_test
+    db_sync_basic_opts_with_errors_test, remote_driver_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -739,6 +739,37 @@ range_resynchronization_test(Config) ->
     ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_synchronization_params, [SpaceId, Provider2Id]), 5).
 
 
+remote_driver_test(Config) ->
+    [Worker1, Worker2, Worker3] = ?config(op_worker_nodes, Config),
+    SessId1= lfm_test_utils:get_user1_session_id(Config, Worker1),
+    SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
+    SessId3 = lfm_test_utils:get_user1_session_id(Config, Worker3),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    SpaceName = lfm_test_utils:get_user1_first_space_name(Config),
+
+    TestDirName = generator:gen_name(),
+    {ok, TestDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, SpaceGuid, TestDirName, 8#777)),
+
+    test_utils:mock_expect(Worker1, dbsync_changes, apply, fun(_Doc) -> ok end),
+
+    WorkersWithSessions = #{
+        2 => {Worker2, SessId2},
+        3 => {Worker3, SessId3}
+    },
+    {TestGuid, _} = lists:foldl(fun(WorkerNum, {ParentGuid, ParentPath}) ->
+        {Worker, SessId} = maps:get(WorkerNum, WorkersWithSessions),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, ParentPath}), 60),
+        Name = generator:gen_name(),
+        {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, ParentGuid, Name, 8#777)),
+        {Guid, <<ParentPath/binary, "/",  Name/binary>>}
+    end, {TestDirGuid, <<"/", SpaceName/binary, "/", TestDirName/binary>>}, [2, 3, 2, 3, 2, 3]),
+
+
+    ?assertEqual({ok, synced},
+        rpc:call(Worker1, file_meta_sync_status_cache, get, [SpaceId, file_id:guid_to_uuid(TestGuid)])).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -766,7 +797,7 @@ init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     MockedConfig = multi_provider_file_ops_test_base:mock_sync_and_rtransfer_errors(Config),
     init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(Case, Config) when
-    Case =:= resynchronization_test ; Case =:= range_resynchronization_test
+    Case =:= resynchronization_test ; Case =:= range_resynchronization_test ; Case =:= remote_driver_test
 ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [dbsync_changes]),
@@ -814,7 +845,7 @@ end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     multi_provider_file_ops_test_base:unmock_sync_and_rtransfer_errors(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
-    Case =:= resynchronization_test ; Case =:= range_resynchronization_test
+    Case =:= resynchronization_test ; Case =:= range_resynchronization_test ; Case =:= remote_driver_test
 ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [dbsync_changes]),
