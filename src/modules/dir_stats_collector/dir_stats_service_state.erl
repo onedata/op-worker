@@ -124,8 +124,8 @@ get(SpaceId) ->
         {ok, #document{value = DirStatsServiceState}} ->
             {ok, DirStatsServiceState};
 
-        {error, not_found} ->
-            ?ERROR_NOT_FOUND
+        Error ->
+            Error
     end.
 
 

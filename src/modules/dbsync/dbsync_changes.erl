@@ -42,15 +42,17 @@
 %%--------------------------------------------------------------------
 -spec apply_batch([datastore:doc()], {couchbase_changes:since(), couchbase_changes:until()},
     timestamp(), od_space:id(), od_provider:id()) -> ok.
+apply_batch([], BatchRange, Timestamp, _SpaceId, _ProviderId) ->
+    % Empty batch (all sequences have been overwritten by newer changes)
+    self() ! {batch_applied, BatchRange, Timestamp, ok},
+    ok;
 apply_batch(Docs, BatchRange, Timestamp, SpaceId, ProviderId) ->
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
         DocsList = maps:values(DocsGroups),
 
-        MinSize = application:get_env(?APP_NAME,
-            dbsync_changes_apply_min_group_size, 10),
-
+        MinSize = length(Docs) / op_worker:get_env(dbsync_changes_max_procs, 50),
         {LastGroup, DocsList2} = lists:foldl(fun(Group, {CurrentGroup, Acc}) ->
             Group2 = Group ++ CurrentGroup,
             case length(Group2) >= MinSize of
@@ -68,7 +70,7 @@ apply_batch(Docs, BatchRange, Timestamp, SpaceId, ProviderId) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref),
         Ans = gather_answers(Pids, Ref),
-        log(Docs, BatchRange, Ans, SpaceId, ProviderId),
+        dbsync_logger:log_apply(Docs, BatchRange, Ans, SpaceId, ProviderId),
         Master ! {batch_applied, BatchRange, Timestamp, Ans}
     end),
     ok.
@@ -382,26 +384,4 @@ get_ctx(Model, Doc) ->
     case Doc of
         #document{deleted = true} -> datastore_model:ensure_expiry_set_on_delete(Ctx);
         _ -> Ctx
-    end.
-
-
--spec log(
-    [datastore:doc()],
-    {couchbase_changes:since(), couchbase_changes:until()},
-    ok | timeout | {error, datastore_doc:seq(), term()},
-    od_space:id(),
-    od_provider:id()
-) -> ok.
-log(Docs, BatchRange, Ans, SpaceId, ProviderId) ->
-    case op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000) of % 500 MB
-        0 ->
-            ok;
-        MaxSize ->
-            LogFilePrefix = op_worker:get_env(dbsync_changes_audit_log_file_prefix, "/tmp/dbsync_changes_"),
-            LogFile = LogFilePrefix ++ str_utils:to_list(SpaceId) ++ "_" ++ str_utils:to_list(ProviderId) ++ ".log",
-
-            Seqs = lists:map(fun(#document{seq = Seq}) -> Seq end, Docs),
-            Log = "Seqs range ~p applied with ans: ~p~nSeqs in range: ~w",
-            Args = [BatchRange, Ans, Seqs],
-            onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize)
     end.

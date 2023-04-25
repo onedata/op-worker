@@ -310,8 +310,8 @@ process_current_branching_node(UserCtx, State) ->
     end,
     case matches_prefix(Path, State) orelse IsAncestorNode of
         true ->
-            {ListOpts, UpdatedState} = init_current_branching_node_processing(State),
-            process_current_branching_node_in_batches(UserCtx, ListOpts, UpdatedState, #result_accumulator{});
+            {NodeIterator, UpdatedState} = init_current_branching_node_processing(State),
+            process_current_branching_node_in_batches(UserCtx, NodeIterator, UpdatedState, #result_accumulator{});
         false ->
             {done, #result_accumulator{}}
     end.

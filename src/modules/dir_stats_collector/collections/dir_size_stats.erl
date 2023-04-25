@@ -49,7 +49,8 @@
     get_stats/1, get_stats/2, 
     browse_historical_stats_collection/2,
     report_reg_file_size_changed/3,
-    report_file_created/2, report_file_deleted/2, report_remote_links_change/2,
+    report_file_created/2, report_file_created_without_state_check/2,
+    report_file_deleted/2, report_remote_links_change/2,
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
@@ -139,6 +140,13 @@ report_file_created(?DIRECTORY_TYPE, Guid) ->
     update_stats(Guid, #{?DIR_COUNT => 1});
 report_file_created(_, Guid) ->
     update_stats(Guid, #{?REG_FILE_AND_LINK_COUNT => 1}).
+
+
+-spec report_file_created_without_state_check(file_meta:type(), file_id:file_guid()) -> ok.
+report_file_created_without_state_check(?DIRECTORY_TYPE, Guid) ->
+    ok = dir_stats_collector:update_stats_of_dir_without_state_check(Guid, ?MODULE, #{?DIR_COUNT => 1});
+report_file_created_without_state_check(_, Guid) ->
+    ok = dir_stats_collector:update_stats_of_dir_without_state_check(Guid, ?MODULE, #{?REG_FILE_AND_LINK_COUNT => 1}).
 
 
 -spec report_file_deleted(file_meta:type(), file_id:file_guid()) -> ok.

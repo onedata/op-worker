@@ -75,10 +75,8 @@ copy(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
     {ok, SourcePath} = lfm:get_file_path(SessId, SourceGuid),
     {ok, TargetParentPath} = lfm:get_file_path(SessId, TargetParentGuid),
     Recursive = maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT),
-    SourcePathTokens = filepath_utils:split(SourcePath),
-    TargetParentPathTokens = filepath_utils:split(TargetParentPath),
-    case SourcePathTokens -- TargetParentPathTokens of
-        [] when Recursive ->
+    case filepath_utils:is_equal_or_descendant(TargetParentPath, SourcePath) of
+        {true, _} when Recursive ->
             % attempt to copy file to itself
             {error, ?EINVAL};
         _ ->
