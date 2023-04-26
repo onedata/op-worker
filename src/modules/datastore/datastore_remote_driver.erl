@@ -30,12 +30,12 @@
     routing_key := key(),
     % One of following must be defined
     source_ids => [oneprovider:id()],
-    scope => od_space:id()
+    scope => od_space:id() | undefined
 }.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
 -type communicator_ans() :: {ok, clproto_message_id:id()} | {error, term()}.
--type provider_future() :: {communicator_ans(), session:id()}.
+-type provider_future() :: {communicator_ans(), session:id()} | {error, term()}.
 -type future() :: [provider_future()].
 
 %%%===================================================================
@@ -97,7 +97,10 @@ get_async(#{
     lists:map(fun(ProviderId) ->
         get_async(Key, Model, RoutingKey, ProviderId)
     end, ProviderIds);
+get_async(#{scope := undefined}, _Key) ->
+    {error, not_found};
 get_async(Ctx = #{scope := SpaceId}, Key) ->
+    put(mw_test, {Key, Ctx, erlang:process_info(self(), current_stacktrace)}),
     case dbsync_utils:get_providers(SpaceId) -- [oneprovider:get_id()] of
         [] -> {error, not_found};
         ProviderIds -> get_async(Ctx#{source_ids => ProviderIds}, Key)
@@ -109,17 +112,19 @@ get_async(Ctx = #{scope := SpaceId}, Key) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec wait(future()) -> {ok, doc()} | {error, term()}.
-wait(Future) ->
-    case wait_for_all(Future) of
-        {ok, #document{scope = SpaceId} = Doc} ->
-            spawn(fun() ->
-                Model = element(1, Doc#document.value),
-                datastore_model_default:on_remote_doc_created(Model, dbsync_changes:get_ctx(Model, Doc), Doc),
-                dbsync_events:change_replicated(SpaceId, Doc)
-            end),
-            {ok, Doc};
-        Error ->
-            Error
+wait([ProviderFuture]) ->
+    wait_on_provider_future(ProviderFuture);
+wait([ProviderFuture | Futures]) ->
+    case {wait_on_provider_future(ProviderFuture), wait(Futures)} of
+        {{ok, #document{revs = [Rev1 | _]}} = Ans1, {ok, #document{revs = [Rev2 | _]}} = Ans2} ->
+            case datastore_rev:is_greater(Rev1, Rev2) of
+                true -> Ans1;
+                false -> Ans2
+            end;
+        {{ok, _} = Ans1, _} ->
+            Ans1;
+        {_, Ans2} ->
+            Ans2
     end.
 
 
@@ -127,7 +132,7 @@ wait(Future) ->
 %%% Internal functions
 %%%===================================================================
 
--spec get_async(key(), datastore_model:model(), key(), oneprovider:id()) -> future().
+-spec get_async(key(), datastore_model:model(), key(), oneprovider:id()) -> provider_future().
 get_async(Key, Model, RoutingKey, ProviderId) ->
     try
         case oneprovider:get_id() of
@@ -152,23 +157,6 @@ get_async(Key, Model, RoutingKey, ProviderId) ->
         _:Reason2:Stacktrace ->
             ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason2], Stacktrace),
             {error, Reason2}
-    end.
-
-
--spec wait_for_all(future()) -> {ok, doc()} | {error, term()}.
-wait_for_all([ProviderFuture]) ->
-    wait_on_provider_future(ProviderFuture);
-wait_for_all([ProviderFuture | Futures]) ->
-    case {wait_on_provider_future(ProviderFuture), wait_for_all(Futures)} of
-        {{ok, #document{revs = [Rev1 | _]}} = Ans1, {ok, #document{revs = [Rev2 | _]}} = Ans2} ->
-            case datastore_rev:is_greater(Rev1, Rev2) of
-                true -> Ans1;
-                false -> Ans2
-            end;
-        {{ok, _} = Ans1, _} ->
-            Ans1;
-        {_, Ans2} ->
-            Ans2
     end.
 
 

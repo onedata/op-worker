@@ -234,27 +234,29 @@ get_eff_qos(FileCtx) ->
         {error, ancestor_deleted} ->
             ancestor_deleted
     end,
-    try HighestSyncedAncestorUuid of
-        ReferenceUuid ->
-            % link to this reference is missing - ignore, as posthook to execute on this reference when link appears has been added.
-            undefined;
-        ancestor_deleted ->
-            undefined;
-        <<>> ->
-            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
-            case file_qos:get_effective(FileDoc) of
-                {error, {file_meta_missing, _}} ->
-                    % One of the file references has a missing ancestor. Calculate effective value only for this reference;
-                    % all other references trigger reconciliation when they synchronize.
-                    file_qos:get_effective_for_single_reference(FileDoc);
-                Res ->
-                    Res
-            end;
-        _ ->
-            % This reference has a missing ancestor. Calculate effective value only for this reference up to missing ancestor;
-            % all other references trigger reconciliation when they synchronize.
-            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
-            file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid)
+    try
+        case HighestSyncedAncestorUuid of
+            ReferenceUuid ->
+                % link to this reference is missing - ignore, as posthook to execute on this reference when link appears has been added.
+                undefined;
+            ancestor_deleted ->
+                undefined;
+            <<>> ->
+                {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
+                case file_qos:get_effective(FileDoc) of
+                    {error, {file_meta_missing, _}} ->
+                        % One of the file references has a missing ancestor. Calculate effective value only for this reference;
+                        % all other references trigger reconciliation when they synchronize.
+                        file_qos:get_effective_for_single_reference(FileDoc);
+                    Res ->
+                        Res
+                end;
+            _ ->
+                % This reference has a missing ancestor. Calculate effective value only for this reference up to missing ancestor;
+                % all other references trigger reconciliation when they synchronize.
+                {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
+                file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid)
+        end
     catch
         _:{badmatch, {error, not_found}} -> undefined % race with file deletion
     end.

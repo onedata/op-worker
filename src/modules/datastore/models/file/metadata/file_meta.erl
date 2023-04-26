@@ -44,7 +44,7 @@
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
--export([get_ctx_with_remote_set/1]).
+-export([get_ctx_with_remote_set/2]).
 
 
 %% datastore_model callbacks
@@ -84,7 +84,8 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
--define(CTX_WITH_REMOTE_SCOPE(Scope), ?CTX#{scope => Scope, remote_driver_ctx => #{scope => Scope}}).
+-define(CTX_WITH_REMOTE_SCOPE(Scope), ?CTX_WITH_REMOTE_SCOPE(Scope, Scope)).
+-define(CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope), ?CTX#{scope => Scope, remote_driver_ctx => #{scope => RemoteScope}}).
 
 % For each "normal" file (including spaces) scope is id of a space to
 % which the file belongs.
@@ -1033,8 +1034,13 @@ check_name_and_get_conflicting_files(#document{
 %%--------------------------------------------------------------------
 -spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id(), od_space:id()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: conflicts()}.
-check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, Scope) ->
-    file_meta_forest:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, Scope).
+check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, ChildScope) ->
+    RemoteScope = case fslogic_file_id:is_special_uuid(ParentUuid) of
+        true -> undefined;
+        false -> ChildScope
+    end,
+    file_meta_forest:check_name_and_get_conflicting_files(
+        ParentUuid, FileName, FileUuid, FileProviderId, ChildScope, RemoteScope).
 
 
 %%--------------------------------------------------------------------
@@ -1062,7 +1068,7 @@ get_provider_id(#document{value = FileMeta}) ->
     get_provider_id(FileMeta).
 
 
--spec get_scope(doc()) -> od_space:id().
+-spec get_scope(doc()) -> od_space:id() | undefined.
 get_scope(#document{scope = Scope}) ->
     Scope.
 
@@ -1086,9 +1092,9 @@ get_uuid(FileUuid) ->
     {ok, FileUuid}.
 
 
--spec get_ctx_with_remote_set(od_space:id()) -> datastore:ctx().
-get_ctx_with_remote_set(Scope) ->
-    ?CTX_WITH_REMOTE_SCOPE(Scope).
+-spec get_ctx_with_remote_set(od_space:id(), od_space:id() | undefined) -> datastore:ctx().
+get_ctx_with_remote_set(Scope, RemoteScope) ->
+    ?CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope).
 
 %%%===================================================================
 %%% Internal functions

@@ -20,8 +20,8 @@
 -export([log_apply/5, log_batch_received/5, log_batch_requested/4, log_batch_sending/4]).
 
 
--define(CHANGES_FILE_MAX_SIZE, op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000)). % 500 MB
--define(OUT_STREAM_FILE_MAX_SIZE, op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 524288000)). % 500 MB
+-define(CHANGES_FILE_MAX_SIZE, op_worker:get_env(dbsync_changes_audit_log_file_max_size, 104857600)). % 100 MB
+-define(OUT_STREAM_FILE_MAX_SIZE, op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 104857600)). % 100 MB
 -define(CHANGES_FILE_PREFIX, op_worker:get_env(dbsync_changes_audit_log_file_prefix, "/tmp/dbsync_changes_")).
 -define(OUT_STREAM_FILE_PREFIX, op_worker:get_env(dbsync_out_stream_audit_log_file_prefix, "/tmp/dbsync_out_stream_")).
 

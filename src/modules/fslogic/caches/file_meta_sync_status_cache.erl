@@ -167,7 +167,7 @@ calculate_links_sync_status([#document{value = #file_meta{is_scope = true}}, _Pa
     {ok, synced, CalculationInfo};
 calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, CalculationInfo]) ->
     #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}, scope = Scope} = FileMetaDoc,
-    case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope) of
+    case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope, Scope) of
         {ok, _} -> {ok, synced, CalculationInfo};
         {error, _} -> {error, {link_missing, ParentUuid, Name}}
     end.
@@ -185,7 +185,7 @@ find_lowest_missing_link(
     MissingLink,
     #document{value = #file_meta{parent_uuid =  ParentUuid, name = Name}, scope = Scope} = Doc
 ) ->
-    case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope) of
+    case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope, Scope) of
         {ok, _} ->
             case file_meta:get_parent(Doc) of
                 {ok, NextDoc} -> find_lowest_missing_link(MissingLink, NextDoc);

@@ -79,7 +79,8 @@
                                                  % NOTE: if not equal to <<>> values will NOT be cached
                                                  % NOTE: this option works in best effort manner - if there is already value
                                                  %       calculated from space root cached it will be returned.
-    should_cache => boolean() % default: true; indicates whether calculated value should be cached
+    should_cache => boolean(), % default: true; indicates whether calculated value should be cached,
+    get_remote_from_scope => od_space:id() % allow getting more remote docs (file_meta docs and forests)
 }.
 
 -export_type([args/0, calculation_info/0]).
