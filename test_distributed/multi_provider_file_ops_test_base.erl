@@ -1893,7 +1893,10 @@ unmock_sync_and_rtransfer_errors(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config, dbsync_changes]),
     RequestDelay = ?config(request_delay, Config),
-    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay).
+    case RequestDelay of
+        undefined -> utils:rpc_multicall(Workers, application, unset_env, [?APP_NAME, dbsync_changes_request_delay]);
+        _ -> test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay)
+    end.
 
 %%%===================================================================
 %%% Internal functions

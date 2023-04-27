@@ -55,7 +55,7 @@
     rtransfer_blocking_test, traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
     traverse_restart_test, multiple_traverse_test, external_multiple_traverse_test, mixed_multiple_traverse_test,
-    db_sync_basic_opts_with_errors_test, remote_driver_test
+    remote_driver_test, db_sync_basic_opts_with_errors_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
