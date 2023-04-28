@@ -18,6 +18,7 @@
 -include("modules/fslogic/data_distribution.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -72,6 +73,8 @@ call(ProviderId, FileGuid, Request) ->
             {ok, ProviderResult};
         {ok, #provider_rpc_response{result = Error, status = error}} ->
             Error;
+        {ok, #status{code = ?EBADMSG}} ->
+            ?ERROR_NOT_SUPPORTED;
         {error, _} = Error ->
             Error
     end.

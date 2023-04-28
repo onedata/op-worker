@@ -53,4 +53,23 @@ start_link() ->
 -spec init(Args :: term()) ->
     {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init([]) ->
+    ensure_audit_log_dirs(),
+
     {ok, {#{strategy => one_for_one, intensity => 10, period => 3600}, []}}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec ensure_audit_log_dirs() -> ok.
+ensure_audit_log_dirs() ->
+    lists:foreach(fun(LogRootDir) ->
+        ok = filelib:ensure_dir(op_worker:get_env(LogRootDir))
+    end, [
+        storage_import_audit_log_root_dir,
+        dbsync_changes_audit_log_root_dir,
+        dbsync_out_stream_audit_log_root_dir
+    ]).

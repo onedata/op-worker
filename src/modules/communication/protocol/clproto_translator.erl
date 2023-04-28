@@ -1299,7 +1299,10 @@ translate_from_protobuf(#'MultipartUploads'{
     }};
 
 translate_from_protobuf(undefined) ->
-    undefined.
+    undefined;
+
+translate_from_protobuf(Message) when is_tuple(Message) ->
+    throw({unrecognized_message, element(1, Message)}).
 
 
 %%--------------------------------------------------------------------

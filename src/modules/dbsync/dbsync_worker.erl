@@ -221,9 +221,11 @@ start_out_stream(SpaceId) ->
     end,
     Handler = fun
         (Since, Until, Timestamp, Docs) when Since =:= Until ->
+            dbsync_logger:log_batch_sending(Since, Until, all, SpaceId),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs);
         (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
+            dbsync_logger:log_batch_sending(Since, Until, all, SpaceId),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
             dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp),
             ok
@@ -284,10 +286,12 @@ handle_changes_request(ProviderId, #changes_request2{
 } = Request) ->
     Handler = fun
         (BatchSince, end_of_stream, Timestamp, Docs) ->
+            dbsync_logger:log_batch_sending(BatchSince, Until, ProviderId, SpaceId),
             dbsync_communicator:send_changes(
                 ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs
             );
         (BatchSince, BatchUntil, Timestamp, Docs) ->
+            dbsync_logger:log_batch_sending(BatchSince, BatchUntil, ProviderId, SpaceId),
             dbsync_communicator:send_changes(
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )

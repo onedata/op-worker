@@ -1287,12 +1287,12 @@ move_copy_conflict(Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    FileName = filename:join([binary_to_list(SpaceName), "move_test_file.txt"]),
+    FileName = filename:join([binary_to_list(SpaceName), "move_copy_conflict.txt"]),
     FileUri = list_to_binary(filename:join("/", FileName)),
     FileData = <<"data">>,
     create_file(Config, FileName),
     write_to_file(Config, FileName, FileData, 0),
-    NewMoveFileName = "new_move_test_file",
+    NewMoveFileName = "new_move_copy_conflict",
 
     %%--- conflicting mv/cpy ------- (we cannot move and copy at the same time)
     ?assertEqual(FileData, get_file_content(Config, FileName)),
@@ -1315,8 +1315,8 @@ move(Config) ->
     DirName = filename:join([binary_to_list(SpaceName), "move_test_dir"]) ++ "/",
 
     FileData = <<"data">>,
-    create_file(Config, FileName),
-    mkdir(Config, DirName),
+    {ok, FileGuid} = create_file(Config, FileName),
+    {ok, DirGuid} = mkdir(Config, DirName),
     write_to_file(Config, FileName, FileData, 0),
     NewMoveFileName = filename:join([binary_to_list(SpaceName), "new_move_test_file"]),
     NewMoveDirName = filename:join([binary_to_list(SpaceName), "new_move_test_dir"]) ++ "/",
@@ -1326,7 +1326,7 @@ move(Config) ->
     ?assert(not object_exists(Config, NewMoveDirName)),
 
     RequestHeaders2 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    RequestBody2 = json_utils:encode(#{<<"move">> => list_to_binary(DirName)}),
+    RequestBody2 = json_utils:encode(#{<<"move">> => build_random_src_uri(DirName, DirGuid)}),
     ?assertMatch({ok, ?HTTP_201_CREATED, _Headers2, _Response2}, do_request(Workers, NewMoveDirName, put, RequestHeaders2, RequestBody2)),
 
     ?assert(not object_exists(Config, DirName)),
@@ -1338,7 +1338,7 @@ move(Config) ->
     ?assert(not object_exists(Config, NewMoveFileName)),
     ?assertEqual(FileData, get_file_content(Config, FileName)),
     RequestHeaders3 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody3 = json_utils:encode(#{<<"move">> => list_to_binary(FileName)}),
+    RequestBody3 = json_utils:encode(#{<<"move">> => build_random_src_uri(FileName, FileGuid)}),
     ?assertMatch({ok, _Code3, _Headers3, _Response3}, do_request(Workers, NewMoveFileName, put, RequestHeaders3, RequestBody3)),
 
     ?assert(not object_exists(Config, FileName)),
@@ -1355,7 +1355,7 @@ copy(Config) ->
     FileName2 = filename:join([binary_to_list(SpaceName), "copy_test_file.txt"]),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
     UserName1 = ?config({user_name, <<"user1">>}, Config),
-    create_file(Config, FileName2),
+    {ok, FileGuid} = create_file(Config, FileName2),
     FileData2 = <<"data">>,
     FileAcl = [#access_control_entity{
         acetype = ?allow_mask,
@@ -1380,7 +1380,7 @@ copy(Config) ->
 
     % copy file using cdmi
     RequestHeaders4 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
-    RequestBody4 = json_utils:encode(#{<<"copy">> => list_to_binary(FileName2)}),
+    RequestBody4 = json_utils:encode(#{<<"copy">> => build_random_src_uri(FileName2, FileGuid)}),
     {ok, Code4, _Headers4, _Response4} = do_request(Workers, NewFileName2, put, RequestHeaders4, RequestBody4),
     ?assertEqual(?HTTP_201_CREATED, Code4),
 
@@ -1406,7 +1406,7 @@ copy(Config) ->
         acemask = ?all_container_perms_mask
     }],
 
-    mkdir(Config, DirName2),
+    {ok, DirGuid} = mkdir(Config, DirName2),
     ?assert(object_exists(Config, DirName2)),
     set_acl(Config, DirName2, DirAcl),
     add_xattrs(Config, DirName2, Xattrs),
@@ -1427,7 +1427,7 @@ copy(Config) ->
 
     % copy dir using cdmi
     RequestHeaders5 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?CONTAINER_CONTENT_TYPE_HEADER],
-    RequestBody5 = json_utils:encode(#{<<"copy">> => list_to_binary(DirName2)}),
+    RequestBody5 = json_utils:encode(#{<<"copy">> => build_random_src_uri(DirName2, DirGuid)}),
     {ok, Code5, _Headers5, _Response5} = do_request(Workers, NewDirName2, put, RequestHeaders5, RequestBody5),
     ?assertEqual(?HTTP_201_CREATED, Code5),
 
@@ -2174,3 +2174,24 @@ get_random_string(Length, AllowedChars) ->
             AllowedChars)]
         ++ Acc
     end, [], lists:seq(1, Length)).
+
+
+%% @private
+-spec build_random_src_uri(list(), file_id:file_guid()) -> binary().
+build_random_src_uri(Path, Guid) ->
+    PathBin = str_utils:to_binary(Path),
+
+    case rand:uniform(3) of
+        1 ->
+            PathBin;
+        2 ->
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+            <<"/cdmi_objectid/", ObjectId/binary>>;
+        3 ->
+            [_SpaceName, PathTokens] = filepath_utils:split(PathBin),
+            {ok, SpaceObjectId} = file_id:guid_to_objectid(
+                fslogic_file_id:spaceid_to_space_dir_guid(file_id:guid_to_space_id(Guid))
+            ),
+            PathBin2 = filepath_utils:join([SpaceObjectId, PathTokens]),
+            <<"/cdmi_objectid/", PathBin2/binary>>
+    end.
