@@ -67,7 +67,7 @@
 -type options() :: #{
     pagination_token := pagination_token() | undefined,
     whitelist => undefined | whitelist(),
-    ignore_missing_links => boolean(), % default: true
+    ignore_missing_links => boolean(), % default: false
     limit => limit()
 } | #{
     tune_for_large_continuous_listing := boolean(),
@@ -75,7 +75,7 @@
     offset => offset(),
     inclusive => boolean(),
     whitelist => undefined | whitelist(),
-    ignore_missing_links => boolean(), % default: true
+    ignore_missing_links => boolean(), % default: false
     limit => limit()
 }.
 %% @formatter:on

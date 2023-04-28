@@ -70,7 +70,7 @@
     % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
     %             being down, such subtree will be ignored and NO error returned;
     % * `false` - in case described above `interrupted_call` error will be returned.
-    ignore_missing_links => boolean() % default: true
+    ignore_missing_links => boolean() % default: false
 }.
 
 -type list_extended_info() :: #list_extended_info{}.
@@ -143,7 +143,7 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 -spec list(forest(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list(ParentUuid, Opts) ->
     ExpectedSize = maps:get(size, Opts),
-    Ctx = case maps:get(ignore_missing_links, Opts, true) of
+    Ctx = case maps:get(ignore_missing_links, Opts, false) of
         true ->
             ?CTX;
         false ->
