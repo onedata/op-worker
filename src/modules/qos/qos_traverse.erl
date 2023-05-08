@@ -127,7 +127,8 @@ task_finished(TaskId, _PoolName) ->
 
 -spec task_canceled(id(), traverse:pool()) -> ok.
 task_canceled(TaskId, PoolName) ->
-    task_finished(TaskId, PoolName).
+    % call with ?MODULE for mocking in tests
+    ?MODULE:task_finished(TaskId, PoolName).
 
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),

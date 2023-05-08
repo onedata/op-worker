@@ -101,12 +101,16 @@ create_archive(_Config) ->
     Providers = [krakow, paris],
 
     #object{
-        dataset = #dataset_object{id = DatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
+        dataset = #dataset_object{id = DatasetId, archives = [#archive_object{id = BaseArchiveId}]}
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+        archives = 1
+    }}),
 
     #object{
         dataset = #dataset_object{id = DetachedDatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+        state = ?DETACHED_DATASET
+    }}),
 
     MemRef = api_test_memory:init(),
 
@@ -139,7 +143,7 @@ create_archive(_Config) ->
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
                     % pick only 4 random out of all possible configs
-                    <<"config">> => lists_utils:random_sublist(generate_all_valid_configs(), 4, 4),
+                    <<"config">> => lists_utils:random_sublist(generate_all_valid_configs(BaseArchiveId), 4, 4),
                     <<"description">> => [<<"Test description">>],
                     <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()],
                     <<"deletedCallback">> => [?ARCHIVE_DELETED_CALLBACK_URL()]
@@ -151,6 +155,7 @@ create_archive(_Config) ->
                     {<<"config">>, #{<<"incremental">> => <<"not json">>}, ?ERROR_BAD_VALUE_JSON(<<"config.incremental">>)},
                     {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => <<"not a boolean">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental.enabled">>)},
                     {<<"config">>, #{<<"incremental">> => #{<<"not_enable">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.enabled">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.basedOn">>)},
                     {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
                     {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
@@ -166,12 +171,17 @@ create_archive(_Config) ->
     ])).
 
 %% @private
--spec generate_all_valid_configs() -> [archive_config:json()].
-generate_all_valid_configs() ->
+-spec generate_all_valid_configs(archive:id()) -> [archive_config:json()].
+generate_all_valid_configs(BaseArchiveId) ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
-    IncrementalValues = lists:flatten([undefined | [#{<<"enabled">> => Enable} || Enable <- ?SUPPORTED_INCREMENTAL_ENABLED_VALUES]]),
+    IncrementalValues = [
+        undefined,
+        #{<<"enabled">> => false},
+        #{<<"enabled">> => true, <<"basedOn">> => BaseArchiveId}
+    ],
     IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
     CreateNestedArchivesValues = [undefined, true, false],
+    
     AllConfigsCombinations = [
         {Layout, Incremental, IncludeDip, CreateNestedArchives} ||
         Layout <- LayoutValues,
@@ -347,10 +357,15 @@ get_archive_info(_Config) ->
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 1}}, krakow
     ),
+    
+    Providers = [krakow, paris],
+    lists:foreach(fun(P) ->
+        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            opt_archives:get_info(P, oct_background:get_user_session_id(user3, P), ArchiveId), ?ATTEMPTS)
+    end, Providers),
 
     ConfigJson = archive_config:to_json(Config),
 
-    Providers = [krakow, paris],
     maybe_detach_dataset(Providers, DatasetId),
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -573,14 +588,13 @@ get_dataset_archives(_Config) ->
     }}),
 
     Providers = [krakow, paris],
-    RandomProvider = lists_utils:random_element(Providers),
-    RandomProviderNode = ?OCT_RAND_OP_NODE(RandomProvider),
-    UserSessId = oct_background:get_user_session_id(user3, RandomProvider),
 
     ArchiveInfos = lists:map(fun(#archive_object{id = ArchiveId}) ->
-        {ok, ArchiveInfo} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-            opt_archives:get_info(RandomProviderNode, UserSessId, ArchiveId), ?ATTEMPTS),
-        ArchiveInfo
+        lists:foldl(fun(P, _) ->
+            {ok, ArchiveInfo} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+                opt_archives:get_info(P, oct_background:get_user_session_id(user3, P), ArchiveId), ?ATTEMPTS),
+            ArchiveInfo
+        end, undefined, lists_utils:shuffle(Providers))
     end, ArchiveObjects),
 
     % pick first and last index as token test values
