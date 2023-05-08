@@ -419,11 +419,11 @@ ensure_base_archive_is_set_if_applicable(Config) ->
     case archive_config:is_incremental(Config) of
         true ->
             case archive_config:get_incremental_based_on(Config) of
-                undefined -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"basedOn">>));
+                undefined -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.basedOn">>));
                 BaseArchiveId ->
                     case archive:get(BaseArchiveId) of
                         {ok, _} -> BaseArchiveId;
-                        {error, not_found} -> throw(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"basedOn">>))
+                        {error, not_found} -> throw(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"config.incremental.basedOn">>))
                     end
             end;
         false ->
