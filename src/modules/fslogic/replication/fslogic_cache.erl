@@ -785,7 +785,23 @@ flush_key(Key, Type) ->
 
             Ans = case get({?FLUSHED_DOCS, Key}) =:= DocToSave of
                 true ->
-                    flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
+                    EnsureSynced = case get({?ENSURE_SYNCED, Key}) of
+                        undefined -> false;
+                        true -> true
+                    end,
+                    case EnsureSynced of
+                        true ->
+                            case file_location:save(DocToSave, EnsureSynced) of
+                                {ok, _} ->
+                                    erase({?ENSURE_SYNCED, Key}),
+                                    flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
+                                Error ->
+                                    ?error("Flush failed for key ~p: ~p", [Key, Error]),
+                                    Error
+                            end;
+                        _ ->
+                            flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type)
+                    end;
                 _ ->
                     EnsureSynced = case get({?ENSURE_SYNCED, Key}) of
                         undefined -> false;

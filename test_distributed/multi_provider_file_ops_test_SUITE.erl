@@ -1522,8 +1522,11 @@ tmp_files_test_base(Config0, User, SpaceId) ->
 
     lists:foreach(fun(Worker) ->
         lists:foreach(fun(G) ->
-            ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}), ?ATTEMPTS)
-        end, TmpFiles),
+            ?assertMatch({ok,#file_attr{}}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}), ?ATTEMPTS)
+        end, TmpDirs),
+        lists:foreach(fun(G) ->
+            ?assertMatch({ok,#file_attr{size = 100}}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}), ?ATTEMPTS)
+        end, TmpRegFiles),
 
         ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
             Worker, SessId(Worker), #file_ref{guid = SyncedDirGuid}, #{tune_for_large_continuous_listing => false}
@@ -1633,15 +1636,18 @@ create_tmp_files(Config, SpaceId) ->
     {ok, {FileGuid1, Handle1}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
         Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined
     )),
-    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle1)),
     {ok, {FileGuid2, Handle2}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
         Worker1, SessId(Worker1), DirGuid, ?RAND_STR(), undefined
     )),
-    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
     {ok, {FileGuid3, Handle3}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
         Worker1, SessId(Worker1), Dir2Guid, ?RAND_STR(), undefined
     )),
-    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle3)),
+
+    lists:foreach(fun(Handle) ->
+        ?assertEqual({ok, 100}, lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100))),
+        ?assertEqual(ok, lfm_proxy:close(Worker1, Handle))
+    end, [Handle1, Handle2, Handle3]),
+
     ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
         Worker1, SessId(Worker1), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
