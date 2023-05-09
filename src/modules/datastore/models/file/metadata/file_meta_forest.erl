@@ -57,7 +57,21 @@
 -type tree_ids() :: datastore_model:tree_ids().
 
 %% @formatter:off
--type list_opts() :: datastore:fold_opts().
+-type list_opts() :: #{
+    % required keys
+    size := non_neg_integer(),
+    % one of: token, offset, last_name is required so that we know were to start listing
+    token => binary(),
+    offset => non_neg_integer(),
+    last_name => last_name(),
+    % optional keys
+    last_tree => last_tree(),
+    inclusive => boolean(),
+    % * `true`  - when it is not possible to fetch missing links document by remote driver due to e.g. remote provider
+    %             being down, such subtree will be ignored and NO error returned;
+    % * `false` - in case described above `interrupted_call` error will be returned.
+    ignore_missing_links => boolean() % default: false
+}.
 
 -type list_extended_info() :: #list_extended_info{}.
 
@@ -129,7 +143,17 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 -spec list(forest(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list(ParentUuid, Opts) ->
     ExpectedSize = maps:get(size, Opts),
-    Result = fold(ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
+    Ctx = case maps:get(ignore_missing_links, Opts, false) of
+        true ->
+            ?CTX;
+        false ->
+            ?CTX#{
+                handle_interrupted_call => false,
+                writer_interrupted_call_retries => 0,
+                links_tree_interrupted_call_retries => 0
+            }
+    end,
+    Result = fold(Ctx, ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
         case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
             true -> {ok, {[Link | ListAcc], ListedLinksCount + 1}};
             _ -> {ok, {ListAcc, ListedLinksCount + 1}}
@@ -240,10 +264,10 @@ get_all(ParentUuid, Name) ->
 %%% Internal functions
 %%%===================================================================
 
--spec fold(forest(), fold_fun(), fold_acc(), list_opts()) ->
+-spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), list_opts()) ->
     {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold(ParentUuid, Fun, AccIn, Opts) ->
-    datastore_model:fold_links(?CTX, ParentUuid, all, Fun, AccIn, Opts).
+fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
+    datastore_model:fold_links(Ctx, ParentUuid, all, Fun, AccIn, Opts).
 
 
 %%--------------------------------------------------------------------

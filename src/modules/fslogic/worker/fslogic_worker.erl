@@ -566,7 +566,7 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children(UserCtx, FileCtx, ListingOpts);
 handle_file_request(UserCtx, #get_file_children_attrs{
-    listing_options = ListingOpts, 
+    listing_options = ListingOpts,
     optional_attrs = OptionalAttrs
 }, FileCtx) ->
     dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, OptionalAttrs);

@@ -25,6 +25,7 @@
 
 -export([
     resolve_file/1,
+    create_file_tree/4,
     create_and_sync_file_tree/3, create_and_sync_file_tree/4,
     mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3, prepare_symlink_value/3
 ]).
@@ -64,6 +65,13 @@ resolve_file(FileSelector) ->
     catch error:{badkeys, _} ->
         {FileSelector, file_id:guid_to_space_id(FileSelector)}
     end.
+
+
+-spec create_file_tree(od_user:id(), file_id:file_guid(), oct_background:entity_selector(), object_spec()) ->
+    object().
+create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc) ->
+    {Object, _} = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc, parallel, #{}),
+    Object.
 
 
 -spec create_and_sync_file_tree(
