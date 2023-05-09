@@ -503,9 +503,9 @@ remove_archive_privileges_test(_Config) ->
     RequiredPrivileges = privileges:from_list([?SPACE_REMOVE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
-    lists:foreach(fun({Privilege, ArchiveId}) ->
+    lists:foreach(fun(ArchiveId) ->
     
-        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- RequiredPrivileges),
         % user2 cannot remove the archive
         ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:delete(P1Node, User2SessIdP1, ArchiveId)),
     
@@ -513,7 +513,7 @@ remove_archive_privileges_test(_Config) ->
         % user2 can now remove archive
         ?assertEqual(ok, opt_archives:delete(P1Node, User2SessIdP1, ArchiveId))
 
-    end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
+    end, [ArchiveId1, ArchiveId2]).
 
 
 %===================================================================

@@ -162,7 +162,7 @@ missing_file_meta_posthook(FileUuid, SpaceId) ->
     reconcile_qos(FileCtx).
 
 
--spec missing_link_posthook(file_meta:uuid(), file_meta:name(), od_space:id()) -> ok.
+-spec missing_link_posthook(file_meta:uuid(), file_meta:name(), od_space:id()) -> ok | repeat.
 missing_link_posthook(ParentUuid, MissingName, SpaceId) ->
     case file_meta_forest:get(ParentUuid, all, MissingName) of
         {ok, [#link{target = Uuid}]} ->

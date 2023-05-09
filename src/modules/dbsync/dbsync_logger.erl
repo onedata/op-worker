@@ -22,8 +22,12 @@
 
 -define(CHANGES_FILE_MAX_SIZE, op_worker:get_env(dbsync_changes_audit_log_file_max_size, 104857600)). % 100 MB
 -define(OUT_STREAM_FILE_MAX_SIZE, op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 104857600)). % 100 MB
--define(CHANGES_FILE_PREFIX, op_worker:get_env(dbsync_changes_audit_log_file_prefix, "/tmp/dbsync_changes_")).
--define(OUT_STREAM_FILE_PREFIX, op_worker:get_env(dbsync_out_stream_audit_log_file_prefix, "/tmp/dbsync_out_stream_")).
+-define(CHANGES_AUDIT_LOG_ROOT_DIR, op_worker:get_env(
+    dbsync_changes_audit_log_root_dir, "/tmp/dbsync_changes/"
+)).
+-define(OUT_STREAM_AUDIT_LOG_ROOT_DIR, op_worker:get_env(
+    dbsync_out_stream_audit_log_root_dir, "/tmp/dbsync_out_stream/"
+)).
 
 %%%===================================================================
 %%% API
@@ -81,7 +85,7 @@ log_batch_sending(Since, Until, ProviderId, SpaceId) ->
         0 ->
             ok;
         MaxSize ->
-            LogFile = ?OUT_STREAM_FILE_PREFIX ++ str_utils:to_list(SpaceId) ++ ".log",
+            LogFile = ?OUT_STREAM_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ ".log",
 
             Log = "Seqs range ~p sent to ~p",
             Args = [{Since, Until}, ProviderId],
@@ -96,4 +100,4 @@ log_batch_sending(Since, Until, ProviderId, SpaceId) ->
 %% @private
 -spec get_changes_log_file(od_space:id(), od_provider:id()) -> string().
 get_changes_log_file(SpaceId, ProviderId) ->
-    ?CHANGES_FILE_PREFIX ++ str_utils:to_list(SpaceId) ++ "_" ++ str_utils:to_list(ProviderId) ++ ".log".
+    ?CHANGES_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ "_" ++ str_utils:to_list(ProviderId) ++ ".log".

@@ -455,8 +455,8 @@
     stats = archive_stats:empty() :: archive_stats:record(),
 
     % Related archives
-    % NOTE: all archive relations are optional and depend on options provided in config. 
-    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined), 
+    % NOTE: all archive relations are optional and depend on options provided in config.
+    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined),
     % as one archive cannot be AIP and DIP at the same time.
 
     % if archive has been created directly it has no parent archive
@@ -465,7 +465,7 @@
     % id of archive that current one is based on if it is incremental
     base_archive_id :: undefined | archive:id(),
 
-    % Relations between dissemination information package (DIP) 
+    % Relations between dissemination information package (DIP)
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
     related_dip = undefined :: undefined | archive:id()
@@ -1023,6 +1023,7 @@
     % Information needed to restart directory listing
     tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token(),
+    listing_errors_handling_policy :: tree_traverse:listing_errors_handling_policy(),
     % Traverse task specific info
     child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
@@ -1035,7 +1036,7 @@
     resolved_root_uuids :: [file_meta:uuid()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
-    % Set of encountered files on the path from the traverse root to the currently processed one. 
+    % Set of encountered files on the path from the traverse root to the currently processed one.
     % It is required to efficiently prevent loops when resolving symlinks
     encountered_files :: tree_traverse:encountered_files_set()
 }).

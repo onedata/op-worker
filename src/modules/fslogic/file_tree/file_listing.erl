@@ -67,6 +67,7 @@
 -type options() :: #{
     pagination_token := pagination_token() | undefined,
     whitelist => undefined | whitelist(),
+    ignore_missing_links => boolean(), % default: false
     limit => limit()
 } | #{
     tune_for_large_continuous_listing := boolean(),
@@ -74,6 +75,7 @@
     offset => offset(),
     inclusive => boolean(),
     whitelist => undefined | whitelist(),
+    ignore_missing_links => boolean(), % default: false
     limit => limit()
 }.
 %% @formatter:on
@@ -220,6 +222,7 @@ convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     BaseOpts = index_to_datastore_list_opts(Index),
     maps_utils:remove_undefined(BaseOpts#{
         token => DatastoreToken,
+        ignore_missing_links => sanitize_ignore_missing_links_opt(maps:get(ignore_missing_links, Opts, undefined)),
         size => sanitize_limit(maps:get(limit, Opts, undefined))
     });
 convert_to_datastore_options(Opts) ->
@@ -239,10 +242,12 @@ convert_to_datastore_options(Opts) ->
             maps:get(limit, Opts, undefined)),
         offset => sanitize_offset(
             maps:get(offset, Opts, undefined), 
-            maps:get(prev_link_name, BaseOpts, undefined), 
+            maps:get(prev_link_name, BaseOpts, undefined),
             maps:get(whitelist, Opts, undefined)),
         inclusive => sanitize_inclusive(
             maps:get(inclusive, Opts, undefined)),
+        ignore_missing_links => sanitize_ignore_missing_links_opt(
+            maps:get(ignore_missing_links, Opts, undefined)),
         token => DatastoreToken
     }).
 
@@ -298,6 +303,18 @@ sanitize_offset(Offset, _, _Whitelist) ->
     %% throw(?ERROR_BAD_VALUE_TOO_LOW(Offset, 0));
     Offset < 0 andalso throw(?EINVAL),
     Offset.
+
+
+%% @private
+-spec sanitize_ignore_missing_links_opt(boolean() | any()) -> boolean() | undefined.
+sanitize_ignore_missing_links_opt(Boolean) when is_boolean(Boolean)->
+    Boolean;
+sanitize_ignore_missing_links_opt(undefined) ->
+    undefined;
+sanitize_ignore_missing_links_opt(_) ->
+    %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+    %% throw(?ERROR_BAD_VALUE_BOOLEAN(ignore_missing_links))
+    throw(?EINVAL).
 
 
 %% @private

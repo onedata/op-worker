@@ -128,6 +128,7 @@ stages:
         - events_reliability_2op
         - file_deletion
         - file_lifecycle
+        - file_links_reconciliation_traverse
         - file_popularity
         - file_registration
         - fslogic_req
@@ -1075,6 +1076,15 @@ file_lifecycle:
     - *ct_logs
     - <<: *cover_ct
       name: cover_ct_file_lifecycle.tar.gz
+
+file_links_reconciliation_traverse:
+  <<: *ct-onenv-job
+  key: FLRECTR
+  artifacts:
+    - <<: *cover_ct
+      name: cover_ct_file_links_reconciliation_traverse.tar.gz
+    - *ct_logs
+  requirements: *os-agent
 
 file_popularity:
   <<: *ct-job
@@ -2042,6 +2052,7 @@ Coverage report:
     - artifact: cover_ct_events_reliability_2op.tar.gz
     - artifact: cover_ct_file_deletion.tar.gz
     - artifact: cover_ct_file_lifecycle.tar.gz
+    - artifact: cover_ct_file_links_reconciliation_traverse.tar.gz
     - artifact: cover_ct_file_popularity.tar.gz
     - artifact: cover_ct_file_registration.tar.gz
     - artifact: cover_ct_fslogic_req.tar.gz
