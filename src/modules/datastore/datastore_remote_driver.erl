@@ -38,6 +38,8 @@
 -type provider_future() :: {communicator_ans(), session:id()} | {error, term()}.
 -type future() :: [provider_future()].
 
+-define(ALLOW_GET_FROM_SCOPE, op_worker:get_env(remote_driver_get_from_scope, true)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -100,10 +102,14 @@ get_async(#{
 get_async(#{scope := undefined}, _Key) ->
     {error, not_found};
 get_async(Ctx = #{scope := SpaceId}, Key) ->
-    put(mw_test, {Key, Ctx, erlang:process_info(self(), current_stacktrace)}),
-    case dbsync_utils:get_providers(SpaceId) -- [oneprovider:get_id()] of
-        [] -> {error, not_found};
-        ProviderIds -> get_async(Ctx#{source_ids => ProviderIds}, Key)
+    case ?ALLOW_GET_FROM_SCOPE of
+        true ->
+            case dbsync_utils:get_providers(SpaceId) -- [oneprovider:get_id()] of
+                [] -> {error, not_found};
+                ProviderIds -> get_async(Ctx#{source_ids => ProviderIds}, Key)
+            end;
+        false ->
+            {error, not_found}
     end.
 
 %%--------------------------------------------------------------------
