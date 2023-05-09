@@ -256,7 +256,8 @@ handle_cast(#request{type = ?FINISHED}, State = #state{
     case queue:out(Queue) of
         {empty, Queue} ->
             State2 = State#state{active_requests_num = ActiveRequestsNum2 = ActiveRequestsNum - 1},
-            case ActiveRequestsNum2 =:= 0 of
+            % TODO VFS-10856 - identify  doubled requests (can appear due to sync problems)
+            case ActiveRequestsNum2 =< 0 of
                 true -> {stop, normal, State2};
                 false -> {noreply, State2}
             end;
