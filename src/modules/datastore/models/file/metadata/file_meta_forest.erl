@@ -98,6 +98,13 @@ get(ParentUuid, TreeIds, FileNames) ->
     datastore_model:get_links(?CTX, ParentUuid, TreeIds, FileNames).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets links using context with remote scope set that allows getting link docs from other providers if they are not
+%% synced.
+%% Warning - should be used only when we know that link forest exists. Otherwise, it will affect performance.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_local_or_remote(forest(), link_name() | [link_name()], od_space:id(), od_space:id() | undefined) ->
     {ok, [internal_link()]} | [{ok, [internal_link()]} | {error, term()}] | {error, term()}.
 get_local_or_remote(ParentUuid, FileNames, Scope, RemoteScope) ->

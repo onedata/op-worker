@@ -80,7 +80,8 @@
                                                  % NOTE: this option works in best effort manner - if there is already value
                                                  %       calculated from space root cached it will be returned.
     should_cache => boolean(), % default: true; indicates whether calculated value should be cached,
-    get_remote_from_scope => od_space:id() % allow getting more remote docs (file_meta docs and forests)
+    get_remote_from_scope => od_space:id() % allow getting parent docs from remote providers if they do not exist
+                                           % locally - see file_meta:get_including_deleted_local_or_remote for more information
 }.
 
 -export_type([args/0, calculation_info/0]).

@@ -84,6 +84,8 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
+% Context with remote scope set that allows getting docs from other providers if they are not synced.
+% Warning - should be used only when we know that document exists. Otherwise, it will affect performance.
 -define(CTX_WITH_REMOTE_SCOPE(Scope), ?CTX_WITH_REMOTE_SCOPE(Scope, Scope)).
 -define(CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope), ?CTX#{scope => Scope, remote_driver_ctx => #{scope => RemoteScope}}).
 
@@ -245,6 +247,13 @@ get_including_deleted(Uuid) ->
     get_including_deleted(Uuid, ?CTX).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_meta doc even if its marked as deleted. Uses context with remote scope set that allows getting
+%% docs from other providers if they are not synced.
+%% Warning - should be used only when we know that document exists. Otherwise, it will affect performance.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_including_deleted_local_or_remote(uuid(), od_space:id()) -> {ok, doc()} | {error, term()}.
 get_including_deleted_local_or_remote(Uuid, Scope) ->
     get_including_deleted(Uuid, ?CTX_WITH_REMOTE_SCOPE(Scope)).
@@ -1092,6 +1101,12 @@ get_uuid(FileUuid) ->
     {ok, FileUuid}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns context with remote scope set that allows getting docs from other providers if they are not synced.
+%% Warning - should be used only when we know that document exists. Otherwise, it will affect performance.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_ctx_with_remote_set(od_space:id(), od_space:id() | undefined) -> datastore:ctx().
 get_ctx_with_remote_set(Scope, RemoteScope) ->
     ?CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope).

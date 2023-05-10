@@ -39,7 +39,7 @@
 -type future() :: [provider_future()].
 
 -define(ALLOW_GET_FROM_SCOPE, op_worker:get_env(remote_driver_get_from_scope, true)).
-%%cluster_worker:set_env(include_overridden_in_changes, false), op_worker:set_env(remote_driver_get_from_scope, false).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
