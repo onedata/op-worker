@@ -706,13 +706,13 @@ init_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta_forest),
     test_utils:mock_expect(Workers, file_meta_forest, get_local_or_remote, fun
-        (Uuid, Name, Scope) when Name =:= ?CONFLICTING_FILE_NAME orelse Name =:= ?CONFLICTING_FILE_AFTER_RENAME ->
-            case meck:passthrough([Uuid, Name, Scope]) of
+        (Uuid, Name, Scope, RemoteScope) when Name =:= ?CONFLICTING_FILE_NAME orelse Name =:= ?CONFLICTING_FILE_AFTER_RENAME ->
+            case meck:passthrough([Uuid, Name, Scope, RemoteScope]) of
                 {ok, List} -> {ok, [#link{name = Name, target = Uuid, tree_id = ?TEST_TREE_ID} | List]};
                 {error, not_found} -> {ok, [#link{name = Name, target = Uuid, tree_id = ?TEST_TREE_ID}]}
             end;
-        (Uuid, Name, Scope) ->
-            meck:passthrough([Uuid, Name, Scope])
+        (Uuid, Name, Scope, RemoteScope) ->
+            meck:passthrough([Uuid, Name, Scope, RemoteScope])
     end),
     init_per_testcase(default, Config);
 init_per_testcase(Case, Config) when
