@@ -1013,21 +1013,26 @@ update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
 propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
-    {Parent, UpdatedCachedDirStats} = acquire_parent(Guid, CachedDirStats),
+    case fslogic_file_id:is_tmp_dir_guid(Guid) of
+        true ->
+            CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
+        false ->
+            {Parent, UpdatedCachedDirStats} = acquire_parent(Guid, CachedDirStats),
 
-    Result = case Parent of
-        <<"root_dir">> -> ok;
-        undefined -> add_hook_for_missing_doc(Guid, CollectionType, StatUpdatesAccForParent);
-        _ -> update_stats_of_dir(Parent, internal, CollectionType, StatUpdatesAccForParent)
-    end,
+            Result = case Parent of
+                <<"root_dir">> -> ok;
+                undefined -> add_hook_for_missing_doc(Guid, CollectionType, StatUpdatesAccForParent);
+                _ -> update_stats_of_dir(Parent, internal, CollectionType, StatUpdatesAccForParent)
+            end,
 
-    case Result of
-        ok ->
-            UpdatedCachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
-        {error, _} = Error ->
-            ?error("Dir stats collector ~p error for collection type: ~p and guid ~p (parent ~p): ~p",
-                [?FUNCTION_NAME, CollectionType, Guid, Parent, Error]),
-            UpdatedCachedDirStats
+            case Result of
+                ok ->
+                    UpdatedCachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
+                {error, _} = Error ->
+                    ?error("Dir stats collector ~p error for collection type: ~p and guid ~p (parent ~p): ~p",
+                        [?FUNCTION_NAME, CollectionType, Guid, Parent, Error]),
+                    UpdatedCachedDirStats
+            end
     end.
 
 

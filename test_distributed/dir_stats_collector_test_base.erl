@@ -57,13 +57,36 @@
 
 basic_test(Config) ->
     % TODO VFS-8835 - test rename
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    {ok, NotCountedDirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker, SessId, TmpDirGuid, ?RAND_STR(), undefined)),
+
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]),
 
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    check_dir_stats(Config, op_worker_nodes, TmpDirGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 1,
+        ?FILE_ERRORS_COUNT => 0,
+        ?DIR_ERRORS_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+    }),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(NotCountedDirGuid))),
+    check_dir_stats(Config, op_worker_nodes, TmpDirGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 0,
+        ?FILE_ERRORS_COUNT => 0,
+        ?DIR_ERRORS_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+    }),
+
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
     {ok, GuidsAndNames} = ?assertMatch({ok, _}, lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceGuid), 0, 100)),
 
