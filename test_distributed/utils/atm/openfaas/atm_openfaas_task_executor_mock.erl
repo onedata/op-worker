@@ -141,7 +141,11 @@ mock_assert_openfaas_healthy(Workers) ->
 %% @private
 -spec mock_create([node()]) -> ok.
 mock_create(Workers) ->
-    MockFun = fun(AtmWorkflowExecutionCtx, AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
+    MockFun = fun(#atm_task_executor_creation_args{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        lane_execution_index = AtmLaneIndex,
+        lambda_revision = AtmLambdaRevision
+    }) ->
         AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
             AtmWorkflowExecutionCtx
         ),
