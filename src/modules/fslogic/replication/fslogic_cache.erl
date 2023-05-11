@@ -783,17 +783,13 @@ flush_key(Key, Type) ->
                     wait_for_flush(Key, FlushPid, true)
             end,
 
-            Ans = case get({?FLUSHED_DOCS, Key}) =:= DocToSave of
-                true ->
+            Ans = case {get({?FLUSHED_DOCS, Key}) =:= DocToSave, utils:ensure_defined(get({?ENSURE_SYNCED, Key}), false)} of
+                {true, false} ->
                     flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
-                _ ->
-                    EnsureSynced = case get({?ENSURE_SYNCED, Key}) of
-                        undefined -> false;
-                        true -> true
-                    end,
+                {IsFlushed, EnsureSynced} ->
                     case file_location:save(DocToSave, EnsureSynced) of
                         {ok, _} ->
-                            put({?FLUSHED_DOCS, Key}, DocToSave),
+                            IsFlushed orelse put({?FLUSHED_DOCS, Key}, DocToSave),
                             erase({?ENSURE_SYNCED, Key}),
                             flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                         Error ->
