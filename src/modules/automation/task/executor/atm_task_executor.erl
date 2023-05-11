@@ -30,7 +30,7 @@
 
 %% API
 -export([
-    create/4,
+    create/1,
     initiate/2,
     abort/2,
     teardown/2,
@@ -48,6 +48,7 @@
 -type model() :: atm_openfaas_task_executor.
 -type record() :: atm_openfaas_task_executor:record().
 
+-type creation_args() :: #atm_task_executor_creation_args{}.
 -type initiation_ctx() :: #atm_task_executor_initiation_ctx{}.
 
 -type job_args() :: json_utils:json_map().
@@ -69,7 +70,7 @@
 
 -type streamed_data() :: {chunk, json_utils:json_map()} | errors:error().
 
--export_type([initiation_ctx/0]).
+-export_type([creation_args/0, initiation_ctx/0]).
 -export_type([job_args/0, job_results/0]).
 -export_type([job_batch_id/0, lambda_input/0, lambda_output/0, job_batch_result/0]).
 -export_type([streamed_data/0]).
@@ -82,13 +83,7 @@
 %%%===================================================================
 
 
--callback create(
-    atm_workflow_execution_ctx:record(),
-    atm_lane_execution:index(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record()
-) ->
-    record() | no_return().
+-callback create(creation_args()) -> record() | no_return().
 
 -callback initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
 
@@ -112,16 +107,12 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_ctx:record(),
-    atm_lane_execution:index(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record()
-) ->
-    record() | no_return().
-create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
+-spec create(creation_args()) -> record() | no_return().
+create(AtmTaskExecutorCreationArgs = #atm_task_executor_creation_args{
+    lambda_revision = AtmLambdaRevision
+}) ->
     Model = get_executor_model(AtmLambdaRevision#atm_lambda_revision.operation_spec),
-    Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
+    Model:create(AtmTaskExecutorCreationArgs).
 
 
 -spec initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
@@ -209,4 +200,6 @@ db_decode(#{<<"_model">> := ModelJson} = AtmTaskExecutorJson, NestedRecordDecode
 -spec get_executor_model(atm_lambda_operation_spec:record()) ->
     module().
 get_executor_model(#atm_openfaas_operation_spec{}) ->
-    atm_openfaas_task_executor.
+    atm_openfaas_task_executor;
+get_executor_model(#atm_onedata_function_operation_spec{function_id = <<"replicate">>}) ->
+    atm_replicate_function_task_executor.

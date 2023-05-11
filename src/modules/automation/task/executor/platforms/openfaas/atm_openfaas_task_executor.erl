@@ -29,7 +29,7 @@
 
 %% atm_task_executor callbacks
 -export([
-    create/4,
+    create/1,
     initiate/2,
     abort/2,
     teardown/2,
@@ -84,14 +84,11 @@ get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry_id = 
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_ctx:record(),
-    atm_lane_execution:index(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record()
-) ->
-    record() | no_return().
-create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
+-spec create(atm_task_executor:creation_args()) -> record() | no_return().
+create(#atm_task_executor_creation_args{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    lambda_revision = AtmLambdaRevision
+}) ->
     atm_openfaas_monitor:assert_openfaas_healthy(),
 
     FunctionId = build_function_id(AtmWorkflowExecutionCtx),

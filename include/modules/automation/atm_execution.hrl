@@ -85,6 +85,14 @@
     parallel_box_schema :: atm_parallel_box_schema:record()
 }).
 
+-record(atm_task_executor_creation_args, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    lane_execution_index :: atm_lane_execution:index(),
+    task_id :: atm_task_execution:id(),
+    task_schema :: atm_task_schema:record(),
+    lambda_revision :: atm_lambda_revision:record()
+}).
+
 -record(atm_task_executor_initiation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     task_execution_id :: atm_task_execution:id(),

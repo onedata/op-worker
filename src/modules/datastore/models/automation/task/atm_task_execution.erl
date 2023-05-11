@@ -15,7 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([create/1, get/1, update/2, delete/1]).
+-export([create/2, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -50,9 +50,12 @@
 %%%===================================================================
 
 
--spec create(record()) -> {ok, doc()} | {error, term()}.
-create(AtmTaskExecutionRecord) ->
-    datastore_model:create(?CTX(), #document{value = AtmTaskExecutionRecord}).
+-spec create(id(), record()) -> {ok, doc()} | {error, term()}.
+create(AtmTaskExecutionId, AtmTaskExecutionRecord) ->
+    datastore_model:create(?CTX(), #document{
+        key = AtmTaskExecutionId,
+        value = AtmTaskExecutionRecord
+    }).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
