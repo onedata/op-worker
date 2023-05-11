@@ -525,7 +525,8 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     insert_function_annotations(FunctionDefinition, #{
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
-        <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
+        <<"oneclient.openfaas.onedata.org/input_spaces_ids">> => SpaceId,
+        <<"oneclient.openfaas.onedata.org/output_space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
         <<"oneclient.openfaas.onedata.org/options">> => <<
             EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary
