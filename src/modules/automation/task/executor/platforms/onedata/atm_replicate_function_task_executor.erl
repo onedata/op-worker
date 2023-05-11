@@ -187,7 +187,7 @@ build_id(AtmWorkflowExecutionId, AtmTaskExecutionId) ->
 
 
 %% @private
--spec unpack_id(atm_workflow_execution_ctx:record()) -> binary().
+-spec unpack_id(binary()) -> {atm_workflow_execution:id(), atm_task_execution:id()}.
 unpack_id(ExecutorId) ->
     [AtmWorkflowExecutionId, AtmTaskExecutionId] = binary:split(ExecutorId, <<?ID_SEPARATOR>>),
     {AtmWorkflowExecutionId, AtmTaskExecutionId}.

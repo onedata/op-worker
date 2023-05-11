@@ -45,8 +45,12 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type model() :: atm_openfaas_task_executor.
--type record() :: atm_openfaas_task_executor:record().
+-type model() ::
+    atm_openfaas_task_executor |
+    atm_replicate_function_task_executor.
+-type record() ::
+    atm_openfaas_task_executor:record() |
+    atm_replicate_function_task_executor:record().
 
 -type creation_args() :: #atm_task_executor_creation_args{}.
 -type initiation_ctx() :: #atm_task_executor_initiation_ctx{}.
