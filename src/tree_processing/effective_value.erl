@@ -79,7 +79,9 @@
                                                  % NOTE: if not equal to <<>> values will NOT be cached
                                                  % NOTE: this option works in best effort manner - if there is already value
                                                  %       calculated from space root cached it will be returned.
-    should_cache => boolean() % default: true; indicates whether calculated value should be cached
+    should_cache => boolean(), % default: true; indicates whether calculated value should be cached,
+    get_remote_from_scope => od_space:id() % allow getting parent docs from remote providers if they do not exist
+                                           % locally - see file_meta:get_including_deleted_local_or_remote for more information
 }.
 
 -export_type([args/0, calculation_info/0]).
@@ -283,7 +285,7 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
 calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
     case get_parent_uuid(Key, FileDoc) of
         {ok, ParentUuid} ->
-            case file_meta:get_including_deleted(ParentUuid) of
+            case get_file_meta(ParentUuid, Options) of
                 {ok, ParentDoc} -> get_or_calculate(Cache, ParentDoc, CalculateCallback, Options);
                 {error, not_found} ->
                     {error, {file_meta_missing, ParentUuid}}
@@ -342,7 +344,7 @@ differentiate_and_cache_references(Cache, Key, MergedValue, CalculationInfo,
 -spec force_execution_on_referenced_key(file_meta:uuid(), callback(), merge_callback(),
     calculation_info(), bounded_cache:value(), get_or_calculate_options()) -> get_or_calculate_return_value().
 force_execution_on_referenced_key(INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options) ->
-    case file_meta:get_including_deleted(INodeKey) of
+    case get_file_meta(INodeKey, Options) of
         {ok, FileDoc} ->
             Args = maps:get(args, Options, []),
             InitialCalculationInfo = maps:get(initial_calculation_info, Options, undefined),
@@ -393,3 +395,10 @@ get_references(#document{key = DocKey} = FileDoc) ->
             {error, not_found} -> false
         end
     end, References -- [DocKey])].
+
+
+-spec get_file_meta(file_meta:uuid(), get_or_calculate_options()) -> {ok, file_meta:doc()} | {error, term()}.
+get_file_meta(Uuid, #{get_remote_from_scope := Scope}) ->
+    file_meta:get_including_deleted_local_or_remote(Uuid, Scope);
+get_file_meta(Uuid, _Options) ->
+    file_meta:get_including_deleted(Uuid).

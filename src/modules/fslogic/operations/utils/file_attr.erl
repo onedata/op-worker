@@ -205,9 +205,10 @@ resolve_file_name(UserCtx, FileDoc, FileCtx0, <<_/binary>> = ParentGuid, resolve
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
     ProviderId = file_meta:get_provider_id(FileDoc),
+    Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
 
-    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId) of
+    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
         {conflicting, ExtendedName, ConflictingFiles} ->
             {ExtendedName, ConflictingFiles, FileCtx1};
         _ ->

@@ -90,22 +90,26 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
     {ChildrenCtxs, ListingToken, FileCtx1} = get_children_ctxs(
         UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?list_container_mask)),
     ChildrenNum = length(ChildrenCtxs),
 
     ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
         ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
+        ChildUuid = file_ctx:get_logical_uuid_const(ChildCtx),
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
-        case Num == 1 orelse Num == ChildrenNum of
+        case (Num == 1 orelse Num == ChildrenNum) of
             true ->
                 try
                     {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
+                    % Get parent uuid from doc - if function is executed for regular file uuid from FileCtx
+                    % cannot be used (file is returned as its own child for regular files so uuid from FileCtx
+                    % is equal to ChildUuid is such a case)
+                    {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
                     ProviderId = file_meta:get_provider_id(FileDoc),
-                    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
+                    Scope = file_meta:get_scope(FileDoc),
                     case file_meta:check_name_and_get_conflicting_files(
-                        file_id:guid_to_uuid(ParentGuid), ChildName, FileUuid, ProviderId) 
+                        ParentUuid, ChildName, ChildUuid, ProviderId, Scope)
                     of
                         {conflicting, ExtendedName, _ConflictingFiles} ->
                             {true, #child_link{name = ExtendedName, guid = ChildGuid}};
