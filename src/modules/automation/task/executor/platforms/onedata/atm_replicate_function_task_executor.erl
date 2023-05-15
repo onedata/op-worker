@@ -49,6 +49,7 @@
 
 
 -define(ID_SEPARATOR, "#").
+% Value used by replica_synchronizer to prioritize replication jobs
 -define(SYNCHRONIZATION_PRIORITY, 224).
 
 
@@ -117,7 +118,8 @@ run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
 -spec trigger_stream_conclusion(atm_workflow_execution_ctx:record(), record()) ->
     ok | no_return().
 trigger_stream_conclusion(AtmWorkflowExecutionCtx, _AtmTaskExecutor) ->
-    % All remaining stats must have been flushed before replication ended
+    % All remaining stats must have been flushed by replica_synchronizer
+    % before replication ended
     workflow_engine:report_task_data_streaming_concluded(
         atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx),
         atm_workflow_execution_ctx:get_task_execution_id(AtmWorkflowExecutionCtx),
