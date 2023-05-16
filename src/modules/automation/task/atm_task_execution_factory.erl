@@ -39,6 +39,7 @@
 -type execution_components() :: #execution_components{}.
 
 -record(creation_ctx, {
+    task_id :: atm_task_execution:id(),
     creation_args :: creation_args(),
     execution_components :: execution_components()
 }).
@@ -70,7 +71,10 @@ create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_cre
 -spec create(atm_parallel_box_execution:creation_args(), atm_task_schema:record()) ->
     atm_task_execution:doc().
 create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) ->
+    AtmTaskExecutionId = datastore_key:new(),
+
     CreationCtx = create_execution_components(#creation_ctx{
+        task_id = AtmTaskExecutionId,
         creation_args = #creation_args{
             parallel_box_execution_creation_args = AtmParallelBoxExecutionCreationArgs,
             task_schema = AtmTaskSchema,
@@ -158,6 +162,7 @@ create_execution_components(CreationCtx) ->
 %% @private
 -spec create_executor(creation_ctx()) -> creation_ctx().
 create_executor(CreationCtx = #creation_ctx{
+    task_id = AtmTaskExecutionId,
     creation_args = #creation_args{
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
             lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
@@ -171,9 +176,13 @@ create_executor(CreationCtx = #creation_ctx{
     execution_components = ExecutionComponents
 }) ->
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
-        executor = atm_task_executor:create(
-            AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
-        )
+        executor = atm_task_executor:create(#atm_task_executor_creation_args{
+            workflow_execution_ctx = AtmWorkflowExecutionCtx,
+            lane_execution_index = AtmLaneIndex,
+            task_id = AtmTaskExecutionId,
+            task_schema = AtmTaskSchema,
+            lambda_revision = AtmLambdaRevision
+        })
     }}.
 
 
@@ -299,6 +308,7 @@ delete_execution_components(_) ->
 %% @private
 -spec create_task_execution_doc(creation_ctx()) -> atm_task_execution:doc().
 create_task_execution_doc(#creation_ctx{
+    task_id = AtmTaskExecutionId,
     creation_args = #creation_args{
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
             parallel_box_index = AtmParallelBoxIndex,
@@ -335,7 +345,7 @@ create_task_execution_doc(#creation_ctx{
         AtmTaskSchemaResultMappers
     ),
 
-    {ok, AtmTaskExecutionDoc} = atm_task_execution:create(#atm_task_execution{
+    {ok, AtmTaskExecutionDoc} = atm_task_execution:create(AtmTaskExecutionId, #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
         run_num = undefined,
