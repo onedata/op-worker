@@ -67,13 +67,12 @@
 ]).
 
 
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_time_series_measurement_data_spec{
+    specs = [#atm_time_series_measurement_spec{
         name_matcher_type = has_prefix,
         name_matcher = <<>>,
         unit = none
-    }]}
+    }]
 }).
 
 

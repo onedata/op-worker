@@ -66,7 +66,7 @@
 
 -spec build(atm_data_spec:record(), atm_list_store_container_iterator:record()) -> record().
 build(ItemDataSpec, RootsIterator) ->
-    Module = get_callback_module(atm_data_spec:get_type(ItemDataSpec)),
+    Module = get_callback_module(atm_data_spec:get_data_type(ItemDataSpec)),
     #atm_tree_forest_store_container_iterator{
         callback_module = Module,
         item_data_spec = ItemDataSpec,

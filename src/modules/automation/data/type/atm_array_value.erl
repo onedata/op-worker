@@ -16,6 +16,7 @@
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
@@ -33,11 +34,11 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_array_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #{
-    item_data_spec := ItemDataSpec
+assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #atm_array_data_spec{
+    item_data_spec = ItemDataSpec
 }) ->
     lists:foreach(fun({Idx, Item}) ->
         try
@@ -55,19 +56,19 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #{
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+-spec compress(atm_value:expanded(), atm_array_data_spec:record()) ->
     [atm_value:compressed()].
-compress(Array, #{item_data_spec := ItemDataSpec}) ->
+compress(Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
     lists:map(fun(Item) -> atm_value:compress(Item, ItemDataSpec) end, Array).
 
 
 -spec expand(
     atm_workflow_execution_auth:record(),
     [atm_value:compressed()],
-    atm_data_type:value_constraints()
+    atm_array_data_spec:record()
 ) ->
     {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Array, #{item_data_spec := ItemDataSpec}) ->
+expand(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
     try
         {ok, lists:map(fun(Item) ->
             case atm_value:expand(AtmWorkflowExecutionAuth, Item, ItemDataSpec) of

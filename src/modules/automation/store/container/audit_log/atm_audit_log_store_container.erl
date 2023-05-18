@@ -104,7 +104,7 @@ get_config(#atm_audit_log_store_container{config = AtmStoreConfig}) ->
 
 -spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 get_iterated_item_data_spec(_) ->
-    #atm_data_spec{type = atm_object_type}.
+    #atm_object_data_spec{}.
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().

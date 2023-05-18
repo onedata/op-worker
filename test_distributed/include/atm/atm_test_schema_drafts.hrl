@@ -46,9 +46,9 @@
     },
     config_parameter_specs = [#atm_parameter_spec{
         name = ?ECHO_ARG_NAME,
-        data_spec = #atm_data_spec{
-            type = atm_number_type,
-            value_constraints = #{integers_only => true}
+        data_spec = #atm_number_data_spec{
+            integers_only = true,
+            allowed_values = undefined
         },
         is_optional = true,
         default_value = 0
@@ -65,7 +65,10 @@
     }]
 }).
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), ?ECHO_LAMBDA_DRAFT(__DATA_SPEC, return_value)).
--define(NUMBER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_number_type})).
+-define(NUMBER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_number_data_spec{
+    integers_only = false,
+    allowed_values = undefined
+})).
 
 -define(ECHO_LAMBDA_ID, <<"echo">>).
 -define(ECHO_LAMBDA_REVISION_NUM, 1).

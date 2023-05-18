@@ -47,7 +47,7 @@
 
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_st">>).
 
--define(ATM_FILE_DATA_SPEC, #atm_data_spec{type = atm_file_type}).
+-define(ATM_FILE_DATA_SPEC, #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]}).  %% TODO
 
 -define(FOREACH_TASK_DRAFT(__ID), #atm_task_schema_draft{
     id = __ID,

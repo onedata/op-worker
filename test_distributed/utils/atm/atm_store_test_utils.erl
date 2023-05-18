@@ -137,31 +137,37 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
 
 -spec example_data_spec(atm_data_type:type()) -> atm_data_spec:record().
 example_data_spec(atm_array_type) ->
-    #atm_data_spec{
-        type = atm_array_type,
-        value_constraints = #{
-            item_data_spec => example_data_spec(?RAND_ELEMENT(basic_data_types()))
-        }
+    #atm_array_data_spec{
+        item_data_spec = example_data_spec(?RAND_ELEMENT(basic_data_types()))
     };
+
+example_data_spec(atm_boolean_type) ->
+    #atm_boolean_data_spec{};
+
+example_data_spec(atm_dataset_type) ->
+    #atm_dataset_data_spec{};
+
+example_data_spec(atm_file_type) ->
+    #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]};  %% TODO macro with all file attributes?????
+
+example_data_spec(atm_number_type) ->
+    #atm_number_data_spec{integers_only = false, allowed_values = undefined};
+
+example_data_spec(atm_object_type) ->
+    #atm_object_data_spec{};
+
+example_data_spec(atm_range_type) ->
+    #atm_range_data_spec{};
+
+example_data_spec(atm_string_type) ->
+    #atm_string_data_spec{allowed_values = undefined};
 
 example_data_spec(atm_time_series_measurement_type) ->
     RandSpecs = atm_test_utils:example_time_series_measurement_specs(),
 
-    #atm_data_spec{
-        type = atm_time_series_measurement_type,
-        value_constraints = #{specs => lists_utils:random_sublist(RandSpecs, 1, all)}
-    };
-
-example_data_spec(AtmDataType) when
-    AtmDataType =:= atm_boolean_type;
-    AtmDataType =:= atm_dataset_type;
-    AtmDataType =:= atm_file_type;
-    AtmDataType =:= atm_number_type;
-    AtmDataType =:= atm_object_type;
-    AtmDataType =:= atm_range_type;
-    AtmDataType =:= atm_string_type
-->
-    #atm_data_spec{type = AtmDataType}.
+    #atm_time_series_measurement_data_spec{
+        specs = lists_utils:random_sublist(RandSpecs, 1, all)
+    }.
 
 
 -spec gen_valid_data(
@@ -170,23 +176,18 @@ example_data_spec(AtmDataType) when
     atm_data_spec:record()
 ) ->
     atm_value:expanded().
-gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_array_type,
-    value_constraints = #{item_data_spec := ItemDataSpec}
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_array_data_spec{
+    item_data_spec = ItemDataSpec
 }) ->
     lists:map(
         fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, ItemDataSpec) end,
         lists:seq(1, ?RAND_INT(5, 10))
     );
 
-gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_boolean_type
-}) ->
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_boolean_data_spec{}) ->
     ?RAND_BOOL();
 
-gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_dataset_type
-}) ->
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_dataset_data_spec{}) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     #file_attr{guid = FileGuid, type = FileType} = create_random_file_in_space_root_dir(
@@ -202,9 +203,7 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
         <<"rootFileType">> => str_utils:to_binary(FileType)
     };
 
-gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_file_type
-}) ->
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_file_data_spec{}) ->
     #file_attr{guid = FileGuid, type = FileType} = create_random_file_in_space_root_dir(
         ProviderSelector, AtmWorkflowExecutionAuth
     ),
@@ -215,31 +214,27 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
         <<"type">> => str_utils:to_binary(FileType)
     };
 
-gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_number_type,
-    value_constraints = ValueConstraints
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_number_data_spec{
+    integers_only = true,
+    allowed_values = undefined
 }) ->
-    case maps:get(allowed_values, ValueConstraints, undefined) of
-        undefined ->
-            case maps:get(integers_only, ValueConstraints, false) of
-                true -> ?RAND_INT(1000000);
-                false -> ?RAND_ELEMENT([?RAND_INT(1000000), ?RAND_FLOAT(0, 1000000)])
-            end;
-
-        AllowedValues ->
-            ?RAND_ELEMENT(AllowedValues)
-    end;
-
-gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_object_type
+    ?RAND_INT(1000000);
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_number_data_spec{
+    integers_only = false,
+    allowed_values = undefined
 }) ->
+    ?RAND_ELEMENT([?RAND_INT(1000000), ?RAND_FLOAT(0, 1000000)]);
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_number_data_spec{
+    allowed_values = AllowedValues
+}) ->
+    ?RAND_ELEMENT(AllowedValues);
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_object_data_spec{}) ->
     lists:foldl(fun(_, Acc) ->
         Acc#{?RAND_STR(32) => lists_utils:random_element([?RAND_STR(32), rand:uniform(1000000)])}
     end, #{}, lists:seq(1, ?RAND_INT(3, 5)));
 
-gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_range_type
-}) ->
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_range_data_spec{}) ->
     case rand:uniform(3) of
         1 ->
             #{<<"end">> => ?RAND_INT(10, 200)};
@@ -257,18 +252,17 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
             }
     end;
 
-gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_string_type,
-    value_constraints = ValueConstraints
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_string_data_spec{
+    allowed_values = undefined
 }) ->
-    case maps:get(allowed_values, ValueConstraints, undefined) of
-        undefined -> ?RAND_STR(32);
-        AllowedValues -> ?RAND_ELEMENT(AllowedValues)
-    end;
+    ?RAND_STR(32);
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_string_data_spec{
+    allowed_values = AllowedValues
+}) ->
+    ?RAND_ELEMENT(AllowedValues);
 
-gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs := Specs}
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_time_series_measurement_data_spec{
+    specs = Specs
 }) ->
     #{
         <<"tsName">> => gen_ts_name(?RAND_ELEMENT(Specs)),
@@ -299,43 +293,39 @@ gen_ts_name(#atm_time_series_measurement_spec{
     atm_data_spec:record()
 ) ->
     atm_value:expanded().
-gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_array_type,
-    value_constraints = #{item_data_spec := ItemDataSpec}
+gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_array_data_spec{
+    item_data_spec = ItemDataSpec
 }) ->
     lists:map(
         fun(_) -> gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, ItemDataSpec) end,
         lists:seq(1, ?RAND_INT(5, 10))
     );
 
-gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_object_type
+gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_object_data_spec{
 }) ->
-    gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-        type = ?RAND_ELEMENT([atm_boolean_type, atm_number_type, atm_string_type])
-    });
+    gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, example_data_spec(?RAND_ELEMENT(
+        [atm_boolean_type, atm_number_type, atm_string_type]
+    )));
 
-gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = AtmDataType
-}) ->
+gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, AtmDataSpec) ->
+    AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
     InvalidDataSpec = example_data_spec(?RAND_ELEMENT(basic_data_types() -- [AtmDataType])),
     gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidDataSpec).
 
 
 -spec infer_exp_invalid_data_error(atm_value:expanded(), atm_data_spec:record()) ->
     errors:error().
-infer_exp_invalid_data_error(InvalidArray = [InvalidValue | _], #atm_data_spec{
-    type = atm_array_type,
-    value_constraints = #{item_data_spec := #atm_data_spec{type = ExpItemDataType}}
+infer_exp_invalid_data_error(InvalidArray = [InvalidValue | _], #atm_array_data_spec{
+    item_data_spec = ItemDataSpec
 }) ->
     ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
         InvalidArray, atm_array_type, #{<<"$[0]">> => errors:to_json(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidValue, ExpItemDataType)
+            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidValue, atm_data_spec:get_data_type(ItemDataSpec))
         )}
     );
 
-infer_exp_invalid_data_error(InvalidItem, #atm_data_spec{type = ExpItemDataType}) ->
-    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ExpItemDataType).
+infer_exp_invalid_data_error(InvalidItem, AtmDataSpec) ->
+    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, atm_data_spec:get_data_type(AtmDataSpec)).
 
 
 -spec compress_and_expand_data(
@@ -365,9 +355,7 @@ compress_and_expand_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDa
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
-randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
-    type = atm_file_type
-}) ->
+randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_file_data_spec{}) ->
     case rand:uniform(5) of
         1 ->
             SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
@@ -382,9 +370,7 @@ randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecution
             false
     end;
 
-randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
-    type = atm_dataset_type
-}) ->
+randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_dataset_data_spec{}) ->
     case rand:uniform(5) of
         1 ->
             SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),

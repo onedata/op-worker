@@ -19,17 +19,16 @@
 -include_lib("ctool/include/time_series/common.hrl").
 
 
--define(ATM_NUMBER_DATA_SPEC, #atm_data_spec{type = atm_number_type}).
--define(ATM_STRING_DATA_SPEC, #atm_data_spec{type = atm_string_type}).
--define(ATM_OBJECT_DATA_SPEC, #atm_data_spec{type = atm_object_type}).
+-define(ATM_NUMBER_DATA_SPEC, #atm_number_data_spec{integers_only = false, allowed_values = undefined}).
+-define(ATM_STRING_DATA_SPEC, #atm_string_data_spec{allowed_values = undefined}).
+-define(ATM_OBJECT_DATA_SPEC, #atm_object_data_spec{}).
 
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_time_series_measurement_data_spec{
+    specs = [#atm_time_series_measurement_spec{
         name_matcher_type = has_prefix,
         name_matcher = <<>>,
         unit = none
-    }]}
+    }]
 }).
 
 -define(EXP_WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{

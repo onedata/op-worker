@@ -38,32 +38,28 @@
 -spec validate(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    AtmDataType = atm_data_spec:get_type(AtmDataSpec),
+    AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
 
     case atm_data_type:is_instance(AtmDataType, Value) of
         true ->
             Module = get_callback_module(AtmDataType),
-            ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
-            Module:assert_meets_constraints(AtmWorkflowExecutionAuth, Value, ValueConstraints);
+            Module:assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec);
         false ->
             throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))
     end.
 
 
 -spec compress(expanded(), atm_data_spec:record()) -> compressed() | no_return().
-compress(Value, #atm_data_spec{type = AtmDataType, value_constraints = ValueConstraints}) ->
-    Module = get_callback_module(AtmDataType),
-    Module:compress(Value, ValueConstraints).
+compress(Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
+    Module:compress(Value, AtmDataSpec).
 
 
 -spec expand(atm_workflow_execution_auth:record(), compressed(), atm_data_spec:record()) ->
     {ok, expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Value, #atm_data_spec{
-    type = AtmDataType,
-    value_constraints = ValueConstraints
-}) ->
-    Module = get_callback_module(AtmDataType),
-    Module:expand(AtmWorkflowExecutionAuth, Value, ValueConstraints).
+expand(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
+    Module:expand(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 -spec filterexpand_list(

@@ -220,7 +220,7 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStor
 
 %% @private
 -spec get_item_data_spec(atm_range_store_config:record()) -> atm_data_spec:record().
-get_item_data_spec(#atm_range_store_config{}) -> #atm_data_spec{type = atm_range_type}.
+get_item_data_spec(#atm_range_store_config{}) -> #atm_range_data_spec{}.
 
 
 %% @private

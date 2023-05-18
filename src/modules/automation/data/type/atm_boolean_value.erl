@@ -31,10 +31,10 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_boolean_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _AtmDataSpec) ->
     ok.
 
 
@@ -43,11 +43,11 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _ValueConstraints) -
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> boolean().
-compress(Value, _ValueConstraints) -> Value.
+-spec compress(atm_value:expanded(), atm_boolean_data_spec:record()) -> boolean().
+compress(Value, _AtmDataSpec) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), boolean(), atm_data_type:value_constraints()) ->
+-spec expand(atm_workflow_execution_auth:record(), boolean(), atm_boolean_data_spec:record()) ->
     {ok, atm_value:expanded()}.
-expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
+expand(_AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     {ok, Value}.

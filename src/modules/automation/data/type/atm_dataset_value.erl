@@ -43,10 +43,10 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_dataset_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
+assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     check_implicit_constraints(AtmWorkflowExecutionAuth, Value).
 
 
@@ -73,14 +73,14 @@ list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+-spec compress(atm_value:expanded(), atm_dataset_data_spec:record()) ->
     dataset:id().
-compress(#{<<"datasetId">> := DatasetId}, _ValueConstraints) -> DatasetId.
+compress(#{<<"datasetId">> := DatasetId}, _AtmDataSpec) -> DatasetId.
 
 
--spec expand(atm_workflow_execution_auth:record(), dataset:id(), atm_data_type:value_constraints()) ->
+-spec expand(atm_workflow_execution_auth:record(), dataset:id(), atm_dataset_data_spec:record()) ->
     {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, DatasetId, _ValueConstraints) ->
+expand(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     try
         DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),

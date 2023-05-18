@@ -44,9 +44,9 @@
 -export_type([record/0]).
 
 
--define(ITEM_DATA_SPEC, #atm_data_spec{
-    type = atm_number_type,
-    value_constraints = #{integers_only => true}
+-define(ITEM_DATA_SPEC, #atm_number_data_spec{
+    integers_only = true,
+    allowed_values = undefined
 }).
 
 

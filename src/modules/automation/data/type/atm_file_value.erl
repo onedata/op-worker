@@ -17,6 +17,7 @@
 -behaviour(atm_data_compressor).
 -behaviour(atm_tree_forest_store_container_iterator).
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -43,14 +44,14 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_file_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} = Value, ValueConstraints) ->
+assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} = Value, AtmDataSpec) ->
     try
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
         FileAttrs = check_implicit_constraints(AtmWorkflowExecutionAuth, Guid),
-        check_explicit_constraints(FileAttrs, ValueConstraints)
+        check_explicit_constraints(FileAttrs, AtmDataSpec)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_file_type, UnverifiedConstraints));
@@ -87,9 +88,9 @@ list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+-spec compress(atm_value:expanded(), atm_file_data_spec:record()) ->
     file_id:file_guid().
-compress(#{<<"file_id">> := ObjectId}, _ValueConstraints) ->
+compress(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
     {ok, Guid} = file_id:objectid_to_guid(ObjectId),
     Guid.
 
@@ -97,10 +98,10 @@ compress(#{<<"file_id">> := ObjectId}, _ValueConstraints) ->
 -spec expand(
     atm_workflow_execution_auth:record(),
     file_id:file_guid(),
-    atm_data_type:value_constraints()
+    atm_file_data_spec:record()
 ) ->
     {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
+expand(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
@@ -164,17 +165,11 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, FileGuid) ->
 
 
 %% @private
--spec check_explicit_constraints(lfm_attrs:file_attributes(), atm_data_type:value_constraints()) ->
+-spec check_explicit_constraints(lfm_attrs:file_attributes(), atm_file_data_spec:record()) ->
     ok | no_return().
-check_explicit_constraints(#file_attr{type = FileType}, Constraints) ->
-    case maps:get(file_type, Constraints, 'ANY') of
-        'ANY' ->
-            ok;
-        FileType ->
-            ok;
-        Other ->
-            UnverifiedConstraint = atm_file_type:encode_value_constraints(
-                #{file_type => Other}, fun jsonable_record:to_json/2
-            ),
-            throw({unverified_constraints, UnverifiedConstraint})
-    end.
+check_explicit_constraints(_, #atm_file_data_spec{file_type = 'ANY'}) ->
+    ok;
+check_explicit_constraints(#file_attr{type = FileType}, #atm_file_data_spec{file_type = FileType}) ->
+    ok;
+check_explicit_constraints(_, #atm_file_data_spec{file_type = ConstraintType}) ->
+    throw({unverified_constraints, #{<<"file_type">> => str_utils:to_binary(ConstraintType)}}).

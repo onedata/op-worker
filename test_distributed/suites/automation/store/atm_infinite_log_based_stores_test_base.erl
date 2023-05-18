@@ -259,9 +259,8 @@ update_content_test_base(#{
                 #{<<"$[1]">> => errors:to_json(ExpInvalidInputItemError)}
             )},
             {extend, NewInputItem1, atm_store_test_utils:infer_exp_invalid_data_error(
-                NewInputItem1, #atm_data_spec{
-                    type = atm_array_type,
-                    value_constraints = #{item_data_spec => InputItemGeneratorSeedDataSpec}
+                NewInputItem1, #atm_array_data_spec{
+                    item_data_spec = InputItemGeneratorSeedDataSpec
                 }
             )}
         ]),

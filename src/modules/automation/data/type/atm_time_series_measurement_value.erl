@@ -16,6 +16,7 @@
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
@@ -36,12 +37,12 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_time_series_measurement_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, Measurement, ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Measurement, AtmDataSpec) ->
     try
-        check_measurement_constraints(Measurement, ValueConstraints)
+        check_measurement_constraints(Measurement, AtmDataSpec)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
@@ -59,19 +60,19 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Measurement, ValueConstraint
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+-spec compress(atm_value:expanded(), atm_time_series_measurement_data_spec:record()) ->
     json_utils:json_map().
-compress(Value, _ValueConstraints) ->
+compress(Value, _AtmDataSpec) ->
     maps:with([<<"tsName">>, <<"timestamp">>, <<"value">>], Value).
 
 
 -spec expand(
     atm_workflow_execution_auth:record(),
     json_utils:json_map(),
-    atm_data_type:value_constraints()
+    atm_time_series_measurement_data_spec:record()
 ) ->
     {ok, atm_value:expanded()}.
-expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
+expand(_AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     {ok, Value}.
 
 
@@ -83,12 +84,12 @@ expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 %% @private
 -spec check_measurement_constraints(
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_time_series_measurement_data_spec:record()
 ) ->
     ok | no_return().
 check_measurement_constraints(
     #{<<"tsName">> := TSName},
-    #{specs := AllowedMeasurementSpecs}
+    #atm_time_series_measurement_data_spec{specs = AllowedMeasurementSpecs}
 ) ->
     case atm_time_series_names:find_matching_measurement_spec(TSName, AllowedMeasurementSpecs) of
         {ok, _} ->

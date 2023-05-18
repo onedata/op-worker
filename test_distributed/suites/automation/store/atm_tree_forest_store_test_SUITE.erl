@@ -246,8 +246,8 @@ example_configs() ->
     lists:map(fun(ItemDataSpec) ->
         #atm_tree_forest_store_config{item_data_spec = ItemDataSpec}
     end, [
-        #atm_data_spec{type = atm_dataset_type},
-        #atm_data_spec{type = atm_file_type}
+        #atm_dataset_data_spec{},
+        #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]}  %% TODO
     ]).
 
 
@@ -437,11 +437,18 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
             atm_file_type -> 
                 {ok, CdmiId} = file_id:guid_to_objectid(Root),
                 #{<<"file_id">> => CdmiId};
-            atm_dataset_type -> #{<<"datasetId">> => Root}
+            atm_dataset_type ->
+                #{<<"datasetId">> => Root}
         end
     end, Roots),
+    AtmDataSpec = case Type of
+        atm_file_type ->
+            #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]};  %% TODO
+        atm_dataset_type ->
+            #atm_dataset_data_spec{}
+    end,
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_tree_forest_store_config{
-        item_data_spec = #atm_data_spec{type = Type}
+        item_data_spec = AtmDataSpec
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
         AtmWorkflowExecutionAuth, RootsToAdd, AtmStoreSchema

@@ -53,11 +53,11 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_range_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
-    Range = compress(Value, ValueConstraints),
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    Range = compress(Value, AtmDataSpec),
 
     try
         assert_valid_step_direction(Range)
@@ -78,17 +78,17 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(range_json(), atm_data_type:value_constraints()) -> range().
-compress(Value = #{<<"end">> := End}, _ValueConstraints) ->
+-spec compress(range_json(), atm_range_data_spec:record()) -> range().
+compress(Value = #{<<"end">> := End}, _AtmDataSpec) ->
     Start = maps:get(<<"start">>, Value, 0),
     Step = maps:get(<<"step">>, Value, 1),
 
     [Start, End, Step].
 
 
--spec expand(atm_workflow_execution_auth:record(), range(), atm_data_type:value_constraints()) ->
+-spec expand(atm_workflow_execution_auth:record(), range(), atm_range_data_spec:record()) ->
     {ok, range_json()}.
-expand(_AtmWorkflowExecutionAuth, [Start, End, Step], _ValueConstraints) ->
+expand(_AtmWorkflowExecutionAuth, [Start, End, Step], _AtmDataSpec) ->
     {ok, #{
         <<"start">> => Start,
         <<"end">> => End,

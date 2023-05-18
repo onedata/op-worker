@@ -130,7 +130,7 @@ browse_by_timestamp_test(_Config) ->
     ),
 
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
@@ -195,7 +195,7 @@ expiration_test(_Config) ->
     ),
 
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
@@ -242,13 +242,10 @@ example_configs() ->
     ],
 
     lists:flatten([
-        #atm_audit_log_store_config{log_content_data_spec = #atm_data_spec{
-            type = atm_array_type,
-            value_constraints = #{
-                item_data_spec => atm_store_test_utils:example_data_spec(?RAND_ELEMENT(
+        #atm_audit_log_store_config{log_content_data_spec = #atm_array_data_spec{
+            item_data_spec = atm_store_test_utils:example_data_spec(?RAND_ELEMENT(
                     SupportedStaticBasicTypes
-                ))
-            }
+            ))
         }},
 
         lists:map(fun(LogContentDataType) ->

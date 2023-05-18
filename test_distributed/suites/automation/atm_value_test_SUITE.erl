@@ -122,13 +122,12 @@ all() -> [
 
 atm_array_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_array_type,
-            value_constraints = #{item_data_spec => #atm_data_spec{
-                type = atm_array_type,
-                value_constraints = #{item_data_spec => #atm_data_spec{type = atm_number_type}}
-            }}
-        },
+        data_spec = #atm_array_data_spec{item_data_spec = #atm_array_data_spec{
+            item_data_spec = #atm_number_data_spec{
+                integers_only = false,
+                allowed_values = undefined
+            }
+        }},
         valid_values = [
             [],
             [[]],
@@ -163,13 +162,9 @@ atm_array_value_validation_test(_Config) ->
 
 atm_array_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_array_type,
-            value_constraints = #{item_data_spec => #atm_data_spec{
-                type = atm_array_type,
-                value_constraints = #{item_data_spec => #atm_data_spec{type = atm_range_type}}
-            }}
-        },
+        data_spec = #atm_array_data_spec{item_data_spec = #atm_array_data_spec{
+            item_data_spec = #atm_range_data_spec{}
+        }},
         values = [
             [],
             [[]],
@@ -200,7 +195,7 @@ atm_array_value_compress_expand_test(_Config) ->
 
 atm_boolean_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{type = atm_boolean_type},
+        data_spec = #atm_boolean_data_spec{},
         valid_values = [false, true],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_boolean_type)} end,
@@ -211,7 +206,7 @@ atm_boolean_value_validation_test(_Config) ->
 
 atm_boolean_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_boolean_type},
+        data_spec = #atm_boolean_data_spec{},
         values = [false, true]
     }).
 
@@ -240,7 +235,7 @@ atm_dataset_value_validation_test(_Config) ->
     ]),
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{type = atm_dataset_type},
+        data_spec = #atm_dataset_data_spec{},
         valid_values = lists:map(fun(DatasetId) -> #{<<"datasetId">> => DatasetId} end, [
             DirDatasetId,
             % user can view dataset even if he does not have access to file the dataset is attached
@@ -289,7 +284,7 @@ atm_dataset_value_compress_expand_test(_Config) ->
     ]),
 
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_dataset_type},
+        data_spec = #atm_dataset_data_spec{},
         values = lists:flatten([
             {error, #{<<"datasetId">> => <<"RemovedDatasetId">>}, ?ERROR_NOT_FOUND},
 
@@ -330,14 +325,7 @@ atm_file_value_validation_test(_Config) ->
         #symlink_spec{symlink_value = <<"a/b">>}
     ]),
 
-    ValueConstraints = ?RAND_ELEMENT([
-        #{},
-        #{file_type => 'ANY'},
-        #{file_type => 'REG'},
-        #{file_type => 'DIR'},
-        #{file_type => 'SYMLNK'}
-    ]),
-    AllowedFileType = maps:get(file_type, ValueConstraints, 'ANY'),
+    AllowedFileType = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
     AllowedFileTypeBin = str_utils:to_binary(AllowedFileType),
 
     {FilesWithAllowedType, FilesWithNotAllowedType} = case AllowedFileType of
@@ -353,9 +341,9 @@ atm_file_value_validation_test(_Config) ->
     end,
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_file_type,
-            value_constraints = ValueConstraints
+        data_spec = #atm_file_data_spec{
+            file_type = AllowedFileType,
+            attributes = [file_id]  %% TODO
         },
         valid_values = lists:map(BuildFileObjectFun, FilesWithAllowedType),
         invalid_values_with_exp_errors = lists:flatten([
@@ -406,15 +394,9 @@ atm_file_value_compress_expand_test(_Config) ->
     ]),
 
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_file_type,
-            value_constraints = ?RAND_ELEMENT([
-                #{},
-                #{file_type => 'ANY'},
-                #{file_type => 'REG'},
-                #{file_type => 'DIR'},
-                #{file_type => 'SYMLNK'}
-            ])
+        data_spec = #atm_file_data_spec{
+            file_type = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
+            attributes = [file_id]  %% TODO
         },
         values = lists:flatten([
             {
@@ -449,9 +431,9 @@ atm_file_value_compress_expand_test(_Config) ->
 
 atm_number_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_number_type,
-            value_constraints = ?RAND_ELEMENT([#{}, #{integers_only => false}])
+        data_spec = #atm_number_data_spec{
+            integers_only = false,
+            allowed_values = undefined
         },
         valid_values = [-10, 0, 5.5, 10],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
@@ -461,9 +443,9 @@ atm_number_value_validation_test(_Config) ->
     }),
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_number_type,
-            value_constraints = #{integers_only => true}
+        data_spec = #atm_number_data_spec{
+            integers_only = true,
+            allowed_values = undefined
         },
         valid_values = [-10, 0, 10],
         invalid_values_with_exp_errors = [
@@ -475,9 +457,9 @@ atm_number_value_validation_test(_Config) ->
 
     AllowedValues = ?RAND_ELEMENT([[], [-4, 0, 5.6, 10]]),
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_number_type,
-            value_constraints = #{allowed_values => AllowedValues}
+        data_spec = #atm_number_data_spec{
+            integers_only = false,
+            allowed_values = AllowedValues
         },
         valid_values = AllowedValues,
         invalid_values_with_exp_errors = lists:map(fun(Num) ->
@@ -490,14 +472,14 @@ atm_number_value_validation_test(_Config) ->
 
 atm_number_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_number_type},
+        data_spec = #atm_number_data_spec{integers_only = false, allowed_values = undefined},
         values = [-10, 0, 5.5, 10]
     }).
 
 
 atm_object_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{type = atm_object_type},
+        data_spec = #atm_object_data_spec{},
         valid_values = [
             #{<<"key1">> => <<"value">>},
             #{<<"key2">> => 5},
@@ -520,7 +502,7 @@ atm_object_value_validation_test(_Config) ->
 
 atm_object_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_object_type},
+        data_spec = #atm_object_data_spec{},
         values = [
             #{<<"key1">> => <<"value">>},
             #{<<"key2">> => 5},
@@ -532,7 +514,7 @@ atm_object_value_compress_expand_test(_Config) ->
 
 atm_range_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{type = atm_range_type},
+        data_spec = #atm_range_data_spec{},
         valid_values = [
             #{<<"end">> => 10},
             #{<<"start">> => 1, <<"end">> => 10},
@@ -572,7 +554,7 @@ atm_range_value_validation_test(_Config) ->
 
 atm_range_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_range_type},
+        data_spec = #atm_range_data_spec{},
         values = [
             #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2},
             #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1},
@@ -602,7 +584,7 @@ atm_range_value_compress_expand_test(_Config) ->
 
 atm_string_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{type = atm_string_type},
+        data_spec = #atm_string_data_spec{allowed_values = undefined},
         valid_values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)} end,
@@ -612,10 +594,7 @@ atm_string_value_validation_test(_Config) ->
 
     AllowedValues = ?RAND_ELEMENT([[], [<<"NaN">>, <<"!@#$%^&*()">>]]),
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_string_type,
-            value_constraints = #{allowed_values => AllowedValues}
-        },
+        data_spec = #atm_string_data_spec{allowed_values = AllowedValues},
         valid_values = AllowedValues,
         invalid_values_with_exp_errors = lists:map(fun(Num) ->
             {Num, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
@@ -627,7 +606,7 @@ atm_string_value_validation_test(_Config) ->
 
 atm_string_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_string_type},
+        data_spec = #atm_string_data_spec{allowed_values = undefined},
         values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>]
     }).
 
@@ -647,10 +626,7 @@ atm_time_series_measurement_value_validation_test(_Config) ->
     ],
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_time_series_measurement_type,
-            value_constraints = #{specs => MeasurementSpecs}
-        },
+        data_spec = #atm_time_series_measurement_data_spec{specs = MeasurementSpecs},
         valid_values = [
             build_rand_ts_measurement(<<"size">>),
             build_rand_ts_measurement(<<"awesome_tests">>)
@@ -691,13 +667,12 @@ atm_time_series_measurement_value_compress_expand_test(_Config) ->
     RandMeasurement = build_rand_ts_measurement(),
 
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{
-            type = atm_time_series_measurement_type,
-            value_constraints = #{specs => [#atm_time_series_measurement_spec{
+        data_spec = #atm_time_series_measurement_data_spec{
+            specs = [#atm_time_series_measurement_spec{
                 name_matcher_type = has_prefix,
                 name_matcher = <<"awesome_">>,
                 unit = none
-            }]}
+            }]
         },
         values = [
             % Compress and expand should work even for measurements not conforming

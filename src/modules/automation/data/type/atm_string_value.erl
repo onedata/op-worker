@@ -16,6 +16,7 @@
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
@@ -33,15 +34,16 @@
 -spec assert_meets_constraints(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_data_type:value_constraints()
+    atm_string_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     try
-        lists:foreach(fun
-            ({_, undefined}) -> ok;
-            (ConstraintRule) -> assert_meets_constraint(ConstraintRule, Value)
-        end, maps:to_list(ValueConstraints))
+        lists:foreach(fun(CheckConstraintFun) ->
+            CheckConstraintFun(Value, AtmDataSpec)
+        end, [
+            fun check_allowed_values_constraint/2
+        ])
     catch throw:{unverified_constraints, UnverifiedConstraints} ->
         throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_string_type, UnverifiedConstraints))
     end.
@@ -52,13 +54,13 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> binary().
-compress(Value, _ValueConstraints) -> Value.
+-spec compress(atm_value:expanded(), atm_string_data_spec:record()) -> binary().
+compress(Value, _AtmDataSpec) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), binary(), atm_data_type:value_constraints()) ->
+-spec expand(atm_workflow_execution_auth:record(), binary(), atm_string_data_spec:record()) ->
     {ok, atm_value:expanded()}.
-expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
+expand(_AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     {ok, Value}.
 
 
@@ -68,10 +70,12 @@ expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 
 
 %% @private
--spec assert_meets_constraint(ConstraintRule :: {atom(), term()}, number()) ->
+-spec check_allowed_values_constraint(binary(), atm_number_data_spec:record()) ->
     ok | no_return().
-assert_meets_constraint({allowed_values, AllowedValues}, Number) ->
-    case lists:member(Number, AllowedValues) of
+check_allowed_values_constraint(_String, #atm_string_data_spec{allowed_values = undefined}) ->
+    ok;
+check_allowed_values_constraint(String, #atm_string_data_spec{allowed_values = AllowedValues}) ->
+    case lists:member(String, AllowedValues) of
         true -> ok;
         false -> throw({unverified_constraints, #{<<"allowedValues">> => AllowedValues}})
     end.

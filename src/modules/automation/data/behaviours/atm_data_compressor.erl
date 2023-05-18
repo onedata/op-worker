@@ -20,13 +20,13 @@
 %%%===================================================================
 
 
--callback compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+-callback compress(atm_value:expanded(), atm_data_spec:record()) ->
     atm_value:compressed() | no_return().
 
 
 -callback expand(
     atm_workflow_execution_auth:record(),
     atm_value:compressed(),
-    atm_data_type:value_constraints()
+    atm_data_spec:record()
 ) ->
     {ok, atm_value:expanded()} | {error, term()}.

@@ -83,22 +83,22 @@
                 config_parameter_specs = [
                     #atm_parameter_spec{
                         name = ?ATM_LAMBDA_CONFIG_PARAMETER_INT,
-                        data_spec = #atm_data_spec{
-                            type = atm_number_type,
-                            value_constraints = #{integers_only => true}
+                        data_spec = #atm_number_data_spec{
+                            integers_only = true,
+                            allowed_values = undefined
                         },
                         is_optional = true,
                         default_value = 0
                     },
                     #atm_parameter_spec{
                         name = ?ATM_LAMBDA_CONFIG_PARAMETER_STR,
-                        data_spec = #atm_data_spec{type = atm_string_type},
+                        data_spec = #atm_string_data_spec{allowed_values = undefined},
                         is_optional = true,
                         default_value = <<>>
                     },
                     #atm_parameter_spec{
                         name = ?ATM_LAMBDA_CONFIG_PARAMETER_BOOL,
-                        data_spec = #atm_data_spec{type = atm_boolean_type},
+                        data_spec = #atm_boolean_data_spec{},
                         is_optional = true,
                         default_value = false
                     }
@@ -291,7 +291,7 @@ map_arguments() ->
 
 
 map_results_to_audit_log_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_number_type},
+    IteratedItemDataSpec = #atm_number_data_spec{integers_only = false, allowed_values = undefined},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         testcase = ?FUNCTION_NAME,
@@ -304,7 +304,7 @@ map_results_to_audit_log_store() ->
 
 
 map_results_to_list_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_string_type},
+    IteratedItemDataSpec = #atm_string_data_spec{allowed_values = undefined},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         testcase = ?FUNCTION_NAME,
@@ -327,7 +327,7 @@ map_results_to_range_store() ->
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         testcase = ?FUNCTION_NAME,
-        iterated_item_spec = #atm_data_spec{type = atm_range_type},
+        iterated_item_spec = #atm_range_data_spec{},
         iterated_items = IteratedItems,
         target_store_type = range,
         target_store_config = #atm_range_store_config{},
@@ -336,7 +336,7 @@ map_results_to_range_store() ->
 
 
 map_results_to_single_value_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
+    IteratedItemDataSpec = #atm_object_data_spec{},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         testcase = ?FUNCTION_NAME,
@@ -362,7 +362,7 @@ map_results_to_time_series_store() ->
 
 
 map_results_to_tree_forest_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_file_type},
+    IteratedItemDataSpec = #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]},  %% TODO
     FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
@@ -413,7 +413,7 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
 
 
 map_results_to_workflow_audit_log_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
+    IteratedItemDataSpec = #atm_object_data_spec{},
     IteratedItems = gen_random_object_list(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
@@ -429,7 +429,7 @@ map_results_to_workflow_audit_log_store() ->
 
 
 map_results_to_task_audit_log_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
+    IteratedItemDataSpec = #atm_object_data_spec{},
     IteratedItems = gen_random_object_list(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
