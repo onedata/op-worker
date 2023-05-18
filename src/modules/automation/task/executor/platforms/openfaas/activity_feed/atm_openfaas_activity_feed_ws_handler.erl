@@ -205,12 +205,7 @@ handle_text_message(Payload, #state{handler_module = HandlerModule, handler_stat
             false ->
                 Payload
         end,
-        ?error_stacktrace(
-            "Error when parsing an openfaas activity report - ~w:~p~n"
-            "Request payload: ~ts",
-            [Class, Reason, TrimmedPayload],
-            Stacktrace
-        ),
+        ?error_exception(?autoformat([TrimmedPayload]), Class, Reason, Stacktrace),
         HandlerModule:handle_error(self(), ?ERROR_BAD_MESSAGE(TrimmedPayload), HandlerState),
         {reply, [{text, <<"Bad request: ", Payload/binary>>}], State}
     end.
@@ -236,12 +231,7 @@ handle_activity_report(ActivityReport, #state{handler_module = HandlerModule, ha
                 {reply, ReplyFrames, State#state{handler_state = FinalHandlerState}}
         end
     catch Class:Reason:Stacktrace ->
-        ?error_stacktrace(
-            "Unexpected error when processing an openfaas activity report - ~w:~p~n"
-            "Activity report: ~tp",
-            [Class, Reason, ActivityReport],
-            Stacktrace
-        ),
+        ?error_exception([?autoformat([HandlerModule, ActivityReport, HandlerState])], Class, Reason, Stacktrace),
         HandlerModule:handle_error(self(), ?ERROR_INTERNAL_SERVER_ERROR, HandlerState),
         {reply, [{text, <<"Internal server error while processing the request">>}], State}
     end.
