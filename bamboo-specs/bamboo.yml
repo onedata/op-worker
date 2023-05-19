@@ -410,7 +410,7 @@ _Codetag Tracker:
         test-results: op_worker/test/codetag_tracker_results/TEST-*.xml
         description: Parse test results
     - script: *clear-env
-  requirements: *requirements
+  requirements: []
   artifact-subscriptions: &op-worker
     - artifact: op_worker.tar.gz
 
