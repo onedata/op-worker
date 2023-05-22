@@ -93,7 +93,7 @@
 
 -callback abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
--callback teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+-callback teardown(atm_workflow_execution_ctx:record(), atm_task_execution:doc()) -> ok | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
@@ -131,10 +131,12 @@ abort(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     Model:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
--spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:doc()) -> ok | no_return().
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc = #document{value = #atm_task_execution{
+    executor = AtmTaskExecutor
+}}) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    Model:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
 
 
 -spec delete(record()) -> ok | no_return().
