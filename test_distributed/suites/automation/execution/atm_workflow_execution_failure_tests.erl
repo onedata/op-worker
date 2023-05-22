@@ -400,7 +400,9 @@ fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"item">> => Item,
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(<<"value">>))
+                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(
+                        <<"value">>, [<<"schrodinger_cat">>, <<"schrodinger_dog">>]
+                    ))
                 }
             end, ItemBatch)
         end

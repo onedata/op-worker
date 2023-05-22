@@ -229,11 +229,9 @@ handle_stopped(AtmTaskExecutionId) ->
 -spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ok | no_return().
 teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionId),
-
     atm_task_executor:teardown(
         AtmWorkflowExecutionCtx,
-        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
+        ensure_atm_task_execution_doc(AtmTaskExecutionId)
     ).
 
 
