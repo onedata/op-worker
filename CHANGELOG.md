@@ -4,6 +4,21 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.2
+
+-   **VFS-10825** Web GUI: Fixed unnecessary scrollbars in Safari.
+-   **VFS-10803** Web GUI: Fixed polling for file infinitely if moving
+    or copying fails.
+-   **VFS-10692** Web GUI: Redesigned actions available in various
+    context menus of file, dataset and archive browser.
+-   **VFS-10601** Web GUI: Added columns visibility configuration in
+    file browsers.
+-   **VFS-10461** Web GUI: Added auto-update of files, datasets and
+    archives lists accomplished using polling.
+-   **VFS-10411** Web GUI: Added support for incomplete infinite scroll
+    listing chunks from backend. It increases stability of file browser
+    GUI.
+
 ### 21.02.1
 
 -   **VFS-10754** Web GUI: Fixed file list crash after jumping to the
