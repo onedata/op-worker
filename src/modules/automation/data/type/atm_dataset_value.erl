@@ -24,7 +24,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([assert_meets_constraints/3, resolve/3]).
 
 %% atm_tree_forest_store_container_iterator callbacks
 -export([
@@ -48,6 +48,17 @@
     ok | no_return().
 assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     check_implicit_constraints(AtmWorkflowExecutionAuth, Value).
+
+
+-spec resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_dataset_data_spec:record()
+) ->
+    atm_value:expanded() | no_return().
+resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    Value.
 
 
 %%%===================================================================

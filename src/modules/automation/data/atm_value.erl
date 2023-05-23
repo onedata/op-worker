@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([validate/3]).
+-export([validate/3, resolve/3]).
 -export([compress/2, expand/3, filterexpand_list/3]).
 
 
@@ -39,14 +39,20 @@
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
+    assert_data_type(AtmDataType, Value),
 
-    case atm_data_type:is_instance(AtmDataType, Value) of
-        true ->
-            Module = get_callback_module(AtmDataType),
-            Module:assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec);
-        false ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))
-    end.
+    Module = get_callback_module(AtmDataType),
+    Module:assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+
+
+-spec resolve(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
+    expanded() | no_return().
+resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
+    assert_data_type(AtmDataType, Value),
+
+    Module = get_callback_module(AtmDataType),
+    Module:resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 -spec compress(expanded(), atm_data_spec:record()) -> compressed() | no_return().
@@ -93,3 +99,12 @@ get_callback_module(atm_object_type) -> atm_object_value;
 get_callback_module(atm_range_type) -> atm_range_value;
 get_callback_module(atm_string_type) -> atm_string_value;
 get_callback_module(atm_time_series_measurement_type) -> atm_time_series_measurement_value.
+
+
+%% @private
+-spec assert_data_type(atm_data_type:type(), expanded()) -> ok | no_return().
+assert_data_type(AtmDataType, Value) ->
+    case atm_data_type:is_instance(AtmDataType, Value) of
+        true -> ok;
+        false -> throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))
+    end.

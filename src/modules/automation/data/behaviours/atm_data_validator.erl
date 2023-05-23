@@ -35,3 +35,22 @@
     atm_data_spec:record()
 ) ->
     ok | no_return().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves required fields in case of reference types and asserts that all
+%% value constraints hold.
+%%
+%%                              !!! NOTE !!!
+%% Beside explicit constraints given as an function argument some values may
+%% also be bound by implicit ones that need to be checked (e.g. file/dataset
+%% must exist within space in context of which workflow execution happens)
+%% @end
+%%--------------------------------------------------------------------
+-callback resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_data_spec:record()
+) ->
+    atm_value:expanded() | no_return().

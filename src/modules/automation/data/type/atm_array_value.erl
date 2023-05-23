@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([assert_meets_constraints/3, resolve/3]).
 
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
@@ -48,7 +48,27 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #atm_array_data_s
                 str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)
             }))
         end
-    end, lists:zip(lists:seq(0, length(ItemsArray) - 1), ItemsArray)).
+    end, lists:enumerate(0, ItemsArray)).
+
+
+-spec resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_array_data_spec:record()
+) ->
+    atm_value:expanded() | no_return().
+resolve(AtmWorkflowExecutionAuth, ItemsArray, #atm_array_data_spec{
+    item_data_spec = ItemDataSpec
+}) ->
+    lists:map(fun({Idx, Item}) ->
+        try
+            atm_value:resolve(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
+        catch throw:ItemError ->
+            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(ItemsArray, atm_array_type, #{
+                str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)
+            }))
+        end
+    end, lists:enumerate(0, ItemsArray)).
 
 
 %%%===================================================================

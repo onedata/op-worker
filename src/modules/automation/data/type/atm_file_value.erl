@@ -25,7 +25,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([assert_meets_constraints/3, resolve/3]).
 
 %% atm_tree_forest_store_container_iterator callbacks
 -export([
@@ -62,10 +62,26 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
     end.
 
 
+-spec resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_file_data_spec:record()
+) ->
+    atm_value:expanded() | no_return().
+resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
+    attributes = AttributesToResolve
+}) ->
+    %% TODO fetch required attrs first then validate
+    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    maps:with(lists:map(fun str_utils:to_binary/1, AttributesToResolve), Value).
+
+
 %%%===================================================================
 %%% atm_tree_forest_store_container_iterator callbacks
 %%%===================================================================
 
+
+%% TODO return {file_id: FILE_ID} instead of resolved attrs
 -spec list_tree(
     atm_workflow_execution_auth:record(),
     recursive_listing:pagination_token() | undefined,
@@ -95,6 +111,7 @@ compress(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
     Guid.
 
 
+%% TODO return {file_id: FILE_ID} instead of resolved attrs
 -spec expand(
     atm_workflow_execution_auth:record(),
     file_id:file_guid(),
@@ -172,4 +189,4 @@ check_explicit_constraints(_, #atm_file_data_spec{file_type = 'ANY'}) ->
 check_explicit_constraints(#file_attr{type = FileType}, #atm_file_data_spec{file_type = FileType}) ->
     ok;
 check_explicit_constraints(_, #atm_file_data_spec{file_type = ConstraintType}) ->
-    throw({unverified_constraints, #{<<"file_type">> => str_utils:to_binary(ConstraintType)}}).
+    throw({unverified_constraints, #{<<"fileType">> => str_utils:to_binary(ConstraintType)}}).

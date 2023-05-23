@@ -73,7 +73,8 @@ acquire_value(AtmRunJobBatchCtx, #atm_lambda_execution_config_entry{
     data_spec = AtmDataSpec
 }) ->
     AtmWorkflowExecutionAuth = atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
-    ?check(atm_value:expand(AtmWorkflowExecutionAuth, CompressedValue, AtmDataSpec)).
+    Value = ?check(atm_value:expand(AtmWorkflowExecutionAuth, CompressedValue, AtmDataSpec)),
+    atm_value:resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 %%%===================================================================

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([assert_meets_constraints/3, resolve/3]).
 
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
@@ -61,16 +61,22 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
 
     try
         assert_valid_step_direction(Range)
-    catch
-        throw:{unverified_constraints, UnverifiedConstraints} ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                Value, atm_range_type, UnverifiedConstraints
-            ));
-        throw:Error ->
-            throw(Error);
-        _:_ ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_range_type))
+    catch throw:{unverified_constraints, UnverifiedConstraints} ->
+        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            Value, atm_range_type, UnverifiedConstraints
+        ))
     end.
+
+
+-spec resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_range_data_spec:record()
+) ->
+    atm_value:expanded() | no_return().
+resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    Value.
 
 
 %%%===================================================================

@@ -17,7 +17,7 @@
 -behaviour(atm_data_compressor).
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([assert_meets_constraints/3, resolve/3]).
 
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
@@ -33,9 +33,19 @@
     atm_value:expanded(),
     atm_boolean_data_spec:record()
 ) ->
-    ok | no_return().
+    ok.
 assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _AtmDataSpec) ->
     ok.
+
+
+-spec resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_boolean_data_spec:record()
+) ->
+    atm_value:expanded().
+resolve(_AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
+    Value.
 
 
 %%%===================================================================

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([assert_meets_constraints/3, resolve/3]).
 
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
@@ -49,6 +49,17 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     end.
 
 
+-spec resolve(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_string_data_spec:record()
+) ->
+    atm_value:expanded() | no_return().
+resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    Value.
+
+
 %%%===================================================================
 %%% atm_data_compressor callbacks
 %%%===================================================================
@@ -70,7 +81,7 @@ expand(_AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
 
 
 %% @private
--spec check_allowed_values_constraint(binary(), atm_number_data_spec:record()) ->
+-spec check_allowed_values_constraint(binary(), atm_string_data_spec:record()) ->
     ok | no_return().
 check_allowed_values_constraint(_String, #atm_string_data_spec{allowed_values = undefined}) ->
     ok;
