@@ -12,6 +12,7 @@
 -module(atm_store_test_utils).
 -author("Michal Stanisz").
 
+-include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/acl.hrl").
@@ -148,7 +149,7 @@ example_data_spec(atm_dataset_type) ->
     #atm_dataset_data_spec{};
 
 example_data_spec(atm_file_type) ->
-    #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]};  %% TODO macro with all file attributes?????
+    #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)};
 
 example_data_spec(atm_number_type) ->
     #atm_number_data_spec{integers_only = false, allowed_values = undefined};

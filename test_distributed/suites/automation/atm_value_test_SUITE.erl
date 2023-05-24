@@ -12,6 +12,7 @@
 -module(atm_value_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
@@ -311,6 +312,7 @@ atm_dataset_value_compress_expand_test(_Config) ->
 
 atm_file_value_validation_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
 
     [#object{guid = FileInSpace1Guid}] = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space1, [#file_spec{}]
@@ -335,7 +337,10 @@ atm_file_value_validation_test(_Config) ->
         'SYMLNK' -> {[SymlinkGuid], [DirGuid, FileGuid]}
     end,
 
-    BuildFileObjectFun = fun(Guid) ->
+    FileAttrsToResolve = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES),
+    FileAttrsToResolveBin = lists:map(fun str_utils:to_binary/1, FileAttrsToResolve),
+
+    BuildBareFileObjectFun = fun(Guid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         #{<<"file_id">> => ObjectId}
     end,
@@ -343,9 +348,14 @@ atm_file_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_file_data_spec{
             file_type = AllowedFileType,
-            attributes = [file_id]  %% TODO
+            attributes = FileAttrsToResolve
         },
-        valid_values = lists:map(BuildFileObjectFun, FilesWithAllowedType),
+        valid_values = lists:map(fun(Guid) ->
+            BareFileObject = BuildBareFileObjectFun(Guid),
+            {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
+            ResolvedFileObject = maps:with(FileAttrsToResolveBin, file_attr_translator:to_json(FileAttrs)),
+            {BareFileObject, ResolvedFileObject}
+        end, FilesWithAllowedType),
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
@@ -353,7 +363,7 @@ atm_file_value_validation_test(_Config) ->
             ),
 
             lists:map(fun({Guid, UnverifiedConstraint}) ->
-                Value = BuildFileObjectFun(Guid),
+                Value = BuildBareFileObjectFun(Guid),
                 {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_file_type, UnverifiedConstraint
                 )}
@@ -370,7 +380,7 @@ atm_file_value_validation_test(_Config) ->
             ]),
 
             lists:map(fun(Guid) ->
-                Value = BuildFileObjectFun(Guid),
+                Value = BuildBareFileObjectFun(Guid),
                 {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_file_type, #{<<"fileType">> => AllowedFileTypeBin}
                 )}
@@ -379,6 +389,7 @@ atm_file_value_validation_test(_Config) ->
     }).
 
 
+%% TODO expand should return only file_id
 atm_file_value_compress_expand_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
     SessionId = oct_background:get_user_session_id(user1, krakow),
@@ -396,7 +407,8 @@ atm_file_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
         data_spec = #atm_file_data_spec{
             file_type = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
-            attributes = [file_id]  %% TODO
+            % attributes shouldn't have any impact on compress/expand functionality
+            attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
         },
         values = lists:flatten([
             {
@@ -697,14 +709,25 @@ atm_value_validation_test_base(#atm_value_validation_testcase{
 }) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
-    lists:foreach(fun(ValidValue) ->
-        ?assertEqual(ok, ?rpc(atm_value:validate(
-            AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
-        )))
+    lists:foreach(fun
+        ({ValidValue, ValidResolvedValue}) ->
+            ?assertEqual(ok, ?rpc(atm_value:validate(
+                AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
+            ))),
+            ?assertEqual(ValidResolvedValue, ?rpc(atm_value:resolve(
+                AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
+            )));
+        (ValidValue) ->
+            ?assertEqual(ok, ?rpc(atm_value:validate(
+                AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
+            )))
     end, ValidValues),
 
     lists:foreach(fun({InvalidValue, ExpError}) ->
         ?assertEqual(ExpError, ?rpc(catch atm_value:validate(
+            AtmWorkflowExecutionAuth, InvalidValue, AtmDataSpec
+        ))),
+        ?assertEqual(ExpError, ?rpc(catch atm_value:resolve(
             AtmWorkflowExecutionAuth, InvalidValue, AtmDataSpec
         )))
     end, InvalidValuesAndExpErrors).

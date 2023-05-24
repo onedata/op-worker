@@ -252,7 +252,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"a06c117ddf442593109efbb7fd196a80">>,
+    checksum = <<"3f737525fe2e905b2b5b532d0264175b">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
@@ -280,7 +280,7 @@ end).
             type = list,
             config = #atm_list_store_config{item_data_spec = #atm_file_data_spec{
                 file_type = 'ANY',
-                attributes = [file_id]  %% TODO
+                attributes = [file_id]
             }},
             requires_initial_content = true
         },

@@ -12,6 +12,7 @@
 -module(atm_tree_forest_store_test_SUITE).
 -author("Michal Stanisz").
 
+-include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -247,7 +248,7 @@ example_configs() ->
         #atm_tree_forest_store_config{item_data_spec = ItemDataSpec}
     end, [
         #atm_dataset_data_spec{},
-        #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]}  %% TODO
+        #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)}
     ]).
 
 
@@ -443,7 +444,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
     end, Roots),
     AtmDataSpec = case Type of
         atm_file_type ->
-            #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]};  %% TODO
+            #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)};
         atm_dataset_type ->
             #atm_dataset_data_spec{}
     end,

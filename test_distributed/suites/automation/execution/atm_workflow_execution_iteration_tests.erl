@@ -47,8 +47,6 @@
 
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_st">>).
 
--define(ATM_FILE_DATA_SPEC, #atm_file_data_spec{file_type = 'ANY', attributes = [file_id]}).  %% TODO
-
 -define(FOREACH_TASK_DRAFT(__ID), #atm_task_schema_draft{
     id = __ID,
     lambda_id = ?ECHO_LAMBDA_ID,
@@ -289,6 +287,10 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
     files_to_remove_before_iteration_starts = FilesToRemove,
     exp_iterated_files = ExpIteratedFiles
 }) ->
+    AtmFileDataSpec = #atm_file_data_spec{
+        file_type = 'ANY',
+        attributes = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+    },
     AtmStoreInitialContent = case InitialFiles of
         undefined -> undefined;
         #object{} -> file_object_to_atm_file_value(InitialFiles);
@@ -296,17 +298,17 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
     end,
     AtmStoreSchemaDraft = case AtmStoreType of
         list ->
-            ?ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_FILE_DATA_SPEC, AtmStoreInitialContent);
+            ?ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent);
         single_value ->
-            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_FILE_DATA_SPEC, AtmStoreInitialContent);
+            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent);
         tree_forest ->
-            ?ATM_TREE_FOREST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_FILE_DATA_SPEC, AtmStoreInitialContent)
+            ?ATM_TREE_FOREST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent)
     end,
     ExpIteratedEntries = lists:map(fun file_object_to_atm_file_value/1, ExpIteratedFiles),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
-            Testcase, AtmStoreSchemaDraft, ?ATM_FILE_DATA_SPEC
+            Testcase, AtmStoreSchemaDraft, AtmFileDataSpec
         ),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,

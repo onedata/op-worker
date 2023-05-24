@@ -17,6 +17,13 @@
 -include("atm/atm_test_schema.hrl").
 
 
+-define(ATM_FILE_ATTRIBUTES, [
+    name, type, mode, size, atime, mtime, ctime,
+    owner_id, file_id, parent_id, provider_id,
+    storage_user_id, storage_group_id,
+    shares, hardlinks_count, index
+]).
+
 -define(ECHO_DOCKER_IMAGE_ID, <<"test/echo">>).
 
 % Failing by not returning result if size metric measurements are present in arguments

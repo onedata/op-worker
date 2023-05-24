@@ -39,11 +39,7 @@
     ok | no_return().
 assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     try
-        lists:foreach(fun(CheckConstraintFun) ->
-            CheckConstraintFun(Value, AtmDataSpec)
-        end, [
-            fun check_allowed_values_constraint/2
-        ])
+        check_allowed_values_constraint(Value, AtmDataSpec)
     catch throw:{unverified_constraints, UnverifiedConstraints} ->
         throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_string_type, UnverifiedConstraints))
     end.

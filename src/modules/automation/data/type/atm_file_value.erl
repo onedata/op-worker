@@ -47,19 +47,11 @@
     atm_file_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} = Value, AtmDataSpec) ->
-    try
-        {ok, Guid} = file_id:objectid_to_guid(ObjectId),
-        FileAttrs = check_implicit_constraints(AtmWorkflowExecutionAuth, Guid),
-        check_explicit_constraints(FileAttrs, AtmDataSpec)
-    catch
-        throw:{unverified_constraints, UnverifiedConstraints} ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_file_type, UnverifiedConstraints));
-        throw:Error ->
-            throw(Error);
-        _:_ ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
-    end.
+assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec#atm_file_data_spec{
+        attributes = []  %% validate constraints but don't fetch any attrs
+    }),
+    ok.
 
 
 -spec resolve(
@@ -69,11 +61,14 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
 ) ->
     atm_value:expanded() | no_return().
 resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
-    attributes = AttributesToResolve
+    attributes = Attrs
 }) ->
-    %% TODO fetch required attrs first then validate
-    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
-    maps:with(lists:map(fun str_utils:to_binary/1, AttributesToResolve), Value).
+    FileAttrs = resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+
+    maps:with(
+        lists:map(fun str_utils:to_binary/1, Attrs),
+        file_attr_translator:to_json(FileAttrs)
+    ).
 
 
 %%%===================================================================
@@ -156,16 +151,50 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
 
 
 %% @private
--spec check_implicit_constraints(atm_workflow_execution_auth:record(), file_id:file_guid()) ->
+-spec resolve_internal(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_file_data_spec:record()
+) ->
     lfm_attrs:file_attributes() | no_return().
-check_implicit_constraints(AtmWorkflowExecutionAuth, FileGuid) ->
+resolve_internal(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} = Value, AtmDataSpec) ->
+    try
+        {ok, Guid} = file_id:objectid_to_guid(ObjectId),
+
+        check_in_space_constraint(AtmWorkflowExecutionAuth, Guid),
+
+        %% TODO refactor attr_req/allow to select attributes to fetch
+        FileAttrs = fetch_attributes(AtmWorkflowExecutionAuth, Guid),
+
+        check_file_type_constraint(FileAttrs, AtmDataSpec),
+
+        FileAttrs
+    catch
+        throw:{unverified_constraints, UnverifiedConstraints} ->
+            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_file_type, UnverifiedConstraints));
+        throw:Error ->
+            throw(Error);
+        _:_ ->
+            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
+    end.
+
+
+%% @private
+-spec check_in_space_constraint(atm_workflow_execution_auth:record(), file_id:file_guid()) ->
+    ok | no_return().
+check_in_space_constraint(AtmWorkflowExecutionAuth, FileGuid) ->
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
 
     case file_id:guid_to_space_id(FileGuid) of
         SpaceId -> ok;
         _ -> throw({unverified_constraints, #{<<"inSpace">> => SpaceId}})
-    end,
+    end.
 
+
+%% @private
+-spec fetch_attributes(atm_workflow_execution_auth:record(), file_id:file_guid()) ->
+    lfm_attrs:file_attributes() | no_return().
+fetch_attributes(AtmWorkflowExecutionAuth, FileGuid) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
@@ -173,20 +202,18 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, FileGuid) ->
             FileAttrs;
         {error, Errno} ->
             case fslogic_errors:is_access_error(Errno) of
-                true ->
-                    throw({unverified_constraints, #{<<"hasAccess">> => true}});
-                false ->
-                    throw(?ERROR_POSIX(Errno))
+                true -> throw({unverified_constraints, #{<<"hasAccess">> => true}});
+                false -> throw(?ERROR_POSIX(Errno))
             end
     end.
 
 
 %% @private
--spec check_explicit_constraints(lfm_attrs:file_attributes(), atm_file_data_spec:record()) ->
+-spec check_file_type_constraint(lfm_attrs:file_attributes(), atm_file_data_spec:record()) ->
     ok | no_return().
-check_explicit_constraints(_, #atm_file_data_spec{file_type = 'ANY'}) ->
+check_file_type_constraint(_, #atm_file_data_spec{file_type = 'ANY'}) ->
     ok;
-check_explicit_constraints(#file_attr{type = FileType}, #atm_file_data_spec{file_type = FileType}) ->
+check_file_type_constraint(#file_attr{type = FileType}, #atm_file_data_spec{file_type = FileType}) ->
     ok;
-check_explicit_constraints(_, #atm_file_data_spec{file_type = ConstraintType}) ->
+check_file_type_constraint(_, #atm_file_data_spec{file_type = ConstraintType}) ->
     throw({unverified_constraints, #{<<"fileType">> => str_utils:to_binary(ConstraintType)}}).
