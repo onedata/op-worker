@@ -106,20 +106,15 @@ compress(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
     Guid.
 
 
-%% TODO return {file_id: FILE_ID} instead of resolved attrs
 -spec expand(
     atm_workflow_execution_auth:record(),
     file_id:file_guid(),
     atm_file_data_spec:record()
 ) ->
-    {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
-    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-
-    case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs)};
-        {error, Errno} -> ?ERROR_POSIX(Errno)
-    end.
+    {ok, atm_value:expanded()}.
+expand(_AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    {ok, #{<<"file_id">> => ObjectId}}.
 
 
 %%%===================================================================
@@ -133,11 +128,13 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     FileCtx = file_ctx:new_by_guid(CompressedRoot),
     try
+        %% TODO list only guids?
         #fuse_response{fuse_response = #recursive_listing_result{
             entries = Entries, pagination_token = PaginationToken}
         } = dir_req:list_recursively(UserCtx, FileCtx, Opts, [size]),
         MappedEntries = lists:map(fun({_Path, FileAttrs}) ->
-            file_attr_translator:to_json(FileAttrs)
+            {ok, ObjectId} = file_id:guid_to_objectid(FileAttrs#file_attr.guid),
+            #{<<"file_id">> => ObjectId}
         end, Entries),
         {MappedEntries, PaginationToken}
     catch _:Error ->
