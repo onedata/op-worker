@@ -156,7 +156,7 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
 
 -spec update_content(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store_content_update_options:record(),
     atm_store:id()
 ) ->

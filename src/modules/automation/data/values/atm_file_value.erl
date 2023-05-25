@@ -6,61 +6,95 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator`, `atm_tree_forest_container_iterator` 
-%%% and `atm_data_compressor` functionality for `atm_file_type`.
+%%% This module implements `atm_value` and `atm_tree_forest_container_iterator`
+%%% functionality for `atm_file_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_file_value).
 -author("Michal Stanisz").
 
--behaviour(atm_data_validator).
--behaviour(atm_data_compressor).
+-behaviour(atm_value).
 -behaviour(atm_tree_forest_store_container_iterator).
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-%% atm_data_validator callbacks
--export([assert_meets_constraints/3, resolve/3]).
-
-%% atm_tree_forest_store_container_iterator callbacks
+%% atm_value callbacks
 -export([
-    list_tree/4
+    validate/3,
+    to_store_item/2,
+    from_store_item/3,
+    describe/3,
+    resolve_lambda_parameter/3
 ]).
 
-%% atm_data_compressor callbacks
--export([compress/2, expand/3]).
+%% atm_tree_forest_store_container_iterator callbacks
+-export([list_tree/4]).
 
 
 %%%===================================================================
-%%% atm_data_validator callbacks
+%%% atm_value callbacks
 %%%===================================================================
 
 
--spec assert_meets_constraints(
+-spec validate(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_file_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec#atm_file_data_spec{
         attributes = []  %% validate constraints but don't fetch any attrs
     }),
     ok.
 
 
--spec resolve(
+-spec to_store_item(automation:item(), atm_file_data_spec:record()) ->
+    atm_store:item().
+to_store_item(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
+    {ok, Guid} = file_id:objectid_to_guid(ObjectId),
+    Guid.
+
+
+-spec from_store_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    atm_store:item(),
     atm_file_data_spec:record()
 ) ->
-    atm_value:expanded() | no_return().
-resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
+    {ok, automation:item()}.
+from_store_item(_AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    {ok, #{<<"file_id">> => ObjectId}}.
+
+
+-spec describe(
+    atm_workflow_execution_auth:record(),
+    atm_store:item(),
+    atm_file_data_spec:record()
+) ->
+    {ok, automation:item()}.
+describe(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+
+    case lfm:stat(SessionId, ?FILE_REF(Guid)) of
+        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs)};
+        {error, Errno} -> ?ERROR_POSIX(Errno)
+    end.
+
+
+-spec resolve_lambda_parameter(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_file_data_spec:record()
+) ->
+    automation:item().
+resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
     attributes = Attrs
 }) ->
     FileAttrs = resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
@@ -76,14 +110,13 @@ resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
 %%%===================================================================
 
 
-%% TODO return {file_id: FILE_ID} instead of resolved attrs
 -spec list_tree(
     atm_workflow_execution_auth:record(),
     recursive_listing:pagination_token() | undefined,
-    atm_value:compressed(),
+    atm_store:item(),
     atm_store_container_iterator:batch_size()
 ) ->
-    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+    {[automation:item()], recursive_listing:pagination_token() | undefined}.
 list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     list_internal(AtmWorkflowExecutionAuth, CompressedRoot,
         maps_utils:remove_undefined(#{
@@ -95,47 +128,38 @@ list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
 
 
 %%%===================================================================
-%%% atm_data_compressor callbacks
-%%%===================================================================
-
-
--spec compress(atm_value:expanded(), atm_file_data_spec:record()) ->
-    file_id:file_guid().
-compress(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
-    {ok, Guid} = file_id:objectid_to_guid(ObjectId),
-    Guid.
-
-
--spec expand(
-    atm_workflow_execution_auth:record(),
-    file_id:file_guid(),
-    atm_file_data_spec:record()
-) ->
-    {ok, atm_value:expanded()}.
-expand(_AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-    {ok, #{<<"file_id">> => ObjectId}}.
-
-
-%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %% @private
--spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), dir_req:recursive_listing_opts()) ->
-    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+-spec list_internal(atm_workflow_execution_auth:record(), atm_store:item(), dir_req:recursive_listing_opts()) ->
+    {[automation:item()], recursive_listing:pagination_token() | undefined}.
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
-    FileCtx = file_ctx:new_by_guid(CompressedRoot),
+    FileCtx0 = file_ctx:new_by_guid(CompressedRoot),
     try
-        %% TODO list only guids?
-        #fuse_response{fuse_response = #recursive_listing_result{
-            entries = Entries, pagination_token = PaginationToken}
-        } = dir_req:list_recursively(UserCtx, FileCtx, Opts, [size]),
-        MappedEntries = lists:map(fun({_Path, FileAttrs}) ->
-            {ok, ObjectId} = file_id:guid_to_objectid(FileAttrs#file_attr.guid),
-            #{<<"file_id">> => ObjectId}
+        {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+        AccessRequirements = case IsDir of
+            true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
+            false -> [?TRAVERSE_ANCESTORS]
+        end,
+        {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+            UserCtx, FileCtx1, AccessRequirements
+        ),
+
+        #recursive_listing_result{
+            entries = Entries,
+            pagination_token = PaginationToken
+        } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx2, kv_utils:move_found(
+            include_directories, include_branching_nodes, Opts
+        )),
+        MappedEntries = lists:map(fun({_, ChildFileCtx}) ->
+            ChildGuid = file_ctx:get_logical_guid_const(ChildFileCtx),
+            {ok, ChildObjectId} = file_id:guid_to_objectid(ChildGuid),
+            #{<<"file_id">> => ChildObjectId}
         end, Entries),
+
         {MappedEntries, PaginationToken}
     catch _:Error ->
         case datastore_runner:normalize_error(Error) of
@@ -150,7 +174,7 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
 %% @private
 -spec resolve_internal(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_file_data_spec:record()
 ) ->
     lfm_attrs:file_attributes() | no_return().

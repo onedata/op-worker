@@ -389,7 +389,6 @@ atm_file_value_validation_test(_Config) ->
     }).
 
 
-%% TODO expand should return only file_id
 atm_file_value_compress_expand_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
     SessionId = oct_background:get_user_session_id(user1, krakow),
@@ -411,30 +410,20 @@ atm_file_value_compress_expand_test(_Config) ->
             attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
         },
         values = lists:flatten([
-            {
-                error,
-                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
-                    <<"removed_file_id">>, SpaceKrkId
-                )))},
-                ?ERROR_POSIX(?ENOENT)
-            },
-            {
-                error,
-                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
-                ?ERROR_POSIX(?EACCES)
-            },
+            #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+                <<"removed_file_id">>, SpaceKrkId
+            )))},
+            #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
 
-            % Compress and expand should work even for measurements not conforming
-            % to value constraints as those are not checked for these operations
             lists:map(fun(Guid) ->
                 {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
 
                 % atm_file_type is but a reference to underlying file entity -
-                % as such expanding it should fetch all current file attributes
+                % as such compressing and expanding should remove any attribute but file_id
                 {
                     different,
-                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
-                    file_attr_translator:to_json(FileAttrs)
+                    file_attr_translator:to_json(FileAttrs),
+                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))}
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
         ])
@@ -714,7 +703,7 @@ atm_value_validation_test_base(#atm_value_validation_testcase{
             ?assertEqual(ok, ?rpc(atm_value:validate(
                 AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
             ))),
-            ?assertEqual(ValidResolvedValue, ?rpc(atm_value:resolve(
+            ?assertEqual(ValidResolvedValue, ?rpc(atm_value:resolve_lambda_parameter(
                 AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
             )));
         (ValidValue) ->
@@ -727,7 +716,7 @@ atm_value_validation_test_base(#atm_value_validation_testcase{
         ?assertEqual(ExpError, ?rpc(catch atm_value:validate(
             AtmWorkflowExecutionAuth, InvalidValue, AtmDataSpec
         ))),
-        ?assertEqual(ExpError, ?rpc(catch atm_value:resolve(
+        ?assertEqual(ExpError, ?rpc(catch atm_value:resolve_lambda_parameter(
             AtmWorkflowExecutionAuth, InvalidValue, AtmDataSpec
         )))
     end, InvalidValuesAndExpErrors).
@@ -747,9 +736,9 @@ atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
             Term -> {Term, {ok, Term}}
         end,
 
-        ?assertEqual(ExpectedExpandResult, ?rpc(atm_value:expand(
+        ?assertEqual(ExpectedExpandResult, ?rpc(atm_value:from_store_item(
             AtmWorkflowExecutionAuth,
-            atm_value:compress(InitialItem, AtmDataSpec),
+            atm_value:to_store_item(InitialItem, AtmDataSpec),
             AtmDataSpec
         )))
     end, Values).

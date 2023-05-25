@@ -20,7 +20,6 @@
 
 %% API
 -export([build/2]).
--export([gen_listing_postprocessor/2]).
 
 % atm_store_container_iterator callbacks
 -export([get_next_batch/3]).
@@ -54,14 +53,6 @@ build(ItemDataSpec, BackendId) ->
     }.
 
 
--spec gen_listing_postprocessor(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_store_container_infinite_log_backend:listing_postprocessor().
-gen_listing_postprocessor(AtmWorkflowExecutionAuth, ItemDataSpec) ->
-    fun({Index, {_Timestamp, CompressedItem}}) ->
-        {Index, atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
-    end.
-
-
 %%%===================================================================
 %%% atm_store_container_iterator callbacks
 %%%===================================================================
@@ -72,15 +63,16 @@ gen_listing_postprocessor(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_container_iterator:batch_size(),
     record()
 ) ->
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_list_store_container_iterator{
     item_data_spec = ItemDataSpec,
     backend_id = BackendId,
     last_listed_index = LastListedIndex
 }) ->
     Result = atm_store_container_infinite_log_backend:iterator_get_next_batch(
-        BatchSize, BackendId, LastListedIndex,
-        gen_listing_postprocessor(AtmWorkflowExecutionAuth, ItemDataSpec)
+        BatchSize, BackendId, LastListedIndex, fun({Index, {_Timestamp, CompressedItem}}) ->
+            {Index, atm_value:from_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
+        end
     ),
     case Result of
         stop ->

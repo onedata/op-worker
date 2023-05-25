@@ -257,7 +257,7 @@
 -record(atm_single_value_store_content_browse_options, {}).
 
 -record(atm_single_value_store_content_browse_result, {
-    item :: {ok, atm_value:expanded()} | errors:error()
+    item :: {ok, automation:item()} | errors:error()
 }).
 
 -record(atm_time_series_store_content_browse_options, {
@@ -279,7 +279,7 @@
 
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: atm_value:expanded() | audit_log:append_request(),
+    argument :: automation:item() | audit_log:append_request(),
     options :: atm_store_content_update_options:record()
 }).
 

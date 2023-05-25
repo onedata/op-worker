@@ -76,7 +76,7 @@ build(InclusiveStart, ExclusiveEnd, Step) ->
     record()
 ) ->
     {ok, [integer()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_range_store_container_iterator{
+get_next_batch(_AtmWorkflowExecutionAuth, BatchSize, Record = #atm_range_store_container_iterator{
     current_num = CurrentNum,
     exclusive_end = ExclusiveEnd,
     step = Step
@@ -89,11 +89,8 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_range_store_co
     case lists:seq(CurrentNum, Threshold, Step) of
         [] ->
             stop;
-        CompressedItems ->
-            Batch = atm_value:filterexpand_list(
-                AtmWorkflowExecutionAuth, CompressedItems, ?ITEM_DATA_SPEC
-            ),
-            {ok, Batch, Record#atm_range_store_container_iterator{current_num = Threshold + Step}}
+        Numbers ->
+            {ok, Numbers, Record#atm_range_store_container_iterator{current_num = Threshold + Step}}
     end.
 
 

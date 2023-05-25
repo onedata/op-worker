@@ -46,7 +46,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_content() :: [atm_value:expanded()] | undefined.
+-type initial_content() :: [automation:item()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_audit_log_store_content_browse_options:record()

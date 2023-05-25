@@ -267,11 +267,11 @@ input_item_formatter(Item) -> Item.
 %% @private
 -spec input_item_to_exp_store_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id(),
     non_neg_integer()
 ) ->
-    atm_value:expanded().
+    automation:item().
 input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
     atm_store_test_utils:compress_and_expand_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
@@ -281,7 +281,7 @@ input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemData
 %% @private
 -spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
@@ -301,7 +301,7 @@ build_content_update_options(UpdateFun) ->
 
 %% @private
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    [atm_value:expanded()].
+    [automation:item()].
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     #atm_tree_forest_store_content_browse_result{

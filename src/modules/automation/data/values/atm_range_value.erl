@@ -6,24 +6,25 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator` and `atm_data_compressor`
-%%% functionality for `atm_range_type`.
+%%% This module implements `atm_value` functionality for `atm_range_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_range_value).
 -author("Bartosz Walkowicz").
 
--behaviour(atm_data_validator).
--behaviour(atm_data_compressor).
+-behaviour(atm_value).
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_data_validator callbacks
--export([assert_meets_constraints/3, resolve/3]).
-
-%% atm_data_compressor callbacks
--export([compress/2, expand/3]).
+%% atm_value callbacks
+-export([
+    validate/3,
+    to_store_item/2,
+    from_store_item/3,
+    describe/3,
+    resolve_lambda_parameter/3
+]).
 
 %% Full 'initial_content' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying concrete binaries ('initial_content' must be
@@ -46,18 +47,18 @@
 
 
 %%%===================================================================
-%%% atm_data_validator callbacks
+%%% atm_value callbacks
 %%%===================================================================
 
 
--spec assert_meets_constraints(
+-spec validate(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    range_json(),
     atm_range_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    Range = compress(Value, AtmDataSpec),
+validate(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    Range = to_store_item(Value, AtmDataSpec),
 
     try
         assert_valid_step_direction(Range)
@@ -68,38 +69,48 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     end.
 
 
--spec resolve(
-    atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
-    atm_range_data_spec:record()
-) ->
-    atm_value:expanded() | no_return().
-resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
-    Value.
-
-
-%%%===================================================================
-%%% atm_data_compressor callbacks
-%%%===================================================================
-
-
--spec compress(range_json(), atm_range_data_spec:record()) -> range().
-compress(Value = #{<<"end">> := End}, _AtmDataSpec) ->
+-spec to_store_item(range_json(), atm_range_data_spec:record()) ->
+    range().
+to_store_item(Value = #{<<"end">> := End}, _AtmDataSpec) ->
     Start = maps:get(<<"start">>, Value, 0),
     Step = maps:get(<<"step">>, Value, 1),
 
     [Start, End, Step].
 
 
--spec expand(atm_workflow_execution_auth:record(), range(), atm_range_data_spec:record()) ->
+-spec from_store_item(
+    atm_workflow_execution_auth:record(),
+    range(),
+    atm_range_data_spec:record()
+) ->
     {ok, range_json()}.
-expand(_AtmWorkflowExecutionAuth, [Start, End, Step], _AtmDataSpec) ->
+from_store_item(_AtmWorkflowExecutionAuth, [Start, End, Step], _AtmDataSpec) ->
     {ok, #{
         <<"start">> => Start,
         <<"end">> => End,
         <<"step">> => Step
     }}.
+
+
+-spec describe(
+    atm_workflow_execution_auth:record(),
+    range(),
+    atm_range_data_spec:record()
+) ->
+    {ok, automation:item()}.
+describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+
+
+-spec resolve_lambda_parameter(
+    atm_workflow_execution_auth:record(),
+    range_json(),
+    atm_range_data_spec:record()
+) ->
+    automation:item().
+resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec) ->
+    validate(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec),
+    Value.
 
 
 %%%===================================================================

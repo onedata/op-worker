@@ -266,7 +266,7 @@ get_input_item_generator_seed_data_spec(#atm_audit_log_store_config{
 
 
 %% @private
--spec input_item_formatter(atm_value:expanded()) -> atm_value:expanded().
+-spec input_item_formatter(automation:item()) -> automation:item().
 input_item_formatter(LogContent) ->
     Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?AUDIT_LOG_SEVERITY_LEVELS]),
 
@@ -281,11 +281,11 @@ input_item_formatter(LogContent) ->
 %% @private
 -spec input_item_to_exp_store_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id(),
     Index :: non_neg_integer()
 ) ->
-    atm_value:expanded().
+    automation:item().
 input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec, Index) ->
     LogContent = case InputItem of
         #{<<"content">> := LC} -> LC;
@@ -312,7 +312,7 @@ input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec
 %% @private
 -spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
@@ -335,7 +335,7 @@ build_content_update_options(UpdateFun) ->
 
 %% @private
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    [atm_value:expanded()].
+    [automation:item()].
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     try

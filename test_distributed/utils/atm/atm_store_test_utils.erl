@@ -92,9 +92,9 @@ build_store_schema(Config, RequiresInitialContent, DefaultInitialContent) ->
 -spec build_create_store_with_initial_content_fun(
     atm_workflow_execution_auth:record(),
     atm_store_config:record(),
-    atm_value:expanded()
+    automation:item()
 ) ->
-    fun((atm_value:expanded()) -> {ok, atm_store:doc()} | no_return()).
+    fun((automation:item()) -> {ok, atm_store:doc()} | no_return()).
 build_create_store_with_initial_content_fun(
     AtmWorkflowExecutionAuth,
     AtmStoreConfig,
@@ -176,7 +176,7 @@ example_data_spec(atm_time_series_measurement_type) ->
     atm_workflow_execution_auth:record(),
     atm_data_spec:record()
 ) ->
-    atm_value:expanded().
+    automation:item().
 gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_array_data_spec{
     item_data_spec = ItemDataSpec
 }) ->
@@ -293,7 +293,7 @@ gen_ts_name(#atm_time_series_measurement_spec{
     atm_workflow_execution_auth:record(),
     atm_data_spec:record()
 ) ->
-    atm_value:expanded().
+    automation:item().
 gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_array_data_spec{
     item_data_spec = ItemDataSpec
 }) ->
@@ -314,7 +314,7 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, AtmDataSpec) ->
     gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidDataSpec).
 
 
--spec infer_exp_invalid_data_error(atm_value:expanded(), atm_data_spec:record()) ->
+-spec infer_exp_invalid_data_error(automation:item(), atm_data_spec:record()) ->
     errors:error().
 infer_exp_invalid_data_error(InvalidArray = [InvalidValue | _], #atm_array_data_spec{
     item_data_spec = ItemDataSpec
@@ -332,18 +332,18 @@ infer_exp_invalid_data_error(InvalidItem, AtmDataSpec) ->
 -spec compress_and_expand_data(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id()
 ) ->
-    atm_value:expanded().
+    automation:item().
 compress_and_expand_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
     %% Some data types supported in atm are just references to entities in op.
     %% When retrieving items of such types from stores value returned may differ
     %% from the one given during adding to store (actual data about such entity
     %% is fetched using reference and returned)
-    {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:expand(
+    {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:from_store_item(
         AtmWorkflowExecutionAuth,
-        atm_value:compress(Data, AtmDataSpec),
+        atm_value:to_store_item(Data, AtmDataSpec),
         AtmDataSpec
     )),
     ExpandedData.
@@ -352,7 +352,7 @@ compress_and_expand_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDa
 -spec randomly_remove_entity_referenced_by_item(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.

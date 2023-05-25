@@ -79,7 +79,7 @@ acquire_arg(Item, AtmRunJobBatchCtx, #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder,
     data_spec = AtmDataSpec
 }) ->
-    atm_value:resolve(
+    atm_value:resolve_lambda_parameter(
         atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
         build_value(Item, AtmRunJobBatchCtx, ArgValueBuilder),
         AtmDataSpec

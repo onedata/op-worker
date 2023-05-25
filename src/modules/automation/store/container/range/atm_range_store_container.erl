@@ -83,7 +83,7 @@ create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
 
     #atm_range_store_container{
         config = AtmStoreConfig,
-        range = atm_value:compress(InitialContent, ?RANGE_DATA_SPEC)
+        range = atm_value:to_store_item(InitialContent, ?RANGE_DATA_SPEC)
     }.
 
 
@@ -129,7 +129,7 @@ browse_content(
         options = #atm_range_store_content_browse_options{}
     }
 ) ->
-    {ok, RangeJson} = atm_value:expand(AtmWorkflowExecutionAuth, Range, ?RANGE_DATA_SPEC),
+    {ok, RangeJson} = atm_value:describe(AtmWorkflowExecutionAuth, Range, ?RANGE_DATA_SPEC),
     #atm_range_store_content_browse_result{range = RangeJson}.
 
 
@@ -140,7 +140,7 @@ update_content(Record, #atm_store_content_update_req{
     options = #atm_range_store_content_update_options{}
 }) ->
     atm_value:validate(AtmWorkflowExecutionAuth, Item, ?RANGE_DATA_SPEC),
-    Record#atm_range_store_container{range = atm_value:compress(Item, ?RANGE_DATA_SPEC)}.
+    Record#atm_range_store_container{range = atm_value:to_store_item(Item, ?RANGE_DATA_SPEC)}.
 
 
 -spec delete(record()) -> ok.

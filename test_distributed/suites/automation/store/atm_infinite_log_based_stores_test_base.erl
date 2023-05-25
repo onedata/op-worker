@@ -37,16 +37,16 @@
 
 % Formats data generated using `get_input_item_generator_seed_data_spec()`
 % into one of the possible forms accepted as input by given store
--type input_item_formatter() :: fun((atm_value:expanded()) -> atm_value:expanded()).
+-type input_item_formatter() :: fun((automation:item()) -> automation:item()).
 
 % Prepares expected item (as stored and returned when browsing) from corresponding input item
 -type input_item_to_exp_store_item() :: fun((
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id(),
     Index :: non_neg_integer()
 ) ->
-    atm_value:expanded()
+    automation:item()
 ).
 
 % Some atm data types are only references to entities in op. Removing such
@@ -54,7 +54,7 @@
 % (error item is returned)
 -type randomly_remove_entity_referenced_by_item() :: fun((
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}
@@ -66,7 +66,7 @@
 
 % Returns entire store content
 -type get_content() :: fun((atm_workflow_execution_auth:record(), atm_store:id()) ->
-    [atm_value:expanded()]
+    [automation:item()]
 ).
 
 -type build_content_browse_options() :: fun((json_utils:json_map()) ->
@@ -470,7 +470,7 @@ create_workflow_execution_auth() ->
 
 %% @private
 -spec gen_valid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_valid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
@@ -479,7 +479,7 @@ gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 
 %% @private
 -spec gen_invalid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_invalid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec

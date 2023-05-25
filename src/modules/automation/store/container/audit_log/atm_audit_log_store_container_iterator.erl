@@ -57,7 +57,7 @@ build(BackendId) ->
     atm_store_container_iterator:batch_size(),
     record()
 ) ->
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionAuth, BatchSize, Record = #atm_audit_log_store_container_iterator{
     backend_id = BackendId,
     audit_log_iterator = AuditLogIterator

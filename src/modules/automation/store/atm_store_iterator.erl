@@ -57,7 +57,7 @@ build(AtmStoreIteratorSpec, AtmStoreContainer) ->
 
 
 -spec get_next(atm_workflow_execution_env:record(), record()) -> 
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     spec = #atm_store_iterator_spec{max_batch_size = Size},
     container_iterator = ContainerIterator
@@ -124,7 +124,7 @@ db_decode(#{
     atm_store_container_iterator:record(),
     pos_integer()
 ) ->
-    {ok, [atm_value:expanded()], atm_store_container_iterator:record()} | stop.
+    {ok, [automation:item()], atm_store_container_iterator:record()} | stop.
 get_next_internal(AtmWorkflowExecutionAuth, AtmStoreContainerIterator, Size) ->
     case atm_store_container_iterator:get_next_batch(
         AtmWorkflowExecutionAuth, Size, AtmStoreContainerIterator

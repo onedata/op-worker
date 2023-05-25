@@ -8,9 +8,6 @@
 %%% @doc
 %%% This module handles operations on automation values.
 %%% Atm values are Oneprovider specific implementation of atm_data_type's.
-%%% Each must implement `atm_data_validator` behaviour and, if kept in store,
-%%% also `atm_data_compressor` behaviour (each value is saved in store in its
-%%% compressed form and is expanded upon listing).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_value).
@@ -20,14 +17,80 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([validate/3, resolve/3]).
--export([compress/2, expand/3, filterexpand_list/3]).
+-export([
+    validate/3,
+
+    to_store_item/2,
+    from_store_item/3,
+
+    describe/3,
+    resolve_lambda_parameter/3
+]).
 
 
--type compressed() :: term().
--type expanded() :: automation:item().
+%%%===================================================================
+%%% Callbacks
+%%%===================================================================
 
--export_type([compressed/0, expanded/0]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts that all value constraints hold for specified value.
+%%
+%%                              !!! NOTE !!!
+%% Beside explicit constraints given as an function argument some values may
+%% also be bound by implicit ones that need to be checked (e.g. file/dataset
+%% must exist within space in context of which workflow execution happens)
+%% @end
+%%--------------------------------------------------------------------
+-callback validate(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_data_spec:record()
+) ->
+    ok | no_return().
+
+
+-callback to_store_item(
+    automation:item(),
+    atm_data_spec:record()
+) ->
+    atm_store:item().
+
+
+-callback from_store_item(
+    atm_workflow_execution_auth:record(),
+    atm_store:item(),
+    atm_data_spec:record()
+) ->
+    {ok, automation:item()} | errors:error().
+
+
+-callback describe(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_data_spec:record()
+) ->
+    {ok, automation:item()} | errors:error().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Resolves required fields in case of reference types and asserts that all
+%% value constraints hold.
+%%
+%%                              !!! NOTE !!!
+%% Beside explicit constraints given as an function argument some values may
+%% also be bound by implicit ones that need to be checked (e.g. file/dataset
+%% must exist within space in context of which workflow execution happens)
+%% @end
+%%--------------------------------------------------------------------
+-callback resolve_lambda_parameter(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_data_spec:record()
+) ->
+    automation:item() | no_return().
 
 
 %%%===================================================================
@@ -35,52 +98,48 @@
 %%%===================================================================
 
 
--spec validate(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
+-spec validate(atm_workflow_execution_auth:record(), automation:item(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
     assert_data_type(AtmDataType, Value),
 
     Module = get_callback_module(AtmDataType),
-    Module:assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+    Module:validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
--spec resolve(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
-    expanded() | no_return().
-resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+-spec to_store_item(automation:item(), atm_data_spec:record()) -> atm_store:item() | no_return().
+to_store_item(Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
+    Module:to_store_item(Value, AtmDataSpec).
+
+
+-spec from_store_item(atm_workflow_execution_auth:record(), atm_store:item(), atm_data_spec:record()) ->
+    {ok, automation:item()} | {error, term()}.
+from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
+    Module:from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+
+
+-spec describe(atm_workflow_execution_auth:record(), atm_store:item(), atm_data_spec:record()) ->
+    {ok, automation:item()} | {error, term()}.
+describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
+    Module:describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+
+
+-spec resolve_lambda_parameter(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_data_spec:record()
+) ->
+    automation:item() | no_return().
+resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
     assert_data_type(AtmDataType, Value),
 
     Module = get_callback_module(AtmDataType),
-    Module:resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
-
-
--spec compress(expanded(), atm_data_spec:record()) -> compressed() | no_return().
-compress(Value, AtmDataSpec) ->
-    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
-    Module:compress(Value, AtmDataSpec).
-
-
--spec expand(atm_workflow_execution_auth:record(), compressed(), atm_data_spec:record()) ->
-    {ok, expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
-    Module:expand(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
-
-
--spec filterexpand_list(
-    atm_workflow_execution_auth:record(),
-    [compressed()] | compressed(),
-    atm_data_spec:record()
-) ->
-    [expanded()].
-filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec) ->
-    lists:filtermap(fun(CompressedItem) ->
-        case atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, AtmDataSpec) of
-            {ok, ExpandedItem} -> {true, ExpandedItem};
-            {error, _} -> false
-        end
-    end, utils:ensure_list(CompressedItems)).
+    Module:resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 %%%===================================================================
@@ -102,7 +161,7 @@ get_callback_module(atm_time_series_measurement_type) -> atm_time_series_measure
 
 
 %% @private
--spec assert_data_type(atm_data_type:type(), expanded()) -> ok | no_return().
+-spec assert_data_type(atm_data_type:type(), automation:item()) -> ok | no_return().
 assert_data_type(AtmDataType, Value) ->
     case atm_data_type:is_instance(AtmDataType, Value) of
         true -> ok;

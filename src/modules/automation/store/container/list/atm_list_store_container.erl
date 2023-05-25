@@ -38,7 +38,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_content() :: [atm_value:expanded()] | undefined.
+-type initial_content() :: [automation:item()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_list_store_content_browse_options:record()
@@ -111,9 +111,10 @@ browse_content(Record, #atm_store_content_browse_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     options = #atm_list_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
-    ListingPostprocessor = atm_list_store_container_iterator:gen_listing_postprocessor(
-        AtmWorkflowExecutionAuth, get_item_data_spec(Record)
-    ),
+    ItemDataSpec = get_item_data_spec(Record),
+    ListingPostprocessor = fun({Index, {_Timestamp, CompressedItem}}) ->
+        {Index, atm_value:describe(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
+    end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
         Record#atm_list_store_container.backend_id,
         ListingOpts,
@@ -209,18 +210,18 @@ get_item_data_spec(#atm_list_store_container{config = #atm_list_store_config{
 
 
 %% @private
--spec extend_insecure([atm_value:expanded()], record()) -> record().
+-spec extend_insecure([automation:item()], record()) -> record().
 extend_insecure(ItemsArray, Record) ->
     lists:foldl(fun append_insecure/2, Record, ItemsArray).
 
 
 %% @private
--spec append_insecure(atm_value:expanded(), record()) -> record().
+-spec append_insecure(automation:item(), record()) -> record().
 append_insecure(Item, Record = #atm_list_store_container{
     config = #atm_list_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
     atm_store_container_infinite_log_backend:append(
-        BackendId, atm_value:compress(Item, ItemDataSpec)
+        BackendId, atm_value:to_store_item(Item, ItemDataSpec)
     ),
     Record.

@@ -6,15 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator`, `atm_tree_forest_container_iterator` 
-%%% and `atm_data_compressor` functionality for `atm_dataset_type`.
+%%% This module implements `atm_value` and `atm_tree_forest_container_iterator`
+%%% functionality for `atm_dataset_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_dataset_value).
 -author("Michal Stanisz").
 
--behaviour(atm_data_validator).
--behaviour(atm_data_compressor).
+-behaviour(atm_value).
 -behaviour(atm_tree_forest_store_container_iterator).
 
 -include("modules/automation/atm_execution.hrl").
@@ -23,41 +22,74 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_data_validator callbacks
--export([assert_meets_constraints/3, resolve/3]).
-
-%% atm_tree_forest_store_container_iterator callbacks
+%% atm_value callbacks
 -export([
-    list_tree/4
+    validate/3,
+    to_store_item/2,
+    from_store_item/3,
+    describe/3,
+    resolve_lambda_parameter/3
 ]).
 
-%% atm_data_compressor callbacks
--export([compress/2, expand/3]).
+%% atm_tree_forest_store_container_iterator callbacks
+-export([list_tree/4]).
 
 
 %%%===================================================================
-%%% atm_data_validator callbacks
+%%% atm_value callbacks
 %%%===================================================================
 
 
--spec assert_meets_constraints(
+-spec validate(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_dataset_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
+validate(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     check_implicit_constraints(AtmWorkflowExecutionAuth, Value).
 
 
--spec resolve(
+-spec to_store_item(automation:item(), atm_dataset_data_spec:record()) ->
+    atm_store:item().
+to_store_item(#{<<"datasetId">> := DatasetId}, _AtmDataSpec) ->
+    DatasetId.
+
+
+-spec from_store_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    atm_store:item(),
     atm_dataset_data_spec:record()
 ) ->
-    atm_value:expanded() | no_return().
-resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    assert_meets_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    {ok, automation:item()} | errors:error().
+from_store_item(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+    try
+        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
+        {ok, dataset_utils:dataset_info_to_json(DatasetInfo)}
+    catch throw:Error ->
+        Error
+    end.
+
+
+-spec describe(
+    atm_workflow_execution_auth:record(),
+    atm_store:item(),
+    atm_dataset_data_spec:record()
+) ->
+    {ok, automation:item()}.
+describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+
+
+-spec resolve_lambda_parameter(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_dataset_data_spec:record()
+) ->
+    automation:item().
+resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec) ->
+    validate(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec),
     Value.
 
 
@@ -69,10 +101,10 @@ resolve(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
 -spec list_tree(
     atm_workflow_execution_auth:record(),
     recursive_listing:pagination_token() | undefined,
-    atm_value:compressed(),
+    atm_store:item(),
     atm_store_container_iterator:batch_size()
 ) ->
-    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+    {[automation:item()], recursive_listing:pagination_token() | undefined}.
 list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     list_internal(AtmWorkflowExecutionAuth, CompressedRoot, 
         maps_utils:remove_undefined(#{limit => BatchSize, pagination_token => PrevToken})
@@ -80,34 +112,13 @@ list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
 
 
 %%%===================================================================
-%%% atm_data_compressor callbacks
-%%%===================================================================
-
-
--spec compress(atm_value:expanded(), atm_dataset_data_spec:record()) ->
-    dataset:id().
-compress(#{<<"datasetId">> := DatasetId}, _AtmDataSpec) -> DatasetId.
-
-
--spec expand(atm_workflow_execution_auth:record(), dataset:id(), atm_dataset_data_spec:record()) ->
-    {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
-    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    try
-        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
-        {ok, dataset_utils:dataset_info_to_json(DatasetInfo)}
-    catch throw:Error ->
-        Error
-    end.
-
-
-%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
 %% @private
--spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), dataset_req:recursive_listing_opts()) ->
-    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+-spec list_internal(atm_workflow_execution_auth:record(), atm_store:item(), dataset_req:recursive_listing_opts()) ->
+    {[automation:item()], recursive_listing:pagination_token() | undefined}.
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     try
@@ -129,7 +140,7 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
 
 
 %% @private
--spec check_implicit_constraints(atm_workflow_execution_auth:record(), atm_value:expanded()) ->
+-spec check_implicit_constraints(atm_workflow_execution_auth:record(), automation:item()) ->
     ok | no_return().
 check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId} = Value) ->
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
