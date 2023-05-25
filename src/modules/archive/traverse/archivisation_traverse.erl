@@ -172,7 +172,15 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
         do_aborted_master_job(Job, MasterJobArgs, UserCtx, {failed, Reason})
     end,
-    archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler).
+    case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
+        {ok, _} = Result ->
+            Result;
+        {error, interrupted_call} ->
+            ?warning("Dataset content changed on remote provider during archivisation - some files might be missing in final archive."),
+            {ok, #{}};
+        {error, _} = Error ->
+            ErrorHandler(InitialJob, Error, undefined)
+    end.
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
@@ -298,8 +306,12 @@ report_error(TaskId, Job, Reason, Stacktrace) ->
     lists:foreach(fun(ArchiveDoc) ->
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
         archive:mark_file_failed(ArchiveDoc),
-        ?error_stacktrace("Unexpected error during archivisation(~p) of file ~p in archive ~p:~n~p", 
-            [TaskId, FileGuid, ArchiveId, Reason], Stacktrace)
+        LogMessage = str_utils:format_bin("Unexpected error during archivisation: ~s",
+            [?autoformat([TaskId, FileGuid, ArchiveId, Reason])]),
+        case Stacktrace of
+            undefined -> ?error(LogMessage);
+            _ -> ?error_stacktrace(LogMessage, Stacktrace)
+        end
     end, ArchiveDocs).
 
 
@@ -326,6 +338,7 @@ build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx) ->
         task_id => ArchiveId,
         track_subtree_status => true,
         children_master_jobs_mode => async,
+        listing_errors_handling_policy => propagate,
         traverse_info => build_initial_traverse_info(
             ArchiveDoc, Config, file_ctx:get_logical_guid_const(StartFileCtx), UserCtx),
         symlink_resolution_policy => SymlinksResolutionPolicy,

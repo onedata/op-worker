@@ -28,12 +28,17 @@
 %% Traverse behaviour callbacks
 -export([
     task_started/2,
-    task_canceled/2,
     task_finished/2,
+    task_canceled/2,
     get_job/1,
     update_job_progress/5,
     do_master_job/2,
     do_slave_job/2
+]).
+
+%% exported for mocking in tests
+-export([
+    start_internal/3
 ]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -80,17 +85,22 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid, RootDirName) ->
         tune_for_large_continuous_listing  => false,
         % NOTE: do not use RootDir path, as file is already moved to trash
         initial_relative_path => filename:join(ParentPath, RootDirName),
+        listing_errors_handling_policy => propagate_unknown,
+        additional_data => #{
+            <<"user_id">> => user_ctx:get_user_id(UserCtx),
+            <<"root_guid">> => file_ctx:get_logical_guid_const(RootDirCtx)
+        },
         traverse_info => #{
             root_guid => file_ctx:get_logical_guid_const(RootDirCtx),
             emit_events => EmitEvents,
             % TODO VFS-7133 after extending file_meta with field for storing source parent
-            % there will be no need to store below 2 values
+            % there will be no need to store below value
             root_original_parent_uuid => RootOriginalParentUuid
         }
     },
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
-            tree_traverse:run(?POOL_NAME, RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
+            start_internal(RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
             Error
     end.
@@ -104,15 +114,25 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid, RootDirName) ->
 task_started(TaskId, _Pool) ->
     ?debug("dir deletion job ~p started", [TaskId]).
 
--spec task_canceled(id(), tree_traverse:pool()) -> ok.
-task_canceled(TaskId, _PoolName) ->
-    tree_traverse_session:close_for_task(TaskId),
-    ?debug("dir deletion job ~p cancelled", [TaskId]).
-
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, _Pool) ->
-    tree_traverse_session:close_for_task(TaskId),
-    ?debug("dir deletion job ~p finished", [TaskId]).
+    {ok, AD} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    case AD of
+        #{<<"failed">> := <<"true">>} ->
+            #{<<"user_id">> := UserId, <<"root_guid">> := RootGuid, <<"options">> := EncodedOptions} = AD,
+            ?debug("dir deletion job ~p failed, reruning", [TaskId]),
+            timer:sleep(timer:seconds(10)),
+            ?MODULE:start_internal(file_ctx:new_by_guid(RootGuid), UserId, binary_to_term(EncodedOptions));
+        _ ->
+            tree_traverse_session:close_for_task(TaskId),
+            ?debug("dir deletion job ~p finished", [TaskId])
+    end.
+
+
+-spec task_canceled(id(), tree_traverse:pool()) -> ok.
+task_canceled(TaskId, Pool) ->
+    task_finished(TaskId, Pool).
+
 
 -spec get_job(traverse:job_id()) ->
     {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
@@ -140,7 +160,20 @@ do_master_job(Job = #tree_traverse{
     BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingToken, SubtreeProcessingStatus) ->
         delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx1, UserId, TaskId, TraverseInfo)
     end,
-    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
+    case tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook) of
+        {ok, _} = Res ->
+            Res;
+        {error, _} = Error ->
+            %% @TODO VFS-11151 - log to system audit log
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            ?error("Error when listing directory during tree deletion: ~s", [?autoformat([Error, FileUuid])]),
+            tree_traverse_progress:delete(TaskId, FileUuid),
+            tree_traverse:cancel(?POOL_NAME, TaskId),
+            traverse_task:update_additional_data(traverse_task:get_ctx(), ?POOL_NAME, TaskId, fun(AD) ->
+                {ok, AD#{<<"failed">> => <<"true">>}}
+            end),
+            {ok, #{}}
+    end.
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
@@ -155,6 +188,15 @@ do_slave_job(#tree_traverse_slave{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec start_internal(file_ctx:ctx(), od_user:id(), tree_traverse:run_options()) -> {ok, id()}.
+start_internal(RootDirCtx, UserId, Options) ->
+    PrevAD = maps:get(additional_data, Options, #{}),
+    tree_traverse:run(?POOL_NAME, RootDirCtx, UserId, Options#{
+        additional_data => PrevAD#{<<"options">> => term_to_binary(Options)}
+    }).
+
 
 %% @private
 -spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(),

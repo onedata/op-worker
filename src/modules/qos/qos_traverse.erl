@@ -46,17 +46,23 @@
 -export_type([id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, op_worker:get_env(qos_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(qos_traverse_batch_size)).
 
 -define(SEPARATOR, <<"#">>).
 -define(QOS_TRANSFER_ID(TaskId, FileUuid), <<TaskId/binary, (?SEPARATOR)/binary, FileUuid/binary>>).
 
--define(MAX_REPEATS, 8).
+% Due to traverse_task only using few first bytes of id in combination with timestamp in seconds there is
+% quite a big chance of conflicts when creating new traverse.
+% Therefore starting new traverse is repeated on already_exists error up to ?MAX_START_ALREADY_EXISTS_REPEATS,
+% with each repeat taking 1 second to ensure new timestamp.
+-define(MAX_START_ALREADY_EXISTS_REPEATS, 8).
+
+-define(LISTING_ERRORS_REPEAT_TIMEOUT_SEC, op_worker:get_env(qos_listing_errors_repeat_timeout_sec)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-    
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates initial traverse task to fulfill requirements defined in qos_entry.
@@ -68,8 +74,7 @@ start(FileCtx, QosEntries, TaskId) ->
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         children_master_jobs_mode => sync,
-        %% @TODO VFS-10768 - Use failed files list for handling failed dirs listing
-        listing_errors_handling_policy => retry_infinitely,
+        listing_errors_handling_policy => propagate,
         additional_data => #{
             <<"encoded_qos_entries">> => json_utils:encode(QosEntries),
             <<"space_id">> => file_ctx:get_space_id_const(FileCtx),
@@ -77,7 +82,7 @@ start(FileCtx, QosEntries, TaskId) ->
         }
     },
     {ok, FileCtx2} = qos_status:report_traverse_started(TaskId, FileCtx, QosEntries),
-    start_internal(FileCtx2, Options, ?MAX_REPEATS).
+    start_internal(FileCtx2, Options, ?MAX_START_ALREADY_EXISTS_REPEATS).
     
 
 -spec report_entry_deleted(qos_entry:id() | qos_entry:doc()) -> ok.
@@ -140,35 +145,18 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
 
--spec do_master_job(tree_traverse:master_job() | tree_traverse:slave_job(), traverse:master_job_extended_args()) ->
+-spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job = #tree_traverse_slave{}, #{task_id := TaskId}) ->
-    do_slave_job(Job, TaskId);
 do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_id := TaskId}) ->
     BatchProcessingPrehook = build_batch_processing_prehook(TaskId, FileCtx),
-    %% @TODO VFS-10301 - uncomment after fixing problem with entry deletion cancelling traverse other entries rely on.
-%%    case file_qos:get_direct_qos_entries(file_ctx:get_logical_uuid_const(FileCtx)) of
-%%        [] ->
-%%            tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook);
-%%        _Entries ->
-%%            {ok, #{<<"uuid">> := TraverseRootUuid}} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-%%            case file_ctx:get_logical_uuid_const(FileCtx) of
-%%                TraverseRootUuid ->
-%%                    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook);
-%%                _ ->
-%%                    % There exists some QoS entry that is set on this file and current traverse is not being executed for it.
-%%                    % As this entry must have started its own traverse there is no need for this one to continue.
-%%                    {ok, #{}}
-%%            end
-%%    end.
-    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
+    %% @TODO VFS-10301 Optimize QoS by cutting unnecessary traverses if already traversed
+    do_master_jobs_with_repeats(Job, MasterJobArgs, BatchProcessingPrehook, global_clock:timestamp_seconds()).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(#tree_traverse_slave{file_ctx = FileCtx} = Job, TaskId) ->
     % TODO VFS-6137: add space check and optionally choose other storage
-    {ok, AdditionalData} =
-        traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    {ok, AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     
     % skip entries deleted after traverse start
     FinalQosEntries = lists:filter(fun(QosEntryId) ->
@@ -242,6 +230,28 @@ build_batch_processing_prehook(TaskId, FileCtx) ->
             false ->
                 ok
         end
+    end.
+
+
+%% @private
+-spec do_master_jobs_with_repeats(tree_traverse:master_job(), traverse:master_job_extended_args(),
+    tree_traverse:new_jobs_preprocessor(), time:seconds()) -> {ok, traverse:master_job_map()}.
+do_master_jobs_with_repeats(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_id := TaskId},
+    BatchProcessingPrehook, FirstListingTimestamp
+) ->
+    case tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook) of
+        {ok, _} = Result ->
+            Result;
+        {error, _} = Error ->
+            case global_clock:timestamp_seconds() - FirstListingTimestamp > ?LISTING_ERRORS_REPEAT_TIMEOUT_SEC of
+                true ->
+                    {ok, AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+                    report_file_failed_for_entries(get_traverse_qos_entries(AdditionalData), FileCtx, Error),
+                    {ok, #{}};
+                false ->
+                    timer:sleep(timer:seconds(1)),
+                    do_master_jobs_with_repeats(Job, MasterJobArgs, BatchProcessingPrehook, FirstListingTimestamp)
+            end
     end.
 
 
@@ -395,6 +405,8 @@ transfer_id_to_file_uuid(TransferId) ->
 -spec normalize_error({error, any()}) -> errors:error().
 normalize_error({error, <<"quota exceeded">>}) ->
     ?ERROR_QUOTA_EXCEEDED;
+normalize_error({error, {connection,<<"No such file or directory">>}}) ->
+    ?ERROR_NOT_FOUND;
 normalize_error(Error) ->
     Error.
 
