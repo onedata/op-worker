@@ -119,10 +119,10 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         end,
         FullyExpandedInitialItem = case InitialItem of
             undefined -> undefined;
-            _ -> compress_and_expand_data(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
+            _ -> describe_item(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
         end,
         NewItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
-        FullyExpandedNewItem = compress_and_expand_data(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
+        DescribedNewItem = describe_item(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
 
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
@@ -154,7 +154,7 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         ?assertEqual(ok, ?rpc(atm_store_api:update_content(
             AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
         ))),
-        ?assertMatch(FullyExpandedNewItem, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
+        ?assertMatch(DescribedNewItem, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
 
     end, AtmStoreConfigs).
 
@@ -184,10 +184,10 @@ browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, Se
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         SetContentFun(AtmWorkflowExecutionAuth, Item, AtmStoreId),
-        ExpandedItem = compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+        DescribedItem = describe_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
         ?assertEqual(
-            BuildBrowseResult(ExpandedItem),
+            BuildBrowseResult(DescribedItem),
             ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, ContentBrowseOpts, AtmStoreId))
         )
 
@@ -226,13 +226,13 @@ gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 
 
 %% @private
--spec compress_and_expand_data(
+-spec describe_item(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_store:id()
 ) ->
     automation:item().
-compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
-    atm_store_test_utils:compress_and_expand_data(
+describe_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:to_described_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).

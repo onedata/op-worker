@@ -73,7 +73,7 @@ update_content_test(_Config) ->
         example_configs(),
         fun get_item_data_spec/1,
         #atm_single_value_store_content_update_options{},
-        fun get_content/2
+        fun browse_content/2
     ).
 
 
@@ -176,7 +176,7 @@ get_item_data_spec(#atm_single_value_store_config{item_data_spec = ItemDataSpec}
 ) ->
     automation:item().
 compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
-    atm_store_test_utils:compress_and_expand_data(
+    atm_store_test_utils:to_iterated_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).
 
@@ -203,9 +203,9 @@ set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
 
 
 %% @private
--spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
     undefined | automation:item().
-get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_single_value_store_content_browse_options{},
     try
         #atm_single_value_store_content_browse_result{

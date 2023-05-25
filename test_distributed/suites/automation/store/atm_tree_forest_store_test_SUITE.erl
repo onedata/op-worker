@@ -104,9 +104,9 @@ update_content_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         build_content_update_options => fun build_content_update_options/1,
-        get_content => fun get_content/2
+        browse_content => fun browse_content/2
     }).
 
 
@@ -115,7 +115,7 @@ browse_content_by_index_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -127,7 +127,7 @@ browse_content_by_offset_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -265,15 +265,15 @@ input_item_formatter(Item) -> Item.
 
 
 %% @private
--spec input_item_to_exp_store_item(
+-spec describe_item(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_store:id(),
     non_neg_integer()
 ) ->
     automation:item().
-input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
-    atm_store_test_utils:compress_and_expand_data(
+describe_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
+    atm_store_test_utils:to_described_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
     ).
 
@@ -300,9 +300,9 @@ build_content_update_options(UpdateFun) ->
 
 
 %% @private
--spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
     [automation:item()].
-get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     #atm_tree_forest_store_content_browse_result{
         tree_roots = TreeRoots,

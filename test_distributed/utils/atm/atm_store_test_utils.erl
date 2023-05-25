@@ -31,7 +31,8 @@
     gen_valid_data/3,
     gen_invalid_data/3,
     infer_exp_invalid_data_error/2,
-    compress_and_expand_data/4,
+    to_described_item/4,
+    to_iterated_item/4,
     randomly_remove_entity_referenced_by_item/4,
     split_into_chunks/3
 ]).
@@ -329,18 +330,37 @@ infer_exp_invalid_data_error(InvalidItem, AtmDataSpec) ->
     ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, atm_data_spec:get_data_type(AtmDataSpec)).
 
 
--spec compress_and_expand_data(
+-spec to_described_item(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_store:id()
 ) ->
     automation:item().
-compress_and_expand_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
+to_described_item(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
     %% Some data types supported in atm are just references to entities in op.
     %% When retrieving items of such types from stores value returned may differ
     %% from the one given during adding to store (actual data about such entity
     %% is fetched using reference and returned)
+    {ok, NewData} = ?rpc(ProviderSelector, atm_value:describe(
+        AtmWorkflowExecutionAuth,
+        atm_value:to_store_item(Data, AtmDataSpec),
+        AtmDataSpec
+    )),
+    NewData.
+
+
+-spec to_iterated_item(
+    oct_background:node_selector(),
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_store:id()
+) ->
+    automation:item().
+to_iterated_item(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
+    %% Some data types supported in atm are just references to entities in op.
+    %% When retrieving items of such types from stores value returned may differ
+    %% from the one given during adding to store
     {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:from_store_item(
         AtmWorkflowExecutionAuth,
         atm_value:to_store_item(Data, AtmDataSpec),

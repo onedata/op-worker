@@ -47,7 +47,8 @@
 ) ->
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
-    check_implicit_constraints(AtmWorkflowExecutionAuth, Value).
+    resolve_internal(AtmWorkflowExecutionAuth, Value),
+    ok.
 
 
 -spec to_store_item(automation:item(), atm_dataset_data_spec:record()) ->
@@ -61,8 +62,18 @@ to_store_item(#{<<"datasetId">> := DatasetId}, _AtmDataSpec) ->
     atm_store:item(),
     atm_dataset_data_spec:record()
 ) ->
+    {ok, automation:item()}.
+from_store_item(_AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
+    {ok, #{<<"datasetId">> => DatasetId}}.
+
+
+-spec describe(
+    atm_workflow_execution_auth:record(),
+    atm_store:item(),
+    atm_dataset_data_spec:record()
+) ->
     {ok, automation:item()} | errors:error().
-from_store_item(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
+describe(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     try
         DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
@@ -72,25 +83,15 @@ from_store_item(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     end.
 
 
--spec describe(
-    atm_workflow_execution_auth:record(),
-    atm_store:item(),
-    atm_dataset_data_spec:record()
-) ->
-    {ok, automation:item()}.
-describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
-
-
 -spec resolve_lambda_parameter(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_dataset_data_spec:record()
 ) ->
     automation:item().
-resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec) ->
-    validate(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec),
-    Value.
+resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, _AtmParameterDataSpec) ->
+    DatasetInfo = resolve_internal(AtmWorkflowExecutionAuth, Value),
+    dataset_utils:dataset_info_to_json(DatasetInfo).
 
 
 %%%===================================================================
@@ -140,9 +141,9 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
 
 
 %% @private
--spec check_implicit_constraints(atm_workflow_execution_auth:record(), automation:item()) ->
-    ok | no_return().
-check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId} = Value) ->
+-spec resolve_internal(atm_workflow_execution_auth:record(), automation:item()) ->
+    dataset_api:info() | no_return().
+resolve_internal(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId} = Value) ->
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
@@ -151,7 +152,7 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := Datase
         file_id:guid_to_space_id(DatasetInfo#dataset_info.root_file_guid)
     of
         SpaceId ->
-            ok;
+            DatasetInfo;
         _ ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
                 <<"inSpace">> => SpaceId

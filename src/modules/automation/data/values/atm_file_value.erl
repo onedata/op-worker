@@ -163,6 +163,7 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
         {MappedEntries, PaginationToken}
     catch _:Error ->
         case datastore_runner:normalize_error(Error) of
+            {badmatch, not_found} -> {[], undefined};
             not_found -> {[], undefined};
             ?EPERM -> {[], undefined};
             ?EACCES -> {[], undefined};
@@ -184,7 +185,7 @@ resolve_internal(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} = Value,
 
         check_in_space_constraint(AtmWorkflowExecutionAuth, Guid),
 
-        %% TODO refactor attr_req/allow to select attributes to fetch
+        %% TODO VFS-10945 refactor attr_req/allow to select attributes to fetch
         FileAttrs = fetch_attributes(AtmWorkflowExecutionAuth, Guid),
 
         check_file_type_constraint(FileAttrs, AtmDataSpec),
