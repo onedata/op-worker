@@ -66,8 +66,13 @@ exec(?ECHO_CONFIG_DOCKER_ID, #{<<"argsBatch">> := ArgsBatch, <<"ctx">> := #{
 
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => lists:map(fun
-        (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) -> #{};
-        (Arg) -> Arg
+        (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) ->
+            #{
+                <<"schrodinger_cat">> => <<"dead">>,
+                <<"schrodinger_dog">> => <<"dead">>
+            };
+        (Arg) ->
+            Arg
     end, ArgsBatch)};
 
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2, #{<<"argsBatch">> := ArgsBatch}) ->

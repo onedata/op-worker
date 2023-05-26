@@ -65,6 +65,10 @@
 -export_type([function_id/0, record/0]).
 
 
+-define(FUNCTION_REMOVAL_STRATEGY, op_worker:get_env(
+    atm_openfaas_function_removal_strategy, always  %% possible values: always | upon_success | never
+)).
+
 -define(AWAIT_RETRIES, 300).
 -define(AWAIT_INTERVAL_SEC, 1).
 
@@ -136,12 +140,29 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
 
 -spec abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 abort(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
-    remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    case ?FUNCTION_REMOVAL_STRATEGY of
+        always -> remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor);
+        _ -> ok
+    end.
 
 
--spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
-    remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:doc()) ->
+    ok | no_return().
+teardown(AtmWorkflowExecutionCtx, #document{value = #atm_task_execution{
+    status = AtmTaskExecutionStatus,
+    executor = AtmTaskExecutor
+}}) ->
+    case ?FUNCTION_REMOVAL_STRATEGY of
+        always ->
+            remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor);
+        upon_success when
+            AtmTaskExecutionStatus =:= ?FINISHED_STATUS;
+            AtmTaskExecutionStatus =:= ?SKIPPED_STATUS
+        ->
+            remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor);
+        _ ->
+            ok
+    end.
 
 
 -spec delete(record()) -> ok | no_return().
@@ -686,28 +707,23 @@ build_job_heartbeat_url(#atm_lambda_input{
 remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
-    case op_worker:get_env(atm_workflow_execution_debug_mode, false) of
-        true ->
+    OpenfaasConfig = atm_openfaas_config:get(),
+
+    Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/system/functions">>),
+    AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
+    Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
+
+    case http_client:delete(Endpoint, AuthHeaders, Payload) of
+        {ok, ?HTTP_202_ACCEPTED, _, _} ->
+            log_function_removed(AtmWorkflowExecutionCtx, FunctionName);
+        {ok, ?HTTP_404_NOT_FOUND, _, _} ->
             ok;
-        false ->
-            OpenfaasConfig = atm_openfaas_config:get(),
-
-            Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/system/functions">>),
-            AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
-            Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
-
-            case http_client:delete(Endpoint, AuthHeaders, Payload) of
-                {ok, ?HTTP_202_ACCEPTED, _, _} ->
-                    log_function_removed(AtmWorkflowExecutionCtx, FunctionName);
-                {ok, ?HTTP_404_NOT_FOUND, _, _} ->
-                    ok;
-                {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
-                    Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
-                    log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
-                {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-                    Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
-                    log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error)
-            end
+        {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
+            Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
+            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
+        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
+            Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
+            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error)
     end.
 
 
