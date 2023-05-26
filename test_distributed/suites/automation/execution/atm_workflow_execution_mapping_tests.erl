@@ -16,6 +16,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 
 -export([
     acquire_lambda_config/0,
@@ -28,6 +29,7 @@
     map_results_to_single_value_store/0,
     map_results_to_time_series_store/0,
     map_results_to_tree_forest_store/0,
+    map_from_file_list_to_object_list_store/0,
 
     map_results_to_workflow_audit_log_store/0,
     map_results_to_task_audit_log_store/0,
@@ -361,8 +363,6 @@ map_results_to_time_series_store() ->
     }).
 
 
-%% TODO list<file> -> list<object> mapping test
-
 map_results_to_tree_forest_store() ->
     IteratedItemDataSpec = #atm_file_data_spec{
         file_type = 'ANY',
@@ -414,6 +414,83 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         target_store_schema_id = TargetStoreSchemaId,
         target_store_type = TargetStoreType,
         target_store_update_options = TargetStoreContentUpdateOptions
+    }).
+
+
+-spec map_from_file_list_to_object_list_store() ->
+    ok.
+map_from_file_list_to_object_list_store() ->
+    UserSessionId = oct_background:get_user_session_id(user1, ?PROVIDER_SELECTOR),
+
+    FileAttrsToResolve = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)]),
+    AtmFileDataSpec = #atm_file_data_spec{file_type = 'ANY', attributes = FileAttrsToResolve},
+
+    FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
+    ),
+    InputItems = lists:map(fun(#object{guid = Guid}) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        #{<<"file_id">> => ObjectId}
+    end, FileObjects),
+    ExpOutputItems = lists:map(fun(#object{guid = Guid}) ->
+        {ok, FileAttrs} = ?rpc(?PROVIDER_SELECTOR, lfm:stat(UserSessionId, ?FILE_REF(Guid))),
+        maps:with(
+            lists:map(fun str_utils:to_binary/1, FileAttrsToResolve),
+            file_attr_translator:to_json(FileAttrs)
+        )
+    end, FileObjects),
+
+    IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(
+        AtmFileDataSpec#atm_file_data_spec{attributes = []},
+        InputItems
+    ),
+
+    ArgumentMappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+
+    TargetStoreSchemaId = <<"target_st">>,
+    TargetStoreSchemaDraft = #atm_store_schema_draft{
+        id = TargetStoreSchemaId,
+        type = list,
+        config = #atm_list_store_config{item_data_spec = #atm_object_data_spec{}}
+    },
+    ResultMappings = [#atm_task_schema_result_mapper{
+        result_name = ?ECHO_ARG_NAME,
+        store_schema_id = TargetStoreSchemaId,
+        store_content_update_options = #atm_list_store_content_update_options{function = append}
+    }],
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
+            ?ECHO_DOCKER_IMAGE_ID,
+            [IteratedStoreSchemaDraft, TargetStoreSchemaDraft],
+            AtmFileDataSpec,
+            #{},
+            ArgumentMappings,
+            ResultMappings
+        ),
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                handle_task_execution_stopped = #atm_step_mock_spec{
+                    after_step_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                    }) ->
+                        TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
+                            TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
+                        ),
+                        assert_exp_target_store_content(list, ExpOutputItems, TargetStoreContent)
+                    end
+                }
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_finished
+                ]
+            }
+        }]
     }).
 
 

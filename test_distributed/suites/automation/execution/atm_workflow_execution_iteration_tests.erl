@@ -17,7 +17,9 @@
 
 -export([
     iterate_over_list_store/0,
+    %% TODO VFS-10854 fix after introducing exception store not validating input
     iterate_over_list_store_with_some_inaccessible_items/0,
+    %% TODO VFS-10854 fix after introducing exception store not validating input
     iterate_over_list_store_with_all_items_inaccessible/0,
     iterate_over_empty_list_store/0,
 
@@ -25,6 +27,7 @@
     iterate_over_empty_range_store/0,
 
     iterate_over_single_value_store/0,
+    %% TODO VFS-10854 fix after introducing exception store not validating input
     iterate_over_single_value_store_with_all_items_inaccessible/0,
     iterate_over_empty_single_value_store/0,
 
@@ -80,7 +83,8 @@
                 store_iterator_spec = #atm_store_iterator_spec_draft{
                     store_schema_id = ?ITERATED_STORE_SCHEMA_ID,
                     max_batch_size = ?RAND_INT(5, 8)
-                }
+                },
+                max_retries = 0
             }]
         },
         supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
@@ -280,94 +284,85 @@ iterate_over_empty_tree_forest_store() ->
 %% @private
 -spec iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(iterate_over_file_store_test_spec()) ->
     ok.
-iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec = #iterate_over_file_store_test_spec{
     testcase = Testcase,
     store_type = AtmStoreType,
-    initial_files = InitialFiles,
     files_to_remove_before_iteration_starts = [_ | _] = FilesToRemove,
     exp_iterated_files = ExpIteratedFiles
 }) when
     AtmStoreType =:= list;
     AtmStoreType =:= single_value
 ->
-    ok;
-%% TODO @)(*#^!^#!*@^#&(*WA^%E(*&Q^%#(Q#%
-%%    AtmFileDataSpec = #atm_file_data_spec{
-%%        file_type = 'ANY',
-%%        attributes = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
-%%    },
-%%    AtmStoreInitialContent = case InitialFiles of
-%%        undefined -> undefined;
-%%        #object{} -> file_object_to_atm_file_value(InitialFiles);
-%%        _ when is_list(InitialFiles) -> lists:map(fun file_object_to_atm_file_value/1, InitialFiles)
-%%    end,
-%%    AtmStoreSchemaDraft = case AtmStoreType of
-%%        list ->
-%%            ?ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent);
-%%        single_value ->
-%%            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent)
-%%    end,
-%%    ExpIteratedEntries = lists:map(fun file_object_to_atm_file_value/1, ExpIteratedFiles),
-%%
-%%    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-%%        workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
-%%            Testcase, AtmStoreSchemaDraft, AtmFileDataSpec
-%%        ),
-%%        incarnations = [#atm_workflow_execution_incarnation_test_spec{
-%%            incarnation_num = 1,
-%%            lane_runs = [#atm_lane_run_execution_test_spec{
-%%                selector = {1, 1},
-%%                prepare_lane = #atm_step_mock_spec{
-%%                    before_step_hook = fun(_MockCallCtx) ->
-%%                        lists_utils:pforeach(fun(#object{guid = Guid}) ->
-%%                            onenv_file_test_utils:rm_and_sync_file(user1, Guid)
-%%                        end, FilesToRemove)
-%%                    end
-%%                },
-%%                run_task_for_item = #atm_step_mock_spec{
-%%                    before_step_hook = build_record_iterated_items_hook(
-%%                        Testcase,
-%%                        fun filter_out_everything_but_file_id_from_atm_file_value/1
-%%                    )
-%%                },
-%%                handle_task_execution_stopped = case ExpIteratedFiles of
-%%                    [] -> build_handle_task_execution_stopped_mock_spec_for_skipped_tasks();
-%%                    _ -> #atm_step_mock_spec{}
-%%                end
-%%            }],
-%%            handle_workflow_execution_stopped = #atm_step_mock_spec{
-%%                after_step_exp_state_diff = [
-%%                    {lane_runs, [{1, 1}], rerunable},
-%%                    workflow_finished
-%%                ]
-%%            }
-%%        }]
-%%    }),
-%%    assert_all_items_were_iterated(Testcase, ExpIteratedEntries);
-iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+    AtmFileDataSpec = build_file_data_spec(),
+    AtmStoreInitialContent = build_store_input(TestSpec),
+    AtmStoreSchemaDraft = build_store_schema(AtmStoreType, AtmFileDataSpec, AtmStoreInitialContent),
+
+    ExpIteratedEntries = lists:map(fun file_object_to_atm_file_value/1, ExpIteratedFiles),
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
+            Testcase, AtmStoreSchemaDraft, AtmFileDataSpec
+        ),
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                prepare_lane = #atm_step_mock_spec{
+                    before_step_hook = fun(_MockCallCtx) ->
+                        lists_utils:pforeach(fun(#object{guid = Guid}) ->
+                            onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+                        end, FilesToRemove)
+                    end
+                },
+                run_task_for_item = #atm_step_mock_spec{
+                    before_step_hook = build_record_iterated_items_hook(
+                        Testcase,
+                        fun filter_out_everything_but_file_id_from_atm_file_value/1
+                    ),
+                    after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+                        [<<"task1">>, <<"task2">>] => fun(#atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState,
+                            call_args = [_, _, AtmTaskExecutionId, _, ItemBatch]
+                        }) ->
+                            {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                                {task, AtmTaskExecutionId, items_scheduled, length(ItemBatch)},
+                                {task, AtmTaskExecutionId, items_failed, length(ItemBatch)}
+                            ])}
+                        end
+                    })
+                },
+                handle_task_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+                        [<<"task1">>, <<"task2">>] => [{task, ?TASK_ID_PLACEHOLDER, failed}],
+                        <<"task3">> => [{task, ?TASK_ID_PLACEHOLDER, skipped}]
+                    })
+                },
+
+                handle_lane_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [
+                        {lane_run, {1, 1}, failed},
+                        workflow_stopping
+                    ]
+                }
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [
+                    workflow_failed
+                ]
+            }
+        }]
+    }),
+    assert_all_items_were_iterated(Testcase, ExpIteratedEntries);
+
+iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec = #iterate_over_file_store_test_spec{
     testcase = Testcase,
     store_type = AtmStoreType,
-    initial_files = InitialFiles,
     files_to_remove_before_iteration_starts = FilesToRemove,
     exp_iterated_files = ExpIteratedFiles
 }) ->
-    AtmFileDataSpec = #atm_file_data_spec{
-        file_type = 'ANY',
-        attributes = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
-    },
-    AtmStoreInitialContent = case InitialFiles of
-        undefined -> undefined;
-        #object{} -> file_object_to_atm_file_value(InitialFiles);
-        _ when is_list(InitialFiles) -> lists:map(fun file_object_to_atm_file_value/1, InitialFiles)
-    end,
-    AtmStoreSchemaDraft = case AtmStoreType of
-        list ->
-            ?ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent);
-        single_value ->
-            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent);
-        tree_forest ->
-            ?ATM_TREE_FOREST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInitialContent)
-    end,
+    AtmFileDataSpec = build_file_data_spec(),
+    AtmStoreInitialContent = build_store_input(TestSpec),
+    AtmStoreSchemaDraft = build_store_schema(AtmStoreType, AtmFileDataSpec, AtmStoreInitialContent),
     ExpIteratedEntries = lists:map(fun file_object_to_atm_file_value/1, ExpIteratedFiles),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
@@ -423,6 +418,32 @@ create_initial_files() ->
         ]},
         lists_utils:generate(fun() -> #file_spec{} end, 30)
     ])).
+
+
+%% @private
+build_file_data_spec() ->
+    #atm_file_data_spec{
+        file_type = 'ANY',
+        attributes = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+    }.
+
+
+%% @private
+build_store_input(#iterate_over_file_store_test_spec{initial_files = undefined}) ->
+    undefined;
+build_store_input(#iterate_over_file_store_test_spec{initial_files = InitialFile = #object{}}) ->
+    file_object_to_atm_file_value(InitialFile);
+build_store_input(#iterate_over_file_store_test_spec{initial_files = InitialFiles}) ->
+    lists:map(fun file_object_to_atm_file_value/1, InitialFiles).
+
+
+%% @private
+build_store_schema(list, AtmFileDataSpec, AtmStoreInput) ->
+    ?ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInput);
+build_store_schema(single_value, AtmFileDataSpec, AtmStoreInput) ->
+    ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInput);
+build_store_schema(tree_forest, AtmFileDataSpec, AtmStoreInput) ->
+    ?ATM_TREE_FOREST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, AtmFileDataSpec, AtmStoreInput).
 
 
 %% @private
