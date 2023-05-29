@@ -33,6 +33,7 @@
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
     logging_severity :: atm_audit_log_store_container:severity(),
+    logging_level :: atm_audit_log_store_container:level(),
     callback_url :: undefined | http_client:url()
 }).
 -type creation_args() :: #creation_args{}.
@@ -114,6 +115,7 @@ create(
             lambda_docs = AtmLambdaDocs,
             store_initial_content_overlay = AtmStoreInitialContentOverlay,
             logging_severity = LoggingSeverity,
+            logging_level = atm_audit_log_store_container:severity_to_logging_level(LoggingSeverity),
             callback_url = CallbackUrl
         },
         execution_components = #execution_components{global_store_registry = #{}}
@@ -283,7 +285,8 @@ create_global_stores(CreationCtx = #creation_ctx{
         workflow_schema_revision = #atm_workflow_schema_revision{
             stores = AtmStoreSchemas
         },
-        store_initial_content_overlay = AtmStoreInitialContentOverlay
+        store_initial_content_overlay = AtmStoreInitialContentOverlay,
+        logging_level = LoggingLevel
     }
 }) ->
     lists:foldl(fun(
@@ -300,7 +303,7 @@ create_global_stores(CreationCtx = #creation_ctx{
         )),
         try
             {ok, #document{key = AtmStoreId}} = atm_store_api:create(
-                AtmWorkflowExecutionAuth, StoreInitialContent, AtmStoreSchema
+                AtmWorkflowExecutionAuth, LoggingLevel, StoreInitialContent, AtmStoreSchema
             ),
             NewCreationCtx#creation_ctx{
                 workflow_execution_env = atm_workflow_execution_env:add_global_store_mapping(
@@ -326,7 +329,8 @@ create_global_stores(CreationCtx = #creation_ctx{
 create_workflow_audit_log(CreationCtx = #creation_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv,
     creation_args = #creation_args{
-        workflow_execution_auth = AtmWorkflowExecutionAuth
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        logging_level = LoggingLevel
     },
     execution_components = ExecutionComponents
 }) ->
@@ -337,6 +341,7 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
         }
     }} = atm_store_api:create(
         AtmWorkflowExecutionAuth,
+        LoggingLevel,
         undefined,
         ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),

@@ -195,6 +195,14 @@
 
 %% Atm stores related macros
 
+% Record used only during creation of atm store container (it is not persisted anywhere)
+-record(atm_store_container_creation_args, {
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    logging_level :: atm_audit_log_store_container:level(),
+    store_config :: atm_store_config:record(),
+    initial_content :: atm_store_container:initial_content()
+}).
+
 -define(ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(__ID), #atm_store_schema{
     id = __ID,
     name = __ID,

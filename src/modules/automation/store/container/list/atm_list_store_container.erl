@@ -21,7 +21,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -64,22 +64,24 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_list_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(#atm_store_container_creation_args{
+    store_config = AtmStoreConfig,
+    initial_content = undefined
+}) ->
     create_container(AtmStoreConfig);
 
-create(AtmWorkflowExecutionAuth, AtmAtmStoreConfig, InitialItemsArray) ->
+create(#atm_store_container_creation_args{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    store_config = AtmStoreConfig,
+    initial_content = InitialItemsArray
+}) ->
     atm_value:validate(
         AtmWorkflowExecutionAuth,
         InitialItemsArray,
-        ?ATM_ARRAY_DATA_SPEC(AtmAtmStoreConfig#atm_list_store_config.item_data_spec)
+        ?ATM_ARRAY_DATA_SPEC(AtmStoreConfig#atm_list_store_config.item_data_spec)
     ),
-    extend_insecure(InitialItemsArray, create_container(AtmAtmStoreConfig)).
+    extend_insecure(InitialItemsArray, create_container(AtmStoreConfig)).
 
 
 -spec copy(record()) -> no_return().

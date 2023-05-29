@@ -444,7 +444,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
         item_data_spec = #atm_data_spec{type = Type}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
-        AtmWorkflowExecutionAuth, RootsToAdd, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, RootsToAdd, AtmStoreSchema
     ))),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,

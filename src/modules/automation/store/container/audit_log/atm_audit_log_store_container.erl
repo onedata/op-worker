@@ -32,7 +32,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -98,16 +98,19 @@ severity_to_logging_level(?LOGGER_EMERGENCY) -> ?LOGGER_EMERGENCY_LEVEL.
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_audit_log_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+%% TODO logging level
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(#atm_store_container_creation_args{
+    store_config = AtmStoreConfig,
+    initial_content = undefined
+}) ->
     create_container(AtmStoreConfig);
 
-create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialItemsArray) ->
+create(#atm_store_container_creation_args{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    store_config = AtmStoreConfig,
+    initial_content = InitialItemsArray
+}) ->
     % validate and sanitize given array of items first, to simulate atomic operation
     LogContentDataSpec = AtmStoreConfig#atm_audit_log_store_config.log_content_data_spec,
     Logs = sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, InitialItemsArray),

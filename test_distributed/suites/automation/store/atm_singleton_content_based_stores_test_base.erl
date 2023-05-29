@@ -67,6 +67,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
         ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
         ?rpc(catch atm_store_api:create(
             AtmWorkflowExecutionAuth,
+            ?LOGGER_DEBUG_LEVEL,
             undefined,
             atm_store_test_utils:build_store_schema(?RAND_ELEMENT(AtmStoreConfigs), true)
         ))
@@ -75,6 +76,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
         {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
         ?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth,
+            ?LOGGER_DEBUG_LEVEL,
             undefined,
             atm_store_test_utils:build_store_schema(?RAND_ELEMENT(AtmStoreConfigs), false)
         ))
@@ -126,7 +128,7 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
 
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, InitialItem, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, InitialItem, AtmStoreSchema
         ))),
 
         % Assert set with invalid item should fail
@@ -174,7 +176,7 @@ browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, Se
         ItemDataSpec = GetItemDataSpec(AtmStoreConfig),
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, AtmStoreSchema
         ))),
 
         ExpError = ?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchema#atm_store_schema.id),

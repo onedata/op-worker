@@ -202,6 +202,7 @@ create_audit_log(CreationCtx = #creation_ctx{
 
     {ok, #document{key = AtmSystemAuditLogStoreId}} = atm_store_api:create(
         AtmWorkflowExecutionAuth,
+        atm_workflow_execution_ctx:get_logging_level(AtmWorkflowExecutionCtx),
         undefined,
         ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
@@ -263,6 +264,7 @@ create_time_series_store(CreationCtx = #creation_ctx{
 
     {ok, #document{key = AtmTaskTSStoreId}} = atm_store_api:create(
         AtmWorkflowExecutionAuth,
+        atm_workflow_execution_ctx:get_logging_level(AtmWorkflowExecutionCtx),
         undefined,
         ?ATM_TASK_TIME_SERIES_STORE_SCHEMA(AtmTaskTSStoreConfig)
     ),

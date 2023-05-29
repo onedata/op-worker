@@ -46,6 +46,8 @@
     get_task_time_series_store_id/2,
 
     acquire_auth/1,
+
+    get_logging_level/1,
     build_logger/3
 ]).
 
@@ -245,6 +247,11 @@ acquire_auth(#atm_workflow_execution_env{
 }) ->
     CreatorUserCtx = atm_workflow_execution_session:acquire(AtmWorkflowExecutionId),
     atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, CreatorUserCtx).
+
+
+-spec get_logging_level(record()) -> atm_audit_log_store_container:level().
+get_logging_level(#atm_workflow_execution_env{logging_level = LoggingLevel}) ->
+    LoggingLevel.
 
 
 -spec build_logger(

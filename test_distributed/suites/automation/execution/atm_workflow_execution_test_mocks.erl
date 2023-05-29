@@ -131,11 +131,12 @@ mock_workflow_execution_factory(Workers) ->
         AtmWorkflowSchemaId,
         AtmWorkflowSchemaRevisionNum,
         StoreInitialValues,
+        LoggingSeverity,
         CallbackUrl
     ) ->
         Result = {#document{key = AtmWorkflowExecutionId}, _} = meck:passthrough([
             UserCtx, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-            StoreInitialValues, CallbackUrl
+            StoreInitialValues, LoggingSeverity, CallbackUrl
         ]),
         case maps:get(test_process, StoreInitialValues, undefined) of
             undefined -> ok;

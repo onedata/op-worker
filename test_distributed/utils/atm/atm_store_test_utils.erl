@@ -103,19 +103,25 @@ build_create_store_with_initial_content_fun(
         case rand:uniform(3) of
             1 ->
                 StoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
-                atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema);
+                atm_store_api:create(
+                    AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, ContentInitializer, StoreSchema
+                );
             2 ->
                 StoreSchema = atm_store_test_utils:build_store_schema(
                     AtmStoreConfig, false, ContentInitializer
                 ),
-                atm_store_api:create(AtmWorkflowExecutionAuth, undefined, StoreSchema);
+                atm_store_api:create(
+                    AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, StoreSchema
+                );
             3 ->
                 % Default content initializer (from schema) should be overridden
                 % by one specified in args when creating store
                 StoreSchema = atm_store_test_utils:build_store_schema(
                     AtmStoreConfig, false, DefaultContentInitializer
                 ),
-                atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema)
+                atm_store_api:create(
+                    AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, ContentInitializer, StoreSchema
+                )
         end
     end.
 

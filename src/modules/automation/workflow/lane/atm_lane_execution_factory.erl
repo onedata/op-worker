@@ -204,7 +204,7 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
     {ok, #atm_store{container = AtmStoreContainer}} = atm_store_api:get(AtmIteratedStoreId),
 
     {ok, #document{key = AtmLaneExceptionStoreId}} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, ?ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(
+        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, ?ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(
             atm_store_container:get_iterated_item_data_spec(AtmStoreContainer)
         )
     ),

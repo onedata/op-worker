@@ -133,7 +133,7 @@ browse_by_timestamp_test(_Config) ->
         log_content_data_spec = #atm_data_spec{type = atm_object_type}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, AtmStoreSchema
     ))),
 
 %%    ItemsNum = rand:uniform(1000),  @TODO VFS-10429
@@ -198,7 +198,7 @@ expiration_test(_Config) ->
         log_content_data_spec = #atm_data_spec{type = atm_object_type}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, AtmStoreSchema
     ))),
 
     CallBrowseContent = fun() ->
