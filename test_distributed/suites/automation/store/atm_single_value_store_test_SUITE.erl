@@ -103,6 +103,7 @@ iterator_test(_Config) ->
             atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
             atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
             0,
+            ?LOGGER_DEBUG,
             #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
         ),
 

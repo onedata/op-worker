@@ -101,7 +101,7 @@ create(
         execution_components = ExecutionComponents
     } = create_execution_components(#creation_ctx{
         workflow_execution_env = atm_workflow_execution_env:build(
-            SpaceId, AtmWorkflowExecutionId, 0
+            SpaceId, AtmWorkflowExecutionId, 0, LoggingLevel
         ),
         creation_args = #creation_args{
             workflow_execution_id = AtmWorkflowExecutionId,

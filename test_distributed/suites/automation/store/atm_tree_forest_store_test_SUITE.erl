@@ -451,7 +451,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
         max_batch_size = MaxBatchSize
     },
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        SpaceId, WorkflowId, 0, #{AtmStoreDummySchemaId => AtmStoreId}
+        SpaceId, WorkflowId, 0, ?LOGGER_DEBUG, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIterator0 = ?rpc(ProviderSelector, atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
