@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/6, delete_insecure/1]).
+-export([create/7, delete_insecure/1]).
 
 
 -record(creation_args, {
@@ -32,6 +32,7 @@
     workflow_schema_revision :: atm_workflow_schema_revision:record(),
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
+    logging_level :: atm_audit_log_store_container:logging_level(),
     callback_url :: undefined | http_client:url()
 }).
 -type creation_args() :: #creation_args{}.
@@ -64,6 +65,7 @@
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
+    atm_audit_log_store_container:logging_level(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
@@ -73,6 +75,7 @@ create(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
+    LoggingLevel,
     CallbackUrl
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -110,6 +113,7 @@ create(
             workflow_schema_revision = AtmWorkflowSchemaRevision,
             lambda_docs = AtmLambdaDocs,
             store_initial_content_overlay = AtmStoreInitialContentOverlay,
+            logging_level = LoggingLevel,
             callback_url = CallbackUrl
         },
         execution_components = #execution_components{global_store_registry = #{}}
@@ -390,6 +394,7 @@ create_workflow_execution_doc(#creation_ctx{
             name = AtmWorkflowSchemaName,
             atm_inventory = AtmInventoryId
         }},
+        logging_level = LoggingLevel,
         callback_url = CallbackUrl
     },
     execution_components = #execution_components{
@@ -424,7 +429,7 @@ create_workflow_execution_doc(#creation_ctx{
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
 
-            logging_level = ?LOGGER_INFO,  %% TODO
+            logging_level = LoggingLevel,
 
             callback = CallbackUrl,
 

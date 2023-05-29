@@ -318,7 +318,7 @@ schedule_workflow_execution(AtmWorkflowSchemaId) ->
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
 
     {AtmWorkflowExecutionId, _} = ?rpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
-        SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, undefined
+        SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, ?LOGGER_DEBUG, undefined
     )),
     AtmWorkflowExecutionId.
 

@@ -21,6 +21,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
 -export([init/1, teardown/1]).
@@ -91,7 +92,8 @@ schedule_workflow_execution_as_test_process(
 
     ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialContentOverlay#{test_process => TestProcPid}, CallbackUrl
+        AtmStoreInitialContentOverlay#{test_process => TestProcPid},
+        ?LOGGER_DEBUG, CallbackUrl
     )).
 
 

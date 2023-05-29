@@ -87,12 +87,13 @@ execute(UserCtx, SpaceDirCtx, #atm_workflow_execution_schedule_request{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
     atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_content_overlay = AtmStoreInitialContentOverlay,
+    logging_level = LeggingLevel,
     callback_url = CallbackUrl
 }) ->
     {ok, atm_workflow_execution_api:schedule(
         UserCtx, file_ctx:get_space_id_const(SpaceDirCtx),
         AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialContentOverlay, CallbackUrl
+        AtmStoreInitialContentOverlay, LeggingLevel, CallbackUrl
     )};
 
 execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_init_cancel_request{
