@@ -405,6 +405,8 @@ retry_lane_test(Config) ->
     }).
 
 retry_and_execute_other_lane_than_the_one_prepared_in_advance_test(Config) ->
+    % Note: If preparation of lane 3 takes too long, the test fails because it will be recognized
+    % as preparation after retry -  do not delay run preparation for this test
     execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
         generator_options = #{lane_to_retry => <<"2">>, prepare_ignored_lane_in_advance => true}
     }).
@@ -423,6 +425,8 @@ prepare_lane_too_early_with_long_callback_execution_test(Config) ->
     }).
 
 retry_lane_with_long_lasting_lane_preparation_test(Config) ->
+    % Note: If preparation of lane 3 takes too long, the test fails because it will be recognized
+    % as preparation after retry -  do not delay run preparation for this test using sleep!
     execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
         test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}],
         generator_options = #{lane_to_retry => <<"2">>}
