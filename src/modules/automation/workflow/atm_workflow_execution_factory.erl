@@ -32,7 +32,7 @@
     workflow_schema_revision :: atm_workflow_schema_revision:record(),
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
-    logging_level :: atm_audit_log_store_container:logging_level(),
+    logging_severity :: atm_audit_log_store_container:severity(),
     callback_url :: undefined | http_client:url()
 }).
 -type creation_args() :: #creation_args{}.
@@ -65,7 +65,7 @@
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
-    atm_audit_log_store_container:logging_level(),
+    atm_audit_log_store_container:severity(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
@@ -75,7 +75,7 @@ create(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
-    LoggingLevel,
+    LoggingSeverity,
     CallbackUrl
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -101,7 +101,7 @@ create(
         execution_components = ExecutionComponents
     } = create_execution_components(#creation_ctx{
         workflow_execution_env = atm_workflow_execution_env:build(
-            SpaceId, AtmWorkflowExecutionId, 0, LoggingLevel
+            SpaceId, AtmWorkflowExecutionId, 0, LoggingSeverity
         ),
         creation_args = #creation_args{
             workflow_execution_id = AtmWorkflowExecutionId,
@@ -113,7 +113,7 @@ create(
             workflow_schema_revision = AtmWorkflowSchemaRevision,
             lambda_docs = AtmLambdaDocs,
             store_initial_content_overlay = AtmStoreInitialContentOverlay,
-            logging_level = LoggingLevel,
+            logging_severity = LoggingSeverity,
             callback_url = CallbackUrl
         },
         execution_components = #execution_components{global_store_registry = #{}}
@@ -394,7 +394,7 @@ create_workflow_execution_doc(#creation_ctx{
             name = AtmWorkflowSchemaName,
             atm_inventory = AtmInventoryId
         }},
-        logging_level = LoggingLevel,
+        logging_severity = LoggingSeverity,
         callback_url = CallbackUrl
     },
     execution_components = #execution_components{
@@ -429,7 +429,7 @@ create_workflow_execution_doc(#creation_ctx{
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
 
-            logging_level = LoggingLevel,
+            logging_severity = LoggingSeverity,
 
             callback = CallbackUrl,
 

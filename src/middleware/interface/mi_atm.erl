@@ -36,7 +36,7 @@
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
-    atm_audit_log_store_container:logging_level(),
+    atm_audit_log_store_container:severity(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
@@ -46,7 +46,7 @@ schedule_workflow_execution(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
-    LoggingLevel,
+    LoggingSeverity,
     CallbackUrl
 ) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
@@ -55,7 +55,7 @@ schedule_workflow_execution(
         atm_workflow_schema_id = AtmWorkflowSchemaId,
         atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
         store_initial_content_overlay = AtmStoreInitialContentOverlay,
-        logging_level = LoggingLevel,
+        logging_severity = LoggingSeverity,
         callback_url = CallbackUrl
     }).
 

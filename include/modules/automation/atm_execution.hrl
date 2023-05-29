@@ -314,16 +314,25 @@
 -define(LOGGER_INFO, <<"info">>).
 -define(LOGGER_NOTICE, <<"notice">>).
 -define(LOGGER_WARNING, <<"warning">>).
--define(LOGGER_ALERT, <<"alert">>).
 -define(LOGGER_ERROR, <<"error">>).
 -define(LOGGER_CRITICAL, <<"critical">>).
+-define(LOGGER_ALERT, <<"alert">>).
 -define(LOGGER_EMERGENCY, <<"emergency">>).
 
 -define(LOGGER_SEVERITY_LEVELS, [
     ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
-    ?LOGGER_WARNING, ?LOGGER_ALERT,
-    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
+    ?LOGGER_WARNING, ?LOGGER_ERROR,
+    ?LOGGER_CRITICAL, ?LOGGER_ALERT, ?LOGGER_EMERGENCY
 ]).
+
+-define(LOGGER_DEBUG_LEVEL, 7).
+-define(LOGGER_INFO_LEVEL, 6).
+-define(LOGGER_NOTICE_LEVEL, 5).
+-define(LOGGER_WARNING_LEVEL, 4).
+-define(LOGGER_ERROR_LEVEL, 3).
+-define(LOGGER_CRITICAL_LEVEL, 2).
+-define(LOGGER_ALERT_LEVEL, 1).
+-define(LOGGER_EMERGENCY_LEVEL, 0).
 
 
 -define(ATM_SUPERVISION_WORKER_SUP, atm_supervision_worker_sup).

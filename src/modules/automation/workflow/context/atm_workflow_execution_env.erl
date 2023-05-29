@@ -56,7 +56,7 @@
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_incarnation :: atm_workflow_execution:incarnation(),
 
-    logging_level :: atm_audit_log_store_container:logging_level(),
+    logging_level :: atm_audit_log_store_container:level(),
 
     % globally accessible stores
     global_store_registry :: atm_workflow_execution:store_registry(),
@@ -83,18 +83,18 @@
     od_space:id(),
     atm_workflow_execution:id(),
     atm_workflow_execution:incarnation(),
-    atm_audit_log_store_container:logging_level()
+    atm_audit_log_store_container:severity()
 ) ->
     record().
-build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, LoggingLevel) ->
-    build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, LoggingLevel, #{}).
+build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, LoggingSeverity) ->
+    build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, LoggingSeverity, #{}).
 
 
 -spec build(
     od_space:id(),
     atm_workflow_execution:id(),
     atm_workflow_execution:incarnation(),
-    atm_audit_log_store_container:logging_level(),
+    atm_audit_log_store_container:severity(),
     atm_workflow_execution:store_registry()
 ) ->
     record().
@@ -102,14 +102,14 @@ build(
     SpaceId,
     AtmWorkflowExecutionId,
     AtmWorkflowExecutionIncarnation,
-    LoggingLevel,
+    LoggingSeverity,
     AtmGlobalStoreRegistry
 ) ->
     #atm_workflow_execution_env{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_execution_incarnation = AtmWorkflowExecutionIncarnation,
-        logging_level = LoggingLevel,
+        logging_level = atm_audit_log_store_container:severity_to_logging_level(LoggingSeverity),
         global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_store_container = undefined,
         lane_run_exception_store_container = undefined,
@@ -254,11 +254,13 @@ acquire_auth(#atm_workflow_execution_env{
 ) ->
     atm_workflow_execution_logger:record() | no_return().
 build_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_execution_env{
+    logging_level = LoggingLevel,
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
     task_audit_logs_registry = AtmTaskAuditLogsRegistry
 }) ->
     atm_workflow_execution_logger:build(
         AtmWorkflowExecutionAuth,
+        LoggingLevel,
         maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined),
         AtmWorkflowAuditLogStoreContainer
     ).

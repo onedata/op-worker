@@ -1187,7 +1187,7 @@
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
 
-    logging_level :: atm_audit_log_store_container:logging_level(),
+    logging_severity :: atm_audit_log_store_container:severity(),
 
     callback :: undefined | http_client:url(),
 

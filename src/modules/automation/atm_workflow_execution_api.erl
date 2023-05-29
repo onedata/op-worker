@@ -143,7 +143,7 @@ foldl(SpaceId, Phase, Callback, InitialAcc) ->
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     store_initial_content_overlay(),
-    atm_audit_log_store_container:logging_level(),
+    atm_audit_log_store_container:severity(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
@@ -153,7 +153,7 @@ schedule(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
-    LoggingLevel,
+    LoggingSeverity,
     CallbackUrl
 ) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
@@ -162,7 +162,7 @@ schedule(
         AtmWorkflowSchemaId,
         AtmWorkflowSchemaRevisionNum,
         AtmStoreInitialContentOverlay,
-        LoggingLevel,
+        LoggingSeverity,
         CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),

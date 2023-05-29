@@ -27,6 +27,9 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% API
+-export([severity_to_logging_level/1]).
+
 %% atm_store_container callbacks
 -export([
     create/3,
@@ -46,8 +49,8 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type entry_severity() :: binary().  %% see ?LOGGER_SEVERITY_LEVELS
--type logging_level() :: entry_severity().
+-type severity() :: binary().  %% see ?LOGGER_SEVERITY_LEVELS
+-type level() :: 0..7.
 
 -type initial_content() :: [atm_value:expanded()] | undefined.
 
@@ -65,13 +68,29 @@
 -type record() :: #atm_audit_log_store_container{}.
 
 -export_type([
-    entry_severity/0, logging_level/0,
+    severity/0, level/0,
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
 ]).
 
 %% defaults are used; @see audit_log.erl
 -define(LOG_OPTS, #{}).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec severity_to_logging_level(severity()) -> level().
+severity_to_logging_level(?LOGGER_DEBUG) -> ?LOGGER_DEBUG_LEVEL;
+severity_to_logging_level(?LOGGER_INFO) -> ?LOGGER_INFO_LEVEL;
+severity_to_logging_level(?LOGGER_NOTICE) -> ?LOGGER_NOTICE_LEVEL;
+severity_to_logging_level(?LOGGER_WARNING) -> ?LOGGER_WARNING_LEVEL;
+severity_to_logging_level(?LOGGER_ERROR) -> ?LOGGER_ERROR_LEVEL;
+severity_to_logging_level(?LOGGER_CRITICAL) -> ?LOGGER_CRITICAL_LEVEL;
+severity_to_logging_level(?LOGGER_ALERT) -> ?LOGGER_ALERT_LEVEL;
+severity_to_logging_level(?LOGGER_EMERGENCY) -> ?LOGGER_EMERGENCY_LEVEL.
 
 
 %%%===================================================================

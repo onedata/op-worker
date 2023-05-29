@@ -207,7 +207,7 @@ get_record_struct(2) ->
         {status, atom},
         {prev_status, atom},
 
-        {logging_level, string},  % new field
+        {logging_severity, string},  % new field
 
         {callback, string},
 

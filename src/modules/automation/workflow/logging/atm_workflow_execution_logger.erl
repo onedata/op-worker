@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
--export([build/3]).
+-export([build/4]).
 -export([
     task_handle_logs/3,
     task_debug/2, task_debug/3,
@@ -51,6 +51,7 @@
 
 -record(atm_workflow_execution_logger, {
     atm_workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    logging_level :: atm_audit_log_store_container:level(),
     task_audit_log_store_container :: undefined | atm_store_container:record(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record()
 }).
@@ -66,13 +67,20 @@
 
 -spec build(
     atm_workflow_execution_auth:record(),
+    atm_audit_log_store_container:level(),
     undefined | atm_store_container:record(),
     undefined | atm_store_container:record()
 ) ->
     record().
-build(AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer, AtmWorkflowAuditLogStoreContainer) ->
+build(
+    AtmWorkflowExecutionAuth,
+    LoggingLevel,
+    AtmTaskAuditLogStoreContainer,
+    AtmWorkflowAuditLogStoreContainer
+) ->
     #atm_workflow_execution_logger{
         atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
+        logging_level = LoggingLevel,
         task_audit_log_store_container = AtmTaskAuditLogStoreContainer,
         workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
     }.
