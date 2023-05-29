@@ -20,16 +20,19 @@
 -include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
--export([build/4]).
+-export([
+    build/4,
+    should_log/2
+]).
 -export([
     task_handle_logs/3,
     task_debug/2, task_debug/3,
     task_info/2, task_info/3,
     task_notice/2, task_notice/3,
     task_warning/2, task_warning/3,
-    task_alert/2, task_alert/3,
     task_error/2, task_error/3,
     task_critical/2, task_critical/3,
+    task_alert/2, task_alert/3,
     task_emergency/2, task_emergency/3
 ]).
 -export([
@@ -38,9 +41,9 @@
     workflow_info/2, workflow_info/3,
     workflow_notice/2, workflow_notice/3,
     workflow_warning/2, workflow_warning/3,
-    workflow_alert/2, workflow_alert/3,
     workflow_error/2, workflow_error/3,
     workflow_critical/2, workflow_critical/3,
+    workflow_alert/2, workflow_alert/3,
     workflow_emergency/2, workflow_emergency/3
 ]).
 
@@ -84,6 +87,11 @@ build(
         task_audit_log_store_container = AtmTaskAuditLogStoreContainer,
         workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
     }.
+
+
+-spec should_log(record(), atm_audit_log_store_container:level()) -> boolean().
+should_log(#atm_workflow_execution_logger{logging_level = LoggingLevel}, LogLevel) ->
+    LogLevel =< LoggingLevel.
 
 
 -spec task_handle_logs(
@@ -142,16 +150,6 @@ task_warning(Format, Args, AtmWorkflowExecutionLogger) ->
     task_warning(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
--spec task_alert(log_content(), record()) -> ok.
-task_alert(LogContent, AtmWorkflowExecutionLogger) ->
-    task_append_system_log(LogContent, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
-
-
--spec task_alert(string(), [term()], record()) -> ok.
-task_alert(Format, Args, AtmWorkflowExecutionLogger) ->
-    task_alert(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
-
-
 -spec task_error(log_content(), record()) -> ok.
 task_error(LogContent, AtmWorkflowExecutionLogger) ->
     task_append_system_log(LogContent, ?LOGGER_ERROR, AtmWorkflowExecutionLogger).
@@ -170,6 +168,16 @@ task_critical(LogContent, AtmWorkflowExecutionLogger) ->
 -spec task_critical(string(), [term()], record()) -> ok.
 task_critical(Format, Args, AtmWorkflowExecutionLogger) ->
     task_critical(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
+
+
+-spec task_alert(log_content(), record()) -> ok.
+task_alert(LogContent, AtmWorkflowExecutionLogger) ->
+    task_append_system_log(LogContent, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
+
+
+-spec task_alert(string(), [term()], record()) -> ok.
+task_alert(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_alert(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_emergency(log_content(), record()) -> ok.
@@ -238,16 +246,6 @@ workflow_warning(Format, Args, AtmWorkflowExecutionLogger) ->
     workflow_warning(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
--spec workflow_alert(log_content(), record()) -> ok.
-workflow_alert(LogContent, AtmWorkflowExecutionLogger) ->
-    workflow_append_system_log(LogContent, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
-
-
--spec workflow_alert(string(), [term()], record()) -> ok.
-workflow_alert(Format, Args, AtmWorkflowExecutionLogger) ->
-    workflow_alert(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
-
-
 -spec workflow_error(log_content(), record()) -> ok.
 workflow_error(LogContent, AtmWorkflowExecutionLogger) ->
     workflow_append_system_log(LogContent, ?LOGGER_ERROR, AtmWorkflowExecutionLogger).
@@ -266,6 +264,16 @@ workflow_critical(LogContent, AtmWorkflowExecutionLogger) ->
 -spec workflow_critical(string(), [term()], record()) -> ok.
 workflow_critical(Format, Args, AtmWorkflowExecutionLogger) ->
     workflow_critical(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
+
+
+-spec workflow_alert(log_content(), record()) -> ok.
+workflow_alert(LogContent, AtmWorkflowExecutionLogger) ->
+    workflow_append_system_log(LogContent, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_alert(string(), [term()], record()) -> ok.
+workflow_alert(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_alert(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_emergency(log_content(), record()) -> ok.

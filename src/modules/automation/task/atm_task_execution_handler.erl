@@ -482,16 +482,16 @@ handle_job_batch_processing_error(
 ) ->
     atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, length(ItemBatch)),
 
-    ErrorLog = #{
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    ?atm_task_error(#{
         <<"description">> => <<"Failed to process batch of items.">>,
         <<"itemBatch">> => ItemBatch,
         <<"reason">> => case Error of
             ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
             _ -> errors:to_json(Error)
         end
-    },
-    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_error(ErrorLog, Logger).
+    }, Logger).
 
 
 -spec process_job_results(
@@ -553,7 +553,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
             }
     end,
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_error(ErrorLog#{<<"item">> => Item}, Logger).
+    ?atm_task_error(ErrorLog#{<<"item">> => Item}, Logger).
 
 
 %% @private
@@ -604,13 +604,12 @@ log_uncorrelated_results_processing_error(
 ) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
-    TaskLog = #{
+    ?atm_task_critical(#{
         <<"description">> => <<"Failed to process uncorrelated task results.">>,
         <<"reason">> => errors:to_json(Error)
-    },
-    atm_workflow_execution_logger:task_critical(TaskLog, Logger),
+    }, Logger),
 
-    WorkflowLog = #{
+    ?atm_workflow_critical(#{
         <<"description">> => str_utils:format_bin(
             "Failed to process uncorrelated results for task '~s'.",
             [AtmTaskExecutionId]
@@ -618,8 +617,7 @@ log_uncorrelated_results_processing_error(
         <<"referencedComponents">> => #{
             <<"tasks">> => [AtmTaskExecutionId]
         }
-    },
-    atm_workflow_execution_logger:workflow_critical(WorkflowLog, Logger).
+    }, Logger).
 
 
 %% @private
@@ -631,11 +629,10 @@ log_uncorrelated_results_processing_error(
 log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
-    TaskLog = #{
+    ?atm_task_info(#{
         <<"description">> => <<"Stopping task execution.">>,
         <<"reason">> => StoppingReason
-    },
-    atm_workflow_execution_logger:task_info(TaskLog, Logger).
+    }, Logger).
 
 
 %% @private

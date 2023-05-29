@@ -334,6 +334,188 @@
 -define(LOGGER_ALERT_LEVEL, 1).
 -define(LOGGER_EMERGENCY_LEVEL, 0).
 
+-define(atm_task_debug(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_DEBUG_LEVEL,
+    atm_workflow_execution_logger:task_debug(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_debug(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_DEBUG_LEVEL,
+    atm_workflow_execution_logger:task_debug(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_info(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_INFO_LEVEL,
+    atm_workflow_execution_logger:task_info(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_info(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_INFO_LEVEL,
+    atm_workflow_execution_logger:task_info(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_notice(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_NOTICE_LEVEL,
+    atm_workflow_execution_logger:task_notice(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_notice(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_NOTICE_LEVEL,
+    atm_workflow_execution_logger:task_notice(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_warning(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_WARNING_LEVEL,
+    atm_workflow_execution_logger:task_warning(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_warning(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_WARNING_LEVEL,
+    atm_workflow_execution_logger:task_warning(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_error(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ERROR_LEVEL,
+    atm_workflow_execution_logger:task_error(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_error(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ERROR_LEVEL,
+    atm_workflow_execution_logger:task_error(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_critical(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_CRITICAL_LEVEL,
+    atm_workflow_execution_logger:task_critical(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_critical(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_CRITICAL_LEVEL,
+    atm_workflow_execution_logger:task_critical(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_alert(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ALERT_LEVEL,
+    atm_workflow_execution_logger:task_alert(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_alert(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ALERT_LEVEL,
+    atm_workflow_execution_logger:task_alert(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_task_emergency(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_EMERGENCY_LEVEL,
+    atm_workflow_execution_logger:task_emergency(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_task_emergency(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_EMERGENCY_LEVEL,
+    atm_workflow_execution_logger:task_emergency(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_debug(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_DEBUG_LEVEL,
+    atm_workflow_execution_logger:workflow_debug(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_debug(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_DEBUG_LEVEL,
+    atm_workflow_execution_logger:workflow_debug(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_info(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_INFO_LEVEL,
+    atm_workflow_execution_logger:workflow_info(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_info(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_INFO_LEVEL,
+    atm_workflow_execution_logger:workflow_info(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_notice(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_NOTICE_LEVEL,
+    atm_workflow_execution_logger:workflow_notice(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_notice(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_NOTICE_LEVEL,
+    atm_workflow_execution_logger:workflow_notice(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_warning(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_WARNING_LEVEL,
+    atm_workflow_execution_logger:workflow_warning(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_warning(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_WARNING_LEVEL,
+    atm_workflow_execution_logger:workflow_warning(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_error(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ERROR_LEVEL,
+    atm_workflow_execution_logger:workflow_error(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_error(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ERROR_LEVEL,
+    atm_workflow_execution_logger:workflow_error(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_critical(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_CRITICAL_LEVEL,
+    atm_workflow_execution_logger:workflow_critical(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_critical(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_CRITICAL_LEVEL,
+    atm_workflow_execution_logger:workflow_critical(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_alert(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ALERT_LEVEL,
+    atm_workflow_execution_logger:workflow_alert(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_alert(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_ALERT_LEVEL,
+    atm_workflow_execution_logger:workflow_alert(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_workflow_emergency(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_EMERGENCY_LEVEL,
+    atm_workflow_execution_logger:workflow_emergency(__LOG_CONTENT, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+-define(atm_workflow_emergency(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER), ?atm_log(
+    __ATM_WORKFLOW_EXECUTION_LOGGER,
+    ?LOGGER_EMERGENCY_LEVEL,
+    atm_workflow_execution_logger:workflow_emergency(__FORMAT, __ARGS, __ATM_WORKFLOW_EXECUTION_LOGGER)
+)).
+
+-define(atm_log(__ATM_WORKFLOW_EXECUTION_LOGGER, __LOG_LEVEL, __LOG_CALL),
+    case atm_workflow_execution_logger:should_log(__ATM_WORKFLOW_EXECUTION_LOGGER, __LOG_LEVEL) of
+        true -> __LOG_CALL;
+        false -> ok
+    end
+).
 
 -define(ATM_SUPERVISION_WORKER_SUP, atm_supervision_worker_sup).
 
