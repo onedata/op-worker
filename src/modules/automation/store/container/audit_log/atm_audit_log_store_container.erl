@@ -46,6 +46,9 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
+-type entry_severity() :: binary().  %% see ?LOGGER_SEVERITY_LEVELS
+-type logging_level() :: entry_severity().
+
 -type initial_content() :: [atm_value:expanded()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
@@ -62,6 +65,7 @@
 -type record() :: #atm_audit_log_store_container{}.
 
 -export_type([
+    entry_severity/0, logging_level/0,
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
 ]).

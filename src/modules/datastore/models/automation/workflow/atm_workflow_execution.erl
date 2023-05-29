@@ -23,7 +23,7 @@
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 
 -type id() :: binary().
@@ -138,7 +138,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 %%--------------------------------------------------------------------
@@ -178,4 +178,68 @@ get_record_struct(1) ->
         {start_time, integer},
         {suspend_time, integer},
         {finish_time, integer}
+    ]};
+
+get_record_struct(2) ->
+    % New fields:
+    % - logging_level
+    {record, [
+        {discarded, boolean},
+
+        {user_id, string},
+        {space_id, string},
+        {atm_inventory_id, string},
+
+        {name, string},
+        {schema_snapshot_id, string},
+        {lambda_snapshot_registry, #{string => string}},
+
+        {store_registry, #{string => string}},
+        {system_audit_log_store_id, string},
+
+        {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
+        {lanes_count, integer},
+
+        {incarnation, integer},
+        {current_lane_index, integer},
+        {current_run_num, integer},
+
+        {status, atom},
+        {prev_status, atom},
+
+        {logging_level, string},  % new field
+
+        {callback, string},
+
+        {schedule_time, integer},
+        {start_time, integer},
+        {suspend_time, integer},
+        {finish_time, integer}
     ]}.
+
+
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE,
+    Discarded,
+    UserId, SpaceId, AtmInventoryId,
+    Name, SchemaSnapshotId, LambdaRevisionRegistry,
+    StoreRegistry, SystemAuditLogStoreId,
+    Lanes, LanesCount,
+    Incarnation, CurrentLaneIndex, CurrentRunNum,
+    Status, PrevStatus,
+    Callback,
+    ScheduleTime, StartTime, SuspendTime, FinishTime
+}) ->
+    {2, {?MODULE,
+        Discarded,
+        UserId, SpaceId, AtmInventoryId,
+        Name, SchemaSnapshotId, LambdaRevisionRegistry,
+        StoreRegistry, SystemAuditLogStoreId,
+        Lanes, LanesCount,
+        Incarnation, CurrentLaneIndex, CurrentRunNum,
+        Status, PrevStatus,
+        ?LOGGER_INFO,
+        Callback,
+        ScheduleTime, StartTime, SuspendTime, FinishTime
+    }}.

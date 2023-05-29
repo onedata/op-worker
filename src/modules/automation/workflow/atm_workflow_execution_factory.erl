@@ -424,6 +424,8 @@ create_workflow_execution_doc(#creation_ctx{
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
 
+            logging_level = ?LOGGER_INFO,  %% TODO
+
             callback = CallbackUrl,
 
             schedule_time = global_clock:timestamp_seconds(),
