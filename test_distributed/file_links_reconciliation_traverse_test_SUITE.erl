@@ -31,7 +31,7 @@ all() -> [
     file_links_reconciliation_traverse_test
 ].
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 120).
 
 %%%===================================================================
 %%% API

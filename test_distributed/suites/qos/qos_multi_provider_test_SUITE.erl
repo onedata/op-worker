@@ -404,7 +404,7 @@ reevaluate_impossible_qos_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     P2StorageId = opt_spaces:get_storage_id(Provider2, SpaceId),
     
-    RandomQosParam = str_utils:rand_hex(5),
+    RandomQosParam = gen_random_qos_param(),
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, impossible),
     
     % Impossible qos reevaluation is called after successful set_qos_parameters
@@ -431,7 +431,7 @@ reevaluate_impossible_qos_race_test(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     P2StorageId = opt_spaces:get_storage_id(Provider2, SpaceId),
     
-    RandomQosParam = str_utils:rand_hex(5),
+    RandomQosParam = gen_random_qos_param(),
     ok = qos_tests_utils:set_qos_parameters(Provider2, P2StorageId, #{<<"param">> => RandomQosParam}),
     
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, possible),
@@ -445,7 +445,7 @@ reevaluate_impossible_qos_conflict_test(_Config) ->
     Providers = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     
-    RandomQosParam = str_utils:rand_hex(5),
+    RandomQosParam = gen_random_qos_param(),
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, impossible),
 
     lists_utils:pforeach(fun(Provider) ->
@@ -508,6 +508,7 @@ setup_reevaluate_test(QosParam, Status) ->
     {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
     {QosNameIdMapping, DirPath}.
 
+
 qos_reevaluate_assert_file_qos(StorageId, DirPath, QosNameIdMapping) ->
     Providers = oct_background:get_provider_ids(),
     ExpectedFileQos = [
@@ -521,6 +522,13 @@ qos_reevaluate_assert_file_qos(StorageId, DirPath, QosNameIdMapping) ->
         }
     ],
     qos_tests_utils:assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, true, 10).
+
+
+gen_random_qos_param() ->
+    % str_utils:rand_hex can sometimes generate a string representing a valid number.
+    % Passing it through qos_expression:parse ensures that final value set in qos_entry document will be exactly the same.
+    {<<"=">>,<<"param">>, RandomQosParam} = qos_expression:parse(<<"param=", (str_utils:rand_hex(5))/binary>>),
+    RandomQosParam.
 
 %%%===================================================================
 %%% QoS traverse tests
