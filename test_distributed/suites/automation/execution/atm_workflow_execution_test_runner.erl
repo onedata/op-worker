@@ -185,6 +185,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     workflow_schema_dump_or_draft = AtmWorkflowSchemaDumpOrDraft,
     workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_content_overlay = AtmStoreInitialContentOverlay,
+    logging_severity = LoggingSeverity,
     callback_url = CallbackUrl,
     incarnations = Incarnations
 }) ->
@@ -197,7 +198,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     ),
     {AtmWorkflowExecutionId, _} = atm_workflow_execution_test_mocks:schedule_workflow_execution_as_test_process(
         ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialContentOverlay, CallbackUrl
+        AtmStoreInitialContentOverlay, LoggingSeverity, CallbackUrl
     ),
 
     ExpState = atm_workflow_execution_exp_state_builder:init(

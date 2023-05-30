@@ -25,7 +25,7 @@
 
 %% API
 -export([init/1, teardown/1]).
--export([schedule_workflow_execution_as_test_process/7]).
+-export([schedule_workflow_execution_as_test_process/8]).
 -export([reply_to_execution_process/2]).
 
 
@@ -76,6 +76,7 @@ teardown(ProviderSelectors) ->
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
+    atm_audit_log_store_container:severity(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()}.
@@ -86,6 +87,7 @@ schedule_workflow_execution_as_test_process(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
+    LoggingSeverity,
     CallbackUrl
 ) ->
     TestProcPid = self(),
@@ -93,7 +95,7 @@ schedule_workflow_execution_as_test_process(
     ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
         AtmStoreInitialContentOverlay#{test_process => TestProcPid},
-        ?LOGGER_DEBUG, CallbackUrl
+        LoggingSeverity, CallbackUrl
     )).
 
 
