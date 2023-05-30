@@ -1006,7 +1006,7 @@ get_recursive_file_list(Config0) ->
 
 
 check_fs_stats_on_different_providers(Config) ->
-    [P2, _, P1 | _] = ?config(op_worker_nodes, Config),
+    [P1, _, P2 | _] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,
     GetSessId = fun(W) -> ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config) end,
