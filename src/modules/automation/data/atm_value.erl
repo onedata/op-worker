@@ -102,7 +102,7 @@
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
-    assert_data_type(AtmDataType, Value),
+    assert_is_instance_of_data_type(AtmDataType, Value),
 
     Module = get_callback_module(AtmDataType),
     Module:validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
@@ -136,7 +136,7 @@ describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     automation:item() | no_return().
 resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
-    assert_data_type(AtmDataType, Value),
+    assert_is_instance_of_data_type(AtmDataType, Value),
 
     Module = get_callback_module(AtmDataType),
     Module:resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
@@ -161,8 +161,8 @@ get_callback_module(atm_time_series_measurement_type) -> atm_time_series_measure
 
 
 %% @private
--spec assert_data_type(atm_data_type:type(), automation:item()) -> ok | no_return().
-assert_data_type(AtmDataType, Value) ->
+-spec assert_is_instance_of_data_type(atm_data_type:type(), automation:item()) -> ok | no_return().
+assert_is_instance_of_data_type(AtmDataType, Value) ->
     case atm_data_type:is_instance(AtmDataType, Value) of
         true -> ok;
         false -> throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))

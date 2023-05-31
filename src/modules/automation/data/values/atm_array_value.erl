@@ -16,6 +16,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% atm_value callbacks
 -export([
@@ -63,16 +64,9 @@ to_store_item(Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
 ) ->
     {ok, [automation:item()]} | errors:error().
 from_store_item(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
-    try
-        {ok, lists:map(fun(Item) ->
-            case atm_value:from_store_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) of
-                {ok, ExpandedItem} -> ExpandedItem;
-                {error, _} = Error -> throw(Error)
-            end
-        end, Array)}
-    catch throw:{error, _} = Error ->
-        Error
-    end.
+    ?catch_exceptions({ok, lists:map(fun(Item) ->
+        ?check(atm_value:from_store_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec))
+    end, Array)}).
 
 
 -spec describe(
@@ -82,16 +76,9 @@ from_store_item(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_
 ) ->
     {ok, [automation:item()]} | errors:error().
 describe(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
-    try
-        {ok, lists:map(fun(Item) ->
-            case atm_value:describe(AtmWorkflowExecutionAuth, Item, ItemDataSpec) of
-                {ok, ExpandedItem} -> ExpandedItem;
-                {error, _} = Error -> throw(Error)
-            end
-        end, Array)}
-    catch throw:{error, _} = Error ->
-        Error
-    end.
+    ?catch_exceptions({ok, lists:map(fun(Item) ->
+        ?check(atm_value:describe(AtmWorkflowExecutionAuth, Item, ItemDataSpec))
+    end, Array)}).
 
 
 -spec resolve_lambda_parameter(

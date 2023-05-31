@@ -75,12 +75,10 @@ from_store_item(_AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     {ok, automation:item()} | errors:error().
 describe(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    try
-        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
-        {ok, dataset_utils:dataset_info_to_json(DatasetInfo)}
-    catch throw:Error ->
-        Error
-    end.
+
+    ?catch_exceptions({ok, dataset_utils:dataset_info_to_json(mi_datasets:get_info(
+        SessionId, DatasetId
+    ))}).
 
 
 -spec resolve_lambda_parameter(
