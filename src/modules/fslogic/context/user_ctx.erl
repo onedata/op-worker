@@ -130,8 +130,7 @@ get_eff_supported_spaces(UserCtx) ->
     lists:filter(fun(SpaceId) ->
         case space_logic:get_provider_ids(get_session_id(UserCtx), SpaceId) of
             {ok, []} -> false;
-            {ok, _} -> true;
-            _ -> false
+            {ok, _} -> true
         end
     end, AllUserSpaces).
 

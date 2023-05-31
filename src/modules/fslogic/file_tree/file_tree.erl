@@ -341,7 +341,7 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
     Children = case Offset < length(FilteredSpaces) of
         true ->
             SpacesChunk = lists:sublist(
-                get_spaces_with_unique_names(space_logic:group_spaces_by_name(SessId, FilteredSpaces)),
+                resolve_unique_names_for_spaces(space_logic:group_spaces_by_name(SessId, FilteredSpaces)),
                 Offset + 1,
                 Limit
             ),
@@ -356,12 +356,12 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
 
 
 %% @private
--spec get_spaces_with_unique_names(#{od_space:name() => [od_space:id()]}) -> [file_meta:name()].
-get_spaces_with_unique_names(GroupedSpaces) ->
+-spec resolve_unique_names_for_spaces(#{od_space:name() => [od_space:id()]}) -> [file_meta:name()].
+resolve_unique_names_for_spaces(GroupedSpaces) ->
     lists:sort(maps:fold(
         fun (Name, [SpaceId], Acc) -> [{Name, SpaceId} | Acc];
             (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
-                {space_logic:extend_space_name(Name, SpaceId), SpaceId}
+                {space_logic:disambiguate_space_name(Name, SpaceId), SpaceId}
             end, Spaces)
         end, [], GroupedSpaces)).
 

@@ -140,10 +140,10 @@ emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLi
         try
             emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
         catch
-            Class:Reason ->
+            Class:Reason:Stacktrace ->
                 % Race with file/link deletion can result in error logged here
-                ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
-                    [Class, Reason, Context, Evt])
+                ?warning_exception("Error emitting event for additional guid ~s",
+                    [?autoformat([Context, Evt])], Class, Reason, Stacktrace)
         end
     end, SessIdsForLinks).
 

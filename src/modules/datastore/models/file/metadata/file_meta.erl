@@ -39,7 +39,7 @@
     update_protection_flags/3, validate_protection_flags/1,
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
--export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
+-export([get_scope_id/1, reconcile_spaces_for_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
     make_space_exist/1, make_tmp_dir_exist/1, make_opened_deleted_files_dir_exist/1,
     new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
@@ -689,14 +689,10 @@ get_mode(#file_meta{mode = Mode}) ->
 %% this function is called asynchronously automatically after user's document is updated.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_onedata_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
-setup_onedata_user(UserId, NewSpaces) ->
+-spec reconcile_spaces_for_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
+reconcile_spaces_for_user(UserId, ChangedSpaces) ->
     try
-        CTime = global_clock:timestamp_seconds(),
-
-        lists:foreach(fun(SpaceId) ->
-            make_space_exist(SpaceId)
-        end, NewSpaces),
+        lists:foreach(fun make_space_exist/1, ChangedSpaces),
 
         FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
         case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
@@ -713,19 +709,13 @@ setup_onedata_user(UserId, NewSpaces) ->
             })
         of
             {ok, _} ->
-                {ok, _} = times:save(#document{
-                    key = FileUuid,
-                    value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-                    scope = ?ROOT_DIR_SCOPE
-                }),
-                ok;
+                ?extract_ok(times:save_with_current_times(FileUuid, ?ROOT_DIR_SCOPE, false));
             {error, already_exists} ->
                 ok
         end
-    catch Type:Message:Stacktrace ->
-        ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
-            UserId, Type, Message
-        ], Stacktrace)
+    catch Class:Reason:Stacktrace ->
+        ?error_exception("Failed to reconcile spaces for user ~s", [?autoformat([UserId, ChangedSpaces])],
+            Class, Reason, Stacktrace)
     end.
 
 

@@ -241,7 +241,7 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
     emit_file_removed(FileCtx, ExcludedSessions, undefined).
 
 
--spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()], file_id:file_guid()) ->
+-spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()], file_id:file_guid() | undefined) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions, ParentGuid) ->
     Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_logical_guid_const(FileCtx)},

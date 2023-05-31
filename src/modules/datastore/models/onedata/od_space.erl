@@ -148,10 +148,10 @@ handle_space_name_appeared(SpaceId, Name, ParentGuid, SpacesByName, Operation) -
             Name;
         [_S1, _S2] = L ->
             [OtherSpaceId] = L -- [SpaceId],
-            emit_renamed_event(OtherSpaceId, ParentGuid, space_logic:extend_space_name(Name, OtherSpaceId), Name),
-            space_logic:extend_space_name(Name, SpaceId);
+            emit_renamed_event(OtherSpaceId, ParentGuid, space_logic:disambiguate_space_name(Name, OtherSpaceId), Name),
+            space_logic:disambiguate_space_name(Name, SpaceId);
         _ ->
-            space_logic:extend_space_name(Name, SpaceId)
+            space_logic:disambiguate_space_name(Name, SpaceId)
     end,
     case Operation of
         create -> ok;
@@ -163,7 +163,7 @@ handle_space_name_appeared(SpaceId, Name, ParentGuid, SpacesByName, Operation) -
 handle_space_name_disappeared(SpaceName, ParentGuid, SpacesByName) ->
     case maps:get(SpaceName, SpacesByName, []) of
         [S] ->
-            emit_renamed_event(S, ParentGuid, SpaceName, space_logic:extend_space_name(SpaceName, S));
+            emit_renamed_event(S, ParentGuid, SpaceName, space_logic:disambiguate_space_name(SpaceName, S));
         _ ->
             ok
     end.
@@ -207,10 +207,10 @@ run_in_critical_section(SpaceId, Fun) ->
 -spec handle_new_supports(id(), PrevVal :: record(), NewVal :: record()) -> ok.
 handle_new_supports(SpaceId, #od_space{providers = PrevProviders}, #od_space{providers = NewProviders}) ->
     case maps:keys(NewProviders) -- maps:keys(PrevProviders) of
-        [] ->
-            ok;
+        [_] -> % emit event only on first support
+            file_meta:emit_space_dir_created(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId);
         _ ->
-            file_meta:emit_space_dir_created(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId)
+            ok
     end.
 
 

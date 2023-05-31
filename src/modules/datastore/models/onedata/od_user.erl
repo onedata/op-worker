@@ -173,7 +173,7 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
                         end
                     end, SpacesDiff)
             end,
-            file_meta:setup_onedata_user(UserId, SpacesDiff)
+            file_meta:reconcile_spaces_for_user(UserId, SpacesDiff)
     end.
 
 

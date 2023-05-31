@@ -72,18 +72,8 @@ add_subscriber(Sub, SessId) ->
         {error, Reason} -> {error, Reason}
     end.
 
--spec get_subscribers(Key :: key() | Keys :: [key()]) ->
+-spec get_subscribers(Key :: key()) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
-get_subscribers(Keys) when is_list(Keys) ->
-    lists:foldl(fun
-        (Key, {ok, Acc}) ->
-            case get_subscribers(Key) of
-                {ok, S} -> {ok, S ++ Acc};
-                {error, _} = Error -> Error
-            end;
-        (_Key, {error, _} = Error) ->
-            Error
-    end, {ok, []}, Keys);
 get_subscribers(Key) ->
     case file_subscription:get(Key) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->

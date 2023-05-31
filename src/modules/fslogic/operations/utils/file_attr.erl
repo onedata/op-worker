@@ -142,7 +142,7 @@ get_space_name_and_conflicts(UserCtx, Name, SpaceId) ->
             {BaseFileName, []};
         Spaces ->
             Conflicts = [{BaseFileName, fslogic_file_id:spaceid_to_space_dir_uuid(S)} || S <- Spaces -- [SpaceId]],
-            ExtendedName = space_logic:extend_space_name(BaseFileName, SpaceId),
+            ExtendedName = space_logic:disambiguate_space_name(BaseFileName, SpaceId),
             {ExtendedName, Conflicts}
     end.
 
