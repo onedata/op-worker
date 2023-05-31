@@ -75,7 +75,7 @@ create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
 
 create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
     ItemDataSpec = AtmStoreConfig#atm_single_value_store_config.item_data_spec,
-    atm_value:validate(AtmWorkflowExecutionAuth, InitialContent, ItemDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, InitialContent, ItemDataSpec),
 
     #atm_single_value_store_container{
         config = AtmStoreConfig,
@@ -130,7 +130,7 @@ browse_content(
         options = #atm_single_value_store_content_browse_options{}
     }
 ) ->
-    Item = case atm_value:describe(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
+    Item = case atm_value:describe_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
         {ok, _} = Result -> Result;
         {error, _} -> ?ERROR_FORBIDDEN
     end,
@@ -147,7 +147,7 @@ update_content(Record, #atm_store_content_update_req{
         Record#atm_single_value_store_container
         .config#atm_single_value_store_config
         .item_data_spec,
-    atm_value:validate(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
     Record#atm_single_value_store_container{
         compressed_item = atm_value:to_store_item(Item, ItemDataSpec)

@@ -222,7 +222,7 @@ get_log_content_data_spec(#atm_audit_log_store_container{
 sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray) when is_list(ItemsArray) ->
     Requests = lists:map(fun build_audit_log_append_request/1, ItemsArray),
 
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         lists:map(fun(#audit_log_append_request{content = LogContent}) -> LogContent end, Requests),
         ?ATM_ARRAY_DATA_SPEC(LogContentDataSpec)
@@ -243,7 +243,7 @@ sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogContentDataSpec, Item) -
     audit_log:append_request() | no_return().
 sanitize_append_request(AtmWorkflowExecutionAuth, LogContentDataSpec, Item) ->
     Request = #audit_log_append_request{content = LogContent} = build_audit_log_append_request(Item),
-    atm_value:validate(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
 
     Request.
 

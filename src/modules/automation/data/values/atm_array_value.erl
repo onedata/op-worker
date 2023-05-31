@@ -20,11 +20,11 @@
 
 %% atm_value callbacks
 -export([
-    validate/3,
+    validate_constraints/3,
     to_store_item/2,
     from_store_item/3,
-    describe/3,
-    resolve_lambda_parameter/3
+    describe_store_item/3,
+    transform_to_data_spec_conformant/3
 ]).
 
 
@@ -33,16 +33,16 @@
 %%%===================================================================
 
 
--spec validate(
+-spec validate_constraints(
     atm_workflow_execution_auth:record(),
     [automation:item()],
     atm_array_data_spec:record()
 ) ->
     ok | no_return().
-validate(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
+validate_constraints(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
     lists:foreach(fun({Idx, Item}) ->
         try
-            atm_value:validate(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
+            atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
         catch throw:ItemError ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Array, atm_array_type, #{
                 str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)
@@ -69,30 +69,30 @@ from_store_item(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_
     end, Array)}).
 
 
--spec describe(
+-spec describe_store_item(
     atm_workflow_execution_auth:record(),
     [atm_store:item()],
     atm_array_data_spec:record()
 ) ->
     {ok, [automation:item()]} | errors:error().
-describe(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
+describe_store_item(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_data_spec = ItemDataSpec}) ->
     ?catch_exceptions({ok, lists:map(fun(Item) ->
-        ?check(atm_value:describe(AtmWorkflowExecutionAuth, Item, ItemDataSpec))
+        ?check(atm_value:describe_store_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec))
     end, Array)}).
 
 
--spec resolve_lambda_parameter(
+-spec transform_to_data_spec_conformant(
     atm_workflow_execution_auth:record(),
     [automation:item()],
     atm_array_data_spec:record()
 ) ->
     [automation:item()] | no_return().
-resolve_lambda_parameter(AtmWorkflowExecutionAuth, ItemsArray, #atm_array_data_spec{
+transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, ItemsArray, #atm_array_data_spec{
     item_data_spec = ItemDataSpec
 }) ->
     lists:map(fun({Idx, Item}) ->
         try
-            atm_value:resolve_lambda_parameter(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
+            atm_value:transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
         catch throw:ItemError ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(ItemsArray, atm_array_type, #{
                 str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)

@@ -74,7 +74,7 @@ create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
     create_container(AtmStoreConfig);
 
 create(AtmWorkflowExecutionAuth, AtmAtmStoreConfig, InitialItemsArray) ->
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         InitialItemsArray,
         ?ATM_ARRAY_DATA_SPEC(AtmAtmStoreConfig#atm_list_store_config.item_data_spec)
@@ -113,7 +113,7 @@ browse_content(Record, #atm_store_content_browse_req{
 }) ->
     ItemDataSpec = get_item_data_spec(Record),
     ListingPostprocessor = fun({Index, {_Timestamp, CompressedItem}}) ->
-        {Index, atm_value:describe(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
+        {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
     end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
         Record#atm_list_store_container.backend_id,
@@ -132,7 +132,7 @@ update_content(Record, #atm_store_content_update_req{
     argument = ItemsArray,
     options = #atm_list_store_content_update_options{function = extend}
 }) ->
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         ItemsArray,
         ?ATM_ARRAY_DATA_SPEC(get_item_data_spec(Record))
@@ -144,7 +144,7 @@ update_content(Record, #atm_store_content_update_req{
     argument = Item,
     options = #atm_list_store_content_update_options{function = append}
 }) ->
-    atm_value:validate(AtmWorkflowExecutionAuth, Item, get_item_data_spec(Record)),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, get_item_data_spec(Record)),
     append_insecure(Item, Record).
 
 

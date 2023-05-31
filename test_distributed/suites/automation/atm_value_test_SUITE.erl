@@ -701,23 +701,23 @@ atm_value_validation_test_base(#atm_value_validation_testcase{
 
     lists:foreach(fun
         ({ValidValue, ValidResolvedValue}) ->
-            ?assertEqual(ok, ?rpc(atm_value:validate(
+            ?assertEqual(ok, ?rpc(atm_value:validate_constraints(
                 AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
             ))),
-            ?assertEqual(ValidResolvedValue, ?rpc(atm_value:resolve_lambda_parameter(
+            ?assertEqual(ValidResolvedValue, ?rpc(atm_value:transform_to_data_spec_conformant(
                 AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
             )));
         (ValidValue) ->
-            ?assertEqual(ok, ?rpc(atm_value:validate(
+            ?assertEqual(ok, ?rpc(atm_value:validate_constraints(
                 AtmWorkflowExecutionAuth, ValidValue, AtmDataSpec
             )))
     end, ValidValues),
 
     lists:foreach(fun({InvalidValue, ExpError}) ->
-        ?assertEqual(ExpError, ?rpc(catch atm_value:validate(
+        ?assertEqual(ExpError, ?rpc(catch atm_value:validate_constraints(
             AtmWorkflowExecutionAuth, InvalidValue, AtmDataSpec
         ))),
-        ?assertEqual(ExpError, ?rpc(catch atm_value:resolve_lambda_parameter(
+        ?assertEqual(ExpError, ?rpc(catch atm_value:transform_to_data_spec_conformant(
             AtmWorkflowExecutionAuth, InvalidValue, AtmDataSpec
         )))
     end, InvalidValuesAndExpErrors).

@@ -342,7 +342,7 @@ to_described_item(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec)
     %% When retrieving items of such types from stores value returned may differ
     %% from the one given during adding to store (actual data about such entity
     %% is fetched using reference and returned)
-    {ok, NewData} = ?rpc(ProviderSelector, atm_value:describe(
+    {ok, NewData} = ?rpc(ProviderSelector, atm_value:describe_store_item(
         AtmWorkflowExecutionAuth,
         atm_value:to_store_item(Data, AtmDataSpec),
         AtmDataSpec

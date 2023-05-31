@@ -20,11 +20,11 @@
 
 %% atm_value callbacks
 -export([
-    validate/3,
+    validate_constraints/3,
     to_store_item/2,
     from_store_item/3,
-    describe/3,
-    resolve_lambda_parameter/3
+    describe_store_item/3,
+    transform_to_data_spec_conformant/3
 ]).
 
 
@@ -33,13 +33,13 @@
 %%%===================================================================
 
 
--spec validate(
+-spec validate_constraints(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_number_data_spec:record()
 ) ->
     ok | no_return().
-validate(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+validate_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     try
         check_integer_only_constraint(Value, AtmDataSpec),
         check_allowed_values_constraint(Value, AtmDataSpec)
@@ -66,24 +66,24 @@ from_store_item(_AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     {ok, Value}.
 
 
--spec describe(
+-spec describe_store_item(
     atm_workflow_execution_auth:record(),
     atm_store:item(),
     atm_number_data_spec:record()
 ) ->
     {ok, automation:item()}.
-describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+describe_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
--spec resolve_lambda_parameter(
+-spec transform_to_data_spec_conformant(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_number_data_spec:record()
 ) ->
     automation:item().
-resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec) ->
-    validate(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec),
+transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec) ->
+    validate_constraints(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec),
     Value.
 
 

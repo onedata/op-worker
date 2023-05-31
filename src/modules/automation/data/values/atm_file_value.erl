@@ -26,11 +26,11 @@
 
 %% atm_value callbacks
 -export([
-    validate/3,
+    validate_constraints/3,
     to_store_item/2,
     from_store_item/3,
-    describe/3,
-    resolve_lambda_parameter/3
+    describe_store_item/3,
+    transform_to_data_spec_conformant/3
 ]).
 
 %% atm_tree_forest_store_container_iterator callbacks
@@ -42,13 +42,13 @@
 %%%===================================================================
 
 
--spec validate(
+-spec validate_constraints(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_file_data_spec:record()
 ) ->
     ok | no_return().
-validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+validate_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec#atm_file_data_spec{
         attributes = []  %% validate constraints but don't fetch any attrs
     }),
@@ -73,13 +73,13 @@ from_store_item(_AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     {ok, #{<<"file_id">> => ObjectId}}.
 
 
--spec describe(
+-spec describe_store_item(
     atm_workflow_execution_auth:record(),
     atm_store:item(),
     atm_file_data_spec:record()
 ) ->
     {ok, automation:item()}.
-describe(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
+describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
@@ -88,13 +88,13 @@ describe(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     end.
 
 
--spec resolve_lambda_parameter(
+-spec transform_to_data_spec_conformant(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_file_data_spec:record()
 ) ->
     automation:item().
-resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
+transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
     attributes = Attrs
 }) ->
     FileAttrs = resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec),

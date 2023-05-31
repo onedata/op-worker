@@ -76,7 +76,7 @@ consume_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
     data_spec = AtmDataSpec
 }, Result) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-    atm_value:validate(AtmWorkflowExecutionAuth, Result, AtmDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Result, AtmDataSpec),
 
     lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId} = DispatchSpec) ->
         try

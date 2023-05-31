@@ -18,13 +18,13 @@
 
 %% API
 -export([
-    validate/3,
+    validate_constraints/3,
 
     to_store_item/2,
     from_store_item/3,
+    describe_store_item/3,
 
-    describe/3,
-    resolve_lambda_parameter/3
+    transform_to_data_spec_conformant/3
 ]).
 
 
@@ -43,7 +43,7 @@
 %% must exist within space in context of which workflow execution happens)
 %% @end
 %%--------------------------------------------------------------------
--callback validate(
+-callback validate_constraints(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_data_spec:record()
@@ -66,7 +66,7 @@
     {ok, automation:item()} | errors:error().
 
 
--callback describe(
+-callback describe_store_item(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_data_spec:record()
@@ -85,7 +85,7 @@
 %% must exist within space in context of which workflow execution happens)
 %% @end
 %%--------------------------------------------------------------------
--callback resolve_lambda_parameter(
+-callback transform_to_data_spec_conformant(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_data_spec:record()
@@ -98,14 +98,18 @@
 %%%===================================================================
 
 
--spec validate(atm_workflow_execution_auth:record(), automation:item(), atm_data_spec:record()) ->
+-spec validate_constraints(
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_data_spec:record()
+) ->
     ok | no_return().
-validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+validate_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
     assert_is_instance_of_data_type(AtmDataType, Value),
 
     Module = get_callback_module(AtmDataType),
-    Module:validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+    Module:validate_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 -spec to_store_item(automation:item(), atm_data_spec:record()) -> atm_store:item() | no_return().
@@ -121,25 +125,29 @@ from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     Module:from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
--spec describe(atm_workflow_execution_auth:record(), atm_store:item(), atm_data_spec:record()) ->
+-spec describe_store_item(
+    atm_workflow_execution_auth:record(),
+    atm_store:item(),
+    atm_data_spec:record()
+) ->
     {ok, automation:item()} | {error, term()}.
-describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+describe_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_data_type(AtmDataSpec)),
-    Module:describe(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+    Module:describe_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
--spec resolve_lambda_parameter(
+-spec transform_to_data_spec_conformant(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_data_spec:record()
 ) ->
     automation:item() | no_return().
-resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_data_type(AtmDataSpec),
     assert_is_instance_of_data_type(AtmDataType, Value),
 
     Module = get_callback_module(AtmDataType),
-    Module:resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+    Module:transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 %%%===================================================================

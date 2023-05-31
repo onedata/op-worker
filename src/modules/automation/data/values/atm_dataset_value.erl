@@ -24,11 +24,11 @@
 
 %% atm_value callbacks
 -export([
-    validate/3,
+    validate_constraints/3,
     to_store_item/2,
     from_store_item/3,
-    describe/3,
-    resolve_lambda_parameter/3
+    describe_store_item/3,
+    transform_to_data_spec_conformant/3
 ]).
 
 %% atm_tree_forest_store_container_iterator callbacks
@@ -40,13 +40,13 @@
 %%%===================================================================
 
 
--spec validate(
+-spec validate_constraints(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_dataset_data_spec:record()
 ) ->
     ok | no_return().
-validate(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
+validate_constraints(AtmWorkflowExecutionAuth, Value, _AtmDataSpec) ->
     resolve_internal(AtmWorkflowExecutionAuth, Value),
     ok.
 
@@ -67,13 +67,13 @@ from_store_item(_AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     {ok, #{<<"datasetId">> => DatasetId}}.
 
 
--spec describe(
+-spec describe_store_item(
     atm_workflow_execution_auth:record(),
     atm_store:item(),
     atm_dataset_data_spec:record()
 ) ->
     {ok, automation:item()} | errors:error().
-describe(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
+describe_store_item(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     ?catch_exceptions({ok, dataset_utils:dataset_info_to_json(mi_datasets:get_info(
@@ -81,13 +81,13 @@ describe(AtmWorkflowExecutionAuth, DatasetId, _AtmDataSpec) ->
     ))}).
 
 
--spec resolve_lambda_parameter(
+-spec transform_to_data_spec_conformant(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_dataset_data_spec:record()
 ) ->
     automation:item().
-resolve_lambda_parameter(AtmWorkflowExecutionAuth, Value, _AtmParameterDataSpec) ->
+transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, _AtmParameterDataSpec) ->
     DatasetInfo = resolve_internal(AtmWorkflowExecutionAuth, Value),
     dataset_utils:dataset_info_to_json(DatasetInfo).
 
