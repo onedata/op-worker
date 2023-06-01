@@ -29,65 +29,82 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 
-%% TODO describe tests??
-%% tests
+% tests
 -export([
     atm_array_value_validation_test/1,
     atm_array_value_to_from_store_item_test/1,
+    atm_array_value_describe_test/1,
 
     atm_boolean_value_validation_test/1,
     atm_boolean_value_to_from_store_item_test/1,
+    atm_boolean_value_describe_test/1,
 
     atm_dataset_value_validation_test/1,
     atm_dataset_value_to_from_store_item_test/1,
+    atm_dataset_value_describe_test/1,
 
     atm_file_value_validation_test/1,
     atm_file_value_to_from_store_item_test/1,
+    atm_file_value_describe_test/1,
 
     atm_number_value_validation_test/1,
     atm_number_value_to_from_store_item_test/1,
+    atm_number_value_describe_test/1,
 
     atm_object_value_validation_test/1,
     atm_object_value_to_from_store_item_test/1,
+    atm_object_value_describe_test/1,
 
     atm_range_value_validation_test/1,
     atm_range_value_to_from_store_item_test/1,
+    atm_range_value_describe_test/1,
 
     atm_string_value_validation_test/1,
     atm_string_value_to_from_store_item_test/1,
+    atm_string_value_describe_test/1,
 
     atm_time_series_measurement_value_validation_test/1,
-    atm_time_series_measurement_value_to_from_store_item_test/1
+    atm_time_series_measurement_value_to_from_store_item_test/1,
+    atm_time_series_measurement_value_describe_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         atm_array_value_validation_test,
         atm_array_value_to_from_store_item_test,
+        atm_array_value_describe_test,
 
         atm_boolean_value_validation_test,
         atm_boolean_value_to_from_store_item_test,
+        atm_boolean_value_describe_test,
 
         atm_dataset_value_validation_test,
         atm_dataset_value_to_from_store_item_test,
+        atm_dataset_value_describe_test,
 
         atm_file_value_validation_test,
         atm_file_value_to_from_store_item_test,
+        atm_file_value_describe_test,
 
         atm_number_value_validation_test,
         atm_number_value_to_from_store_item_test,
+        atm_number_value_describe_test,
 
         atm_object_value_validation_test,
         atm_object_value_to_from_store_item_test,
+        atm_object_value_describe_test,
 
         atm_range_value_validation_test,
         atm_range_value_to_from_store_item_test,
+        atm_range_value_describe_test,
 
         atm_string_value_validation_test,
         atm_string_value_to_from_store_item_test,
+        atm_string_value_describe_test,
 
         atm_time_series_measurement_value_validation_test,
-        atm_time_series_measurement_value_to_from_store_item_test
+        atm_time_series_measurement_value_to_from_store_item_test,
+        atm_time_series_measurement_value_describe_test
     ]}
 ].
 
@@ -102,6 +119,14 @@ all() -> [
     invalid_values_with_exp_errors
 }).
 -record(atm_value_to_from_store_item_testcase, {
+    data_spec,
+    values :: [
+        Term :: json_utils:json_term() |
+        {different, Input :: json_utils:json_term(), ExpOutput :: json_utils:json_term()} |
+        {error, Input :: json_utils:json_term(), ExpError :: errors:error()}
+    ]
+}).
+-record(atm_value_describe_testcase, {
     data_spec,
     values :: [
         Term :: json_utils:json_term() |
@@ -195,6 +220,39 @@ atm_array_value_to_from_store_item_test(_Config) ->
     }).
 
 
+atm_array_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_array_data_spec{item_data_spec = #atm_array_data_spec{
+            item_data_spec = #atm_range_data_spec{}
+        }},
+        values = [
+            [],
+            [[]],
+
+            % Array items should be described according to their type rules
+            {
+                different,
+                [
+                    [],
+                    [
+                        #{<<"end">> => 100},
+                        #{<<"end">> => 100, <<"start">> => -100},
+                        #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1}
+                    ]
+                ],
+                [
+                    [],
+                    [
+                        #{<<"end">> => 100, <<"start">> => 0, <<"step">> => 1},
+                        #{<<"end">> => 100, <<"start">> => -100, <<"step">> => 1},
+                        #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1}
+                    ]
+                ]
+            }
+        ]
+    }).
+
+
 atm_boolean_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_boolean_data_spec{},
@@ -208,6 +266,13 @@ atm_boolean_value_validation_test(_Config) ->
 
 atm_boolean_value_to_from_store_item_test(_Config) ->
     atm_value_to_from_store_item_test_base(#atm_value_to_from_store_item_testcase{
+        data_spec = #atm_boolean_data_spec{},
+        values = [false, true]
+    }).
+
+
+atm_boolean_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
         data_spec = #atm_boolean_data_spec{},
         values = [false, true]
     }).
@@ -299,6 +364,49 @@ atm_dataset_value_to_from_store_item_test(_Config) ->
                     different,
                     dataset_utils:dataset_info_to_json(DatasetInfo),
                     #{<<"datasetId">> => DatasetId}
+                }
+            end, [
+                DirDatasetId,
+                % user can view dataset even if he does not have access to file the dataset is attached
+                FileInDirDatasetId,
+                FileDatasetId,
+                SymlinkDatasetId
+            ])
+        ])
+    }).
+
+
+atm_dataset_value_describe_test(_Config) ->
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    [
+        #object{dataset = #dataset_object{id = DirDatasetId}, children = [
+            #object{dataset = #dataset_object{id = FileInDirDatasetId}}
+        ]},
+        #object{dataset = #dataset_object{id = FileDatasetId}},
+        #object{dataset = #dataset_object{id = SymlinkDatasetId}}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+        #dir_spec{mode = 8#700, dataset = #dataset_spec{}, children = [
+            #file_spec{dataset = #dataset_spec{}}
+        ]},
+        #file_spec{dataset = #dataset_spec{}},
+        #symlink_spec{symlink_value = <<"a/b">>, dataset = #dataset_spec{}}
+    ]),
+
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_dataset_data_spec{},
+        values = lists:flatten([
+            {error, #{<<"datasetId">> => <<"RemovedDatasetId">>}, ?ERROR_NOT_FOUND},
+
+            lists:map(fun(DatasetId) ->
+                DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
+
+                % atm_dataset_type is but a reference to underlying file entity -
+                % as such expanding it should fetch all current file attributes
+                {
+                    different,
+                    #{<<"datasetId">> => DatasetId},
+                    dataset_utils:dataset_info_to_json(DatasetInfo)
                 }
             end, [
                 DirDatasetId,
@@ -431,6 +539,55 @@ atm_file_value_to_from_store_item_test(_Config) ->
     }).
 
 
+atm_file_value_describe_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    [
+        #object{guid = DirGuid, children = [#object{guid = FileInDirGuid}]},
+        #object{guid = FileGuid},
+        #object{guid = SymlinkGuid}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+        #dir_spec{mode = 8#700, children = [#file_spec{}]},
+        #file_spec{},
+        #symlink_spec{symlink_value = <<"a/b">>}
+    ]),
+
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_file_data_spec{
+            file_type = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
+            % attributes shouldn't have any impact on describe functionality
+            attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
+        },
+        values = lists:flatten([
+            {
+                error,
+                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+                    <<"removed_file_id">>, SpaceKrkId
+                )))},
+                ?ERROR_POSIX(?ENOENT)
+            },
+            {
+                error,
+                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
+                ?ERROR_POSIX(?EACCES)
+            },
+
+            lists:map(fun(Guid) ->
+                {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
+
+                % atm_file_type is but a reference to underlying file entity -
+                % as such describe should resolve all attributes
+                {
+                    different,
+                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
+                    file_attr_translator:to_json(FileAttrs)
+                }
+            end, [DirGuid, FileGuid, SymlinkGuid])
+        ])
+    }).
+
+
 atm_number_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_number_data_spec{
@@ -479,6 +636,13 @@ atm_number_value_to_from_store_item_test(_Config) ->
     }).
 
 
+atm_number_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_number_data_spec{integers_only = false, allowed_values = undefined},
+        values = [-10, 0, 5.5, 10]
+    }).
+
+
 atm_object_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_object_data_spec{},
@@ -504,6 +668,18 @@ atm_object_value_validation_test(_Config) ->
 
 atm_object_value_to_from_store_item_test(_Config) ->
     atm_value_to_from_store_item_test_base(#atm_value_to_from_store_item_testcase{
+        data_spec = #atm_object_data_spec{},
+        values = [
+            #{<<"key1">> => <<"value">>},
+            #{<<"key2">> => 5},
+            #{<<"key3">> => [5]},
+            #{<<"key4">> => #{<<"key">> => <<"value">>}}
+        ]
+    }).
+
+
+atm_object_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
         data_spec = #atm_object_data_spec{},
         values = [
             #{<<"key1">> => <<"value">>},
@@ -584,6 +760,36 @@ atm_range_value_to_from_store_item_test(_Config) ->
     }).
 
 
+atm_range_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_range_data_spec{},
+        values = [
+            #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2},
+            #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1},
+
+            % Optional fields should be filled with defaults when expanding
+            % if not previously specified
+            {
+                different,
+                #{<<"end">> => 10},
+                #{<<"end">> => 10, <<"start">> => 0, <<"step">> => 1}
+            },
+            {
+                different,
+                #{<<"start">> => 1, <<"end">> => 10},
+                #{<<"start">> => 1, <<"end">> => 10, <<"step">> => 1}
+            },
+
+            % Excess fields should be removed when compressing
+            {
+                different,
+                #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2, <<"key">> => <<"value">>},
+                #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2}
+            }
+        ]
+    }).
+
+
 atm_string_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_string_data_spec{allowed_values = undefined},
@@ -608,6 +814,13 @@ atm_string_value_validation_test(_Config) ->
 
 atm_string_value_to_from_store_item_test(_Config) ->
     atm_value_to_from_store_item_test_base(#atm_value_to_from_store_item_testcase{
+        data_spec = #atm_string_data_spec{allowed_values = undefined},
+        values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>]
+    }).
+
+
+atm_string_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
         data_spec = #atm_string_data_spec{allowed_values = undefined},
         values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>]
     }).
@@ -691,6 +904,27 @@ atm_time_series_measurement_value_to_from_store_item_test(_Config) ->
     }).
 
 
+atm_time_series_measurement_value_describe_test(_Config) ->
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_time_series_measurement_data_spec{
+            specs = [#atm_time_series_measurement_spec{
+                name_matcher_type = has_prefix,
+                name_matcher = <<"awesome_">>,
+                unit = none
+            }]
+        },
+        values = [
+            % Describe should work even for measurements not conforming
+            % to value constraints as those are not checked for these operations
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement()
+        ]
+    }).
+
+
 %% @private
 atm_value_validation_test_base(#atm_value_validation_testcase{
     data_spec = AtmDataSpec,
@@ -738,6 +972,28 @@ atm_value_to_from_store_item_test_base(#atm_value_to_from_store_item_testcase{
         end,
 
         ?assertEqual(ExpectedExpandResult, ?rpc(atm_value:from_store_item(
+            AtmWorkflowExecutionAuth,
+            atm_value:to_store_item(InitialItem, AtmDataSpec),
+            AtmDataSpec
+        )))
+    end, Values).
+
+
+%% @private
+atm_value_describe_test_base(#atm_value_describe_testcase{
+    data_spec = AtmDataSpec,
+    values = Values
+}) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    lists:foreach(fun(Value) ->
+        {InitialItem, ExpectedExpandResult} = case Value of
+            {error, Input, ExpError} -> {Input, ExpError};
+            {different, Input, ExpOutput} -> {Input, {ok, ExpOutput}};
+            Term -> {Term, {ok, Term}}
+        end,
+
+        ?assertEqual(ExpectedExpandResult, ?rpc(atm_value:describe_store_item(
             AtmWorkflowExecutionAuth,
             atm_value:to_store_item(InitialItem, AtmDataSpec),
             AtmDataSpec
