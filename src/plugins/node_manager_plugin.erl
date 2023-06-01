@@ -160,6 +160,9 @@ upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
+    % file_links_reconciliation_traverse runs on QoS pool.
+    % It is not started yet as it starts with qos_worker in next step, so it must be started manually.
+    qos_traverse:init_pool(),
     await_zone_connection_and_run(fun file_links_reconciliation_traverse:start/0),
     {ok, 5}.
 
