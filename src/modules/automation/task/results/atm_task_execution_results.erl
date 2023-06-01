@@ -82,7 +82,9 @@ consume_results(AtmWorkflowExecutionCtx, Type, ResultSpecs, ResultValues) ->
             {ok, ResultValue} ->
                 consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue);
             error ->
-                Type == item_related andalso throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName))
+                Type == item_related andalso throw(?ERROR_ATM_TASK_RESULT_MISSING(
+                    ResultName, maps:keys(ResultValues)
+                ))
         end
     end, ResultSpecs).
 

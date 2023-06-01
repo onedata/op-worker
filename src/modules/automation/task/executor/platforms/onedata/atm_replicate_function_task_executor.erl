@@ -84,8 +84,8 @@ abort(_AtmWorkflowExecutionCtx, #atm_replicate_function_task_executor{id = Execu
     replica_synchronizer:cancel(ExecutorId).
 
 
--spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok.
-teardown(_AtmWorkflowExecutionCtx, _AtmTaskExecutor) -> ok.
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:doc()) -> ok.
+teardown(_AtmWorkflowExecutionCtx, _AtmTaskExecutionDoc) -> ok.
 
 
 -spec delete(record()) -> ok.
