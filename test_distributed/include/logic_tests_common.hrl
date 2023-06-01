@@ -215,12 +215,7 @@ end).
 -define(ATM_INVENTORY_NAME(__AtmInventory), __AtmInventory).
 
 % Mocked atm_lambda data
--define(ATM_LAMBDA_DATA_SPEC,
-    #atm_data_spec{
-        type = atm_boolean_type,
-        value_constraints = #{}
-    }
-).
+-define(ATM_LAMBDA_DATA_SPEC, #atm_boolean_data_spec{}).
 -define(ATM_LAMBDA_FIRST_REVISION(__AtmLambda), #atm_lambda_revision{
     name = <<"example_name">>,
     summary = <<"example_summary">>,
@@ -257,7 +252,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"a06c117ddf442593109efbb7fd196a80">>,
+    checksum = <<"3f737525fe2e905b2b5b532d0264175b">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
@@ -283,9 +278,9 @@ end).
             name = <<"store1Name">>,
             description = <<"store1Desc">>,
             type = list,
-            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                type = atm_file_type,
-                value_constraints = #{}
+            config = #atm_list_store_config{item_data_spec = #atm_file_data_spec{
+                file_type = 'ANY',
+                attributes = [file_id]
             }},
             requires_initial_content = true
         },
@@ -294,9 +289,9 @@ end).
             name = <<"store2Name">>,
             description = <<"store2Desc">>,
             type = single_value,
-            config = #atm_single_value_store_config{item_data_spec = #atm_data_spec{
-                type = atm_number_type,
-                value_constraints = #{}
+            config = #atm_single_value_store_config{item_data_spec = #atm_number_data_spec{
+                integers_only = false,
+                allowed_values = undefined
             }},
             requires_initial_content = false
         }

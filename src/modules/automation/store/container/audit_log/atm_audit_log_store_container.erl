@@ -46,7 +46,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_content() :: [atm_value:expanded()] | undefined.
+-type initial_content() :: [automation:item()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_audit_log_store_content_browse_options:record()
@@ -104,7 +104,7 @@ get_config(#atm_audit_log_store_container{config = AtmStoreConfig}) ->
 
 -spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 get_iterated_item_data_spec(_) ->
-    #atm_data_spec{type = atm_object_type}.
+    #atm_object_data_spec{}.
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
@@ -222,7 +222,7 @@ get_log_content_data_spec(#atm_audit_log_store_container{
 sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray) when is_list(ItemsArray) ->
     Requests = lists:map(fun build_audit_log_append_request/1, ItemsArray),
 
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         lists:map(fun(#audit_log_append_request{content = LogContent}) -> LogContent end, Requests),
         ?ATM_ARRAY_DATA_SPEC(LogContentDataSpec)
@@ -243,7 +243,7 @@ sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogContentDataSpec, Item) -
     audit_log:append_request() | no_return().
 sanitize_append_request(AtmWorkflowExecutionAuth, LogContentDataSpec, Item) ->
     Request = #audit_log_append_request{content = LogContent} = build_audit_log_append_request(Item),
-    atm_value:validate(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
 
     Request.
 

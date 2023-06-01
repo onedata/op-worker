@@ -220,11 +220,11 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStor
 
 %% @private
 -spec get_item_data_spec(atm_range_store_config:record()) -> atm_data_spec:record().
-get_item_data_spec(#atm_range_store_config{}) -> #atm_data_spec{type = atm_range_type}.
+get_item_data_spec(#atm_range_store_config{}) -> #atm_range_data_spec{}.
 
 
 %% @private
--spec set_content(atm_workflow_execution_auth:record(), atm_value:expanded(), atm_store:id()) ->
+-spec set_content(atm_workflow_execution_auth:record(), automation:item(), atm_store:id()) ->
     ok.
 set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
     ?rpc(atm_store_api:update_content(
@@ -237,7 +237,7 @@ set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
 
 %% @private
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    undefined | atm_value:expanded().
+    undefined | automation:item().
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     try
         #atm_range_store_content_browse_result{range = RangeJson} = ?erpc(atm_store_api:browse_content(

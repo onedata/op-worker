@@ -79,7 +79,23 @@ get_fields(#atm_store_iterator_spec{}) ->
     record_info(fields, atm_store_iterator_spec);
 get_fields(#atm_store_schema{}) ->
     record_info(fields, atm_store_schema);
-get_fields(#atm_data_spec{}) ->
-    record_info(fields, atm_data_spec);
+get_fields(#atm_array_data_spec{}) ->
+    record_info(fields, atm_array_data_spec);
+get_fields(#atm_boolean_data_spec{}) ->
+    record_info(fields, atm_boolean_data_spec);
+get_fields(#atm_dataset_data_spec{}) ->
+    record_info(fields, atm_dataset_data_spec);
+get_fields(#atm_file_data_spec{}) ->
+    record_info(fields, atm_file_data_spec);
+get_fields(#atm_number_data_spec{}) ->
+    record_info(fields, atm_number_data_spec);
+get_fields(#atm_object_data_spec{}) ->
+    record_info(fields, atm_object_data_spec);
+get_fields(#atm_range_data_spec{}) ->
+    record_info(fields, atm_range_data_spec);
+get_fields(#atm_string_data_spec{}) ->
+    record_info(fields, atm_string_data_spec);
+get_fields(#atm_time_series_measurement_data_spec{}) ->
+    record_info(fields, atm_time_series_measurement_data_spec);
 get_fields(#atm_resource_spec{}) ->
     record_info(fields, atm_resource_spec).

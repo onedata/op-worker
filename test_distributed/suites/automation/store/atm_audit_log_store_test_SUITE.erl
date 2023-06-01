@@ -82,9 +82,9 @@ update_content_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         build_content_update_options => fun build_content_update_options/1,
-        get_content => fun get_content/2
+        browse_content => fun browse_content/2
     }).
 
 
@@ -93,7 +93,7 @@ iterator_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        input_item_to_exp_iterated_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
@@ -103,7 +103,7 @@ browse_by_index_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -115,7 +115,7 @@ browse_by_offset_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -130,7 +130,7 @@ browse_by_timestamp_test(_Config) ->
     ),
 
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
@@ -195,7 +195,7 @@ expiration_test(_Config) ->
     ),
 
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
@@ -242,13 +242,10 @@ example_configs() ->
     ],
 
     lists:flatten([
-        #atm_audit_log_store_config{log_content_data_spec = #atm_data_spec{
-            type = atm_array_type,
-            value_constraints = #{
-                item_data_spec => atm_store_test_utils:example_data_spec(?RAND_ELEMENT(
+        #atm_audit_log_store_config{log_content_data_spec = #atm_array_data_spec{
+            item_data_spec = atm_store_test_utils:example_data_spec(?RAND_ELEMENT(
                     SupportedStaticBasicTypes
-                ))
-            }
+            ))
         }},
 
         lists:map(fun(LogContentDataType) ->
@@ -269,7 +266,7 @@ get_input_item_generator_seed_data_spec(#atm_audit_log_store_config{
 
 
 %% @private
--spec input_item_formatter(atm_value:expanded()) -> atm_value:expanded().
+-spec input_item_formatter(automation:item()) -> automation:item().
 input_item_formatter(LogContent) ->
     Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?AUDIT_LOG_SEVERITY_LEVELS]),
 
@@ -282,14 +279,14 @@ input_item_formatter(LogContent) ->
 
 
 %% @private
--spec input_item_to_exp_store_item(
+-spec describe_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id(),
     Index :: non_neg_integer()
 ) ->
-    atm_value:expanded().
-input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec, Index) ->
+    automation:item().
+describe_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec, Index) ->
     LogContent = case InputItem of
         #{<<"content">> := LC} -> LC;
         #{<<"severity">> := _} = Object -> maps:without([<<"severity">>], Object);
@@ -315,7 +312,7 @@ input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec
 %% @private
 -spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
@@ -337,9 +334,9 @@ build_content_update_options(UpdateFun) ->
 
 
 %% @private
--spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    [atm_value:expanded()].
-get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [automation:item()].
+browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     try
         #atm_audit_log_store_content_browse_result{result = #{

@@ -37,16 +37,26 @@
 
 % Formats data generated using `get_input_item_generator_seed_data_spec()`
 % into one of the possible forms accepted as input by given store
--type input_item_formatter() :: fun((atm_value:expanded()) -> atm_value:expanded()).
+-type input_item_formatter() :: fun((automation:item()) -> automation:item()).
 
-% Prepares expected item (as stored and returned when browsing) from corresponding input item
--type input_item_to_exp_store_item() :: fun((
+% Prepares expected item (as stored and returned when iterating) from corresponding input item
+-type input_item_to_exp_iterated_item() :: fun((
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id(),
     Index :: non_neg_integer()
 ) ->
-    atm_value:expanded()
+    automation:item()
+).
+
+% Prepares expected browse item (as stored and returned when browsing) from corresponding input item
+-type describe_item() :: fun((
+    atm_workflow_execution_auth:record(),
+    automation:item(),
+    atm_store:id(),
+    Index :: non_neg_integer()
+) ->
+    automation:item()
 ).
 
 % Some atm data types are only references to entities in op. Removing such
@@ -54,7 +64,7 @@
 % (error item is returned)
 -type randomly_remove_entity_referenced_by_item() :: fun((
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}
@@ -65,8 +75,8 @@
 ).
 
 % Returns entire store content
--type get_content() :: fun((atm_workflow_execution_auth:record(), atm_store:id()) ->
-    [atm_value:expanded()]
+-type browse_content() :: fun((atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [automation:item()]
 ).
 
 -type build_content_browse_options() :: fun((json_utils:json_map()) ->
@@ -80,10 +90,10 @@
 -export_type([
     get_input_item_generator_seed_data_spec/0,
     input_item_formatter/0,
-    input_item_to_exp_store_item/0,
+    input_item_to_exp_iterated_item/0,
     randomly_remove_entity_referenced_by_item/0,
     build_content_update_options/0,
-    get_content/0,
+    browse_content/0,
     build_content_browse_options/0,
     build_content_browse_result/0
 ]).
@@ -194,18 +204,18 @@ create_test_base(#{
     store_configs := [atm_store_config:record()],
     get_input_item_generator_seed_data_spec := get_input_item_generator_seed_data_spec(),
     input_item_formatter := input_item_formatter(),
-    input_item_to_exp_store_item := input_item_to_exp_store_item(),
+    describe_item := describe_item(),
     build_content_update_options := build_content_update_options(),
-    get_content := get_content()
+    browse_content := browse_content()
 }) ->
     ok | no_return().
 update_content_test_base(#{
     store_configs := AtmStoreConfigs,
     get_input_item_generator_seed_data_spec := GetInputItemGeneratorSeedDataSpecFun,
     input_item_formatter := InputItemFormatterFun,
-    input_item_to_exp_store_item := InputItemToExpStoreItemFun,
+    describe_item := DescribeItemFun,
     build_content_update_options := BuildContentUpdateOptionsFun,
-    get_content := GetContentFun
+    browse_content := BrowseContentFun
 }) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
@@ -213,7 +223,7 @@ update_content_test_base(#{
         InputItemFormatterFun(gen_valid_data(AtmWorkflowExecutionAuth, AtmDataSpec))
     end,
     PrepareExpStoreItemFun = fun(InputItem, AtmDataSpec, Index) ->
-        InputItemToExpStoreItemFun(AtmWorkflowExecutionAuth, InputItem, AtmDataSpec, Index)
+        DescribeItemFun(AtmWorkflowExecutionAuth, InputItem, AtmDataSpec, Index)
     end,
 
     lists:foreach(fun(AtmStoreConfig) ->
@@ -250,7 +260,7 @@ update_content_test_base(#{
             ?assertEqual(ExpError, ?rpc(catch atm_store_api:update_content(
                 AtmWorkflowExecutionAuth, Args, BuildContentUpdateOptionsFun(Function), AtmStoreId
             ))),
-            ?assertEqual(InitialStoreContent, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
+            ?assertEqual(InitialStoreContent, BrowseContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
         end, [
             {append, InvalidInputItem, ExpInvalidInputItemError},
             {extend, [NewInputItem1, InvalidInputItem], ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
@@ -259,9 +269,8 @@ update_content_test_base(#{
                 #{<<"$[1]">> => errors:to_json(ExpInvalidInputItemError)}
             )},
             {extend, NewInputItem1, atm_store_test_utils:infer_exp_invalid_data_error(
-                NewInputItem1, #atm_data_spec{
-                    type = atm_array_type,
-                    value_constraints = #{item_data_spec => InputItemGeneratorSeedDataSpec}
+                NewInputItem1, #atm_array_data_spec{
+                    item_data_spec = InputItemGeneratorSeedDataSpec
                 }
             )}
         ]),
@@ -277,7 +286,7 @@ update_content_test_base(#{
                 AtmStoreId
             ))
         ),
-        ?assertEqual(InitialStoreContent, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId)),
+        ?assertEqual(InitialStoreContent, BrowseContentFun(AtmWorkflowExecutionAuth, AtmStoreId)),
 
         % Otherwise operation should succeed
         ?rpc(atm_store_api:unfreeze(AtmStoreId)),
@@ -288,7 +297,7 @@ update_content_test_base(#{
             AtmStoreId
         ))),
         ExpStoreContent1 = InitialStoreContent ++ [NewItem1],
-        ?assertEqual(ExpStoreContent1, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId)),
+        ?assertEqual(ExpStoreContent1, BrowseContentFun(AtmWorkflowExecutionAuth, AtmStoreId)),
 
         NewInputItem2 = GenValidInputItemFun(InputItemGeneratorSeedDataSpec),
         NewInputItem3 = GenValidInputItemFun(InputItemGeneratorSeedDataSpec),
@@ -301,7 +310,7 @@ update_content_test_base(#{
         NewItem2 = PrepareExpStoreItemFun(NewInputItem2, InputItemGeneratorSeedDataSpec, Offset + 1),
         NewItem3 = PrepareExpStoreItemFun(NewInputItem3, InputItemGeneratorSeedDataSpec, Offset + 2),
         ExpStoreContent2 = ExpStoreContent1 ++ [NewItem2, NewItem3],
-        ?assertEqual(ExpStoreContent2, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
+        ?assertEqual(ExpStoreContent2, BrowseContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
 
     end, AtmStoreConfigs).
 
@@ -310,7 +319,7 @@ update_content_test_base(#{
     store_configs := [atm_store_config:record()],
     get_input_item_generator_seed_data_spec := get_input_item_generator_seed_data_spec(),
     input_item_formatter := input_item_formatter(),
-    input_item_to_exp_store_item := input_item_to_exp_store_item(),
+    input_item_to_exp_iterated_item := input_item_to_exp_iterated_item(),
     randomly_remove_entity_referenced_by_item := randomly_remove_entity_referenced_by_item()
 }) ->
     ok | no_return().
@@ -318,7 +327,7 @@ iterator_test_base(#{
     store_configs := AtmStoreConfigs,
     get_input_item_generator_seed_data_spec := GetInputItemGeneratorSeedDataSpecFun,
     input_item_formatter := InputItemFormatterFun,
-    input_item_to_exp_store_item := InputItemToExpStoreItemFun,
+    input_item_to_exp_iterated_item := InputItemToExpStoreItemFun,
     randomly_remove_entity_referenced_by_item := RandomlyRemoveEntityReferencedByItemFun
 }) ->
     ItemsCount = 10 + rand:uniform(100),
@@ -369,19 +378,16 @@ iterator_test_base(#{
         end, IteratorToReuse, lists:nthtail(Index - 1, ExpBatches)),
         ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, NewLastIterator))),
 
-        %% Assert non accessible items (e.g. removed) are omitted from iterated items
-        AccessibleItems = lists:filter(fun(ExpItem) ->
-            case RandomlyRemoveEntityReferencedByItemFun(AtmWorkflowExecutionAuth, ExpItem, AtmDataSpec) of
-                {true, _} -> false;
-                false -> true
-            end
+        %% Assert all items, even removed, are returned as their resolution is postponed until lambda invocation
+        lists:foreach(fun(ExpItem) ->
+            RandomlyRemoveEntityReferencedByItemFun(AtmWorkflowExecutionAuth, ExpItem, AtmDataSpec)
         end, ExpStoreContent),
         AtmStoreIterator1 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, #atm_store_iterator_spec{
             store_schema_id = AtmStoreSchema#atm_store_schema.id,
             max_batch_size = ItemsCount
         })),
         ?assertMatch(
-            {ok, AccessibleItems, _},
+            {ok, ExpStoreContent, _},
             ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))
         )
 
@@ -392,7 +398,7 @@ iterator_test_base(#{
     store_configs := [atm_store_config:record()],
     get_input_item_generator_seed_data_spec := get_input_item_generator_seed_data_spec(),
     input_item_formatter := input_item_formatter(),
-    input_item_to_exp_store_item := input_item_to_exp_store_item(),
+    describe_item := describe_item(),
     randomly_remove_entity_referenced_by_item := randomly_remove_entity_referenced_by_item(),
     build_content_browse_options := build_content_browse_options(),
     build_content_browse_result := build_content_browse_result()
@@ -402,7 +408,7 @@ browse_content_test_base(BrowsingMethod, #{
     store_configs := AtmStoreConfigs,
     get_input_item_generator_seed_data_spec := GetInputItemGeneratorSeedDataSpecFun,
     input_item_formatter := InputItemFormatterFun,
-    input_item_to_exp_store_item := InputItemToExpStoreItemFun,
+    describe_item := DescribeItemFun,
     randomly_remove_entity_referenced_by_item := RandomlyRemoveEntityReferencedByItemFun,
     build_content_browse_options := BuildContentBrowseOptionsFun,
     build_content_browse_result := BuildContentBrowseResultFun
@@ -422,7 +428,7 @@ browse_content_test_base(BrowsingMethod, #{
         ))),
 
         Content = lists:map(fun({Index, InputItem}) ->
-            Item = InputItemToExpStoreItemFun(
+            Item = DescribeItemFun(
                 AtmWorkflowExecutionAuth, InputItem, AtmDataSpec, Index - 1
             ),
             case RandomlyRemoveEntityReferencedByItemFun(
@@ -471,7 +477,7 @@ create_workflow_execution_auth() ->
 
 %% @private
 -spec gen_valid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_valid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
@@ -480,7 +486,7 @@ gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 
 %% @private
 -spec gen_invalid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_invalid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
