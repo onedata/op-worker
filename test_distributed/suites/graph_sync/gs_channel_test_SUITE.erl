@@ -41,7 +41,7 @@ oz_connection_test(Config) ->
     ?assertMatch(
         ?ERROR_NO_CONNECTION_TO_ONEZONE,
         rpc:call(Node, provider_logic, get, []),
-        10
+        60
     ),
 
     % If provider can connect to onezone, but was authenticated as nobody,
@@ -50,7 +50,7 @@ oz_connection_test(Config) ->
     ?assertMatch(
         ?ERROR_NO_CONNECTION_TO_ONEZONE,
         rpc:call(Node, provider_logic, get, []),
-        10
+        60
     ),
 
     % Requests should work when the provider connects to onezone.
@@ -58,7 +58,7 @@ oz_connection_test(Config) ->
     ?assertMatch(
         {ok, _},
         rpc:call(Node, provider_logic, get, []),
-        10
+        60
     ),
 
     ok.

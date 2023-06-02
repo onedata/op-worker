@@ -6,24 +6,25 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator` and `atm_data_compressor`
-%%% functionality for `atm_range_type`.
+%%% This module implements `atm_value` functionality for `atm_range_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_range_value).
 -author("Bartosz Walkowicz").
 
--behaviour(atm_data_validator).
--behaviour(atm_data_compressor).
+-behaviour(atm_value).
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
-
-%% atm_data_compressor callbacks
--export([compress/2, expand/3]).
+%% atm_value callbacks
+-export([
+    validate_constraints/3,
+    to_store_item/2,
+    from_store_item/3,
+    describe_store_item/3,
+    transform_to_data_spec_conformant/3
+]).
 
 %% Full 'initial_content' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying concrete binaries ('initial_content' must be
@@ -46,54 +47,70 @@
 
 
 %%%===================================================================
-%%% atm_data_validator callbacks
+%%% atm_value callbacks
 %%%===================================================================
 
 
--spec assert_meets_constraints(
+-spec validate_constraints(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
-    atm_data_type:value_constraints()
+    range_json(),
+    atm_range_data_spec:record()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
-    Range = compress(Value, ValueConstraints),
+validate_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    Range = to_store_item(Value, AtmDataSpec),
 
     try
         assert_valid_step_direction(Range)
-    catch
-        throw:{unverified_constraints, UnverifiedConstraints} ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                Value, atm_range_type, UnverifiedConstraints
-            ));
-        throw:Error ->
-            throw(Error);
-        _:_ ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_range_type))
+    catch throw:{unverified_constraints, UnverifiedConstraints} ->
+        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            Value, atm_range_type, UnverifiedConstraints
+        ))
     end.
 
 
-%%%===================================================================
-%%% atm_data_compressor callbacks
-%%%===================================================================
-
-
--spec compress(range_json(), atm_data_type:value_constraints()) -> range().
-compress(Value = #{<<"end">> := End}, _ValueConstraints) ->
+-spec to_store_item(range_json(), atm_range_data_spec:record()) ->
+    range().
+to_store_item(Value = #{<<"end">> := End}, _AtmDataSpec) ->
     Start = maps:get(<<"start">>, Value, 0),
     Step = maps:get(<<"step">>, Value, 1),
 
     [Start, End, Step].
 
 
--spec expand(atm_workflow_execution_auth:record(), range(), atm_data_type:value_constraints()) ->
+-spec from_store_item(
+    atm_workflow_execution_auth:record(),
+    range(),
+    atm_range_data_spec:record()
+) ->
     {ok, range_json()}.
-expand(_AtmWorkflowExecutionAuth, [Start, End, Step], _ValueConstraints) ->
+from_store_item(_AtmWorkflowExecutionAuth, [Start, End, Step], _AtmDataSpec) ->
     {ok, #{
         <<"start">> => Start,
         <<"end">> => End,
         <<"step">> => Step
     }}.
+
+
+-spec describe_store_item(
+    atm_workflow_execution_auth:record(),
+    range(),
+    atm_range_data_spec:record()
+) ->
+    {ok, automation:item()}.
+describe_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
+    from_store_item(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
+
+
+-spec transform_to_data_spec_conformant(
+    atm_workflow_execution_auth:record(),
+    range_json(),
+    atm_range_data_spec:record()
+) ->
+    automation:item().
+transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec) ->
+    validate_constraints(AtmWorkflowExecutionAuth, Value, AtmParameterDataSpec),
+    Value.
 
 
 %%%===================================================================

@@ -150,7 +150,7 @@ create({uuid, ParentUuid}, FileDoc = #document{
     ignore_in_changes = IgnoreInChanges
 }, TreesToCheck) ->
     ?run(begin
-        true = is_valid_filename(FileName),
+        is_valid_filename(FileName) orelse error({error, ?EINVAL}),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),

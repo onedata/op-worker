@@ -35,7 +35,7 @@
 
 -record(atm_single_value_store_container_iterator, {
     item_data_spec :: atm_data_spec:record(),
-    compressed_item :: undefined | atm_value:compressed(),
+    compressed_item :: undefined | atm_store:item(),
     exhausted = false :: boolean()
 }).
 -type record() :: #atm_single_value_store_container_iterator{}.
@@ -48,7 +48,7 @@
 %%%===================================================================
 
 
--spec build(undefined | atm_value:compressed(), atm_data_spec:record()) ->
+-spec build(undefined | atm_store:item(), atm_data_spec:record()) ->
     record().
 build(CompressedItem, ItemDataSpec) ->
     #atm_single_value_store_container_iterator{
@@ -68,7 +68,7 @@ build(CompressedItem, ItemDataSpec) ->
     atm_store_container_iterator:batch_size(),
     record()
 ) ->
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next_batch(_, _, #atm_single_value_store_container_iterator{compressed_item = undefined}) ->
     stop;
 
@@ -79,7 +79,10 @@ get_next_batch(AtmWorkflowExecutionAuth, _, Record = #atm_single_value_store_con
     item_data_spec = ItemDataSpec,
     compressed_item = CompressedItem
 }) ->
-    Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, [CompressedItem], ItemDataSpec),
+    Batch = case atm_value:from_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
+        {ok, Item} -> [Item];
+        {error, _} -> []
+    end,
     {ok, Batch, Record#atm_single_value_store_container_iterator{exhausted = true}}.
 
 

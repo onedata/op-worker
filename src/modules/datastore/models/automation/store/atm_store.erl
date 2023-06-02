@@ -28,8 +28,11 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0, record/0, doc/0, diff/0]).
+% automation:item converted (if needed) to a format for persisting in a store
+-type item() :: json_utils:json_term().
 
+-export_type([id/0, record/0, doc/0, diff/0]).
+-export_type([item/0]).
 
 -define(CTX, #{model => ?MODULE}).
 

@@ -38,7 +38,7 @@
 -record(atm_tree_forest_store_container_iterator, {
     callback_module :: module(),
     item_data_spec :: atm_data_spec:record(),
-    current_tree_root :: undefined | atm_value:compressed(),
+    current_tree_root :: undefined | atm_store:item(),
     tree_pagination_token :: undefined | tree_pagination_token(),
     roots_iterator :: atm_list_store_container_iterator:record()
 }).
@@ -55,10 +55,10 @@
 -callback list_tree(
     atm_workflow_execution_auth:record(), 
     tree_pagination_token() | undefined, 
-    atm_value:compressed(), 
+    atm_store:item(),
     atm_store_container_iterator:batch_size()
 ) -> 
-    {[atm_value:expanded()], tree_pagination_token() | undefined}.
+    {[automation:item()], tree_pagination_token() | undefined}.
 
 %%%===================================================================
 %%% API
@@ -66,7 +66,7 @@
 
 -spec build(atm_data_spec:record(), atm_list_store_container_iterator:record()) -> record().
 build(ItemDataSpec, RootsIterator) ->
-    Module = get_callback_module(atm_data_spec:get_type(ItemDataSpec)),
+    Module = get_callback_module(atm_data_spec:get_data_type(ItemDataSpec)),
     #atm_tree_forest_store_container_iterator{
         callback_module = Module,
         item_data_spec = ItemDataSpec,
@@ -84,7 +84,7 @@ build(ItemDataSpec, RootsIterator) ->
     atm_store_container_iterator:batch_size(),
     record()
 ) ->
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record) ->
     get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record, []).
 
@@ -98,9 +98,9 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record) ->
     atm_workflow_execution_auth:record(),
     atm_store_container_iterator:batch_size(),
     record(), 
-    [atm_value:compressed()]
+    [atm_store:item()]
 ) ->
-    {ok, [atm_value:compressed()], record()} | stop.
+    {ok, [atm_store:item()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionAuth, BatchSize, Record, ForestAcc) when BatchSize =< 0 ->
     {ok, ForestAcc, Record};
 
@@ -118,7 +118,7 @@ get_next_batch(
     } = Record,
     case atm_list_store_container_iterator:get_next_batch(AtmWorkflowExecutionAuth, 1, ListIterator) of
         {ok, [CurrentTreeRootExpanded], NextRootsIterator} ->
-            CurrentTreeRoot = atm_value:compress(CurrentTreeRootExpanded, ItemDataSpec),
+            CurrentTreeRoot = atm_value:to_store_item(CurrentTreeRootExpanded, ItemDataSpec),
             NextTreeRecord = Record#atm_tree_forest_store_container_iterator{
                 current_tree_root = CurrentTreeRoot,
                 roots_iterator = NextRootsIterator
@@ -151,7 +151,7 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record, ForestAcc) ->
     atm_store_container_iterator:batch_size(),
     record()
 ) ->
-    {[atm_value:compressed()], record()}.
+    {[atm_store:item()], record()}.
 list_tree(
     AtmWorkflowExecutionAuth,
     BatchSize,

@@ -38,7 +38,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_content() :: undefined | atm_value:expanded().
+-type initial_content() :: undefined | automation:item().
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_single_value_store_content_browse_options:record()
@@ -49,7 +49,7 @@
 
 -record(atm_single_value_store_container, {
     config :: atm_single_value_store_config:record(),
-    compressed_item :: undefined | atm_value:compressed()
+    compressed_item :: undefined | atm_store:item()
 }).
 -type record() :: #atm_single_value_store_container{}.
 
@@ -77,11 +77,11 @@ create(#atm_store_container_creation_args{
     initial_content = InitialContent
 }) ->
     ItemDataSpec = AtmStoreConfig#atm_single_value_store_config.item_data_spec,
-    atm_value:validate(AtmWorkflowExecutionAuth, InitialContent, ItemDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, InitialContent, ItemDataSpec),
 
     #atm_single_value_store_container{
         config = AtmStoreConfig,
-        compressed_item = atm_value:compress(InitialContent, ItemDataSpec)
+        compressed_item = atm_value:to_store_item(InitialContent, ItemDataSpec)
     }.
 
 
@@ -132,7 +132,7 @@ browse_content(
         options = #atm_single_value_store_content_browse_options{}
     }
 ) ->
-    Item = case atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
+    Item = case atm_value:describe_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
         {ok, _} = Result -> Result;
         {error, _} -> ?ERROR_FORBIDDEN
     end,
@@ -149,10 +149,10 @@ update_content(Record, #atm_store_content_update_req{
         Record#atm_single_value_store_container
         .config#atm_single_value_store_config
         .item_data_spec,
-    atm_value:validate(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
     Record#atm_single_value_store_container{
-        compressed_item = atm_value:compress(Item, ItemDataSpec)
+        compressed_item = atm_value:to_store_item(Item, ItemDataSpec)
     }.
 
 

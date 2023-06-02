@@ -67,13 +67,12 @@
 ]).
 
 
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_time_series_measurement_data_spec{
+    specs = [#atm_time_series_measurement_spec{
         name_matcher_type = has_prefix,
         name_matcher = <<>>,
         unit = none
-    }]}
+    }]
 }).
 
 
@@ -169,7 +168,7 @@ update_content(Record, #atm_store_content_update_req{
     argument = Measurements,
     options = #atm_time_series_store_content_update_options{dispatch_rules = DispatchRules}
 }) when is_list(Measurements) ->
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         Measurements,
         ?ATM_ARRAY_DATA_SPEC(?ANY_MEASUREMENT_DATA_SPEC)
@@ -181,7 +180,7 @@ update_content(Record, #atm_store_content_update_req{
     argument = Measurement,
     options = #atm_time_series_store_content_update_options{dispatch_rules = DispatchRules}
 }) ->
-    atm_value:validate(AtmWorkflowExecutionAuth, Measurement, ?ANY_MEASUREMENT_DATA_SPEC),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Measurement, ?ANY_MEASUREMENT_DATA_SPEC),
     consume_measurements([Measurement], DispatchRules, Record).
 
 

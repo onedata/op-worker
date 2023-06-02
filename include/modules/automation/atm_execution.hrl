@@ -187,9 +187,8 @@
 
 %% Atm data types related macros
 
--define(ATM_ARRAY_DATA_SPEC(__ITEM_DATA_TYPE_SPEC), #atm_data_spec{
-    type = atm_array_type,
-    value_constraints = #{item_data_spec => __ITEM_DATA_TYPE_SPEC}
+-define(ATM_ARRAY_DATA_SPEC(__ITEM_DATA_TYPE_SPEC), #atm_array_data_spec{
+    item_data_spec = __ITEM_DATA_TYPE_SPEC
 }).
 
 
@@ -209,7 +208,7 @@
     description = <<>>,
     type = audit_log,
     config = #atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     },
     requires_initial_content = false
 }).
@@ -266,7 +265,7 @@
 -record(atm_single_value_store_content_browse_options, {}).
 
 -record(atm_single_value_store_content_browse_result, {
-    item :: {ok, atm_value:expanded()} | errors:error()
+    item :: {ok, automation:item()} | errors:error()
 }).
 
 -record(atm_time_series_store_content_browse_options, {
@@ -288,7 +287,7 @@
 
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: atm_value:expanded() | audit_log:append_request(),
+    argument :: automation:item() | audit_log:append_request(),
     options :: atm_store_content_update_options:record()
 }).
 

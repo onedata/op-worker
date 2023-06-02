@@ -52,7 +52,7 @@
 -type severity() :: binary().  %% see ?LOGGER_SEVERITY_LEVELS
 -type level() :: 0..7.
 
--type initial_content() :: [atm_value:expanded()] | undefined.
+-type initial_content() :: [automation:item()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_audit_log_store_content_browse_options:record()
@@ -134,7 +134,7 @@ get_config(#atm_audit_log_store_container{config = AtmStoreConfig}) ->
 
 -spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 get_iterated_item_data_spec(_) ->
-    #atm_data_spec{type = atm_object_type}.
+    #atm_object_data_spec{}.
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
@@ -270,7 +270,7 @@ sanitize_append_requests(
         prepare_append_request(Item, LoggingLevel)
     end, ItemsArray),
 
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         lists:map(fun(#audit_log_append_request{content = LogContent}) -> LogContent end, Requests),
         ?ATM_ARRAY_DATA_SPEC(LogContentDataSpec)
@@ -293,12 +293,11 @@ sanitize_append_requests(_AtmWorkflowExecutionAuth, _LoggingLevel, _LogContentDa
 sanitize_append_request(AtmWorkflowExecutionAuth, LoggingLevel, LogContentDataSpec, Item) ->
     case prepare_append_request(Item, LoggingLevel) of
         {true, #audit_log_append_request{content = LogContent}} = Result ->
-            atm_value:validate(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
+            atm_value:validate_constraints(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
             Result;
         false ->
             false
     end.
-
 
 %% @private
 -spec prepare_append_request(json_utils:json_term() | audit_log:append_request(), level()) ->
