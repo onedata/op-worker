@@ -277,6 +277,7 @@ init([]) ->
             ?warning("Cannot start Onezone connection: provider failed to authenticate"),
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
+            journal_logger:log("Onezone connection established"),
             ?notice("Onezone connection established: ~p", [ClientRef]),
             yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
             {ok, #state{client_ref = ClientRef}};
@@ -388,6 +389,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
             {noreply, State}
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
+    journal_logger:log("Onezone connection lost"),
     ?warning("Onezone connection lost, reason: ~p", [Reason]),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
