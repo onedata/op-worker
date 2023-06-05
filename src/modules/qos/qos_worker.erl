@@ -50,6 +50,8 @@ init(_Args) ->
     end,
     qos_bounded_cache:init_group(),
     qos_bounded_cache:init_qos_cache_for_all_spaces(),
+    % file_links_reconciliation_traverse is started here, as it uses QoS traverse pool.
+    file_links_reconciliation_traverse:start(),
     {ok, #{}}.
 
 
