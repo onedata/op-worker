@@ -43,6 +43,20 @@
 
 -spec start() -> ok.
 start() ->
+    spawn(fun start_async/0),
+    ok.
+
+
+-spec start_async() -> ok.
+start_async() ->
+    utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+    utils:wait_until(fun() ->
+        % wait for traverse pool to start
+        case datastore_model:get(traverse_tasks_scheduler:get_ctx(), ?POOL_NAME) of
+            {ok, _} -> true;
+            _ -> false
+        end
+    end, timer:seconds(10), infinity),
     {ok, Spaces} = provider_logic:get_spaces(),
     SpacesToStart = lists:filter(fun(SpaceId) ->
         case space_logic:get_provider_ids(SpaceId) of
