@@ -7,8 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Module responsible for traversing file tree. It is required to be executed
-%%% once per space so missing link documents (due to bug in previous versions)
-%%% can be fetched and properly saved in datastore.
+%%% once per space so missing link documents can be fetched and properly saved in datastore
+%%% (due to a bug in previous versions - present up to 20.02.19 and 21.02.1).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_links_reconciliation_traverse).
