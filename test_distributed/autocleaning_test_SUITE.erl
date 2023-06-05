@@ -873,25 +873,29 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
-init_per_testcase(Case, Config) when
-    Case =:= forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated orelse
-    Case =:= autocleaning_should_evict_file_replicas_until_it_reaches_configured_target orelse
-    Case =:= restart_autocleaning_run_test
-->
-    [W | _] = ?config(op_worker_nodes, Config),
-    disable_periodical_spaces_autocleaning_check(W),
-    init_per_testcase(default, Config);
-
 init_per_testcase(cancel_autocleaning_run, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(W, op_worker, autocleaning_view_batch_size, 10),
     ok = test_utils:set_env(W, op_worker, replica_deletion_max_parallel_requests, 10),
-    disable_periodical_spaces_autocleaning_check(W),
     init_per_testcase(default, Config);
 
-init_per_testcase(default, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= periodical_autocleaning_should_evict_file_replica_when_it_is_replicated orelse
+    Case =:= autocleaning_should_evict_file_when_it_is_old_enough
+->
+    Config2 = init_per_testcase(default, Config),
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = enable_periodical_spaces_autocleaning_check(W),
+    Config2;
+
+init_per_testcase(time_warp_test, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
+
+init_per_testcase(_, Config) ->
     ct:timetrap({minutes, 20}),
     Workers = [W | _] = ?config(op_worker_nodes, Config),
+    disable_periodical_spaces_autocleaning_check(W),
     % ensure that all file blocks will be public
     ok = test_utils:set_env(Workers, ?APP_NAME, public_block_size_treshold, 0),
     ok = test_utils:set_env(Workers, ?APP_NAME, public_block_percent_treshold, 0),
@@ -899,18 +903,8 @@ init_per_testcase(default, Config) ->
     clean_autocleaning_run_model(W, ?SPACE_ID),
     Config2 = lfm_proxy:init(Config),
     lfm_test_utils:assert_space_and_trash_are_empty(Workers, ?SPACE_ID, ?ATTEMPTS),
-    Config2;
+    Config2.
 
-init_per_testcase(time_warp_test, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    disable_periodical_spaces_autocleaning_check(W),
-    time_test_utils:freeze_time(Config),
-    init_per_testcase(default, Config);
-
-init_per_testcase(_Case, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    ok = enable_periodical_spaces_autocleaning_check(W),
-    init_per_testcase(default, Config).
 
 end_per_testcase(cancel_autocleaning_run, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
