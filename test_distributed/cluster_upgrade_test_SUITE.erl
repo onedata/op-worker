@@ -32,7 +32,6 @@
     upgrade_from_20_02_0_beta3_storages/1,
     upgrade_from_20_02_1_space_strategies/1,
     upgrade_from_20_02_1_storage_sync_monitoring/1,
-    upgrade_from_20_02_19_file_links_reconciliation_traverse_test/1
 ]).
 
 %%%===================================================================
@@ -43,8 +42,7 @@ all() -> ?ALL([
     upgrade_from_19_02_x_storages,
     upgrade_from_20_02_0_beta3_storages,
     upgrade_from_20_02_1_space_strategies,
-    upgrade_from_20_02_1_storage_sync_monitoring,
-    upgrade_from_20_02_19_file_links_reconciliation_traverse_test
+    upgrade_from_20_02_1_storage_sync_monitoring
 ]).
 
 %%%===================================================================
@@ -438,16 +436,6 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc3}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId3])),
     ?assertMatch({ok, SIMDoc4}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId4])),
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
-
-
-upgrade_from_20_02_19_file_links_reconciliation_traverse_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
-    
-    test_utils:mock_assert_num_calls_sum(Worker, file_links_reconciliation_traverse, start, [], 1),
-    
-    % test, that this function is idempotent
-    ?assertEqual(ok, rpc:call(Worker, file_links_reconciliation_traverse, start, [])).
 
 
 %%%===================================================================

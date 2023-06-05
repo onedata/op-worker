@@ -50,6 +50,10 @@ init(_Args) ->
     end,
     qos_bounded_cache:init_group(),
     qos_bounded_cache:init_qos_cache_for_all_spaces(),
+    % file_links_reconciliation_traverse is started here, as it uses QoS traverse pool.
+    % Although it is sufficient to be started just once for every space, the procedure
+    % is idempotent and it's safe to attempt its start at every application init.
+    file_links_reconciliation_traverse:start(),
     {ok, #{}}.
 
 
