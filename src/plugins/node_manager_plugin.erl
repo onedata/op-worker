@@ -45,8 +45,7 @@
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, ?LINE_20_02(<<"19">>)},
-    {5, op_worker:get_release_version()}
+    {4, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -151,13 +150,7 @@ before_cluster_upgrade() ->
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    {ok, 4};
-upgrade_cluster(4) ->
-    % file_links_reconciliation_traverse runs on QoS pool.
-    % It is not started yet as it starts with qos_worker in next step, so it must be started manually.
-    qos_traverse:init_pool(),
-    await_zone_connection_and_run(fun file_links_reconciliation_traverse:start/0),
-    {ok, 5}.
+    {ok, 4}.
 
 %%--------------------------------------------------------------------
 %% @doc
