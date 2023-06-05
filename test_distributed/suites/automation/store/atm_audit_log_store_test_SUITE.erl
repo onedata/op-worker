@@ -238,7 +238,7 @@ logging_level_test(_Config) ->
     LoggingLevel = atm_audit_log_store_container:severity_to_logging_level(LoggingSeverity),
 
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, LoggingLevel, undefined, AtmStoreSchema

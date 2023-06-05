@@ -104,6 +104,7 @@
 %% Record used as an argument for lambda call
 -record(atm_lambda_input, {
     workflow_execution_id :: atm_workflow_execution:id(),
+    logging_level :: atm_audit_log_store_container:level(),
     job_batch_id :: atm_task_executor:job_batch_id(),
     config :: json_utils:json_map(),
     args_batch :: [atm_task_executor:job_args()]

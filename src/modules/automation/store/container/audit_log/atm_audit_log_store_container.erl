@@ -28,7 +28,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([severity_to_logging_level/1]).
+-export([
+    severity_to_logging_level/1,
+    level_to_logging_severity/1
+]).
 
 %% atm_store_container callbacks
 -export([
@@ -92,6 +95,17 @@ severity_to_logging_level(?LOGGER_ERROR) -> ?LOGGER_ERROR_LEVEL;
 severity_to_logging_level(?LOGGER_CRITICAL) -> ?LOGGER_CRITICAL_LEVEL;
 severity_to_logging_level(?LOGGER_ALERT) -> ?LOGGER_ALERT_LEVEL;
 severity_to_logging_level(?LOGGER_EMERGENCY) -> ?LOGGER_EMERGENCY_LEVEL.
+
+
+-spec level_to_logging_severity(level()) -> severity().
+level_to_logging_severity(?LOGGER_DEBUG_LEVEL) -> ?LOGGER_DEBUG;
+level_to_logging_severity(?LOGGER_INFO_LEVEL) -> ?LOGGER_INFO;
+level_to_logging_severity(?LOGGER_NOTICE_LEVEL) -> ?LOGGER_NOTICE;
+level_to_logging_severity(?LOGGER_WARNING_LEVEL) -> ?LOGGER_WARNING;
+level_to_logging_severity(?LOGGER_ERROR_LEVEL) -> ?LOGGER_ERROR;
+level_to_logging_severity(?LOGGER_CRITICAL_LEVEL) -> ?LOGGER_CRITICAL;
+level_to_logging_severity(?LOGGER_ALERT_LEVEL) -> ?LOGGER_ALERT;
+level_to_logging_severity(?LOGGER_EMERGENCY_LEVEL) -> ?LOGGER_EMERGENCY.
 
 
 %%%===================================================================

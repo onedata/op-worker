@@ -398,6 +398,8 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
     lambda_execution_config_entries = AtmLambdaExecutionConfigEntries,
     argument_specs = AtmTaskExecutionArgSpecs
 }) ->
+    AtmWorkflowExecutionCtx = atm_run_job_batch_ctx:get_workflow_execution_ctx(AtmRunJobBatchCtx),
+
     AtmLambdaExecutionConfig = atm_lambda_execution_config_entries:acquire_config(
         AtmRunJobBatchCtx, AtmLambdaExecutionConfigEntries
     ),
@@ -411,6 +413,7 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
 
     #atm_lambda_input{
         workflow_execution_id = atm_run_job_batch_ctx:get_workflow_execution_id(AtmRunJobBatchCtx),
+        logging_level = atm_workflow_execution_ctx:get_logging_level(AtmWorkflowExecutionCtx),
         job_batch_id = AtmJobBatchId,
         config = AtmLambdaExecutionConfig,
         args_batch = ArgsBatch
