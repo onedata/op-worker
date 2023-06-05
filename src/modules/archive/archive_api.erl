@@ -256,7 +256,7 @@ delete_archive_recursive(ArchiveId) ->
 -spec delete_single_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
 delete_single_archive(undefined, _UserCtx) ->
     ok;
-delete_single_archive(ArchiveDoc = #document{}, UserCtx) ->
+delete_single_archive(ArchiveDoc = #document{}, _UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case archive:delete(ArchiveId) of
         ok ->
@@ -264,7 +264,9 @@ delete_single_archive(ArchiveDoc = #document{}, UserCtx) ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
             % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel delete requests?
-            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
+            % NOTE: delete as root because user may not have all permissions to file
+            %       (only permissions to remove archive are required)
+            delete_req:delete_using_trash(user_ctx:new(?ROOT_USER_ID), ArchiveDocCtx, true),
             
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
