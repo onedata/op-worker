@@ -85,7 +85,7 @@ all() -> [
 -define(USER1, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESS_ID(?USER1, Worker, Config)).
 
--define(ATTEMPTS, 300).
+-define(ATTEMPTS, 60).
 -define(LIMIT, 10).
 -define(MAX_LIMIT, 10000).
 -define(MAX_VAL, 1000000000).
@@ -869,6 +869,15 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig),
         Workers = ?config(op_worker_nodes, NewConfig2),
         test_utils:set_env(Workers, op_worker, autocleaning_restart_runs, false),
+
+        % Autocleaning check is triggered by datastore posthook that can be executed before document is flushed.
+        % Add waiting for flush to ensure that expected behaviour will occur during first check after any changes.
+        test_utils:mock_new(Workers, autocleaning_api, [passthrough]),
+        test_utils:mock_expect(Workers, autocleaning_api, check, fun(SpaceId) ->
+            wait_for_flush(),
+            meck:passthrough([SpaceId])
+        end),
+
         sort_workers(NewConfig2)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -930,6 +939,8 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, autocleaning_api),
     application:stop(hackney),
     application:stop(ssl).
 
@@ -1079,3 +1090,15 @@ change_last_open(Worker, FileGuid, NewLastOpen) ->
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
+
+wait_for_flush() ->
+    {_, QueueSizeSum} = lists:foldl(fun(Bucket, {Max, Sum}) ->
+        {M, S} = couchbase_pool:get_worker_queue_size_stats(Bucket),
+        {max(Max, M), Sum + S}
+    end, {0, 0}, couchbase_config:get_buckets()),
+    TPSizesSum = tp_router:get_process_size_sum(),
+    FlushQueue = couchbase_config:get_flush_queue_size(),
+    case QueueSizeSum + TPSizesSum + FlushQueue of
+        0 -> ok;
+        _ -> wait_for_flush()
+    end.
