@@ -31,7 +31,7 @@
     upgrade_from_19_02_x_storages/1,
     upgrade_from_20_02_0_beta3_storages/1,
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1,
+    upgrade_from_20_02_1_storage_sync_monitoring/1
 ]).
 
 %%%===================================================================
