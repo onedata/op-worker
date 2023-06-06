@@ -30,7 +30,7 @@
 ]).
 -export([
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1,
+    upgrade_from_20_02_1_storage_sync_monitoring/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
