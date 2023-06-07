@@ -311,8 +311,13 @@ execute_exception_handler_if_waiting(ExecutionId) ->
 
 -spec abandon(workflow_engine:execution_id(), workflow_handler:abrupt_stop_reason()) -> ok.
 abandon(ExecutionId, InterruptReason) ->
-    {ok, _} = update(ExecutionId, fun(State) -> mark_workflow_abandoned(State, InterruptReason) end),
-    ok.
+    case update(ExecutionId, fun(State) -> mark_workflow_abandoned(State, InterruptReason) end) of
+        {ok, _} ->
+            ok;
+        ?ERROR_NOT_FOUND ->
+            ?warning("Ignoring abandon for not existing workflow execution ~p", [ExecutionId]),
+            ok
+    end.
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
