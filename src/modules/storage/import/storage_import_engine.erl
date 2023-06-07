@@ -153,28 +153,10 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                             end
                                     end
                             end;
-                        % It's impossible that deletion marker is not found and HasSuffix == true,
-                        % which is proved below:
-                        %
-                        % Assumptions:
-                        %  - file with name FileName is processed
-                        %  - link from Parent to FileBaseName is not found
-                        %  - deletion marker from Parent to Filename is not found
-                        % Thesis:
-                        % - FileName == FileBaseName (FileName has no suffix)
-                        %
-                        % Proof by contradiction
-                        % Let's assume, contradictory to thesis, that:
-                        %  - file with name FileName is processed
-                        %  - link from Parent to FileBaseName is not found
-                        %  - deletion marker from Parent to Filename is not found
-                        %  - FileName != FileBaseName (FileName has suffix)
-                        % File is created on storage with suffix if and only if
-                        % file with FileBaseName exists on storage.
-                        % It's impossible that such file exists on storage if link from parent
-                        % to FileBaseName is not found and if deletion marker from parent to FileName
-                        % is not found either.
-                        % Here we have contradiction which proves the thesis.
+                        {error, not_found} ->
+                            % This file was created as a result of access via uuid to remotely created
+                            % (link is not synchronized yet)
+                            {?FILE_UNMODIFIED, undefined, StorageFileCtx};
                         {ok, _FileUuid} ->
                             % deletion marker exists, it means that deletion of the file has been scheduled
                             % we may ignore this file
