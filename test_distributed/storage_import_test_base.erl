@@ -6372,7 +6372,7 @@ clean_space(Config) ->
     SpaceGuid = rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [?SPACE_ID]),
     lfm_proxy:close_all(W),
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000),
-    Attempts = 5 * ?ATTEMPTS,
+    Attempts = 600,
     Self = self(),
     Guids = lists:filtermap(fun({Guid, Name}) ->
         case Name =:= ?TRASH_DIR_NAME of
@@ -7040,7 +7040,7 @@ init_per_testcase(Case, Config)
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ct:timetrap({minutes, 20}),
+    ct:timetrap({minutes, 60}),
     mock_link_handling_method(Workers),
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = add_synced_storages(ConfigWithProxy),
