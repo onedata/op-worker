@@ -450,7 +450,7 @@ build_next_jobs(Job, TaskId, ChildrenCtxs, NewJobsPreprocessor) ->
     ChildrenCount = length(SlaveJobs) + length(MasterJobs),
     SubtreeProcessingStatus = maybe_report_children_jobs_to_process(
         Job, TaskId, ChildrenCount, file_listing:is_finished(ListingPaginationToken)),
-    
+
     {UpdatedSlaveJobs, UpdatedMasterJobs} = case
         NewJobsPreprocessor(SlaveJobs, MasterJobs, ListingPaginationToken, SubtreeProcessingStatus)
     of
