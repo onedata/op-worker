@@ -36,7 +36,6 @@
     task_started/2,
     task_finished/2,
     task_canceled/2,
-    get_sync_info/1,
     get_job/1,
     update_job_progress/5,
     do_master_job/2,
@@ -151,11 +150,6 @@ task_finished(TaskId, Pool) ->
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, Pool) ->
     task_finished(TaskId, Pool).
-
-
--spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
-get_sync_info(Job) ->
-    tree_traverse:get_sync_info(Job).
 
 
 -spec get_job(traverse:job_id()) ->

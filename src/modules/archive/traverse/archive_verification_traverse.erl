@@ -32,7 +32,6 @@
     task_started/2,
     task_finished/2,
     task_canceled/2,
-    get_sync_info/1,
     get_job/1,
     update_job_progress/5,
     do_master_job/2,
@@ -130,11 +129,6 @@ task_canceled(TaskId, _Pool) ->
         {error, marked_to_delete}  -> ok = archive_api:delete_single_archive(TaskId, user_ctx:new(?ROOT_SESS_ID))
     end, 
     ?debug("Archive verification job ~p cancelled", [TaskId]).
-
-
--spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
-get_sync_info(Job) ->
-    tree_traverse:get_sync_info(Job).
 
 
 -spec get_job(traverse:job_id()) ->
