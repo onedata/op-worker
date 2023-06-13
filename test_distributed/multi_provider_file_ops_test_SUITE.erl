@@ -951,35 +951,35 @@ get_recursive_file_list(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
     User = <<"user2">>,
     SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end,
-    
+
     [Worker1 | _] = ?config(workers1, Config),
     Domain1 = ?GET_DOMAIN_BIN(Worker1),
-    
+
     [Worker2 | _] = ?config(workers_not1, Config),
     Domain2 = ?GET_DOMAIN_BIN(Worker2),
-    
+
     lfm_ct:save_named_context(w1, Worker1, SessionId(Worker1)),
     lfm_ct:save_named_context(w2, Worker2, SessionId(Worker2)),
-    
+
     MainDir = generator:gen_name(),
     MainDirPath = <<"/space7/", MainDir/binary, "/">>,
     MainDirGuid = lfm_ct:mkdir_with_ctx(w1, [MainDirPath]),
     file_test_utils:await_sync(Worker2, MainDirGuid),
-    
+
     Dirname = generator:gen_name(),
     DirGuidW1 = lfm_ct:mkdir_with_ctx(w1, [<<MainDirPath/binary, Dirname/binary>>]),
     DirGuidW2 = lfm_ct:mkdir_with_ctx(w2, [<<MainDirPath/binary, Dirname/binary>>]),
-    
+
     file_test_utils:await_sync(Worker2, DirGuidW1),
     file_test_utils:await_sync(Worker1, DirGuidW2),
-    
+
     DirnameMapping = #{
         {Worker1, DirGuidW1} => Dirname,
         {Worker1, DirGuidW2} => <<Dirname/binary, "@", Domain2/binary>>,
         {Worker2, DirGuidW1} => <<Dirname/binary, "@", Domain1/binary>>,
         {Worker2, DirGuidW2} => Dirname
     },
-    
+
     Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
     {AllExpectedFilesW1, AllExpectedFilesW2} = lists:foldl(fun(DG, Acc) ->
         lists:foldl(fun(Filename, {FilesTmpW1, FilesTmpW2}) ->
@@ -987,11 +987,11 @@ get_recursive_file_list(Config0) ->
             GW2 = lfm_ct:create_with_ctx(w2, [DG, Filename, ?DEFAULT_FILE_MODE]),
             {
                 FilesTmpW1 ++ [
-                    {GW1, filename:join([maps:get({Worker1, DG}, DirnameMapping), Filename])}, 
+                    {GW1, filename:join([maps:get({Worker1, DG}, DirnameMapping), Filename])},
                     {GW2, filename:join([maps:get({Worker1, DG}, DirnameMapping), <<Filename/binary, "@", Domain2/binary>>])}
                 ],
                 FilesTmpW2 ++ [
-                    {GW1, filename:join([maps:get({Worker2, DG}, DirnameMapping), <<Filename/binary, "@", Domain1/binary>>])}, 
+                    {GW1, filename:join([maps:get({Worker2, DG}, DirnameMapping), <<Filename/binary, "@", Domain1/binary>>])},
                     {GW2, filename:join([maps:get({Worker2, DG}, DirnameMapping), Filename])}
                 ]
             }
@@ -1000,7 +1000,7 @@ get_recursive_file_list(Config0) ->
     lists:foreach(fun({Guid, _}) ->
         file_test_utils:await_sync([Worker1, Worker2], Guid)
     end, AllExpectedFilesW1),
-    
+
     lfm_files_test_base:check_list_recursive_start_after(Worker1, SessionId(Worker1), MainDirGuid, AllExpectedFilesW1),
     lfm_files_test_base:check_list_recursive_start_after(Worker2, SessionId(Worker2), MainDirGuid, AllExpectedFilesW2).
 
