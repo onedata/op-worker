@@ -249,7 +249,7 @@ start_gs_client_worker() ->
             % when the 'on_db_and_workers_ready' callback fires.
             case node_manager:are_db_and_workers_ready() of
                 false ->
-                    ?info("Deferring on-connect-to-oz procedures as DB and workers are not ready yet");
+                    ?info("Deferring on-connect-to-oz procedures as not all workers are ready yet");
                 true ->
                     run_on_connect_to_oz_procedures()
             end;

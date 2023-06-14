@@ -54,6 +54,7 @@ init(_Args) ->
     % Although it is sufficient to be started just once for every space, the procedure
     % is idempotent and it's safe to attempt its start at every application init.
     file_links_reconciliation_traverse:start(),
+    % QoS traverse pools are initialized after successful zone connection
     {ok, #{}}.
 
 
