@@ -56,6 +56,9 @@
     openfaas_status_check_grace_attempts, 5
 ))).
 
+% how often logs appear when Openfaas is unreachable during status check
+-define(OPENFAAS_UNREACHABLE_LOG_INTERVAL, 300). % 5 minutes
+
 -define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER,
     report_openfaas_down_to_atm_workflow_execution_layer
 ).
@@ -222,7 +225,9 @@ check_openfaas_status() ->
             {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, _RespBody} ->
                 unhealthy;
             _ ->
-                ?warning("OpenFaaS service is unreachable (due to e.g. incorrect configuration)"),
+                utils:throttle({?MODULE, ?LINE}, ?OPENFAAS_UNREACHABLE_LOG_INTERVAL, fun() ->
+                    ?critical("OpenFaaS service is unreachable (due to e.g. incorrect configuration)")
+                end),
                 unreachable
         end
     catch throw:?ERROR_ATM_OPENFAAS_NOT_CONFIGURED ->

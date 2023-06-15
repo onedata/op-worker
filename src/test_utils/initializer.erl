@@ -1316,6 +1316,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
+                    version = <<"21.02.2">>,
                     eff_spaces = EffSpaces,
                     storages = Storages,
                     longitude = 0.0,
