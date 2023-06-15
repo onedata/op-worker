@@ -122,7 +122,7 @@
 
 -record(map_results_to_global_store_test_spec, {
     testcase :: atom(),
-    logging_severity = ?LOGGER_DEBUG :: atm_audit_log_store_container:severity(),
+    log_level = ?DEBUG_AUDIT_LOG_SEVERITY_INT :: audit_log:entry_severity_int(),
     iterated_item_spec :: atm_data_spec:record(),
     iterated_items :: [automation:item()],
     target_store_type :: automation:store_type(),
@@ -134,7 +134,7 @@
 
 -record(map_results_to_store_test_spec, {
     testcase :: atom(),
-    logging_severity = ?LOGGER_DEBUG :: atm_audit_log_store_container:severity(),
+    log_level = ?DEBUG_AUDIT_LOG_SEVERITY_INT :: audit_log:entry_severity_int(),
     global_store_schema_drafts :: [atm_test_schema_factory:atm_store_schema_draft()],
     iterated_item_spec :: atm_data_spec:record(),
     iterated_items :: [automation:item()],
@@ -300,17 +300,17 @@ map_results_to_audit_log_store() ->
     IteratedItemDataSpec = #atm_object_data_spec{},
     IteratedItems = gen_random_log_object_list(),
 
-    LoggingSeverity = ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS),
+    LogLevel = audit_log:severity_to_int(?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)),
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         testcase = ?FUNCTION_NAME,
-        logging_severity = LoggingSeverity,
+        log_level = LogLevel,
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
         target_store_type = audit_log,
         target_store_config = #atm_audit_log_store_config{log_content_data_spec = IteratedItemDataSpec},
         target_store_update_options = #atm_audit_log_store_content_update_options{function = append},
-        exp_target_store_content = filter_logged_objects_content(LoggingSeverity, IteratedItems)
+        exp_target_store_content = filter_logged_objects_content(LogLevel, IteratedItems)
     }).
 
 
@@ -400,7 +400,7 @@ map_results_to_tree_forest_store() ->
     ok.
 map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
     testcase = Testcase,
-    logging_severity = LoggingSeverity,
+    log_level = LogLevel,
     iterated_item_spec = IteratedItemDataSpec,
     iterated_items = IteratedItems,
     target_store_type = TargetStoreType,
@@ -419,7 +419,7 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
         testcase = Testcase,
-        logging_severity = LoggingSeverity,
+        log_level = LogLevel,
         global_store_schema_drafts = [IteratedStoreSchemaDraft, TargetStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
@@ -512,18 +512,18 @@ map_results_to_workflow_audit_log_store() ->
     IteratedItems = gen_random_log_object_list(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    LoggingSeverity = ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS),
+    LogLevel = audit_log:severity_to_int(?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)),
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
         testcase = ?FUNCTION_NAME,
-        logging_severity = LoggingSeverity,
+        log_level = LogLevel,
         global_store_schema_drafts = [IteratedStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
         target_store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
         target_store_type = audit_log,
         target_store_update_options = #atm_audit_log_store_content_update_options{function = append},
-        exp_target_store_content = filter_logged_objects_content(LoggingSeverity, IteratedItems)
+        exp_target_store_content = filter_logged_objects_content(LogLevel, IteratedItems)
     }).
 
 
@@ -532,18 +532,18 @@ map_results_to_task_audit_log_store() ->
     IteratedItems = gen_random_log_object_list(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    LoggingSeverity = ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS),
+    LogLevel = audit_log:severity_to_int(?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)),
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
         testcase = ?FUNCTION_NAME,
-        logging_severity = LoggingSeverity,
+        log_level = LogLevel,
         global_store_schema_drafts = [IteratedStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
         target_store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
         target_store_type = audit_log,
         target_store_update_options = #atm_audit_log_store_content_update_options{function = append},
-        exp_target_store_content = filter_logged_objects_content(LoggingSeverity, IteratedItems)
+        exp_target_store_content = filter_logged_objects_content(LogLevel, IteratedItems)
     }).
 
 
@@ -570,7 +570,7 @@ map_results_to_task_time_series_store() ->
 -spec map_results_to_store_test_base(map_results_to_store_test_spec()) -> ok.
 map_results_to_store_test_base(#map_results_to_store_test_spec{
     testcase = Testcase,
-    logging_severity = LoggingSeverity,
+    log_level = LogLevel,
     global_store_schema_drafts = StoreSchemaDrafts,
     iterated_item_spec = IteratedItemDataSpec,
     target_store_schema_id = TargetStoreSchemaId,
@@ -595,7 +595,7 @@ map_results_to_store_test_base(#map_results_to_store_test_spec{
             ArgumentMappings,
             ResultMappings
         ),
-        logging_severity = LoggingSeverity,
+        log_level = LogLevel,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -722,26 +722,25 @@ gen_random_log_object_list() ->
             2 ->
                 #{
                     ?RAND_STR() => ?RAND_STR(),
-                    <<"severity">> => ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS)
+                    <<"severity">> => ?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)
                 };
             3 ->
                 #{<<"content">> => #{?RAND_STR() => ?RAND_STR()}};
             4 ->
                 #{
                     <<"content">> => #{?RAND_STR() => ?RAND_STR()},
-                    <<"severity">> => ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS)
+                    <<"severity">> => ?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)
                 }
         end
     end, ?RAND_INT(30, 50)).
 
 
 %% @private
-filter_logged_objects_content(LoggingSeverity, LogObjects) ->
-    LoggingLevel = atm_audit_log_store_container:severity_to_logging_level(LoggingSeverity),
+filter_logged_objects_content(LogLevel, LogObjects) ->
 
     lists:filtermap(fun(LogObject) ->
-        LogSeverity = maps:get(<<"severity">>, LogObject, ?LOGGER_INFO),
-        case atm_audit_log_store_container:severity_to_logging_level(LogSeverity) =< LoggingLevel of
+        LogSeverity = maps:get(<<"severity">>, LogObject, ?INFO_AUDIT_LOG_SEVERITY),
+        case audit_log:severity_to_int(LogSeverity) =< LogLevel of
             true ->
                 {true, maps:get(<<"content">>, LogObject, maps:without([<<"severity">>], LogObject))};
             false ->

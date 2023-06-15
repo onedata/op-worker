@@ -134,7 +134,7 @@ iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
     AtmStoreSchemaId = AtmStoreSchema#atm_store_schema.id,
 
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, AtmRangeStoreInitialValue, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, AtmRangeStoreInitialValue, AtmStoreSchema
     ))),
     AtmWorkflowExecutionEnv = build_workflow_execution_env(
         AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStoreId
@@ -165,7 +165,7 @@ reuse_iterator_test(_Config) ->
 
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth,
-        ?LOGGER_DEBUG_LEVEL,
+        ?DEBUG_AUDIT_LOG_SEVERITY_INT,
         #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
         AtmStoreSchema
     ))),
@@ -215,7 +215,7 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStor
         atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
         0,
-        ?LOGGER_DEBUG,
+        ?DEBUG_AUDIT_LOG_SEVERITY_INT,
         #{AtmStoreSchemaId => AtmStoreId}
     ).
 

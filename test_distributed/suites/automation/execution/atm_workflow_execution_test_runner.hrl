@@ -118,7 +118,7 @@
     workflow_schema_revision_num = 1 :: atm_workflow_schema_revision:revision_number(),
 
     store_initial_content_overlay = #{} :: atm_workflow_execution_api:store_initial_content_overlay(),
-    logging_severity = ?LOGGER_DEBUG :: atm_audit_log_store_container:severity(),
+    log_level = ?DEBUG_AUDIT_LOG_SEVERITY_INT :: audit_log:entry_severity_int(),
     callback_url = undefined :: undefined | http_client:url(),
 
     incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()],

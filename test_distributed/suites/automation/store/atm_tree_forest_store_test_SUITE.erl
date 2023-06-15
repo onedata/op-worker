@@ -452,14 +452,14 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
         item_data_spec = AtmDataSpec
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
-        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, RootsToAdd, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, RootsToAdd, AtmStoreSchema
     ))),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
         max_batch_size = MaxBatchSize
     },
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        SpaceId, WorkflowId, 0, ?LOGGER_DEBUG, #{AtmStoreDummySchemaId => AtmStoreId}
+        SpaceId, WorkflowId, 0, ?DEBUG_AUDIT_LOG_SEVERITY_INT, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIterator0 = ?rpc(ProviderSelector, atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.

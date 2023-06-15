@@ -141,7 +141,7 @@ create_test_base(#{
         ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
         ?rpc(catch atm_store_api:create(
             AtmWorkflowExecutionAuth,
-            ?LOGGER_DEBUG_LEVEL,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             undefined,
             atm_store_test_utils:build_store_schema(ExampleAtmStoreConfig, true)
         ))
@@ -153,7 +153,7 @@ create_test_base(#{
         {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
         ?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth,
-            ?LOGGER_DEBUG_LEVEL,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             undefined,
             atm_store_test_utils:build_store_schema(ExampleAtmStoreConfig, false)
         ))
@@ -241,7 +241,7 @@ update_content_test_base(#{
             [InputItem] -> {[PrepareExpStoreItemFun(InputItem, InputItemGeneratorSeedDataSpec, 0)], 1}
         end,
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, InitialInputContent, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, InitialInputContent, AtmStoreSchema
         ))),
 
         NewInputItemDataSeed1 = gen_valid_data(
@@ -346,7 +346,7 @@ iterator_test_base(#{
         end, lists:seq(1, ItemsCount))),
 
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, InitialInputContent, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, InitialInputContent, AtmStoreSchema
         ))),
         MaxBatchSize = rand:uniform(ItemsCount),
         ExpBatches = atm_store_test_utils:split_into_chunks(MaxBatchSize, [], ExpStoreContent),
@@ -426,7 +426,7 @@ browse_content_test_base(BrowsingMethod, #{
             InputItemFormatterFun(gen_valid_data(AtmWorkflowExecutionAuth, AtmDataSpec))
         end, lists:seq(1, Length)),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, InitialInputContent, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, InitialInputContent, AtmStoreSchema
         ))),
 
         Content = lists:map(fun({Index, InputItem}) ->

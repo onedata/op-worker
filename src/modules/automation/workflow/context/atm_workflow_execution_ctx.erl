@@ -26,7 +26,7 @@
     get_workflow_execution_incarnation/1,
     get_env/1,
     get_auth/1,
-    get_logging_level/1,
+    get_log_level_int/1,
     get_logger/1,
 
     is_global_store/2,
@@ -113,9 +113,9 @@ get_auth(#atm_workflow_execution_ctx{workflow_execution_auth = AtmWorkflowExecut
     AtmWorkflowExecutionAuth.
 
 
--spec get_logging_level(record()) -> atm_audit_log_store_container:level().
-get_logging_level(#atm_workflow_execution_ctx{workflow_execution_env = AtmWorkflowExecutionEnv}) ->
-    atm_workflow_execution_env:get_logging_level(AtmWorkflowExecutionEnv).
+-spec get_log_level_int(record()) -> audit_log:entry_severity_int().
+get_log_level_int(#atm_workflow_execution_ctx{workflow_execution_env = AtmWorkflowExecutionEnv}) ->
+    atm_workflow_execution_env:get_log_level_int(AtmWorkflowExecutionEnv).
 
 
 -spec get_logger(record()) -> atm_workflow_execution_logger:record().

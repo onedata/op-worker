@@ -413,7 +413,7 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
 
     #atm_lambda_input{
         workflow_execution_id = atm_run_job_batch_ctx:get_workflow_execution_id(AtmRunJobBatchCtx),
-        logging_level = atm_workflow_execution_ctx:get_logging_level(AtmWorkflowExecutionCtx),
+        log_level = atm_workflow_execution_ctx:get_log_level_int(AtmWorkflowExecutionCtx),
         job_batch_id = AtmJobBatchId,
         config = AtmLambdaExecutionConfig,
         args_batch = ArgsBatch

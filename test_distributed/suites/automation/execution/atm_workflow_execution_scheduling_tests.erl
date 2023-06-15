@@ -250,5 +250,5 @@ try_to_schedule_workflow_execution(
 
     ?erpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        StoreInitialContents, ?LOGGER_DEBUG, undefined
+        StoreInitialContents, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined
     )).

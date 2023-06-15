@@ -93,7 +93,7 @@ iterator_test(_Config) ->
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
         AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
         ))),
         AtmStoreIteratorSpec = #atm_store_iterator_spec{
             store_schema_id = AtmStoreSchema#atm_store_schema.id,
@@ -103,7 +103,7 @@ iterator_test(_Config) ->
             atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
             atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
             0,
-            ?LOGGER_DEBUG,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
         ),
 

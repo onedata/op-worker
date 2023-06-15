@@ -182,7 +182,7 @@ get_record_struct(1) ->
 
 get_record_struct(2) ->
     % New fields:
-    % - logging_level
+    % - log_level
     {record, [
         {discarded, boolean},
 
@@ -207,7 +207,7 @@ get_record_struct(2) ->
         {status, atom},
         {prev_status, atom},
 
-        {logging_severity, string},  % new field
+        {log_level, integer},  % new field
 
         {callback, string},
 
@@ -239,7 +239,7 @@ upgrade_record(1, {?MODULE,
         Lanes, LanesCount,
         Incarnation, CurrentLaneIndex, CurrentRunNum,
         Status, PrevStatus,
-        ?LOGGER_INFO,
+        ?INFO_AUDIT_LOG_SEVERITY_INT,
         Callback,
         ScheduleTime, StartTime, SuspendTime, FinishTime
     }}.

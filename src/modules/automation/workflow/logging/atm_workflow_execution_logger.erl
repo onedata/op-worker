@@ -31,7 +31,7 @@
 
 -record(atm_workflow_execution_logger, {
     atm_workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    logging_level :: atm_audit_log_store_container:level(),
+    log_level :: audit_log:entry_severity_int(),
     task_audit_log_store_container :: undefined | atm_store_container:record(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record()
 }).
@@ -47,28 +47,28 @@
 
 -spec build(
     atm_workflow_execution_auth:record(),
-    atm_audit_log_store_container:level(),
+    audit_log:entry_severity_int(),
     undefined | atm_store_container:record(),
     undefined | atm_store_container:record()
 ) ->
     record().
 build(
     AtmWorkflowExecutionAuth,
-    LoggingLevel,
+    LogLevel,
     AtmTaskAuditLogStoreContainer,
     AtmWorkflowAuditLogStoreContainer
 ) ->
     #atm_workflow_execution_logger{
         atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
-        logging_level = LoggingLevel,
+        log_level = LogLevel,
         task_audit_log_store_container = AtmTaskAuditLogStoreContainer,
         workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
     }.
 
 
--spec should_log(record(), atm_audit_log_store_container:level()) -> boolean().
-should_log(#atm_workflow_execution_logger{logging_level = LoggingLevel}, LogLevel) ->
-    LogLevel =< LoggingLevel.
+-spec should_log(record(), audit_log:entry_severity_int()) -> boolean().
+should_log(#atm_workflow_execution_logger{log_level = LogLevel}, LogSeverityInt) ->
+    audit_log:should_log(LogLevel, LogSeverityInt).
 
 
 -spec task_append_system_log(log_content(), severity(), record()) -> ok.

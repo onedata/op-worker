@@ -15,6 +15,7 @@
 
 
 -include("global_definitions.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -104,7 +105,7 @@
 %% Record used as an argument for lambda call
 -record(atm_lambda_input, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    logging_level :: atm_audit_log_store_container:level(),
+    log_level :: audit_log:entry_severity_int(),
     job_batch_id :: atm_task_executor:job_batch_id(),
     config :: json_utils:json_map(),
     args_batch :: [atm_task_executor:job_args()]
@@ -198,7 +199,7 @@
 % Record used only during creation of atm store container (it is not persisted anywhere)
 -record(atm_store_container_creation_args, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    logging_level :: atm_audit_log_store_container:level(),
+    log_level :: audit_log:entry_severity_int(),
     store_config :: atm_store_config:record(),
     initial_content :: atm_store_container:initial_content()
 }).
@@ -318,30 +319,6 @@
 
 %% Atm logging related macros
 
--define(LOGGER_DEBUG, <<"debug">>).
--define(LOGGER_INFO, <<"info">>).
--define(LOGGER_NOTICE, <<"notice">>).
--define(LOGGER_WARNING, <<"warning">>).
--define(LOGGER_ERROR, <<"error">>).
--define(LOGGER_CRITICAL, <<"critical">>).
--define(LOGGER_ALERT, <<"alert">>).
--define(LOGGER_EMERGENCY, <<"emergency">>).
-
--define(LOGGER_SEVERITY_LEVELS, [
-    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
-    ?LOGGER_WARNING, ?LOGGER_ERROR,
-    ?LOGGER_CRITICAL, ?LOGGER_ALERT, ?LOGGER_EMERGENCY
-]).
-
--define(LOGGER_DEBUG_LEVEL, 7).
--define(LOGGER_INFO_LEVEL, 6).
--define(LOGGER_NOTICE_LEVEL, 5).
--define(LOGGER_WARNING_LEVEL, 4).
--define(LOGGER_ERROR_LEVEL, 3).
--define(LOGGER_CRITICAL_LEVEL, 2).
--define(LOGGER_ALERT_LEVEL, 1).
--define(LOGGER_EMERGENCY_LEVEL, 0).
-
 -define(atm_task_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL, __LOGGER),
     case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
         true ->
@@ -352,56 +329,56 @@
 ).
 
 -define(atm_task_debug(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_DEBUG, ?LOGGER_DEBUG_LEVEL, __LOGGER
+    __LOG_CONTENT, ?DEBUG_AUDIT_LOG_SEVERITY, ?DEBUG_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_debug(__FORMAT, __ARGS, __LOGGER), ?atm_task_debug(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_info(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_INFO, ?LOGGER_INFO_LEVEL, __LOGGER
+    __LOG_CONTENT, ?INFO_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_info(__FORMAT, __ARGS, __LOGGER), ?atm_task_info(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_notice(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_NOTICE, ?LOGGER_NOTICE_LEVEL, __LOGGER
+    __LOG_CONTENT, ?NOTICE_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_notice(__FORMAT, __ARGS, __LOGGER), ?atm_task_notice(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_warning(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_WARNING, ?LOGGER_WARNING_LEVEL, __LOGGER
+    __LOG_CONTENT, ?WARNING_AUDIT_LOG_SEVERITY, ?WARNING_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_warning(__FORMAT, __ARGS, __LOGGER), ?atm_task_warning(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_error(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_ERROR, ?LOGGER_ERROR_LEVEL, __LOGGER
+    __LOG_CONTENT, ?ERROR_AUDIT_LOG_SEVERITY, ?ERROR_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_error(__FORMAT, __ARGS, __LOGGER), ?atm_task_error(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_critical(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_CRITICAL, ?LOGGER_CRITICAL_LEVEL, __LOGGER
+    __LOG_CONTENT, ?CRITICAL_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_critical(__FORMAT, __ARGS, __LOGGER), ?atm_task_critical(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_alert(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_ALERT, ?LOGGER_ALERT_LEVEL, __LOGGER
+    __LOG_CONTENT, ?ALERT_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_alert(__FORMAT, __ARGS, __LOGGER), ?atm_task_alert(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_task_emergency(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?LOGGER_EMERGENCY, ?LOGGER_EMERGENCY_LEVEL, __LOGGER
+    __LOG_CONTENT, ?EMERGENCY_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_task_emergency(__FORMAT, __ARGS, __LOGGER), ?atm_task_emergency(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
@@ -417,56 +394,56 @@
 ).
 
 -define(atm_workflow_debug(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_DEBUG, ?LOGGER_DEBUG_LEVEL, __LOGGER
+    __LOG_CONTENT, ?DEBUG_AUDIT_LOG_SEVERITY, ?DEBUG_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_debug(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_debug(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_info(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_INFO, ?LOGGER_INFO_LEVEL, __LOGGER
+    __LOG_CONTENT, ?INFO_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_info(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_info(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_notice(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_NOTICE, ?LOGGER_NOTICE_LEVEL, __LOGGER
+    __LOG_CONTENT, ?NOTICE_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_notice(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_notice(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_warning(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_WARNING, ?LOGGER_WARNING_LEVEL, __LOGGER
+    __LOG_CONTENT, ?WARNING_AUDIT_LOG_SEVERITY, ?WARNING_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_warning(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_warning(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_error(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_ERROR, ?LOGGER_ERROR_LEVEL, __LOGGER
+    __LOG_CONTENT, ?ERROR_AUDIT_LOG_SEVERITY, ?ERROR_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_error(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_error(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_critical(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_CRITICAL, ?LOGGER_CRITICAL_LEVEL, __LOGGER
+    __LOG_CONTENT, ?CRITICAL_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_critical(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_critical(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_alert(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_ALERT, ?LOGGER_ALERT_LEVEL, __LOGGER
+    __LOG_CONTENT, ?ALERT_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_alert(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_alert(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
 -define(atm_workflow_emergency(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?LOGGER_EMERGENCY, ?LOGGER_EMERGENCY_LEVEL, __LOGGER
+    __LOG_CONTENT, ?EMERGENCY_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY_INT, __LOGGER
 )).
 -define(atm_workflow_emergency(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_emergency(
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER

@@ -135,7 +135,7 @@ browse_by_timestamp_test(_Config) ->
         log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
     ))),
 
 %%    ItemsNum = rand:uniform(1000),  @TODO VFS-10429
@@ -200,7 +200,7 @@ expiration_test(_Config) ->
         log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, ?LOGGER_DEBUG_LEVEL, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
     ))),
 
     CallBrowseContent = fun() ->
@@ -234,14 +234,13 @@ logging_level_test(_Config) ->
         ?PROVIDER_SELECTOR, user1, space_krk
     ),
 
-    LoggingSeverity = ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS),
-    LoggingLevel = atm_audit_log_store_container:severity_to_logging_level(LoggingSeverity),
+    LogLevel = audit_log:severity_to_int(?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)),
 
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
         log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, LoggingLevel, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, LogLevel, undefined, AtmStoreSchema
     ))),
 
     ItemsNum = rand:uniform(100),
@@ -250,12 +249,12 @@ logging_level_test(_Config) ->
         LogContent = #{<<"value">> => Index},
         ItemToAdd = case rand:uniform(4) of
             1 -> LogContent;
-            2 -> #{<<"content">> => LogContent, <<"severity">> => ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS)};
+            2 -> #{<<"content">> => LogContent, <<"severity">> => ?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)};
             3 -> #{<<"content">> => LogContent};
-            4 -> LogContent#{<<"severity">> => ?RAND_ELEMENT(?LOGGER_SEVERITY_LEVELS)}
+            4 -> LogContent#{<<"severity">> => ?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)}
         end,
-        LogSeverity = maps:get(<<"severity">>, ItemToAdd, ?LOGGER_INFO),
-        case atm_audit_log_store_container:severity_to_logging_level(LogSeverity) =< LoggingLevel of
+        LogSeverity = maps:get(<<"severity">>, ItemToAdd, ?INFO_AUDIT_LOG_SEVERITY),
+        case audit_log:severity_to_int(LogSeverity) =< LogLevel of
             true ->
                 ExpAddedItem = #{
                     <<"content">> => LogContent,
