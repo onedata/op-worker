@@ -157,6 +157,7 @@
     subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),
+    version :: onedata:release_version(),
     latitude = 0.0 :: float(),
     longitude = 0.0 :: float(),
     online = false :: boolean(),
