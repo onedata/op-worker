@@ -38,12 +38,16 @@ translate_value(#gri{aspect = test_image}, {binary, TestImage}) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = protected}, #od_provider{
     name = Name,
+    domain = Domain,
+    version = Version,
     latitude = Latitude,
     longitude = Longitude,
     online = Online
 }) ->
     #{
         <<"name">> => Name,
+        <<"domain">> => Domain,
+        <<"version">> => Version,
         <<"latitude">> => Latitude,
         <<"longitude">> => Longitude,
         <<"online">> => Online
