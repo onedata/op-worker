@@ -57,7 +57,7 @@
 ))).
 
 % how often logs appear when Openfaas is unreachable during status check
--define(OPENFAAS_UNREACHABLE_LOG_INTERVAL, 300). % 5 minutes
+-define(OPENFAAS_UNREACHABLE_LOG_INTERVAL, 1800). % 30 minutes
 
 -define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER,
     report_openfaas_down_to_atm_workflow_execution_layer

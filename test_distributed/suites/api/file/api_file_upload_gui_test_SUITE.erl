@@ -13,8 +13,9 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
--include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 
 -export([
     all/0, groups/0,
@@ -139,6 +140,8 @@ upload_test(_Config) ->
 
 
 stale_upload_file_should_be_deleted_test(_Config) ->
+    set_upload_inactivity_period(krakow, 300),
+
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
@@ -158,9 +161,9 @@ stale_upload_file_should_be_deleted_test(_Config) ->
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
-    % and will be removed if no such process exists for longer than 1 minute
+    % and will be removed if no such process exists for longer than the inactivity period
     stop_stalling_process(StallingProcess),
-    time_test_utils:simulate_seconds_passing(59),
+    time_test_utils:simulate_seconds_passing(299),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
@@ -171,6 +174,8 @@ stale_upload_file_should_be_deleted_test(_Config) ->
 
 
 upload_with_backward_time_warps_test(_Config) ->
+    set_upload_inactivity_period(krakow, 300),
+
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
@@ -183,15 +188,17 @@ upload_with_backward_time_warps_test(_Config) ->
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
-    % but will de removed if time equal to inactivity period (currently 1 minute)
+    % but will de removed if time equal to inactivity period
     % passes from this new point in time (if no new activity occurred)
-    time_test_utils:simulate_seconds_passing(61),
+    time_test_utils:simulate_seconds_passing(301),
     force_stale_uploads_removal(krakow),
     ?assertMatch(false, is_upload_registered(krakow, user1, FileGuid)),
     assert_file_does_not_exist(krakow, user1, FileGuid).
 
 
 upload_with_forward_time_warps_test(_Config) ->
+    set_upload_inactivity_period(krakow, 300),
+
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
@@ -205,8 +212,8 @@ upload_with_forward_time_warps_test(_Config) ->
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
-    % otherwise it will be removed after inactivity period (currently 1 minute)
-    time_test_utils:simulate_seconds_passing(61),
+    % otherwise it will be removed after inactivity period
+    time_test_utils:simulate_seconds_passing(301),
     force_stale_uploads_removal(krakow),
     ?assertMatch(false, is_upload_registered(krakow, user1, FileGuid)),
     assert_file_does_not_exist(krakow, user1, FileGuid).
@@ -469,3 +476,10 @@ unmock_cowboy_multipart(ProviderPlaceholder) ->
     Nodes = oct_background:get_provider_nodes(ProviderPlaceholder),
     test_utils:mock_unload(Nodes, cowboy_req),
     test_utils:mock_unload(Nodes, cow_multipart).
+
+
+%% @private
+-spec set_upload_inactivity_period(oct_background:entity_selector(), time:seconds()) -> ok.
+set_upload_inactivity_period(ProviderPlaceholder, Seconds) ->
+    Nodes = oct_background:get_provider_nodes(ProviderPlaceholder),
+    test_utils:set_env(Nodes, ?APP_NAME, upload_inactivity_period_sec, Seconds).

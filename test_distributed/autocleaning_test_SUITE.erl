@@ -85,7 +85,7 @@ all() -> [
 -define(USER1, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESS_ID(?USER1, Worker, Config)).
 
--define(ATTEMPTS, 300).
+-define(ATTEMPTS, 60).
 -define(LIMIT, 10).
 -define(MAX_LIMIT, 10000).
 -define(MAX_VAL, 1000000000).
@@ -869,29 +869,42 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig),
         Workers = ?config(op_worker_nodes, NewConfig2),
         test_utils:set_env(Workers, op_worker, autocleaning_restart_runs, false),
+
+        % Autocleaning check is triggered by datastore posthook that can be executed before document is flushed.
+        % Add waiting for flush to ensure that expected behaviour will occur during first check after any changes.
+        test_utils:mock_new(Workers, autocleaning_api, [passthrough]),
+        test_utils:mock_expect(Workers, autocleaning_api, check, fun(SpaceId) ->
+            wait_for_flush(),
+            meck:passthrough([SpaceId])
+        end),
+
         sort_workers(NewConfig2)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
-
-init_per_testcase(Case, Config) when
-    Case =:= forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated orelse
-    Case =:= autocleaning_should_evict_file_replicas_until_it_reaches_configured_target orelse
-    Case =:= restart_autocleaning_run_test
-->
-    [W | _] = ?config(op_worker_nodes, Config),
-    disable_periodical_spaces_autocleaning_check(W),
-    init_per_testcase(default, Config);
 
 init_per_testcase(cancel_autocleaning_run, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(W, op_worker, autocleaning_view_batch_size, 10),
     ok = test_utils:set_env(W, op_worker, replica_deletion_max_parallel_requests, 10),
-    disable_periodical_spaces_autocleaning_check(W),
     init_per_testcase(default, Config);
 
-init_per_testcase(default, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= periodical_autocleaning_should_evict_file_replica_when_it_is_replicated orelse
+    Case =:= autocleaning_should_evict_file_when_it_is_old_enough
+->
+    Config2 = init_per_testcase(default, Config),
+    [W | _] = ?config(op_worker_nodes, Config),
+    ok = enable_periodical_spaces_autocleaning_check(W),
+    Config2;
+
+init_per_testcase(time_warp_test, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
+
+init_per_testcase(_, Config) ->
     ct:timetrap({minutes, 20}),
     Workers = [W | _] = ?config(op_worker_nodes, Config),
+    disable_periodical_spaces_autocleaning_check(W),
     % ensure that all file blocks will be public
     ok = test_utils:set_env(Workers, ?APP_NAME, public_block_size_treshold, 0),
     ok = test_utils:set_env(Workers, ?APP_NAME, public_block_percent_treshold, 0),
@@ -899,18 +912,8 @@ init_per_testcase(default, Config) ->
     clean_autocleaning_run_model(W, ?SPACE_ID),
     Config2 = lfm_proxy:init(Config),
     lfm_test_utils:assert_space_and_trash_are_empty(Workers, ?SPACE_ID, ?ATTEMPTS),
-    Config2;
+    Config2.
 
-init_per_testcase(time_warp_test, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    disable_periodical_spaces_autocleaning_check(W),
-    time_test_utils:freeze_time(Config),
-    init_per_testcase(default, Config);
-
-init_per_testcase(_Case, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    ok = enable_periodical_spaces_autocleaning_check(W),
-    init_per_testcase(default, Config).
 
 end_per_testcase(cancel_autocleaning_run, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -936,6 +939,8 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, autocleaning_api),
     application:stop(hackney),
     application:stop(ssl).
 
@@ -1085,3 +1090,15 @@ change_last_open(Worker, FileGuid, NewLastOpen) ->
 sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
+
+wait_for_flush() ->
+    {_, QueueSizeSum} = lists:foldl(fun(Bucket, {Max, Sum}) ->
+        {M, S} = couchbase_pool:get_worker_queue_size_stats(Bucket),
+        {max(Max, M), Sum + S}
+    end, {0, 0}, couchbase_config:get_buckets()),
+    TPSizesSum = tp_router:get_process_size_sum(),
+    FlushQueue = couchbase_config:get_flush_queue_size(),
+    case QueueSizeSum + TPSizesSum + FlushQueue of
+        0 -> ok;
+        _ -> wait_for_flush()
+    end.

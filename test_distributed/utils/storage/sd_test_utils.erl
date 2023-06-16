@@ -198,7 +198,9 @@ recursive_rm_posix(Worker, SDHandle, Offset, Count, DoNotDeleteRoot) ->
             end;
         {ok, Children} ->
             rm_children(Worker, SDHandle, Children),
-            recursive_rm_posix(Worker, SDHandle, Offset + Count, Count, false)
+            recursive_rm_posix(Worker, SDHandle, Offset + Count, Count, false);
+        {error, ?ENOENT} ->
+            ok
     end.
 
 recursive_rm_s3(Worker, SDHandle, Marker, Offset, Count) ->

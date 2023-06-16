@@ -50,6 +50,10 @@
 init(_Args) ->
     qos_bounded_cache:init_group(),
     qos_bounded_cache:init_qos_cache_for_all_spaces(),
+    % file_links_reconciliation_traverse is started here, as it uses QoS traverse pool.
+    % Although it is sufficient to be started just once for every space, the procedure
+    % is idempotent and it's safe to attempt its start at every application init.
+    file_links_reconciliation_traverse:start(),
     % QoS traverse pools are initialized after successful zone connection
     {ok, #{}}.
 
@@ -74,7 +78,7 @@ handle({?CHECK_QOS_CACHE, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     case qos_bounded_cache:is_cache_initialized(SpaceId) of
-        true -> 
+        true ->
             ok;
         false ->
             ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),

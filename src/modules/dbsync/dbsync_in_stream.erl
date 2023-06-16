@@ -285,8 +285,8 @@ resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
                                 [SpaceId, ProviderId, Error]),
                             ok;
                         Seq ->
-                            ?info("Resynchronizing ~p sequences on dbsync in stream {~p, ~p} due to: ~p",
-                                [Seq, SpaceId, ProviderId, Error]),
+                            ?info("Resynchronizing ~p sequences on dbsync in stream {~p, ~p} due to:~s",
+                                [Seq, SpaceId, ProviderId, ?autoformat([Error])]),
                             ok = dbsync_state:resynchronize_stream(
                                 SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER, -1 * Seq, current)
                     end
