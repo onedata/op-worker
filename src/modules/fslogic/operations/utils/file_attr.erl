@@ -100,16 +100,14 @@ resolve(UserCtx, FileCtx, Opts) ->
     ),
 
     % TODO VFS-11033 - remove when stats work for archives
-    {FinalReplicationStatus, FinalSize, FileCtx9} = case {ShareId, EffectiveType} of
-        {undefined, _} ->
-            {ReplicationStatus, Size, FileCtx7};
-        {_, ?DIRECTORY_TYPE} ->
+    {FinalReplicationStatus, FinalSize, FileCtx9} = case EffectiveType of
+        ?DIRECTORY_TYPE when ShareId =/= undefined ->
             {UuidPath, FileCtx8} = file_ctx:get_uuid_based_path(FileCtx7),
             case lists:any(fun(Uuid) -> archivisation_tree:is_special_uuid(Uuid) end, filename:split(UuidPath)) of
                 true -> {undefined, undefined, FileCtx8};
                 false -> {ReplicationStatus, Size, FileCtx8}
             end;
-        {ReplicationStatus, Size} ->
+        _ ->
             {ReplicationStatus, Size, FileCtx7}
     end,
 
