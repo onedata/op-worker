@@ -29,7 +29,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -56,6 +56,7 @@
 }.
 
 -record(atm_audit_log_store_container, {
+    log_level :: audit_log:entry_severity_int(),
     config :: atm_audit_log_store_config:record(),
     backend_id :: audit_log:id()
 }).
@@ -75,21 +76,27 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_audit_log_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
-    create_container(AtmStoreConfig);
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(#atm_store_container_creation_args{
+    log_level = LogLevel,
+    store_config = AtmStoreConfig,
+    initial_content = undefined
+}) ->
+    create_container(LogLevel, AtmStoreConfig);
 
-create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialItemsArray) ->
+create(#atm_store_container_creation_args{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    log_level = LogLevel,
+    store_config = AtmStoreConfig,
+    initial_content = InitialItemsArray
+}) ->
     % validate and sanitize given array of items first, to simulate atomic operation
     LogContentDataSpec = AtmStoreConfig#atm_audit_log_store_config.log_content_data_spec,
-    Logs = sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, InitialItemsArray),
+    AppendRequests = sanitize_append_requests(
+        AtmWorkflowExecutionAuth, LogLevel, LogContentDataSpec, InitialItemsArray
+    ),
 
-    extend_audit_log(Logs, create_container(AtmStoreConfig)).
+    extend_audit_log(AppendRequests, create_container(LogLevel, AtmStoreConfig)).
 
 
 -spec copy(record()) -> no_return().
@@ -132,6 +139,7 @@ update_content(Record, #atm_store_content_update_req{
 }) ->
     AppendRequests = sanitize_append_requests(
         AtmWorkflowExecutionAuth,
+        Record#atm_audit_log_store_container.log_level,
         get_log_content_data_spec(Record),
         ItemsArray
     ),
@@ -142,12 +150,17 @@ update_content(Record, #atm_store_content_update_req{
     argument = Item,
     options = #atm_audit_log_store_content_update_options{function = append}
 }) ->
-    AppendRequest = sanitize_append_request(
+    case sanitize_append_request(
         AtmWorkflowExecutionAuth,
+        Record#atm_audit_log_store_container.log_level,
         get_log_content_data_spec(Record),
         Item
-    ),
-    append_to_audit_log(AppendRequest, Record).
+    ) of
+        {true, AppendRequest} ->
+            append_to_audit_log(AppendRequest, Record);
+        false ->
+            Record
+    end.
 
 
 -spec delete(record()) -> ok.
@@ -169,10 +182,12 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_audit_log_store_container{
     config = AtmStoreConfig,
+    log_level = LogLevel,
     backend_id = BackendId
 }, NestedRecordEncoder) ->
     #{
         <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_audit_log_store_config),
+        <<"logLevel">> => LogLevel,
         <<"backendId">> => BackendId
     }.
 
@@ -180,11 +195,12 @@ db_encode(#atm_audit_log_store_container{
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(
-    #{<<"config">> := AtmStoreConfigJson, <<"backendId">> := BackendId},
+    RecordJson = #{<<"config">> := AtmStoreConfigJson, <<"backendId">> := BackendId},
     NestedRecordDecoder
 ) ->
     #atm_audit_log_store_container{
         config = NestedRecordDecoder(AtmStoreConfigJson, atm_audit_log_store_config),
+        log_level = maps:get(<<"logLevel">>, RecordJson, ?INFO_AUDIT_LOG_SEVERITY_INT),
         backend_id = BackendId
     }.
 
@@ -195,10 +211,12 @@ db_decode(
 
 
 %% @private
--spec create_container(atm_audit_log_store_config:record()) -> record().
-create_container(AtmStoreConfig) ->
+-spec create_container(audit_log:entry_severity_int(), atm_audit_log_store_config:record()) ->
+    record().
+create_container(LogLevel, AtmStoreConfig) ->
     #atm_audit_log_store_container{
         config = AtmStoreConfig,
+        log_level = LogLevel,
         % the underlying audit_log will be created upon the first append
         backend_id = datastore_key:new()
     }.
@@ -215,12 +233,20 @@ get_log_content_data_spec(#atm_audit_log_store_container{
 %% @private
 -spec sanitize_append_requests(
     atm_workflow_execution_auth:record(),
+    audit_log:entry_severity_int(),
     atm_data_spec:record(),
     [json_utils:json_term() | audit_log:append_request()]
 ) ->
     [audit_log:append_request()] | no_return().
-sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray) when is_list(ItemsArray) ->
-    Requests = lists:map(fun build_audit_log_append_request/1, ItemsArray),
+sanitize_append_requests(
+    AtmWorkflowExecutionAuth,
+    LogLevel,
+    LogContentDataSpec,
+    ItemsArray
+) when is_list(ItemsArray) ->
+    Requests = lists:filtermap(fun(Item) ->
+        prepare_append_request(Item, LogLevel)
+    end, ItemsArray),
 
     atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
@@ -230,22 +256,42 @@ sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArra
 
     Requests;
 
-sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogContentDataSpec, Item) ->
+sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogLevel, _LogContentDataSpec, Item) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Item, atm_array_type)).
 
 
 %% @private
 -spec sanitize_append_request(
     atm_workflow_execution_auth:record(),
+    audit_log:entry_severity_int(),
     atm_data_spec:record(),
     json_utils:json_term() | audit_log:append_request()
 ) ->
-    audit_log:append_request() | no_return().
-sanitize_append_request(AtmWorkflowExecutionAuth, LogContentDataSpec, Item) ->
-    Request = #audit_log_append_request{content = LogContent} = build_audit_log_append_request(Item),
-    atm_value:validate_constraints(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
+    false | {true, audit_log:append_request()} | no_return().
+sanitize_append_request(AtmWorkflowExecutionAuth, LogLevel, LogContentDataSpec, Item) ->
+    case prepare_append_request(Item, LogLevel) of
+        {true, #audit_log_append_request{content = LogContent}} = Result ->
+            atm_value:validate_constraints(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
+            Result;
+        false ->
+            false
+    end.
 
-    Request.
+
+%% @private
+-spec prepare_append_request(
+    json_utils:json_term() | audit_log:append_request(),
+    audit_log:entry_severity_int()
+) ->
+    false | {true, audit_log:append_request()}.
+prepare_append_request(Item, LogLevel) ->
+    AppendRequest = build_audit_log_append_request(Item),
+    LogSeverityInt = audit_log:severity_to_int(AppendRequest#audit_log_append_request.severity),
+
+    case audit_log:should_log(LogLevel, LogSeverityInt) of
+        true -> {true, AppendRequest};
+        false -> false
+    end.
 
 
 %% @private

@@ -105,19 +105,25 @@ build_create_store_with_initial_content_fun(
         case rand:uniform(3) of
             1 ->
                 StoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
-                atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema);
+                atm_store_api:create(
+                    AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, ContentInitializer, StoreSchema
+                );
             2 ->
                 StoreSchema = atm_store_test_utils:build_store_schema(
                     AtmStoreConfig, false, ContentInitializer
                 ),
-                atm_store_api:create(AtmWorkflowExecutionAuth, undefined, StoreSchema);
+                atm_store_api:create(
+                    AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, StoreSchema
+                );
             3 ->
                 % Default content initializer (from schema) should be overridden
                 % by one specified in args when creating store
                 StoreSchema = atm_store_test_utils:build_store_schema(
                     AtmStoreConfig, false, DefaultContentInitializer
                 ),
-                atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema)
+                atm_store_api:create(
+                    AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, ContentInitializer, StoreSchema
+                )
         end
     end.
 
@@ -133,6 +139,7 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
         atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
         0,
+        ?DEBUG_AUDIT_LOG_SEVERITY_INT,
         #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
     ).
 

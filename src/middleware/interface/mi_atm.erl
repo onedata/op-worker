@@ -16,7 +16,7 @@
 
 %% API
 -export([
-    schedule_workflow_execution/6,
+    schedule_workflow_execution/7,
     init_cancel_workflow_execution/2,
     init_pause_workflow_execution/2,
     resume_workflow_execution/2,
@@ -36,6 +36,7 @@
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
+    audit_log:entry_severity_int(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
@@ -45,6 +46,7 @@ schedule_workflow_execution(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
+    LogLevel,
     CallbackUrl
 ) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
@@ -53,6 +55,7 @@ schedule_workflow_execution(
         atm_workflow_schema_id = AtmWorkflowSchemaId,
         atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
         store_initial_content_overlay = AtmStoreInitialContentOverlay,
+        log_level = LogLevel,
         callback_url = CallbackUrl
     }).
 

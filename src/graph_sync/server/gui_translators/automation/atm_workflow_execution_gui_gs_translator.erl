@@ -73,6 +73,8 @@ translate_atm_workflow_execution(AtmWorkflowExecution = #atm_workflow_execution{
 
     status = Status,
 
+    log_level = LogLevel,
+
     schedule_time = ScheduleTime,
     start_time = StartTime,
     suspend_time = SuspendTime,
@@ -104,6 +106,8 @@ translate_atm_workflow_execution(AtmWorkflowExecution = #atm_workflow_execution{
         ),
 
         <<"status">> => atom_to_binary(Status, utf8),
+
+        <<"logLevel">> => audit_log:severity_from_int(LogLevel),
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,

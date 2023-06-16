@@ -17,7 +17,7 @@
 
 %% API
 -export([
-    create/3,
+    create/4,
     copy/2,
     get/1, acquire_iterator/2,
     freeze/1, unfreeze/1,
@@ -40,17 +40,18 @@
 
 -spec create(
     atm_workflow_execution_auth:record(),
+    audit_log:entry_severity_int(),
     undefined | initial_content(),
     atm_store_schema:record()
 ) ->
     {ok, atm_store:doc()} | no_return().
-create(_AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
+create(_AtmWorkflowExecutionAuth, _LogLevel, undefined, #atm_store_schema{
     requires_initial_content = true,
     default_initial_content = undefined
 }) ->
     throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT);
 
-create(AtmWorkflowExecutionAuth, InitialContent, #atm_store_schema{
+create(AtmWorkflowExecutionAuth, LogLevel, InitialContent, #atm_store_schema{
     id = AtmStoreSchemaId,
     default_initial_content = DefaultInitialContent,
     type = StoreType,
@@ -65,9 +66,12 @@ create(AtmWorkflowExecutionAuth, InitialContent, #atm_store_schema{
         schema_id = AtmStoreSchemaId,
         initial_content = ActualInitialContent,
         frozen = false,
-        container = atm_store_container:create(
-            StoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, ActualInitialContent
-        )
+        container = atm_store_container:create(StoreType, #atm_store_container_creation_args{
+            workflow_execution_auth = AtmWorkflowExecutionAuth,
+            log_level = LogLevel,
+            store_config = AtmStoreConfig,
+            initial_content = ActualInitialContent
+        })
     }).
 
 

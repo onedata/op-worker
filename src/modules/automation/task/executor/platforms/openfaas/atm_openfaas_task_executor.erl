@@ -353,7 +353,7 @@ log_function_registering(#initiation_ctx{
     }
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_info(
+    ?atm_workflow_info(
         "Registering docker '~ts' as function '~ts' in OpenFaaS.", [DockerImage, FunctionName],
         AtmWorkflowExecutionLogger
     ).
@@ -368,7 +368,7 @@ log_function_registered(#initiation_ctx{
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_info(
+    ?atm_workflow_info(
         "Function '~ts' registered in OpenFaaS.", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
@@ -641,7 +641,7 @@ log_function_ready(#initiation_ctx{
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_info(
+    ?atm_workflow_info(
         "Function '~ts' ready to use in OpenFaaS.", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
@@ -665,9 +665,11 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
 
     Body = json_utils:encode(#{
         <<"ctx">> => #{
-            <<"heartbeatUrl">> => build_job_heartbeat_url(LambdaInput),
+            <<"atmWorkflowExecutionId">> => LambdaInput#atm_lambda_input.workflow_execution_id,
+            <<"logLevel">> => audit_log:severity_from_int(LambdaInput#atm_lambda_input.log_level),
             <<"timeoutSeconds">> => op_worker:get_env(atm_workflow_job_timeout_sec, 1800),
             <<"oneproviderDomain">> => oneprovider:get_domain(),
+            <<"heartbeatUrl">> => build_job_heartbeat_url(LambdaInput),
             <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx),
             <<"config">> => LambdaInput#atm_lambda_input.config
         },
@@ -732,7 +734,7 @@ remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
     ok.
 log_function_removed(AtmWorkflowExecutionCtx, FunctionName) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_info(
+    ?atm_workflow_info(
         "Function '~ts' removed from OpenFaaS.", [FunctionName], Logger
     ).
 
@@ -753,7 +755,7 @@ log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error) ->
         <<"reason">> => errors:to_json(Error)
     },
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_warning(LogContent, Logger).
+    ?atm_workflow_warning(LogContent, Logger).
 
 
 %% @private

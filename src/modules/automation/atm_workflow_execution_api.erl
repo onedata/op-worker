@@ -50,7 +50,7 @@
     foldl/4
 ]).
 -export([
-    schedule/6,
+    schedule/7,
     get/1, get_summary/2,
     init_cancel/2,
     init_pause/2,
@@ -143,6 +143,7 @@ foldl(SpaceId, Phase, Callback, InitialAcc) ->
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     store_initial_content_overlay(),
+    audit_log:entry_severity_int(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
@@ -152,6 +153,7 @@ schedule(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
+    LogLevel,
     CallbackUrl
 ) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
@@ -160,6 +162,7 @@ schedule(
         AtmWorkflowSchemaId,
         AtmWorkflowSchemaRevisionNum,
         AtmStoreInitialContentOverlay,
+        LogLevel,
         CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),

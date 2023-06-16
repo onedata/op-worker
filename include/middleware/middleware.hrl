@@ -107,6 +107,7 @@
     atm_workflow_schema_id :: od_atm_workflow_schema:id(),
     atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
     store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
+    log_level :: audit_log:entry_severity_int(),
     callback_url :: undefined | http_client:url()
 }).
 

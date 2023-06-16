@@ -27,7 +27,7 @@
 
 %% API
 -export([
-    create/4,
+    create/2,
     copy/1,
     get_store_type/1, get_config/1, get_iterated_item_data_spec/1,
     acquire_iterator/1,
@@ -39,6 +39,8 @@
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
+
+-type creation_args() :: #atm_store_container_creation_args{}.
 
 -type type() ::
     atm_audit_log_store_container |
@@ -80,6 +82,7 @@
     atm_time_series_store_container:content_update_req() |
     atm_tree_forest_store_container:content_update_req().
 
+-export_type([creation_args/0]).
 -export_type([type/0, initial_content/0, record/0]).
 -export_type([content_browse_req/0, content_update_req/0]).
 
@@ -89,12 +92,7 @@
 %%%===================================================================
 
 
--callback create(
-    atm_workflow_execution_auth:record(),
-    atm_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
+-callback create(creation_args()) -> record() | no_return().
 
 -callback copy(record()) -> record() | no_return().
 
@@ -132,16 +130,10 @@
 %%%===================================================================
 
 
--spec create(
-    automation:store_type(),
-    atm_workflow_execution_auth:record(),
-    atm_store_config:record(),
-    initial_content()
-) ->
-    record().
-create(AtmStoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
+-spec create(automation:store_type(), creation_args()) -> record().
+create(AtmStoreType, CreationArgs) ->
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
-    RecordType:create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent).
+    RecordType:create(CreationArgs).
 
 
 -spec copy(record()) -> record() | no_return().
