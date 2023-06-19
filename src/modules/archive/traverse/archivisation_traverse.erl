@@ -36,6 +36,7 @@
 -export([
     task_started/2,
     task_finished/2,
+    get_sync_info/1,
     get_job/1,
     update_job_progress/5,
     do_master_job/2,
@@ -142,6 +143,11 @@ task_finished(TaskId, _Pool) ->
                 ArchiveId, DatasetId, CallbackUrlOrUndefined,
                 ErrorDescription)
     end.
+
+
+-spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).
 
 
 -spec get_job(traverse:job_id()) ->
