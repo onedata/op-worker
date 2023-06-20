@@ -127,7 +127,7 @@ task_canceled(TaskId, _Pool) ->
     tree_traverse_session:close_for_task(TaskId),
     case archive:mark_cancelled(TaskId) of
         ok -> ok;
-        {error, marked_to_delete}  -> ok = archive_api:delete_single_archive(TaskId, user_ctx:new(?ROOT_SESS_ID))
+        {error, marked_to_delete}  -> ok = archive_api:delete_single_archive(TaskId)
     end, 
     ?debug("Archive verification job ~p cancelled", [TaskId]).
 
