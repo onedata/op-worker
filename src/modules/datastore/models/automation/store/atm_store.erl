@@ -71,7 +71,7 @@ type_from_json(AtmStoreTypeJson) -> automation:store_type_from_json(AtmStoreType
 
 
 -spec config_to_json(config()) -> json_utils:json_term().
-config_to_json(Record = #atm_exception_store_config{}) ->
+config_to_json(Record) ->
     RecordType = utils:record_type(Record),
     RecordType:to_json(Record).
 
