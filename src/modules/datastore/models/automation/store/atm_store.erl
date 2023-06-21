@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
+-export([type_to_json/1, type_from_json/1]).
 -export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
@@ -28,11 +29,16 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
+-type type() ::
+    automation:store_type() |
+    % types specific to op and as such not available in schema
+    exception.
+
 % automation:item converted (if needed) to a format for persisting in a store
 -type item() :: json_utils:json_term().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([item/0]).
+-export_type([type/0, item/0]).
 
 -define(CTX, #{model => ?MODULE}).
 
@@ -40,6 +46,16 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec type_to_json(type()) -> json_utils:json_term().
+type_to_json(exception) -> <<"exception">>;
+type_to_json(AtmStoreType) -> automation:store_type_to_json(AtmStoreType).
+
+
+-spec type_from_json(json_utils:json_term()) -> type().
+type_from_json(<<"exception">>) -> exception;
+type_from_json(AtmStoreTypeJson) -> automation:store_type_from_json(AtmStoreTypeJson).
 
 
 -spec create(record()) -> {ok, doc()} | {error, term()}.

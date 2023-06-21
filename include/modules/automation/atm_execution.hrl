@@ -249,6 +249,10 @@
     result :: audit_log:browse_result()
 }).
 
+-record(atm_exception_store_content_browse_options, {
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
+}).
+
 -record(atm_list_store_content_browse_options, {
     listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
 }).
