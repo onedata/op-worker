@@ -299,7 +299,11 @@
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
     argument :: automation:item() | audit_log:append_request(),
-    options :: atm_store_content_update_options:record()
+    options :: atm_store:content_update_options()
+}).
+
+-record(atm_exception_store_content_update_options, {
+    function :: append | extend
 }).
 
 

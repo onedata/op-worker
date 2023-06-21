@@ -12,6 +12,7 @@
 -module(atm_store).
 -author("Bartosz Walkowicz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
@@ -34,11 +35,16 @@
     % types specific to op and as such not available in schema
     exception.
 
+-type content_update_options() ::
+    atm_store_content_update_options:record() |
+    % options for stores specific to op and not available in schema
+    #atm_exception_store_content_update_options{}.
+
 % automation:item converted (if needed) to a format for persisting in a store
 -type item() :: json_utils:json_term().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([type/0, item/0]).
+-export_type([type/0, item/0, content_update_options/0]).
 
 -define(CTX, #{model => ?MODULE}).
 
