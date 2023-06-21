@@ -44,6 +44,7 @@
 
 -type type() ::
     atm_audit_log_store_container |
+    atm_exception_store_container |
     atm_list_store_container |
     atm_range_store_container |
     atm_single_value_store_container |
@@ -52,6 +53,7 @@
 
 -type initial_content() ::
     atm_audit_log_store_container:initial_content() |
+    atm_exception_store_container:initial_content() |
     atm_list_store_container:initial_content() |
     atm_range_store_container:initial_content() |
     atm_single_value_store_container:initial_content() |
@@ -60,6 +62,7 @@
 
 -type record() ::
     atm_audit_log_store_container:record() |
+    atm_exception_store_container:record() |
     atm_list_store_container:record() |
     atm_range_store_container:record() |
     atm_single_value_store_container:record() |
@@ -68,6 +71,7 @@
 
 -type content_browse_req() ::
     atm_audit_log_store_container:content_browse_req() |
+    atm_exception_store_container:content_browse_req() |
     atm_list_store_container:content_browse_req() |
     atm_range_store_container:content_browse_req() |
     atm_single_value_store_container:content_browse_req() |
@@ -76,6 +80,7 @@
 
 -type content_update_req() ::
     atm_audit_log_store_container:content_update_req() |
+    atm_exception_store_container:content_update_req() |
     atm_list_store_container:content_update_req() |
     atm_range_store_container:content_update_req() |
     atm_single_value_store_container:content_update_req() |
@@ -96,7 +101,7 @@
 
 -callback copy(record()) -> record() | no_return().
 
--callback get_config(record()) -> atm_store_config:record().
+-callback get_config(record()) -> atm_store:config().
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -130,7 +135,7 @@
 %%%===================================================================
 
 
--spec create(automation:store_type(), creation_args()) -> record().
+-spec create(atm_store:type(), creation_args()) -> record().
 create(AtmStoreType, CreationArgs) ->
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
     RecordType:create(CreationArgs).
@@ -142,13 +147,13 @@ copy(AtmStoreContainer) ->
     RecordType:copy(AtmStoreContainer).
 
 
--spec get_store_type(record()) -> automation:store_type().
+-spec get_store_type(record()) -> atm_store:type().
 get_store_type(AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
     atm_store_container_type_to_atm_store_type(RecordType).
 
 
--spec get_config(record()) -> atm_store_config:record().
+-spec get_config(record()) -> atm_store:config().
 get_config(AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
     RecordType:get_config(AtmStoreContainer).
@@ -202,7 +207,7 @@ db_encode(AtmStoreContainer, NestedRecordEncoder) ->
     AtmStoreType = atm_store_container_type_to_atm_store_type(RecordType),
 
     maps:merge(
-        #{<<"type">> => automation:store_type_to_json(AtmStoreType)},
+        #{<<"type">> => atm_store:type_to_json(AtmStoreType)},
         NestedRecordEncoder(AtmStoreContainer, RecordType)
     ).
 
@@ -210,7 +215,7 @@ db_encode(AtmStoreContainer, NestedRecordEncoder) ->
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{<<"type">> := AtmStoreTypeJson} = AtmStoreContainerJson, NestedRecordDecoder) ->
-    AtmStoreType = automation:store_type_from_json(AtmStoreTypeJson),
+    AtmStoreType = atm_store:type_from_json(AtmStoreTypeJson),
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
 
     NestedRecordDecoder(AtmStoreContainerJson, RecordType).
@@ -222,9 +227,10 @@ db_decode(#{<<"type">> := AtmStoreTypeJson} = AtmStoreContainerJson, NestedRecor
 
 
 %% @private
--spec atm_store_type_to_atm_store_container_type(automation:store_type()) ->
+-spec atm_store_type_to_atm_store_container_type(atm_store:type()) ->
     atm_store_container:type().
 atm_store_type_to_atm_store_container_type(audit_log) -> atm_audit_log_store_container;
+atm_store_type_to_atm_store_container_type(exception) -> atm_exception_store_container;
 atm_store_type_to_atm_store_container_type(list) -> atm_list_store_container;
 atm_store_type_to_atm_store_container_type(range) -> atm_range_store_container;
 atm_store_type_to_atm_store_container_type(single_value) -> atm_single_value_store_container;
@@ -234,8 +240,9 @@ atm_store_type_to_atm_store_container_type(tree_forest) -> atm_tree_forest_store
 
 %% @private
 -spec atm_store_container_type_to_atm_store_type(atm_store_container:type()) ->
-    automation:store_type().
+    atm_store:type().
 atm_store_container_type_to_atm_store_type(atm_audit_log_store_container) -> audit_log;
+atm_store_container_type_to_atm_store_type(atm_exception_store_container) -> exception;
 atm_store_container_type_to_atm_store_type(atm_list_store_container) -> list;
 atm_store_container_type_to_atm_store_type(atm_range_store_container) -> range;
 atm_store_container_type_to_atm_store_type(atm_single_value_store_container) -> single_value;
