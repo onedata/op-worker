@@ -81,7 +81,10 @@ create(#atm_store_container_creation_args{
         InitialItemsArray,
         ?ATM_ARRAY_DATA_SPEC(AtmStoreConfig#atm_list_store_config.item_data_spec)
     ),
-    extend_insecure(InitialItemsArray, create_container(AtmStoreConfig)).
+
+    Record = create_container(AtmStoreConfig),
+    extend_insecure(InitialItemsArray, Record),
+    Record.
 
 
 -spec copy(record()) -> no_return().
@@ -128,7 +131,7 @@ browse_content(Record, #atm_store_content_browse_req{
     }.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> ok | no_return().
 update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = ItemsArray,
@@ -212,18 +215,24 @@ get_item_data_spec(#atm_list_store_container{config = #atm_list_store_config{
 
 
 %% @private
--spec extend_insecure([automation:item()], record()) -> record().
-extend_insecure(ItemsArray, Record) ->
-    lists:foldl(fun append_insecure/2, Record, ItemsArray).
-
-
-%% @private
--spec append_insecure(automation:item(), record()) -> record().
-append_insecure(Item, Record = #atm_list_store_container{
+-spec extend_insecure([automation:item()], record()) -> ok.
+extend_insecure(ItemsArray, #atm_list_store_container{
     config = #atm_list_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
-    atm_store_container_infinite_log_backend:append(
+    lists:foreach(fun(Item) ->
+        atm_store_container_infinite_log_backend:append(
+            BackendId, atm_value:to_store_item(Item, ItemDataSpec)
+        )
+    end, ItemsArray).
+
+
+%% @private
+-spec append_insecure(automation:item(), record()) -> ok.
+append_insecure(Item, #atm_list_store_container{
+    config = #atm_list_store_config{item_data_spec = ItemDataSpec},
+    backend_id = BackendId
+}) ->
+    ok = atm_store_container_infinite_log_backend:append(
         BackendId, atm_value:to_store_item(Item, ItemDataSpec)
-    ),
-    Record.
+    ).

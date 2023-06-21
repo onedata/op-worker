@@ -119,7 +119,7 @@ browse_content(Record, #atm_store_content_browse_req{
     }.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> ok | no_return().
 update_content(Record, #atm_store_content_update_req{
     argument = ItemsArray,
     options = #atm_exception_store_content_update_options{function = extend}
@@ -186,18 +186,24 @@ get_item_data_spec(#atm_exception_store_container{config = #atm_exception_store_
 
 
 %% @private
--spec extend_insecure([automation:item()], record()) -> record().
-extend_insecure(ItemsArray, Record) ->
-    lists:foldl(fun append_insecure/2, Record, ItemsArray).
-
-
-%% @private
--spec append_insecure(automation:item(), record()) -> record().
-append_insecure(Item, Record = #atm_exception_store_container{
+-spec extend_insecure([automation:item()], record()) -> ok.
+extend_insecure(ItemsArray, #atm_exception_store_container{
     config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
-    atm_store_container_infinite_log_backend:append(
+    lists:foreach(fun(Item) ->
+        atm_store_container_infinite_log_backend:append(
+            BackendId, atm_value:to_store_item(Item, ItemDataSpec)
+        )
+    end, ItemsArray).
+
+
+%% @private
+-spec append_insecure(automation:item(), record()) -> ok.
+append_insecure(Item, #atm_exception_store_container{
+    config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
+    backend_id = BackendId
+}) ->
+    ok = atm_store_container_infinite_log_backend:append(
         BackendId, atm_value:to_store_item(Item, ItemDataSpec)
-    ),
-    Record.
+    ).

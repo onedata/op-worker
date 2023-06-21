@@ -125,7 +125,8 @@
 -callback browse_content(record(), content_browse_req()) ->
     atm_store_content_browse_result:record() | no_return().
 
--callback update_content(record(), content_update_req()) -> record() | no_return().
+-callback update_content(record(), content_update_req()) ->
+    ok | {ok, NewRecord :: record()} | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
@@ -178,7 +179,8 @@ browse_content(AtmStoreContainer, AtmStoreContentBrowseReq) ->
     RecordType:browse_content(AtmStoreContainer, AtmStoreContentBrowseReq).
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) ->
+    ok | {ok, record()} | no_return().
 update_content(AtmStoreContainer, AtmStoreContentUpdateReq) ->
     RecordType = utils:record_type(AtmStoreContainer),
     RecordType:update_content(AtmStoreContainer, AtmStoreContentUpdateReq).

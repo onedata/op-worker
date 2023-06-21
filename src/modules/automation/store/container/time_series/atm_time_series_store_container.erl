@@ -162,7 +162,7 @@ browse_content(Record, #atm_store_content_browse_req{
     end.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> ok | no_return().
 update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Measurements,
@@ -265,8 +265,8 @@ build_initial_ts_collection_config(#time_series_collection_schema{time_series_sc
     [atm_time_series_dispatch_rule:record()],
     record()
 ) ->
-    record().
-consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_store_container{
+    ok.
+consume_measurements(Measurements, DispatchRules, #atm_time_series_store_container{
     config = #atm_time_series_store_config{
         time_series_collection_schema = #time_series_collection_schema{
             time_series_schemas = TSSchemas
@@ -296,6 +296,4 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
             MissingConfig = maps:with(maps:keys(MissingLayout), InvolvedCollectionConfig),
             ok = datastore_time_series_collection:incorporate_config(?CTX, BackendId, MissingConfig),
             ok = datastore_time_series_collection:consume_measurements(?CTX, BackendId, ConsumeSpec)
-    end,
-
-    Record.
+    end.

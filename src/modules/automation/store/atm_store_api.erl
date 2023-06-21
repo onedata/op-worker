@@ -172,16 +172,21 @@ update_content(AtmWorkflowExecutionAuth, Item, Options, AtmStoreId) ->
     %   * do not support any operation
     case get(AtmStoreId) of
         {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->
-            UpdatedAtmStoreContainer = atm_store_container:update_content(
+            UpdatedAtmStoreContainerResult = atm_store_container:update_content(
                 AtmStoreContainer, #atm_store_content_update_req{
                     workflow_execution_auth = AtmWorkflowExecutionAuth,
                     argument = Item,
                     options = Options
                 }
             ),
-            atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
-                {ok, PrevStore#atm_store{container = UpdatedAtmStoreContainer}}
-            end);
+            case UpdatedAtmStoreContainerResult of
+                ok ->
+                    ok;
+                {ok, UpdatedAtmStoreContainer} ->
+                    atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
+                        {ok, PrevStore#atm_store{container = UpdatedAtmStoreContainer}}
+                    end)
+            end;
         {ok, #atm_store{schema_id = AtmStoreSchemaId, frozen = true}} ->
             throw(?ERROR_ATM_STORE_FROZEN(AtmStoreSchemaId));
         {error, _} = Error ->

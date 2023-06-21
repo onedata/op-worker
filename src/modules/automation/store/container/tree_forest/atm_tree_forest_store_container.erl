@@ -118,7 +118,7 @@ browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
     }.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> ok | no_return().
 update_content(Record, UpdateReq = #atm_store_content_update_req{
     options = #atm_tree_forest_store_content_update_options{function = Function}
 }) ->
@@ -126,11 +126,7 @@ update_content(Record, UpdateReq = #atm_store_content_update_req{
     RootsListContentUpdateReq = UpdateReq#atm_store_content_update_req{
         options = #atm_list_store_content_update_options{function = Function}
     },
-    Record#atm_tree_forest_store_container{
-        roots_list = atm_list_store_container:update_content(
-            RootsList, RootsListContentUpdateReq
-        )
-    }.
+    atm_list_store_container:update_content(RootsList, RootsListContentUpdateReq).
 
 
 -spec delete(record()) -> ok.
