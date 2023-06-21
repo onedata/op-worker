@@ -29,6 +29,7 @@
 -compile({no_auto_import, [get/1]}).
 
 -type initial_content() :: atm_store_container:initial_content().
+-type schema() :: atm_store_schema:record() | #atm_system_store_schema{}.
 
 -export_type([initial_content/0]).
 
@@ -42,7 +43,7 @@
     atm_workflow_execution_auth:record(),
     audit_log:entry_severity_int(),
     undefined | initial_content(),
-    atm_store_schema:record()
+    schema()
 ) ->
     {ok, atm_store:doc()} | no_return().
 create(_AtmWorkflowExecutionAuth, _LogLevel, undefined, #atm_store_schema{
@@ -51,25 +52,21 @@ create(_AtmWorkflowExecutionAuth, _LogLevel, undefined, #atm_store_schema{
 }) ->
     throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT);
 
-create(AtmWorkflowExecutionAuth, LogLevel, InitialContent, #atm_store_schema{
-    id = AtmStoreSchemaId,
-    default_initial_content = DefaultInitialContent,
-    type = StoreType,
-    config = AtmStoreConfig
-}) ->
-    ActualInitialContent = utils:ensure_defined(InitialContent, DefaultInitialContent),
+create(AtmWorkflowExecutionAuth, LogLevel, InitialContent, AtmStoreSchema) ->
+    StoreType = get_store_type(AtmStoreSchema),
+    ActualInitialContent = get_initial_content(InitialContent, AtmStoreSchema),
 
     {ok, _} = atm_store:create(#atm_store{
         workflow_execution_id = atm_workflow_execution_auth:get_workflow_execution_id(
             AtmWorkflowExecutionAuth
         ),
-        schema_id = AtmStoreSchemaId,
+        schema_id = get_schema_id(AtmStoreSchema),
         initial_content = ActualInitialContent,
         frozen = false,
         container = atm_store_container:create(StoreType, #atm_store_container_creation_args{
             workflow_execution_auth = AtmWorkflowExecutionAuth,
             log_level = LogLevel,
-            store_config = AtmStoreConfig,
+            store_config = get_store_config(AtmStoreSchema),
             initial_content = ActualInitialContent
         })
     }).
@@ -203,3 +200,35 @@ delete(AtmStoreId) ->
         ?ERROR_NOT_FOUND ->
             ok
     end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec get_schema_id(schema()) -> automation:name().
+get_schema_id(#atm_store_schema{id = AtmStoreSchemaId}) -> AtmStoreSchemaId;
+get_schema_id(#atm_system_store_schema{id = AtmStoreSchemaId}) -> AtmStoreSchemaId.
+
+
+%% @private
+-spec get_store_type(schema()) -> atm_store:type().
+get_store_type(#atm_store_schema{type = StoreType}) -> StoreType;
+get_store_type(#atm_system_store_schema{type = StoreType}) -> StoreType.
+
+
+%% @private
+-spec get_store_config(schema()) -> atm_store:config().
+get_store_config(#atm_store_schema{config = AtmStoreConfig}) -> AtmStoreConfig;
+get_store_config(#atm_system_store_schema{config = AtmStoreConfig}) -> AtmStoreConfig.
+
+
+%% @private
+-spec get_initial_content(undefined | initial_content(), schema()) ->
+    undefined | initial_content().
+get_initial_content(undefined, #atm_store_schema{default_initial_content = DefaultInitialContent}) ->
+    DefaultInitialContent;
+get_initial_content(InitialContent, _) ->
+    InitialContent.

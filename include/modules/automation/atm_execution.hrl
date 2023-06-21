@@ -196,6 +196,13 @@
 
 %% Atm stores related macros
 
+-record(atm_system_store_schema, {
+    id :: automation:name(),
+    name :: automation:name(),
+    type :: atm_store:type(),
+    config :: atm_store:config()
+}).
+
 % Record used only during creation of atm store container (it is not persisted anywhere)
 -record(atm_store_container_creation_args, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
@@ -204,15 +211,13 @@
     initial_content :: atm_store_container:initial_content()
 }).
 
--define(ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(__ID), #atm_store_schema{
+-define(ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(__ID), #atm_system_store_schema{
     id = __ID,
     name = __ID,
-    description = <<>>,
     type = audit_log,
     config = #atm_audit_log_store_config{
         log_content_data_spec = #atm_object_data_spec{}
-    },
-    requires_initial_content = false
+    }
 }).
 
 -define(ATM_TASK_TIME_SERIES_STORE_SCHEMA(__CONFIG), #atm_store_schema{
@@ -230,13 +235,11 @@
     item_data_spec :: atm_data_spec:record()
 }).
 
--define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
+-define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_system_store_schema{
     id = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
     name = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
-    description = <<>>,
-    type = list,
-    config = #atm_list_store_config{item_data_spec = __ITEM_DATA_SPEC},
-    requires_initial_content = false
+    type = exception,
+    config = #atm_exception_store_config{item_data_spec = __ITEM_DATA_SPEC}
 }).
 
 -record(atm_store_content_browse_req, {
