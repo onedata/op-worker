@@ -18,6 +18,7 @@
 
 %% API
 -export([type_to_json/1, type_from_json/1]).
+-export([config_to_json/1]).
 -export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
@@ -35,6 +36,11 @@
     % types specific to op and as such not available in schema
     exception.
 
+-type config() ::
+    atm_store_config:record() |
+    % configs for stores specific to op and not available in schema
+    #atm_exception_store_config{}.
+
 -type content_update_options() ::
     atm_store_content_update_options:record() |
     % options for stores specific to op and not available in schema
@@ -44,7 +50,7 @@
 -type item() :: json_utils:json_term().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([type/0, item/0, content_update_options/0]).
+-export_type([type/0, config/0, content_update_options/0, item/0]).
 
 -define(CTX, #{model => ?MODULE}).
 
@@ -62,6 +68,12 @@ type_to_json(AtmStoreType) -> automation:store_type_to_json(AtmStoreType).
 -spec type_from_json(json_utils:json_term()) -> type().
 type_from_json(<<"exception">>) -> exception;
 type_from_json(AtmStoreTypeJson) -> automation:store_type_from_json(AtmStoreTypeJson).
+
+
+-spec config_to_json(config()) -> json_utils:json_term().
+config_to_json(Record = #atm_exception_store_config{}) ->
+    RecordType = utils:record_type(Record),
+    RecordType:to_json(Record).
 
 
 -spec create(record()) -> {ok, doc()} | {error, term()}.

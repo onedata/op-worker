@@ -200,7 +200,7 @@
 -record(atm_store_container_creation_args, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
     log_level :: audit_log:entry_severity_int(),
-    store_config :: atm_store_config:record(),
+    store_config :: atm_store:config(),
     initial_content :: atm_store_container:initial_content()
 }).
 
@@ -225,6 +225,10 @@
 }).
 
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
+
+-record(atm_exception_store_config, {
+    item_data_spec :: atm_data_spec:record()
+}).
 
 -define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
     id = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
