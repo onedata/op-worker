@@ -21,6 +21,7 @@
 
 -type record() ::
     atm_audit_log_store_content_browse_result:record() |
+    atm_exception_store_content_browse_result:record() |
     atm_list_store_content_browse_result:record() |
     atm_range_store_content_browse_result:record() |
     atm_single_value_store_content_browse_result:record() |
