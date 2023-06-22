@@ -1209,6 +1209,22 @@ get_historical_dir_size_stats_schema_test(Config) ->
                             ?DIR_SIZE_STATS_COLLECTION_SCHEMA
                         )
                     end
+                },
+                #scenario_template{
+                    name = <<"Get dir size stats collection schema using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = fun(_) ->
+                        #gs_args{
+                            operation = get,
+                            gri = #gri{type = op_file, id = undefined, aspect = dir_size_stats_collection_schema, scope = public}
+                        }
+                    end,
+                    validate_result_fun = fun(_TestCtx, {ok, Result}) ->
+                        ?assertEqual(
+                            jsonable_record:from_json(Result, time_series_collection_schema),
+                            ?DIR_SIZE_STATS_COLLECTION_SCHEMA
+                        )
+                    end
                 }
             ]
         }

@@ -109,7 +109,10 @@ get_response(#gri{aspect = archive_recall_details}, Result) ->
     ?OK_REPLY(translate_archive_recall_details(Result));
 
 get_response(#gri{aspect = archive_recall_progress}, ArchiveRecallProgress) ->
-    ?OK_REPLY(ArchiveRecallProgress).
+    ?OK_REPLY(ArchiveRecallProgress);
+
+get_response(#gri{aspect = dir_size_stats_collection_schema}, TimeSeriesCollectionSchema) ->
+    ?OK_REPLY(jsonable_record:to_json(TimeSeriesCollectionSchema)).
 
 
 %%%===================================================================
