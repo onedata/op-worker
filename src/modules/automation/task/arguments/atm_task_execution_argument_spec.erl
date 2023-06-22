@@ -79,12 +79,11 @@ acquire_arg(Item, AtmRunJobBatchCtx, #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder,
     data_spec = AtmDataSpec
 }) ->
-    ArgValue = build_value(Item, AtmRunJobBatchCtx, ArgValueBuilder),
-
-    AtmWorkflowExecutionAuth = atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
-    atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec),
-
-    ArgValue.
+    atm_value:transform_to_data_spec_conformant(
+        atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
+        build_value(Item, AtmRunJobBatchCtx, ArgValueBuilder),
+        AtmDataSpec
+    ).
 
 
 %%%===================================================================

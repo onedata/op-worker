@@ -15,6 +15,7 @@
 
 
 -include("global_definitions.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -104,6 +105,7 @@
 %% Record used as an argument for lambda call
 -record(atm_lambda_input, {
     workflow_execution_id :: atm_workflow_execution:id(),
+    log_level :: audit_log:entry_severity_int(),
     job_batch_id :: atm_task_executor:job_batch_id(),
     config :: json_utils:json_map(),
     args_batch :: [atm_task_executor:job_args()]
@@ -187,13 +189,20 @@
 
 %% Atm data types related macros
 
--define(ATM_ARRAY_DATA_SPEC(__ITEM_DATA_TYPE_SPEC), #atm_data_spec{
-    type = atm_array_type,
-    value_constraints = #{item_data_spec => __ITEM_DATA_TYPE_SPEC}
+-define(ATM_ARRAY_DATA_SPEC(__ITEM_DATA_TYPE_SPEC), #atm_array_data_spec{
+    item_data_spec = __ITEM_DATA_TYPE_SPEC
 }).
 
 
 %% Atm stores related macros
+
+% Record used only during creation of atm store container (it is not persisted anywhere)
+-record(atm_store_container_creation_args, {
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    log_level :: audit_log:entry_severity_int(),
+    store_config :: atm_store_config:record(),
+    initial_content :: atm_store_container:initial_content()
+}).
 
 -define(ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(__ID), #atm_store_schema{
     id = __ID,
@@ -201,7 +210,7 @@
     description = <<>>,
     type = audit_log,
     config = #atm_audit_log_store_config{
-        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+        log_content_data_spec = #atm_object_data_spec{}
     },
     requires_initial_content = false
 }).
@@ -258,7 +267,7 @@
 -record(atm_single_value_store_content_browse_options, {}).
 
 -record(atm_single_value_store_content_browse_result, {
-    item :: {ok, atm_value:expanded()} | errors:error()
+    item :: {ok, automation:item()} | errors:error()
 }).
 
 -record(atm_time_series_store_content_browse_options, {
@@ -280,7 +289,7 @@
 
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: atm_value:expanded() | audit_log:append_request(),
+    argument :: automation:item() | audit_log:append_request(),
     options :: atm_store_content_update_options:record()
 }).
 
@@ -310,20 +319,135 @@
 
 %% Atm logging related macros
 
--define(LOGGER_DEBUG, <<"debug">>).
--define(LOGGER_INFO, <<"info">>).
--define(LOGGER_NOTICE, <<"notice">>).
--define(LOGGER_WARNING, <<"warning">>).
--define(LOGGER_ALERT, <<"alert">>).
--define(LOGGER_ERROR, <<"error">>).
--define(LOGGER_CRITICAL, <<"critical">>).
--define(LOGGER_EMERGENCY, <<"emergency">>).
+-define(atm_task_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL, __LOGGER),
+    case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
+        true ->
+            atm_workflow_execution_logger:task_append_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOGGER);
+        false ->
+            ok
+    end
+).
 
--define(LOGGER_SEVERITY_LEVELS, [
-    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
-    ?LOGGER_WARNING, ?LOGGER_ALERT,
-    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
-]).
+-define(atm_task_debug(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?DEBUG_AUDIT_LOG_SEVERITY, ?DEBUG_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_debug(__FORMAT, __ARGS, __LOGGER), ?atm_task_debug(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_info(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?INFO_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_info(__FORMAT, __ARGS, __LOGGER), ?atm_task_info(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_notice(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?NOTICE_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_notice(__FORMAT, __ARGS, __LOGGER), ?atm_task_notice(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_warning(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?WARNING_AUDIT_LOG_SEVERITY, ?WARNING_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_warning(__FORMAT, __ARGS, __LOGGER), ?atm_task_warning(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_error(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?ERROR_AUDIT_LOG_SEVERITY, ?ERROR_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_error(__FORMAT, __ARGS, __LOGGER), ?atm_task_error(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_critical(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?CRITICAL_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_critical(__FORMAT, __ARGS, __LOGGER), ?atm_task_critical(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_alert(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?ALERT_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_alert(__FORMAT, __ARGS, __LOGGER), ?atm_task_alert(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_task_emergency(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
+    __LOG_CONTENT, ?EMERGENCY_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_task_emergency(__FORMAT, __ARGS, __LOGGER), ?atm_task_emergency(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL, __LOGGER),
+    case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
+        true ->
+            atm_workflow_execution_logger:workflow_append_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOGGER);
+        false ->
+            ok
+    end
+).
+
+-define(atm_workflow_debug(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?DEBUG_AUDIT_LOG_SEVERITY, ?DEBUG_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_debug(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_debug(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_info(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?INFO_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_info(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_info(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_notice(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?NOTICE_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_notice(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_notice(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_warning(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?WARNING_AUDIT_LOG_SEVERITY, ?WARNING_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_warning(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_warning(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_error(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?ERROR_AUDIT_LOG_SEVERITY, ?ERROR_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_error(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_error(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_critical(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?CRITICAL_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_critical(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_critical(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_alert(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?ALERT_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_alert(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_alert(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
+
+-define(atm_workflow_emergency(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
+    __LOG_CONTENT, ?EMERGENCY_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY_INT, __LOGGER
+)).
+-define(atm_workflow_emergency(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_emergency(
+    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
+)).
 
 
 -define(ATM_SUPERVISION_WORKER_SUP, atm_supervision_worker_sup).

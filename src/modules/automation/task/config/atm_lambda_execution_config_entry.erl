@@ -53,11 +53,11 @@ build(
     UndefinedOrValue
 ) ->
     Value = utils:ensure_defined(UndefinedOrValue, DefaultValue),
-    atm_value:validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
 
     #atm_lambda_execution_config_entry{
         name = Name,
-        compressed_value = atm_value:compress(Value, AtmDataSpec),
+        compressed_value = atm_value:to_store_item(Value, AtmDataSpec),
         data_spec = AtmDataSpec
     }.
 
@@ -73,7 +73,8 @@ acquire_value(AtmRunJobBatchCtx, #atm_lambda_execution_config_entry{
     data_spec = AtmDataSpec
 }) ->
     AtmWorkflowExecutionAuth = atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
-    ?check(atm_value:expand(AtmWorkflowExecutionAuth, CompressedValue, AtmDataSpec)).
+    Value = ?check(atm_value:from_store_item(AtmWorkflowExecutionAuth, CompressedValue, AtmDataSpec)),
+    atm_value:transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec).
 
 
 %%%===================================================================

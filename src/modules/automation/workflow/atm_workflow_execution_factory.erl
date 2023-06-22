@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/6, delete_insecure/1]).
+-export([create/7, delete_insecure/1]).
 
 
 -record(creation_args, {
@@ -32,6 +32,7 @@
     workflow_schema_revision :: atm_workflow_schema_revision:record(),
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
+    log_level :: audit_log:entry_severity_int(),
     callback_url :: undefined | http_client:url()
 }).
 -type creation_args() :: #creation_args{}.
@@ -64,6 +65,7 @@
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
+    audit_log:entry_severity_int(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
@@ -73,6 +75,7 @@ create(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
+    LogLevel,
     CallbackUrl
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -98,7 +101,7 @@ create(
         execution_components = ExecutionComponents
     } = create_execution_components(#creation_ctx{
         workflow_execution_env = atm_workflow_execution_env:build(
-            SpaceId, AtmWorkflowExecutionId, 0
+            SpaceId, AtmWorkflowExecutionId, 0, LogLevel
         ),
         creation_args = #creation_args{
             workflow_execution_id = AtmWorkflowExecutionId,
@@ -110,6 +113,7 @@ create(
             workflow_schema_revision = AtmWorkflowSchemaRevision,
             lambda_docs = AtmLambdaDocs,
             store_initial_content_overlay = AtmStoreInitialContentOverlay,
+            log_level = LogLevel,
             callback_url = CallbackUrl
         },
         execution_components = #execution_components{global_store_registry = #{}}
@@ -279,7 +283,8 @@ create_global_stores(CreationCtx = #creation_ctx{
         workflow_schema_revision = #atm_workflow_schema_revision{
             stores = AtmStoreSchemas
         },
-        store_initial_content_overlay = AtmStoreInitialContentOverlay
+        store_initial_content_overlay = AtmStoreInitialContentOverlay,
+        log_level = LogLevel
     }
 }) ->
     lists:foldl(fun(
@@ -296,7 +301,7 @@ create_global_stores(CreationCtx = #creation_ctx{
         )),
         try
             {ok, #document{key = AtmStoreId}} = atm_store_api:create(
-                AtmWorkflowExecutionAuth, StoreInitialContent, AtmStoreSchema
+                AtmWorkflowExecutionAuth, LogLevel, StoreInitialContent, AtmStoreSchema
             ),
             NewCreationCtx#creation_ctx{
                 workflow_execution_env = atm_workflow_execution_env:add_global_store_mapping(
@@ -322,7 +327,8 @@ create_global_stores(CreationCtx = #creation_ctx{
 create_workflow_audit_log(CreationCtx = #creation_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv,
     creation_args = #creation_args{
-        workflow_execution_auth = AtmWorkflowExecutionAuth
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        log_level = LogLevel
     },
     execution_components = ExecutionComponents
 }) ->
@@ -333,6 +339,7 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
         }
     }} = atm_store_api:create(
         AtmWorkflowExecutionAuth,
+        LogLevel,
         undefined,
         ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
@@ -390,6 +397,7 @@ create_workflow_execution_doc(#creation_ctx{
             name = AtmWorkflowSchemaName,
             atm_inventory = AtmInventoryId
         }},
+        log_level = LogLevel,
         callback_url = CallbackUrl
     },
     execution_components = #execution_components{
@@ -423,6 +431,8 @@ create_workflow_execution_doc(#creation_ctx{
 
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
+
+            log_level = LogLevel,
 
             callback = CallbackUrl,
 

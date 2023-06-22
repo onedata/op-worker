@@ -73,7 +73,7 @@ update_content_test(_Config) ->
         example_configs(),
         fun get_item_data_spec/1,
         #atm_single_value_store_content_update_options{},
-        fun get_content/2
+        fun browse_content/2
     ).
 
 
@@ -93,7 +93,7 @@ iterator_test(_Config) ->
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
         AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
         ))),
         AtmStoreIteratorSpec = #atm_store_iterator_spec{
             store_schema_id = AtmStoreSchema#atm_store_schema.id,
@@ -103,6 +103,7 @@ iterator_test(_Config) ->
             atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
             atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
             0,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
         ),
 
@@ -171,19 +172,19 @@ get_item_data_spec(#atm_single_value_store_config{item_data_spec = ItemDataSpec}
 %% @private
 -spec compress_and_expand_data(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id()
 ) ->
-    atm_value:expanded().
+    automation:item().
 compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
-    atm_store_test_utils:compress_and_expand_data(
+    atm_store_test_utils:to_iterated_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).
 
 
 %% @private
 -spec gen_valid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_valid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
@@ -191,7 +192,7 @@ gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 
 
 %% @private
--spec set_content(atm_workflow_execution_auth:record(), atm_value:expanded(), atm_store:id()) ->
+-spec set_content(atm_workflow_execution_auth:record(), automation:item(), atm_store:id()) ->
     ok.
 set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
     ?rpc(atm_store_api:update_content(
@@ -203,9 +204,9 @@ set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
 
 
 %% @private
--spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    undefined | atm_value:expanded().
-get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    undefined | automation:item().
+browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_single_value_store_content_browse_options{},
     try
         #atm_single_value_store_content_browse_result{

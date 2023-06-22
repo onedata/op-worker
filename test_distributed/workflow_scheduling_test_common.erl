@@ -655,7 +655,9 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
     Gathered, Options) ->
     #{
         lane_index := LaneIndex,
-        lane_id := LaneId
+        lane_id := LaneId,
+        prepare_in_advance := PrepareInAdvance,
+        lane_id_to_be_prepared_in_advance := NextLaneId
     } = LaneExecutionContext,
     TaskStreams = kv_utils:get([task_streams, LaneIndex], LaneExecutionContext, #{}),
 
@@ -672,7 +674,8 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
     LaneElementsCount = count_lane_elements(LaneExecutionContext, TaskIds, ExpectedItems, Options),
     ct:print("Verify ~p history elements", [LaneElementsCount]),
 
-    GatheredForLane = verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext),
+    {GatheredForLane, CallsToIgnore} =
+        verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext),
 
     case VerificationType of
         verify_all ->
@@ -714,8 +717,9 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             end, GatheredForLane5, ExpectedItems),
             ?assertEqual([], Remaining),
 
-            verify_lanes_execution_history(NewExpected,
-                lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount), Options);
+            UpdatedLaneElementsCount = LaneElementsCount - length(CallsToIgnore),
+            verify_lanes_execution_history(NewExpected, lists:sublist(Gathered -- CallsToIgnore,
+                UpdatedLaneElementsCount + 1, length(Gathered) - UpdatedLaneElementsCount), Options);
         skip_items_verification ->
             GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams),
             [FirstNotFiltered | _] = lists:dropwhile(fun
@@ -735,8 +739,16 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             end,
             [_ | NewGathered] = lists:dropwhile(fun(HandlerCall) ->
                     HandlerCall =/= FirstNotFiltered
-            end, Gathered),
-            verify_lanes_execution_history(NewExpected, NewGathered, Options);
+            end, Gathered -- CallsToIgnore),
+
+            NewGathered2 = case NewGathered of
+                [#handler_call{function = prepare_lane, lane_id = NextLaneId} | NewGatheredTail] when PrepareInAdvance ->
+                    NewGatheredTail;
+                _ ->
+                    NewGathered
+            end,
+
+            verify_lanes_execution_history(NewExpected, NewGathered2, Options);
         expect_lane_finish ->
             GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams),
             ?assertMatch([
@@ -751,6 +763,9 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 (_) ->
                     true
             end, GatheredForLane),
+            % NOTE: this check assumes that no item is finished
+            % If exception is raised in prepare_lane done in advance, prepare_lane should be short enough to finish
+            % before items processing
             ?assertMatch(
                 [#handler_call{function = handle_exception}, #handler_call{function = handle_workflow_abruptly_stopped}],
                 Filtered
@@ -758,8 +773,14 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             [FirstGatheredForLane | _] = GatheredForLane,
             FilteredGathered = lists:dropwhile(fun(HandlerCall) ->
                 HandlerCall =/= FirstGatheredForLane
-            end, Gathered),
-            ?assertEqual([], FilteredGathered -- GatheredForLane);
+            end, Gathered -- CallsToIgnore),
+
+            case FilteredGathered -- GatheredForLane of
+                [#handler_call{function = prepare_lane, lane_id = NextLaneId} | _] when PrepareInAdvance ->
+                    ok;
+                NewGathered ->
+                    ?assertEqual([], NewGathered)
+            end;
         expect_empty_items_list ->
             ?assertMatch([#handler_call{function = handle_workflow_execution_stopped}], GatheredForLane)
     end.
@@ -786,31 +807,63 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{
             Acc
     end, {undefined, undefined}, GatheredForLane),
 
-    case ShouldPrepareNextLane of
+    CallsToIgnore = case ShouldPrepareNextLane of
         true ->
+            IgnoredLaneId = workflow_test_handler:get_ignored_lane_id(),
+            LaneToRetryId = maps:get(lane_to_retry, Context, undefined),
             case maps:get(fail_iteration, Context, undefined) of
-                1 -> ok; % Fail of iteration may prevent prepare in advance
-                _ -> ?assertNotEqual(undefined, PrepareNextLane)
+                1 ->
+                    []; % Fail of iteration may prevent prepare in advance
+                _ when LaneId =:= LaneToRetryId orelse NextLaneId =:= IgnoredLaneId ->
+                    case PrepareNextLane of
+                        undefined ->
+                            % If lane is ignored, start of the next lane does not block prepare_in_advance
+                            % and call can be finished later than expected
+                            PrepareNextLane2 = lists:foldl(fun
+                                (#handler_call{function = prepare_lane, lane_id = Id} = Call, Acc) when Id =:= NextLaneId ->
+                                    LaneId =:= LaneToRetryId orelse ?assertEqual(undefined, Acc),
+                                    Call;
+                                (_, Acc) ->
+                                    Acc
+                            end, undefined, Gathered),
+                            ?assertNotEqual(undefined, PrepareNextLane2),
+                            [PrepareNextLane2];
+                        _ ->
+                            []
+                    end;
+                _ ->
+                    case PrepareNextLane of
+                        undefined ->
+                            % If prepare_lane is long, it can be finished after prepare for next lane
+                            % that will be started in advance
+                            PrepareNextLane2 = ?assertMatch(#handler_call{function = prepare_lane, lane_id = NextLaneId},
+                                lists:nth(LaneElementsCount + 1, Gathered)),
+                            [PrepareNextLane2];
+                        _ ->
+                            []
+                    end
             end;
         false ->
-            ?assertEqual(undefined, PrepareNextLane)
+            ?assertEqual(undefined, PrepareNextLane),
+            []
     end,
     GatheredForLane2 = GatheredForLane -- [PrepareNextLane],
+    GatheredForLane3 = lists:sublist(GatheredForLane2, length(GatheredForLane) - length(CallsToIgnore)),
 
     case IsLanePrepared of
         true ->
             ?assertEqual(undefined, PrepareForLane),
-            GatheredForLane2;
+            {GatheredForLane3, CallsToIgnore};
         false ->
-            [FirstForLane | GatheredForLane3] = GatheredForLane2,
+            [FirstForLane | GatheredForLane4] = GatheredForLane3,
             ?assertEqual(PrepareForLane, FirstForLane),
-            GatheredForLane3
+            {GatheredForLane4, CallsToIgnore}
     end;
 verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id := LaneId}) ->
     [FirstForLane | GatheredForLane] = lists:sublist(Gathered, LaneElementsCount),
     ?assertEqual(prepare_lane, FirstForLane#handler_call.function),
     ?assertEqual(LaneId, FirstForLane#handler_call.lane_id),
-    GatheredForLane.
+    {GatheredForLane, []}.
 
 verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
     ReversedGatheredForLane = lists:reverse(GatheredForLane),

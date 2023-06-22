@@ -137,12 +137,12 @@ create_test(_Config) ->
 
     ?assertThrow(
         ?ERROR_BAD_DATA(<<"initialContent">>, <<"Time series store does not accept initial content">>),
-        ?erpc(atm_store_api:create(AtmWorkflowExecutionAuth, [], AtmStoreSchema))
+        ?erpc(atm_store_api:create(AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, [], AtmStoreSchema))
     ),
 
     {ok, #document{key = AtmStoreId}} = ?assertMatch(
         {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
-        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, undefined, AtmStoreSchema))
+        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema))
     ),
 
     % Assert only ts for exact generators are initiated
@@ -479,7 +479,7 @@ build_store_schema(AtmStoreConfig) ->
 create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
     {ok, #document{key = AtmStoreId}} = ?assertMatch(
         {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
-        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, undefined, AtmStoreSchema))
+        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema))
     ),
     AtmStoreId.
 

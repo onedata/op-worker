@@ -1202,9 +1202,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     end),
 
     test_utils:mock_expect(Workers, space_logic, get_local_storages, fun(SpaceId) ->
-        {ok, #document{value = #od_space{storages = StorageIds}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
-        {ok, #document{value = #od_provider{storages = ProviderStorageIds}}} = provider_logic:get(),
-        {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(StorageIds), X==Y]}
+        {ok, #document{value = #od_space{storages_by_provider = StorageByProvider}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        {ok, maps:keys(maps:get(oneprovider:get_id(), StorageByProvider, #{}))}
     end),
     
     test_utils:mock_expect(Workers, space_logic, get_local_supporting_storage, fun(SpaceId) ->
@@ -1316,6 +1315,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
+                    version = <<"21.02.2">>,
                     eff_spaces = EffSpaces,
                     storages = Storages,
                     longitude = 0.0,

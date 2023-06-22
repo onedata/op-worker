@@ -21,7 +21,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -38,7 +38,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_content() :: [atm_value:expanded()] | undefined.
+-type initial_content() :: [automation:item()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_list_store_content_browse_options:record()
@@ -64,22 +64,24 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_list_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(#atm_store_container_creation_args{
+    store_config = AtmStoreConfig,
+    initial_content = undefined
+}) ->
     create_container(AtmStoreConfig);
 
-create(AtmWorkflowExecutionAuth, AtmAtmStoreConfig, InitialItemsArray) ->
-    atm_value:validate(
+create(#atm_store_container_creation_args{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    store_config = AtmStoreConfig,
+    initial_content = InitialItemsArray
+}) ->
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         InitialItemsArray,
-        ?ATM_ARRAY_DATA_SPEC(AtmAtmStoreConfig#atm_list_store_config.item_data_spec)
+        ?ATM_ARRAY_DATA_SPEC(AtmStoreConfig#atm_list_store_config.item_data_spec)
     ),
-    extend_insecure(InitialItemsArray, create_container(AtmAtmStoreConfig)).
+    extend_insecure(InitialItemsArray, create_container(AtmStoreConfig)).
 
 
 -spec copy(record()) -> no_return().
@@ -111,9 +113,10 @@ browse_content(Record, #atm_store_content_browse_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     options = #atm_list_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
-    ListingPostprocessor = atm_list_store_container_iterator:gen_listing_postprocessor(
-        AtmWorkflowExecutionAuth, get_item_data_spec(Record)
-    ),
+    ItemDataSpec = get_item_data_spec(Record),
+    ListingPostprocessor = fun({Index, {_Timestamp, CompressedItem}}) ->
+        {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
+    end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
         Record#atm_list_store_container.backend_id,
         ListingOpts,
@@ -131,7 +134,7 @@ update_content(Record, #atm_store_content_update_req{
     argument = ItemsArray,
     options = #atm_list_store_content_update_options{function = extend}
 }) ->
-    atm_value:validate(
+    atm_value:validate_constraints(
         AtmWorkflowExecutionAuth,
         ItemsArray,
         ?ATM_ARRAY_DATA_SPEC(get_item_data_spec(Record))
@@ -143,7 +146,7 @@ update_content(Record, #atm_store_content_update_req{
     argument = Item,
     options = #atm_list_store_content_update_options{function = append}
 }) ->
-    atm_value:validate(AtmWorkflowExecutionAuth, Item, get_item_data_spec(Record)),
+    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, get_item_data_spec(Record)),
     append_insecure(Item, Record).
 
 
@@ -209,18 +212,18 @@ get_item_data_spec(#atm_list_store_container{config = #atm_list_store_config{
 
 
 %% @private
--spec extend_insecure([atm_value:expanded()], record()) -> record().
+-spec extend_insecure([automation:item()], record()) -> record().
 extend_insecure(ItemsArray, Record) ->
     lists:foldl(fun append_insecure/2, Record, ItemsArray).
 
 
 %% @private
--spec append_insecure(atm_value:expanded(), record()) -> record().
+-spec append_insecure(automation:item(), record()) -> record().
 append_insecure(Item, Record = #atm_list_store_container{
     config = #atm_list_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
     atm_store_container_infinite_log_backend:append(
-        BackendId, atm_value:compress(Item, ItemDataSpec)
+        BackendId, atm_value:to_store_item(Item, ItemDataSpec)
     ),
     Record.

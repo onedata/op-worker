@@ -388,13 +388,6 @@ init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case = upgrade_from_20_02_19_file_links_reconciliation_traverse_test, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    
-    test_utils:mock_new(Worker, file_links_reconciliation_traverse, [passthrough]),
-    test_utils:mock_expect(Worker, file_links_reconciliation_traverse, start, fun() -> meck:passthrough([]) end),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
@@ -403,7 +396,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service, file_links_reconciliation_traverse]),
+    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service]),
     ok.
 
 

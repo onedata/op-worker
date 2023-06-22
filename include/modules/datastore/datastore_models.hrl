@@ -157,6 +157,7 @@
     subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),
+    version :: onedata:release_version(),
     latitude = 0.0 :: float(),
     longitude = 0.0 :: float(),
     online = false :: boolean(),
@@ -1185,6 +1186,8 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
+
+    log_level :: audit_log:entry_severity_int(),
 
     callback :: undefined | http_client:url(),
 

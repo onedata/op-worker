@@ -67,6 +67,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
         ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
         ?rpc(catch atm_store_api:create(
             AtmWorkflowExecutionAuth,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             undefined,
             atm_store_test_utils:build_store_schema(?RAND_ELEMENT(AtmStoreConfigs), true)
         ))
@@ -75,6 +76,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
         {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
         ?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             undefined,
             atm_store_test_utils:build_store_schema(?RAND_ELEMENT(AtmStoreConfigs), false)
         ))
@@ -105,7 +107,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
     [atm_store_config:record()],
     fun((atm_store_config:record()) -> atm_data_spec:record()),
     atm_store_content_update_options:record(),
-    fun((atm_workflow_execution_auth:record(), atm_store:id()) -> undefined | atm_value:expanded())
+    fun((atm_workflow_execution_auth:record(), atm_store:id()) -> undefined | automation:item())
 ) ->
     ok.
 update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, GetContentFun) ->
@@ -119,14 +121,14 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         end,
         FullyExpandedInitialItem = case InitialItem of
             undefined -> undefined;
-            _ -> compress_and_expand_data(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
+            _ -> describe_item(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
         end,
         NewItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
-        FullyExpandedNewItem = compress_and_expand_data(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
+        DescribedNewItem = describe_item(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
 
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, InitialItem, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, InitialItem, AtmStoreSchema
         ))),
 
         % Assert set with invalid item should fail
@@ -154,7 +156,7 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         ?assertEqual(ok, ?rpc(atm_store_api:update_content(
             AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
         ))),
-        ?assertMatch(FullyExpandedNewItem, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
+        ?assertMatch(DescribedNewItem, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
 
     end, AtmStoreConfigs).
 
@@ -163,8 +165,8 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
     [atm_store_config:record()],
     fun((atm_store_config:record()) -> atm_data_spec:record()),
     atm_store_content_browse_options:record(),
-    fun((atm_workflow_execution_auth:record(), atm_value:expanded(), atm_store:id()) -> ok),
-    fun((atm_value:expanded()) -> atm_store_content_browse_result:record())
+    fun((atm_workflow_execution_auth:record(), automation:item(), atm_store:id()) -> ok),
+    fun((automation:item()) -> atm_store_content_browse_result:record())
 ) ->
     ok.
 browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, SetContentFun, BuildBrowseResult) ->
@@ -174,7 +176,7 @@ browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, Se
         ItemDataSpec = GetItemDataSpec(AtmStoreConfig),
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
         ))),
 
         ExpError = ?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchema#atm_store_schema.id),
@@ -184,10 +186,10 @@ browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, Se
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         SetContentFun(AtmWorkflowExecutionAuth, Item, AtmStoreId),
-        ExpandedItem = compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+        DescribedItem = describe_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
         ?assertEqual(
-            BuildBrowseResult(ExpandedItem),
+            BuildBrowseResult(DescribedItem),
             ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, ContentBrowseOpts, AtmStoreId))
         )
 
@@ -209,7 +211,7 @@ create_workflow_execution_auth() ->
 
 %% @private
 -spec gen_valid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_valid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
@@ -218,7 +220,7 @@ gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 
 %% @private
 -spec gen_invalid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_value:expanded().
+    automation:item().
 gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
     atm_store_test_utils:gen_invalid_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
@@ -226,13 +228,13 @@ gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 
 
 %% @private
--spec compress_and_expand_data(
+-spec describe_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id()
 ) ->
-    atm_value:expanded().
-compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
-    atm_store_test_utils:compress_and_expand_data(
+    automation:item().
+describe_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:to_described_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).

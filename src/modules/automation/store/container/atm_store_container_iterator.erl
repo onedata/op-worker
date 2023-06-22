@@ -49,7 +49,7 @@
 
 
 -callback get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record()) ->
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 
 
 %%%===================================================================
@@ -58,7 +58,7 @@
 
 
 -spec get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record()) ->
-    {ok, [atm_value:expanded()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator) ->
     Module = utils:record_type(AtmStoreContainerIterator),
     Module:get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator).

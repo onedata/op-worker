@@ -21,10 +21,11 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
 -export([init/1, teardown/1]).
--export([schedule_workflow_execution_as_test_process/7]).
+-export([schedule_workflow_execution_as_test_process/8]).
 -export([reply_to_execution_process/2]).
 
 
@@ -75,6 +76,7 @@ teardown(ProviderSelectors) ->
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_content_overlay(),
+    audit_log:entry_severity_int(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()}.
@@ -85,13 +87,15 @@ schedule_workflow_execution_as_test_process(
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
     AtmStoreInitialContentOverlay,
+    LogLevel,
     CallbackUrl
 ) ->
     TestProcPid = self(),
 
     ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialContentOverlay#{test_process => TestProcPid}, CallbackUrl
+        AtmStoreInitialContentOverlay#{test_process => TestProcPid},
+        LogLevel, CallbackUrl
     )).
 
 
@@ -129,11 +133,12 @@ mock_workflow_execution_factory(Workers) ->
         AtmWorkflowSchemaId,
         AtmWorkflowSchemaRevisionNum,
         StoreInitialValues,
+        LoggingSeverity,
         CallbackUrl
     ) ->
         Result = {#document{key = AtmWorkflowExecutionId}, _} = meck:passthrough([
             UserCtx, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-            StoreInitialValues, CallbackUrl
+            StoreInitialValues, LoggingSeverity, CallbackUrl
         ]),
         case maps:get(test_process, StoreInitialValues, undefined) of
             undefined -> ok;

@@ -21,7 +21,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -37,7 +37,7 @@
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
--type initial_content() :: [atm_value:expanded()] | undefined.
+-type initial_content() :: [automation:item()] | undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
     options :: atm_tree_forest_store_content_browse_options:record()
@@ -63,22 +63,15 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_tree_forest_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
-    RootsListStoreConfig = #atm_list_store_config{
-        item_data_spec = AtmStoreConfig#atm_tree_forest_store_config.item_data_spec
-    },
-
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(CreationArgs = #atm_store_container_creation_args{store_config = AtmStoreConfig}) ->
     #atm_tree_forest_store_container{
         config = AtmStoreConfig,
-        roots_list = atm_list_store_container:create(
-            AtmWorkflowExecutionAuth, RootsListStoreConfig, InitialContent
-        )
+        roots_list = atm_list_store_container:create(CreationArgs#atm_store_container_creation_args{
+            store_config = #atm_list_store_config{
+                item_data_spec = AtmStoreConfig#atm_tree_forest_store_config.item_data_spec
+            }
+        })
     }.
 
 

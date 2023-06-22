@@ -78,7 +78,7 @@ handle({?CHECK_QOS_CACHE, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
     case qos_bounded_cache:is_cache_initialized(SpaceId) of
-        true -> 
+        true ->
             ok;
         false ->
             ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),

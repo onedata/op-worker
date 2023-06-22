@@ -12,6 +12,7 @@
 -module(atm_tree_forest_store_test_SUITE).
 -author("Michal Stanisz").
 
+-include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -103,9 +104,9 @@ update_content_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         build_content_update_options => fun build_content_update_options/1,
-        get_content => fun get_content/2
+        browse_content => fun browse_content/2
     }).
 
 
@@ -114,7 +115,7 @@ browse_content_by_index_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -126,7 +127,7 @@ browse_content_by_offset_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
+        describe_item => fun describe_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -246,8 +247,8 @@ example_configs() ->
     lists:map(fun(ItemDataSpec) ->
         #atm_tree_forest_store_config{item_data_spec = ItemDataSpec}
     end, [
-        #atm_data_spec{type = atm_dataset_type},
-        #atm_data_spec{type = atm_file_type}
+        #atm_dataset_data_spec{},
+        #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)}
     ]).
 
 
@@ -264,15 +265,15 @@ input_item_formatter(Item) -> Item.
 
 
 %% @private
--spec input_item_to_exp_store_item(
+-spec describe_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_store:id(),
     non_neg_integer()
 ) ->
-    atm_value:expanded().
-input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
-    atm_store_test_utils:compress_and_expand_data(
+    automation:item().
+describe_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
+    atm_store_test_utils:to_described_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
     ).
 
@@ -280,7 +281,7 @@ input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemData
 %% @private
 -spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
+    automation:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
@@ -299,9 +300,9 @@ build_content_update_options(UpdateFun) ->
 
 
 %% @private
--spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    [atm_value:expanded()].
-get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [automation:item()].
+browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     #atm_tree_forest_store_content_browse_result{
         tree_roots = TreeRoots,
@@ -437,21 +438,28 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
             atm_file_type -> 
                 {ok, CdmiId} = file_id:guid_to_objectid(Root),
                 #{<<"file_id">> => CdmiId};
-            atm_dataset_type -> #{<<"datasetId">> => Root}
+            atm_dataset_type ->
+                #{<<"datasetId">> => Root}
         end
     end, Roots),
+    AtmDataSpec = case Type of
+        atm_file_type ->
+            #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)};
+        atm_dataset_type ->
+            #atm_dataset_data_spec{}
+    end,
     AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_tree_forest_store_config{
-        item_data_spec = #atm_data_spec{type = Type}
+        item_data_spec = AtmDataSpec
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
-        AtmWorkflowExecutionAuth, RootsToAdd, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, RootsToAdd, AtmStoreSchema
     ))),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
         max_batch_size = MaxBatchSize
     },
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        SpaceId, WorkflowId, 0, #{AtmStoreDummySchemaId => AtmStoreId}
+        SpaceId, WorkflowId, 0, ?DEBUG_AUDIT_LOG_SEVERITY_INT, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIterator0 = ?rpc(ProviderSelector, atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.

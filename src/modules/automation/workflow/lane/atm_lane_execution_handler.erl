@@ -195,7 +195,7 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
                 <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
             },
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-            atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
+            ?atm_workflow_critical(LogContent, Logger),
 
             handle_setup_exception(
                 infer_setup_exception(Reason),
@@ -245,7 +245,7 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
                 <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
             },
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-            atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
+            ?atm_workflow_critical(LogContent, Logger),
 
             handle_setup_exception(
                 infer_setup_exception(Reason),

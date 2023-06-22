@@ -195,6 +195,7 @@ external_cancel_during_lane_prepare_test(Config) ->
     }).
 
 external_cancel_during_lane_prepare_in_advance_test(Config) ->
+    % NOTE: prepare_lane should be short enough to finish before items processing
     cancel_and_resume_test_base(Config, #test_config{
         prepare_in_advance = true,
         lane_id = <<"2">>,

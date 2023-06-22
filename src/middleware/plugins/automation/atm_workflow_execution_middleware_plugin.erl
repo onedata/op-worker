@@ -81,6 +81,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
         },
         optional => #{
             <<"storeInitialContentOverlay">> => {json, any},
+            <<"logLevel">> => {binary, ?AUDIT_LOG_SEVERITY_LEVELS},
             <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
         }
     };
@@ -243,6 +244,7 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
         maps:get(<<"atmWorkflowSchemaId">>, Data),
         maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
         maps:get(<<"storeInitialContentOverlay">>, Data, #{}),
+        audit_log:severity_to_int(maps:get(<<"logLevel">>, Data, ?INFO_AUDIT_LOG_SEVERITY)),
         maps:get(<<"callback">>, Data, undefined)
     ),
     {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}};
