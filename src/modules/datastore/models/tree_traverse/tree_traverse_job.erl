@@ -60,7 +60,6 @@ save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
     tune_for_large_continuous_listing = TuneForLargeContinuousListing,
-    listing_errors_handling_policy = ListingErrorsHandlingPolicy,
     pagination_token = ListingPaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -81,7 +80,6 @@ save_master_job(Key, Job = #tree_traverse{
         doc_id = Uuid,
         user_id = UserId,
         tune_for_large_continuous_listing = TuneForLargeContinuousListing,
-        listing_errors_handling_policy = ListingErrorsHandlingPolicy,
         pagination_token = ListingPaginationToken,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -118,7 +116,6 @@ get_master_job(#document{value = #tree_traverse_job{
     user_id = UserId,
     tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     pagination_token = PaginationToken,
-    listing_errors_handling_policy = ListingErrorsHandlingPolicy,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
@@ -137,7 +134,6 @@ get_master_job(#document{value = #tree_traverse_job{
                 user_id = UserId,
                 tune_for_large_continuous_listing = TuneForLargeContinuousListing,
                 pagination_token = PaginationToken,
-                listing_errors_handling_policy = ListingErrorsHandlingPolicy,
                 child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
                 children_master_jobs_mode = ChildrenMasterJobsMode,
                 track_subtree_status = TrackSubtreeStatus,
@@ -181,7 +177,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    7.
+    6.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -285,26 +281,6 @@ get_record_struct(6) ->
         {tune_for_large_continuous_listing, boolean}, % modified field (renamed from use_listing_token)
         {pagination_token, {custom, string, {file_listing, encode_pagination_token, decode_pagination_token}}}, % new field
         % removed fields last_name and last_tree
-        {child_dirs_job_generation_policy, atom},
-        {children_master_jobs_mode, atom},
-        {track_subtree_status, boolean},
-        {batch_size, integer},
-        {traverse_info, binary},
-        {symlink_resolution_policy, atom},
-        {resolved_root_uuids, [string]},
-        {relative_path, binary},
-        {encountered_files, #{string => boolean}}
-    ]};
-get_record_struct(7) ->
-    {record, [
-        {pool, string},
-        {callback_module, atom},
-        {task_id, string},
-        {doc_id, string},
-        {user_id, string},
-        {tune_for_large_continuous_listing, boolean},
-        {pagination_token, {custom, string, {file_listing, encode_pagination_token, decode_pagination_token}}},
-        {listing_errors_handling_policy, atom}, % new field
         {child_dirs_job_generation_policy, atom},
         {children_master_jobs_mode, atom},
         {track_subtree_status, boolean},
@@ -506,46 +482,6 @@ upgrade_record(5, Record) ->
         UserId,
         TuneForLargeContinuousListing,
         ListingPaginationToken,
-        ChildDirsJobGenerationPolicy,
-        ChildrenMasterJobsMode,
-        TrackSubtreeStatus,
-        BatchSize,
-        TraverseInfo,
-        SymlinkResolutionPolicy,
-        RootUuids,
-        RelativePath,
-        EncounteredFiles
-    }};
-upgrade_record(6, Record) ->
-    {
-        ?MODULE,
-        Pool,
-        CallbackModule,
-        TaskId,
-        DocId,
-        UserId,
-        TuneForLargeContinuousListing,
-        ListingPaginationToken,
-        ChildDirsJobGenerationPolicy,
-        ChildrenMasterJobsMode,
-        TrackSubtreeStatus,
-        BatchSize,
-        TraverseInfo,
-        SymlinkResolutionPolicy,
-        RootUuids,
-        RelativePath,
-        EncounteredFiles
-    } = Record,
-    
-    {7, {?MODULE,
-        Pool,
-        CallbackModule,
-        TaskId,
-        DocId,
-        UserId,
-        TuneForLargeContinuousListing,
-        ListingPaginationToken,
-        propagate, % new field - listing_errors_handling_policy
         ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,
