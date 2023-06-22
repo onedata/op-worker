@@ -17,9 +17,7 @@
 
 -export([
     iterate_over_list_store/0,
-    %% TODO VFS-10854 fix after introducing exception store not validating input
     iterate_over_list_store_with_some_inaccessible_items/0,
-    %% TODO VFS-10854 fix after introducing exception store not validating input
     iterate_over_list_store_with_all_items_inaccessible/0,
     iterate_over_empty_list_store/0,
 
@@ -27,7 +25,6 @@
     iterate_over_empty_range_store/0,
 
     iterate_over_single_value_store/0,
-    %% TODO VFS-10854 fix after introducing exception store not validating input
     iterate_over_single_value_store_with_all_items_inaccessible/0,
     iterate_over_empty_single_value_store/0,
 
@@ -59,7 +56,7 @@
 }).
 
 -define(FOREACH_WORKFLOW_SCHEMA_DRAFT(
-    __TESTCASE, __ITERATED_STORE_SCHEMA_DRAFT, __ITERATED_ITEM_DATA_SPEC
+    __TESTCASE, __ITERATED_STORE_SCHEMA_DRAFT, __ITERATED_ITEM_DATA_SPEC, __MAX_BATCH_SIZE
 ),
     #atm_workflow_schema_dump_draft{
         name = str_utils:to_binary(__TESTCASE),
@@ -82,7 +79,7 @@
                 ],
                 store_iterator_spec = #atm_store_iterator_spec_draft{
                     store_schema_id = ?ITERATED_STORE_SCHEMA_ID,
-                    max_batch_size = ?RAND_INT(5, 8)
+                    max_batch_size = __MAX_BATCH_SIZE
                 },
                 max_retries = 0
             }]
@@ -91,6 +88,18 @@
             ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(__ITERATED_ITEM_DATA_SPEC)
         }}
     }
+).
+-define(FOREACH_WORKFLOW_SCHEMA_DRAFT(
+    __TESTCASE,
+    __ITERATED_STORE_SCHEMA_DRAFT,
+    __ITERATED_ITEM_DATA_SPEC
+),
+    ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
+        __TESTCASE,
+        __ITERATED_STORE_SCHEMA_DRAFT,
+        __ITERATED_ITEM_DATA_SPEC,
+        ?RAND_INT(5, 8)
+    )
 ).
 
 
@@ -115,7 +124,7 @@ iterate_over_list_store() ->
 
 
 iterate_over_list_store_with_some_inaccessible_items() ->
-    InitialFiles = [DirObject | FileObjects] = create_initial_files(),
+    InitialFiles = [_DirObject | FileObjects] = create_initial_files(),
     FilesToRemove = lists_utils:random_sublist(FileObjects),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
@@ -123,7 +132,7 @@ iterate_over_list_store_with_some_inaccessible_items() ->
         store_type = list,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = FilesToRemove,
-        exp_iterated_files = [DirObject | FileObjects -- FilesToRemove]
+        exp_iterated_files = InitialFiles
     }).
 
 
@@ -135,7 +144,7 @@ iterate_over_list_store_with_all_items_inaccessible() ->
         store_type = list,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = InitialFiles,
-        exp_iterated_files = []
+        exp_iterated_files = InitialFiles
     }).
 
 
@@ -220,7 +229,7 @@ iterate_over_single_value_store_with_all_items_inaccessible() ->
         store_type = single_value,
         initial_files = DirObject,
         files_to_remove_before_iteration_starts = [DirObject],
-        exp_iterated_files = []
+        exp_iterated_files = [DirObject]
     }).
 
 
@@ -287,8 +296,8 @@ iterate_over_empty_tree_forest_store() ->
 iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec = #iterate_over_file_store_test_spec{
     testcase = Testcase,
     store_type = AtmStoreType,
-    files_to_remove_before_iteration_starts = [_ | _] = FilesToRemove,
-    exp_iterated_files = ExpIteratedFiles
+    initial_files = InitialFiles,
+    files_to_remove_before_iteration_starts = [_ | _] = FilesToRemove
 }) when
     AtmStoreType =:= list;
     AtmStoreType =:= single_value
@@ -297,11 +306,21 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
     AtmStoreInitialContent = build_store_input(TestSpec),
     AtmStoreSchemaDraft = build_store_schema(AtmStoreType, AtmFileDataSpec, AtmStoreInitialContent),
 
-    ExpIteratedEntries = lists:map(fun file_object_to_atm_file_value/1, ExpIteratedFiles),
+    MaxBatchSize = ?RAND_INT(5, 8),
+    FilesToRemoveAtmValues = lists:map(fun file_object_to_atm_file_value/1, FilesToRemove),
+
+    ExpTask12IteratedEntries = lists:map(
+        fun file_object_to_atm_file_value/1,
+        utils:ensure_list(InitialFiles)
+    ),
+    ExpTask3IteratedEntries = lists:flatten(lists:filter(fun(ItemBatch) ->
+        [] == lists_utils:intersect(ItemBatch, FilesToRemoveAtmValues)
+    end, atm_store_test_utils:split_into_chunks(MaxBatchSize, [], ExpTask12IteratedEntries))),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        test_gc = false,
         workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
-            Testcase, AtmStoreSchemaDraft, AtmFileDataSpec
+            Testcase, AtmStoreSchemaDraft, AtmFileDataSpec, MaxBatchSize
         ),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -324,17 +343,44 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
                             workflow_execution_exp_state = ExpState,
                             call_args = [_, _, AtmTaskExecutionId, _, ItemBatch]
                         }) ->
-                            {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                            {true, atm_workflow_execution_exp_state_builder:expect(ExpState, lists:flatten([
                                 {task, AtmTaskExecutionId, items_scheduled, length(ItemBatch)},
-                                {task, AtmTaskExecutionId, items_failed, length(ItemBatch)}
+
+                                case lists_utils:intersect(ItemBatch, FilesToRemoveAtmValues) of
+                                    [] -> [];
+                                    _ -> [{task, AtmTaskExecutionId, items_failed, length(ItemBatch)}]
+                                end
+                            ]))}
+                        end,
+                        <<"task3">> => fun(#atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState,
+                            call_args = [_, _, AtmTaskExecutionId, _, ItemBatch]
+                        }) ->
+                            {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                                {task, AtmTaskExecutionId, items_scheduled, length(ItemBatch)}
                             ])}
                         end
                     })
                 },
                 handle_task_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                        [<<"task1">>, <<"task2">>] => [{task, ?TASK_ID_PLACEHOLDER, failed}],
-                        <<"task3">> => [{task, ?TASK_ID_PLACEHOLDER, skipped}]
+                        [<<"task1">>, <<"task2">>] => [
+                            {task, ?TASK_ID_PLACEHOLDER, failed}
+                        ],
+                        <<"task3">> => fun(#atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState,
+                            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                        }) ->
+                            ExpStatus = case atm_workflow_execution_exp_state_builder:get_task_stats(
+                                AtmTaskExecutionId, ExpState
+                            ) of
+                                {0, 0, 0} -> skipped;
+                                _ -> finished
+                            end,
+                            {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                                {task, AtmTaskExecutionId, ExpStatus}
+                            ])}
+                        end
                     })
                 },
 
@@ -347,12 +393,15 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
             }],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    {lane_runs, [{1, 1}], retriable},
                     workflow_failed
                 ]
             }
         }]
     }),
-    assert_all_items_were_iterated(Testcase, ExpIteratedEntries);
+    assert_all_items_were_iterated(Testcase, [<<"task1">>, <<"task2">>], ExpTask12IteratedEntries),
+    assert_all_items_were_iterated(Testcase, [<<"task3">>], ExpTask3IteratedEntries);
 
 iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec = #iterate_over_file_store_test_spec{
     testcase = Testcase,
@@ -501,14 +550,18 @@ build_record_iterated_items_hook(Testcase, Mapper) ->
 
 
 %% @private
--spec assert_all_items_were_iterated(term(), [automation:item()]) -> ok.
 assert_all_items_were_iterated(Testcase, ExpIteratedItems) ->
+    assert_all_items_were_iterated(Testcase, [<<"task1">>, <<"task2">>, <<"task3">>], ExpIteratedItems).
+
+
+%% @private
+assert_all_items_were_iterated(Testcase, TaskSchemaIds, ExpIteratedItems) ->
     lists:foreach(fun(AtmTaskSchemaId) ->
         ?assertEqual(
             lists:sort(ExpIteratedItems),
             get_recorded_iterated_items(Testcase, AtmTaskSchemaId)
         )
-    end, [<<"task1">>, <<"task2">>, <<"task3">>]).
+    end, TaskSchemaIds).
 
 
 %% @private
