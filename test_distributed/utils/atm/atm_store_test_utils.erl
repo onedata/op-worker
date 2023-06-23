@@ -65,19 +65,26 @@ create_workflow_execution_auth(ProviderSelector, UserSelector, SpaceSelector) ->
     rpc:call(Node, atm_workflow_execution_auth, build, [SpaceId, AtmWorkflowExecutionId, UserCtx]).
 
 
--spec build_store_schema(atm_store_config:record()) -> atm_store_schema:record().
+-spec build_store_schema(atm_store_config:record()) -> atm_store_api:schema().
 build_store_schema(Config) ->
     build_store_schema(Config, false).
 
 
 -spec build_store_schema(atm_store_config:record(), boolean()) ->
-    atm_store_schema:record().
+    atm_store_api:schema().
 build_store_schema(Config, RequiresInitialContent) ->
     build_store_schema(Config, RequiresInitialContent, undefined).
 
 
 -spec build_store_schema(atm_store_config:record(), boolean(), undefined | automation:item()) ->
-    atm_store_schema:record().
+    atm_store_api:schema().
+build_store_schema(Config = #atm_exception_store_config{}, _RequiresInitialContent, _DefaultInitialContent) ->
+    #atm_system_store_schema{
+        id = ?RAND_STR(16),
+        name = ?RAND_STR(16),
+        type = exception,
+        config = Config
+    };
 build_store_schema(Config, RequiresInitialContent, DefaultInitialContent) ->
     #atm_store_schema{
         id = ?RAND_STR(16),
@@ -130,7 +137,7 @@ build_create_store_with_initial_content_fun(
 
 -spec build_workflow_execution_env(
     atm_workflow_execution_auth:record(),
-    atm_store_schema:record(),
+    atm_store_api:schema(),
     atm_store:id()
 ) ->
     atm_workflow_execution_env:record().
@@ -140,7 +147,7 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
         0,
         ?DEBUG_AUDIT_LOG_SEVERITY_INT,
-        #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
+        #{get_schema_id(AtmStoreSchema) => AtmStoreId}
     ).
 
 
@@ -434,6 +441,11 @@ infer_store_type(#atm_range_store_config{}) -> range;
 infer_store_type(#atm_single_value_store_config{}) -> single_value;
 infer_store_type(#atm_time_series_store_config{}) -> time_series;
 infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
+
+
+%% @private
+get_schema_id(#atm_store_schema{id = Id}) -> Id;
+get_schema_id(#atm_system_store_schema{id = Id}) -> Id.
 
 
 %% @private

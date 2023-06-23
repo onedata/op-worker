@@ -95,6 +95,7 @@ stages:
         - archivestorage_helper
         - archivisation_cancellation
         - atm_audit_log_store
+        - atm_exception_store
         - atm_list_store
         - atm_openfaas_activity_feed
         - atm_range_store
@@ -769,6 +770,13 @@ atm_audit_log_store:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_atm_audit_log_store.tar.gz
+
+atm_exception_store:
+  <<: *ct-onenv-job
+  key: ATMEXCST
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_atm_exception_store.tar.gz
 
 atm_list_store:
   <<: *ct-onenv-job
@@ -1844,6 +1852,7 @@ Coverage report:
     - artifact: ct_logs_archive_sequential.tar.gz
     - artifact: ct_logs_archivestorage_helper.tar.gz
     - artifact: ct_logs_atm_audit_log_store.tar.gz
+    - artifact: ct_logs_atm_exception_store.tar.gz
     - artifact: ct_logs_atm_list_store.tar.gz
     - artifact: ct_logs_atm_openfaas_activity_feed.tar.gz
     - artifact: ct_logs_atm_range_store.tar.gz

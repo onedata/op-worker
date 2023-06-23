@@ -31,7 +31,7 @@
 -type initial_content() :: atm_store_container:initial_content().
 -type schema() :: atm_store_schema:record() | #atm_system_store_schema{}.
 
--export_type([initial_content/0]).
+-export_type([initial_content/0, schema/0]).
 
 
 %%%===================================================================
