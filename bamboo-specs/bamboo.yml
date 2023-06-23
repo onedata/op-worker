@@ -1843,6 +1843,7 @@ Coverage report:
     - artifact: ct_logs_archive_recall.tar.gz
     - artifact: ct_logs_archive_sequential.tar.gz
     - artifact: ct_logs_archivestorage_helper.tar.gz
+    - artifact: ct_logs_archivisation_cancellation.tar.gz
     - artifact: ct_logs_atm_audit_log_store.tar.gz
     - artifact: ct_logs_atm_list_store.tar.gz
     - artifact: ct_logs_atm_openfaas_activity_feed.tar.gz
