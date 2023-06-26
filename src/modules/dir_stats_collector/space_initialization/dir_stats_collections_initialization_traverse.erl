@@ -93,7 +93,19 @@ do_master_job(#tree_traverse{
     receive
         initialization_finished -> ok
     end,
-    do_tree_traverse_master_job(Job, MasterJobExtendedArgs);
+
+    {ok, #{master_jobs := MasterJobs} = MasterJobMap} = Ans = do_tree_traverse_master_job(Job, MasterJobExtendedArgs),
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            TrashJob = tree_traverse:get_child_master_job(Job,
+                file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
+            ArchiveJob = tree_traverse:get_child_master_job(Job,
+                file_ctx:new_by_uuid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
+            {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob | MasterJobs]}};
+        false ->
+            Ans
+    end;
 do_master_job(Job, MasterJobExtendedArgs) ->
     do_tree_traverse_master_job(Job, MasterJobExtendedArgs).
 

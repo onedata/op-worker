@@ -23,7 +23,7 @@
 
 -export([create_archive_dir/5]).
 -export([
-    assert_archive_dir_structure_is_correct/7, assert_archive_state/3, assert_archive_state/4,
+    assert_archive_dir_structure_is_correct/7, assert_archive_stats/7, assert_archive_state/3, assert_archive_state/4,
     assert_archive_is_preserved/8, assert_incremental_archive_links/3,
     assert_copied/6, assert_structure/7
 ]).
@@ -49,6 +49,31 @@ assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, Arc
     assert_archives_root_dir_exists(Node, SessionId, SpaceId, Attempts),
     assert_dataset_archives_dir_exists(Node, SessionId, SpaceId, DatasetId, Attempts),
     assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, Attempts).
+
+
+assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, FollowSymlinks, Attempts) ->
+    StatsKeysToVerify = [<<"dir_count">>, <<"reg_file_and_link_count">>],
+    CheckStats = fun() ->
+        try
+            OriginGuid = file_id:pack_guid(DatasetId, SpaceId),
+            OriginStats = get_and_verify_origin_stats(Node, SessionId, OriginGuid, FollowSymlinks, StatsKeysToVerify),
+            OriginCounts = maps:with(StatsKeysToVerify, OriginStats),
+
+            {ok, ArchiveDataDirGuid} =  rpc:call(Node, archive, get_data_dir_guid, [ArchiveId]),
+            {ok, ArchiveStats} = rpc:call(Node, dir_size_stats, get_stats, [ArchiveDataDirGuid]),
+            case maps:with([<<"dir_count">>, <<"reg_file_and_link_count">>], ArchiveStats) of
+                OriginCounts -> true;
+                _ -> {false, OriginStats, ArchiveStats}
+            end
+        catch
+            Error:Reason:Stacktrace ->
+                {false, {Error, Reason, Stacktrace}}
+        end
+    end,
+    ?assert(CheckStats(), Attempts),
+    rpc:call(Node, dir_stats_service_state, disable, [SpaceId]),
+    rpc:call(Node, dir_stats_service_state, enable, [SpaceId]),
+    ?assert(CheckStats(), Attempts).
 
 
 assert_archive_state(ArchiveList, ExpectedState, Attempts) ->
@@ -278,7 +303,10 @@ assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->
                 ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
                 ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
                 ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
-                ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size),
+                case TargetAttr#file_attr.type of
+                    ?DIRECTORY_TYPE -> ok;
+                    _ -> ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size)
+                end,
                 true
         end
     catch
@@ -461,3 +489,58 @@ assert_incremental_archive_links(Node, SessionId, BaseArchiveId, Guid, ModifiedF
 extract_base_archive_id(Node, SessionId, Guid) ->
     {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, fslogic_file_id:ensure_referenced_guid(Guid)),
     archivisation_tree:extract_archive_id(Path).
+
+
+get_and_verify_origin_stats(Node, SessionId, OriginGuid, FollowSymlinks, StatsKeysToVerify) ->
+    case lfm_proxy:stat(Node, SessionId, ?FILE_REF(OriginGuid)) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            {CalculatedStats, SymlinkStats} = calculate_stats(Node, SessionId, OriginGuid, FollowSymlinks),
+            {ok, #{<<"dir_count">> := DirCount} = CollectedStats} =
+                rpc:call(Node, dir_size_stats, get_stats, [OriginGuid]),
+            FilteredCalculatedStats = maps:with(StatsKeysToVerify, CalculatedStats),
+            FilteredCalculatedStats = maps:with(StatsKeysToVerify, merge_stats(SymlinkStats, CollectedStats#{
+                <<"dir_count">> => DirCount + 1 % +1 to count root dir
+            }));
+        {ok, #file_attr{type = ?SYMLINK_TYPE}} when FollowSymlinks ->
+            SymlinkGuid = resolve_symlink(Node, SessionId, OriginGuid),
+            get_and_verify_origin_stats(Node, SessionId, SymlinkGuid, FollowSymlinks, StatsKeysToVerify);
+        {ok, _} ->
+            rpc:call(Node, dir_size_stats, init_child, [OriginGuid, false])
+    end.
+
+
+calculate_stats(Node, SessionId, Guid, FollowSymlinks) ->
+    case lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)) of
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(Guid), 0, 1000),
+            lists:foldl(fun({ChildGuid, _}, {StatsAcc, SymlinkAcc}) ->
+                {ChildStats, SymlinkStats} = calculate_stats(Node, SessionId, ChildGuid, FollowSymlinks),
+                {
+                    merge_stats(ChildStats, StatsAcc),
+                    merge_stats(SymlinkStats, SymlinkAcc)
+                }
+            end, {rpc:call(Node, dir_size_stats, init_child, [Guid, false]), #{}}, Children);
+        {ok, #file_attr{type = ?SYMLINK_TYPE}} when FollowSymlinks ->
+            TargetGuid = resolve_symlink(Node, SessionId, Guid),
+            {#{<<"reg_file_and_link_count">> := FileCount} = Stats, _} =
+                calculate_stats(Node, SessionId, TargetGuid, FollowSymlinks),
+            {Stats, Stats#{<<"reg_file_and_link_count">> := FileCount - 1}}; % subtract resolved symlinks
+        {ok, _} ->
+            {rpc:call(Node, dir_size_stats, init_child, [Guid, false]), #{}}
+    end.
+
+
+resolve_symlink(Node, SessionId, Guid) ->
+    {ok, TargetGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(Guid)),
+    case lfm_proxy:stat(Node, SessionId, ?FILE_REF(TargetGuid)) of
+        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+            resolve_symlink(Node, SessionId, TargetGuid);
+        {ok, _} ->
+            TargetGuid
+    end.
+
+
+merge_stats(Stats1, Stats2) ->
+    maps:merge_with(fun(_, V1, V2) ->
+        V1 + V2
+    end, Stats1, Stats2).

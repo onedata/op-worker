@@ -31,8 +31,8 @@
 
 
 %% API
--export([new_initialization_data/0, are_stats_ready/1, report_update/1, get_stats/2,
-    update_stats_from_children_descendants/3,
+-export([new_initialization_data/0, are_stats_ready/1, is_initialization_pending/1,
+    report_update/1, get_stats/2, update_stats_from_children_descendants/3,
     start_dir_initialization/2, continue_dir_initialization/1, finish_dir_initialization/3,
     abort_collection_initialization/2]).
 
@@ -60,8 +60,9 @@
 -export_type([initialization_data/0, initialization_progress/0, initialization_data_map/0, collections_map/0]).
 
 
--define(RACE_PREVENTING_TIME, 30000). % If update appears in less than ?RACE_PREVENTING_TIME from initialization
-                                      % finish it is considered as possible race and initialization is repeated
+% If update appears in less than ?RACE_PREVENTING_TIME from initialization
+% finish it is considered as possible race and initialization is repeated
+-define(RACE_PREVENTING_TIME, op_worker:get_env(dir_stats_collector_race_preventing_time, 30000)).
 -define(BATCH_SIZE, 100).
 
 %%%===================================================================
@@ -78,6 +79,13 @@ are_stats_ready(#initialization_data{status = prepared, race_preventing_timer = 
     countdown_timer:is_expired(Timer);
 are_stats_ready(_) ->
     false.
+
+
+-spec is_initialization_pending(initialization_data()) -> boolean().
+is_initialization_pending(#initialization_data{status = preparing, dir_and_direct_children_stats = undefined}) ->
+    false;
+is_initialization_pending(_) ->
+    true.
 
 
 -spec report_update(initialization_data()) -> initialization_data().

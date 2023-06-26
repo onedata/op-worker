@@ -495,8 +495,9 @@ on_remote_doc_created(_Ctx, #document{
                     {ok, State} ->
                         case dir_stats_service_state:is_active(State) of
                             true ->
-                                dir_size_stats:report_file_created_without_state_check(
-                                    Type, file_id:pack_guid(ParentUuid, SpaceId));
+                                dir_stats_collector:is_propagation_excluded(file_id:pack_guid(Key, SpaceId)) orelse
+                                    dir_size_stats:report_file_created_without_state_check(
+                                        Type, file_id:pack_guid(ParentUuid, SpaceId));
                             false ->
                                 ok
                         end;
@@ -504,7 +505,8 @@ on_remote_doc_created(_Ctx, #document{
                         ok;
                     {error, internal_call} ->
                         spawn(fun() ->
-                            dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
+                            dir_stats_collector:is_propagation_excluded(file_id:pack_guid(Key, SpaceId)) orelse
+                                dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
                         end)
                 end
         end

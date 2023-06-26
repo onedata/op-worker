@@ -68,7 +68,8 @@
     update_stats_of_parent/3, update_stats_of_parent/4, update_stats_of_nearest_dir/3,
     flush_stats/2, delete_stats/2,
     initialize_collections/1,
-    report_file_moved/4]).
+    report_file_moved/4,
+    is_propagation_excluded/1]).
 %% API - space
 -export([stop_collecting/1]).
 
@@ -340,6 +341,11 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
             ?error_stacktrace("Error handling file ~p move from ~p to ~p: ~p:~p",
                 [FileGuid, SourceParentGuid, TargetParentGuid, Error, Reason], Stacktrace)
     end.
+
+
+-spec is_propagation_excluded(file_id:file_guid()) -> boolean().
+is_propagation_excluded(Guid) ->
+    fslogic_file_id:is_tmp_dir_guid(Guid) orelse archivisation_tree:is_root_dir_uuid(file_id:guid_to_uuid(Guid)).
 
 
 %%%===================================================================
@@ -705,8 +711,13 @@ start_collections_initialization_for_all_cached_dirs(#state{dir_stats_cache = Di
             collecting_status = initializing,
             initialization_data = InitializationData
         }, Acc) ->
-            InitializationDataMap = maps:get(Guid, Acc, #{}),
-            Acc#{Guid => InitializationDataMap#{CollectionType => InitializationData}};
+            case dir_stats_collections_initializer:is_initialization_pending(InitializationData) of
+                true ->
+                    Acc;
+                false ->
+                    InitializationDataMap = maps:get(Guid, Acc, #{}),
+                    Acc#{Guid => InitializationDataMap#{CollectionType => InitializationData}}
+            end;
         (_CachedDirStatsKey, _CachedDirStats, Acc) ->
             Acc
     end, #{}, DirStatsCache),
@@ -1013,7 +1024,7 @@ update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
 propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
-    case fslogic_file_id:is_tmp_dir_guid(Guid) of
+    case is_propagation_excluded(Guid) of
         true ->
             CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
         false ->
