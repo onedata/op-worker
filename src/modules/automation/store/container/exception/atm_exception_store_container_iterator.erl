@@ -16,6 +16,7 @@
 -behaviour(atm_store_container_iterator).
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -63,18 +64,29 @@ build(ItemDataSpec, BackendId) ->
     atm_store_container_iterator:batch_size(),
     record()
 ) ->
-    {ok, [automation:item()], record()} | stop.
+    {ok, [atm_workflow_execution_handler:item()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_exception_store_container_iterator{
     item_data_spec = ItemDataSpec,
     backend_id = BackendId,
     last_listed_index = LastListedIndex
 }) ->
-    Result = atm_store_container_infinite_log_backend:iterator_get_next_batch(
-        BatchSize, BackendId, LastListedIndex, fun({Index, {_Timestamp, CompressedItem}}) ->
-            {Index, atm_value:from_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
-        end
-    ),
-    case Result of
+    ListingPostprocessor = fun({Index, {_Timestamp, #{
+        <<"id">> := TraceId,
+        <<"value">> := StoreValue
+    }}}) ->
+        Result = case atm_value:from_store_item(
+            AtmWorkflowExecutionAuth, StoreValue, ItemDataSpec
+        ) of
+            {ok, Value} ->
+                {ok, #atm_item_execution{trace_id = TraceId, value = Value}};
+            {error, _} = Error ->
+                Error
+        end,
+        {Index, Result}
+    end,
+    case atm_store_container_infinite_log_backend:iterator_get_next_batch(
+        BatchSize, BackendId, LastListedIndex, ListingPostprocessor
+    ) of
         stop ->
             stop;
         {ok, FilteredEntries, NewLastListedIndex} ->

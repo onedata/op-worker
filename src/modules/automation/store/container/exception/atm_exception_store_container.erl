@@ -105,8 +105,9 @@ browse_content(Record, #atm_store_content_browse_req{
     options = #atm_exception_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
     ItemDataSpec = get_item_data_spec(Record),
-    ListingPostprocessor = fun({Index, {_Timestamp, CompressedItem}}) ->
-        {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
+    ListingPostprocessor = fun({Index, {_Timestamp, #{<<"value">> := Value}}}) ->
+        %% TODO add id to browse entry
+        {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, Value, ItemDataSpec)}
     end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
         Record#atm_exception_store_container.backend_id,
@@ -186,24 +187,35 @@ get_item_data_spec(#atm_exception_store_container{config = #atm_exception_store_
 
 
 %% @private
--spec extend_insecure([automation:item()], record()) -> ok.
-extend_insecure(ItemsArray, #atm_exception_store_container{
-    config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
+-spec extend_insecure([atm_workflow_execution_handler:item()], record()) -> ok.
+extend_insecure(ItemsArray, Record = #atm_exception_store_container{
     backend_id = BackendId
 }) ->
+    %% TODO VFS-11091 infinite_log:extend
     lists:foreach(fun(Item) ->
         atm_store_container_infinite_log_backend:append(
-            BackendId, atm_value:to_store_item(Item, ItemDataSpec)
+            BackendId, build_entry(Item, Record)
         )
     end, ItemsArray).
 
 
 %% @private
--spec append_insecure(automation:item(), record()) -> ok.
-append_insecure(Item, #atm_exception_store_container{
-    config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
+-spec append_insecure(atm_workflow_execution_handler:item(), record()) -> ok.
+append_insecure(Item, Record = #atm_exception_store_container{
     backend_id = BackendId
 }) ->
     ok = atm_store_container_infinite_log_backend:append(
-        BackendId, atm_value:to_store_item(Item, ItemDataSpec)
+        BackendId, build_entry(Item, Record)
     ).
+
+
+%% @private
+-spec build_entry(atm_workflow_execution_handler:item(), record()) ->
+    json_utils:json_map().
+build_entry(Item, Record) ->
+    ItemDataSpec = get_item_data_spec(Record),
+
+    #{
+        <<"id">> => Item#atm_item_execution.trace_id,
+        <<"value">> => atm_value:to_store_item(Item#atm_item_execution.value, ItemDataSpec)
+    }.

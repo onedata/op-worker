@@ -386,7 +386,7 @@ handle_task_execution_stopped(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv,
 -spec report_item_error(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    automation:item()
+    [item()]
 ) ->
     ok.
 report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) ->
