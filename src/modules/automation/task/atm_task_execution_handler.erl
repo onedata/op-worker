@@ -113,7 +113,7 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     atm_task_executor:job_batch_id(),
-    [automation:item()]
+    [atm_workflow_execution_handler:item()]
 ) ->
     ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_job_batch(
@@ -145,7 +145,7 @@ run_job_batch(
 -spec process_job_batch_result(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    [automation:item()],
+    [atm_workflow_execution_handler:item()],
     atm_task_executor:job_batch_result()
 ) ->
     ok | error.
@@ -359,7 +359,7 @@ gen_atm_workflow_execution_env_diff(#document{
     atm_workflow_execution_ctx:record(),
     atm_task_execution:doc(),
     atm_task_executor:job_batch_id(),
-    [automation:item()]
+    [atm_workflow_execution_handler:item()]
 ) ->
     ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_job_batch_insecure(
@@ -390,7 +390,7 @@ run_job_batch_insecure(
 -spec build_lambda_input(
     atm_task_executor:job_batch_id(),
     atm_run_job_batch_ctx:record(),
-    [automation:item()],
+    [atm_workflow_execution_handler:item()],
     atm_task_execution:record()
 ) ->
     atm_task_executor:lambda_input().
@@ -421,8 +421,11 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
 
 
 %% @private
--spec parse_job_batch_result([automation:item()], atm_task_executor:job_batch_result()) ->
-    {ok, [{automation:item(), atm_task_executor:job_results()}]} | errors:error().
+-spec parse_job_batch_result(
+    [atm_workflow_execution_handler:item()],
+    atm_task_executor:job_batch_result()
+) ->
+    {ok, [{atm_workflow_execution_handler:item(), atm_task_executor:job_results()}]} | errors:error().
 parse_job_batch_result(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
@@ -456,7 +459,7 @@ parse_job_batch_result(_ItemBatch, {ok, #atm_lambda_output{results_batch = Resul
 -spec handle_job_batch_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    [automation:item()],
+    [atm_workflow_execution_handler:item()],
     errors:error()
 ) ->
     ok.
@@ -489,7 +492,10 @@ handle_job_batch_processing_error(
 
     ?atm_task_error(#{
         <<"description">> => <<"Failed to process batch of items.">>,
-        <<"itemBatch">> => ItemBatch,
+        %% TODO item ids instead of values??
+        <<"itemBatch">> => lists:map(fun(#atm_item_execution{value = Value}) ->
+            Value
+        end, ItemBatch),
         <<"reason">> => case Error of
             ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
             _ -> errors:to_json(Error)
@@ -500,7 +506,7 @@ handle_job_batch_processing_error(
 -spec process_job_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     atm_task_executor:job_results()
 ) ->
     ok | error | no_return().
@@ -536,7 +542,7 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
 -spec handle_job_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     errors:error() | json_utils:json_map()
 ) ->
     ok.
@@ -556,7 +562,8 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
             }
     end,
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_task_error(ErrorLog#{<<"item">> => Item}, Logger).
+    %% TODO log item id instead of value??
+    ?atm_task_error(ErrorLog#{<<"item">> => Item#atm_item_execution.value}, Logger).
 
 
 %% @private

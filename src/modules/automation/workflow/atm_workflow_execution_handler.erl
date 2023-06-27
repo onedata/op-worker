@@ -306,7 +306,7 @@ resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector)
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     atm_task_executor:job_batch_id(),
-    [automation:item()]
+    [item()]
 ) ->
     ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_task_for_item(
@@ -323,7 +323,7 @@ run_task_for_item(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
-    [automation:item()],
+    [item()],
     atm_task_executor:job_batch_result()
 ) ->
     ok | error.
