@@ -506,18 +506,22 @@ build_job_failure_lane_run_test_spec(AtmLaneRunSelector, IsLastExpLaneRun, #fail
     should_item_processing_fail_fun = ShouldItemProcessingFailFun,
     build_task1_audit_log_exp_content_fun = BuildTask1AuditLogExpContentFun
 }) ->
-    InferFailedItemCountFun = fun(ItemBatch) ->
-        record_items_processed(TestcaseId, AtmLaneRunSelector, ItemBatch),
+    InferFailedItemCountFun = fun(ItemBatch0) ->
+        ItemBatch1 = lists:map(
+            fun(#atm_item_execution{value = Value}) -> Value end,
+            ItemBatch0
+        ),
+        record_items_processed(TestcaseId, AtmLaneRunSelector, ItemBatch1),
 
-        case lists:filter(ShouldItemProcessingFailFun, ItemBatch) of
+        case lists:filter(ShouldItemProcessingFailFun, ItemBatch1) of
             [] ->
                 % Batch can be processed further (by following parallel boxes)
                 % only if no item from batch fails (limitation of workflow engine)
-                inc_exp_items_processed_by_task3(TestcaseId, AtmLaneRunSelector, length(ItemBatch)),
+                inc_exp_items_processed_by_task3(TestcaseId, AtmLaneRunSelector, length(ItemBatch1)),
                 0;
             FailedItems ->
                 record_failed_item_batch_for_task1(TestcaseId, AtmLaneRunSelector, FailedItems),
-                update_exp_exception_store_content(TestcaseId, AtmLaneRunSelector, ItemBatch),
+                update_exp_exception_store_content(TestcaseId, AtmLaneRunSelector, ItemBatch1),
                 length(FailedItems)
         end
     end,
@@ -729,7 +733,7 @@ record_items_processed(TestcaseId, AtmLaneRunSelector, ItemsProcessed) ->
 
 %% @private
 -spec get_all_processed_items(term(), atm_lane_execution:lane_run_selector()) ->
-    [automation:id()].
+    [automation:item()].
 get_all_processed_items(TestcaseId, AtmLaneRunSelector) ->
     Key = {TestcaseId, AtmLaneRunSelector, items_processed},
     node_cache:get(Key, []).

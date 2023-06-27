@@ -33,6 +33,7 @@
     infer_exp_invalid_data_error/2,
     to_described_item/4,
     to_iterated_item/4,
+    iterator_get_next/3,
     randomly_remove_entity_referenced_by_item/4,
     split_into_chunks/3
 ]).
@@ -381,6 +382,21 @@ to_iterated_item(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) 
         AtmDataSpec
     )),
     ExpandedData.
+
+
+-spec iterator_get_next(
+    oct_background:node_selector(),
+    workflow_engine:execution_context(),
+    iterator:iterator()
+) ->
+    {ok, automation:item(), iterator:iterator()} | stop.
+iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator) ->
+    case ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator)) of
+        stop ->
+            stop;
+        {ok, Batch, NextIterator} ->
+            {ok, lists:map(fun(Item) -> Item#atm_item_execution.value end, Batch), NextIterator}
+    end.
 
 
 -spec randomly_remove_entity_referenced_by_item(
