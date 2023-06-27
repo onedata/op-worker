@@ -33,7 +33,6 @@
     tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token() | undefined,
     batch_size :: tree_traverse:batch_size(),
-    listing_errors_handling_policy :: tree_traverse:listing_errors_handling_policy(),
 
     % Traverse config
     % generate slave jobs also for directories

@@ -1851,6 +1851,7 @@ Coverage report:
     - artifact: ct_logs_archive_recall.tar.gz
     - artifact: ct_logs_archive_sequential.tar.gz
     - artifact: ct_logs_archivestorage_helper.tar.gz
+    - artifact: ct_logs_archivisation_cancellation.tar.gz
     - artifact: ct_logs_atm_audit_log_store.tar.gz
     - artifact: ct_logs_atm_exception_store.tar.gz
     - artifact: ct_logs_atm_list_store.tar.gz
@@ -2004,7 +2005,15 @@ Qnthack - rerun:
           # The script which requests the next build of a plan resides on the bamboo server.
           # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
           # The script is run indirectly by the CGI script used in the curl command.
-          - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
+          - |-
+            STATUS=`curl -s -w "%{http_code}" -o /tmp/run-build.body 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}`
+            cat /tmp/run-build.body
+            rm /tmp/run-build.body
+            if [ ${STATUS} != "200" ]; then
+              exit 1
+            else
+              exit 0
+            fi
         conditions:
           - variable:
               matches:
