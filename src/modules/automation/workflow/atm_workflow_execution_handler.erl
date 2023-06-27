@@ -55,6 +55,8 @@
     handle_workflow_abruptly_stopped/3
 ]).
 
+-type item() :: #atm_item_execution{}.
+-export_type([item/0]).
 
 -define(ATM_WORKFLOW_EXECUTION_ENGINE, <<"atm_workflow_execution_engine">>).
 

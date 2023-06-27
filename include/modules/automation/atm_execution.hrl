@@ -15,7 +15,8 @@
 
 
 -include("global_definitions.hrl").
--include_lib("cluster_worker/include/audit_log.hrl").
+-include("modules/automation/atm_logging.hrl").
+-include("modules/automation/atm_openfaas.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -116,75 +117,9 @@
     results_batch :: undefined | [undefined | atm_task_executor:job_results()]
 }).
 
-
-% Record carrying an activity report of an OpenFaaS function
--record(atm_openfaas_activity_report, {
-    type :: atm_openfaas_activity_report:type(),
-    batch :: [atm_openfaas_activity_report:body()]
-}).
-
-% Record carrying a status report of a pod that executes given OpenFaaS function
-% (currently the only possible type of OpenFaaS function activity report), used
-% to build atm_openfaas_function_pod_status_summary
--record(atm_openfaas_function_pod_status_report, {
-    function_id :: atm_openfaas_task_executor:function_id(),
-    pod_id :: atm_openfaas_function_pod_status_registry:pod_id(),
-
-    pod_status :: atm_openfaas_function_pod_status_report:pod_status(),
-    containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
-
-    event_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
-    event_type :: atm_openfaas_function_pod_status_report:event_type(),
-    event_reason :: atm_openfaas_function_pod_status_report:event_reason(),
-    event_message :: atm_openfaas_function_pod_status_report:event_message()
-}).
-
-% Record holding the summary of status changes for a single pod of an OpenFaaS function
-% (single entry in the atm_openfaas_function_pod_status_registry)
--record(atm_openfaas_function_pod_status_summary, {
-    current_status :: atm_openfaas_function_pod_status_report:pod_status(),
-    current_containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
-    last_status_change_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
-    event_log_id :: infinite_log:log_id()
-}).
-
-% Record carrying a generic result streamer report
--record(atm_openfaas_result_streamer_report, {
-    id :: atm_openfaas_result_streamer_report:id(),
-    body :: atm_openfaas_result_streamer_report:body()
-}).
-
-% Record carrying a status report of a lambda result streamer of type 'registration'
--record(atm_openfaas_result_streamer_registration_report, {
-    workflow_execution_id :: atm_workflow_execution:id(),
-    task_execution_id :: atm_task_execution:id(),
-    result_streamer_id :: atm_openfaas_result_streamer_registry:result_streamer_id()
-}).
-
-% Record carrying a status report of a lambda result streamer of type 'chunk'
--record(atm_openfaas_result_streamer_chunk_report, {
-    chunk :: atm_openfaas_result_streamer_chunk_report:chunk()
-}).
-
-% Record carrying a status report of a lambda result streamer of type 'invalidData'
--record(atm_openfaas_result_streamer_invalid_data_report, {
-    result_name :: automation:name(),
-    base_64_encoded_data :: binary()
-}).
-
-% Record carrying a status report of a lambda result streamer of type 'deregistration'
--record(atm_openfaas_result_streamer_deregistration_report, {
-}).
-
-% Record expressing the push message sent to lambda result streamers to
-% acknowledge that a result streamer report has been processed
--record(atm_openfaas_result_streamer_report_ack, {
-    id :: atm_openfaas_result_streamer_report:id()
-}).
-
-% Record expressing the push message sent to lambda result streamers to
-% cue their finalization (flushing of all results and deregistering)
--record(atm_openfaas_result_streamer_finalization_signal, {
+-record(atm_item_execution, {
+    trace_id :: binary(),
+    value :: automation:item()
 }).
 
 %% Atm data types related macros
@@ -305,7 +240,12 @@
 
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: automation:item() | audit_log:append_request(),
+    argument ::
+        automation:item() |
+        audit_log:append_request() |
+        % for exception store
+        atm_workflow_execution_handler:item() |
+        [atm_workflow_execution_handler:item()],
     options :: atm_store:content_update_options()
 }).
 
@@ -335,139 +275,6 @@
 -define(PAUSED_STATUS, paused).
 -define(CRASHED_STATUS, crashed).
 -define(SKIPPED_STATUS, skipped).
-
-
-%% Atm logging related macros
-
--define(atm_task_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL, __LOGGER),
-    case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
-        true ->
-            atm_workflow_execution_logger:task_append_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOGGER);
-        false ->
-            ok
-    end
-).
-
--define(atm_task_debug(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?DEBUG_AUDIT_LOG_SEVERITY, ?DEBUG_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_debug(__FORMAT, __ARGS, __LOGGER), ?atm_task_debug(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_info(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?INFO_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_info(__FORMAT, __ARGS, __LOGGER), ?atm_task_info(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_notice(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?NOTICE_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_notice(__FORMAT, __ARGS, __LOGGER), ?atm_task_notice(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_warning(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?WARNING_AUDIT_LOG_SEVERITY, ?WARNING_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_warning(__FORMAT, __ARGS, __LOGGER), ?atm_task_warning(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_error(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?ERROR_AUDIT_LOG_SEVERITY, ?ERROR_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_error(__FORMAT, __ARGS, __LOGGER), ?atm_task_error(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_critical(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?CRITICAL_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_critical(__FORMAT, __ARGS, __LOGGER), ?atm_task_critical(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_alert(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?ALERT_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_alert(__FORMAT, __ARGS, __LOGGER), ?atm_task_alert(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_task_emergency(__LOG_CONTENT, __LOGGER), ?atm_task_system_log(
-    __LOG_CONTENT, ?EMERGENCY_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_task_emergency(__FORMAT, __ARGS, __LOGGER), ?atm_task_emergency(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL, __LOGGER),
-    case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
-        true ->
-            atm_workflow_execution_logger:workflow_append_system_log(__LOG_CONTENT, __LOG_SEVERITY, __LOGGER);
-        false ->
-            ok
-    end
-).
-
--define(atm_workflow_debug(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?DEBUG_AUDIT_LOG_SEVERITY, ?DEBUG_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_debug(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_debug(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_info(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?INFO_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_info(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_info(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_notice(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?NOTICE_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_notice(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_notice(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_warning(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?WARNING_AUDIT_LOG_SEVERITY, ?WARNING_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_warning(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_warning(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_error(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?ERROR_AUDIT_LOG_SEVERITY, ?ERROR_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_error(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_error(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_critical(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?CRITICAL_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_critical(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_critical(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_alert(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?ALERT_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_alert(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_alert(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
-
--define(atm_workflow_emergency(__LOG_CONTENT, __LOGGER), ?atm_workflow_system_log(
-    __LOG_CONTENT, ?EMERGENCY_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY_INT, __LOGGER
-)).
--define(atm_workflow_emergency(__FORMAT, __ARGS, __LOGGER), ?atm_workflow_emergency(
-    str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
-)).
 
 
 -define(ATM_SUPERVISION_WORKER_SUP, atm_supervision_worker_sup).
