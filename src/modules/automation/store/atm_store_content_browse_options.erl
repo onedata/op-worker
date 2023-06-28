@@ -22,6 +22,7 @@
 
 -type type() ::
     atm_audit_log_store_content_browse_options |
+    atm_exception_store_content_browse_options |
     atm_list_store_content_browse_options |
     atm_range_store_content_browse_options |
     atm_single_value_store_content_browse_options |
@@ -30,6 +31,7 @@
 
 -type record() ::
     atm_audit_log_store_content_browse_options:record() |
+    atm_exception_store_content_browse_options:record() |
     atm_list_store_content_browse_options:record() |
     atm_range_store_content_browse_options:record() |
     atm_single_value_store_content_browse_options:record() |
@@ -52,7 +54,7 @@
 %%%===================================================================
 
 
--spec sanitize(automation:store_type(), json_utils:json_map()) ->
+-spec sanitize(atm_store:type(), json_utils:json_map()) ->
     record() | no_return().
 sanitize(AtmStoreType, EmptyOptions) when is_map(EmptyOptions), map_size(EmptyOptions) == 0 ->
     % options are optional and if not specified should resolve to reasonable defaults
@@ -60,6 +62,9 @@ sanitize(AtmStoreType, EmptyOptions) when is_map(EmptyOptions), map_size(EmptyOp
 
 sanitize(audit_log, #{<<"type">> := <<"auditLogStoreContentBrowseOptions">>} = Data) ->
     atm_audit_log_store_content_browse_options:sanitize(Data);
+
+sanitize(exception, #{<<"type">> := <<"exceptionStoreContentBrowseOptions">>} = Data) ->
+    atm_exception_store_content_browse_options:sanitize(Data);
 
 sanitize(list, #{<<"type">> := <<"listStoreContentBrowseOptions">>} = Data) ->
     atm_list_store_content_browse_options:sanitize(Data);
@@ -89,8 +94,9 @@ sanitize(_, _) ->
 
 
 %% @private
--spec store_type_to_type_json(automation:store_type()) -> binary().
+-spec store_type_to_type_json(atm_store:type()) -> binary().
 store_type_to_type_json(audit_log) -> <<"auditLogStoreContentBrowseOptions">>;
+store_type_to_type_json(exception) -> <<"exceptionStoreContentBrowseOptions">>;
 store_type_to_type_json(list) -> <<"listStoreContentBrowseOptions">>;
 store_type_to_type_json(range) -> <<"rangeStoreContentBrowseOptions">>;
 store_type_to_type_json(single_value) -> <<"singleValueStoreContentBrowseOptions">>;

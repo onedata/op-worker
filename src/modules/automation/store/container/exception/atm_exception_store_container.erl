@@ -1,17 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Stanisz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2023 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_store_container` functionality for `list`
+%%% This module implements `atm_store_container` functionality for `exception`
 %%% atm_store type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_list_store_container).
--author("Michal Stanisz").
+-module(atm_exception_store_container).
+-author("Bartosz Walkowicz").
 
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
@@ -38,20 +38,20 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_content() :: [automation:item()] | undefined.
+-type initial_content() :: undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
-    options :: atm_list_store_content_browse_options:record()
+    options :: atm_exception_store_content_browse_options:record()
 }.
 -type content_update_req() :: #atm_store_content_update_req{
-    options :: atm_list_store_content_update_options:record()
+    options :: #atm_exception_store_content_update_options{}
 }.
 
--record(atm_list_store_container, {
-    config :: atm_list_store_config:record(),
+-record(atm_exception_store_container, {
+    config :: atm_exception_store_config:record(),
     backend_id :: atm_store_container_infinite_log_backend:id()
 }).
--type record() :: #atm_list_store_container{}.
+-type record() :: #atm_exception_store_container{}.
 
 -export_type([
     initial_content/0, content_browse_req/0, content_update_req/0,
@@ -69,22 +69,10 @@ create(#atm_store_container_creation_args{
     store_config = AtmStoreConfig,
     initial_content = undefined
 }) ->
-    create_container(AtmStoreConfig);
-
-create(#atm_store_container_creation_args{
-    workflow_execution_auth = AtmWorkflowExecutionAuth,
-    store_config = AtmStoreConfig,
-    initial_content = InitialItemsArray
-}) ->
-    atm_value:validate_constraints(
-        AtmWorkflowExecutionAuth,
-        InitialItemsArray,
-        ?ATM_ARRAY_DATA_SPEC(AtmStoreConfig#atm_list_store_config.item_data_spec)
-    ),
-
-    Record = create_container(AtmStoreConfig),
-    extend_insecure(InitialItemsArray, Record),
-    Record.
+    #atm_exception_store_container{
+        config = AtmStoreConfig,
+        backend_id = atm_store_container_infinite_log_backend:create()
+    }.
 
 
 -spec copy(record()) -> no_return().
@@ -92,8 +80,8 @@ copy(_) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
--spec get_config(record()) -> atm_list_store_config:record().
-get_config(#atm_list_store_container{config = AtmStoreConfig}) ->
+-spec get_config(record()) -> atm_exception_store_config:record().
+get_config(#atm_exception_store_container{config = AtmStoreConfig}) ->
     AtmStoreConfig.
 
 
@@ -102,30 +90,30 @@ get_iterated_item_data_spec(Record) ->
     get_item_data_spec(Record).
 
 
--spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().
-acquire_iterator(#atm_list_store_container{
-    config = #atm_list_store_config{item_data_spec = ItemDataSpec},
+-spec acquire_iterator(record()) -> atm_exception_store_container_iterator:record().
+acquire_iterator(#atm_exception_store_container{
+    config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
-    atm_list_store_container_iterator:build(ItemDataSpec, BackendId).
+    atm_exception_store_container_iterator:build(ItemDataSpec, BackendId).
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_list_store_content_browse_result:record() | no_return().
+    atm_exception_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
-    options = #atm_list_store_content_browse_options{listing_opts = ListingOpts}
+    options = #atm_exception_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
     ItemDataSpec = get_item_data_spec(Record),
     ListingPostprocessor = fun({Index, {_Timestamp, CompressedItem}}) ->
         {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec)}
     end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
-        Record#atm_list_store_container.backend_id,
+        Record#atm_exception_store_container.backend_id,
         ListingOpts,
         ListingPostprocessor
     ),
-    #atm_list_store_content_browse_result{
+    #atm_exception_store_content_browse_result{
         items = Entries,
         is_last = ProgressMarker =:= done
     }.
@@ -133,28 +121,20 @@ browse_content(Record, #atm_store_content_browse_req{
 
 -spec update_content(record(), content_update_req()) -> ok | no_return().
 update_content(Record, #atm_store_content_update_req{
-    workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = ItemsArray,
-    options = #atm_list_store_content_update_options{function = extend}
+    options = #atm_exception_store_content_update_options{function = extend}
 }) ->
-    atm_value:validate_constraints(
-        AtmWorkflowExecutionAuth,
-        ItemsArray,
-        ?ATM_ARRAY_DATA_SPEC(get_item_data_spec(Record))
-    ),
     extend_insecure(ItemsArray, Record);
 
 update_content(Record, #atm_store_content_update_req{
-    workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
-    options = #atm_list_store_content_update_options{function = append}
+    options = #atm_exception_store_content_update_options{function = append}
 }) ->
-    atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, get_item_data_spec(Record)),
     append_insecure(Item, Record).
 
 
 -spec delete(record()) -> ok.
-delete(#atm_list_store_container{backend_id = BackendId}) ->
+delete(#atm_exception_store_container{backend_id = BackendId}) ->
     atm_store_container_infinite_log_backend:delete(BackendId).
 
 
@@ -170,12 +150,12 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_list_store_container{
+db_encode(#atm_exception_store_container{
     config = AtmStoreConfig,
     backend_id = BackendId
 }, NestedRecordEncoder) ->
     #{
-        <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_list_store_config),
+        <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_exception_store_config),
         <<"backendId">> => BackendId
     }.
 
@@ -186,8 +166,8 @@ db_decode(
     #{<<"config">> := AtmStoreConfigJson, <<"backendId">> := BackendId},
     NestedRecordDecoder
 ) ->
-    #atm_list_store_container{
-        config = NestedRecordDecoder(AtmStoreConfigJson, atm_list_store_config),
+    #atm_exception_store_container{
+        config = NestedRecordDecoder(AtmStoreConfigJson, atm_exception_store_config),
         backend_id = BackendId
     }.
 
@@ -198,17 +178,8 @@ db_decode(
 
 
 %% @private
--spec create_container(atm_list_store_config:record()) -> record().
-create_container(AtmStoreConfig) ->
-    #atm_list_store_container{
-        config = AtmStoreConfig,
-        backend_id = atm_store_container_infinite_log_backend:create()
-    }.
-
-
-%% @private
 -spec get_item_data_spec(record()) -> atm_data_spec:record().
-get_item_data_spec(#atm_list_store_container{config = #atm_list_store_config{
+get_item_data_spec(#atm_exception_store_container{config = #atm_exception_store_config{
     item_data_spec = ItemDataSpec
 }}) ->
     ItemDataSpec.
@@ -216,8 +187,8 @@ get_item_data_spec(#atm_list_store_container{config = #atm_list_store_config{
 
 %% @private
 -spec extend_insecure([automation:item()], record()) -> ok.
-extend_insecure(ItemsArray, #atm_list_store_container{
-    config = #atm_list_store_config{item_data_spec = ItemDataSpec},
+extend_insecure(ItemsArray, #atm_exception_store_container{
+    config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
     lists:foreach(fun(Item) ->
@@ -229,8 +200,8 @@ extend_insecure(ItemsArray, #atm_list_store_container{
 
 %% @private
 -spec append_insecure(automation:item(), record()) -> ok.
-append_insecure(Item, #atm_list_store_container{
-    config = #atm_list_store_config{item_data_spec = ItemDataSpec},
+append_insecure(Item, #atm_exception_store_container{
+    config = #atm_exception_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
     ok = atm_store_container_infinite_log_backend:append(

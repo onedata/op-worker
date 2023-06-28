@@ -390,14 +390,14 @@ handle_task_execution_stopped(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv,
 report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
 
-    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update
-    % does not modify store document itself but only referenced infinite log
-    atm_list_store_container:update_content(
+    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as exception
+    % store update does not modify store document itself but only referenced infinite log
+    atm_exception_store_container:update_content(
         atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
         #atm_store_content_update_req{
             workflow_execution_auth = AtmWorkflowExecutionAuth,
             argument = ItemBatch,
-            options = #atm_list_store_content_update_options{function = extend}
+            options = #atm_exception_store_content_update_options{function = extend}
         }
     ),
 

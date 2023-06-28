@@ -139,7 +139,7 @@ browse_content(
     #atm_single_value_store_content_browse_result{item = Item}.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> {ok, record()} | no_return().
 update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
@@ -151,9 +151,9 @@ update_content(Record, #atm_store_content_update_req{
         .item_data_spec,
     atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
-    Record#atm_single_value_store_container{
+    {ok, Record#atm_single_value_store_container{
         compressed_item = atm_value:to_store_item(Item, ItemDataSpec)
-    }.
+    }}.
 
 
 -spec delete(record()) -> ok.
