@@ -573,9 +573,12 @@ does_contain_size_measurement(Measurements) ->
 
 
 %% @private
--spec filter_size_measurements([json_utils:json_map()]) -> [json_utils:json_map()].
+-spec filter_size_measurements([atm_workflow_execution_handler:item()]) ->
+    [json_utils:json_map()].
 filter_size_measurements(Measurements) ->
-    lists:filter(fun is_size_measurement/1, Measurements).
+    lists:filter(fun is_size_measurement/1, atm_workflow_execution_test_utils:get_values_batch(
+        Measurements
+    )).
 
 
 %% @private

@@ -46,6 +46,7 @@
     build_task_step_hook/1,
     build_task_step_strategy/1
 ]).
+-export([get_values_batch/1]).
 
 
 -define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
@@ -283,6 +284,11 @@ build_task_step_strategy(StrategiesPerTask) ->
             TaskStrategy -> TaskStrategy
         end
     end.
+
+
+-spec get_values_batch([atm_workflow_execution_handler:item()]) -> [automation:item()].
+get_values_batch(ItemBatch) ->
+    lists:map(fun(Item) -> Item#atm_item_execution.value end, ItemBatch).
 
 
 %%%===================================================================

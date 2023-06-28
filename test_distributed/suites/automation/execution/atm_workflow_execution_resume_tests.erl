@@ -355,7 +355,7 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                         selector = {1, 1},
                         run_task_for_item = #atm_step_mock_spec{
                             strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, [Item]]}) ->
-                                case lists:member(Item, [4, 5, 6]) of
+                                case lists:member(Item#atm_item_execution.value, [4, 5, 6]) of
                                     % Delay execution of last batch to ensure it happens after execution is suspended
                                     true -> {passthrough_with_delay, timer:seconds(1)};
                                     false -> passthrough
@@ -692,7 +692,10 @@ build_lane_run_execution_test_spec_with_even_numbers(
             ]
         }) ->
             ItemCount = length(ItemBatch),
-            EvenNumberCount = lists:sum(lists:map(fun(Item) -> 1 - (Item rem 2) end, ItemBatch)),
+            EvenNumberCount = lists:sum(lists:map(
+                fun(Item) -> 1 - (Item rem 2) end,
+                atm_workflow_execution_test_utils:get_values_batch(ItemBatch)
+            )),
 
             Expectations = case atm_workflow_execution_exp_state_builder:get_task_schema_id(
                 AtmTaskExecutionId, ExpState0
