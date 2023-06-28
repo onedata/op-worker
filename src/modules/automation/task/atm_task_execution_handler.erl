@@ -492,10 +492,7 @@ handle_job_batch_processing_error(
 
     ?atm_task_error(#{
         <<"description">> => <<"Failed to process batch of items.">>,
-        %% TODO item ids instead of values??
-        <<"itemBatch">> => lists:map(fun(#atm_item_execution{value = Value}) ->
-            Value
-        end, ItemBatch),
+        <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch),
         <<"reason">> => case Error of
             ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
             _ -> errors:to_json(Error)
@@ -562,8 +559,14 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
             }
     end,
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    %% TODO log item id instead of value??
-    ?atm_task_error(ErrorLog#{<<"item">> => Item#atm_item_execution.value}, Logger).
+    ?atm_task_error(ErrorLog#{<<"item">> => item_execution_to_json(Item)}, Logger).
+
+
+%% @private
+-spec item_execution_to_json(atm_workflow_execution_handler:item()) ->
+    json_utils:json_term().
+item_execution_to_json(#atm_item_execution{trace_id = TraceId, value = Value}) ->
+    #{<<"id">> => TraceId, <<"value">> => Value}.
 
 
 %% @private

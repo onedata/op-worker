@@ -106,7 +106,7 @@ browse_content(Record, #atm_store_content_browse_req{
 }) ->
     ItemDataSpec = get_item_data_spec(Record),
     ListingPostprocessor = fun({Index, {_Timestamp, #{<<"value">> := Value}}}) ->
-        %% TODO add id to browse entry
+        %% TODO VFS-11098 add id to browse entry
         {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, Value, ItemDataSpec)}
     end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
