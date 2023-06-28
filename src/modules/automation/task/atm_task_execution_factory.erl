@@ -19,13 +19,14 @@
 
 %% API
 -export([
-    create_all/1, create/2,
+    create_all/1, create/3,
     delete_all/1, delete/1
 ]).
 
 
 -record(creation_args, {
     parallel_box_execution_creation_args :: atm_parallel_box_execution:creation_args(),
+    task_index :: non_neg_integer(),
     task_schema :: atm_task_schema:record(),
     lambda_revision :: atm_lambda_revision:record()
 }).
@@ -40,6 +41,7 @@
 
 -record(creation_ctx, {
     task_id :: atm_task_execution:id(),
+    logger :: atm_workflow_execution_logger:record(),
     creation_args :: creation_args(),
     execution_components :: execution_components()
 }).
@@ -56,27 +58,39 @@
 create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_creation_args{
     parallel_box_schema = #atm_parallel_box_schema{tasks = AtmTaskSchemas}
 }) ->
-    lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, AtmTaskExecutionDocs) ->
+    lists:foldl(fun({AtmTaskSchemaIndex, AtmTaskSchema}, AtmTaskExecutionDocs) ->
         try
-            [create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) | AtmTaskExecutionDocs]
+            AtmTaskExecutionDoc = create(
+                AtmParallelBoxExecutionCreationArgs, AtmTaskSchemaIndex, AtmTaskSchema
+            ),
+            [AtmTaskExecutionDoc | AtmTaskExecutionDocs]
         catch Type:Reason:Stacktrace ->
             catch delete_all([Doc#document.key || Doc <- AtmTaskExecutionDocs]),
 
+            AtmTaskSchemaId = AtmTaskSchema#atm_task_schema.id,
             Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Error))
         end
-    end, [], AtmTaskSchemas).
+    end, [], lists:enumerate(0, AtmTaskSchemas)).
 
 
--spec create(atm_parallel_box_execution:creation_args(), atm_task_schema:record()) ->
+-spec create(atm_parallel_box_execution:creation_args(), non_neg_integer(), atm_task_schema:record()) ->
     atm_task_execution:doc().
-create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) ->
+create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchemaIndex, AtmTaskSchema) ->
     AtmTaskExecutionId = datastore_key:new(),
+
+    #atm_parallel_box_execution_creation_args{
+        lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+            workflow_execution_ctx = AtmWorkflowExecutionCtx
+        }
+    } = AtmParallelBoxExecutionCreationArgs,
 
     CreationCtx = create_execution_components(#creation_ctx{
         task_id = AtmTaskExecutionId,
+        logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
         creation_args = #creation_args{
             parallel_box_execution_creation_args = AtmParallelBoxExecutionCreationArgs,
+            task_index = AtmTaskSchemaIndex,
             task_schema = AtmTaskSchema,
             lambda_revision = get_lambda_revision(AtmTaskSchema, AtmParallelBoxExecutionCreationArgs)
         },
@@ -163,6 +177,7 @@ create_execution_components(CreationCtx) ->
 -spec create_executor(creation_ctx()) -> creation_ctx().
 create_executor(CreationCtx = #creation_ctx{
     task_id = AtmTaskExecutionId,
+    logger = Logger,
     creation_args = #creation_args{
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
             lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
@@ -175,20 +190,30 @@ create_executor(CreationCtx = #creation_ctx{
     },
     execution_components = ExecutionComponents
 }) ->
+    AtmTaskExecutor = atm_task_executor:create(#atm_task_executor_creation_args{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        lane_execution_index = AtmLaneIndex,
+        task_id = AtmTaskExecutionId,
+        task_schema = AtmTaskSchema,
+        lambda_revision = AtmLambdaRevision
+    }),
+
+    ?atm_workflow_debug(#{
+        <<"description">> => <<"Created task executor.">>,
+        <<"details">> => #{
+            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx)
+        }
+    }, Logger),
+
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
-        executor = atm_task_executor:create(#atm_task_executor_creation_args{
-            workflow_execution_ctx = AtmWorkflowExecutionCtx,
-            lane_execution_index = AtmLaneIndex,
-            task_id = AtmTaskExecutionId,
-            task_schema = AtmTaskSchema,
-            lambda_revision = AtmLambdaRevision
-        })
+        executor = AtmTaskExecutor
     }}.
 
 
 %% @private
 -spec create_audit_log(creation_ctx()) -> creation_ctx().
 create_audit_log(CreationCtx = #creation_ctx{
+    logger = Logger,
     creation_args = #creation_args{
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
             lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
@@ -207,6 +232,14 @@ create_audit_log(CreationCtx = #creation_ctx{
         ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
+    ?atm_workflow_debug(#{
+        <<"description">> => <<"Created task audit log.">>,
+        <<"details">> => #{
+            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
+            <<"auditLogStoreId">> => AtmSystemAuditLogStoreId
+        }
+    }, Logger),
+
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         system_audit_log_store_id = AtmSystemAuditLogStoreId
     }}.
@@ -221,6 +254,7 @@ create_time_series_store(CreationCtx = #creation_ctx{creation_args = #creation_a
 
 %% Copy ts store in case of retry
 create_time_series_store(CreationCtx = #creation_ctx{
+    logger = Logger,
     creation_args = #creation_args{
         task_schema = #atm_task_schema{id = AtmTaskSchemaId},
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
@@ -242,12 +276,21 @@ create_time_series_store(CreationCtx = #creation_ctx{
     OriginAtmTaskTSStoreId = OriginAtmTaskExecution#atm_task_execution.time_series_store_id,
     #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
 
+    ?atm_workflow_debug(#{
+        <<"description">> => <<"Copied origin run task time series store.">>,
+        <<"details">> => #{
+            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
+            <<"timeSeriesStoreId">> => AtmTaskTSStoreId
+        }
+    }, Logger),
+
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         time_series_store_id = AtmTaskTSStoreId
     }};
 
 %% Otherwise create new ts store instance
 create_time_series_store(CreationCtx = #creation_ctx{
+    logger = Logger,
     creation_args = #creation_args{
         task_schema = #atm_task_schema{
             time_series_store_config = AtmTaskTSStoreConfig
@@ -268,6 +311,14 @@ create_time_series_store(CreationCtx = #creation_ctx{
         undefined,
         ?ATM_TASK_TIME_SERIES_STORE_SCHEMA(AtmTaskTSStoreConfig)
     ),
+
+    ?atm_workflow_debug(#{
+        <<"description">> => <<"Created task time series store.">>,
+        <<"details">> => #{
+            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
+            <<"timeSeriesStoreId">> => AtmTaskTSStoreId
+        }
+    }, Logger),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         time_series_store_id = AtmTaskTSStoreId
@@ -309,7 +360,8 @@ delete_execution_components(_) ->
 
 %% @private
 -spec create_task_execution_doc(creation_ctx()) -> atm_task_execution:doc().
-create_task_execution_doc(#creation_ctx{
+create_task_execution_doc(CreationCtx = #creation_ctx{
+    logger = Logger,
     task_id = AtmTaskExecutionId,
     creation_args = #creation_args{
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
@@ -375,4 +427,33 @@ create_task_execution_doc(#creation_ctx{
         items_processed = 0,
         items_failed = 0
     }),
+
+    ?atm_workflow_debug(#{
+        <<"description">> => <<"Created task.">>,
+        <<"details">> => #{
+            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
+            <<"taskId">> => AtmTaskExecutionDoc#document.key
+        }
+    }, Logger),
+
     AtmTaskExecutionDoc.
+
+
+%% @private
+-spec build_schema_selector_json(creation_ctx()) -> json_utils:json_map().
+build_schema_selector_json(#creation_ctx{
+    creation_args = #creation_args{
+        task_index = AtmTaskSchemaIndex,
+        parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
+            parallel_box_index = AtmParallelBoxIndex,
+            lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+                lane_run_selector = AtmLaneRunSelector
+            }
+        }
+    }
+}) ->
+    #{
+        <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+        <<"parallelBoxIndex">> => AtmParallelBoxIndex,
+        <<"taskSchemaIndex">> => AtmTaskSchemaIndex
+    }.

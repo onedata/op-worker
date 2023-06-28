@@ -29,6 +29,7 @@
 -type run_execution_components() :: #run_execution_components{}.
 
 -record(run_creation_ctx, {
+    logger :: atm_workflow_execution_logger:record(),
     creation_args :: run_creation_args(),
     reset_lane_retries_num :: boolean(),
     execution_components :: run_execution_components()
@@ -90,7 +91,12 @@ delete_run(#atm_lane_execution_run{
 ) ->
     atm_workflow_execution:doc() | no_return().
 create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
-    RunCreationCtx = create_run_execution_components(build_run_creation_ctx(
+    RunCreationCtx = #run_creation_ctx{
+        logger = Logger,
+        creation_args = #atm_lane_execution_run_creation_args{
+            type = RunType
+        }
+    } = create_run_execution_components(build_run_creation_ctx(
         AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
     )),
     Diff = fun(AtmWorkflowExecution) ->
@@ -104,7 +110,21 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
     AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
 
     case atm_workflow_execution_status:handle_lane_run_created(AtmWorkflowExecutionId, Diff) of
-        {ok, NewAtmWorkflowExecutionDoc} ->
+        {ok, NewAtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution}} ->
+            ?atm_workflow_debug(#{
+                <<"description">> => ?fmt_bin("Created ~p lane run.", [
+                    AtmLaneRunSelector
+                ]),
+                <<"details">> => #{
+                    <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(
+                        AtmLaneRunSelector
+                    ),
+                    <<"laneRun">> => atm_lane_execution:run_to_json(
+                        AtmLaneRunSelector, RunType, AtmWorkflowExecution
+                    )
+                }
+            }, Logger),
+
             NewAtmWorkflowExecutionDoc;
         {error, _} = Error ->
             delete_run_execution_components(RunCreationCtx#run_creation_ctx.execution_components),
@@ -122,6 +142,7 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
 build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     {AtmLaneSelector, _} = AtmLaneRunSelector,
     AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     {ok, Run = #atm_lane_execution_run{status = ?PREPARING_STATUS}} = atm_lane_execution:get_run(
         AtmLaneRunSelector, AtmWorkflowExecution
@@ -142,7 +163,8 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
             Id
     end,
 
-    {RunType, OriginAtmLaneRun} = case Run#atm_lane_execution_run.origin_run_num of
+    OriginRunNum = Run#atm_lane_execution_run.origin_run_num,
+    {RunType, OriginAtmLaneRun} = case OriginRunNum of
         undefined ->
             {regular, undefined};
         OriginRunNum ->
@@ -154,8 +176,23 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
             end
     end,
 
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Started creation of ~p lane run.", [
+            AtmLaneRunSelector
+        ]),
+        <<"details">> => #{
+            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+            <<"laneRunType">> => RunType,
+            <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
+            <<"iteratedStoreId">> => IteratedStoreId
+        }
+    }, Logger),
+
     #run_creation_ctx{
+        logger = Logger,
         creation_args = #atm_lane_execution_run_creation_args{
+            lane_run_selector = AtmLaneRunSelector,
+
             type = RunType,
             workflow_execution_ctx = AtmWorkflowExecutionCtx,
             workflow_execution_doc = AtmWorkflowExecutionDoc,
@@ -194,7 +231,9 @@ create_run_execution_components(RunCreationCtx) ->
 %% @private
 -spec create_exception_store(run_creation_ctx()) -> run_creation_ctx().
 create_exception_store(RunCreationCtx = #run_creation_ctx{
+    logger = Logger,
     creation_args = #atm_lane_execution_run_creation_args{
+        lane_run_selector = AtmLaneRunSelector,
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         iterated_store_id = AtmIteratedStoreId
     },
@@ -212,6 +251,16 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
         ))
     ),
 
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Created exception store for ~p lane run.", [
+            AtmLaneRunSelector
+        ]),
+        <<"details">> => #{
+            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+            <<"exceptionStoreId">> => AtmLaneExceptionStoreId
+        }
+    }, Logger),
+
     RunCreationCtx#run_creation_ctx{
         execution_components = RunExecutionComponents#run_execution_components{
             exception_store_id = AtmLaneExceptionStoreId
@@ -222,12 +271,29 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
 %% @private
 -spec create_parallel_box_executions(run_creation_ctx()) -> run_creation_ctx().
 create_parallel_box_executions(RunCreationCtx = #run_creation_ctx{
-    creation_args = RunCreationArgs,
+    logger = Logger,
+    creation_args = RunCreationArgs = #atm_lane_execution_run_creation_args{
+        lane_run_selector = AtmLaneRunSelector
+    },
     execution_components = RunExecutionComponents
 }) ->
+    AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(RunCreationArgs),
+
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Created parallel boxes for ~p lane run.", [
+            AtmLaneRunSelector
+        ]),
+        <<"details">> => #{
+            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+            <<"parallelBoxes">> => lists:map(
+                fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
+            )
+        }
+    }, Logger),
+
     RunCreationCtx#run_creation_ctx{
         execution_components = RunExecutionComponents#run_execution_components{
-            parallel_boxes = atm_parallel_box_execution:create_all(RunCreationArgs)
+            parallel_boxes = AtmParallelBoxExecutions
         }
     }.
 

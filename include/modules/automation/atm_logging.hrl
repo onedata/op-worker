@@ -147,5 +147,6 @@
     str_utils:format_bin(__FORMAT, __ARGS), __LOGGER
 )).
 
+-define(fmt_bin(Format, Args), str_utils:format_bin(Format, Args)).
 
 -endif.
