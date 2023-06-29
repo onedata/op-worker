@@ -352,10 +352,10 @@ log_function_registering(#initiation_ctx{
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_info(
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(
         "Registering docker '~ts' as function '~ts' in OpenFaaS.", [DockerImage, FunctionName],
-        AtmWorkflowExecutionLogger
+        Logger
     ).
 
 
@@ -367,10 +367,8 @@ log_function_registered(#initiation_ctx{
     },
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_info(
-        "Function '~ts' registered in OpenFaaS.", [FunctionName], AtmWorkflowExecutionLogger
-    ).
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug("Function '~ts' registered in OpenFaaS.", [FunctionName], Logger).
 
 
 %% @private
@@ -638,11 +636,22 @@ log_function_ready(#initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
     },
-    executor = #atm_openfaas_task_executor{function_name = FunctionName}
+    executor = #atm_openfaas_task_executor{
+        function_name = FunctionName,
+        operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
+    }
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_info(
-        "Function '~ts' ready to use in OpenFaaS.", [FunctionName], AtmWorkflowExecutionLogger
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_info(
+        #{
+            <<"description">> => ?fmt_bin("Function '~ts' ready to use in OpenFaaS.", [
+                FunctionName
+            ]),
+            <<"details">> => #{
+                <<"dockerImage">> => DockerImage
+            }
+        },
+        Logger
     ).
 
 
@@ -734,9 +743,7 @@ remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
     ok.
 log_function_removed(AtmWorkflowExecutionCtx, FunctionName) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_info(
-        "Function '~ts' removed from OpenFaaS.", [FunctionName], Logger
-    ).
+    ?atm_task_info("Function '~ts' removed from OpenFaaS.", [FunctionName], Logger).
 
 
 %% @private
@@ -747,15 +754,14 @@ log_function_removed(AtmWorkflowExecutionCtx, FunctionName) ->
 ) ->
     ok.
 log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error) ->
-    LogContent = #{
-        <<"description">> => str_utils:format_bin(
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_warning(#{
+        <<"description">> => ?fmt_bin(
             "Failed to remove function '~ts' from OpenFaaS.",
             [FunctionName]
         ),
         <<"reason">> => errors:to_json(Error)
-    },
-    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_warning(LogContent, Logger).
+    }, Logger).
 
 
 %% @private
