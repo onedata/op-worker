@@ -428,11 +428,12 @@ create_task_execution_doc(CreationCtx = #creation_ctx{
         items_failed = 0
     }),
 
+    AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
     ?atm_workflow_debug(#{
-        <<"description">> => <<"Created task.">>,
+        <<"description">> => ?fmt_bin("Created '~ts' task.", [AtmTaskExecutionId]),
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
-            <<"taskId">> => AtmTaskExecutionDoc#document.key
+            <<"taskId">> => AtmTaskExecutionId
         }
     }, Logger),
 

@@ -160,11 +160,24 @@ handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionC
     {ok, workflow_engine:lane_spec()} | error.
 prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = AtmWorkflowExecutionDoc0#document.key,
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    AtmLaneRunSelectorJSON = atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Preparing ~p lane run.", [AtmLaneRunSelector]),
+        <<"details">> => #{<<"laneRunSelector">> => AtmLaneRunSelectorJSON}
+    }, Logger),
 
     try
         AtmWorkflowExecutionDoc1 = atm_lane_execution_factory:create_run(
             AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx
         ),
+
+        ?atm_workflow_debug(#{
+            <<"description">> => ?fmt_bin("Initiating ~p lane run.", [AtmLaneRunSelector]),
+            <<"details">> => #{<<"laneRunSelector">> => AtmLaneRunSelectorJSON}
+        }, Logger),
+
         BasicLaneSpec = initiate_lane_run(
             AtmLaneRunSelector,
             AtmWorkflowExecutionDoc1,
@@ -178,6 +191,11 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
             AtmLaneRunSelector, AtmWorkflowExecutionDoc1#document.key
         ),
         call_current_lane_run_pre_execution_hooks(AtmWorkflowExecutionDoc2),
+
+        ?atm_workflow_info(#{
+            <<"description">> => ?fmt_bin("Prepared ~p lane run.", [AtmLaneRunSelector]),
+            <<"details">> => #{<<"laneRunSelector">> => AtmLaneRunSelectorJSON}
+        }, Logger),
 
         {ok, LaneSpec}
     catch
@@ -213,6 +231,13 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
     {ok, workflow_engine:lane_spec()} | error.
 resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = AtmWorkflowExecutionDoc0#document.key,
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    AtmLaneRunSelectorJSON = atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Resuming ~p lane run.", [AtmLaneRunSelector]),
+        <<"details">> => #{<<"laneRunSelector">> => AtmLaneRunSelectorJSON}
+    }, Logger),
 
     try
         LaneSpec = initiate_lane_run(
@@ -228,6 +253,11 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
         ),
         call_current_lane_run_pre_execution_hooks(AtmWorkflowExecutionDoc1),
 
+        ?atm_workflow_info(#{
+            <<"description">> => ?fmt_bin("Resumed ~p lane run.", [AtmLaneRunSelector]),
+            <<"details">> => #{<<"laneRunSelector">> => AtmLaneRunSelectorJSON}
+        }, Logger),
+
         {ok, LaneSpec}
     catch
         throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
@@ -236,16 +266,11 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
             );
 
         Type:Reason:Stacktrace ->
-            {AtmLaneIndex, RunNum} = AtmLaneRunSelector,
-            LogContent = #{
-                <<"description">> => str_utils:format_bin(
-                    "Failed to resume ~p run of lane number ~p.",
-                    [RunNum, AtmLaneIndex]
-                ),
+            ?atm_workflow_critical(#{
+                <<"description">> => ?fmt_bin("Failed to resume ~p lane run.", [AtmLaneRunSelector]),
+                <<"details">> => #{<<"laneRunSelector">> => AtmLaneRunSelectorJSON},
                 <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
-            },
-            Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-            ?atm_workflow_critical(LogContent, Logger),
+            }, Logger),
 
             handle_setup_exception(
                 infer_setup_exception(Reason),
@@ -438,33 +463,30 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
     atm_workflow_execution:doc()
 ) ->
     {ok, stopping | stopped}.
-handle_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
-    key = AtmWorkflowExecutionId,
-    value = AtmWorkflowExecution = #atm_workflow_execution{prev_status = PrevStatus}
-}) ->
-    IsCurrentLaneRun = atm_lane_execution:is_current_lane_run(
-        AtmLaneRunSelector, AtmWorkflowExecution
-    ),
+handle_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc) ->
+    AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+    PrevStatus = AtmWorkflowExecution#atm_workflow_execution.prev_status,
+    IsCurrentLaneRun = atm_lane_execution:is_current_lane_run(AtmLaneRunSelector, AtmWorkflowExecution),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_workflow_info(#{
+        <<"description">> => ?fmt_bin("Initiating ~p lane run stop.", [AtmLaneRunSelector]),
+        <<"details">> => #{
+            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+            <<"reason">> => Reason
+        }
+    }, Logger),
 
     case atm_workflow_execution_status:status_to_phase(PrevStatus) of
         ?SUSPENDED_PHASE when IsCurrentLaneRun ->
-            % Stopping suspended execution - since there was no active process
-            % handling it, manual cleanup and callback calls are necessary
-            workflow_engine:cleanup_execution(AtmWorkflowExecutionId),
-            init_stop_parallel_boxes(
-                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
-            ),
-            atm_lane_execution_status:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId),
-            {ok, stopped};
+            handle_suspended_current_lane_run_stopping(
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+            );
 
         _ when IsCurrentLaneRun ->
-            % Currently executed lane run stopping == entire workflow execution is stopping
-            workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
-            init_stop_parallel_boxes(
-                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
-            ),
-            workflow_engine:finish_cancel_procedure(AtmWorkflowExecutionId),
-            {ok, stopping};
+            handle_current_lane_run_stopping(
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+            );
 
         _ ->
             init_stop_parallel_boxes(
@@ -472,6 +494,69 @@ handle_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #d
             ),
             {ok, stopping}
     end.
+
+
+%% @private
+-spec handle_suspended_current_lane_run_stopping(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_stopping_reason(),
+    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution:doc()
+) ->
+    {ok, stopped}.
+handle_suspended_current_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
+    key = AtmWorkflowExecutionId,
+    value = AtmWorkflowExecution
+}) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    % Stopping suspended execution - since there was no active process
+    % handling it, manual cleanup and callback calls are necessary
+    workflow_engine:cleanup_execution(AtmWorkflowExecutionId),
+    ?atm_workflow_debug(<<"Cleaned up workflow_engine execution.">>, Logger),
+
+    init_stop_parallel_boxes(
+        AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
+    ),
+
+    atm_lane_execution_status:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId),
+    ?atm_workflow_info(#{
+        <<"description">> => ?fmt_bin("Stopped suspended ~p lane run.", [AtmLaneRunSelector]),
+        <<"details">> => #{
+            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector)
+        }
+    }, Logger),
+
+    {ok, stopped}.
+
+
+%% @private
+-spec handle_current_lane_run_stopping(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_stopping_reason(),
+    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution:doc()
+) ->
+    {ok, stopping}.
+handle_current_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
+    key = AtmWorkflowExecutionId,
+    value = AtmWorkflowExecution
+}) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    % Currently executed lane run stopping == entire workflow execution is stopping
+    ?atm_workflow_debug(<<"Initiating workflow_engine cancel procedure.">>, Logger),
+    workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
+    ?atm_workflow_debug(<<"Initiated workflow_engine cancel procedure.">>, Logger),
+
+    init_stop_parallel_boxes(
+        AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
+    ),
+
+    workflow_engine:finish_cancel_procedure(AtmWorkflowExecutionId),
+    ?atm_workflow_debug(<<"Finished workflow_engine cancel procedure.">>, Logger),
+
+    {ok, stopping}.
 
 
 %% @private
@@ -495,6 +580,15 @@ init_stop_parallel_boxes(
         Reason -> Reason
     end,
     {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Initiating ~p lane run tasks stop.", [AtmLaneRunSelector]),
+        <<"details">> => #{
+            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+            <<"taskStoppingReason">> => AtmTaskExecutionStoppingReason
+        }
+    }, Logger),
 
     atm_parallel_box_execution:init_stop_all(
         AtmWorkflowExecutionCtx,

@@ -46,7 +46,15 @@
     {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
 start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
-    initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
+    Result = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_info(<<"Started task.">>, Logger),
+
+    AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
+    ?atm_workflow_info(workflow_log("Started '~ts' task.", AtmTaskExecutionId), Logger),
+
+    Result.
 
 
 -spec init_stop(
@@ -80,15 +88,24 @@ init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
 -spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
 resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
     case atm_task_execution_status:handle_resuming(
         AtmTaskExecutionId, get_incarnation(AtmWorkflowExecutionCtx)
     ) of
         {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
+            ?atm_task_debug(<<"Resuming task.">>, Logger),
+            ?atm_workflow_debug(workflow_log("Resuming '~ts' task.", AtmTaskExecutionId), Logger),
+
             unfreeze_stores(AtmTaskExecution),
             InitiationResult = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
 
             case atm_task_execution_status:handle_resumed(AtmTaskExecutionId) of
                 {ok, _} ->
+                    ?atm_task_info(<<"Resumed task.">>, Logger),
+                    ?atm_workflow_info(
+                        workflow_log("Resumed '~ts' task.", AtmTaskExecutionId), Logger
+                    ),
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
                     teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
@@ -622,15 +639,9 @@ log_uncorrelated_results_processing_error(
         <<"reason">> => errors:to_json(Error)
     }, Logger),
 
-    ?atm_workflow_critical(#{
-        <<"description">> => str_utils:format_bin(
-            "Failed to process uncorrelated results for task '~s'.",
-            [AtmTaskExecutionId]
-        ),
-        <<"referencedComponents">> => #{
-            <<"tasks">> => [AtmTaskExecutionId]
-        }
-    }, Logger).
+    ?atm_workflow_critical(workflow_log(
+        "Failed to process uncorrelated results for task '~s'.", AtmTaskExecutionId
+    ), Logger).
 
 
 %% @private
@@ -641,11 +652,22 @@ log_uncorrelated_results_processing_error(
     ok.
 log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    AtmTaskExecutionId = atm_workflow_execution_ctx:get_task_execution_id(AtmWorkflowExecutionCtx),
+    LogBase = #{<<"details">> => #{<<"reason">> => StoppingReason}},
 
-    ?atm_task_info(#{
-        <<"description">> => <<"Stopping task execution.">>,
-        <<"reason">> => StoppingReason
-    }, Logger).
+    ?atm_task_info(LogBase#{<<"description">> => <<"Initiated task stop.">>}, Logger),
+    ?atm_workflow_info(maps:merge(LogBase, workflow_log(
+        "Initiated '~ts' task stop.", AtmTaskExecutionId
+    )), Logger).
+
+
+%% @private
+-spec workflow_log(list(), atm_task_execution:id()) -> json_utils:json_map().
+workflow_log(Format, AtmTaskExecutionId) ->
+    #{
+        <<"description">> => ?fmt_bin(Format, [AtmTaskExecutionId]),
+        <<"referencedComponents">> => #{<<"tasks">> => [AtmTaskExecutionId]}
+    }.
 
 
 %% @private
