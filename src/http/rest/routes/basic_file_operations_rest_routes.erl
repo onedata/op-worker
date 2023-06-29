@@ -30,6 +30,19 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
+    %% Get size statistics.
+    {<<"/data/:id/size_stats">>, rest_handler, #rest_req{
+        method = 'GET',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = {dir_size_stats_collection, ?PROVIDER_BINDING}, 
+            scope = private
+        }
+    }},
     %% List directory files and subdirectories
     {<<"/data/:id/children">>, rest_handler, #rest_req{
         method = 'GET',

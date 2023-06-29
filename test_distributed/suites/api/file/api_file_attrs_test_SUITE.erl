@@ -1209,22 +1209,6 @@ get_historical_dir_size_stats_schema_test(Config) ->
                             ?DIR_SIZE_STATS_COLLECTION_SCHEMA
                         )
                     end
-                },
-                #scenario_template{
-                    name = <<"Get dir size stats collection schema using op_file gs api">>,
-                    type = gs,
-                    prepare_args_fun = fun(_) ->
-                        #gs_args{
-                            operation = get,
-                            gri = #gri{type = op_file, id = undefined, aspect = dir_size_stats_collection_schema, scope = public}
-                        }
-                    end,
-                    validate_result_fun = fun(_TestCtx, {ok, Result}) ->
-                        ?assertEqual(
-                            jsonable_record:from_json(Result, time_series_collection_schema),
-                            ?DIR_SIZE_STATS_COLLECTION_SCHEMA
-                        )
-                    end
                 }
             ]
         }
@@ -1241,12 +1225,16 @@ get_historical_dir_size_stats_layout_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #dir_spec{
-            mode = 8#707, 
-            shares = [#share_spec{}], 
-            children = [#file_spec{content = crypto:strong_rand_bytes(8)}]
-        }
+    [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, space_krk_par, [
+                #dir_spec{
+                    mode = 8#707,
+                    shares = [#share_spec{}],
+                    children = [#file_spec{content = crypto:strong_rand_bytes(8)}]
+                },
+                #file_spec{content = crypto:strong_rand_bytes(8)}
+            ]
     ),
     Metrics = [?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC],
     ExpLayoutBase = #{
@@ -1261,7 +1249,7 @@ get_historical_dir_size_stats_layout_test(Config) ->
         (krakow) -> ExpLayoutBase#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
         (paris) -> ExpLayoutBase#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
     end,
-    
+
     await_file_size_sync(krakow, 8, DirGuid),
     await_file_size_sync(paris, 8, DirGuid),
     
@@ -1271,15 +1259,24 @@ get_historical_dir_size_stats_layout_test(Config) ->
         Provider = api_test_memory:get(MemRef, current_provider),
         ?assertEqual({ok, #{<<"layout">> => ExpLayoutFun(Provider)}}, Result)
     end,
+    ValidateRestSuccessfulCallFun = fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ProviderId = opw_test_rpc:get_provider_id(TestCtx#api_test_ctx.node),
+        Provider = oct_background:to_entity_placeholder(ProviderId),
+        ?assertEqual(?HTTP_200_OK, RespCode),
+        ?assertEqual(#{<<"layout">> => ExpLayoutFun(Provider)}, RespBody)
+    end,
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     DataSpecFun = fun(_) -> #data_spec{
         optional = [<<"mode">>],
         correct_values = #{<<"mode">> => [<<"layout">>]},
         bad_values = [
-            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])}
+            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
+            {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
+            {bad_id, FileGuid, {gs, ?ERROR_POSIX(?ENOTDIR)}}
         ]}
     end,
     gather_historical_dir_size_stats_test_base(
-        MemRef, DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpecFun, #{}).
+        MemRef, DirGuid, ShareId, ValidateGsSuccessfulCallFun, ValidateRestSuccessfulCallFun, Config, DataSpecFun, #{}).
 
 
 get_historical_dir_size_stats_slice_test(Config) ->
@@ -1291,18 +1288,22 @@ get_historical_dir_size_stats_slice_test(Config) ->
     P1StorageId = get_storage_id(SpaceId, P1Id),
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
-    
-    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #dir_spec{
-            mode = 8#707,
-            shares = [#share_spec{}],
-            children = [
-                #file_spec{content = crypto:strong_rand_bytes(8)},
-                #file_spec{content = crypto:strong_rand_bytes(16)},
-                #dir_spec{}
-            ]
-        },
-        krakow
+
+    [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, space_krk_par, [
+                #dir_spec{
+                    mode = 8#707,
+                    shares = [#share_spec{}],
+                    children = [
+                        #file_spec{content = crypto:strong_rand_bytes(8)},
+                        #file_spec{content = crypto:strong_rand_bytes(16)},
+                        #dir_spec{}
+                    ]
+                },
+                #file_spec{content = crypto:strong_rand_bytes(8)}
+            ],
+            krakow
     ),
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
     BaseLayout = maps_utils:random_submap(#{
@@ -1338,10 +1339,23 @@ get_historical_dir_size_stats_slice_test(Config) ->
         end, maps:get(<<"slice">> , ResultData)),
         ?assertEqual(ExpSliceFun(Provider), ResultWithoutTimestamps)
     end,
+    ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ProviderId = opw_test_rpc:get_provider_id(TestCtx#api_test_ctx.node),
+        Provider = oct_background:to_entity_placeholder(ProviderId),
+        ?assertEqual(?HTTP_200_OK, RespCode),
+        ResultData = ?assertMatch(#{<<"slice">> := _}, RespBody),
+        ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
+            lists:map(fun(Map) ->
+                maps:without([<<"timestamp">>, <<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
+            end, Windows)
+        end, maps:get(<<"slice">> , ResultData)),
+        ?assertEqual(ExpSliceFun(Provider), ResultWithoutTimestamps)
+    end,
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     DataSpecFun = fun(ProviderId) -> #data_spec{
         required = [<<"layout">>],
         optional = [
-            <<"mode">>, 
+            <<"mode">>,
             <<"startTimestamp">>,
             <<"windowLimit">>
         ],
@@ -1358,21 +1372,26 @@ get_historical_dir_size_stats_slice_test(Config) ->
             {<<"windowLimit">>, 8888, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
             {<<"windowLimit">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"windowLimit">>)}},
             {<<"startTimestamp">>, -1, {?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)}},
-            {<<"startTimestamp">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)}}
-        ]}
+            {<<"startTimestamp">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)}},
+            {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
+            {bad_id, FileGuid, {gs, ?ERROR_POSIX(?ENOTDIR)}}
+        ]
+    }
     end,
-    gather_historical_dir_size_stats_test_base(MemRef, DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpecFun,
+    gather_historical_dir_size_stats_test_base(MemRef, DirGuid, ShareId, ValidateGsSuccessfulCallFun,
+        ValidateRestSuccessfulCallFun, Config, DataSpecFun,
         #{<<"mode">> => <<"slice">>} % add mode to data, when it is left out, as when it is omitted `layout` mode is assumed
     ).
 
 
 %% @private
-gather_historical_dir_size_stats_test_base(MemRef, FileGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpecFun, DefaultData) ->
+gather_historical_dir_size_stats_test_base(MemRef, FileGuid, ShareId, ValidateGsSuccessfulCallFun,
+    ValidateRestSuccessfulCallFun, Config, DataSpecFun, DefaultData) ->
     lists:foreach(fun(Provider) ->
         api_test_memory:set(MemRef, current_provider, Provider),
         ?assert(onenv_api_test_runner:run_tests([
             #suite_spec{
-                target_nodes = ?config(op_worker_nodes, Config),
+                target_nodes = [Provider],
                 client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
                 scenario_templates = [
                     #scenario_template{
@@ -1380,6 +1399,12 @@ gather_historical_dir_size_stats_test_base(MemRef, FileGuid, ShareId, ValidateGs
                         type = gs,
                         prepare_args_fun = build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Provider, DefaultData),
                         validate_result_fun = ValidateGsSuccessfulCallFun
+                    },
+                    #scenario_template{
+                        name = <<"Get dir size stats using /data/DirId/size_stats rest endpoint">>,
+                        type = rest,
+                        prepare_args_fun = build_gather_historical_dir_size_stats_prepare_rest_args_fun(FileGuid, DefaultData),
+                        validate_result_fun = ValidateRestSuccessfulCallFun
                     }
                 ],
                 data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
@@ -1406,6 +1431,23 @@ build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Provider, D
         }
     end.
 
+
+%% @private
+-spec build_gather_historical_dir_size_stats_prepare_rest_args_fun(file_id:file_guid(), map()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_gather_historical_dir_size_stats_prepare_rest_args_fun(FileGuid, DefaultData) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {ok, Id} = file_id:guid_to_objectid(FileGuid),
+        {ObjectId, Data2} = api_test_utils:maybe_substitute_bad_id(Id, Data),
+        RestPath = <<"data/", ObjectId/binary, "/size_stats">>,
+
+        #rest_args{
+            method = get,
+            path = RestPath,
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
+            body = json_utils:encode(maps:merge(DefaultData, Data2))
+        }
+    end.
 
 %%%===================================================================
 %%% Get file storage locations test functions
