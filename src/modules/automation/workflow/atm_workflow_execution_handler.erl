@@ -367,10 +367,19 @@ handle_task_results_processed_for_all_items(
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId
 ) ->
-    atm_task_execution_handler:trigger_stream_conclusion(
-        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
-        AtmTaskExecutionId
-    ).
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
+        AtmTaskExecutionId, AtmWorkflowExecutionEnv
+    ),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_workflow_debug(#{
+        <<"description">> => ?fmt_bin("Processed all uncorrelated results for '~ts' task", [
+            AtmTaskExecutionId
+        ]),
+        <<"referencedComponents">> => #{<<"tasks">> => [AtmTaskExecutionId]}
+    }, Logger),
+
+    atm_task_execution_handler:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId).
 
 
 -spec handle_task_execution_stopped(

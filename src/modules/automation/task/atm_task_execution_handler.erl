@@ -192,6 +192,12 @@ process_job_batch_result(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
 ) ->
     ok | error.
 process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, UncorrelatedResults}) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(#{
+        <<"description">> => <<"Processing streamed uncorrelated results.">>,
+        <<"results">> => UncorrelatedResults
+    }, Logger),
+
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
@@ -387,6 +393,12 @@ run_job_batch_insecure(
     AtmJobBatchId,
     ItemBatch
 ) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(#{
+        <<"description">> => <<"Running task for items.">>,
+        <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)
+    }, Logger),
+
     AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
     AtmLambdaInput = build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
 
@@ -427,6 +439,12 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
             Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs
         )
     end, ItemBatch),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(#{
+        <<"description">> => <<"Created argsBatch.">>,
+        <<"argsBatch">> => ArgsBatch
+    }, Logger),
 
     #atm_lambda_input{
         workflow_execution_id = atm_run_job_batch_ctx:get_workflow_execution_id(AtmRunJobBatchCtx),
@@ -536,6 +554,13 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception
 
 process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResults) ->
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(#{
+        <<"description">> => <<"Processing results for item.">>,
+        <<"item">> => item_execution_to_json(Item),
+        <<"results">> => JobResults
+    }, Logger),
 
     try
         atm_task_execution_results:consume_results(
