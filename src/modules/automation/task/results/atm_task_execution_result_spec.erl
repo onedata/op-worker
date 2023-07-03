@@ -199,14 +199,14 @@ dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_content_update_options = UpdateOptions
 }) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_handle_logs(UpdateOptions, Result, Logger);
+    atm_workflow_execution_logger:task_handle_logs(Logger, UpdateOptions, Result);
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
     store_content_update_options = UpdateOptions
 }) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_handle_logs(UpdateOptions, Result, Logger);
+    atm_workflow_execution_logger:workflow_handle_logs(Logger, UpdateOptions, Result);
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_schema_id = AtmStoreSchemaId,

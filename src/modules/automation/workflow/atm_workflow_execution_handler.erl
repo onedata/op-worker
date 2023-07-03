@@ -255,10 +255,10 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
         AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
 
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        ?atm_workflow_critical(#{
+        ?atm_workflow_critical(Logger, #{
             <<"description">> => <<"OpenFaaS service is not healthy (see error reason).">>,
-            <<"reason">> => errors:to_json(Error)
-        }, Logger),
+            <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+        }),
 
         atm_lane_execution_handler:init_stop({current, current}, interrupt, AtmWorkflowExecutionCtx)
     after
@@ -372,12 +372,12 @@ handle_task_results_processed_for_all_items(
     ),
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_debug(#{
+    ?atm_workflow_debug(Logger, #{
         <<"description">> => ?fmt_bin("Processed all uncorrelated results for '~ts' task", [
             AtmTaskExecutionId
         ]),
         <<"referencedComponents">> => #{<<"tasks">> => [AtmTaskExecutionId]}
-    }, Logger),
+    }),
 
     atm_task_execution_handler:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId).
 
@@ -805,19 +805,21 @@ get_root_workflow_execution_ctx(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
 ) ->
     ok.
 log_exception(Logger, throw, {session_acquisition_failed, Error}, _Stacktrace) ->
-    ?atm_workflow_critical(#{
+    ?atm_workflow_critical(Logger, #{
         <<"description">> => <<"Failed to acquire user session.">>,
-        <<"reason">> => errors:to_json(Error)
-    }, Logger);
+        <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+    });
 
 log_exception(Logger, throw, Reason, _Stacktrace) ->
-    ?atm_workflow_critical(#{
+    ?atm_workflow_critical(Logger, #{
         <<"description">> => <<"Unexpected error occured.">>,
-        <<"reason">> => errors:to_json(Reason)
-    }, Logger);
+        <<"details">> => #{<<"reason">> => errors:to_json(Reason)}
+    });
 
 log_exception(Logger, Type, Reason, Stacktrace) ->
-    ?atm_workflow_emergency(#{
+    Error = ?examine_exception(Type, Reason, Stacktrace),
+
+    ?atm_workflow_emergency(Logger, #{
         <<"description">> => <<"Unexpected emergency occured.">>,
-        <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
-    }, Logger).
+        <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+    }).

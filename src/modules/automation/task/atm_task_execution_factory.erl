@@ -198,12 +198,12 @@ create_executor(CreationCtx = #creation_ctx{
         lambda_revision = AtmLambdaRevision
     }),
 
-    ?atm_workflow_debug(#{
-        <<"description">> => <<"Created task executor.">>,
+    ?atm_workflow_debug(Logger, #{
+        <<"description">> => <<"Task executor created.">>,  %% TODO task_executor:to_json/name?
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx)
         }
-    }, Logger),
+    }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         executor = AtmTaskExecutor
@@ -232,13 +232,13 @@ create_audit_log(CreationCtx = #creation_ctx{
         ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
-    ?atm_workflow_debug(#{
-        <<"description">> => <<"Created task audit log.">>,
+    ?atm_workflow_debug(Logger, #{
+        <<"description">> => <<"Task audit log created.">>,
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
             <<"auditLogStoreId">> => AtmSystemAuditLogStoreId
         }
-    }, Logger),
+    }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         system_audit_log_store_id = AtmSystemAuditLogStoreId
@@ -276,13 +276,13 @@ create_time_series_store(CreationCtx = #creation_ctx{
     OriginAtmTaskTSStoreId = OriginAtmTaskExecution#atm_task_execution.time_series_store_id,
     #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
 
-    ?atm_workflow_debug(#{
-        <<"description">> => <<"Copied origin run task time series store.">>,
+    ?atm_workflow_debug(Logger, #{
+        <<"description">> => <<"Task time series store copied from origin run.">>,
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
             <<"timeSeriesStoreId">> => AtmTaskTSStoreId
         }
-    }, Logger),
+    }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         time_series_store_id = AtmTaskTSStoreId
@@ -312,13 +312,13 @@ create_time_series_store(CreationCtx = #creation_ctx{
         ?ATM_TASK_TIME_SERIES_STORE_SCHEMA(AtmTaskTSStoreConfig)
     ),
 
-    ?atm_workflow_debug(#{
-        <<"description">> => <<"Created task time series store.">>,
+    ?atm_workflow_debug(Logger, #{
+        <<"description">> => <<"Task time series store created.">>,
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
             <<"timeSeriesStoreId">> => AtmTaskTSStoreId
         }
-    }, Logger),
+    }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         time_series_store_id = AtmTaskTSStoreId
@@ -429,13 +429,13 @@ create_task_execution_doc(CreationCtx = #creation_ctx{
     }),
 
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
-    ?atm_workflow_debug(#{
-        <<"description">> => ?fmt_bin("Created '~ts' task.", [AtmTaskExecutionId]),
+    ?atm_workflow_debug(Logger, #{
+        <<"description">> => ?fmt_bin("Task '~ts' created.", [AtmTaskExecutionId]),
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
             <<"taskId">> => AtmTaskExecutionId
         }
-    }, Logger),
+    }),
 
     AtmTaskExecutionDoc.
 

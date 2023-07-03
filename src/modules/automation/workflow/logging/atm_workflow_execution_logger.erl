@@ -71,50 +71,50 @@ should_log(#atm_workflow_execution_logger{log_level = LogLevel}, LogSeverityInt)
     audit_log:should_log(LogLevel, LogSeverityInt).
 
 
--spec task_append_system_log(log_content(), severity(), record()) -> ok.
-task_append_system_log(LogContent, Severity, AtmWorkflowExecutionLogger) ->
+-spec task_append_system_log(record(), log_content(), severity()) -> ok.
+task_append_system_log(Logger, LogContent, Severity) ->
     task_handle_logs(
+        Logger,
         #atm_audit_log_store_content_update_options{function = append},
-        ensure_system_audit_log_object(LogContent, Severity),
-        AtmWorkflowExecutionLogger
+        ensure_system_audit_log_object(LogContent, Severity)
     ).
 
 
 -spec task_handle_logs(
+    record(),
     atm_audit_log_store_content_update_options:record(),
-    log() | [log()],
-    record()
+    log() | [log()]
 ) ->
     ok.
-task_handle_logs(UpdateOptions, AuditLogObject, #atm_workflow_execution_logger{
+task_handle_logs(#atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     task_audit_log_store_container = AtmTaskAuditLogStoreContainer
-}) ->
+}, UpdateOptions, AuditLogObject) ->
     handle_logs(
         UpdateOptions, AuditLogObject, AtmWorkflowExecutionAuth,
         AtmTaskAuditLogStoreContainer
     ).
 
 
--spec workflow_append_system_log(log_content(), severity(), record()) -> ok.
-workflow_append_system_log(LogContent, Severity, AtmWorkflowExecutionLogger) ->
+-spec workflow_append_system_log(record(), log_content(), severity()) -> ok.
+workflow_append_system_log(Logger, LogContent, Severity) ->
     workflow_handle_logs(
+        Logger,
         #atm_audit_log_store_content_update_options{function = append},
-        ensure_system_audit_log_object(LogContent, Severity),
-        AtmWorkflowExecutionLogger
+        ensure_system_audit_log_object(LogContent, Severity)
     ).
 
 
 -spec workflow_handle_logs(
+    record(),
     atm_audit_log_store_content_update_options:record(),
-    log() | [log()],
-    record()
+    log() | [log()]
 ) ->
     ok.
-workflow_handle_logs(UpdateOptions, AuditLogObject, #atm_workflow_execution_logger{
+workflow_handle_logs(#atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
-}) ->
+}, UpdateOptions, AuditLogObject) ->
     handle_logs(
         UpdateOptions, AuditLogObject, AtmWorkflowExecutionAuth,
         AtmWorkflowAuditLogStoreContainer
