@@ -105,9 +105,14 @@ browse_content(Record, #atm_store_content_browse_req{
     options = #atm_exception_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
     ItemDataSpec = get_item_data_spec(Record),
-    ListingPostprocessor = fun({Index, {_Timestamp, #{<<"value">> := Value}}}) ->
-        %% TODO VFS-11098 add id to browse entry
-        {Index, atm_value:describe_store_item(AtmWorkflowExecutionAuth, Value, ItemDataSpec)}
+    ListingPostprocessor = fun({Index, {_Timestamp, Entry = #{<<"value">> := StoreValue}}}) ->
+        Result = case atm_value:describe_store_item(
+            AtmWorkflowExecutionAuth, StoreValue, ItemDataSpec
+        ) of
+            {ok, Value} -> {ok, Entry#{<<"value">> => Value}};
+            {error, _} = Error -> Error
+        end,
+        {Index, Result}
     end,
     {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
         Record#atm_exception_store_container.backend_id,
