@@ -35,6 +35,7 @@
 
 -type record() ::
     atm_audit_log_store_container_iterator:record() |
+    atm_exception_store_container_iterator:record() |
     atm_list_store_container_iterator:record() |
     atm_range_store_container_iterator:record() |
     atm_single_value_store_container_iterator:record() |

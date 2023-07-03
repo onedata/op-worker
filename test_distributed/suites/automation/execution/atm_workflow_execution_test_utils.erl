@@ -355,9 +355,12 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
 
 
 %% @private
--spec build_browse_opts(automation:store_type()) -> atm_store_content_browse_options:record().
+-spec build_browse_opts(atm_store:type()) -> atm_store_content_browse_options:record().
 build_browse_opts(audit_log) ->
     #atm_audit_log_store_content_browse_options{browse_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+
+build_browse_opts(exception) ->
+    #atm_exception_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
 
 build_browse_opts(list) ->
     #atm_list_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};

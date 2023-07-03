@@ -335,18 +335,15 @@ groups() -> [
 
     {iteration_tests, [], [
         iterate_over_list_store,
-        %% TODO VFS-10854 fix after introducing exception store not validating input
-%%        iterate_over_list_store_with_some_inaccessible_items,
-        %% TODO VFS-10854 fix after introducing exception store not validating input
-%%        iterate_over_list_store_with_all_items_inaccessible
+        iterate_over_list_store_with_some_inaccessible_items,
+        iterate_over_list_store_with_all_items_inaccessible,
         iterate_over_empty_list_store,
 
         iterate_over_range_store,
         iterate_over_empty_range_store,
 
         iterate_over_single_value_store,
-        %% TODO VFS-10854 fix after introducing exception store not validating input
-%%        iterate_over_single_value_store_with_all_items_inaccessible,
+        iterate_over_single_value_store_with_all_items_inaccessible,
         iterate_over_empty_single_value_store,
 
         iterate_over_tree_forest_store,

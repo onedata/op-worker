@@ -34,7 +34,7 @@
 
 % Use QoS pool, as this traverse is only executed once after upgrade and there is no need to keep separate pool for it.
 -define(POOL_NAME, qos_traverse:pool_name()).
--define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 1000)).
 
 
 %%%===================================================================

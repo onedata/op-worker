@@ -19,7 +19,8 @@
 
 %% API
 -export([delete/3, delete_using_trash/3]).
-
+% should only be used after permissions check
+-export([delete_using_trash_insecure/3]).
 
 %%%===================================================================
 %%% API
@@ -60,6 +61,16 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     delete_using_trash_insecure(UserCtx, FileCtx3, EmitEvents).
+
+
+-spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    fslogic_worker:fuse_response().
+delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
+    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {Filename, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
+    FileCtx4 = trash:move_to_trash(FileCtx3, UserCtx),
+    {ok, _} = trash:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
+    ?FUSE_OK_RESP.
 
 
 %%%===================================================================
@@ -120,16 +131,6 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
         {_, _, _FileCtx2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
-
-
--spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
-    fslogic_worker:fuse_response().
-delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
-    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
-    {Filename, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    FileCtx4 = trash:move_to_trash(FileCtx3, UserCtx),
-    {ok, _} = trash:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
-    ?FUSE_OK_RESP.
 
 
 %%--------------------------------------------------------------------

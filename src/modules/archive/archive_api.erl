@@ -49,9 +49,9 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, cancel_archivisation/3, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, cancel_archivisation/2, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
     list_archives/3, delete/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
--export([delete_single_archive/2]).
+-export([delete_single_archive/1]).
 -export([delete_archive_recursive/1]).
 
 
@@ -127,12 +127,12 @@ start_archivisation(
     end.
 
 
--spec cancel_archivisation(archive:doc(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+-spec cancel_archivisation(archive:doc(), archive:cancel_preservation_policy()) ->
     ok | {error, term()}.
-cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP, UserCtx) ->
-    cancel_archivisations(ArchiveDoc, RelatedAip, PP, UserCtx);
-cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP, UserCtx) ->
-    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx).
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP) ->
+    cancel_archivisations(ArchiveDoc, RelatedAip, PP);
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP) ->
+    cancel_archivisations(ArchiveDoc, RelatedDip, PP).
 
 
 -spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
@@ -253,33 +253,35 @@ delete_archive_recursive(ArchiveId) ->
     end.
 
 
--spec delete_single_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
-delete_single_archive(undefined, _UserCtx) ->
+-spec delete_single_archive(archive:id() | archive:doc()) -> ok | error().
+delete_single_archive(undefined) ->
     ok;
-delete_single_archive(ArchiveDoc = #document{}, _UserCtx) ->
+delete_single_archive(ArchiveDoc = #document{}) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case archive:delete(ArchiveId) of
         ok ->
+            %% @TODO VFS-11079 possible race when removing archive on other provider than it was created
+            %% and document of dataset with protection flags blocking archive modification is not synced yet
             ok = unblock_archive(ArchiveDoc),
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel delete requests?
-            % NOTE: delete as root because user may not have all permissions to file
-            %       (only permissions to remove archive are required)
-            delete_req:delete_using_trash(user_ctx:new(?ROOT_USER_ID), ArchiveDocCtx, true),
-            
+            %% @TODO VFS-7718 Should it be possible to register many callbacks in case of parallel delete requests?
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
             {ok, ParentArchiveId} = archive:get_parent_id(ArchiveDoc),
+            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+            
             ParentArchiveId =/= undefined andalso archives_forest:delete(ParentArchiveId, SpaceId, ArchiveId),
-            archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
+            archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp),
+            % NOTE: permission to delete archive were already checked, ignore check on directory deletion
+            delete_req:delete_using_trash_insecure(user_ctx:new(?ROOT_USER_ID), ArchiveDocCtx, true),
+            ok;
         ?ERROR_NOT_FOUND ->
             % there was race with other process removing the archive
             ok
     end;
-delete_single_archive(ArchiveId, UserCtx) ->
+delete_single_archive(ArchiveId) ->
     case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> delete_single_archive(ArchiveDoc, UserCtx);
+        {ok, ArchiveDoc} -> delete_single_archive(ArchiveDoc);
         ?ERROR_NOT_FOUND -> ok
     end.
 
@@ -354,9 +356,8 @@ delete_archive(ArchiveDoc = #document{value = #archive{related_aip = undefined, 
 %% @private
 -spec delete_archives(archive:doc(), archive:id() | undefined) -> ok | error().
 delete_archives(Archive, RelatedArchive) ->
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = delete_single_archive(Archive, UserCtx),
-    ok = delete_single_archive(RelatedArchive, UserCtx).
+    ok = delete_single_archive(Archive),
+    ok = delete_single_archive(RelatedArchive).
 
 
 %% @private
@@ -366,17 +367,17 @@ unblock_archive(#document{} = ArchiveDoc) ->
 
 
 %% @private
--spec cancel_archivisations(archive:doc(), archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+-spec cancel_archivisations(archive:doc(), archive:id(), archive:cancel_preservation_policy()) ->
     ok | {error, term()}.
-cancel_archivisations(ArchiveDoc, RelatedArchiveId, PreservationPolicy, UserCtx) ->
-    RelatedArchiveId =/= undefined andalso cancel_single_archive(RelatedArchiveId, PreservationPolicy, UserCtx),
-    cancel_single_archive(ArchiveDoc, PreservationPolicy, UserCtx).
+cancel_archivisations(ArchiveDoc, RelatedArchiveId, PreservationPolicy) ->
+    RelatedArchiveId =/= undefined andalso cancel_single_archive(RelatedArchiveId, PreservationPolicy),
+    cancel_single_archive(ArchiveDoc, PreservationPolicy).
 
 
 %% @private
--spec cancel_single_archive(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+-spec cancel_single_archive(archive:doc() | archive:id(), archive:cancel_preservation_policy()) ->
     ok | {error, term()}.
-cancel_single_archive(ArchiveDocOrId, PreservationPolicy, UserCtx) ->
+cancel_single_archive(ArchiveDocOrId, PreservationPolicy) ->
     case archive:mark_cancelling(ArchiveDocOrId, PreservationPolicy) of
         ok ->
             {ok, TaskId} = archive:get_id(ArchiveDocOrId),
@@ -384,7 +385,7 @@ cancel_single_archive(ArchiveDocOrId, PreservationPolicy, UserCtx) ->
         {error, already_cancelled} ->
             case PreservationPolicy of
                 retain -> ok;
-                delete -> delete_single_archive(ArchiveDocOrId, UserCtx)
+                delete -> delete_single_archive(ArchiveDocOrId)
             end;
         {error, already_finished} ->
             ok;
