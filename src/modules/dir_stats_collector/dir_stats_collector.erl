@@ -69,7 +69,7 @@
     flush_stats/2, delete_stats/2,
     initialize_collections/1,
     report_file_moved/4,
-    is_propagation_excluded/1]).
+    is_uuid_counted/1]).
 %% API - space
 -export([stop_collecting/1]).
 
@@ -343,9 +343,9 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
     end.
 
 
--spec is_propagation_excluded(file_id:file_guid()) -> boolean().
-is_propagation_excluded(Guid) ->
-    fslogic_file_id:is_tmp_dir_guid(Guid) orelse archivisation_tree:is_root_dir_uuid(file_id:guid_to_uuid(Guid)).
+-spec is_uuid_counted(file_meta:uuid()) -> boolean().
+is_uuid_counted(Uuid) ->
+    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse archivisation_tree:is_root_dir_uuid(Uuid)).
 
 
 %%%===================================================================
@@ -1024,7 +1024,7 @@ update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
 propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
-    case is_propagation_excluded(Guid) of
+    case fslogic_file_id:is_tmp_dir_guid(Guid)(Guid) of
         true ->
             CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
         false ->

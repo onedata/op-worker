@@ -94,7 +94,12 @@ do_master_job(#tree_traverse{
         initialization_finished -> ok
     end,
 
-    {ok, #{master_jobs := MasterJobs} = MasterJobMap} = Ans = do_tree_traverse_master_job(Job, MasterJobExtendedArgs),
+    {ok, #{master_jobs := MasterJobs} = MasterJobMap} = Ans = try
+        do_tree_traverse_master_job(Job, MasterJobExtendedArgs)
+    catch
+        error:{badmatch, {error, not_found}} ->
+            {ok, #{slave_jobs => [], master_jobs => []}}
+    end,
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
