@@ -608,7 +608,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
 -spec item_execution_to_json(atm_workflow_execution_handler:item()) ->
     json_utils:json_term().
 item_execution_to_json(#atm_item_execution{trace_id = TraceId, value = Value}) ->
-    #{<<"id">> => TraceId, <<"value">> => Value}.
+    #{<<"traceId">> => TraceId, <<"value">> => Value}.
 
 
 %% @private

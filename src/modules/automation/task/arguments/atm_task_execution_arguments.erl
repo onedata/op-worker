@@ -55,7 +55,7 @@ acquire_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
             Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Error))
         end
-    end, #{<<"__meta">> => #{<<"id">> => TraceId}}, AtmTaskExecutionArgSpecs).
+    end, #{<<"__meta">> => #{<<"traceId">> => TraceId}}, AtmTaskExecutionArgSpecs).
 
 
 %%%===================================================================

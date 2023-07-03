@@ -216,6 +216,6 @@ build_entry(Item, Record) ->
     ItemDataSpec = get_item_data_spec(Record),
 
     #{
-        <<"id">> => Item#atm_item_execution.trace_id,
+        <<"traceId">> => Item#atm_item_execution.trace_id,
         <<"value">> => atm_value:to_store_item(Item#atm_item_execution.value, ItemDataSpec)
     }.

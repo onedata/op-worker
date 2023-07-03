@@ -71,7 +71,7 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_exception_stor
     last_listed_index = LastListedIndex
 }) ->
     ListingPostprocessor = fun({Index, {_Timestamp, #{
-        <<"id">> := TraceId,
+        <<"traceId">> := TraceId,
         <<"value">> := StoreValue
     }}}) ->
         Result = case atm_value:from_store_item(
