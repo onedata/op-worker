@@ -33,6 +33,7 @@
     discard_workflow_execution/1
 ]).
 -export([
+    scan_audit_log/3, scan_audit_log/4,
     browse_store/2, browse_store/3,
     get_exception_store_content/2
 ]).
@@ -46,7 +47,7 @@
     build_task_step_hook/1,
     build_task_step_strategy/1
 ]).
--export([get_values_batch/1]).
+-export([get_values_batch/1, item_batch_to_json/1, item_to_json/1]).
 
 
 -define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
@@ -155,6 +156,36 @@ discard_workflow_execution(#atm_mock_call_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, atm_workflow_execution_api:discard(AtmWorkflowExecutionId)).
+
+
+-spec scan_audit_log(
+    automation:id(),
+    atm_workflow_execution_test_runner:mock_call_ctx(),
+    fun((json_utils:json_term()) -> boolean())
+) ->
+    boolean().
+scan_audit_log(AtmAuditLogStoreSchemaId, AtmMockCallCtx, PredFun) ->
+    scan_audit_log(AtmAuditLogStoreSchemaId, undefined, AtmMockCallCtx, PredFun).
+
+
+-spec scan_audit_log(
+    automation:id(),
+    undefined | atm_task_execution:id(),
+    atm_workflow_execution_test_runner:mock_call_ctx(),
+    fun((json_utils:json_term()) -> boolean())
+) ->
+    boolean().
+scan_audit_log(AtmAuditLogStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx, PredFun) ->
+    #{<<"logEntries">> := LogEntries} = ?assertMatch(
+        #{<<"isLast">> := true, <<"logEntries">> := _},
+        browse_store(AtmAuditLogStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx)
+    ),
+    lists_utils:foldl_while(fun(Entry, Acc) ->
+        case PredFun(Entry) orelse Acc of
+            true -> {halt, true};
+            false -> {cont, false}
+        end
+    end, false, LogEntries).
 
 
 -spec browse_store(automation:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
@@ -289,6 +320,16 @@ build_task_step_strategy(StrategiesPerTask) ->
 -spec get_values_batch([atm_workflow_execution_handler:item()]) -> [automation:item()].
 get_values_batch(ItemBatch) ->
     lists:map(fun(Item) -> Item#atm_item_execution.value end, ItemBatch).
+
+
+-spec item_batch_to_json([atm_workflow_execution_handler:item()]) -> [json_utils:json_map()].
+item_batch_to_json(ItemBatch) ->
+    lists:map(fun item_to_json/1, ItemBatch).
+
+
+-spec item_to_json(atm_workflow_execution_handler:item()) -> json_utils:json_map().
+item_to_json(#atm_item_execution{trace_id = TraceId, value = Value}) ->
+    #{<<"traceId">> => TraceId, <<"value">> => Value}.
 
 
 %%%===================================================================

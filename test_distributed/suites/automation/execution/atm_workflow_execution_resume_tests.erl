@@ -720,7 +720,7 @@ assert_exception_store_content(ExpContent, AtmLaneRunSelector, AtmMockCallCtx) -
     ),
     ?assertEqual(
         lists:sort(ExpContent),
-        lists:sort(lists:map(fun(#{<<"value">> := Content}) -> Content end, Items))
+        lists:sort(lists:map(fun(#{<<"value">> := #{<<"value">> := Content}}) -> Content end, Items))
     ).
 
 
