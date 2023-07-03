@@ -1024,7 +1024,7 @@ update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
 propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
-    case fslogic_file_id:is_tmp_dir_guid(Guid)(Guid) of
+    case fslogic_file_id:is_tmp_dir_guid(Guid) of
         true ->
             CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
         false ->
