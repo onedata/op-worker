@@ -1237,6 +1237,7 @@ get_historical_dir_size_stats_layout_test(Config) ->
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics,
+        ?TOTAL_DOWNLOAD_SIZE => Metrics,
         ?FILE_ERRORS_COUNT => Metrics,
         ?DIR_ERRORS_COUNT => Metrics
     },
@@ -1292,7 +1293,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics
+        ?TOTAL_SIZE => Metrics,
+        ?TOTAL_DOWNLOAD_SIZE => Metrics
     }),
     LayoutFun = fun
         (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
@@ -1304,7 +1306,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
             ?REG_FILE_AND_LINK_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 2}]} end, #{}, Metrics),
             ?SIZE_ON_STORAGE(P1StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),
             ?SIZE_ON_STORAGE(P2StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 0}]} end, #{}, Metrics),
-            ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
+            ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),
+            ?TOTAL_DOWNLOAD_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
         })
     end,
     await_file_size_sync(krakow, 24, DirGuid),

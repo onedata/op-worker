@@ -33,7 +33,6 @@
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
 -define(MAX_LINKS_NUM, 65536). % 64 * 1024
--define(INCLUDE_REFERENCES_MAP_SIZE_TRESHOLD, 64).
 
 %%%===================================================================
 %%% API
@@ -149,6 +148,9 @@ list_references(Key) ->
 -spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references()}.
 merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
     #document{value = #file_meta{references = OldReferences}}) ->
+    % TODO - tutaj trzeba obsluzyc pojawienie/znikniecie linku uwzgledniajac race z lokalna zmiana rozmiaru
+    % Do tego przydaloby sie nowe pole refow z nie uwzglednionym size updatowane w synchronizerze (tez mapa per provider)
+    % Mozna dodane/usuniete linki zapisywac w jakims ets/pamieci i przy kazdej produkcji zmian ta pamiec sprawdzac (czysci sie przy obsludze dodania linka)
     ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
     OldMutatorReferences = maps:get(Mutator, OldReferences, []),
 

@@ -165,6 +165,7 @@ handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
 
 -spec handle_file_deleted_on_imported_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_imported_storage(FileCtx) ->
+    % TODO - a co jak plik mial hardlinki?
     report_file_deleted(FileCtx),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, false, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS)),
@@ -218,13 +219,75 @@ cleanup_opened_files() ->
 deregister_link_and_inspect_references(FileCtx) ->
     LinkUuid = file_ctx:get_logical_uuid_const(FileCtx),
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    {ok, ReferencesPresence} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+    {ok, ReferencesPresence} = case dir_stats_service_state:is_active(SpaceId) of
+        true ->
+            ReferencedFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+            replica_synchronizer:apply(ReferencedFileCtx, fun() ->
+                try
+                    % TODO - ogarnac duplikacje kodu z liczeniem size
+                    Size = case file_ctx:get_or_create_local_regular_file_location_doc(ReferencedFileCtx, true, true) of
+                        {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
+                            fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc));
+                        {#document{value = #file_location{size = TotalSize}}, _} ->
+                            TotalSize
+                    end,
+                    case file_meta_hardlinks:list_references(FileUuid) of
+                        {ok, [LinkUuid]} ->
+                            dir_size_stats:report_link_size_changed(
+                                file_ctx:get_logical_guid_const(FileCtx), -Size, total_and_download_size),
+                            dir_size_stats:report_link_size_changed(
+                                file_ctx:get_referenced_guid_const(FileCtx), Size, total_size_only);
+                        {ok, [LinkUuid, NextRef | _]} ->
+                            dir_size_stats:report_link_size_changed(
+                                file_ctx:get_logical_guid_const(FileCtx), -Size, total_and_download_size),
+                            dir_size_stats:report_link_size_changed(
+                                file_id:pack_guid(NextRef, SpaceId), Size, total_size_only);
+                        _ ->
+                            dir_size_stats:report_download_size_changed(file_ctx:get_logical_guid_const(FileCtx), -Size)
+                    end,
+                    file_meta_hardlinks:deregister(FileUuid, LinkUuid)
+                catch
+                    _:Reason ->
+                        {error, Reason}
+                end
+            end);
+        false ->
+            file_meta_hardlinks:deregister(FileUuid, LinkUuid)
+    end,
     ReferencesPresence.
 
 -spec inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
 inspect_references(FileCtx) ->
-    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    file_meta_hardlinks:inspect_references(FileUuid).
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    replica_synchronizer:apply(FileCtx, fun() ->
+        try
+            % TODO - ogarnac duplikacje kodu z liczeniem size
+            Size = case file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
+                {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
+                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc));
+                {#document{value = #file_location{size = TotalSize}}, _} ->
+                    TotalSize
+            end,
+            case file_meta_hardlinks:list_references(FileUuid) of
+                {ok, []} ->
+                    dir_size_stats:report_link_size_changed(
+                        file_ctx:get_logical_guid_const(FileCtx), -Size, download_size_only),
+                    no_references_left;
+                {ok, [NextRef | _]} ->
+                    dir_size_stats:report_link_size_changed(
+                        file_ctx:get_logical_guid_const(FileCtx), -Size, total_and_download_size),
+                    dir_size_stats:report_link_size_changed(
+                        file_id:pack_guid(NextRef, SpaceId), Size, total_size_only),
+                    has_at_least_one_reference
+            end
+        catch
+            _:Reason ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @private

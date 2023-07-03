@@ -12,6 +12,7 @@
 %%%    - ?REG_FILE_AND_LINK_COUNT - total number of regular files, hardlinks and symlinks,
 %%%    - ?DIR_COUNT - total number of nested directories,
 %%%    - ?TOTAL_SIZE - total byte size of the logical data,
+%%%    - ?TOTAL_DOWNLOAD_SIZE - total size in case of download (hardlinks of dame file are downloaded multiple times),
 %%%    - ?SIZE_ON_STORAGE(StorageId) - physical byte size on a specific storage.
 %%% NOTE: the total size is not a sum of sizes on different storages, as the blocks stored
 %%% on different storages may overlap.
@@ -48,7 +49,8 @@
 -export([
     get_stats/1, get_stats/2, 
     browse_historical_stats_collection/2,
-    report_reg_file_size_changed/3,
+    report_total_size_changed/2, report_link_size_changed/3, report_size_changed_on_storage/3,
+    report_download_size_changed/2, report_child_download_size_changed/2,
     report_file_created/2, report_file_created_without_state_check/2,
     report_file_deleted/2, report_remote_links_change/2,
     delete_stats/1]).
@@ -126,13 +128,60 @@ browse_historical_stats_collection(Guid, BrowseRequest) ->
     end.
 
 
--spec report_reg_file_size_changed(file_id:file_guid(), total | {on_storage, storage:id()}, integer()) -> ok.
-report_reg_file_size_changed(_Guid, _Scope, 0) ->
+-spec report_total_size_changed(file_id:file_guid(), integer()) -> ok.
+report_total_size_changed(_Guid, 0) ->
     ok;
-report_reg_file_size_changed(Guid, total, SizeDiff) ->
+report_total_size_changed(Guid, SizeDiff) ->
+    % TODO - informacja o dodaniu/usunieciu linku musi byc puszczana przez synchronizer
+    % TODO - trzeba aktualizowac dla parentow wszystkich linkow i dodac obsluge kasowania file_meta symlinku
+    % co z race kasowania file_location, file_meta linku?
+    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
+    % Co jesli file_meta nie ma?
+    case file_meta_hardlinks:list_references(Uuid) of
+        {ok, [MainRef | References]} ->
+            ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId), ?MODULE,
+                #{?TOTAL_SIZE => SizeDiff, ?TOTAL_DOWNLOAD_SIZE => SizeDiff}),
+            lists:foreach(fun(Ref) ->
+                ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(Ref, SpaceId), ?MODULE,
+                    #{?TOTAL_DOWNLOAD_SIZE => SizeDiff})
+            end, References);
+        {ok, []} ->
+            ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff})
+        % TODO - jesli not_found to dodac posthooka
+    end.
+
+
+-spec report_link_size_changed(file_id:file_guid(), integer(),
+    total_and_download_size | total_size_only | download_size_only) -> ok.
+report_link_size_changed(_Guid, 0, _) ->
+    ok;
+report_link_size_changed(Guid, SizeDiff, total_and_download_size) ->
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff, ?TOTAL_DOWNLOAD_SIZE => SizeDiff});
+report_link_size_changed(Guid, SizeDiff, total_size_only) ->
     ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff});
-report_reg_file_size_changed(Guid, {on_storage, StorageId}, SizeDiff) ->
+report_link_size_changed(Guid, SizeDiff, download_size_only) ->
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_DOWNLOAD_SIZE => SizeDiff}).
+
+
+-spec report_size_changed_on_storage(file_id:file_guid(), storage:id(), integer()) -> ok.
+report_size_changed_on_storage(_Guid, _StorageId, 0) ->
+    ok;
+report_size_changed_on_storage(Guid, StorageId, SizeDiff) ->
     ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?SIZE_ON_STORAGE(StorageId) => SizeDiff}).
+
+
+-spec report_download_size_changed(file_id:file_guid(), integer()) -> ok.
+report_download_size_changed(_Guid, 0) ->
+    ok;
+report_download_size_changed(Guid, SizeDiff) ->
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_DOWNLOAD_SIZE => SizeDiff}).
+
+
+-spec report_child_download_size_changed(file_id:file_guid(), integer()) -> ok.
+report_child_download_size_changed(_Guid, 0) ->
+    ok;
+report_child_download_size_changed(Guid, SizeDiff) ->
+    update_stats(Guid, #{?TOTAL_DOWNLOAD_SIZE => SizeDiff}).
 
 
 -spec report_file_created(file_meta:type(), file_id:file_guid()) -> ok.
@@ -295,6 +344,7 @@ get_ctx() ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec init_existing_child(file_id:file_guid(), file_meta:doc()) -> dir_stats_collection:collection().
 init_existing_child(Guid, Doc) ->
     case file_meta:get_type(Doc) of
@@ -310,26 +360,20 @@ init_existing_child(Guid, Doc) ->
             end;
         Type ->
             try
-                EmptyCurrentStats = gen_empty_current_stats(Guid),
-
                 case Type of
                     ?REGULAR_FILE_TYPE ->
-                        % gets storage_id that is also used by prepare_file_size_summary
-                        FileCtx = file_ctx:new_by_guid(Guid),
-                        {FileSizes, _} = try
-                            file_ctx:prepare_file_size_summary(FileCtx)
-                        catch
-                            throw:{error, {file_meta_missing, _}} ->
-                                % It is impossible to create file_location because of missing ancestor's file_meta.
-                                % Sizes will be counted on location creation.
-                                {[], FileCtx}
-                        end,
-                        lists:foldl(fun
-                            ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
-                            ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
-                        end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes);
+                        init_reg_file(Guid);
+                    ?LINK_TYPE -> % Hardlink
+                        Uuid = file_id:guid_to_uuid(Guid),
+                        case file_meta_hardlinks:list_references(fslogic_file_id:ensure_referenced_uuid(Uuid)) of
+                            {ok, [Uuid | _]} ->
+                                init_reg_file(Guid);
+                            _ ->
+                                init_hardlink(Guid)
+                        end;
                     _ ->
-                        % Links are counted with size 0
+                        % Syminks are counted with size 0
+                        EmptyCurrentStats = gen_empty_current_stats(Guid),
                         EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}
                 end
             catch
@@ -337,6 +381,39 @@ init_existing_child(Guid, Doc) ->
                     handle_init_error(Guid, Error, Reason, Stacktrace),
                     #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
             end
+    end.
+
+
+%% @private
+-spec init_reg_file(file_id:file_guid()) -> dir_stats_collection:collection().
+init_reg_file(Guid) ->
+    EmptyCurrentStats = gen_empty_current_stats(Guid),
+    FileCtx = file_ctx:new_by_guid(Guid),
+    {FileSizes, _} = try
+        file_ctx:prepare_file_size_summary(FileCtx)
+    catch
+        throw:{error, {file_meta_missing, _}} ->
+            % It is impossible to create file_location because of missing ancestor's file_meta.
+            % Sizes will be counted on location creation.
+            {[], FileCtx}
+    end,
+    lists:foldl(fun
+        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size, ?TOTAL_DOWNLOAD_SIZE => Size};
+        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+    end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes).
+
+
+%% @private
+-spec init_hardlink(file_id:file_guid()) -> dir_stats_collection:collection().
+init_hardlink(Guid) ->
+    EmptyCurrentStats = gen_empty_current_stats(Guid),
+    FileCtx = file_ctx:new_by_guid(fslogic_file_id:ensure_referenced_guid(Guid)),
+    case file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
+        {#document{value = #file_location{size = undefined}} = FLDoc, _} ->
+            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(FLDoc)),
+            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?TOTAL_DOWNLOAD_SIZE => TotalSize};
+        {#document{value = #file_location{size = TotalSize}}, _} ->
+            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?TOTAL_DOWNLOAD_SIZE => TotalSize}
     end.
 
 
@@ -364,7 +441,7 @@ stat_names(Guid) ->
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT,
-                ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)];
+                ?TOTAL_SIZE, ?TOTAL_DOWNLOAD_SIZE, ?SIZE_ON_STORAGE(StorageId)];
         {error, not_found} ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
@@ -514,7 +591,8 @@ encode_stat_name(?DIR_COUNT) -> 1;
 encode_stat_name(?FILE_ERRORS_COUNT) -> 2;
 encode_stat_name(?DIR_ERRORS_COUNT) -> 3;
 encode_stat_name(?TOTAL_SIZE) -> 4;
-encode_stat_name(?SIZE_ON_STORAGE(StorageId)) -> {5, StorageId}.
+encode_stat_name(?SIZE_ON_STORAGE(StorageId)) -> {5, StorageId};
+encode_stat_name(?TOTAL_DOWNLOAD_SIZE) -> 6.
 
 
 %% @private
@@ -524,4 +602,5 @@ decode_stat_name(1) -> ?DIR_COUNT;
 decode_stat_name(2) -> ?FILE_ERRORS_COUNT;
 decode_stat_name(3) -> ?DIR_ERRORS_COUNT;
 decode_stat_name(4) -> ?TOTAL_SIZE;
-decode_stat_name({5, StorageId}) -> ?SIZE_ON_STORAGE(StorageId).
+decode_stat_name({5, StorageId}) -> ?SIZE_ON_STORAGE(StorageId);
+decode_stat_name(6) -> ?TOTAL_DOWNLOAD_SIZE.

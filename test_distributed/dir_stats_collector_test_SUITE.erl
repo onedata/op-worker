@@ -22,6 +22,7 @@
 %% tests
 -export([
     basic_test/1,
+    hardlinks_test/1,
     enabling_for_empty_space_test/1,
     enabling_for_not_empty_space_test/1,
     enabling_large_dirs_test/1,
@@ -39,6 +40,7 @@
 
 all() -> [
     basic_test,
+    hardlinks_test,
     enabling_for_empty_space_test,
     enabling_for_not_empty_space_test,
     enabling_large_dirs_test,
@@ -60,6 +62,10 @@ all() -> [
 
 basic_test(Config) ->
     dir_stats_collector_test_base:basic_test(Config).
+
+
+hardlinks_test(Config) ->
+    dir_stats_collector_test_base:hardlinks_test(Config).
 
 
 enabling_for_empty_space_test(Config) ->
@@ -122,7 +128,7 @@ end_per_suite(Config) ->
     lfm_files_test_base:end_per_suite(Config).
 
 
-init_per_testcase(Case = basic_test, Config) ->
+init_per_testcase(Case, Config) when Case =:= basic_test orelse Case =:= hardlinks_test ->
     dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
         Case, Config
     ));

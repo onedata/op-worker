@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([basic_test/1, multiprovider_test/1, multiprovider_trash_test/1, transfer_after_enabling_test/1,
+-export([basic_test/1, hardlinks_test/1, multiprovider_test/1, multiprovider_trash_test/1, transfer_after_enabling_test/1,
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_large_dirs_test/1,
     enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
@@ -74,6 +74,7 @@ basic_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }),
 
@@ -84,6 +85,7 @@ basic_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }),
 
@@ -102,6 +104,7 @@ basic_test(Config) ->
             ?FILE_ERRORS_COUNT => 0,
             ?DIR_ERRORS_COUNT => 0,
             ?TOTAL_SIZE => 0,
+            ?TOTAL_DOWNLOAD_SIZE => 0,
             ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
         }),
 
@@ -114,6 +117,7 @@ basic_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }),
 
@@ -123,8 +127,169 @@ basic_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }).
+
+hardlinks_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceName = lfm_test_utils:get_user1_first_space_name(Config),
+
+    % Setup dirs, files and links
+    [Dir1Guid, Dir2Guid] = DirGuids = lists:map(fun(_) ->
+        {ok, DirGuid} = ?assertMatch({ok, _},
+            lfm_proxy:mkdir(Worker, SessId, filename:join(["/", SpaceName, generator:gen_name()]))),
+        DirGuid
+    end, lists:seq(1,2)),
+
+    FileContent = <<"1234567890">>,
+    FileSize = byte_size(FileContent),
+    [File1Guid, File2Guid, File3Guid, File4Guid] = FileGuids = lists:map(fun(_) ->
+        file_ops_test_utils:create_file(Worker, SessId, Dir1Guid, generator:gen_name(), FileContent)
+    end, lists:seq(1,4)),
+
+    [Link1Guid, Link2Guid, Link3Guid, Link4Guid] = lists:map(fun(FileGuid) ->
+        {ok, #file_attr{guid = LinkGuid}} = ?assertMatch({ok, _},
+            lfm_proxy:make_link(Worker, SessId, ?FILE_REF(FileGuid), ?FILE_REF(Dir2Guid), generator:gen_name())),
+        LinkGuid
+    end, FileGuids),
+
+    % Check operations on links
+    veryfy_hardlinks(Config, DirGuids, [{4, 4, 4}, {0, 4, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link1Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{4, 4, 4}, {0, 3, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File1Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{3, 3, 3}, {0, 3, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File2Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{2, 2, 3}, {1, 3, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link2Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{2, 2, 2}, {0, 2, 0}], FileSize),
+
+    {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link3Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File3Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{1, 1, 2}, {1, 2, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link3Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{2, 1, 2}, {0, 1, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle1)),
+    veryfy_hardlinks(Config, DirGuids, [{1, 1, 1}, {0, 1, 0}], FileSize),
+
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link4Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link4Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{1, 1, 1}, {0, 0, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File4Guid))),
+    veryfy_hardlinks(Config, DirGuids, [{1, 0, 1}, {0, 0, 0}], FileSize),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)),
+    veryfy_hardlinks(Config, DirGuids, [{0, 0, 0}, {0, 0, 0}], FileSize),
+
+    % Create additional dirs, files and links
+    {ok, Dir3Guid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker, SessId, filename:join(["/", SpaceName, generator:gen_name()]))),
+    DirGuids2 = DirGuids ++ [Dir3Guid],
+
+    [File5Guid, File6Guid, File7Guid] = FileGuids2 = lists:map(fun(_) ->
+        file_ops_test_utils:create_file(Worker, SessId, Dir3Guid, generator:gen_name(), FileContent)
+    end, lists:seq(1,3)),
+
+    [Link5Guid, Link6Guid, Link7Guid] = lists:map(fun(FileGuid) ->
+        {ok, #file_attr{guid = LinkGuid}} = ?assertMatch({ok, _},
+            lfm_proxy:make_link(Worker, SessId, ?FILE_REF(FileGuid), ?FILE_REF(Dir1Guid), generator:gen_name())),
+        LinkGuid
+    end, FileGuids2),
+
+    [Link8Guid, Link9Guid, Link10Guid] = lists:map(fun(FileGuid) ->
+        {ok, #file_attr{guid = LinkGuid}} = ?assertMatch({ok, _},
+            lfm_proxy:make_link(Worker, SessId, ?FILE_REF(FileGuid), ?FILE_REF(Dir2Guid), generator:gen_name())),
+        LinkGuid
+    end, FileGuids2),
+
+    % TODO - przetestwac zmiany rozmiaru
+
+    % Check additional dirs, files and links
+    FileSize2 = append_files(Config, [File5Guid, Link6Guid, Link10Guid], FileSize),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 3, 0}, {0, 3, 0}, {3, 3, 3}], FileSize2),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File5Guid))),
+    FileSize3 = append_files(Config, [Link5Guid, File6Guid, Link10Guid], FileSize2),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 3, 0}, {1, 3, 0}, {2, 2, 3}], FileSize3),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link8Guid))),
+    veryfy_hardlinks(Config, DirGuids2, [{1, 3, 0}, {0, 2, 0}, {2, 2, 3}], FileSize3),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link5Guid))),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 2, 0}, {0, 2, 0}, {2, 2, 2}], FileSize3),
+
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link9Guid))),
+    FileSize4 = append_files(Config, [Link6Guid, File7Guid], FileSize3),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 2, 0}, {0, 1, 0}, {2, 2, 2}], FileSize4),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File6Guid))),
+    veryfy_hardlinks(Config, DirGuids2, [{1, 2, 0}, {0, 1, 0}, {1, 1, 2}], FileSize4),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link6Guid))),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 1, 0}, {0, 1, 0}, {1, 1, 1}], FileSize4),
+
+    {ok, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File7Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File7Guid))),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 1, 0}, {1, 1, 0}, {0, 0, 1}], FileSize4),
+    FileSize5 = append_files(Config, [Link7Guid], FileSize4),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize5, <<"xyz">>)),
+    FileSize6 = FileSize5 + 3,
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link7Guid))),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 0, 0}, {1, 1, 0}, {0, 0, 1}], FileSize6),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link10Guid))),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize6, <<"xyz">>)),
+    FileSize7 = FileSize6 + 3,
+    veryfy_hardlinks(Config, DirGuids2, [{0, 0, 0}, {0, 0, 0}, {1, 0, 1}], FileSize7),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle3)),
+    veryfy_hardlinks(Config, DirGuids2, [{0, 0, 0}, {0, 0, 0}, {0, 0, 0}], FileSize7).
+
+
+append_files(Config, Guids, CurrentSize) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    BytesToAppend = 10,
+    lists:foreach(fun(Guid) ->
+        lfm_test_utils:write_file(Worker, SessId, Guid, CurrentSize, {rand_content, BytesToAppend})
+    end, Guids),
+    CurrentSize + BytesToAppend.
+
+
+veryfy_hardlinks(Config, DirGuids, DirSizes, FileSize) ->
+    ct:print("aaaaaa"),
+%%    veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize),
+%%    disable(Config),
+%%    enable(Config),
+    veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize).
+
+
+veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize) ->
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
+
+    lists:foreach(fun({Guid, {TotalSizesExpected, LinksExpected, OnStorageExpected}}) ->
+        ct:print("xxxxx"),
+        check_dir_stats(Config, op_worker_nodes, Guid, #{
+            ?REG_FILE_AND_LINK_COUNT => LinksExpected,
+            ?DIR_COUNT => 0,
+            ?FILE_ERRORS_COUNT => 0,
+            ?DIR_ERRORS_COUNT => 0,
+            ?TOTAL_SIZE => TotalSizesExpected * FileSize,
+            ?TOTAL_DOWNLOAD_SIZE => LinksExpected * FileSize,
+            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => OnStorageExpected * FileSize
+        })
+    end, lists:zip(DirGuids, DirSizes)),
+
+    {TotalSizesExpectedSum, LinksExpectedSum, OnStorageExpectedSum} =
+        lists:foldl(fun({DirTotalSizesExpected, DirLinksExpected, DirOnStorageExpected}, {Acc1, Acc2, Acc3}) ->
+            {Acc1 + DirTotalSizesExpected, Acc2 + DirLinksExpected, Acc3 + DirOnStorageExpected}
+        end, {0, 0, 0}, DirSizes),
+
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => LinksExpectedSum,
+        ?DIR_COUNT => length(DirGuids),
+        ?FILE_ERRORS_COUNT => 0,
+        ?DIR_ERRORS_COUNT => 0,
+        ?TOTAL_SIZE => TotalSizesExpectedSum * FileSize,
+        ?TOTAL_DOWNLOAD_SIZE => LinksExpectedSum * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => OnStorageExpectedSum * FileSize
+    }).
+
+
 
 multiprovider_test(Config) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
@@ -145,6 +310,7 @@ multiprovider_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
+        ?TOTAL_DOWNLOAD_SIZE => 104,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 10
     }),
 
@@ -161,6 +327,7 @@ multiprovider_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
+        ?TOTAL_DOWNLOAD_SIZE => 104,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20
     }),
     check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [1, 1, 1], #{
@@ -169,6 +336,7 @@ multiprovider_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
+        ?TOTAL_DOWNLOAD_SIZE => 104,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 84
     }),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
@@ -177,6 +345,7 @@ multiprovider_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
+        ?TOTAL_DOWNLOAD_SIZE => 1334,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20
     }),
     check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
@@ -185,6 +354,7 @@ multiprovider_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
+        ?TOTAL_DOWNLOAD_SIZE => 1334,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 1314
     }).
 
@@ -230,6 +400,7 @@ multiprovider_trash_test(Config) ->
             ?FILE_ERRORS_COUNT => 0,
             ?DIR_ERRORS_COUNT => 0,
             ?TOTAL_SIZE => 0,
+            ?TOTAL_DOWNLOAD_SIZE => 0,
             ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
         },
         ExpectedResult = lists:duplicate(length(GuidsAndNames) + 2, {ok, EmptyDirStats}),
@@ -291,6 +462,7 @@ enabling_large_dirs_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }).
 
@@ -316,6 +488,7 @@ race_with_file_adding_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
+        ?TOTAL_DOWNLOAD_SIZE => 10,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 10
     }).
 
@@ -334,6 +507,7 @@ race_with_file_writing_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
+        ?TOTAL_DOWNLOAD_SIZE => 10,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 10
     }).
 
@@ -362,6 +536,7 @@ race_with_subtree_adding_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }).
 
@@ -388,6 +563,7 @@ race_with_subtree_filling_with_data_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 200,
+        ?TOTAL_DOWNLOAD_SIZE => 200,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 200
     }).
 
@@ -435,6 +611,7 @@ race_with_file_adding_to_large_dir_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
+        ?TOTAL_DOWNLOAD_SIZE => 10,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 10
     }).
 
@@ -528,6 +705,7 @@ adding_file_when_disabled_test(Config) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1344,
+        ?TOTAL_DOWNLOAD_SIZE => 1344,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 1344
     }),
     check_update_times(Config, [op_worker_nodes]).
@@ -565,6 +743,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 0
     }, true, enabled),
 
@@ -599,6 +778,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_DOWNLOAD_SIZE => 20 * FileSize,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 20 * FileSize
     }),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
@@ -607,6 +787,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_DOWNLOAD_SIZE => 20 * FileSize,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 0
     }),
 
@@ -636,6 +817,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_DOWNLOAD_SIZE => 20 * FileSize,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
     }).
 
@@ -710,6 +892,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
     },
     Expectations = lists:foldl(fun
@@ -720,6 +903,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
             update_expectations_map(Acc, #{
                 ?REG_FILE_AND_LINK_COUNT => 1,
                 ?TOTAL_SIZE => ChildSize,
+                ?TOTAL_DOWNLOAD_SIZE => ChildSize,
                 ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ChildSize,
                 update_time => max(ChildMTime, ChildCTime)
             })
@@ -791,6 +975,7 @@ create_initial_file_tree(Config, NodesSelector, CollectingStatus) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
     }, true, CollectingStatus),
 
@@ -826,6 +1011,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
     }),
     check_dir_stats(Config, NodesSelector, [2, 1, 1], #{
@@ -834,6 +1020,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
     }),
     check_dir_stats(Config, NodesSelector, [2, 1], #{
@@ -842,6 +1029,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
     }),
     check_dir_stats(Config, NodesSelector, [2], #{
@@ -850,6 +1038,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
     }),
 
@@ -859,6 +1048,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 55,
+        ?TOTAL_DOWNLOAD_SIZE => 55,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(SizeOnStorageValueSelector, 55)
     }),
     check_dir_stats(Config, NodesSelector, [1, 1, 1], #{
@@ -867,6 +1057,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
+        ?TOTAL_DOWNLOAD_SIZE => 104,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(SizeOnStorageValueSelector, 104)
     }),
     check_dir_stats(Config, NodesSelector, [1, 1], #{
@@ -875,6 +1066,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 124,
+        ?TOTAL_DOWNLOAD_SIZE => 124,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(SizeOnStorageValueSelector, 124)
     }),
     check_dir_stats(Config, NodesSelector, [1], #{
@@ -883,6 +1075,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 334,
+        ?TOTAL_DOWNLOAD_SIZE => 334,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(SizeOnStorageValueSelector, 334)
     }),
 
@@ -893,6 +1086,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
+        ?TOTAL_DOWNLOAD_SIZE => 1334,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(SizeOnStorageValueSelector, 1334)
     }),
     check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
@@ -901,6 +1095,7 @@ check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
+        ?TOTAL_DOWNLOAD_SIZE => 1334,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(SizeOnStorageValueSelector, 1334)
     }, false, enabled).
 
@@ -1126,6 +1321,7 @@ clean_space_and_verify_stats(Config) ->
                     ?FILE_ERRORS_COUNT => 0,
                     ?DIR_ERRORS_COUNT => 0,
                     ?TOTAL_SIZE => 0,
+                    ?TOTAL_DOWNLOAD_SIZE => 0,
                     ?SIZE_ON_STORAGE(StorageId) => 0
                 }}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS);
             _ ->
