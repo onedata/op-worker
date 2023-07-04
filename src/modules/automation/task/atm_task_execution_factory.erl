@@ -199,6 +199,7 @@ create_executor(CreationCtx = #creation_ctx{
     }),
 
     ?atm_workflow_debug(Logger, #{
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
         <<"description">> => <<"Task executor created.">>,  %% TODO task_executor:to_json/name?
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx)
@@ -233,6 +234,7 @@ create_audit_log(CreationCtx = #creation_ctx{
     ),
 
     ?atm_workflow_debug(Logger, #{
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
         <<"description">> => <<"Task audit log created.">>,
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
@@ -277,6 +279,7 @@ create_time_series_store(CreationCtx = #creation_ctx{
     #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
 
     ?atm_workflow_debug(Logger, #{
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
         <<"description">> => <<"Task time series store copied from origin run.">>,
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
@@ -313,6 +316,7 @@ create_time_series_store(CreationCtx = #creation_ctx{
     ),
 
     ?atm_workflow_debug(Logger, #{
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
         <<"description">> => <<"Task time series store created.">>,
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
@@ -430,7 +434,8 @@ create_task_execution_doc(CreationCtx = #creation_ctx{
 
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
     ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("Task '~ts' created.", [AtmTaskExecutionId]),
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
+        <<"description">> => ?fmt_bin("[Task: ~ts] created.", [AtmTaskExecutionId]),
         <<"details">> => #{
             <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
             <<"taskId">> => AtmTaskExecutionId

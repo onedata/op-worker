@@ -52,7 +52,8 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     ?atm_task_info(Logger, <<"Task started.">>),
 
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
-    ?atm_workflow_info(Logger, workflow_log("Task '~ts' started.", AtmTaskExecutionId)),
+    %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
+    ?atm_workflow_info(Logger, workflow_log("[Task: ~ts] started.", AtmTaskExecutionId)),
 
     Result.
 
@@ -94,8 +95,9 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
         AtmTaskExecutionId, get_incarnation(AtmWorkflowExecutionCtx)
     ) of
         {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
-            ?atm_task_debug(Logger, <<"Resuming task.">>),
-            ?atm_workflow_debug(Logger, workflow_log("Resuming '~ts' task.", AtmTaskExecutionId)),
+            ?atm_task_debug(Logger, <<"Task resuming...">>),
+            %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
+            ?atm_workflow_debug(Logger, workflow_log("[Task: ~ts] resuming...", AtmTaskExecutionId)),
 
             unfreeze_stores(AtmTaskExecution),
             InitiationResult = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
@@ -103,7 +105,8 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
             case atm_task_execution_status:handle_resumed(AtmTaskExecutionId) of
                 {ok, _} ->
                     ?atm_task_info(Logger, <<"Task resumed.">>),
-                    ?atm_workflow_info(Logger, workflow_log("Task '~ts' resumed.", AtmTaskExecutionId)),
+                    %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
+                    ?atm_workflow_info(Logger, workflow_log("[Task: ~ts] resumed.", AtmTaskExecutionId)),
 
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
@@ -193,8 +196,8 @@ process_job_batch_result(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
 process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, UncorrelatedResults}) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_task_debug(Logger, #{
-        <<"description">> => <<"Processing streamed uncorrelated results.">>,
-        <<"details">> => #{<<"results">> => UncorrelatedResults}
+        <<"description">> => <<"Processing streamed results...">>,
+        <<"details">> => #{<<"results">> => UncorrelatedResults}  %% TODO
     }),
 
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
@@ -394,9 +397,9 @@ run_job_batch_insecure(
 ) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_task_debug(Logger, #{
-        <<"description">> => <<"Running task for items.">>,
+        <<"description">> => <<"Running task for items...">>,
         <<"details">> => #{
-            <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)
+            <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)  %% TODO
         }
     }),
 
@@ -444,7 +447,7 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_task_debug(Logger, #{
         <<"description">> => <<"Lambda's input argsBatch created.">>,
-        <<"details">> => #{<<"argsBatch">> => ArgsBatch}
+        <<"details">> => #{<<"argsBatch">> => ArgsBatch}  % TODO
     }),
 
     #atm_lambda_input{
@@ -533,7 +536,7 @@ handle_job_batch_processing_error(
                 ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
                 _ -> errors:to_json(Error)
             end,
-            <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)
+            <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)  %% TODO
         }
     }).
 
@@ -560,9 +563,9 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_task_debug(Logger, #{
-        <<"description">> => <<"Processing results for item.">>,
+        <<"description">> => <<"Processing results for item...">>,
         <<"details">> => #{
-            <<"item">> => item_execution_to_json(Item),
+            <<"item">> => item_execution_to_json(Item),  %% TODO
             <<"results">> => JobResults
         }
     }),
@@ -601,7 +604,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
                 <<"description">> => <<"Lambda exception occurred during item processing.">>,
                 <<"details">> => #{
                     <<"reason">> => Reason,
-                    <<"item">> => item_execution_to_json(Item)
+                    <<"item">> => item_execution_to_json(Item)  % TODO
                 }
             };
         _SystemError = {error, _} ->
@@ -609,7 +612,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
                 <<"description">> => <<"Failed to process item.">>,
                 <<"details">> => #{
                     <<"reason">> => errors:to_json(Error),
-                    <<"item">> => item_execution_to_json(Item)
+                    <<"item">> => item_execution_to_json(Item)  % TODO
                 }
             }
     end).
@@ -671,11 +674,12 @@ log_uncorrelated_results_processing_error(
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     ?atm_task_critical(Logger, #{
-        <<"description">> => <<"Failed to process uncorrelated task results.">>,
+        <<"description">> => <<"Failed to process streamed results.">>,
         <<"details">> => #{<<"reason">> => errors:to_json(Error)}
     }),
     ?atm_workflow_critical(Logger, workflow_log(
-        "Failed to process uncorrelated results for task '~ts'.", AtmTaskExecutionId
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
+        "[Task: ~ts] failed to process streamed results.", AtmTaskExecutionId
     )).
 
 
@@ -691,7 +695,7 @@ log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
     LogBase = #{<<"details">> => #{<<"reason">> => StoppingReason}},
 
     ?atm_task_info(Logger, LogBase#{<<"description">> => <<"Task stop initiated.">>}),
-    ?atm_workflow_info(Logger, workflow_log(LogBase, "Task '~ts' stop initiated.", AtmTaskExecutionId)).
+    ?atm_workflow_info(Logger, workflow_log(LogBase, "[Task: ~ts] stop initiated.", AtmTaskExecutionId)).
 
 
 %% @private

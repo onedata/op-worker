@@ -353,7 +353,7 @@ log_function_registering(#initiation_ctx{
     }
 }) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_task_debug(Logger, "Registering docker '~ts' as function '~ts' in OpenFaaS.", [
+    ?atm_task_debug(Logger, "Registering docker '~ts' as function '~ts' in OpenFaaS...", [
         DockerImage, FunctionName
     ]).
 

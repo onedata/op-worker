@@ -373,7 +373,8 @@ handle_task_results_processed_for_all_items(
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("Processed all uncorrelated results for '~ts' task", [
+        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
+        <<"description">> => ?fmt_bin("[Task: ~ts] processed all streamed results.", [
             AtmTaskExecutionId
         ]),
         <<"referencedComponents">> => #{<<"tasks">> => [AtmTaskExecutionId]}

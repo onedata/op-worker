@@ -112,7 +112,7 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
     case atm_workflow_execution_status:handle_lane_run_created(AtmWorkflowExecutionId, Diff) of
         {ok, NewAtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution}} ->
             ?atm_workflow_debug(Logger, #{
-                <<"description">> => ?fmt_bin("Lane run '~p' created.", [AtmLaneRunSelector]),
+                <<"description">> => ?fmt_bin("[Lane run: ~p] created.", [AtmLaneRunSelector]),
                 <<"details">> => #{
                     <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(
                         AtmLaneRunSelector
@@ -175,7 +175,7 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
     end,
 
     ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("Creating '~p' lane run.", [
+        <<"description">> => ?fmt_bin("[Lane run: ~p] creating...", [
             AtmLaneRunSelector
         ]),
         <<"details">> => #{
@@ -250,7 +250,7 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
     ),
 
     ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("Lane run '~p' exception store created.", [
+        <<"description">> => ?fmt_bin("[Lane run: ~p] exception store created.", [
             AtmLaneRunSelector
         ]),
         <<"details">> => #{
@@ -278,7 +278,7 @@ create_parallel_box_executions(RunCreationCtx = #run_creation_ctx{
     AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(RunCreationArgs),
 
     ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("Lane run '~p' parallel boxes created.", [
+        <<"description">> => ?fmt_bin("[Lane run: ~p] parallel boxes created.", [
             AtmLaneRunSelector
         ]),
         <<"details">> => #{
