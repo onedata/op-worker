@@ -1328,28 +1328,27 @@ get_historical_dir_size_stats_slice_test(Config) ->
     await_file_size_sync(paris, 24, DirGuid),
     
     MemRef = api_test_memory:init(),
-    
-    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        Provider = api_test_memory:get(MemRef, current_provider),
-        {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
+
+    ValidateSliceFun = fun(Slice, Provider) ->
         ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
             lists:map(fun(Map) ->
                 maps:without([<<"timestamp">>, <<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
             end, Windows)
-        end, maps:get(<<"slice">> , ResultData)),
+        end, Slice),
         ?assertEqual(ExpSliceFun(Provider), ResultWithoutTimestamps)
+    end,
+    
+    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
+        Provider = api_test_memory:get(MemRef, current_provider),
+        {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
+        ValidateSliceFun(maps:get(<<"slice">> , ResultData), Provider)
     end,
     ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ProviderId = opw_test_rpc:get_provider_id(TestCtx#api_test_ctx.node),
         Provider = oct_background:to_entity_placeholder(ProviderId),
         ?assertEqual(?HTTP_200_OK, RespCode),
         ResultData = ?assertMatch(#{<<"slice">> := _}, RespBody),
-        ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
-            lists:map(fun(Map) ->
-                maps:without([<<"timestamp">>, <<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
-            end, Windows)
-        end, maps:get(<<"slice">> , ResultData)),
-        ?assertEqual(ExpSliceFun(Provider), ResultWithoutTimestamps)
+        ValidateSliceFun(maps:get(<<"slice">> , ResultData), Provider)
     end,
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     DataSpecFun = fun(ProviderId) -> #data_spec{
@@ -1385,13 +1384,21 @@ get_historical_dir_size_stats_slice_test(Config) ->
 
 
 %% @private
-gather_historical_dir_size_stats_test_base(MemRef, FileGuid, ShareId, ValidateGsSuccessfulCallFun,
-    ValidateRestSuccessfulCallFun, Config, DataSpecFun, DefaultData) ->
+gather_historical_dir_size_stats_test_base(
+    MemRef, FileGuid, ShareId, ValidateGsSuccessfulCallFun,
+    ValidateRestSuccessfulCallFun, Config, DataSpecFun, DefaultData
+) ->
     lists:foreach(fun(Provider) ->
         api_test_memory:set(MemRef, current_provider, Provider),
+        DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+            api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                FileGuid, ShareId, DataSpecFun(Provider)
+            )
+        ),
+
         ?assert(onenv_api_test_runner:run_tests([
             #suite_spec{
-                target_nodes = [Provider],
+                target_nodes = ?config(op_worker_nodes, Config),
                 client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
                 scenario_templates = [
                     #scenario_template{
@@ -1399,7 +1406,17 @@ gather_historical_dir_size_stats_test_base(MemRef, FileGuid, ShareId, ValidateGs
                         type = gs,
                         prepare_args_fun = build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Provider, DefaultData),
                         validate_result_fun = ValidateGsSuccessfulCallFun
-                    },
+                    }
+                ],
+                data_spec = DataSpec
+            }
+        ])),
+
+        ?assert(onenv_api_test_runner:run_tests([
+            #suite_spec{
+                target_nodes = [Provider],
+                client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+                scenario_templates = [
                     #scenario_template{
                         name = <<"Get dir size stats using /data/DirId/size_stats rest endpoint">>,
                         type = rest,
@@ -1407,11 +1424,7 @@ gather_historical_dir_size_stats_test_base(MemRef, FileGuid, ShareId, ValidateGs
                         validate_result_fun = ValidateRestSuccessfulCallFun
                     }
                 ],
-                data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
-                    api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                        FileGuid, ShareId, DataSpecFun(Provider)
-                    )
-                )
+                data_spec = DataSpec
             }
         ]))
     end, [krakow, paris]).
@@ -1435,11 +1448,11 @@ build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Provider, D
 %% @private
 -spec build_gather_historical_dir_size_stats_prepare_rest_args_fun(file_id:file_guid(), map()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_gather_historical_dir_size_stats_prepare_rest_args_fun(FileGuid, DefaultData) ->
+build_gather_historical_dir_size_stats_prepare_rest_args_fun(Guid, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, Id} = file_id:guid_to_objectid(FileGuid),
-        {ObjectId, Data2} = api_test_utils:maybe_substitute_bad_id(Id, Data),
-        RestPath = <<"data/", ObjectId/binary, "/size_stats">>,
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        {FinalObjectId, Data2} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
+        RestPath = <<"data/", FinalObjectId/binary, "/size_stats">>,
 
         #rest_args{
             method = get,
