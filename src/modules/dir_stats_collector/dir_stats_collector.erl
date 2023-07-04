@@ -68,7 +68,8 @@
     update_stats_of_parent/3, update_stats_of_parent/4, update_stats_of_nearest_dir/3,
     flush_stats/2, delete_stats/2,
     initialize_collections/1,
-    report_file_moved/4]).
+    report_file_moved/4,
+    is_uuid_counted/1]).
 %% API - space
 -export([stop_collecting/1]).
 
@@ -340,6 +341,11 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
             ?error_stacktrace("Error handling file ~p move from ~p to ~p: ~p:~p",
                 [FileGuid, SourceParentGuid, TargetParentGuid, Error, Reason], Stacktrace)
     end.
+
+
+-spec is_uuid_counted(file_meta:uuid()) -> boolean().
+is_uuid_counted(Uuid) ->
+    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse archivisation_tree:is_root_dir_uuid(Uuid)).
 
 
 %%%===================================================================
@@ -705,8 +711,13 @@ start_collections_initialization_for_all_cached_dirs(#state{dir_stats_cache = Di
             collecting_status = initializing,
             initialization_data = InitializationData
         }, Acc) ->
-            InitializationDataMap = maps:get(Guid, Acc, #{}),
-            Acc#{Guid => InitializationDataMap#{CollectionType => InitializationData}};
+            case dir_stats_collections_initializer:is_initialization_pending(InitializationData) of
+                true ->
+                    Acc;
+                false ->
+                    InitializationDataMap = maps:get(Guid, Acc, #{}),
+                    Acc#{Guid => InitializationDataMap#{CollectionType => InitializationData}}
+            end;
         (_CachedDirStatsKey, _CachedDirStats, Acc) ->
             Acc
     end, #{}, DirStatsCache),

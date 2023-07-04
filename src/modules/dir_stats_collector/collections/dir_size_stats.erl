@@ -295,6 +295,7 @@ get_ctx() ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec init_existing_child(file_id:file_guid(), file_meta:doc()) -> dir_stats_collection:collection().
 init_existing_child(Guid, Doc) ->
     case file_meta:get_type(Doc) of

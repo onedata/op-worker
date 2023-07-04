@@ -58,7 +58,7 @@
     
     incremental_archive_plain_layout/1,
     incremental_archive_bagit_layout/1,
-    incremental_archive_modified_content/1, 
+    incremental_archive_modified_content/1,
     incremental_archive_modified_metadata/1,
     incremental_archive_new_file/1,
     incremental_nested_archive_plain_layout/1,
@@ -385,7 +385,7 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
             ]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
     }),
-    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, 0, 0).
+    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, 0, 0, false).
 
 archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->
     Size = 20,
@@ -401,7 +401,7 @@ archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         content = ?RAND_CONTENT(Size)
     }),
-    archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId, 1, Size).
+    archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId, 1, Size, false).
 
 archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -428,7 +428,7 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
         config = #archive_config{layout = Layout, include_dip = IncludeDip}
     }]}),
 
-    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId, 1, Size).
+    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId, 1, Size, false).
 
 archive_dataset_containing_symlink_to_reg_file_test_base(Layout, IncludeDip, FollowSymlinks, Strategy) ->
     TargetSpec = #file_spec{
@@ -477,15 +477,17 @@ archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks,
         {undefined, _} -> {0, 0};
         {_, true} -> {1, byte_size(Content)}
     end,
-    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, FileCount, ExpSize).
+    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, FileCount, ExpSize, FollowSymlinks).
 
-archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId, FileCount, ExpSize) ->
+archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId, FileCount, ExpSize, FollowSymlinks) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     lists:foreach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
+        archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
         archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?ATTEMPTS),
+        archive_tests_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, FollowSymlinks, 2 * ?ATTEMPTS),
         archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize, ?ATTEMPTS)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
@@ -744,9 +746,9 @@ init_per_suite(Config) ->
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
-                {provider_token_ttl_sec, 24 * 60 * 60}
-            ]}],
-            posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
+                {provider_token_ttl_sec, 24 * 60 * 60},
+                {dir_stats_collector_race_preventing_time, 2000}
+            ]}]
         }).
 
 end_per_suite(Config) ->

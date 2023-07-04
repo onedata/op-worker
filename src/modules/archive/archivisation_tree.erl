@@ -50,8 +50,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1,
-    uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1]).
+-export([create_archive_dir/4, is_special_uuid/1, is_root_dir_uuid/1, is_in_archive/1,
+    uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
 %%%===================================================================
 %%% API functions
@@ -85,6 +85,12 @@ is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
 is_special_uuid(_) ->
     false.
 
+
+-spec is_root_dir_uuid(file_meta:uuid()) -> boolean().
+is_root_dir_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
+    true;
+is_root_dir_uuid(_) ->
+    false.
 
 -spec uuid_to_archive_id(file_meta:uuid()) -> archive:id() | undefined.
 uuid_to_archive_id(?ARCHIVE_DIR_UUID(ArchiveId)) ->
@@ -128,6 +134,12 @@ get_filename_for_download(ArchiveId) ->
         nomatch ->
             ?ARCHIVE_DIR_NAME(ArchiveId)
     end.
+
+
+-spec get_root_dir_uuid(od_space:id()) -> file_meta:uuid().
+get_root_dir_uuid(SpaceId) ->
+    ?ARCHIVES_ROOT_DIR_UUID(SpaceId).
+
 
 %%%===================================================================
 %%% Internal functions
