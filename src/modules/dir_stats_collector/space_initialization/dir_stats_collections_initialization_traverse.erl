@@ -23,6 +23,7 @@
 
 
 -include("tree_traverse.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -106,7 +107,7 @@ do_master_job(#tree_traverse{
             TrashJob = tree_traverse:get_child_master_job(Job,
                 file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
             ArchiveJob = tree_traverse:get_child_master_job(Job,
-                file_ctx:new_by_uuid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
+                file_ctx:new_by_uuid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId), ?ARCHIVES_ROOT_DIR_NAME),
             {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob | MasterJobs]}};
         false ->
             Ans

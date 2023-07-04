@@ -502,8 +502,8 @@ get_and_verify_origin_stats(Node, SessionId, OriginGuid, FollowSymlinks, StatsKe
                 <<"dir_count">> => DirCount + 1 % +1 to count root dir
             }));
         {ok, #file_attr{type = ?SYMLINK_TYPE}} when FollowSymlinks ->
-            SymlinkGuid = resolve_symlink(Node, SessionId, OriginGuid),
-            get_and_verify_origin_stats(Node, SessionId, SymlinkGuid, FollowSymlinks, StatsKeysToVerify);
+            SymlinkTargetGuid = resolve_symlink(Node, SessionId, OriginGuid),
+            get_and_verify_origin_stats(Node, SessionId, SymlinkTargetGuid, FollowSymlinks, StatsKeysToVerify);
         {ok, _} ->
             rpc:call(Node, dir_size_stats, init_child, [OriginGuid, false])
     end.
@@ -532,12 +532,7 @@ calculate_stats(Node, SessionId, Guid, FollowSymlinks) ->
 
 resolve_symlink(Node, SessionId, Guid) ->
     {ok, TargetGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(Guid)),
-    case lfm_proxy:stat(Node, SessionId, ?FILE_REF(TargetGuid)) of
-        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
-            resolve_symlink(Node, SessionId, TargetGuid);
-        {ok, _} ->
-            TargetGuid
-    end.
+    TargetGuid.
 
 
 merge_stats(Stats1, Stats2) ->
