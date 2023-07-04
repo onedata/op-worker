@@ -217,12 +217,15 @@ input_item_formatter(Item) ->
 ) ->
     json_utils:json_term().
 describe_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
-    atm_store_test_utils:to_described_item(
-        ?PROVIDER_SELECTOR,
-        AtmWorkflowExecutionAuth,
-        ItemInitializer#atm_item_execution.value,
-        ItemDataSpec
-    ).
+    #{
+        <<"traceId">> => ItemInitializer#atm_item_execution.trace_id,
+        <<"value">> => atm_store_test_utils:to_described_item(
+            ?PROVIDER_SELECTOR,
+            AtmWorkflowExecutionAuth,
+            ItemInitializer#atm_item_execution.value,
+            ItemDataSpec
+        )
+    }.
 
 
 %% @private
@@ -255,7 +258,8 @@ randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDa
         AtmWorkflowExecutionAuth,
         case Item of
             #atm_item_execution{value = Value} -> Value;
-            _ -> Item
+            #{<<"traceId">> := _, <<"value">> := Value} -> Value;
+            Value -> Value
         end,
         ItemDataSpec
     ).
