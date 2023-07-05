@@ -160,6 +160,7 @@ create_dataset_archives_dir(DatasetId, SpaceId) ->
             {ok, _} = create_archives_root_dir(SpaceId),
             ok = create_file_meta(ArchivesRootDirUuid, DatasetArchivedDirDoc)
     end,
+    dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(ArchivesRootDirUuid, SpaceId)),
     {ok, DatasetArchivesDirUuid}.
 
 
