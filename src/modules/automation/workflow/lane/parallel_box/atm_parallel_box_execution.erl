@@ -76,7 +76,7 @@ create_all(AtmLaneExecutionRunCreationArgs = #atm_lane_execution_run_creation_ar
                 ?examine_exception(Type, Reason, Stacktrace)
             ))
         end
-    end, [], lists_utils:enumerate(AtmParallelBoxSchemas)).
+    end, [], lists:enumerate(1, AtmParallelBoxSchemas)).
 
 
 -spec create(

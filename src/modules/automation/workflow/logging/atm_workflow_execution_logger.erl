@@ -222,7 +222,7 @@ format_description(#atm_workflow_log_schema{
     description = Description
 }) ->
     %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-    ?fmt_bin("[Task: ~ts] ~ts", [
+    ?fmt_bin("[Task: ~ts...] ~ts", [
         binary:part(AtmTaskExecutionId, 0, 4),
         Description
     ]).

@@ -237,7 +237,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                                 ?assert(atm_workflow_execution_test_utils:scan_audit_log(
                                     ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx, fun
                                         (#{<<"content">> := #{
-                                            <<"description">> := <<"Failed to process uncorrelated task results.">>,
+                                            <<"description">> := <<"Failed to process streamed results.">>,
                                             <<"details">> := #{<<"reason">> := ErrorJson}
                                         }}) ->
                                             ExpError = errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED),

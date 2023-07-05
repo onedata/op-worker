@@ -148,7 +148,7 @@ first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
                     ?assert(atm_workflow_execution_test_utils:scan_audit_log(
                         ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmMockCallCtx, fun
                             (#{<<"content">> := #{
-                                <<"description">> := <<"Failed to prepare next run of lane number 1.">>,
+                                <<"description">> := <<"[Lane: 1] failed to prepare next run.">>,
                                 <<"details">> := #{<<"reason">> := ErrorJson}
                             }}) ->
                                 ?assertMatch(
