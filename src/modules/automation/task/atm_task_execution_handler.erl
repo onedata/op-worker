@@ -34,6 +34,9 @@
 ]).
 
 
+-define(LOG_TERM_SIZE_LIMIT, 1000).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -197,7 +200,7 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, Uncor
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_task_debug(Logger, #{
         <<"description">> => <<"Processing streamed results...">>,
-        <<"details">> => #{<<"results">> => UncorrelatedResults}  %% TODO
+        <<"details">> => #{<<"results">> => ensure_log_term_size_not_exceeded(UncorrelatedResults)}
     }),
 
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
@@ -399,7 +402,9 @@ run_job_batch_insecure(
     ?atm_task_debug(Logger, #{
         <<"description">> => <<"Running task for items...">>,
         <<"details">> => #{
-            <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)  %% TODO
+            <<"itemBatch">> => ensure_log_term_size_not_exceeded(lists:map(
+                fun item_execution_to_json/1, ItemBatch
+            ))
         }
     }),
 
@@ -447,7 +452,7 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_task_debug(Logger, #{
         <<"description">> => <<"Lambda's input argsBatch created.">>,
-        <<"details">> => #{<<"argsBatch">> => ArgsBatch}  % TODO
+        <<"details">> => #{<<"argsBatch">> => ensure_log_term_size_not_exceeded(ArgsBatch)}
     }),
 
     #atm_lambda_input{
@@ -536,7 +541,9 @@ handle_job_batch_processing_error(
                 ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
                 _ -> errors:to_json(Error)
             end,
-            <<"itemBatch">> => lists:map(fun item_execution_to_json/1, ItemBatch)  %% TODO
+            <<"itemBatch">> => ensure_log_term_size_not_exceeded(lists:map(
+                fun item_execution_to_json/1, ItemBatch
+            ))
         }
     }).
 
@@ -565,7 +572,7 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
     ?atm_task_debug(Logger, #{
         <<"description">> => <<"Processing results for item...">>,
         <<"details">> => #{
-            <<"item">> => item_execution_to_json(Item),  %% TODO
+            <<"item">> => ensure_log_term_size_not_exceeded(item_execution_to_json(Item)),
             <<"results">> => JobResults
         }
     }),
@@ -604,7 +611,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
                 <<"description">> => <<"Lambda exception occurred during item processing.">>,
                 <<"details">> => #{
                     <<"reason">> => Reason,
-                    <<"item">> => item_execution_to_json(Item)  % TODO
+                    <<"item">> => ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
                 }
             };
         _SystemError = {error, _} ->
@@ -612,7 +619,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
                 <<"description">> => <<"Failed to process item.">>,
                 <<"details">> => #{
                     <<"reason">> => errors:to_json(Error),
-                    <<"item">> => item_execution_to_json(Item)  % TODO
+                    <<"item">> => ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
                 }
             }
     end).
@@ -623,6 +630,28 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
     json_utils:json_term().
 item_execution_to_json(#atm_item_execution{trace_id = TraceId, value = Value}) ->
     #{<<"traceId">> => TraceId, <<"value">> => Value}.
+
+
+%% @private
+-spec ensure_log_term_size_not_exceeded(term()) -> term() | binary().
+ensure_log_term_size_not_exceeded(Bin) when is_binary(Bin), byte_size(Bin) =< ?LOG_TERM_SIZE_LIMIT ->
+    Bin;
+ensure_log_term_size_not_exceeded(TooLongBinary) when is_binary(TooLongBinary) ->
+    trim_binary(TooLongBinary);
+ensure_log_term_size_not_exceeded(Term) ->
+    case json_utils:encode(Term) of
+        TooLongBinary when byte_size(TooLongBinary) > ?LOG_TERM_SIZE_LIMIT ->
+            trim_binary(TooLongBinary);
+        _ ->
+            Term
+    end.
+
+
+%% @private
+-spec trim_binary(binary()) -> binary().
+trim_binary(TooLongBinary) ->
+    TrimmedBinary = binary:part(TooLongBinary, 0, ?LOG_TERM_SIZE_LIMIT),
+    <<TrimmedBinary/binary, "...">>.
 
 
 %% @private
