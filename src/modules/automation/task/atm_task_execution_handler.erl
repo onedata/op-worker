@@ -36,6 +36,16 @@
 
 -define(LOG_TERM_SIZE_LIMIT, 1000).
 
+-define(workflow_log(__DESCRIPTION, __ATM_TASK_EXECUTION_ID),
+    ?workflow_log(__DESCRIPTION, undefined, __ATM_TASK_EXECUTION_ID)
+).
+-define(workflow_log(__DESCRIPTION, __DETAILS, __ATM_TASK_EXECUTION_ID), #atm_workflow_log_schema{
+    selector = {task, __ATM_TASK_EXECUTION_ID},
+    description = __DESCRIPTION,
+    details = __DETAILS,
+    referenced_tasks = [__ATM_TASK_EXECUTION_ID]
+}).
+
 
 %%%===================================================================
 %%% API
@@ -55,8 +65,7 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     ?atm_task_info(Logger, <<"Task started.">>),
 
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
-    %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-    ?atm_workflow_info(Logger, workflow_log("[Task: ~ts] started.", AtmTaskExecutionId)),
+    ?atm_workflow_info(Logger, ?workflow_log(<<"started.">>, AtmTaskExecutionId)),
 
     Result.
 
@@ -99,8 +108,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     ) of
         {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
             ?atm_task_debug(Logger, <<"Task resuming...">>),
-            %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-            ?atm_workflow_debug(Logger, workflow_log("[Task: ~ts] resuming...", AtmTaskExecutionId)),
+            ?atm_workflow_debug(Logger, ?workflow_log(<<"resuming...">>, AtmTaskExecutionId)),
 
             unfreeze_stores(AtmTaskExecution),
             InitiationResult = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
@@ -108,8 +116,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
             case atm_task_execution_status:handle_resumed(AtmTaskExecutionId) of
                 {ok, _} ->
                     ?atm_task_info(Logger, <<"Task resumed.">>),
-                    %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-                    ?atm_workflow_info(Logger, workflow_log("[Task: ~ts] resumed.", AtmTaskExecutionId)),
+                    ?atm_workflow_info(Logger, ?workflow_log(<<"resumed.">>, AtmTaskExecutionId)),
 
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
@@ -706,9 +713,8 @@ log_uncorrelated_results_processing_error(
         <<"description">> => <<"Failed to process streamed results.">>,
         <<"details">> => #{<<"reason">> => errors:to_json(Error)}
     }),
-    ?atm_workflow_critical(Logger, workflow_log(
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        "[Task: ~ts] failed to process streamed results.", AtmTaskExecutionId
+    ?atm_workflow_critical(Logger, ?workflow_log(
+        <<"failed to process streamed results.">>, AtmTaskExecutionId
     )).
 
 
@@ -721,26 +727,13 @@ log_uncorrelated_results_processing_error(
 log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     AtmTaskExecutionId = atm_workflow_execution_ctx:get_task_execution_id(AtmWorkflowExecutionCtx),
-    LogBase = #{<<"details">> => #{<<"reason">> => StoppingReason}},
+    Details = #{<<"reason">> => StoppingReason},
 
-    ?atm_task_info(Logger, LogBase#{<<"description">> => <<"Task stop initiated.">>}),
-    ?atm_workflow_info(Logger, workflow_log(LogBase, "[Task: ~ts] stop initiated.", AtmTaskExecutionId)).
-
-
-%% @private
--spec workflow_log(list(), atm_task_execution:id()) -> json_utils:json_map().
-workflow_log(Format, AtmTaskExecutionId) ->
-    workflow_log(#{}, Format, AtmTaskExecutionId).
-
-
-%% @private
--spec workflow_log(json_utils:json_map(), list(), atm_task_execution:id()) ->
-    json_utils:json_map().
-workflow_log(LogBase, Format, AtmTaskExecutionId) ->
-    LogBase#{
-        <<"description">> => ?fmt_bin(Format, [AtmTaskExecutionId]),
-        <<"referencedComponents">> => #{<<"tasks">> => [AtmTaskExecutionId]}
-    }.
+    ?atm_task_info(Logger, #{
+        <<"description">> => <<"Task stop initiated.">>,
+        <<"details">> => Details
+    }),
+    ?atm_workflow_info(Logger, ?workflow_log(<<"stop initiated.">>, Details, AtmTaskExecutionId)).
 
 
 %% @private

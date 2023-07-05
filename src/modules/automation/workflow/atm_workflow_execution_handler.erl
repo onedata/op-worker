@@ -372,12 +372,10 @@ handle_task_results_processed_for_all_items(
     ),
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_workflow_debug(Logger, #{
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        <<"description">> => ?fmt_bin("[Task: ~ts] processed all streamed results.", [
-            AtmTaskExecutionId
-        ]),
-        <<"referencedComponents">> => #{<<"tasks">> => [AtmTaskExecutionId]}
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = {task, AtmTaskExecutionId},
+        description = <<"processed all streamed results.">>,
+        referenced_tasks = [AtmTaskExecutionId]
     }),
 
     atm_task_execution_handler:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId).

@@ -149,4 +149,12 @@
 
 -define(fmt_bin(Format, Args), str_utils:format_bin(Format, Args)).
 
+-record(atm_workflow_log_schema, {
+    selector :: undefined | atm_workflow_execution_logger:component_selector(),
+    description :: binary(),
+    details :: undefined | json_utils:json_map(),
+    referenced_tasks :: undefined | [atm_task_execution:id()]
+}).
+
+
 -endif.

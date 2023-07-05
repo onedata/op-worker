@@ -71,7 +71,7 @@ create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_cre
             Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Error))
         end
-    end, [], lists:enumerate(0, AtmTaskSchemas)).
+    end, [], lists:enumerate(1, AtmTaskSchemas)).
 
 
 -spec create(atm_parallel_box_execution:creation_args(), non_neg_integer(), atm_task_schema:record()) ->
@@ -198,12 +198,9 @@ create_executor(CreationCtx = #creation_ctx{
         lambda_revision = AtmLambdaRevision
     }),
 
-    ?atm_workflow_debug(Logger, #{
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        <<"description">> => <<"Task executor created.">>,  %% TODO task_executor:to_json/name?
-        <<"details">> => #{
-            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx)
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = get_task_selector(CreationCtx),
+        description = <<"executor created.">>
     }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -233,13 +230,10 @@ create_audit_log(CreationCtx = #creation_ctx{
         ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
-    ?atm_workflow_debug(Logger, #{
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        <<"description">> => <<"Task audit log created.">>,
-        <<"details">> => #{
-            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
-            <<"auditLogStoreId">> => AtmSystemAuditLogStoreId
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = get_task_selector(CreationCtx),
+        description = <<"audit log created.">>,
+        details = #{<<"auditLogStoreId">> => AtmSystemAuditLogStoreId}
     }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -278,13 +272,10 @@ create_time_series_store(CreationCtx = #creation_ctx{
     OriginAtmTaskTSStoreId = OriginAtmTaskExecution#atm_task_execution.time_series_store_id,
     #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
 
-    ?atm_workflow_debug(Logger, #{
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        <<"description">> => <<"Task time series store copied from origin run.">>,
-        <<"details">> => #{
-            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
-            <<"timeSeriesStoreId">> => AtmTaskTSStoreId
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = get_task_selector(CreationCtx),
+        description = <<"time series store copied from origin run.">>,
+        details = #{<<"timeSeriesStoreId">> => AtmTaskTSStoreId}
     }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -315,13 +306,10 @@ create_time_series_store(CreationCtx = #creation_ctx{
         ?ATM_TASK_TIME_SERIES_STORE_SCHEMA(AtmTaskTSStoreConfig)
     ),
 
-    ?atm_workflow_debug(Logger, #{
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        <<"description">> => <<"Task time series store created.">>,
-        <<"details">> => #{
-            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
-            <<"timeSeriesStoreId">> => AtmTaskTSStoreId
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = get_task_selector(CreationCtx),
+        description = <<"time series store created.">>,
+        details = #{<<"timeSeriesStoreId">> => AtmTaskTSStoreId}
     }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -433,21 +421,18 @@ create_task_execution_doc(CreationCtx = #creation_ctx{
     }),
 
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
-    ?atm_workflow_debug(Logger, #{
-        %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-        <<"description">> => ?fmt_bin("[Task: ~ts] created.", [AtmTaskExecutionId]),
-        <<"details">> => #{
-            <<"taskSchemaSelector">> => build_schema_selector_json(CreationCtx),
-            <<"taskId">> => AtmTaskExecutionId
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = get_task_selector(CreationCtx),
+        description = <<"created.">>,
+        details = #{<<"taskId">> => AtmTaskExecutionId}
     }),
 
     AtmTaskExecutionDoc.
 
 
 %% @private
--spec build_schema_selector_json(creation_ctx()) -> json_utils:json_map().
-build_schema_selector_json(#creation_ctx{
+-spec get_task_selector(creation_ctx()) -> atm_workflow_execution_logger:component_selector().
+get_task_selector(#creation_ctx{
     creation_args = #creation_args{
         task_index = AtmTaskSchemaIndex,
         parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
@@ -458,8 +443,4 @@ build_schema_selector_json(#creation_ctx{
         }
     }
 }) ->
-    #{
-        <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
-        <<"parallelBoxIndex">> => AtmParallelBoxIndex,
-        <<"taskSchemaIndex">> => AtmTaskSchemaIndex
-    }.
+    {task, AtmLaneRunSelector, AtmParallelBoxIndex, AtmTaskSchemaIndex}.

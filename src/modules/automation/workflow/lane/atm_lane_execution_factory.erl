@@ -111,16 +111,12 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
 
     case atm_workflow_execution_status:handle_lane_run_created(AtmWorkflowExecutionId, Diff) of
         {ok, NewAtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution}} ->
-            ?atm_workflow_debug(Logger, #{
-                <<"description">> => ?fmt_bin("[Lane run: ~p] created.", [AtmLaneRunSelector]),
-                <<"details">> => #{
-                    <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(
-                        AtmLaneRunSelector
-                    ),
-                    <<"laneRun">> => atm_lane_execution:run_to_json(
-                        AtmLaneRunSelector, RunType, AtmWorkflowExecution
-                    )
-                }
+            ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+                selector = {lane_run, AtmLaneRunSelector},
+                description = <<"created.">>,
+                details = #{<<"laneRun">> => atm_lane_execution:run_to_json(
+                    AtmLaneRunSelector, RunType, AtmWorkflowExecution
+                )}
             }),
 
             NewAtmWorkflowExecutionDoc;
@@ -174,12 +170,10 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
             end
     end,
 
-    ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("[Lane run: ~p] creating...", [
-            AtmLaneRunSelector
-        ]),
-        <<"details">> => #{
-            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = {lane_run, AtmLaneRunSelector},
+        description = <<"creating...">>,
+        details = #{
             <<"laneRunType">> => RunType,
             <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
             <<"iteratedStoreId">> => IteratedStoreId
@@ -249,14 +243,10 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
         ))
     ),
 
-    ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("[Lane run: ~p] exception store created.", [
-            AtmLaneRunSelector
-        ]),
-        <<"details">> => #{
-            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
-            <<"exceptionStoreId">> => AtmLaneExceptionStoreId
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = {lane_run, AtmLaneRunSelector},
+        description = <<"exception store created.">>,
+        details = #{<<"exceptionStoreId">> => AtmLaneExceptionStoreId}
     }),
 
     RunCreationCtx#run_creation_ctx{
@@ -277,16 +267,12 @@ create_parallel_box_executions(RunCreationCtx = #run_creation_ctx{
 }) ->
     AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(RunCreationArgs),
 
-    ?atm_workflow_debug(Logger, #{
-        <<"description">> => ?fmt_bin("[Lane run: ~p] parallel boxes created.", [
-            AtmLaneRunSelector
-        ]),
-        <<"details">> => #{
-            <<"laneRunSelector">> => atm_lane_execution:lane_run_selector_to_json(AtmLaneRunSelector),
-            <<"parallelBoxes">> => lists:map(
-                fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
-            )
-        }
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = {lane_run, AtmLaneRunSelector},
+        description = <<"parallel boxes created.">>,
+        details = #{<<"parallelBoxes">> => lists:map(
+            fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
+        )}
     }),
 
     RunCreationCtx#run_creation_ctx{
