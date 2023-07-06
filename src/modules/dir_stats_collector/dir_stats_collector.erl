@@ -345,7 +345,7 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
 
 -spec is_uuid_counted(file_meta:uuid()) -> boolean().
 is_uuid_counted(Uuid) ->
-    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse archivisation_tree:is_root_dir_uuid(Uuid)).
+    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse archivisation_tree:is_special_uuid(Uuid)).
 
 
 %%%===================================================================
