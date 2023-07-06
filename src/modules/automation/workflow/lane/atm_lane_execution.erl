@@ -23,7 +23,7 @@
 
 %% API
 -export([
-    lane_run_selector_to_json/1,
+    try_resolving_lane_run_selector/2,
 
     is_current_lane_run/2,
     resolve_selector/2,
@@ -79,9 +79,19 @@
 %%%===================================================================
 
 
--spec lane_run_selector_to_json(lane_run_selector()) -> json_utils:json_map().
-lane_run_selector_to_json({AtmLaneSelector, AtmRunSelector}) ->
-    #{<<"laneIndex">> => AtmLaneSelector, <<"runNumber">> => AtmRunSelector}.
+-spec try_resolving_lane_run_selector(lane_run_selector(), atm_workflow_execution:record()) ->
+    {index(), run_selector()}.
+try_resolving_lane_run_selector(
+    {AtmLaneSelector, AtmRunSelector},
+    AtmWorkflowExecution = #atm_workflow_execution{current_lane_index = CurrentAtmLaneIndex}
+) ->
+    AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
+    % resolve run selector if possible (impossible for lane runs in advance)
+    NewAtmRunSelector = case AtmLaneIndex =< CurrentAtmLaneIndex of
+        true -> resolve_run_selector(AtmRunSelector, AtmWorkflowExecution);
+        false -> AtmRunSelector
+    end,
+    {AtmLaneIndex, NewAtmRunSelector}.
 
 
 -spec is_current_lane_run(lane_run_selector(), atm_workflow_execution:record()) ->

@@ -74,7 +74,8 @@ init_stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
     case atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
         {ok, AtmWorkflowExecutionDoc} ->
             handle_lane_run_stopping(
-                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+                try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecutionDoc),
+                Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
             );
 
         {error, already_stopping} when Reason =:= cancel; Reason =:= pause ->
@@ -86,12 +87,25 @@ init_stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
             % (e.g. provider abrupt shutdown and restart)
             {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
             handle_lane_run_stopping(
-                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+                try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecutionDoc),
+                Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
             );
 
         {error, _} = Error ->
             Error
     end.
+
+
+%% @private
+-spec try_resolving_lane_run_selector(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:record() | atm_workflow_execution:doc()
+) ->
+    {atm_lane_execution:index(), atm_lane_execution:run_selector()}.
+try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execution{}) ->
+    atm_lane_execution:try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecution);
+try_resolving_lane_run_selector(AtmLaneRunSelector, #document{value = AtmWorkflowExecution}) ->
+    try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecution).
 
 
 -spec resume(
