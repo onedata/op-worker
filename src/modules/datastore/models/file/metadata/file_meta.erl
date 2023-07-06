@@ -800,7 +800,7 @@ make_space_exist(SpaceId) ->
     end.
 
 
--spec make_tmp_dir_exist(od_space:id()) -> ok | no_return().
+-spec make_tmp_dir_exist(od_space:id()) -> ok | {error, term()}.
 make_tmp_dir_exist(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
@@ -808,14 +808,14 @@ make_tmp_dir_exist(SpaceId) ->
         TmpDirUuid, ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
         ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId, true
     ),
-    case save(TmpDirDoc) of
+    case datastore_model:create(?CTX, TmpDirDoc) of
         {ok, _} ->
             case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
             end;
-        {error, already_exists} ->
-            ok
+        {error, _} = Error ->
+            Error
     end.
 
 

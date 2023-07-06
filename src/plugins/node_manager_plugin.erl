@@ -154,11 +154,16 @@ upgrade_cluster(3) ->
     {ok, 4};
 upgrade_cluster(4) ->
     await_zone_connection_and_run(fun() ->
-        %% TODO
-        ?info("Starting space_strategies migration procedure..."),
         {ok, SpaceIds} = provider_logic:get_spaces(),
-        lists:foreach(fun file_meta:make_tmp_dir_exist/1, SpaceIds),
-        ?info("space_strategies migration procedure finished succesfully.")
+
+        lists:foreach(fun(SpaceId) ->
+            case file_meta:make_tmp_dir_exist(SpaceId) of
+                ok ->
+                    ?info("Created tmp dir for space '~s'.", [SpaceId]);
+                {error, already_exists} ->
+                    ok
+            end
+        end, SpaceIds)
     end),
     {ok, 5}.
 
