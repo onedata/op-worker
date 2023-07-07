@@ -158,10 +158,8 @@ upgrade_cluster(4) ->
 
         lists:foreach(fun(SpaceId) ->
             case file_meta:make_tmp_dir_exist(SpaceId) of
-                ok ->
-                    ?info("Created tmp dir for space '~s'.", [SpaceId]);
-                {error, already_exists} ->
-                    ok
+                created -> ?info("Created tmp dir for space '~s'.", [SpaceId]);
+                already_exists -> ok
             end
         end, SpaceIds)
     end),
