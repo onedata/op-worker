@@ -123,6 +123,10 @@
     atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
+-record(atm_workflow_execution_force_continue_request, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
 -record(atm_workflow_execution_repeat_request, {
     type :: atm_workflow_execution:repeat_type(),
     atm_workflow_execution_id :: atm_workflow_execution:id(),

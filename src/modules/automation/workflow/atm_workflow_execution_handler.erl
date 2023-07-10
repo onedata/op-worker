@@ -27,7 +27,8 @@
     start/3,
     init_stop/3,
     repeat/4,
-    resume/2
+    resume/2,
+    force_continue/2
 ]).
 -export([
     restart/1,
@@ -185,6 +186,34 @@ resume(UserCtx, AtmWorkflowExecutionId) ->
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
                 execution_context => acquire_global_env(AtmWorkflowExecutionDoc)
+            });
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec force_continue(user_ctx:ctx(), atm_workflow_execution:id()) ->
+    ok | errors:error().
+force_continue(UserCtx, AtmWorkflowExecutionId) ->
+    case atm_workflow_execution_status:handle_forced_continue(AtmWorkflowExecutionId) of
+        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
+            current_lane_index = CurrentAtmLaneIndex,
+            current_run_num = CurrentRunNum,
+            lanes_count = AtmLanesCount
+        }}} ->
+            unfreeze_global_stores(AtmWorkflowExecutionDoc),
+            ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
+
+            workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+                id => AtmWorkflowExecutionId,
+                workflow_handler => ?MODULE,
+                force_clean_execution => true,
+                execution_context => acquire_global_env(AtmWorkflowExecutionDoc),
+                first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
+                next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
+                    true -> {CurrentAtmLaneIndex + 1, current};
+                    false -> undefined
+                end
             });
         {error, _} = Error ->
             Error
@@ -624,6 +653,7 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
     lists:foreach(fun(AtmLaneIndex) ->
+        % TODO
         AtmLaneRunSelector = {AtmLaneIndex, current},
 
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of

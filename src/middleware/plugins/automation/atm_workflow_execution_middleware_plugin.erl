@@ -49,6 +49,7 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(create, cancel, private) -> ?MODULE;
 resolve_handler(create, pause, private) -> ?MODULE;
 resolve_handler(create, resume, private) -> ?MODULE;
+resolve_handler(create, force_continue, private) -> ?MODULE;
 resolve_handler(create, retry, private) -> ?MODULE;
 resolve_handler(create, rerun, private) -> ?MODULE;
 
@@ -89,7 +90,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
 data_spec(#op_req{operation = create, gri = #gri{aspect = Aspect}}) when
     Aspect =:= cancel;
     Aspect =:= pause;
-    Aspect =:= resume
+    Aspect =:= resume;
+    Aspect =:= force_continue
 ->
     undefined;
 
@@ -169,6 +171,7 @@ authorize(
     Aspect =:= cancel;
     Aspect =:= pause;
     Aspect =:= resume;
+    Aspect =:= force_continue;
     Aspect =:= retry;
     Aspect =:= rerun
 ->
@@ -209,6 +212,7 @@ validate(#op_req{operation = create, gri = #gri{aspect = Aspect}}, _) when
     Aspect =:= cancel;
     Aspect =:= pause;
     Aspect =:= resume;
+    Aspect =:= force_continue;
     Aspect =:= retry;
     Aspect =:= rerun
 ->
@@ -266,6 +270,12 @@ create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     aspect = resume
 }}) ->
     mi_atm:resume_workflow_execution(SessionId, AtmWorkflowExecutionId);
+
+create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = force_continue
+}}) ->
+    mi_atm:force_continue_workflow_execution(SessionId, AtmWorkflowExecutionId);
 
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{
     id = AtmWorkflowExecutionId,
