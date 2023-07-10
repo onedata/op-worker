@@ -278,10 +278,13 @@ logging_level_test(_Config) ->
         <<"timestamp">> => Timestamp,
         <<"limit">> => ItemsNum
     }),
-    ?assertEqual(
-        ExpContentBrowseResult,
+    BrowseFun = fun() ->
         ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
-    ).
+    end,
+    case ExpEntries of
+        [] -> ?assertThrow(?ERROR_NOT_FOUND, BrowseFun());
+        _ -> ?assertEqual(ExpContentBrowseResult, BrowseFun())
+    end.
 
 
 %===================================================================

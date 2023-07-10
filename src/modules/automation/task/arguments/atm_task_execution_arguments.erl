@@ -37,23 +37,25 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
 
 
 -spec acquire_args(
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     atm_run_job_batch_ctx:record(),
     [atm_task_execution_argument_spec:record()]
 ) ->
     json_utils:json_map() | no_return().
 acquire_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
+    #atm_item_execution{trace_id = TraceId, value = ItemValue} = Item,
+
     lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
         ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
         try
             Args#{ArgName => atm_task_execution_argument_spec:acquire_arg(
-                Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpec
+                ItemValue, AtmRunJobBatchCtx, AtmTaskExecutionArgSpec
             )}
         catch Type:Reason:Stacktrace ->
             Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Error))
         end
-    end, #{}, AtmTaskExecutionArgSpecs).
+    end, #{<<"__meta">> => #{<<"traceId">> => TraceId}}, AtmTaskExecutionArgSpecs).
 
 
 %%%===================================================================

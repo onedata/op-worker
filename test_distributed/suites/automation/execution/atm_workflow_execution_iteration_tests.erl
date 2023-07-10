@@ -313,8 +313,8 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
         fun file_object_to_atm_file_value/1,
         utils:ensure_list(InitialFiles)
     ),
-    ExpTask3IteratedEntries = lists:flatten(lists:filter(fun(ItemBatch) ->
-        [] == lists_utils:intersect(ItemBatch, FilesToRemoveAtmValues)
+    ExpTask3IteratedEntries = lists:flatten(lists:filter(fun(EntriesBatch) ->
+        [] == lists_utils:intersect(EntriesBatch, FilesToRemoveAtmValues)
     end, atm_store_test_utils:split_into_chunks(MaxBatchSize, [], ExpTask12IteratedEntries))),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
@@ -343,12 +343,13 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(TestSpec 
                             workflow_execution_exp_state = ExpState,
                             call_args = [_, _, AtmTaskExecutionId, _, ItemBatch]
                         }) ->
+                            Values = atm_workflow_execution_test_utils:get_values_batch(ItemBatch),
                             {true, atm_workflow_execution_exp_state_builder:expect(ExpState, lists:flatten([
-                                {task, AtmTaskExecutionId, items_scheduled, length(ItemBatch)},
+                                {task, AtmTaskExecutionId, items_scheduled, length(Values)},
 
-                                case lists_utils:intersect(ItemBatch, FilesToRemoveAtmValues) of
+                                case lists_utils:intersect(Values, FilesToRemoveAtmValues) of
                                     [] -> [];
-                                    _ -> [{task, AtmTaskExecutionId, items_failed, length(ItemBatch)}]
+                                    _ -> [{task, AtmTaskExecutionId, items_failed, length(Values)}]
                                 end
                             ]))}
                         end,
@@ -544,7 +545,7 @@ build_record_iterated_items_hook(Testcase, Mapper) ->
         record_iterated_items(
             Testcase,
             atm_workflow_execution_exp_state_builder:get_task_schema_id(AtmTaskExecutionId, ExpState),
-            lists:map(Mapper, ItemBatch)
+            lists:map(Mapper, atm_workflow_execution_test_utils:get_values_batch(ItemBatch))
         )
     end.
 

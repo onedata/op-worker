@@ -112,7 +112,7 @@ update_content_test(_Config) ->
     {ok, NonExistingObjectId} = file_id:guid_to_objectid(<<"none">>),
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
         AtmWorkflowExecutionAuth,
-        #{<<"file_id">> => NonExistingObjectId},
+        #atm_item_execution{trace_id = <<"ASD">>, value = #{<<"file_id">> => NonExistingObjectId}},
         #atm_exception_store_content_update_options{function = append},
         AtmStoreId
     ))).
@@ -124,7 +124,10 @@ iterator_test(_Config) ->
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_iterated_item => fun input_item_to_exp_iterated_item/4,
-        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        iterator_get_next => fun(AtmWorkflowExecutionEnv, Iterator) ->
+            ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator))
+        end
     }).
 
 
@@ -200,48 +203,65 @@ get_input_item_generator_seed_data_spec(#atm_exception_store_config{item_data_sp
 
 
 %% @private
--spec input_item_formatter(automation:item()) -> automation:item().
-input_item_formatter(Item) -> Item.
+-spec input_item_formatter(automation:item()) -> atm_workflow_execution_handler:item().
+input_item_formatter(Item) ->
+    #atm_item_execution{trace_id = ?RAND_STR(10), value = Item}.
 
 
 %% @private
 -spec describe_item(
     atm_workflow_execution_auth:record(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     atm_store:id(),
     non_neg_integer()
 ) ->
-    automation:item().
+    json_utils:json_term().
 describe_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
-    atm_store_test_utils:to_described_item(
-        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
-    ).
+    #{
+        <<"traceId">> => ItemInitializer#atm_item_execution.trace_id,
+        <<"value">> => atm_store_test_utils:to_described_item(
+            ?PROVIDER_SELECTOR,
+            AtmWorkflowExecutionAuth,
+            ItemInitializer#atm_item_execution.value,
+            ItemDataSpec
+        )
+    }.
 
 
 %% @private
 -spec input_item_to_exp_iterated_item(
     atm_workflow_execution_auth:record(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     atm_store:id(),
     non_neg_integer()
 ) ->
-    automation:item().
+    atm_workflow_execution_handler:item().
 input_item_to_exp_iterated_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec, _Index) ->
-    atm_store_test_utils:to_iterated_item(
-        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
-    ).
+    ItemInitializer#atm_item_execution{value = atm_store_test_utils:to_iterated_item(
+        ?PROVIDER_SELECTOR,
+        AtmWorkflowExecutionAuth,
+        ItemInitializer#atm_item_execution.value,
+        ItemDataSpec
+    )}.
 
 
 %% @private
 -spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
 randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
     atm_store_test_utils:randomly_remove_entity_referenced_by_item(
-        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
+        ?PROVIDER_SELECTOR,
+        AtmWorkflowExecutionAuth,
+        case Item of
+            #atm_item_execution{value = Value} -> Value;
+            #{<<"traceId">> := _, <<"value">> := Value} -> Value;
+            Value -> Value
+        end,
+        ItemDataSpec
     ).
 
 

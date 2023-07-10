@@ -336,6 +336,7 @@ build_audit_log_append_request(LogContent) ->
 extend_audit_log(AppendRequests, #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
+    %% TODO VFS-11091 audit_log:extend
     lists:foreach(fun(AppendRequest) ->
         ok = audit_log:append(BackendId, ?LOG_OPTS, AppendRequest)
     end, AppendRequests).

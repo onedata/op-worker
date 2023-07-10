@@ -150,7 +150,8 @@ stopping_reason_interrupt_overrides_pause() ->
                         ],
                         % Delay execution of chosen batch to ensure it happens after execution is interrupted
                         strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, ItemBatch, _]}) ->
-                            case ContainsDelayedMeasurementPred(ItemBatch) of
+                            Values = atm_workflow_execution_test_utils:get_values_batch(ItemBatch),
+                            case ContainsDelayedMeasurementPred(Values) of
                                 true -> {passthrough_with_delay, timer:seconds(1)};
                                 false -> passthrough
                             end
