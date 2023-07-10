@@ -33,7 +33,6 @@
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
 -define(MAX_LINKS_NUM, 65536). % 64 * 1024
--define(INCLUDE_REFERENCES_MAP_SIZE_TRESHOLD, 64).
 
 %%%===================================================================
 %%% API

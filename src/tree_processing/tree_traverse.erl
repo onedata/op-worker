@@ -50,6 +50,8 @@
 
 %% Tracking subtree progress status API
 -export([report_child_processed/2, delete_subtree_status_doc/2]).
+%% Helpers
+-export([get_child_master_job/3]).
 
 
 -type id() :: traverse:id().
@@ -596,7 +598,6 @@ add_to_set_if_symlinks_followed(Uuid, EncounteredFilesSet, _) ->
 %%% Helper functions
 %%%===================================================================
 
-%% @private
 -spec get_child_master_job(master_job(), file_ctx:ctx(), file_meta:name()) -> master_job().
 get_child_master_job(MasterJob = #tree_traverse{
     relative_path = ParentRelativePath,

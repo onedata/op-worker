@@ -51,7 +51,7 @@
 
 %% API
 -export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1,
-    uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1]).
+    uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
 %%%===================================================================
 %%% API functions
@@ -74,6 +74,7 @@ create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
             {ok, _} = create_dataset_archives_dir(DatasetId, SpaceId),
             ok = create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc)
     end,
+    dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(DatasetArchivesDirUuid, SpaceId)),
     {ok, ArchiveDirUuid}.
 
 
@@ -128,6 +129,12 @@ get_filename_for_download(ArchiveId) ->
         nomatch ->
             ?ARCHIVE_DIR_NAME(ArchiveId)
     end.
+
+
+-spec get_root_dir_uuid(od_space:id()) -> file_meta:uuid().
+get_root_dir_uuid(SpaceId) ->
+    ?ARCHIVES_ROOT_DIR_UUID(SpaceId).
+
 
 %%%===================================================================
 %%% Internal functions

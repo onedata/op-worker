@@ -99,18 +99,6 @@ resolve(UserCtx, FileCtx, Opts) ->
         maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
     ),
 
-    % TODO VFS-11033 - remove when stats work for archives
-    {FinalReplicationStatus, FinalSize, FileCtx9} = case EffectiveType of
-        ?DIRECTORY_TYPE when ShareId =/= undefined ->
-            {UuidPath, FileCtx8} = file_ctx:get_uuid_based_path(FileCtx7),
-            case lists:any(fun(Uuid) -> archivisation_tree:is_special_uuid(Uuid) end, filename:split(UuidPath)) of
-                true -> {undefined, undefined, FileCtx8};
-                false -> {ReplicationStatus, Size, FileCtx8}
-            end;
-        _ ->
-            {ReplicationStatus, Size, FileCtx7}
-    end,
-
     FileAttr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -122,16 +110,16 @@ resolve(UserCtx, FileCtx, Opts) ->
         mtime = MTime,
         ctime = CTime,
         type = EffectiveType,
-        size = FinalSize,
+        size = Size,
         shares = Shares,
         provider_id = ProviderId,
         owner_id = OwnerId,
-        fully_replicated = FinalReplicationStatus,
+        fully_replicated = ReplicationStatus,
         nlink = resolve_link_count(FileCtx7, ShareId, OptionalAttrs),
         index = resolve_index(FileCtx7, FileDoc),
         xattrs = resolve_xattrs(FileCtx7, OptionalAttrs)
     },
-    {FileAttr, FileDoc, ConflictingFiles, FileCtx9}.
+    {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
 
 
 -spec should_fetch_xattrs([optional_attr()]) -> {true, [optional_attr()]} | false.
