@@ -195,9 +195,9 @@
     resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1,
 
     force_continue_failed_iterated_atm_lane_run_execution/1,
+    force_continue_failed_while_preparing_atm_lane_run_execution/1,
 
     garbage_collect_atm_workflow_executions/1,
-    force_continue_failed_while_preparing_atm_lane_run_execution/1,
     force_continue_failed_not_iterated_atm_lane_run_execution/1,
     massive_garbage_collect_atm_workflow_executions/1,
 
@@ -403,7 +403,8 @@ groups() -> [
     ]},
 
     {force_continue_tests, [], [
-        force_continue_failed_iterated_atm_lane_run_execution
+        force_continue_failed_iterated_atm_lane_run_execution,
+        force_continue_failed_while_preparing_atm_lane_run_execution
     ]},
 
     {gc_tests, [], [
@@ -972,6 +973,10 @@ resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
 
 
 force_continue_failed_iterated_atm_lane_run_execution(_Config) ->
+    ?RUN_FORCE_CONTINUE_TEST().
+
+
+force_continue_failed_while_preparing_atm_lane_run_execution(_Config) ->
     ?RUN_FORCE_CONTINUE_TEST().
 
 

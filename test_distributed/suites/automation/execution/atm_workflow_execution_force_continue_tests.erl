@@ -18,7 +18,8 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    force_continue_failed_iterated_atm_lane_run_execution/0
+    force_continue_failed_iterated_atm_lane_run_execution/0,
+    force_continue_failed_while_preparing_atm_lane_run_execution/0
 ]).
 
 
@@ -125,7 +126,6 @@ force_continue_failed_iterated_atm_lane_run_execution() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        test_gc = false,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -167,9 +167,90 @@ force_continue_failed_iterated_atm_lane_run_execution() ->
     }).
 
 
+% Retrying failed while preparing lane run should fail while force continuing it should succeed
+force_continue_failed_while_preparing_atm_lane_run_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            gen_time_series_measurements(), return_value
+        ),
+        test_gc = false,
+        incarnations = [
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 1,
+                lane_runs = [
+                    #atm_lane_run_execution_test_spec{
+                        selector = {1, 1},
+                        create_run = #atm_step_mock_spec{
+                            strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        },
+                        prepare_lane = #atm_step_mock_spec{
+                            after_step_exp_state_diff = no_diff
+                        },
+                        handle_lane_execution_stopped = #atm_step_mock_spec{
+                            before_step_exp_state_diff = [
+                                {all_tasks, {1, 1}, interrupted},
+                                {lane_run, {1, 1}, stopping},
+                                workflow_stopping
+                            ],
+                            after_step_exp_state_diff = [{lane_run, {1, 1}, failed}]
+                        }
+                    },
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {prepare_lane, after_step, {1, 1}})
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [
+                        ?LANE_RUNS_RERUNABLE([{1, 1}]),
+                        workflow_failed
+                    ]
+                },
+                after_hook = fun(AtmMockCallCtx) ->
+                    assert_not_retriable({1, 1}, AtmMockCallCtx),
+                    ?assertEqual(ok, atm_workflow_execution_test_utils:force_continue_workflow_execution(
+                        AtmMockCallCtx
+                    ))
+                end
+            },
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 2,
+                lane_runs = [
+                    #atm_lane_run_execution_test_spec{
+                        selector = {2, 1},
+                        prepare_lane = #atm_step_mock_spec{
+                            before_step_exp_state_diff = [
+                                ?LANE_RUNS_NOT_REPEATABLE([{1, 1}]),
+                                {lane_run, {2, 1}, scheduled},
+                                workflow_resuming
+                            ]
+                        }
+                    }
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [
+                        {lane_runs, [{1, 1}, {2, 1}], rerunable},
+                        workflow_finished
+                    ]
+                }
+            }
+        ]
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_not_retriable(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok.
+assert_not_retriable(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertThrow(
+        ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED,
+        atm_workflow_execution_test_utils:repeat_workflow_execution(retry, AtmLaneRunSelector, AtmMockCallCtx)
+    ).
 
 
 %% @private
