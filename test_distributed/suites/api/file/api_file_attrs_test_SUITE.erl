@@ -1418,7 +1418,7 @@ gather_historical_dir_size_stats_test_base(
                 client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
                 scenario_templates = [
                     #scenario_template{
-                        name = <<"Get dir size stats using /data/DirId/size_stats rest endpoint">>,
+                        name = <<"Get dir size stats using rest endpoint">>,
                         type = rest,
                         prepare_args_fun = build_gather_historical_dir_size_stats_prepare_rest_args_fun(FileGuid, DefaultData),
                         validate_result_fun = ValidateRestSuccessfulCallFun
@@ -1452,7 +1452,7 @@ build_gather_historical_dir_size_stats_prepare_rest_args_fun(Guid, DefaultData) 
     fun(#api_test_ctx{data = Data}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         {FinalObjectId, Data2} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
-        RestPath = <<"data/", FinalObjectId/binary, "/size_stats">>,
+        RestPath = <<"data/", FinalObjectId/binary, "/dir_size_stats">>,
 
         #rest_args{
             method = get,

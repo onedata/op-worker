@@ -47,7 +47,7 @@
 -define(BINDING(__KEY), {binding, __KEY}).
 -define(OBJECTID_BINDING(__KEY), {objectid_binding, __KEY}).
 -define(PATH_BINDING, path_binding).
--define(PROVIDER_BINDING, provider_binding).
+-define(QUERIED_PROVIDER_BINDING, provider_binding).
 
 % Convenience macros used for constructing REST replies
 -define(OK_REPLY(__Body), #rest_resp{code = ?HTTP_200_OK, body = __Body}).
