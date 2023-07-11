@@ -194,7 +194,11 @@
     resume_atm_workflow_execution_paused_after_all_tasks_finished/1,
     resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1,
 
+    force_continue_failed_iterated_atm_lane_run_execution/1,
+
     garbage_collect_atm_workflow_executions/1,
+    force_continue_failed_while_preparing_atm_lane_run_execution/1,
+    force_continue_failed_not_iterated_atm_lane_run_execution/1,
     massive_garbage_collect_atm_workflow_executions/1,
 
     restart_op_worker_after_graceful_stop/1
@@ -398,6 +402,10 @@ groups() -> [
         resume_atm_workflow_execution_interrupted_after_all_tasks_finished
     ]},
 
+    {force_continue_tests, [], [
+        force_continue_failed_iterated_atm_lane_run_execution
+    ]},
+
     {gc_tests, [], [
         garbage_collect_atm_workflow_executions,
         massive_garbage_collect_atm_workflow_executions
@@ -423,6 +431,7 @@ all() -> [
     {group, mapping_tests},
     {group, repeat_tests},
     {group, resume_tests},
+    {group, force_continue_tests},
     {group, gc_tests}
 
     % TODO VFS-10266 Uncomment after implementing onedata/internal task executor
@@ -460,6 +469,7 @@ all() -> [
 -define(RUN_FINISH_TEST(), ?RUN_TEST(atm_workflow_execution_finish_tests)).
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
 -define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
+-define(RUN_FORCE_CONTINUE_TEST(), ?RUN_TEST(atm_workflow_execution_force_continue_tests)).
 -define(RUN_GC_TEST(), ?RUN_TEST(atm_workflow_execution_gc_tests)).
 -define(RUN_RESTART_TEST(__CONFIG), ?RUN_TEST_WITH_CONFIG(
     atm_workflow_execution_restart_tests, __CONFIG
@@ -961,6 +971,10 @@ resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+force_continue_failed_iterated_atm_lane_run_execution(_Config) ->
+    ?RUN_FORCE_CONTINUE_TEST().
+
+
 garbage_collect_atm_workflow_executions(_Config) ->
     ?RUN_GC_TEST().
 
@@ -1038,6 +1052,7 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
     TestGroup =:= resume_tests;
+    TestGroup =:= force_continue_tests;
     TestGroup =:= restarts_tests
 ->
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
@@ -1073,6 +1088,7 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
     TestGroup =:= resume_tests;
+    TestGroup =:= force_continue_tests;
     TestGroup =:= restarts_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),

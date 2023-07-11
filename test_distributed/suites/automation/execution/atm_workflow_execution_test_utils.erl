@@ -28,6 +28,7 @@
     stop_workflow_execution/2,
 
     resume_workflow_execution/1,
+    force_continue_workflow_execution/1,
     repeat_workflow_execution/3,
 
     discard_workflow_execution/1
@@ -131,6 +132,16 @@ resume_workflow_execution(#atm_mock_call_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, mi_atm:resume_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
+-spec force_continue_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok.
+force_continue_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:force_continue_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 -spec repeat_workflow_execution(
