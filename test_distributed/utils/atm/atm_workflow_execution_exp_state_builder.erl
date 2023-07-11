@@ -33,6 +33,8 @@
     assert_deleted/1
 ]).
 -export([
+    get_workflow_status/1,
+
     set_current_lane_run/3,
 
     get_task_selector/2,
@@ -473,6 +475,13 @@ assert_deleted(ExpStateCtx) ->
     assert_workflow_related_docs_deleted(ExpStateCtx),
     assert_global_store_related_docs_deleted(ExpStateCtx),
     assert_task_related_docs_deleted(ExpStateCtx).
+
+
+-spec get_workflow_status(ctx()) -> binary().
+get_workflow_status(#exp_workflow_execution_state_ctx{
+    exp_workflow_execution_state = ExpAtmWorkflowExecutionState
+}) ->
+    maps:get(<<"status">>, ExpAtmWorkflowExecutionState).
 
 
 -spec set_current_lane_run(non_neg_integer(), non_neg_integer(), ctx()) -> ctx().

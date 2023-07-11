@@ -138,7 +138,7 @@ cancel_scheduled_atm_workflow_execution() ->
                     workflow_cancelled
                 ]
             },
-            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -178,7 +178,7 @@ cancel_enqueued_atm_workflow_execution() ->
                     workflow_cancelled
                 ]
             },
-            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -287,7 +287,7 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                     workflow_cancelled
                 ]
             },
-            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -321,7 +321,7 @@ cancel_suspended_atm_workflow_execution_test_base(Testcase, SuspendedIncarnation
                 ]),
                 ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpCancelledState)),
 
-                atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed(
+                atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set(
                     AtmMockCallCtx#atm_mock_call_ctx{workflow_execution_exp_state = ExpCancelledState}
                 )
             end
@@ -403,7 +403,7 @@ cancel_resuming_atm_workflow_execution_test_base(Testcase, SuspendedIncarnation)
                         workflow_cancelled
                     ]
                 },
-                after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+                after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set/1
             }
         ]
     }).

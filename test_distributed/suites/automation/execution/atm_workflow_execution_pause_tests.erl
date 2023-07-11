@@ -128,7 +128,7 @@ pause_scheduled_atm_workflow_execution() ->
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [workflow_paused]
             },
-            after_hook = fun assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            after_hook = fun assert_paused_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -167,7 +167,7 @@ pause_enqueued_atm_workflow_execution() ->
                     workflow_paused
                 ]
             },
-            after_hook = fun assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            after_hook = fun assert_paused_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -269,7 +269,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                     workflow_paused
                 ]
             },
-            after_hook = fun assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            after_hook = fun assert_paused_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -285,7 +285,7 @@ pause_interrupted_atm_workflow_execution() ->
                     ?ERROR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
                     atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
                 ),
-                atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
+                atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_impossible_actions_set(
                     {1, 1}, AtmMockCallCtx
                 ),
                 ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0))
@@ -333,7 +333,7 @@ pause_resuming_interrupted_atm_workflow_execution() ->
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [workflow_paused]
                 },
-                after_hook = fun assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+                after_hook = fun assert_paused_workflow_execution_impossible_actions_set/1
             }
         ]
     }).
@@ -382,14 +382,14 @@ build_interrupted_active_incarnation_test_spec() ->
 
 
 %% @private
-assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated(AtmMockCallCtx = #atm_mock_call_ctx{
+assert_paused_workflow_execution_impossible_actions_set(AtmMockCallCtx = #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState0
 }) ->
     ?assertThrow(
         ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
         atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
     ),
-    atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
+    atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_impossible_actions_set(
         {1, 1}, AtmMockCallCtx
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0)).

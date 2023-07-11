@@ -39,9 +39,9 @@
     get_exception_store_content/2
 ]).
 -export([
-    assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1,
-    assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded/2,
-    assert_not_ended_workflow_execution_can_not_be_repeated/2
+    assert_ended_workflow_execution_impossible_actions_set/1,
+    assert_not_stopped_workflow_execution_impossible_actions_set/2,
+    assert_not_ended_workflow_execution_impossible_actions_set/2
 ]).
 -export([
     build_task_step_exp_state_diff/1,
@@ -233,35 +233,65 @@ get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
     lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
 
 
--spec assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed(
+%% Impossible actions:
+%% - stop
+%% - force continue (only if status != FAILED)
+%% - resume
+-spec assert_ended_workflow_execution_impossible_actions_set(
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
     ok.
-assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed(AtmMockCallCtx) ->
+assert_ended_workflow_execution_impossible_actions_set(AtmMockCallCtx = #atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState
+}) ->
     lists:foreach(fun(StoppingReason) ->
         ?assertEqual(?ERROR_ATM_WORKFLOW_EXECUTION_ENDED, stop_workflow_execution(StoppingReason, AtmMockCallCtx))
     end, ?STOPPING_REASONS),
 
+    case atm_workflow_execution_exp_state_builder:get_workflow_status(ExpState) of
+        <<"failed">> ->
+            ok;
+        _ ->
+            ?assertThrow(
+                ?ERROR_ATM_INVALID_STATUS_TRANSITION(_, ?RESUMING_STATUS),
+                force_continue_workflow_execution(AtmMockCallCtx)
+            )
+    end,
     ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)).
 
 
--spec assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded(
+%% Impossible actions:
+%% - repeat
+%% - force continue
+%% - resume
+%% - discard
+-spec assert_not_stopped_workflow_execution_impossible_actions_set(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
     ok.
-assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded(AtmLaneRunSelector, AtmMockCallCtx) ->
+assert_not_stopped_workflow_execution_impossible_actions_set(
+    AtmLaneRunSelector,
+    AtmMockCallCtx
+) ->
+    assert_not_ended_workflow_execution_impossible_actions_set(AtmLaneRunSelector, AtmMockCallCtx),
     ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)),
-    assert_not_ended_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx),
     ?assertEqual(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED, discard_workflow_execution(AtmMockCallCtx)).
 
 
--spec assert_not_ended_workflow_execution_can_not_be_repeated(
+%% Impossible actions:
+%% - repeat
+%% - force continue
+-spec assert_not_ended_workflow_execution_impossible_actions_set(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
     ok.
-assert_not_ended_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx) ->
+assert_not_ended_workflow_execution_impossible_actions_set(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertThrow(
+        ?ERROR_ATM_INVALID_STATUS_TRANSITION(_, ?RESUMING_STATUS),
+        force_continue_workflow_execution(AtmMockCallCtx)
+    ),
     lists:foreach(fun(RepeatType) ->
         ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED, repeat_workflow_execution(
             RepeatType, AtmLaneRunSelector, AtmMockCallCtx

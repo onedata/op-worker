@@ -239,7 +239,6 @@ force_continue_failed_not_iterated_atm_lane_run_execution() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), file_pipe
         ),
-        test_gc = false,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,

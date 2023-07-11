@@ -158,7 +158,7 @@ interrupt_scheduled_atm_workflow_execution_test_base(InterruptType) ->
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [workflow_interrupted]
             },
-            after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            after_hook = fun assert_interrupted_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -219,7 +219,7 @@ interrupt_enqueued_atm_workflow_execution_test_base(InterruptType) ->
                     workflow_interrupted
                 ]
             },
-            after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            after_hook = fun assert_interrupted_workflow_execution_impossible_actions_set/1
         }]
     }).
 
@@ -343,8 +343,8 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
                 end
             },
             after_hook = case ExpFinalStatus of
-                interrupted -> fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1;
-                failed -> fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+                interrupted -> fun assert_interrupted_workflow_execution_impossible_actions_set/1;
+                failed -> fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set/1
             end
         }]
     }).
@@ -361,7 +361,7 @@ interrupt_paused_atm_workflow_execution() ->
                     ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
                     atm_workflow_execution_test_utils:interrupt_workflow_execution(AtmMockCallCtx)
                 ),
-                atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
+                atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_impossible_actions_set(
                     {1, 1}, AtmMockCallCtx
                 ),
                 ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0))
@@ -431,7 +431,7 @@ interrupt_resuming_paused_atm_workflow_execution_test_base(InterruptType) ->
                 handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [workflow_interrupted]
                 },
-                after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+                after_hook = fun assert_interrupted_workflow_execution_impossible_actions_set/1
             }
         ]
     }).
@@ -479,14 +479,14 @@ build_paused_enqueued_incarnation_test_spec() ->
 
 
 %% @private
-assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated(AtmMockCallCtx = #atm_mock_call_ctx{
+assert_interrupted_workflow_execution_impossible_actions_set(AtmMockCallCtx = #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState0
 }) ->
     ?assertThrow(
         ?ERROR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
         atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
     ),
-    atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
+    atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_impossible_actions_set(
         {1, 1}, AtmMockCallCtx
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0)).
