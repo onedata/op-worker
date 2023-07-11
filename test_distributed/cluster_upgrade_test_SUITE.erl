@@ -30,11 +30,14 @@
 ]).
 -export([
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1
+    upgrade_from_20_02_1_storage_sync_monitoring/1,
+    upgrade_from_21_02_2_tmp_dir/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
 
+-define(DUMMY_SPACE_ID1, <<"dummy">>).
+-define(DUMMY_SPACE_ID2, <<"bigger_dummy">>).
 
 %%%===================================================================
 %%% API functions
@@ -42,7 +45,8 @@
 
 all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
-    upgrade_from_20_02_1_storage_sync_monitoring
+    upgrade_from_20_02_1_storage_sync_monitoring,
+    upgrade_from_21_02_2_tmp_dir
 ]).
 
 %%%===================================================================
@@ -366,6 +370,25 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
 
 
+upgrade_from_21_02_2_tmp_dir(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    SpaceIds = [?DUMMY_SPACE_ID1, ?DUMMY_SPACE_ID2],
+    TmdDirUuids = lists:map(fun fslogic_file_id:spaceid_to_tmp_dir_uuid/1, SpaceIds),
+
+    TmpDirExistsFun = fun(Uuid) -> rpc:call(Worker, file_meta, exists, [Uuid]) end,
+
+    ?assertNot(lists:any(TmpDirExistsFun, TmdDirUuids)),
+
+    % Assert tm dirs are created on upgrade
+    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
+    ?assert(lists:all(TmpDirExistsFun, TmdDirUuids)),
+
+    % Assert upgrade is idempotent
+    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
+    ?assert(lists:all(TmpDirExistsFun, TmdDirUuids)).
+
+
 %%%===================================================================
 %%% Setup/teardown functions
 %%%===================================================================
@@ -388,11 +411,27 @@ init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(Case = upgrade_from_21_02_2_tmp_dir, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?DUMMY_SPACE_ID1, ?DUMMY_SPACE_ID2]}
+    end),
+
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
     test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
     Config.
+
+
+end_per_testcase(Case = upgrade_from_21_02_2_tmp_dir, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

@@ -220,6 +220,7 @@ extend_insecure(ItemsArray, #atm_list_store_container{
     config = #atm_list_store_config{item_data_spec = ItemDataSpec},
     backend_id = BackendId
 }) ->
+    %% TODO VFS-11091 infinite_log:extend
     lists:foreach(fun(Item) ->
         atm_store_container_infinite_log_backend:append(
             BackendId, atm_value:to_store_item(Item, ItemDataSpec)

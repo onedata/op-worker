@@ -23,6 +23,8 @@
 
 %% API
 -export([
+    try_resolving_lane_run_selector/2,
+
     is_current_lane_run/2,
     resolve_selector/2,
 
@@ -33,7 +35,7 @@
     update_run/3, update_run/4
 ]).
 -export([get/2, update/3]).
--export([to_json/2]).
+-export([to_json/2, run_to_json/3]).
 
 %% persistent_record callbacks
 -export([version/0, upgrade_encoded_record/2, db_encode/2, db_decode/2]).
@@ -47,6 +49,7 @@
 
 -type run_num() :: pos_integer().
 -type run_selector() :: current | run_num().
+-type run_type() :: regular | rerun | retry.
 
 -type run_status() ::
     % waiting
@@ -67,13 +70,28 @@
 -type lane_run_selector() :: {selector(), run_selector()}.
 
 -export_type([index/0, selector/0, run_stopping_reason/0, diff/0, record/0]).
--export_type([run_num/0, run_selector/0, run_status/0, run_diff/0, run/0]).
+-export_type([run_num/0, run_selector/0, run_type/0, run_status/0, run_diff/0, run/0]).
 -export_type([lane_run_selector/0]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec try_resolving_lane_run_selector(lane_run_selector(), atm_workflow_execution:record()) ->
+    {index(), run_selector()}.
+try_resolving_lane_run_selector(
+    {AtmLaneSelector, AtmRunSelector},
+    AtmWorkflowExecution = #atm_workflow_execution{current_lane_index = CurrentAtmLaneIndex}
+) ->
+    AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
+    % resolve run selector if possible (impossible for lane runs in advance)
+    NewAtmRunSelector = case AtmLaneIndex =< CurrentAtmLaneIndex of
+        true -> resolve_run_selector(AtmRunSelector, AtmWorkflowExecution);
+        false -> AtmRunSelector
+    end,
+    {AtmLaneIndex, NewAtmRunSelector}.
 
 
 -spec is_current_lane_run(lane_run_selector(), atm_workflow_execution:record()) ->
@@ -204,7 +222,8 @@ to_json(AtmLaneSelector, AtmWorkflowExecution) ->
     AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
 
     {RunsJson, _} = lists:mapfoldr(fun(#atm_lane_execution_run{run_num = RunNum} = Run, RunsPerNum) ->
-        {run_to_json(Run, RunsPerNum, AtmWorkflowExecution), RunsPerNum#{RunNum => Run}}
+        RunType = infer_run_type(Run, RunsPerNum),
+        {run_to_json(Run, RunType, AtmWorkflowExecution), RunsPerNum#{RunNum => Run}}
     end, #{}, AtmLaneExecution#atm_lane_execution.runs),
 
     #{
@@ -213,8 +232,7 @@ to_json(AtmLaneSelector, AtmWorkflowExecution) ->
     }.
 
 
-%% @private
--spec run_to_json(run(), #{run_num() => run()}, atm_workflow_execution:record()) ->
+-spec run_to_json(lane_run_selector() | run(), run_type(), atm_workflow_execution:record()) ->
     json_utils:json_map().
 run_to_json(Run = #atm_lane_execution_run{
     run_num = RunNum,
@@ -223,7 +241,7 @@ run_to_json(Run = #atm_lane_execution_run{
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
-}, RunsPerNum, AtmWorkflowExecution) ->
+}, RunType, AtmWorkflowExecution) ->
     #{
         <<"runNumber">> => utils:undefined_to_null(RunNum),
         <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
@@ -234,24 +252,18 @@ run_to_json(Run = #atm_lane_execution_run{
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
         ),
 
-        <<"runType">> => case OriginRunNum of
-            undefined ->
-                <<"regular">>;
-            _ ->
-                OriginRun = maps:get(OriginRunNum, RunsPerNum),
-
-                case IteratedStoreId == OriginRun#atm_lane_execution_run.exception_store_id of
-                    true -> <<"retry">>;
-                    false -> <<"rerun">>
-                end
-        end,
+        <<"runType">> => atom_to_binary(RunType),
         <<"isRetriable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
             retry, Run, AtmWorkflowExecution
         ),
         <<"isRerunable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
             rerun, Run, AtmWorkflowExecution
         )
-    }.
+    };
+
+run_to_json(AtmLaneRunSelector, RunType, AtmWorkflowExecution) ->
+    {ok, Run} = get_run(AtmLaneRunSelector, AtmWorkflowExecution),
+    run_to_json(Run, RunType, AtmWorkflowExecution).
 
 
 %%%===================================================================
@@ -417,3 +429,20 @@ locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution = #atm_workflow_e
 -spec add_new_run(run(), record()) -> record().
 add_new_run(Run, #atm_lane_execution{runs = Runs} = AtmLaneExecution) ->
     AtmLaneExecution#atm_lane_execution{runs = [Run | Runs]}.
+
+
+%% @private
+-spec infer_run_type(run(), #{run_num() => run()}) -> run_type().
+infer_run_type(#atm_lane_execution_run{origin_run_num = undefined}, _PreviousRunsPerNum) ->
+    regular;
+
+infer_run_type(#atm_lane_execution_run{
+    origin_run_num = OriginRunNum,
+    iterated_store_id = IteratedStoreId
+}, PreviousRunsPerNum) ->
+    OriginRun = maps:get(OriginRunNum, PreviousRunsPerNum),
+
+    case IteratedStoreId == OriginRun#atm_lane_execution_run.exception_store_id of
+        true -> retry;
+        false -> rerun
+    end.

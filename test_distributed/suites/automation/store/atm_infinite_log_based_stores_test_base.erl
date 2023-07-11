@@ -37,22 +37,29 @@
 
 % Formats data generated using `get_input_item_generator_seed_data_spec()`
 % into one of the possible forms accepted as input by given store
--type input_item_formatter() :: fun((automation:item()) -> automation:item()).
+-type input_item_formatter() :: fun((automation:item()) -> automation:item() | atm_workflow_execution_handler:item()).
 
 % Prepares expected item (as stored and returned when iterating) from corresponding input item
 -type input_item_to_exp_iterated_item() :: fun((
     atm_workflow_execution_auth:record(),
-    automation:item(),
+    automation:item() | atm_workflow_execution_handler:item(),
     atm_store:id(),
     Index :: non_neg_integer()
 ) ->
-    automation:item()
+    automation:item() | atm_workflow_execution_handler:item()
+).
+
+-type iterator_get_next() :: fun((
+    workflow_engine:execution_context(),
+    iterator:iterator()
+) ->
+    {ok, automation:item() | atm_workflow_execution_handler:item(), iterator:iterator()} | stop
 ).
 
 % Prepares expected browse item (as stored and returned when browsing) from corresponding input item
 -type describe_item() :: fun((
     atm_workflow_execution_auth:record(),
-    automation:item(),
+    automation:item() | atm_workflow_execution_handler:item(),
     atm_store:id(),
     Index :: non_neg_integer()
 ) ->
@@ -64,7 +71,7 @@
 % (error item is returned)
 -type randomly_remove_entity_referenced_by_item() :: fun((
     atm_workflow_execution_auth:record(),
-    automation:item(),
+    automation:item() | atm_workflow_execution_handler:item(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}
@@ -91,6 +98,7 @@
     get_input_item_generator_seed_data_spec/0,
     input_item_formatter/0,
     input_item_to_exp_iterated_item/0,
+    iterator_get_next/0,
     randomly_remove_entity_referenced_by_item/0,
     build_content_update_options/0,
     browse_content/0,
@@ -327,10 +335,11 @@ update_content_test_base(#{
     get_input_item_generator_seed_data_spec := get_input_item_generator_seed_data_spec(),
     input_item_formatter := input_item_formatter(),
     input_item_to_exp_iterated_item := input_item_to_exp_iterated_item(),
-    randomly_remove_entity_referenced_by_item := randomly_remove_entity_referenced_by_item()
+    randomly_remove_entity_referenced_by_item := randomly_remove_entity_referenced_by_item(),
+    iterator_get_next => iterator_get_next()
 }) ->
     ok | no_return().
-iterator_test_base(#{
+iterator_test_base(Args = #{
     store_configs := AtmStoreConfigs,
     get_input_item_generator_seed_data_spec := GetInputItemGeneratorSeedDataSpecFun,
     input_item_formatter := InputItemFormatterFun,
@@ -339,6 +348,7 @@ iterator_test_base(#{
 }) ->
     ItemsCount = 10 + rand:uniform(100),
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    IteratorGetNextFun = maps:get(iterator_get_next, Args, fun iterator_get_next/2),
 
     lists:foreach(fun(AtmStoreConfig) ->
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
@@ -368,22 +378,22 @@ iterator_test_base(#{
         {UsedIterators, LastIterator} = lists:mapfoldl(fun(ExpBatch, Iterator) ->
             {ok, _, NewIterator} = ?assertMatch(
                 {ok, ExpBatch, _},
-                ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator))
+                IteratorGetNextFun(AtmWorkflowExecutionEnv, Iterator)
             ),
             {Iterator, NewIterator}
         end, AtmStoreIterator0, ExpBatches),
-        ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, LastIterator))),
+        ?assertEqual(stop, IteratorGetNextFun(AtmWorkflowExecutionEnv, LastIterator)),
 
         % Assert iterators can be reused
         {Index, IteratorToReuse} = lists_utils:random_element(lists_utils:enumerate(UsedIterators)),
         NewLastIterator = lists:foldl(fun(ExpBatch, Iterator) ->
             {ok, _, NewIterator} = ?assertMatch(
                 {ok, ExpBatch, _},
-                ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator))
+                IteratorGetNextFun(AtmWorkflowExecutionEnv, Iterator)
             ),
             NewIterator
         end, IteratorToReuse, lists:nthtail(Index - 1, ExpBatches)),
-        ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, NewLastIterator))),
+        ?assertEqual(stop, IteratorGetNextFun(AtmWorkflowExecutionEnv, NewLastIterator)),
 
         %% Assert all items, even removed, are returned as their resolution is postponed until lambda invocation
         lists:foreach(fun(ExpItem) ->
@@ -395,7 +405,7 @@ iterator_test_base(#{
         })),
         ?assertMatch(
             {ok, ExpStoreContent, _},
-            ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))
+            IteratorGetNextFun(AtmWorkflowExecutionEnv, AtmStoreIterator1)
         )
 
     end, AtmStoreConfigs).
@@ -528,3 +538,8 @@ create_store(AtmWorkflowExecutionAuth, LogLevel, InitialInputContent, AtmStoreSc
         AtmWorkflowExecutionAuth, LogLevel, InitialInputContent, AtmStoreSchema
     ))),
     AtmStoreId.
+
+
+%% @private
+iterator_get_next(AtmWorkflowExecutionEnv, Iterator) ->
+    atm_store_test_utils:iterator_get_next(?PROVIDER_SELECTOR, AtmWorkflowExecutionEnv, Iterator).

@@ -40,7 +40,7 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    make_space_exist/1, new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
+    make_space_exist/1, make_tmp_dir_exist/1, new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
@@ -792,21 +792,30 @@ make_space_exist(SpaceId) ->
             end,
 
             trash:create(SpaceId),
-
-            SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-            TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-            TmpDirDoc = new_doc(TmpDirUuid, ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
-                ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId, true
-            ),
-            {ok, _} = save(TmpDirDoc),
-            case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
-                {ok, _} -> ok;
-                {error, already_exists} -> ok
-            end,
+            make_tmp_dir_exist(SpaceId),
 
             emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
+    end.
+
+
+-spec make_tmp_dir_exist(od_space:id()) -> created | already_exists.
+make_tmp_dir_exist(SpaceId) ->
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
+    TmpDirDoc = new_doc(
+        TmpDirUuid, ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
+        ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId, true
+    ),
+    case datastore_model:create(?CTX, TmpDirDoc) of
+        {ok, _} ->
+            case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
+                {ok, _} -> created;
+                {error, already_exists} -> created
+            end;
+        {error, already_exists} ->
+            already_exists
     end.
 
 
