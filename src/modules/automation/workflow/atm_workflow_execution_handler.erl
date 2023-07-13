@@ -98,7 +98,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
 }) ->
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-    workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+    ok = workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
         id => AtmWorkflowExecutionId,
         workflow_handler => ?MODULE,
         execution_context => AtmWorkflowExecutionEnv,
@@ -107,6 +107,12 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
             true -> {2, current};
             false -> undefined
         end
+    }),
+
+    Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
+    ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
+        description = <<"Scheduled execution.">>,
+        details = #{<<"scheduledLaneRunSelector">> => ?lane_run_selector_json({1, 1})}
     }).
 
 
@@ -156,18 +162,32 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             current_run_num = CurrentRunNum
         }}} ->
             unfreeze_global_stores(AtmWorkflowExecutionDoc),
+            AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
             ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-            workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+            CurrentAtmLaneRunSelector = {CurrentAtmLaneIndex, CurrentRunNum},
+            ok = workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
                 force_clean_execution => true,
-                execution_context => acquire_global_env(AtmWorkflowExecutionDoc),
-                first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
+                execution_context => AtmWorkflowExecutionEnv,
+                first_lane_id => CurrentAtmLaneRunSelector,
                 next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
                     true -> {CurrentAtmLaneIndex + 1, current};
                     false -> undefined
                 end
+            }),
+
+            Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
+            ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
+                selector = {lane_run, AtmLaneRunSelector},
+                description = ?fmt_bin("scheduled manual ~s.", [Type]),
+                details = #{
+                    <<"repeatType">> => Type,
+                    <<"scheduledLaneRunSelector">> => ?lane_run_selector_json(
+                        CurrentAtmLaneRunSelector
+                    )
+                }
             });
         {error, _} = Error ->
             Error
@@ -178,14 +198,26 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     ok | errors:error().
 resume(UserCtx, AtmWorkflowExecutionId) ->
     case atm_lane_execution_status:handle_resume(AtmWorkflowExecutionId) of
-        {ok, AtmWorkflowExecutionDoc} ->
+        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
+            current_lane_index = CurrentAtmLaneIndex,
+            current_run_num = CurrentRunNum
+        }}} ->
             unfreeze_global_stores(AtmWorkflowExecutionDoc),
+            AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
             ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-            workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+            Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
+            ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
+                description = <<"Resuming execution...">>,
+                details = #{<<"scheduledLaneRunSelector">> => ?lane_run_selector_json(
+                    {CurrentAtmLaneIndex, CurrentRunNum}
+                )}
+            }),
+
+            ok = workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
-                execution_context => acquire_global_env(AtmWorkflowExecutionDoc)
+                execution_context => AtmWorkflowExecutionEnv
             });
         {error, _} = Error ->
             Error
@@ -202,18 +234,28 @@ force_continue(UserCtx, AtmWorkflowExecutionId) ->
             lanes_count = AtmLanesCount
         }}} ->
             unfreeze_global_stores(AtmWorkflowExecutionDoc),
+            AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
             ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
+            CurrentAtmLaneRunSelector = {CurrentAtmLaneIndex, CurrentRunNum},
             workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
                 force_clean_execution => true,
-                execution_context => acquire_global_env(AtmWorkflowExecutionDoc),
-                first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
+                execution_context => AtmWorkflowExecutionEnv,
+                first_lane_id => CurrentAtmLaneRunSelector,
                 next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
                     true -> {CurrentAtmLaneIndex + 1, current};
                     false -> undefined
                 end
+            }),
+
+            Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
+            ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
+                description = <<"Scheduled force continuing.">>,  %% TODO desc
+                details = #{<<"scheduledLaneRunSelector">> => ?lane_run_selector_json(
+                    CurrentAtmLaneRunSelector
+                )}
             });
         {error, _} = Error ->
             Error
@@ -249,6 +291,12 @@ restart(AtmWorkflowExecutionId) ->
                 RunningPhase =:= ?ONGOING_PHASE
             ->
                 AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
+
+                Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+                ?atm_workflow_critical(
+                    %% TODO desc
+                    Logger, <<"Failed to cleanly suspend execution before op worker stopped.">>
+                ),
 
                 atm_lane_execution_handler:init_stop(
                     {current, current}, interrupt, AtmWorkflowExecutionCtx
@@ -416,8 +464,11 @@ handle_task_results_processed_for_all_items(
     atm_task_execution:id()
 ) ->
     ok.
-handle_task_execution_stopped(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
-    atm_task_execution_handler:handle_stopped(AtmTaskExecutionId).
+handle_task_execution_stopped(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+    atm_task_execution_handler:handle_stopped(
+        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
+        AtmTaskExecutionId
+    ).
 
 
 -spec report_item_error(
@@ -557,6 +608,16 @@ handle_workflow_abruptly_stopped(
 
 
 %% @private
+-spec get_logger(user_ctx:ctx(), atm_workflow_execution_env:record()) ->
+    atm_workflow_execution_logger:record().
+get_logger(UserCtx, AtmWorkflowExecutionEnv) ->
+    SpaceId = atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionId = atm_workflow_execution_env:get_workflow_execution_id(AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, UserCtx),
+    atm_workflow_execution_env:build_logger(undefined, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv).
+
+
+%% @private
 -spec acquire_global_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
 acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
@@ -608,9 +669,18 @@ infer_progress_data_persistence_policy(#document{value = AtmWorkflowExecution}) 
 finalize_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     finalize_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
-    {ok, StoppedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_stopped(
-        AtmWorkflowExecutionId
-    ),
+    {ok, StoppedAtmWorkflowExecutionDoc = #document{
+        value = #atm_workflow_execution{
+            status = StoppedStatus
+        }
+    }} = atm_workflow_execution_status:handle_stopped(AtmWorkflowExecutionId),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
+        description = <<"Stopped execution.">>,
+        details = #{<<"status">> => StoppedStatus}
+    }),
+
     notify_stopped(StoppedAtmWorkflowExecutionDoc),
     StoppedAtmWorkflowExecutionDoc.
 
@@ -623,8 +693,8 @@ finalize_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     ok.
 finalize_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
-    {ok, AtmWorkflowExecutionDoc} = delete_all_lane_runs_prepared_in_advance(
-        AtmWorkflowExecutionId
+    AtmWorkflowExecutionDoc = delete_all_lane_runs_prepared_in_advance(
+        AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
     ),
     freeze_global_stores(AtmWorkflowExecutionDoc),
 
@@ -648,13 +718,13 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, #document{
         value = AtmWorkflowExecution = #atm_workflow_execution{
             lanes_count = AtmLanesCount,
-            current_lane_index = CurrentAtmLaneIndex
+            current_lane_index = CurrentAtmLaneIndex,
+            current_run_num = CurrentRunNum
         }
     }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
     lists:foreach(fun(AtmLaneIndex) ->
-        % TODO
-        AtmLaneRunSelector = {AtmLaneIndex, current},
+        AtmLaneRunSelector = {AtmLaneIndex, CurrentRunNum},
 
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
@@ -682,9 +752,12 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec delete_all_lane_runs_prepared_in_advance(atm_workflow_execution:id()) ->
-    {ok, atm_workflow_execution:doc()}.
-delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId) ->
+-spec delete_all_lane_runs_prepared_in_advance(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record()
+) ->
+    atm_workflow_execution:doc().
+delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, #document{
         value = AtmWorkflowExecution = #atm_workflow_execution{
             lanes_count = AtmLanesCount,
@@ -707,17 +780,32 @@ delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId) ->
         (_) ->
             ?ERROR_NOT_FOUND
     end,
-    NewAtmWorkflowExecution = lists_utils:foldl_while(fun(AtmLaneIndex, AtmWorkflowExecutionAcc) ->
-        case atm_lane_execution:update(AtmLaneIndex, AtmLaneExecutionDiff, AtmWorkflowExecutionAcc) of
-            {ok, NewAtmWorkflowExecutionAcc} -> {cont, NewAtmWorkflowExecutionAcc};
-            ?ERROR_NOT_FOUND -> {halt, AtmWorkflowExecutionAcc}
-        end
-    end, AtmWorkflowExecution, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),
+    {NewAtmWorkflowExecution, AtmPurgeLaneIndices} = lists_utils:foldl_while(fun
+        (AtmLaneIndex, Acc = {AtmWorkflowExecutionAcc, IndicesAcc}) ->
+            case atm_lane_execution:update(AtmLaneIndex, AtmLaneExecutionDiff, AtmWorkflowExecutionAcc) of
+                {ok, NewAtmWorkflowExecutionAcc} ->
+                    {cont, {NewAtmWorkflowExecutionAcc, [AtmLaneIndex | IndicesAcc]}};
+                ?ERROR_NOT_FOUND ->
+                    {halt, Acc}
+            end
+    end, {AtmWorkflowExecution, []}, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),
 
-    atm_workflow_execution:update(
-        AtmWorkflowExecutionId,
-        fun(_) -> {ok, NewAtmWorkflowExecution} end
-    ).
+    {ok, Doc} = atm_workflow_execution:update(AtmWorkflowExecutionId, fun(_) ->
+        {ok, NewAtmWorkflowExecution}
+    end),
+
+    case AtmPurgeLaneIndices of
+        [] ->
+            ok;
+        _ ->
+            Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+            ?atm_workflow_info(Logger, #atm_workflow_log_schema{
+                description = <<"Deleted lane runs prepared in advance.">>,
+                details = #{<<"laneIndices">> => lists:sort(AtmPurgeLaneIndices)}
+            })
+    end,
+
+    Doc.
 
 
 %% @private
