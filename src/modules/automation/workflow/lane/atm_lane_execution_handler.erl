@@ -666,7 +666,9 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
     unfreeze_iterated_store_in_case_of_global_store(CurrentRun, AtmWorkflowExecutionCtx),
     freeze_exception_store(CurrentRun),
 
-    atm_parallel_box_execution:ensure_all_stopped(AtmParallelBoxExecutions),
+    atm_parallel_box_execution:ensure_all_stopped(
+        AtmParallelBoxExecutions, AtmWorkflowExecutionCtx
+    ),
 
     #document{
         value = NewAtmWorkflowExecution = #atm_workflow_execution{
