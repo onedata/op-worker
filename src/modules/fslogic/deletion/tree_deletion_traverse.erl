@@ -116,10 +116,10 @@ task_started(TaskId, _Pool) ->
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, _Pool) ->
-    {ok, AD} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    case AD of
+    {ok, AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    case AdditionalData of
         #{<<"failed">> := <<"true">>} ->
-            #{<<"user_id">> := UserId, <<"root_guid">> := RootGuid, <<"options">> := EncodedOptions} = AD,
+            #{<<"user_id">> := UserId, <<"root_guid">> := RootGuid, <<"options">> := EncodedOptions} = AdditionalData,
             ?debug("dir deletion job ~p failed, reruning", [TaskId]),
             timer:sleep(timer:seconds(10)),
             ?MODULE:start_internal(file_ctx:new_by_guid(RootGuid), UserId, binary_to_term(EncodedOptions));
@@ -169,8 +169,8 @@ do_master_job(Job = #tree_traverse{
             ?error("Error when listing directory during tree deletion: ~s", [?autoformat([Error, FileUuid])]),
             tree_traverse_progress:delete(TaskId, FileUuid),
             tree_traverse:cancel(?POOL_NAME, TaskId),
-            traverse_task:update_additional_data(traverse_task:get_ctx(), ?POOL_NAME, TaskId, fun(AD) ->
-                {ok, AD#{<<"failed">> => <<"true">>}}
+            traverse_task:update_additional_data(traverse_task:get_ctx(), ?POOL_NAME, TaskId, fun(AdditionalData) ->
+                {ok, AdditionalData#{<<"failed">> => <<"true">>}}
             end),
             {ok, #{}}
     end.
@@ -192,9 +192,9 @@ do_slave_job(#tree_traverse_slave{
 %% @private
 -spec start_internal(file_ctx:ctx(), od_user:id(), tree_traverse:run_options()) -> {ok, id()}.
 start_internal(RootDirCtx, UserId, Options) ->
-    PrevAD = maps:get(additional_data, Options, #{}),
+    PrevAdditionalData = maps:get(additional_data, Options, #{}),
     tree_traverse:run(?POOL_NAME, RootDirCtx, UserId, Options#{
-        additional_data => PrevAD#{<<"options">> => term_to_binary(Options)}
+        additional_data => PrevAdditionalData#{<<"options">> => term_to_binary(Options)}
     }).
 
 

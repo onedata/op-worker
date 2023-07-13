@@ -300,7 +300,7 @@ build_new_jobs_preprocessor_fun(TaskId, FileCtx, TraverseInfo, UserCtx, Relative
 %%% Helper functions
 %%%===================================================================
 
--spec report_error(id(), tree_traverse:job(), Reason :: any(), Stacktrace :: list()) -> ok.
+-spec report_error(id(), tree_traverse:job(), Reason :: any(), Stacktrace :: list() | undefined) -> ok.
 report_error(TaskId, Job, Reason, Stacktrace) ->
     {ArchiveDocs, FileGuid} = job_to_error_info(Job),
     lists:foreach(fun(ArchiveDoc) ->
