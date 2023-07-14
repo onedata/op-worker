@@ -1289,6 +1289,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
+    time_test_utils:set_current_time_seconds(1689168600),
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
         onenv_file_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
@@ -1297,7 +1298,6 @@ get_historical_dir_size_stats_slice_test(Config) ->
                     shares = [#share_spec{}],
                     children = [
                         #file_spec{content = crypto:strong_rand_bytes(8)},
-                        #file_spec{content = crypto:strong_rand_bytes(16)},
                         #dir_spec{}
                     ]
                 },
@@ -1305,6 +1305,16 @@ get_historical_dir_size_stats_slice_test(Config) ->
             ],
             krakow
     ),
+    timer:sleep(timer:seconds(10)),
+    time_test_utils:simulate_seconds_passing(100),
+    onenv_file_test_utils:create_and_sync_file_tree(
+        user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow),
+    timer:sleep(timer:seconds(10)),
+    time_test_utils:simulate_seconds_passing(180),
+    onenv_file_test_utils:create_and_sync_file_tree(
+        user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow),
+
+
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
@@ -1315,54 +1325,87 @@ get_historical_dir_size_stats_slice_test(Config) ->
         (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
         (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
     end,
-    
-    ExpSliceFun = fun(Provider) -> maps:with(maps:keys(LayoutFun(Provider)), #{
-            ?DIR_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 1}]} end, #{}, Metrics),
-            ?REG_FILE_AND_LINK_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 2}]} end, #{}, Metrics),
-            ?SIZE_ON_STORAGE(P1StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),
-            ?SIZE_ON_STORAGE(P2StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 0}]} end, #{}, Metrics),
-            ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
+    ExpTimestampFilter = fun(Data, AllMetrics) ->
+        StartTimestamp = case maps:find(<<"startTimestamp">>, Data) of
+            {ok, Start} -> Start;
+            error -> 1689169900
+        end,
+        StopTimestamp = case maps:find(<<"stopTimestamp">>, Data) of
+            {ok, Stop} -> Stop;
+            error -> 1687380000
+        end,
+        lists:sublist(lists:filter(fun(Metrics) ->
+            Timestamp = maps:get(<<"timestamp">>, Metrics),
+            Timestamp < StartTimestamp andalso Timestamp > StopTimestamp
+        end, AllMetrics), case maps:find(<<"windowLimit">>, Data) of
+            {ok, Limit} -> Limit;
+            error -> 1000
+        end)
+    end,
+    ExpMetricsFun = fun(Data, ExpValues) ->
+        [Last, Middle, First] = ExpValues,
+        lists:foldl(
+            fun(Metric, Acc) -> Acc#{Metric =>
+            case Metric of
+                ?MINUTE_METRIC ->
+                    ExpTimestampFilter(Data, [
+                        #{ <<"timestamp">> => 1689168840, <<"value">> => Last},
+                        #{ <<"timestamp">> => 1689168660, <<"value">> => Middle},
+                        #{ <<"timestamp">> => 1689168600, <<"value">> => First}
+                    ]);
+                ?HOUR_METRIC -> ExpTimestampFilter(Data, [#{ <<"timestamp">> => 1689166800, <<"value">> => Last}]);
+                ?DAY_METRIC -> ExpTimestampFilter(Data, [#{ <<"timestamp">> => 1689120000, <<"value">> => Last}]);
+                ?MONTH_METRIC -> ExpTimestampFilter(Data, [#{ <<"timestamp">> => 1687392000, <<"value">> => Last}])
+            end
+            }
+        end, #{}, Metrics)
+    end,
+    ExpSliceFun = fun(Data) -> maps:with(maps:keys(maps:get(<<"layout">>, Data, #{})), #{
+            ?DIR_COUNT => ExpMetricsFun(Data, [1, 1, 1]),
+            ?REG_FILE_AND_LINK_COUNT =>  ExpMetricsFun(Data, [3, 2, 1]),
+            ?SIZE_ON_STORAGE(P1StorageId) =>  ExpMetricsFun(Data, [32, 24, 8]),
+            ?SIZE_ON_STORAGE(P2StorageId) =>  ExpMetricsFun(Data, [0, 0, 0]),
+            ?TOTAL_SIZE => ExpMetricsFun(Data, [32, 24, 8])
         })
     end,
-    await_file_size_sync(krakow, 24, DirGuid),
-    await_file_size_sync(paris, 24, DirGuid),
+    await_file_size_sync(krakow, 32, DirGuid),
+    await_file_size_sync(paris, 32, DirGuid),
     
     MemRef = api_test_memory:init(),
 
-    ValidateSliceFun = fun(Slice, Provider) ->
-        ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
+    ValidateSliceFun = fun(Slice, Data) ->
+        ResultWithoutMeasurementTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
             lists:map(fun(Map) ->
-                maps:without([<<"timestamp">>, <<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
+                maps:without([<<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
             end, Windows)
         end, Slice),
-        ?assertEqual(ExpSliceFun(Provider), ResultWithoutTimestamps)
+        ?assertEqual(ExpSliceFun(Data), ResultWithoutMeasurementTimestamps)
     end,
     
-    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        Provider = api_test_memory:get(MemRef, current_provider),
+    ValidateGsSuccessfulCallFun = fun(TestCtx, Result) ->
         {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
-        ValidateSliceFun(maps:get(<<"slice">> , ResultData), Provider)
+        ValidateSliceFun(maps:get(<<"slice">> , ResultData), TestCtx#api_test_ctx.data)
     end,
     ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ProviderId = opw_test_rpc:get_provider_id(TestCtx#api_test_ctx.node),
-        Provider = oct_background:to_entity_placeholder(ProviderId),
         ?assertEqual(?HTTP_200_OK, RespCode),
         ResultData = ?assertMatch(#{<<"slice">> := _}, RespBody),
-        ValidateSliceFun(maps:get(<<"slice">> , ResultData), Provider)
+        ValidateSliceFun(maps:get(<<"slice">> , ResultData), TestCtx#api_test_ctx.data)
     end,
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     DataSpecFun = fun(ProviderId) -> #data_spec{
         required = [<<"layout">>],
         optional = [
             <<"mode">>,
+            <<"windowLimit">>,
             <<"startTimestamp">>,
-            <<"windowLimit">>
+            <<"stopTimestamp">>
         ],
         correct_values = #{
             <<"mode">> => [<<"slice">>],
             <<"layout">> => [LayoutFun(ProviderId)],
-            <<"windowLimit">> => [1, 8],
-            <<"startTimestamp">> => [7967656156000] % some time in the future
+            <<"windowLimit">> => [2, 5],
+            <<"startTimestamp">> => [1689166750, 1689166900],
+            <<"stopTimestamp">> => [1687380000, 1689166650]
         },
         bad_values = [
             {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
@@ -1665,11 +1708,17 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
 
+init_per_testcase(get_historical_dir_size_stats_slice_test=Case, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     Config.
 
+end_per_testcase(get_historical_dir_size_stats_slice_test=Case, Config) ->
+    ok = time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, _Config) ->
     ok.

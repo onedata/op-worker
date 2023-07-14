@@ -898,12 +898,14 @@ translate_from_protobuf(#'TimeSeriesLayoutGetRequest'{}) ->
 translate_from_protobuf(#'TimeSeriesSliceGetRequest'{
     layout_as_json = EncodedLayout,
     start_timestamp = StartTimestamp,
-    window_limit = WindowLimit
+    window_limit = WindowLimit,
+    stop_timestamp = StopTimestamp
 }) ->
     #time_series_slice_get_request{
         layout = json_utils:decode(EncodedLayout),
         start_timestamp = StartTimestamp,
-        window_limit = WindowLimit
+        window_limit = WindowLimit,
+        stop_timestamp = StopTimestamp
     };
 translate_from_protobuf(#'ProviderCurrentDirSizeStatsBrowseRequest'{
     stat_names = StatNames
@@ -2110,12 +2112,14 @@ translate_to_protobuf(#time_series_layout_get_request{}) ->
 translate_to_protobuf(#time_series_slice_get_request{
     layout = Layout,
     start_timestamp = StartTimestamp,
-    window_limit = WindowLimit
+    window_limit = WindowLimit,
+    stop_timestamp = StopTimestamp
 }) ->
     {time_series_slice_get_request, #'TimeSeriesSliceGetRequest'{
         layout_as_json = json_utils:encode(Layout),
         start_timestamp = StartTimestamp,
-        window_limit = WindowLimit
+        window_limit = WindowLimit,
+        stop_timestamp = StopTimestamp
     }};
 translate_to_protobuf(#provider_reg_distribution_get_request{}) ->
     {provider_reg_distribution_get_request, #'ProviderRegDistributionGetRequest'{}};
