@@ -21,7 +21,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -64,16 +64,18 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_single_value_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(#atm_store_container_creation_args{
+    store_config = AtmStoreConfig,
+    initial_content = undefined
+}) ->
     #atm_single_value_store_container{config = AtmStoreConfig};
 
-create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
+create(#atm_store_container_creation_args{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    store_config = AtmStoreConfig,
+    initial_content = InitialContent
+}) ->
     ItemDataSpec = AtmStoreConfig#atm_single_value_store_config.item_data_spec,
     atm_value:validate_constraints(AtmWorkflowExecutionAuth, InitialContent, ItemDataSpec),
 
@@ -137,7 +139,7 @@ browse_content(
     #atm_single_value_store_content_browse_result{item = Item}.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> {ok, record()} | no_return().
 update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
@@ -149,9 +151,9 @@ update_content(Record, #atm_store_content_update_req{
         .item_data_spec,
     atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
-    Record#atm_single_value_store_container{
+    {ok, Record#atm_single_value_store_container{
         compressed_item = atm_value:to_store_item(Item, ItemDataSpec)
-    }.
+    }}.
 
 
 -spec delete(record()) -> ok.

@@ -92,6 +92,7 @@ archive_simple_dataset_test(Guid, DatasetId, ArchiveId) ->
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
         archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, ?LARGE_ATTEMPTS),
+        archive_tests_utils:assert_archive_stats(Node, SessionId, SpaceId, DatasetId, ArchiveId, false, ?SMALL_ATTEMPTS),
         {ok, #file_attr{type = Type, size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
         {FileCount, ExpSize} = case Type of
             ?DIRECTORY_TYPE -> {0, 0};

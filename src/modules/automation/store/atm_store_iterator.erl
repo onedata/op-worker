@@ -38,6 +38,9 @@
 -export_type([record/0]).
 
 
+-define(TRACE_ID_BYTES_NUM, 10).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -57,7 +60,7 @@ build(AtmStoreIteratorSpec, AtmStoreContainer) ->
 
 
 -spec get_next(atm_workflow_execution_env:record(), record()) -> 
-    {ok, [automation:item()], record()} | stop.
+    {ok, [atm_workflow_execution_handler:item()], record()} | stop.
 get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     spec = #atm_store_iterator_spec{max_batch_size = Size},
     container_iterator = ContainerIterator
@@ -69,7 +72,7 @@ get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
         stop ->
             stop;
         {ok, Items, NewAtmStoreContainerIterator} ->
-            {ok, Items, AtmStoreIterator#atm_store_iterator{
+            {ok, build_item_executions(Items), AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmStoreContainerIterator
             }}
     end.
@@ -124,7 +127,7 @@ db_decode(#{
     atm_store_container_iterator:record(),
     pos_integer()
 ) ->
-    {ok, [automation:item()], atm_store_container_iterator:record()} | stop.
+    {ok, atm_store_container_iterator:batch(), atm_store_container_iterator:record()} | stop.
 get_next_internal(AtmWorkflowExecutionAuth, AtmStoreContainerIterator, Size) ->
     case atm_store_container_iterator:get_next_batch(
         AtmWorkflowExecutionAuth, Size, AtmStoreContainerIterator
@@ -136,3 +139,17 @@ get_next_internal(AtmWorkflowExecutionAuth, AtmStoreContainerIterator, Size) ->
         {ok, _Items, _NewAtmStoreContainerIterator} = Result ->
             Result
     end.
+
+
+%% @private
+-spec build_item_executions(atm_store_container_iterator:batch()) ->
+    [atm_workflow_execution_handler:item()].
+build_item_executions(Items = [#atm_item_execution{} | _]) ->
+    Items;
+build_item_executions(Items) ->
+    lists:map(fun(Item) ->
+        #atm_item_execution{
+            trace_id = str_utils:rand_hex(?TRACE_ID_BYTES_NUM),
+            value = Item
+        }
+    end, Items).

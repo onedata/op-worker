@@ -185,6 +185,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = private},
             subdomain_delegation = maps:get(<<"subdomainDelegation">>, Result),
             domain = maps:get(<<"domain">>, Result),
             subdomain = maps:get(<<"subdomain">>, Result),
+            version = maps:get(<<"version">>, Result),
             longitude = maps:get(<<"longitude">>, Result),
             latitude = maps:get(<<"latitude">>, Result),
             online = maps:get(<<"online">>, Result),
@@ -201,6 +202,7 @@ translate(#gri{type = od_provider, id = Id, aspect = instance, scope = protected
         value = #od_provider{
             name = maps:get(<<"name">>, Result),
             domain = maps:get(<<"domain">>, Result),
+            version = maps:get(<<"version">>, Result),
             longitude = maps:get(<<"longitude">>, Result),
             latitude = maps:get(<<"latitude">>, Result),
             online = maps:get(<<"online">>, Result)

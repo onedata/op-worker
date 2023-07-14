@@ -45,7 +45,8 @@
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, op_worker:get_release_version()}
+    {4, ?LINE_21_02(<<"2">>)},
+    {5, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -150,7 +151,19 @@ before_cluster_upgrade() ->
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    {ok, 4}.
+    {ok, 4};
+upgrade_cluster(4) ->
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+
+        lists:foreach(fun(SpaceId) ->
+            case file_meta:make_tmp_dir_exist(SpaceId) of
+                created -> ?info("Created tmp dir for space '~s'.", [SpaceId]);
+                already_exists -> ok
+            end
+        end, SpaceIds)
+    end),
+    {ok, 5}.
 
 %%--------------------------------------------------------------------
 %% @doc

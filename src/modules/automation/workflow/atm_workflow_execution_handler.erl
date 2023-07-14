@@ -55,6 +55,8 @@
     handle_workflow_abruptly_stopped/3
 ]).
 
+-type item() :: #atm_item_execution{}.
+-export_type([item/0]).
 
 -define(ATM_WORKFLOW_EXECUTION_ENGINE, <<"atm_workflow_execution_engine">>).
 
@@ -253,11 +255,10 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
         AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
 
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        LogContent = #{
+        ?atm_workflow_critical(Logger, #{
             <<"description">> => <<"OpenFaaS service is not healthy (see error reason).">>,
-            <<"reason">> => errors:to_json(Error)
-        },
-        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
+            <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+        }),
 
         atm_lane_execution_handler:init_stop({current, current}, interrupt, AtmWorkflowExecutionCtx)
     after
@@ -305,7 +306,7 @@ resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector)
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     atm_task_executor:job_batch_id(),
-    [automation:item()]
+    [item()]
 ) ->
     ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_task_for_item(
@@ -322,7 +323,7 @@ run_task_for_item(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
-    [automation:item()],
+    [item()],
     atm_task_executor:job_batch_result()
 ) ->
     ok | error.
@@ -366,10 +367,18 @@ handle_task_results_processed_for_all_items(
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId
 ) ->
-    atm_task_execution_handler:trigger_stream_conclusion(
-        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
-        AtmTaskExecutionId
-    ).
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
+        AtmTaskExecutionId, AtmWorkflowExecutionEnv
+    ),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
+        selector = {task, AtmTaskExecutionId},
+        description = <<"processed all streamed results.">>,
+        referenced_tasks = [AtmTaskExecutionId]
+    }),
+
+    atm_task_execution_handler:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId).
 
 
 -spec handle_task_execution_stopped(
@@ -385,20 +394,20 @@ handle_task_execution_stopped(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv,
 -spec report_item_error(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    automation:item()
+    [item()]
 ) ->
     ok.
 report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
 
-    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update
-    % does not modify store document itself but only referenced infinite log
-    atm_list_store_container:update_content(
+    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as exception
+    % store update does not modify store document itself but only referenced infinite log
+    atm_exception_store_container:update_content(
         atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
         #atm_store_content_update_req{
             workflow_execution_auth = AtmWorkflowExecutionAuth,
             argument = ItemBatch,
-            options = #atm_list_store_content_update_options{function = extend}
+            options = #atm_exception_store_content_update_options{function = extend}
         }
     ),
 
@@ -524,13 +533,15 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     space_id = SpaceId,
     incarnation = AtmWorkflowExecutionIncarnation,
     store_registry = AtmGlobalStoreRegistry,
-    system_audit_log_store_id = AtmWorkflowAuditLogStoreId
+    system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
+    log_level = LogLevel
 }}) ->
     {ok, #atm_store{container = AtmWorkflowAuditLogStoreContainer}} = atm_store_api:get(
         AtmWorkflowAuditLogStoreId
     ),
     Env = atm_workflow_execution_env:build(
-        SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry
+        SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation,
+        LogLevel, AtmGlobalStoreRegistry
     ),
     atm_workflow_execution_env:set_workflow_audit_log_store_container(
         AtmWorkflowAuditLogStoreContainer, Env
@@ -793,22 +804,21 @@ get_root_workflow_execution_ctx(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
 ) ->
     ok.
 log_exception(Logger, throw, {session_acquisition_failed, Error}, _Stacktrace) ->
-    LogContent = #{
+    ?atm_workflow_critical(Logger, #{
         <<"description">> => <<"Failed to acquire user session.">>,
-        <<"reason">> => errors:to_json(Error)
-    },
-    atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
+        <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+    });
 
 log_exception(Logger, throw, Reason, _Stacktrace) ->
-    LogContent = #{
+    ?atm_workflow_critical(Logger, #{
         <<"description">> => <<"Unexpected error occured.">>,
-        <<"reason">> => errors:to_json(Reason)
-    },
-    atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
+        <<"details">> => #{<<"reason">> => errors:to_json(Reason)}
+    });
 
 log_exception(Logger, Type, Reason, Stacktrace) ->
-    LogContent = #{
+    Error = ?examine_exception(Type, Reason, Stacktrace),
+
+    ?atm_workflow_emergency(Logger, #{
         <<"description">> => <<"Unexpected emergency occured.">>,
-        <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
-    },
-    atm_workflow_execution_logger:workflow_emergency(LogContent, Logger).
+        <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+    }).

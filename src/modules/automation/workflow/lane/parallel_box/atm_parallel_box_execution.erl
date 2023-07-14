@@ -36,7 +36,7 @@
 
 -type creation_args() :: #atm_parallel_box_execution_creation_args{}.
 
--type initiate_task_fun() :: fun((atm_task_execution:id()) ->
+-type initiate_task_fun() :: fun((atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ignored |
     {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} |
     no_return()
@@ -76,7 +76,7 @@ create_all(AtmLaneExecutionRunCreationArgs = #atm_lane_execution_run_creation_ar
                 ?examine_exception(Type, Reason, Stacktrace)
             ))
         end
-    end, [], lists_utils:enumerate(AtmParallelBoxSchemas)).
+    end, [], lists:enumerate(1, AtmParallelBoxSchemas)).
 
 
 -spec create(
@@ -116,10 +116,11 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
 
 -spec start_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-start_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    initiate_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
-        {ok, atm_task_execution_handler:start(AtmWorkflowExecutionCtx, AtmTaskExecutionId)}
-    end).
+start_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
+    InitiateFun = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
+        {ok, atm_task_execution_handler:start(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)}
+    end,
+    initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateFun).
 
 
 -spec init_stop_all(
@@ -137,10 +138,9 @@ init_stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
 
 -spec resume_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-resume_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    initiate_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
-        atm_task_execution_handler:resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId)
-    end).
+resume_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
+    InitiateFun = fun atm_task_execution_handler:resume/2,
+    initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateFun).
 
 
 -spec ensure_all_stopped([record()]) -> ok | no_return().
@@ -281,14 +281,14 @@ db_decode(#{
 %%%===================================================================
 
 
--spec initiate_all([record()], initiate_task_fun()) ->
+-spec initiate_all(atm_workflow_execution_ctx:record(), [record()], initiate_task_fun()) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-initiate_all(AtmParallelBoxExecutions, InitiateTaskFun) ->
+initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateTaskFun) ->
     AtmParallelBoxesInitiationResult = atm_parallel_runner:map(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try
-            initiate(AtmParallelBoxExecution, InitiateTaskFun)
+            initiate(AtmWorkflowExecutionCtx0, AtmParallelBoxExecution, InitiateTaskFun)
         catch
             throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
                 throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
@@ -314,14 +314,21 @@ initiate_all(AtmParallelBoxExecutions, InitiateTaskFun) ->
 
 
 %% @private
--spec initiate(record(), initiate_task_fun()) ->
+-spec initiate(atm_workflow_execution_ctx:record(), record(), initiate_task_fun()) ->
     {workflow_engine:parallel_box_spec(), atm_workflow_execution_env:diff()} | no_return().
-initiate(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, InitiateTaskFun) ->
+initiate(
+    AtmWorkflowExecutionCtx0,
+    #atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry},
+    InitiateTaskFun
+) ->
     AtmTaskExecutionsInitiationResult = atm_parallel_runner:map(fun(
         {AtmTaskSchemaId, AtmTaskExecutionId}
     ) ->
         try
-            {AtmTaskExecutionId, InitiateTaskFun(AtmTaskExecutionId)}
+            AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
+                AtmTaskExecutionId, AtmWorkflowExecutionCtx0
+            ),
+            {AtmTaskExecutionId, InitiateTaskFun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)}
         catch
             throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
                 throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);

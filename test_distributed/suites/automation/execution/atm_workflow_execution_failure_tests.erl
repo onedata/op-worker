@@ -231,12 +231,22 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         after_step_hook = atm_workflow_execution_test_utils:build_task_step_hook(#{
-                            <<"task1">> => fun(AtmMockCallCtx = #atm_mock_call_ctx{call_args = [_, _, AtmTaskExecutionId]}) ->
-                                ExpTaskLog = #{
-                                    <<"description">> => <<"Failed to process uncorrelated task results.">>,
-                                    <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
-                                },
-                                ?assert(lists:member(ExpTaskLog, get_audit_log_contents(AtmTaskExecutionId, AtmMockCallCtx)))
+                            <<"task1">> => fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                                call_args = [_, _, AtmTaskExecutionId]
+                            }) ->
+                                ?assert(atm_workflow_execution_test_utils:scan_audit_log(
+                                    ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx, fun
+                                        (#{<<"content">> := #{
+                                            <<"description">> := <<"Failed to process streamed results.">>,
+                                            <<"details">> := #{<<"reason">> := ErrorJson}
+                                        }}) ->
+                                            ExpError = errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED),
+                                            ?assertMatch(ExpError, ErrorJson),
+                                            true;
+                                        (_) ->
+                                            false
+                                    end
+                                ))
                             end
                         }),
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
@@ -279,12 +289,14 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error() ->
         build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
-                <<"itemBatch">> => ItemBatch,
-                <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
-                    ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
-                        IncorrectConst, atm_time_series_measurement_type
-                    )
-                ))
+                <<"details">> => #{
+                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
+                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
+                        ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                            IncorrectConst, atm_time_series_measurement_type
+                        )
+                    ))
+                }
             }
         end
     }).
@@ -305,15 +317,17 @@ fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error() ->
                 }
             }
         ),
-        build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
+        build_task1_audit_log_exp_content_fun = fun([Item | _] = ItemBatch) ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
-                <<"itemBatch">> => ItemBatch,
-                <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
-                    ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
-                        hd(ItemBatch), IteratedItemQuery
-                    )
-                ))
+                <<"details">> => #{
+                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
+                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
+                        ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
+                            Item#atm_item_execution.value, IteratedItemQuery
+                        )
+                    ))
+                }
             }
         end
     }).
@@ -335,12 +349,14 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
         build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
-                <<"itemBatch">> => ItemBatch,
-                <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
-                    ?ECHO_ARG_NAME, ?ERROR_ATM_STORE_CONTENT_NOT_SET(
-                        ?SV_STORE_SCHEMA_ID
-                    )
-                ))
+                <<"details">> => #{
+                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
+                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
+                        ?ECHO_ARG_NAME, ?ERROR_ATM_STORE_CONTENT_NOT_SET(
+                            ?SV_STORE_SCHEMA_ID
+                        )
+                    ))
+                }
             }
         end
     }).
@@ -357,8 +373,10 @@ fail_atm_workflow_execution_due_to_job_timeout() ->
         build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
-                <<"itemBatch">> => ItemBatch,
-                <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
+                <<"details">> => #{
+                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
+                    <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
+                }
             }
         end
     }).
@@ -379,8 +397,10 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
             lists:map(fun(Item) ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
-                    <<"item">> => Item,
-                    <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
+                    <<"details">> => #{
+                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
+                        <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
+                    }
                 }
             end, ItemBatch)
         end
@@ -399,10 +419,12 @@ fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
             lists:map(fun(Item) ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
-                    <<"item">> => Item,
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(
-                        <<"value">>, [<<"schrodinger_cat">>, <<"schrodinger_dog">>]
-                    ))
+                    <<"details">> => #{
+                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
+                        <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(
+                            <<"value">>, [<<"schrodinger_cat">>, <<"schrodinger_dog">>]
+                        ))
+                    }
                 }
             end, ItemBatch)
         end
@@ -421,13 +443,15 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
             lists:map(fun(Item) ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
-                    <<"item">> => Item,
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
-                        <<"value">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
-                            ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE,
-                            atm_time_series_measurement_type
-                        )
-                    ))
+                    <<"details">> => #{
+                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
+                        <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
+                            <<"value">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                                ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE,
+                                atm_time_series_measurement_type
+                            )
+                        ))
+                    }
                 }
             end, ItemBatch)
         end
@@ -446,8 +470,10 @@ fail_atm_workflow_execution_due_to_lambda_item_exception() ->
             lists:map(fun(Item) ->
                 #{
                     <<"description">> => <<"Lambda exception occurred during item processing.">>,
-                    <<"item">> => Item,
-                    <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3_EXCEPTION
+                    <<"details">> => #{
+                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
+                        <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3_EXCEPTION
+                    }
                 }
             end, ItemBatch)
         end
@@ -464,8 +490,10 @@ fail_atm_workflow_execution_due_to_lambda_batch_exception() ->
         build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
-                <<"itemBatch">> => ItemBatch,
-                <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
+                <<"details">> => #{
+                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
+                    <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
+                }
             }
         end
     }).
@@ -479,6 +507,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureTestSpec = #fail_atm_work
 }) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         test_gc = false,
+        log_level = ?ERROR_AUDIT_LOG_SEVERITY_INT,
         workflow_schema_dump_or_draft = AtmWorkflowSchemaDraft,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -659,11 +688,11 @@ check_iterated_items(TestcaseId, {1, 1} = AtmLaneRunSelector, AtmMockCallCtx) ->
         ?ITERATED_STORE_SCHEMA_ID, undefined, AtmMockCallCtx
     ),
     SrcStoreContent = lists:sort(lists:map(fun(#{<<"value">> := Value}) -> Value end, Items)),
+    IteratedItems = lists:sort(atm_workflow_execution_test_utils:get_values_batch(
+        get_all_processed_items(TestcaseId, AtmLaneRunSelector)
+    )),
 
-    ?assertEqual(
-        SrcStoreContent,
-        lists:sort(get_all_processed_items(TestcaseId, AtmLaneRunSelector))
-    );
+    ?assertEqual(SrcStoreContent, IteratedItems);
 
 check_iterated_items(TestcaseId, {AtmLaneSelector, RunNum} = AtmLaneRunSelector, AtmMockCallCtx) ->
     ?assertEqual(
@@ -691,19 +720,21 @@ check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx) ->
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
-    [automation:item()].
+    [atm_workflow_execution_handler:item()].
 get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
     #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_utils:browse_store(
         exception_store, AtmLaneRunSelector, AtmMockCallCtx
     ),
-    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
+    lists:map(fun(#{<<"value">> := #{<<"traceId">> := TraceId, <<"value">> := Value}}) ->
+        #atm_item_execution{trace_id = TraceId, value = Value}
+    end, Items).
 
 
 %% @private
 -spec record_failed_item_batch_for_task1(
     term(),
     atm_lane_execution:lane_run_selector(),
-    [automation:item()]
+    [atm_workflow_execution_handler:item()]
 ) ->
     ok.
 record_failed_item_batch_for_task1(TestcaseId, AtmLaneRunSelector, FailedItemBatch) ->
@@ -713,14 +744,18 @@ record_failed_item_batch_for_task1(TestcaseId, AtmLaneRunSelector, FailedItemBat
 
 %% @private
 -spec get_all_failed_item_batches_for_task1(term(), atm_lane_execution:lane_run_selector()) ->
-    ok.
+    [atm_workflow_execution_handler:item()].
 get_all_failed_item_batches_for_task1(TestcaseId, AtmLaneRunSelector) ->
     Key = {TestcaseId, ?TASK1_SELECTOR(AtmLaneRunSelector), failed_item_batch},
     node_cache:get(Key, []).
 
 
 %% @private
--spec record_items_processed(term(), atm_lane_execution:lane_run_selector(), [automation:item()]) ->
+-spec record_items_processed(
+    term(),
+    atm_lane_execution:lane_run_selector(),
+    [atm_workflow_execution_handler:item()]
+) ->
     ok.
 record_items_processed(TestcaseId, AtmLaneRunSelector, ItemsProcessed) ->
     Key = {TestcaseId, AtmLaneRunSelector, items_processed},
@@ -729,7 +764,7 @@ record_items_processed(TestcaseId, AtmLaneRunSelector, ItemsProcessed) ->
 
 %% @private
 -spec get_all_processed_items(term(), atm_lane_execution:lane_run_selector()) ->
-    [automation:id()].
+    [atm_workflow_execution_handler:item()].
 get_all_processed_items(TestcaseId, AtmLaneRunSelector) ->
     Key = {TestcaseId, AtmLaneRunSelector, items_processed},
     node_cache:get(Key, []).
@@ -739,7 +774,7 @@ get_all_processed_items(TestcaseId, AtmLaneRunSelector) ->
 -spec update_exp_exception_store_content(
     term(),
     atm_lane_execution:lane_run_selector(),
-    [automation:item()]
+    [atm_workflow_execution_handler:item()]
 ) ->
     ok.
 update_exp_exception_store_content(TestcaseId, AtmLaneRunSelector, FailedItemBatch) ->
@@ -749,7 +784,7 @@ update_exp_exception_store_content(TestcaseId, AtmLaneRunSelector, FailedItemBat
 
 %% @private
 -spec get_exp_exception_store_content(term(), atm_lane_execution:lane_run_selector()) ->
-    ok.
+    [atm_workflow_execution_handler:item()].
 get_exp_exception_store_content(TestcaseId, AtmLaneRunSelector) ->
     Key = {TestcaseId, AtmLaneRunSelector, exp_exception_store},
     node_cache:get(Key, []).
@@ -794,6 +829,7 @@ contains_size_measurements(Measurements) ->
 
 
 %% @private
--spec is_size_measurement(automation:item()) -> boolean().
+-spec is_size_measurement(automation:item() | atm_workflow_execution_handler:item()) -> boolean().
 is_size_measurement(#{<<"tsName">> := <<"size">>}) -> true;
-is_size_measurement(#{<<"tsName">> := _}) -> false.
+is_size_measurement(#{<<"tsName">> := _}) -> false;
+is_size_measurement(#atm_item_execution{value = Value}) -> is_size_measurement(Value).

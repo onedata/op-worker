@@ -415,7 +415,7 @@ translate_from_protobuf(#'ListFilesRecursively'{
         optional_attrs = [size | xattrs_to_optional_attrs(Xattrs)],
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
-            start_after => StartAfter,
+            start_after_path => StartAfter,
             prefix => Prefix,
             limit => Limit,
             include_directories => IncludeDirs
@@ -1639,7 +1639,7 @@ translate_to_protobuf(#get_recursive_file_list{
     end,
     {list_files_recursively, #'ListFilesRecursively'{
         token = maps:get(pagination_token, ListingOptions, undefined),
-        start_after = maps:get(start_after, ListingOptions, undefined),
+        start_after = maps:get(start_after_path, ListingOptions, undefined),
         prefix = maps:get(prefix, ListingOptions, undefined),
         limit = maps:get(limit, ListingOptions, undefined),
         include_dirs = maps:get(include_directories , ListingOptions, undefined),

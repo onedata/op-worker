@@ -55,7 +55,7 @@
 }.
 -type listing_opts() :: timestamp_agnostic_listing_opts() | timestamp_aware_listing_opts().
 
--type entry() :: {index(), {ok, automation:item()} | errors:error()}.
+-type entry() :: {index(), {ok, automation:item() | atm_workflow_execution_handler:item()} | errors:error()}.
 -type listing_postprocessor() :: json_infinite_log_model:listing_postprocessor(entry()).
 
 -export_type([
@@ -158,7 +158,7 @@ iterator_start_index() ->
     index(),
     listing_postprocessor()
 ) ->
-    {ok, [automation:item()], index()} | stop.
+    {ok, [automation:item()] | [atm_workflow_execution_handler:item()], index()} | stop.
 iterator_get_next_batch(BatchSize, Id, LastListedIndex, ListingPostprocessor) ->
     {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(Id, #{
         start_from => {index_exclusive, LastListedIndex},

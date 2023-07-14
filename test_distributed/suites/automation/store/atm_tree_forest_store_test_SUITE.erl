@@ -158,23 +158,23 @@ restart_iteration_test(_Config) ->
     {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, 3, 2, atm_file_type),
     
     IteratorsAndResults = check_iterator_listing(
-        krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0, Expected, return_iterators, atm_file_type
+        AtmWorkflowExecutionEnv, AtmSerialIterator0, Expected, return_iterators, atm_file_type
     ),
     
     lists:foreach(fun({Iterator, ExpectedResults}) ->
-        check_iterator_listing(krakow, AtmWorkflowExecutionEnv, Iterator, ExpectedResults, return_iterators, atm_file_type)
+        check_iterator_listing(AtmWorkflowExecutionEnv, Iterator, ExpectedResults, return_iterators, atm_file_type)
     end, IteratorsAndResults).
 
 
 restart_partial_iteration_test(_Config) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, FileList} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
-    {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0))),
-    {ok, _, _} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))),
-    {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))),
+    {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0)),
+    {ok, _, _} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1)),
+    {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1)),
     check_listed_values(Res1, FileList -- Res0, atm_file_type),
-    {ok, Res2, AtmStoreIterator3} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator2))),
+    {ok, Res2, AtmStoreIterator3} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator2)),
     check_listed_values(Res2, FileList -- Res1, atm_file_type),
-    ?assertMatch(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator3))).
+    ?assertMatch(stop, iterator_get_next(AtmWorkflowExecutionEnv, AtmStoreIterator3)).
 
 
 iteration_with_deleted_root(_Config) ->
@@ -187,7 +187,7 @@ iteration_with_deleted_root(_Config) ->
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, User1Session, ?FILE_REF(RootToDelete0)), ?ATTEMPTS),
     ExpectedFiles0 = lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(maps:without([RootToDelete0], FilesMap)))),
     
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedFiles0, return_none, atm_file_type).
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedFiles0, return_none, atm_file_type).
 
 
 iteration_after_restart_with_deleted_root(_Config) ->
@@ -195,18 +195,18 @@ iteration_after_restart_with_deleted_root(_Config) ->
     User1Session = oct_background:get_user_session_id(user1, krakow),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
     [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
     ?assertEqual(ok, lfm_proxy:rm_recursive(Node, User1Session, ?FILE_REF(RootToDelete0))),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, User1Session, ?FILE_REF(RootToDelete0)), ?ATTEMPTS),
     ExpectedAfter = lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(maps:without([RootToDelete0], FilesMap)))),
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedAfter, return_none, atm_file_type).
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedAfter, return_none, atm_file_type).
 
 
 iteration_after_restart_with_new_dirs_root(_Config) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
     [Root1 | _] = maps:fold(
         fun (K, {?DIRECTORY_TYPE, _}, Acc) -> [K | Acc];
             (_K, _, Acc) -> Acc
@@ -223,7 +223,7 @@ iteration_after_restart_with_new_dirs_root(_Config) ->
             []
     end,
     AddedIds = GetIds(AddedObject),
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore ++ AddedIds, return_none, atm_file_type).
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore ++ AddedIds, return_none, atm_file_type).
     
 
 iteration_without_permission(_Config) ->
@@ -233,7 +233,7 @@ iteration_without_permission(_Config) ->
             (_K, _, Acc) -> Acc
         end, [], FilesMap),
     
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, RegFiles, return_none, atm_file_type).
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, RegFiles, return_none, atm_file_type).
 
 
 %%%===================================================================
@@ -332,32 +332,31 @@ build_content_browse_result(Entries, IsLast) ->
 -spec iterate_test_base(pos_integer(), non_neg_integer(), atm_data_type:type()) -> ok.
 iterate_test_base(MaxBatchSize, Depth, Type) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, MaxBatchSize, Depth, Type),
-    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, Expected, return_none, Type).
+    check_iterator_listing(AtmWorkflowExecutionEnv, AtmStoreIterator0, Expected, return_none, Type).
 
 
 -spec check_iterator_listing(
-    oct_background:entity_selector(),
-    atm_workflow_execution_env:record(), 
+    atm_workflow_execution_env:record(),
     atm_store_iterator:record(), 
     [file_id:file_guid()], 
     return_iterators | return_none,
     atm_data_type:type()
 ) -> 
     [{atm_store_iterator:record(), [file_id:file_guid()]}].
-check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, [], _, _Type) ->
-    ?assertEqual(stop, ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
+check_iterator_listing(AtmWorkflowExecutionEnv, Iterator, [], _, _Type) ->
+    ?assertEqual(stop, iterator_get_next(AtmWorkflowExecutionEnv, Iterator)),
     [];
-check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, ExpectedList, ReturnStrategy, Type) ->
+check_iterator_listing(AtmWorkflowExecutionEnv, Iterator, ExpectedList, ReturnStrategy, Type) ->
     % duplication here is deliberate to check reuse of iterator
-    {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
-    ?assertMatch({ok, Res, NewIterator}, ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
+    {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator)),
+    ?assertMatch({ok, Res, NewIterator}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator)),
     ResList = utils:ensure_list(Res),
     NewExpectedList = check_listed_values(ResList, ExpectedList, Type),
     case ReturnStrategy of
         return_iterators ->
-            [{Iterator, ExpectedList}] ++ check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type);
+            [{Iterator, ExpectedList}] ++ check_iterator_listing(AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type);
         _ ->
-            check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type)
+            check_iterator_listing(AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type)
     end.
 
 
@@ -452,17 +451,22 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
         item_data_spec = AtmDataSpec
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
-        AtmWorkflowExecutionAuth, RootsToAdd, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, RootsToAdd, AtmStoreSchema
     ))),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
         max_batch_size = MaxBatchSize
     },
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        SpaceId, WorkflowId, 0, #{AtmStoreDummySchemaId => AtmStoreId}
+        SpaceId, WorkflowId, 0, ?DEBUG_AUDIT_LOG_SEVERITY_INT, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIterator0 = ?rpc(ProviderSelector, atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
+
+
+%% @private
+iterator_get_next(AtmWorkflowExecutionEnv, Iterator) ->
+    atm_store_test_utils:iterator_get_next(?PROVIDER_SELECTOR, AtmWorkflowExecutionEnv, Iterator).
 
 
 %%%===================================================================

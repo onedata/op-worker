@@ -14,6 +14,7 @@
 
 -include("atm_workflow_execution_test.hrl").
 -include("atm/atm_test_schema_drafts.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 -export([
     schedule_atm_workflow_with_no_lanes/0,
@@ -249,5 +250,5 @@ try_to_schedule_workflow_execution(
 
     ?erpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        StoreInitialContents, undefined
+        StoreInitialContents, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined
     )).

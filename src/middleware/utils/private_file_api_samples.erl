@@ -137,7 +137,8 @@ download_directory_endpoint(FileId) ->
         description = <<"Returns a TAR archive (binary stream) with directory contents.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s/content", [FileId]),
-        swagger_operation_id = <<"download_file_content">>
+        swagger_operation_id = <<"download_file_content">>,
+        follow_redirects = true
     }.
 
 

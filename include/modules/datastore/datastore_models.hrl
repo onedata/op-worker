@@ -157,6 +157,7 @@
     subdomain_delegation = false :: undefined | boolean(),
     domain :: binary(),
     subdomain = undefined :: undefined |  binary(),
+    version :: onedata:release_version(),
     latitude = 0.0 :: float(),
     longitude = 0.0 :: float(),
     online = false :: boolean(),
@@ -1023,7 +1024,6 @@
     % Information needed to restart directory listing
     tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token(),
-    listing_errors_handling_policy :: tree_traverse:listing_errors_handling_policy(),
     % Traverse task specific info
     child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
@@ -1186,6 +1186,8 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
+
+    log_level :: audit_log:entry_severity_int(),
 
     callback :: undefined | http_client:url(),
 

@@ -304,6 +304,7 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
     json_utils:json_map().
 prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
     workflow_execution_id = AtmWorkflowExecutionId,
+    log_level = LogLevel,
     job_batch_id = AtmJobBatchId,
     config = Config,
     args_batch = ArgsBatch
@@ -318,6 +319,7 @@ prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
             <<"oneproviderDomain">> => oneprovider:get_domain(),
             <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx),
             <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
+            <<"logLevel">> => audit_log:severity_from_int(LogLevel),
             <<"config">> => Config
         },
         <<"argsBatch">> => ArgsBatch

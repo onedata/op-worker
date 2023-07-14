@@ -37,7 +37,8 @@
     browse_by_index_test/1,
     browse_by_offset_test/1,
     browse_by_timestamp_test/1,
-    expiration_test/1
+    expiration_test/1,
+    logging_level_test/1
 ]).
 
 groups() -> [
@@ -50,7 +51,8 @@ groups() -> [
     ]},
     {audit_log_specific_tests, [sequential], [
         browse_by_timestamp_test,
-        expiration_test
+        expiration_test,
+        logging_level_test
     ]}
 ].
 
@@ -133,7 +135,7 @@ browse_by_timestamp_test(_Config) ->
         log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
     ))),
 
 %%    ItemsNum = rand:uniform(1000),  @TODO VFS-10429
@@ -198,7 +200,7 @@ expiration_test(_Config) ->
         log_content_data_spec = #atm_object_data_spec{}
     }),
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
     ))),
 
     CallBrowseContent = fun() ->
@@ -214,7 +216,7 @@ expiration_test(_Config) ->
     ))),
     ?assertMatch(#atm_audit_log_store_content_browse_result{}, CallBrowseContent()),
     % simulate expiration of the audit log
-    {ok, #atm_store{container = {_, _, BackendId}}} = ?rpc(atm_store_api:get(AtmStoreId)),
+    {ok, #atm_store{container = {_, _, _, BackendId}}} = ?rpc(atm_store_api:get(AtmStoreId)),
     ?rpc(audit_log:delete(BackendId)),
     ?assertEqual(?ERROR_NOT_FOUND, CallBrowseContent()),
     % any append should cause log recreation
@@ -222,6 +224,67 @@ expiration_test(_Config) ->
         AtmWorkflowExecutionAuth, #{<<"value">> => ?RAND_STR()}, build_content_update_options(append), AtmStoreId
     ))),
     ?assertMatch(#atm_audit_log_store_content_browse_result{}, CallBrowseContent()).
+
+
+logging_level_test(_Config) ->
+    ok = time_test_utils:set_current_time_millis(123),
+    Timestamp = time_test_utils:get_frozen_time_millis(),
+
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
+        ?PROVIDER_SELECTOR, user1, space_krk
+    ),
+
+    LogLevel = audit_log:severity_to_int(?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)),
+
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
+        log_content_data_spec = #atm_object_data_spec{}
+    }),
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+        AtmWorkflowExecutionAuth, LogLevel, undefined, AtmStoreSchema
+    ))),
+
+    ItemsNum = rand:uniform(100),
+
+    {ItemsToAdd, ExpEntries} = lists:mapfoldl(fun(Index, Acc) ->
+        LogContent = #{<<"value">> => Index},
+        ItemToAdd = case rand:uniform(4) of
+            1 -> LogContent;
+            2 -> #{<<"content">> => LogContent, <<"severity">> => ?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)};
+            3 -> #{<<"content">> => LogContent};
+            4 -> LogContent#{<<"severity">> => ?RAND_ELEMENT(?AUDIT_LOG_SEVERITY_LEVELS)}
+        end,
+        LogSeverity = maps:get(<<"severity">>, ItemToAdd, ?INFO_AUDIT_LOG_SEVERITY),
+        case audit_log:severity_to_int(LogSeverity) =< LogLevel of
+            true ->
+                ExpAddedItem = #{
+                    <<"content">> => LogContent,
+                    <<"timestamp">> => Timestamp,
+                    <<"severity">> => LogSeverity,
+                    <<"source">> => ?USER_AUDIT_LOG_ENTRY_SOURCE
+                },
+                {ItemToAdd, Acc ++ [{integer_to_binary(length(Acc)), {ok, ExpAddedItem}}]};
+            false ->
+                {ItemToAdd, Acc}
+        end
+    end, [], lists:seq(1, ItemsNum)),
+
+    ContentUpdateOpts = build_content_update_options(extend),
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, ItemsToAdd, ContentUpdateOpts, AtmStoreId
+    ))),
+    ExpContentBrowseResult = build_content_browse_result(ExpEntries, true),
+
+    BrowseOpts = build_content_browse_options(#{
+        <<"timestamp">> => Timestamp,
+        <<"limit">> => ItemsNum
+    }),
+    BrowseFun = fun() ->
+        ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
+    end,
+    case ExpEntries of
+        [] -> ?assertThrow(?ERROR_NOT_FOUND, BrowseFun());
+        _ -> ?assertEqual(ExpContentBrowseResult, BrowseFun())
+    end.
 
 
 %===================================================================

@@ -93,7 +93,7 @@ iterator_test(_Config) ->
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
         AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+            AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
         ))),
         AtmStoreIteratorSpec = #atm_store_iterator_spec{
             store_schema_id = AtmStoreSchema#atm_store_schema.id,
@@ -103,6 +103,7 @@ iterator_test(_Config) ->
             atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
             atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
             0,
+            ?DEBUG_AUDIT_LOG_SEVERITY_INT,
             #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
         ),
 
@@ -110,19 +111,19 @@ iterator_test(_Config) ->
         ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0))),
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
-        FullyExpandedItem = compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+        FullyExpandedItem = to_iterated_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
         set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId),
 
         AtmStoreIterator1 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
         {ok, _, AtmStoreIterator2} = ?assertMatch(
-            {ok, [FullyExpandedItem], _},
+            {ok, [#atm_item_execution{value = FullyExpandedItem}], _},
             ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))
         ),
         ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator2))),
 
         %% Assert previous iterators can be reused
         ?assertMatch(
-            {ok, [FullyExpandedItem], _},
+            {ok, [#atm_item_execution{value = FullyExpandedItem}], _},
             ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))
         )
 
@@ -169,13 +170,13 @@ get_item_data_spec(#atm_single_value_store_config{item_data_spec = ItemDataSpec}
 
 
 %% @private
--spec compress_and_expand_data(
+-spec to_iterated_item(
     atm_workflow_execution_auth:record(),
     automation:item(),
     atm_store:id()
 ) ->
     automation:item().
-compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+to_iterated_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
     atm_store_test_utils:to_iterated_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).

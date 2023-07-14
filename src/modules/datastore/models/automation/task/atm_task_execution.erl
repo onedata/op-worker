@@ -116,9 +116,11 @@ get_record_struct(1) ->
         {argument_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_argument_spec
         }}]},
+        %% FIX below field name mismatch (see record) on next model upgrade
         {job_result_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_result_spec
         }}]},
+        %% FIX below field name mismatch (see record) on next model upgrade
         {supplementary_result_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_result_spec
         }}]},

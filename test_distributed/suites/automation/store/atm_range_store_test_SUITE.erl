@@ -134,7 +134,7 @@ iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
     AtmStoreSchemaId = AtmStoreSchema#atm_store_schema.id,
 
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, AtmRangeStoreInitialValue, AtmStoreSchema
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, AtmRangeStoreInitialValue, AtmStoreSchema
     ))),
     AtmWorkflowExecutionEnv = build_workflow_execution_env(
         AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStoreId
@@ -165,6 +165,7 @@ reuse_iterator_test(_Config) ->
 
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth,
+        ?DEBUG_AUDIT_LOG_SEVERITY_INT,
         #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
         AtmStoreSchema
     ))),
@@ -176,20 +177,20 @@ reuse_iterator_test(_Config) ->
         max_batch_size = 1
     })),
 
-    {ok, _, Iterator1} = ?assertMatch({ok, [2], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator0))),
-    {ok, _, Iterator2} = ?assertMatch({ok, [5], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator1))),
-    {ok, _, Iterator3} = ?assertMatch({ok, [8], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator2))),
-    {ok, _, Iterator4} = ?assertMatch({ok, [11], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator3))),
-    {ok, _, Iterator5} = ?assertMatch({ok, [14], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator4))),
-    ?assertMatch(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator5))),
+    {ok, _, Iterator1} = ?assertMatch({ok, [2], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator0)),
+    {ok, _, Iterator2} = ?assertMatch({ok, [5], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator1)),
+    {ok, _, Iterator3} = ?assertMatch({ok, [8], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator2)),
+    {ok, _, Iterator4} = ?assertMatch({ok, [11], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator3)),
+    {ok, _, Iterator5} = ?assertMatch({ok, [14], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator4)),
+    ?assertMatch(stop, iterator_get_next(AtmWorkflowExecutionEnv, Iterator5)),
 
-    ?assertMatch({ok, [2], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator0))),
+    ?assertMatch({ok, [2], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator0)),
 
-    {ok, _, Iterator7} = ?assertMatch({ok, [11], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator3))),
-    ?assertMatch({ok, [14], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator7))),
+    {ok, _, Iterator7} = ?assertMatch({ok, [11], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator3)),
+    ?assertMatch({ok, [14], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator7)),
 
-    {ok, _, Iterator9} = ?assertMatch({ok, [5], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator1))),
-    ?assertMatch({ok, [8], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator9))).
+    {ok, _, Iterator9} = ?assertMatch({ok, [5], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator1)),
+    ?assertMatch({ok, [8], _}, iterator_get_next(AtmWorkflowExecutionEnv, Iterator9)).
 
 
 %===================================================================
@@ -214,6 +215,7 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStor
         atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
         0,
+        ?DEBUG_AUDIT_LOG_SEVERITY_INT,
         #{AtmStoreSchemaId => AtmStoreId}
     ).
 
@@ -259,14 +261,20 @@ get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
 ) ->
     ok | no_return().
 assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator, []) ->
-    ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
+    ?assertEqual(stop, iterator_get_next(AtmWorkflowExecutionEnv, Iterator)),
     ok;
 assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator0, [ExpBatch | RestBatches]) ->
     {ok, _, Iterator1} = ?assertMatch(
         {ok, ExpBatch, _},
-        ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator0))
+        iterator_get_next(AtmWorkflowExecutionEnv, Iterator0)
     ),
     assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator1, RestBatches).
+
+
+%% @private
+iterator_get_next(AtmWorkflowExecutionEnv, Iterator) ->
+    atm_store_test_utils:iterator_get_next(?PROVIDER_SELECTOR, AtmWorkflowExecutionEnv, Iterator).
+
 
 
 %===================================================================

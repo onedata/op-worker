@@ -20,7 +20,7 @@
 
 %% atm_store_container callbacks
 -export([
-    create/3,
+    create/1,
     copy/1,
     get_config/1,
 
@@ -66,19 +66,21 @@
 %%%===================================================================
 
 
--spec create(
-    atm_workflow_execution_auth:record(),
-    atm_range_store_config:record(),
-    initial_content()
-) ->
-    record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+-spec create(atm_store_container:creation_args()) -> record() | no_return().
+create(#atm_store_container_creation_args{
+    store_config = AtmStoreConfig,
+    initial_content = undefined
+}) ->
     #atm_range_store_container{
         config = AtmStoreConfig,
         range = undefined
     };
 
-create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
+create(#atm_store_container_creation_args{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    store_config = AtmStoreConfig,
+    initial_content = InitialContent
+}) ->
     atm_value:validate_constraints(AtmWorkflowExecutionAuth, InitialContent, ?RANGE_DATA_SPEC),
 
     #atm_range_store_container{
@@ -133,14 +135,16 @@ browse_content(
     #atm_range_store_content_browse_result{range = RangeJson}.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> {ok, record()} | no_return().
 update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
     options = #atm_range_store_content_update_options{}
 }) ->
     atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ?RANGE_DATA_SPEC),
-    Record#atm_range_store_container{range = atm_value:to_store_item(Item, ?RANGE_DATA_SPEC)}.
+    {ok, Record#atm_range_store_container{
+        range = atm_value:to_store_item(Item, ?RANGE_DATA_SPEC)
+    }}.
 
 
 -spec delete(record()) -> ok.

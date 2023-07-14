@@ -552,6 +552,7 @@ end).
     admin_email = ?PROVIDER_ADMIN_EMAIL(__Provider),
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
+    version = <<"21.02.2">>,
     online = ?PROVIDER_ONLINE(__Provider),
     storages = __Storages,
     eff_spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
@@ -561,6 +562,7 @@ end).
 -define(PROVIDER_PROTECTED_DATA_MATCHER(__Provider), #document{key = __Provider, value = #od_provider{
     name = ?PROVIDER_NAME(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
+    version = <<"21.02.2">>,
     online = ?PROVIDER_ONLINE(__Provider),
     eff_spaces = #{},
     eff_users = [],
@@ -728,6 +730,7 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = protected}),
     <<"name">> => ?PROVIDER_NAME(__ProviderId),
     <<"domain">> => ?PROVIDER_DOMAIN(__ProviderId),
+    <<"version">> => <<"21.02.2">>,
     <<"online">> => ?PROVIDER_ONLINE(__ProviderId),
     <<"latitude">> => ?PROVIDER_LATITUDE(__ProviderId),
     <<"longitude">> => ?PROVIDER_LONGITUDE(__ProviderId)

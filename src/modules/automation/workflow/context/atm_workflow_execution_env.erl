@@ -26,7 +26,7 @@
 
 %% API
 -export([
-    build/3, build/4,
+    build/4, build/5,
     add_global_store_mapping/3,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
@@ -46,6 +46,8 @@
     get_task_time_series_store_id/2,
 
     acquire_auth/1,
+
+    get_log_level_int/1,
     build_logger/3
 ]).
 
@@ -55,6 +57,8 @@
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_incarnation :: atm_workflow_execution:incarnation(),
+
+    log_level :: audit_log:entry_severity_int(),
 
     % globally accessible stores
     global_store_registry :: atm_workflow_execution:store_registry(),
@@ -77,24 +81,37 @@
 %%%===================================================================
 
 
--spec build(od_space:id(), atm_workflow_execution:id(), atm_workflow_execution:incarnation()) ->
+-spec build(
+    od_space:id(),
+    atm_workflow_execution:id(),
+    atm_workflow_execution:incarnation(),
+    audit_log:entry_severity_int()
+) ->
     record().
-build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation) ->
-    build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, #{}).
+build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, LogLevel) ->
+    build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, LogLevel, #{}).
 
 
 -spec build(
     od_space:id(),
     atm_workflow_execution:id(),
     atm_workflow_execution:incarnation(),
+    audit_log:entry_severity_int(),
     atm_workflow_execution:store_registry()
 ) ->
     record().
-build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry) ->
+build(
+    SpaceId,
+    AtmWorkflowExecutionId,
+    AtmWorkflowExecutionIncarnation,
+    LogLevel,
+    AtmGlobalStoreRegistry
+) ->
     #atm_workflow_execution_env{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_execution_incarnation = AtmWorkflowExecutionIncarnation,
+        log_level = LogLevel,
         global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_store_container = undefined,
         lane_run_exception_store_container = undefined,
@@ -232,6 +249,11 @@ acquire_auth(#atm_workflow_execution_env{
     atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, CreatorUserCtx).
 
 
+-spec get_log_level_int(record()) -> audit_log:entry_severity_int().
+get_log_level_int(#atm_workflow_execution_env{log_level = LogLevel}) ->
+    LogLevel.
+
+
 -spec build_logger(
     undefined | atm_task_execution:id(),
     atm_workflow_execution_auth:record(),
@@ -239,11 +261,13 @@ acquire_auth(#atm_workflow_execution_env{
 ) ->
     atm_workflow_execution_logger:record() | no_return().
 build_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_execution_env{
+    log_level = LogLevel,
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
     task_audit_logs_registry = AtmTaskAuditLogsRegistry
 }) ->
     atm_workflow_execution_logger:build(
         AtmWorkflowExecutionAuth,
+        LogLevel,
         maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined),
         AtmWorkflowAuditLogStoreContainer
     ).
