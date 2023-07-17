@@ -97,6 +97,9 @@ all() -> [
 
 -define(BLOCK(__OFFSET, __SIZE), #file_block{offset = __OFFSET, size = __SIZE}).
 -define(ATTEMPTS, 30).
+-define(NEWEST_TIMESTAMP, 1689169900).
+-define(OLDEST_TIMESTAMP, 1687380000).
+-define(MAX_WINDOW_LIMIT, 1000).
 
 
 %%%===================================================================
@@ -1325,27 +1328,18 @@ get_historical_dir_size_stats_slice_test(Config) ->
         (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
         (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
     end,
-    ExpTimestampFilter = fun(Data, AllMetrics) ->
-        StartTimestamp = case maps:find(<<"startTimestamp">>, Data) of
-            {ok, Start} -> Start;
-            error -> 1689169900
-        end,
-        StopTimestamp = case maps:find(<<"stopTimestamp">>, Data) of
-            {ok, Stop} -> Stop;
-            error -> 1687380000
-        end,
-        lists:sublist(lists:filter(fun(Metrics) ->
-            Timestamp = maps:get(<<"timestamp">>, Metrics),
+    ExpTimestampFilter = fun(Data, Windows) ->
+        StartTimestamp = maps:get(<<"startTimestamp">>, Data, ?NEWEST_TIMESTAMP),
+        StopTimestamp = maps:get(<<"stopTimestamp">>, Data, ?OLDEST_TIMESTAMP),
+        lists:sublist(lists:filter(fun(Window) ->
+            Timestamp = maps:get(<<"timestamp">>, Window),
             Timestamp < StartTimestamp andalso Timestamp > StopTimestamp
-        end, AllMetrics), case maps:find(<<"windowLimit">>, Data) of
-            {ok, Limit} -> Limit;
-            error -> 1000
-        end)
+        end, Windows), maps:get(<<"windowLimit">>, Data, ?MAX_WINDOW_LIMIT))
     end,
     ExpMetricsFun = fun(Data, ExpValues) ->
         [Last, Middle, First] = ExpValues,
-        lists:foldl(
-            fun(Metric, Acc) -> Acc#{Metric =>
+        lists:foldl(fun(Metric, Acc) ->
+            Acc#{Metric =>
             case Metric of
                 ?MINUTE_METRIC ->
                     ExpTimestampFilter(Data, [
