@@ -14,6 +14,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+
 -define(DATASTORE_MODELS, #{
     file_meta => 12,
     file_location => 6,
@@ -31,26 +32,6 @@
     archive_recall_details => 1
 }).
 
-get_model_ctx(qos_entry_audit_log) ->
-    json_infinite_log_model:get_ctx();
-get_model_ctx(Model) ->
-    case erlang:function_exported(Model, get_ctx, 0) of
-        true ->
-            Model:get_ctx();
-        false ->
-                #{}
-    end.
-
-is_sync_enabled(#{sync_enabled := true}) -> true;
-is_sync_enabled(_) -> false.
-
-get_model_version(Model) ->
-    try
-        Model:get_record_version()
-    catch
-        error:undef ->
-            1
-    end.
 
 datastore_model_version_verification_test_() ->
     ActualModelVersions = lists:filtermap(fun(Model) ->
@@ -67,3 +48,26 @@ datastore_model_version_verification_test_() ->
         ?_assertEqual({Model, Version}, {Model, maps:get(Model, ?DATASTORE_MODELS)})
     end, ActualModelVersions).
 
+
+get_model_ctx(qos_entry_audit_log) ->
+    json_infinite_log_model:get_ctx();
+get_model_ctx(Model) ->
+    case erlang:function_exported(Model, get_ctx, 0) of
+        true ->
+            Model:get_ctx();
+        false ->
+            #{}
+    end.
+
+
+is_sync_enabled(#{sync_enabled := true}) -> true;
+is_sync_enabled(_) -> false.
+
+
+get_model_version(Model) ->
+    try
+        Model:get_record_version()
+    catch
+        error:undef ->
+            1
+    end.
