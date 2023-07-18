@@ -38,32 +38,32 @@ get_model_ctx(Model) ->
         true ->
             Model:get_ctx();
         false ->
-                false
+                #{}
     end.
 
-get_model_version(false, Model) ->
-    false;
-get_model_version(Ctx, Model) ->
-    case maps:is_key(sync_enabled, Ctx) of
-        true ->
-            Version = try
-                Model:get_record_version()
-            catch
-                error:undef ->
-                    1
-            end,
-            {true, {Model, Version}};
-        false ->
-            false
+is_sync_enabled(#{sync_enabled := true}) -> true;
+is_sync_enabled(_) -> false.
+
+get_model_version(Model) ->
+    try
+        Model:get_record_version()
+    catch
+        error:undef ->
+            1
     end.
 
 datastore_model_version_verification_test_() ->
     ActualModelVersions = lists:filtermap(fun(Model) ->
         Ctx = get_model_ctx(Model),
-        get_model_version(Ctx, Model)
+        case is_sync_enabled(Ctx) of
+            true -> {true, {Model, get_model_version(Model)}};
+            false -> false
+        end
     end, datastore_config_plugin:get_models()),
+
     ?assertEqual(lists:sort(maps:keys(maps:from_list(ActualModelVersions))), lists:sort(maps:keys(?DATASTORE_MODELS))),
+
     lists:map(fun({Model, Version}) ->
-        ?_assertEqual(Version, maps:get(Model, ?DATASTORE_MODELS))
+        ?_assertEqual({Model, Version}, {Model, maps:get(Model, ?DATASTORE_MODELS)})
     end, ActualModelVersions).
 
