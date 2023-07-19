@@ -32,15 +32,17 @@
 
 
 -type batch_size() :: pos_integer().
+-type batch() :: [automation:item()] | [atm_workflow_execution_handler:item()].
 
 -type record() ::
     atm_audit_log_store_container_iterator:record() |
+    atm_exception_store_container_iterator:record() |
     atm_list_store_container_iterator:record() |
     atm_range_store_container_iterator:record() |
     atm_single_value_store_container_iterator:record() |
     atm_tree_forest_store_container_iterator:record().
 
--export_type([batch_size/0, record/0]).
+-export_type([batch_size/0, batch/0, record/0]).
 
 
 %%%===================================================================
@@ -49,7 +51,7 @@
 
 
 -callback get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record()) ->
-    {ok, [automation:item()], record()} | stop.
+    {ok, batch(), record()} | stop.
 
 
 %%%===================================================================
@@ -58,7 +60,7 @@
 
 
 -spec get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record()) ->
-    {ok, [automation:item()], record()} | stop.
+    {ok, batch(), record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator) ->
     Module = utils:record_type(AtmStoreContainerIterator),
     Module:get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator).

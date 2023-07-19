@@ -53,8 +53,6 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_store{
         <<"initialContent">> => utils:undefined_to_null(InitialContent),
         <<"frozen">> => Frozen,
 
-        <<"type">> => automation:store_type_to_json(AtmStoreType),
-        <<"config">> => atm_store_config:encode(
-            AtmStoreConfig, AtmStoreType, fun jsonable_record:to_json/2
-        )
+        <<"type">> => atm_store:type_to_json(AtmStoreType),
+        <<"config">> => atm_store:config_to_json(AtmStoreConfig)
     }.

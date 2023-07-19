@@ -293,7 +293,8 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
                     run_task_for_item = #atm_step_mock_spec{
                         % Delay execution of last batch to ensure it happens after execution is paused
                         strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, ItemBatch]}) ->
-                            case lists:member(ItemCount, ItemBatch) of
+                            Values = atm_workflow_execution_test_utils:get_values_batch(ItemBatch),
+                            case lists:member(ItemCount, Values) of
                                 true -> {passthrough_with_delay, timer:seconds(2)};
                                 false -> passthrough
                             end

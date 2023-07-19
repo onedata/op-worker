@@ -169,7 +169,7 @@ storage_locations_to_json(StorageLocations) ->
                 {error, _} = Error ->
                     #{
                         <<"success">> => false,
-                        <<"locationsPerStorage">> => errors:to_json(Error)
+                        <<"error">> => errors:to_json(Error)
                     };
                 _ ->
                     #{

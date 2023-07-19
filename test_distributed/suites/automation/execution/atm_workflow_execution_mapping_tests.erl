@@ -772,10 +772,13 @@ assert_exp_target_store_content(audit_log, SrcListStoreContent, #{
     <<"logEntries">> := Logs,
     <<"isLast">> := true
 }) ->
-    LogContents = lists:sort(lists:map(
-        fun(#{<<"content">> := LogContent}) -> LogContent end,
-        Logs
-    )),
+    % Filter out system logs and check only workflow generated ones
+    LogContents = lists:sort(lists:filtermap(fun
+        (#{<<"source">> := <<"user">>, <<"content">> := LogContent}) ->
+            {true, LogContent};
+        (_) ->
+            false
+    end, Logs)),
     ?assertEqual(lists:sort(SrcListStoreContent), LogContents);
 
 assert_exp_target_store_content(list, SrcListStoreContent, #{

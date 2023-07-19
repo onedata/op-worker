@@ -208,7 +208,7 @@ cancel_archivisation(SpaceDirCtx, ArchiveId, PreservationPolicy, UserCtx) ->
                 false -> assert_has_eff_privileges(
                     SpaceDirCtx, UserCtx, [?SPACE_MANAGE_ARCHIVES])
             end,
-            archive_api:cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
+            archive_api:cancel_archivisation(ArchiveDoc, PreservationPolicy);
         ?ERROR_NOT_FOUND ->
             ok;
         {error, _} = Error ->

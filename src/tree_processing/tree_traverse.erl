@@ -189,7 +189,10 @@ run(Pool, FileCtx, UserId, Opts) ->
     ChildrenMasterJobsMode = maps:get(children_master_jobs_mode, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, #{}),
-    TraverseInfo2 = TraverseInfo#{pool => Pool},
+    TraverseInfo2 = TraverseInfo#{
+        pool => Pool,
+        listing_errors_handling_policy => maps:get(listing_errors_handling_policy, Opts, propagate)
+    },
     SymlinksResolutionPolicy = maps:get(symlink_resolution_policy, Opts, preserve),
     {Filename, FileCtx2} = file_ctx:get_aliased_name(FileCtx, undefined),
     InitialRelativePath = maps:get(initial_relative_path, Opts, Filename),
@@ -217,7 +220,6 @@ run(Pool, FileCtx, UserId, Opts) ->
         file_ctx = FileCtx3,
         user_id = UserId,
         tune_for_large_continuous_listing = maps:get(tune_for_large_continuous_listing, Opts, true),
-        listing_errors_handling_policy = maps:get(listing_errors_handling_policy, Opts, propagate),
         pagination_token = undefined,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -416,8 +418,9 @@ do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, 
 do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
     #tree_traverse{
         children_master_jobs_mode = ChildrenMasterJobsMode,
-        listing_errors_handling_policy = ListingErrorsHandlingPolicy
+        traverse_info = TraverseInfo
     } = Job,
+    ListingErrorsHandlingPolicy = maps:get(listing_errors_handling_policy, TraverseInfo, propagate),
     case list_children(Job, TaskId) of
         {ok, {ChildrenCtxs, ListingPaginationToken, FileCtx3}} ->
             UpdatedJob = Job#tree_traverse{file_ctx = FileCtx3, pagination_token = ListingPaginationToken},
@@ -474,8 +477,9 @@ list_children(#tree_traverse{
     pagination_token = PaginationToken,
     tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     batch_size = BatchSize,
-    listing_errors_handling_policy = ListingErrorsHandlingPolicy
+    traverse_info = TraverseInfo
 } = Job, TaskId) ->
+    ListingErrorsHandlingPolicy = maps:get(listing_errors_handling_policy, TraverseInfo, propagate),
     BaseListingOpts = case PaginationToken of
         undefined -> #{tune_for_large_continuous_listing => TuneForLargeContinuousListing};
         _ -> #{pagination_token => PaginationToken}

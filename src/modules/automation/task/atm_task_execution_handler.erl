@@ -34,6 +34,19 @@
 ]).
 
 
+-define(LOG_TERM_SIZE_LIMIT, 1000).
+
+-define(workflow_log(__DESCRIPTION, __ATM_TASK_EXECUTION_ID),
+    ?workflow_log(__DESCRIPTION, undefined, __ATM_TASK_EXECUTION_ID)
+).
+-define(workflow_log(__DESCRIPTION, __DETAILS, __ATM_TASK_EXECUTION_ID), #atm_workflow_log_schema{
+    selector = {task, __ATM_TASK_EXECUTION_ID},
+    description = __DESCRIPTION,
+    details = __DETAILS,
+    referenced_tasks = [__ATM_TASK_EXECUTION_ID]
+}).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -46,7 +59,15 @@
     {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
 start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
-    initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
+    Result = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_info(Logger, <<"Task started.">>),
+
+    AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
+    ?atm_workflow_info(Logger, ?workflow_log(<<"started.">>, AtmTaskExecutionId)),
+
+    Result.
 
 
 -spec init_stop(
@@ -80,15 +101,23 @@ init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
 -spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
 resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
     case atm_task_execution_status:handle_resuming(
         AtmTaskExecutionId, get_incarnation(AtmWorkflowExecutionCtx)
     ) of
         {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
+            ?atm_task_debug(Logger, <<"Task resuming...">>),
+            ?atm_workflow_debug(Logger, ?workflow_log(<<"resuming...">>, AtmTaskExecutionId)),
+
             unfreeze_stores(AtmTaskExecution),
             InitiationResult = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
 
             case atm_task_execution_status:handle_resumed(AtmTaskExecutionId) of
                 {ok, _} ->
+                    ?atm_task_info(Logger, <<"Task resumed.">>),
+                    ?atm_workflow_info(Logger, ?workflow_log(<<"resumed.">>, AtmTaskExecutionId)),
+
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
                     teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
@@ -113,7 +142,7 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     atm_task_executor:job_batch_id(),
-    [automation:item()]
+    [atm_workflow_execution_handler:item()]
 ) ->
     ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_job_batch(
@@ -145,7 +174,7 @@ run_job_batch(
 -spec process_job_batch_result(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    [automation:item()],
+    [atm_workflow_execution_handler:item()],
     atm_task_executor:job_batch_result()
 ) ->
     ok | error.
@@ -175,6 +204,12 @@ process_job_batch_result(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
 ) ->
     ok | error.
 process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, UncorrelatedResults}) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(Logger, #{
+        <<"description">> => <<"Processing streamed results...">>,
+        <<"details">> => #{<<"results">> => ensure_log_term_size_not_exceeded(UncorrelatedResults)}
+    }),
+
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
@@ -359,7 +394,7 @@ gen_atm_workflow_execution_env_diff(#document{
     atm_workflow_execution_ctx:record(),
     atm_task_execution:doc(),
     atm_task_executor:job_batch_id(),
-    [automation:item()]
+    [atm_workflow_execution_handler:item()]
 ) ->
     ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_job_batch_insecure(
@@ -370,6 +405,16 @@ run_job_batch_insecure(
     AtmJobBatchId,
     ItemBatch
 ) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(Logger, #{
+        <<"description">> => <<"Running task for items...">>,
+        <<"details">> => #{
+            <<"itemBatch">> => ensure_log_term_size_not_exceeded(lists:map(
+                fun item_execution_to_json/1, ItemBatch
+            ))
+        }
+    }),
+
     AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
     AtmLambdaInput = build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
 
@@ -390,7 +435,7 @@ run_job_batch_insecure(
 -spec build_lambda_input(
     atm_task_executor:job_batch_id(),
     atm_run_job_batch_ctx:record(),
-    [automation:item()],
+    [atm_workflow_execution_handler:item()],
     atm_task_execution:record()
 ) ->
     atm_task_executor:lambda_input().
@@ -411,6 +456,12 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
         )
     end, ItemBatch),
 
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(Logger, #{
+        <<"description">> => <<"Lambda's input argsBatch created.">>,
+        <<"details">> => #{<<"argsBatch">> => ensure_log_term_size_not_exceeded(ArgsBatch)}
+    }),
+
     #atm_lambda_input{
         workflow_execution_id = atm_run_job_batch_ctx:get_workflow_execution_id(AtmRunJobBatchCtx),
         log_level = atm_workflow_execution_ctx:get_log_level_int(AtmWorkflowExecutionCtx),
@@ -421,8 +472,11 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
 
 
 %% @private
--spec parse_job_batch_result([automation:item()], atm_task_executor:job_batch_result()) ->
-    {ok, [{automation:item(), atm_task_executor:job_results()}]} | errors:error().
+-spec parse_job_batch_result(
+    [atm_workflow_execution_handler:item()],
+    atm_task_executor:job_batch_result()
+) ->
+    {ok, [{atm_workflow_execution_handler:item(), atm_task_executor:job_results()}]} | errors:error().
 parse_job_batch_result(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
@@ -456,7 +510,7 @@ parse_job_batch_result(_ItemBatch, {ok, #atm_lambda_output{results_batch = Resul
 -spec handle_job_batch_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    [automation:item()],
+    [atm_workflow_execution_handler:item()],
     errors:error()
 ) ->
     ok.
@@ -487,20 +541,24 @@ handle_job_batch_processing_error(
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
-    ?atm_task_error(#{
+    ?atm_task_error(Logger, #{
         <<"description">> => <<"Failed to process batch of items.">>,
-        <<"itemBatch">> => ItemBatch,
-        <<"reason">> => case Error of
-            ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
-            _ -> errors:to_json(Error)
-        end
-    }, Logger).
+        <<"details">> => #{
+            <<"reason">> => case Error of
+                ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
+                _ -> errors:to_json(Error)
+            end,
+            <<"itemBatch">> => ensure_log_term_size_not_exceeded(lists:map(
+                fun item_execution_to_json/1, ItemBatch
+            ))
+        }
+    }).
 
 
 -spec process_job_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     atm_task_executor:job_results()
 ) ->
     ok | error | no_return().
@@ -516,6 +574,15 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception
 
 process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResults) ->
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
+
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    ?atm_task_debug(Logger, #{
+        <<"description">> => <<"Processing results for item...">>,
+        <<"details">> => #{
+            <<"item">> => ensure_log_term_size_not_exceeded(item_execution_to_json(Item)),
+            <<"results">> => JobResults
+        }
+    }),
 
     try
         atm_task_execution_results:consume_results(
@@ -536,27 +603,62 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
 -spec handle_job_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    automation:item(),
+    atm_workflow_execution_handler:item(),
     errors:error() | json_utils:json_map()
 ) ->
     ok.
 handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error) ->
     atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, 1),
 
-    ErrorLog = case Error of
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    ?atm_task_error(Logger, case Error of
         _LambdaException = #{<<"exception">> := Reason} ->
             #{
                 <<"description">> => <<"Lambda exception occurred during item processing.">>,
-                <<"reason">> => Reason
+                <<"details">> => #{
+                    <<"reason">> => Reason,
+                    <<"item">> => ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
+                }
             };
         _SystemError = {error, _} ->
             #{
                 <<"description">> => <<"Failed to process item.">>,
-                <<"reason">> => errors:to_json(Error)
+                <<"details">> => #{
+                    <<"reason">> => errors:to_json(Error),
+                    <<"item">> => ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
+                }
             }
-    end,
-    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_task_error(ErrorLog#{<<"item">> => Item}, Logger).
+    end).
+
+
+%% @private
+-spec item_execution_to_json(atm_workflow_execution_handler:item()) ->
+    json_utils:json_term().
+item_execution_to_json(#atm_item_execution{trace_id = TraceId, value = Value}) ->
+    #{<<"traceId">> => TraceId, <<"value">> => Value}.
+
+
+%% @private
+-spec ensure_log_term_size_not_exceeded(term()) -> term() | binary().
+ensure_log_term_size_not_exceeded(Bin) when is_binary(Bin), byte_size(Bin) =< ?LOG_TERM_SIZE_LIMIT ->
+    Bin;
+ensure_log_term_size_not_exceeded(TooLongBinary) when is_binary(TooLongBinary) ->
+    trim_binary(TooLongBinary);
+ensure_log_term_size_not_exceeded(Term) ->
+    case json_utils:encode(Term) of
+        TooLongBinary when byte_size(TooLongBinary) > ?LOG_TERM_SIZE_LIMIT ->
+            trim_binary(TooLongBinary);
+        _ ->
+            Term
+    end.
+
+
+%% @private
+-spec trim_binary(binary()) -> binary().
+trim_binary(TooLongBinary) ->
+    TrimmedBinary = binary:part(TooLongBinary, 0, ?LOG_TERM_SIZE_LIMIT),
+    <<TrimmedBinary/binary, "...">>.
 
 
 %% @private
@@ -607,20 +709,13 @@ log_uncorrelated_results_processing_error(
 ) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
-    ?atm_task_critical(#{
-        <<"description">> => <<"Failed to process uncorrelated task results.">>,
-        <<"reason">> => errors:to_json(Error)
-    }, Logger),
-
-    ?atm_workflow_critical(#{
-        <<"description">> => str_utils:format_bin(
-            "Failed to process uncorrelated results for task '~s'.",
-            [AtmTaskExecutionId]
-        ),
-        <<"referencedComponents">> => #{
-            <<"tasks">> => [AtmTaskExecutionId]
-        }
-    }, Logger).
+    ?atm_task_critical(Logger, #{
+        <<"description">> => <<"Failed to process streamed results.">>,
+        <<"details">> => #{<<"reason">> => errors:to_json(Error)}
+    }),
+    ?atm_workflow_critical(Logger, ?workflow_log(
+        <<"failed to process streamed results.">>, AtmTaskExecutionId
+    )).
 
 
 %% @private
@@ -631,11 +726,14 @@ log_uncorrelated_results_processing_error(
     ok.
 log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    AtmTaskExecutionId = atm_workflow_execution_ctx:get_task_execution_id(AtmWorkflowExecutionCtx),
+    Details = #{<<"reason">> => StoppingReason},
 
-    ?atm_task_info(#{
-        <<"description">> => <<"Stopping task execution.">>,
-        <<"reason">> => StoppingReason
-    }, Logger).
+    ?atm_task_info(Logger, #{
+        <<"description">> => <<"Task stop initiated.">>,
+        <<"details">> => Details
+    }),
+    ?atm_workflow_info(Logger, ?workflow_log(<<"stop initiated.">>, Details, AtmTaskExecutionId)).
 
 
 %% @private

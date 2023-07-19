@@ -145,29 +145,31 @@ first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
                 ],
                 % Assert not all items were processed by tasks
                 before_step_hook = fun(AtmMockCallCtx) ->
-                    #{<<"logEntries">> := [#{<<"content">> := #{<<"reason">> := LogContent}}]} = ?assertMatch(
-                        #{<<"isLast">> := true, <<"logEntries">> := [#{<<"content">> := #{
-                            <<"description">> := <<"Failed to prepare next run of lane number 1.">>
-                        }}]},
-                        atm_workflow_execution_test_utils:browse_store(
-                            ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmMockCallCtx
-                        )
-                    ),
-
-                    ?assertMatch(
-                        ?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
-                            _, ?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
-                                _, ?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(
-                                    _, ?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(
-                                        ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                                            EchoConfigParameterValue, atm_number_type, #{<<"integersOnly">> := true}
+                    ?assert(atm_workflow_execution_test_utils:scan_audit_log(
+                        ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmMockCallCtx, fun
+                            (#{<<"content">> := #{
+                                <<"description">> := <<"[Lane: 1] failed to prepare next run.">>,
+                                <<"details">> := #{<<"reason">> := ErrorJson}
+                            }}) ->
+                                ?assertMatch(
+                                    ?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
+                                        _, ?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
+                                            _, ?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(
+                                                _, ?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(
+                                                    ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                                                        EchoConfigParameterValue, atm_number_type, #{<<"integersOnly">> := true}
+                                                    )
+                                                )
+                                            )
                                         )
-                                    )
-                                )
-                            )
-                        ),
-                        errors:from_json(LogContent)
-                    )
+                                    ),
+                                    errors:from_json(ErrorJson)
+                                ),
+                                true;
+                            (_) ->
+                                false
+                        end
+                    ))
                 end
             }
         }]

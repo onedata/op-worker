@@ -96,7 +96,9 @@ create(#atm_store_container_creation_args{
         AtmWorkflowExecutionAuth, LogLevel, LogContentDataSpec, InitialItemsArray
     ),
 
-    extend_audit_log(AppendRequests, create_container(LogLevel, AtmStoreConfig)).
+    Record = create_container(LogLevel, AtmStoreConfig),
+    extend_audit_log(AppendRequests, Record),
+    Record.
 
 
 -spec copy(record()) -> no_return().
@@ -131,7 +133,7 @@ browse_content(Record, #atm_store_content_browse_req{
     #atm_audit_log_store_content_browse_result{result = BrowseResult}.
 
 
--spec update_content(record(), content_update_req()) -> record() | no_return().
+-spec update_content(record(), content_update_req()) -> ok | no_return().
 update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = ItemsArray,
@@ -159,7 +161,7 @@ update_content(Record, #atm_store_content_update_req{
         {true, AppendRequest} ->
             append_to_audit_log(AppendRequest, Record);
         false ->
-            Record
+            ok
     end.
 
 
@@ -330,15 +332,19 @@ build_audit_log_append_request(LogContent) ->
 
 
 %% @private
--spec extend_audit_log([audit_log:append_request()], record()) -> record().
-extend_audit_log(AppendRequests, Record) ->
-    lists:foldl(fun append_to_audit_log/2, Record, AppendRequests).
+-spec extend_audit_log([audit_log:append_request()], record()) -> ok.
+extend_audit_log(AppendRequests, #atm_audit_log_store_container{
+    backend_id = BackendId
+}) ->
+    %% TODO VFS-11091 audit_log:extend
+    lists:foreach(fun(AppendRequest) ->
+        ok = audit_log:append(BackendId, ?LOG_OPTS, AppendRequest)
+    end, AppendRequests).
 
 
 %% @private
--spec append_to_audit_log(audit_log:append_request(), record()) -> record().
-append_to_audit_log(AppendRequest, Record = #atm_audit_log_store_container{
+-spec append_to_audit_log(audit_log:append_request(), record()) -> ok.
+append_to_audit_log(AppendRequest, #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
-    ok = audit_log:append(BackendId, ?LOG_OPTS, AppendRequest),
-    Record.
+    ok = audit_log:append(BackendId, ?LOG_OPTS, AppendRequest).
