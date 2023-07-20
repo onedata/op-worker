@@ -135,10 +135,7 @@ force_continue_failed_iterated_atm_lane_run_execution() ->
                                 call_args = [_, _, AtmTaskExecutionId, ItemBatch, _]
                             }) ->
                                 ItemCount = length(ItemBatch),
-                                FailedItemCount = case filter_size_measurements(ItemBatch) of
-                                    [] -> 0;
-                                    FailedItems -> length(FailedItems)
-                                end,
+                                FailedItemCount = length(filter_size_measurements(ItemBatch)),
 
                                 {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
                                     {task, AtmTaskExecutionId, items_failed, FailedItemCount},

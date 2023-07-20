@@ -70,7 +70,7 @@
 
 finish_atm_workflow_execution() ->
     AssertActionsNotPossibleOnNotStoppedExecution = fun(AtmMockCallCtx) ->
-        atm_workflow_execution_test_utils:assert_not_stopped_workflow_execution_impossible_actions_set(
+        atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_not_stopped_workflow_execution(
             {1, 1}, AtmMockCallCtx
         )
     end,
@@ -115,6 +115,6 @@ finish_atm_workflow_execution() ->
                     workflow_finished
                 ]
             },
-            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_impossible_actions_set/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_ended_workflow_execution/1
         }]
     }).

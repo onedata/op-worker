@@ -252,7 +252,7 @@ force_continue(UserCtx, AtmWorkflowExecutionId) ->
 
             Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
             ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
-                description = <<"Scheduled force continuing.">>,  %% TODO desc
+                description = <<"Scheduled forced continuation.">>,
                 details = #{<<"scheduledLaneRunSelector">> => ?lane_run_selector_json(
                     CurrentAtmLaneRunSelector
                 )}
@@ -293,10 +293,9 @@ restart(AtmWorkflowExecutionId) ->
                 AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
 
                 Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-                ?atm_workflow_critical(
-                    %% TODO desc
-                    Logger, <<"Failed to cleanly suspend execution before op worker stopped.">>
-                ),
+                ?atm_workflow_critical(Logger, <<
+                    "Failed to cleanly suspend execution before the Oneprovider service has stopped."
+                >>),
 
                 atm_lane_execution_handler:init_stop(
                     {current, current}, interrupt, AtmWorkflowExecutionCtx
@@ -800,7 +799,7 @@ delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExec
         _ ->
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
             ?atm_workflow_info(Logger, #atm_workflow_log_schema{
-                description = <<"Deleted lane runs prepared in advance.">>,
+                description = <<"Deleted lane runs that were prepared in advance.">>,
                 details = #{<<"laneIndices">> => lists:sort(AtmPurgeLaneIndices)}
             })
     end,

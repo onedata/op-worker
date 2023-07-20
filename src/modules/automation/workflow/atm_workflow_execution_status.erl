@@ -62,9 +62,9 @@
 %%%  D   |  | FINISHED |     | FAILED |    | CANCELLED |      |  CRASHED  |   |                 |
 %%%  E   |  +----------+     +--------+    +-----------+      +-----------+   |                 |
 %%%  D   |                       |                                            |                 |
-%%%      |                 force continue                                     |                 |
+%%%      |                 force continue                                  resume            resume
 %%%       \                      |                                            |                /
-%%%         ---------------------o------- resuming ---------------------------o---------------
+%%%         ---------------------o--------------------------------------------o---------------
 %%%
 %%% Workflow transition to STOPPING status when last lane run ended execution and all items were
 %%% processed but also when execution is halted (^stopping) and not all items were processed
@@ -532,9 +532,8 @@ handle_forced_continue(AtmWorkflowExecutionId) ->
                 {NextAtmLaneIndex, CurrentAtmRunNum}, Diff, NextRun, NewAtmWorkflowExecution
             );
 
-        (#atm_workflow_execution{status = Status}) ->
-            %% TODO custom error??
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
+        (_) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} = Result ->

@@ -285,7 +285,7 @@ pause_interrupted_atm_workflow_execution() ->
                     ?ERROR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
                     atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
                 ),
-                atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_impossible_actions_set(
+                atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_not_ended_workflow_execution(
                     {1, 1}, AtmMockCallCtx
                 ),
                 ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0))
@@ -389,7 +389,7 @@ assert_paused_workflow_execution_impossible_actions_set(AtmMockCallCtx = #atm_mo
         ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
         atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
     ),
-    atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_impossible_actions_set(
+    atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_not_ended_workflow_execution(
         {1, 1}, AtmMockCallCtx
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0)).
