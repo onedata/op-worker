@@ -181,7 +181,7 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
             ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
                 selector = {lane_run, AtmLaneRunSelector},
-                description = ?fmt_bin("scheduled manual ~s.", [Type]),
+                description = ?fmt_bin("Scheduled manual ~s.", [Type]),
                 details = #{
                     <<"repeatType">> => Type,
                     <<"scheduledLaneRunSelector">> => ?lane_run_selector_json(
@@ -450,7 +450,7 @@ handle_task_results_processed_for_all_items(
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
         selector = {task, AtmTaskExecutionId},
-        description = <<"processed all streamed results.">>,
+        description = <<"Processed all streamed results.">>,
         referenced_tasks = [AtmTaskExecutionId]
     }),
 
