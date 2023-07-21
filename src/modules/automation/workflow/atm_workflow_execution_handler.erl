@@ -757,54 +757,63 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 ) ->
     atm_workflow_execution:doc().
 delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    {ok, #document{
-        value = AtmWorkflowExecution = #atm_workflow_execution{
-            lanes_count = AtmLanesCount,
-            current_lane_index = CurrentAtmLaneIndex,
-            current_run_num = CurrentRunNum
-        }
-    }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    % lane runs MUST be deleted outside of workflow execution document update
+    % to delete it's components: e.g. task execution documents
+    Key = {?MODULE, AtmWorkflowExecutionId},
+    {ok, NewDoc, DeletedLaneRunsIndices} = critical_section:run(Key, fun() ->
+        {ok, #document{
+            value = AtmWorkflowExecution = #atm_workflow_execution{
+                lanes_count = AtmLanesCount,
+                current_lane_index = CurrentAtmLaneIndex,
+                current_run_num = CurrentRunNum
+            }
+        }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    AtmLaneExecutionDiff = fun
-        (AtmLaneExecution = #atm_lane_execution{runs = [
-            AtmLaneRunPreparedInAdvance = #atm_lane_execution_run{run_num = RunNum}
-            | PreviousLaneRuns
-        ]}) when
-            RunNum =:= undefined;
-            RunNum =:= CurrentRunNum
-        ->
-            atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
-            {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
+        AtmLaneExecutionDiff = fun
+            (AtmLaneExecution = #atm_lane_execution{runs = [
+                AtmLaneRunPreparedInAdvance = #atm_lane_execution_run{run_num = RunNum}
+                | PreviousLaneRuns
+            ]}) when
+                RunNum =:= undefined;
+                RunNum =:= CurrentRunNum
+            ->
+                atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
+                {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 
-        (_) ->
-            ?ERROR_NOT_FOUND
-    end,
-    {NewAtmWorkflowExecution, AtmPurgeLaneIndices} = lists_utils:foldl_while(fun
-        (AtmLaneIndex, Acc = {AtmWorkflowExecutionAcc, IndicesAcc}) ->
-            case atm_lane_execution:update(AtmLaneIndex, AtmLaneExecutionDiff, AtmWorkflowExecutionAcc) of
-                {ok, NewAtmWorkflowExecutionAcc} ->
-                    {cont, {NewAtmWorkflowExecutionAcc, [AtmLaneIndex | IndicesAcc]}};
-                ?ERROR_NOT_FOUND ->
-                    {halt, Acc}
-            end
-    end, {AtmWorkflowExecution, []}, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),
+            (_) ->
+                ?ERROR_NOT_FOUND
+        end,
+        {NewAtmWorkflowExecution, Indices} = lists_utils:foldl_while(fun
+            (AtmLaneIndex, Acc = {AtmWorkflowExecutionAcc, IndicesAcc}) ->
+                case atm_lane_execution:update(
+                    AtmLaneIndex, AtmLaneExecutionDiff, AtmWorkflowExecutionAcc
+                ) of
+                    {ok, NewAtmWorkflowExecutionAcc} ->
+                        {cont, {NewAtmWorkflowExecutionAcc, [AtmLaneIndex | IndicesAcc]}};
+                    ?ERROR_NOT_FOUND ->
+                        {halt, Acc}
+                end
+        end, {AtmWorkflowExecution, []}, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),
 
-    {ok, Doc} = atm_workflow_execution:update(AtmWorkflowExecutionId, fun(_) ->
-        {ok, NewAtmWorkflowExecution}
+        {ok, Doc} = atm_workflow_execution:update(AtmWorkflowExecutionId, fun(_) ->
+            {ok, NewAtmWorkflowExecution}
+        end),
+
+        {ok, Doc, Indices}
     end),
 
-    case AtmPurgeLaneIndices of
+    case DeletedLaneRunsIndices of
         [] ->
             ok;
         _ ->
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
             ?atm_workflow_info(Logger, #atm_workflow_log_schema{
                 description = <<"Deleted lane runs that were prepared in advance.">>,
-                details = #{<<"laneIndices">> => lists:sort(AtmPurgeLaneIndices)}
+                details = #{<<"laneIndices">> => lists:sort(DeletedLaneRunsIndices)}
             })
     end,
 
-    Doc.
+    NewDoc.
 
 
 %% @private
