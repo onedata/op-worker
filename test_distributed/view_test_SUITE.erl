@@ -17,6 +17,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 %% export for ct
@@ -47,18 +48,12 @@
 
 
 %% macros
--define(SPACE_ID, <<"space_id1">>).
--define(SPACE_NAME, <<"space_name1">>).
 -define(TEST_FILE(SpaceName), begin
     FunctionNameBin = str_utils:to_binary(?FUNCTION),
     RandIntBin = str_utils:to_binary(rand:uniform(1000000000)),
     FileName = <<FunctionNameBin/binary, "_", RandIntBin/binary>>,
     filename:join(["/", SpaceName, FileName])
 end).
-
--define(USER_ID, <<"user1">>).
--define(SESS_ID(Worker),
-    ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
 
 -define(view_name, begin <<"view_", (str_utils:to_binary(?FUNCTION))/binary>> end).
 -define(ATTEMPTS, 15).
@@ -78,7 +73,7 @@ end).
 %%%===================================================================
 %%% API
 %%%===================================================================
-all() -> ?ALL([
+all() -> [
     create_and_delete_simple_view_test,
     query_simple_empty_view_test,
     query_view_using_file_meta,
@@ -94,17 +89,17 @@ all() -> ?ALL([
     spatial_function_returning_null_in_range_key_should_return_empty_result,
     spatial_function_returning_integer_key_should_return_error,
     spatial_function_returning_string_key_should_return_error
-]).
+].
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-create_and_delete_simple_view_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+create_and_delete_simple_view_test(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             return [id, id];
@@ -115,11 +110,11 @@ create_and_delete_simple_view_test(Config) ->
     delete_view(Worker, SpaceId, ViewName),
     ?assertMatch({ok, []}, list_views(Worker, SpaceId)).
 
-query_simple_empty_view_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_simple_empty_view_test(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             return null;
@@ -128,11 +123,11 @@ query_simple_empty_view_test(Config) ->
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_view_using_file_meta(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_view_using_file_meta(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
@@ -181,7 +176,7 @@ query_view_using_file_meta(Config) ->
             <<"id">> := _,
             <<"key">> := CdmiId,
             <<"value">> := #{
-                <<"name">> := ?SPACE_ID,
+                <<"name">> := SpaceId,
                 <<"type">> := <<"DIR">>,
                 <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
@@ -193,11 +188,11 @@ query_view_using_file_meta(Config) ->
         }
     ],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_view_using_times(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_view_using_times(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
@@ -232,11 +227,11 @@ query_view_using_times(Config) ->
         }
     ],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_view_using_custom_metadata_when_xattr_is_not_set(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_view_using_custom_metadata_when_xattr_is_not_set(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SimpleMapFunction = <<"
         function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
             if(type == 'custom_metadata')
@@ -246,24 +241,24 @@ query_view_using_custom_metadata_when_xattr_is_not_set(Config) ->
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_view_using_custom_metadata(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_view_using_custom_metadata(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
 
     XattrName = <<"xattr_name">>,
     XattrValue = <<"xattr_value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), ?FILE_REF(SpaceGuid), Xattr),
+    lfm_proxy:set_xattr(Worker, SessionId, ?FILE_REF(SpaceGuid), Xattr),
 
     XattrName2 = <<"xattr_name2">>,
     XattrValue2 = <<"xattr_value2">>,
     Xattr2 = #xattr{name = XattrName2, value = XattrValue2},
-    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), ?FILE_REF(SpaceGuid), Xattr2),
+    lfm_proxy:set_xattr(Worker, SessionId, ?FILE_REF(SpaceGuid), Xattr2),
 
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -281,17 +276,18 @@ query_view_using_custom_metadata(Config) ->
         }
     }],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_view_using_file_popularity(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_view_using_file_popularity(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
+    SpaceName = oct_background:get_space_name(space_krk),
     ViewName = ?view_name,
-    SessionId = ?SESS_ID(Worker),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+    ProviderId = oct_background:get_provider_id(krakow),
     TestData = <<"test_data">>,
     TestDataSize = byte_size(TestData),
 
-    ok = rpc:call(Worker, file_popularity_api, enable, [?SPACE_ID]),
-    FilePath = ?TEST_FILE(?SPACE_NAME),
+    ok = rpc:call(Worker, file_popularity_api, enable, [SpaceId]),
+    FilePath = ?TEST_FILE(SpaceName),
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath),
     Uuid = file_id:guid_to_uuid(Guid),
     {ok, H} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(Guid), write),
@@ -313,7 +309,7 @@ query_view_using_file_popularity(Config) ->
         <<"key">> := CdmiId,
         <<"value">> := #{
             <<"file_uuid">> := Uuid,
-            <<"space_id">> := ?SPACE_ID,
+            <<"space_id">> := SpaceId,
             <<"dy_hist">> :=[1 | _],
             <<"hr_hist">> := [1 | _],
             <<"mth_hist">> := [1 | _],
@@ -325,11 +321,11 @@ query_view_using_file_popularity(Config) ->
             <<"size">> := TestDataSize
     }}],Worker, SpaceId, ViewName, [{stale, false}]).
 
-query_view_and_emit_ctx(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+query_view_and_emit_ctx(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     SimpleMapFunction = <<"
@@ -347,11 +343,11 @@ query_view_and_emit_ctx(Config) ->
 
         }}],Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
 
-wrong_map_function(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+wrong_map_function(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     SimpleMapFunction = <<"
@@ -362,13 +358,13 @@ wrong_map_function(Config) ->
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
 
-emitting_null_key_in_map_function_should_return_empty_result(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+emitting_null_key_in_map_function_should_return_empty_result(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
+    ProviderId = oct_background:get_provider_id(krakow),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(_, _, _, _) {
             return [null, null];
@@ -377,11 +373,11 @@ emitting_null_key_in_map_function_should_return_empty_result(Config) ->
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
 
-spatial_function_returning_null_in_key_should_return_empty_result(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+spatial_function_returning_null_in_key_should_return_empty_result(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpatialFunction = <<"
         function(_, _, _, _) {
             return [null, null];
@@ -390,11 +386,11 @@ spatial_function_returning_null_in_key_should_return_empty_result(Config) ->
     create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
 
-spatial_function_returning_null_in_array_key_should_return_empty_result(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+spatial_function_returning_null_in_array_key_should_return_empty_result(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpatialFunction = <<"
         function(_, _, _, _) {
             return [[null, 1], null];
@@ -403,11 +399,11 @@ spatial_function_returning_null_in_array_key_should_return_empty_result(Config) 
     create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
 
-spatial_function_returning_null_in_range_key_should_return_empty_result(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+spatial_function_returning_null_in_range_key_should_return_empty_result(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpatialFunction = <<"
         function(_, _, _, _) {
             return [[[null, 1], [5, 7]], null];
@@ -416,11 +412,11 @@ spatial_function_returning_null_in_range_key_should_return_empty_result(Config) 
     create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
 
-spatial_function_returning_integer_key_should_return_error(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+spatial_function_returning_integer_key_should_return_error(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpatialFunction = <<"
         function(_, _, _, _) {
             return [1, null];
@@ -430,11 +426,11 @@ spatial_function_returning_integer_key_should_return_error(Config) ->
     ?assertQuery(?ERROR_VIEW_QUERY_FAILED(_, _),
         Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
 
-spatial_function_returning_string_key_should_return_error(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SpaceId = <<"space_id1">>,
+spatial_function_returning_string_key_should_return_error(_Config) ->
+    Worker = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ProviderId = oct_background:get_provider_id(krakow),
     SpatialFunction = <<"
         function(_, _, _, _) {
             return [[\"string\"], null];
@@ -449,23 +445,25 @@ spatial_function_returning_string_key_should_return_error(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "1op"
+    }).
 
-end_per_suite(Config) ->
-    initializer:teardown_storage(Config).
+
+end_per_suite(_Config) ->
+    oct_background:end_per_suite().
+
 
 init_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    initializer:communicator_mock(Workers),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    ct:timetrap({minutes, 10}),
+    lfm_proxy:init(Config),
+    Config.
+
 
 end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+    ok.
+
 
 %%%===================================================================
 %%% Internal functions
