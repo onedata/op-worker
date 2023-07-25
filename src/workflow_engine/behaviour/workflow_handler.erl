@@ -93,6 +93,19 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Callback that updates lane execution context at the beginning
+%% of lane execution. It will be called exactly once for each lane.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_lane_execution_started(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context()
+) ->
+    workflow_engine:execution_context().
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Callback that executes job. It is called once for each job
 %% (pair task/item). It can be called in parallel for jobs connected
 %% to different items and jobs connected to the same item if tasks

@@ -26,7 +26,7 @@
 %% Helper functions verifying execution history
 -export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callback_for_lane/2,
     has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_advance_handler/3,
-    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/3, verify_and_filter_duplicated_calls/4]).
+    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/4, verify_and_filter_duplicated_calls/4]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
 %% Memory verification helper functions
@@ -48,9 +48,11 @@
 }).
 
 -type test_manager_task_failure_key() :: fail_job | fail_result_processing | timeout |
-    fail_lane_preparation | fail_execution_ended_handler.
--type lane_history_check_key() :: expect_empty_items_list | stop_on_lane | fail_on_lane_finish |
-    delay_and_fail_lane_preparation_in_advance | fail_lane_preparation_in_advance | expect_exception.
+    fail_lane_preparation | fail_lane_start | fail_execution_ended_handler.
+-type lane_history_check_key() :: expect_prepare_fail | expect_empty_items_list_and_exception |
+    stop_on_lane | fail_on_lane_finish |
+    delay_and_fail_lane_preparation_in_advance | fail_lane_preparation_in_advance | expect_exception |
+    expect_prepare_exception.
 -export_type([test_manager_task_failure_key/0, lane_history_check_key/0]).
 
 %%%===================================================================
@@ -175,6 +177,9 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             ManagerAcc;
         {prepare_lane, #{fail_lane_preparation := LaneId}} ->
             Sender ! fail_call,
+            ManagerAcc;
+        {handle_lane_execution_started, #{fail_lane_start := LaneId}} ->
+            Sender ! throw_error,
             ManagerAcc;
         {prepare_lane, #{throw_error := LaneId}} ->
             Sender ! throw_error,
@@ -349,6 +354,19 @@ mock_handlers(Workers, Manager) ->
                     lane_id = LaneId
                 },
                 [ExecutionId, Context, LaneId]
+            )
+    end),
+
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_started, fun
+        (ExecutionId, #{lane_id := LaneId} = Context) ->
+            MockTemplate(
+                #handler_call{
+                    function = handle_lane_execution_started,
+                    execution_id = ExecutionId,
+                    context =  Context,
+                    lane_id = LaneId
+                },
+                [ExecutionId, Context]
             )
     end),
 
@@ -665,9 +683,11 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
         #{stop_on_lane := LaneId} -> skip_items_verification;
         #{fail_on_lane_finish := LaneId} -> skip_items_verification;
         #{resume_lane := LaneId} -> skip_items_verification;
-        #{expect_empty_items_list := LaneId} -> expect_empty_items_list;
+        #{expect_prepare_fail := LaneId} -> expect_empty_items_list;
+        #{expect_empty_items_list_and_exception := LaneId} -> expect_empty_items_list_and_exception;
         #{expect_lane_finish := LaneId} -> expect_lane_finish;
         #{expect_exception := LaneId} -> expect_exception;
+        #{expect_prepare_exception := LaneId} -> expect_exception;
         _ -> verify_all
     end,
 
@@ -675,7 +695,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
     ct:print("Verify ~p history elements", [LaneElementsCount]),
 
     {GatheredForLane, CallsToIgnore} =
-        verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext),
+        verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext, Options),
 
     case VerificationType of
         verify_all ->
@@ -781,6 +801,11 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 NewGathered ->
                     ?assertEqual([], NewGathered)
             end;
+        expect_empty_items_list_and_exception ->
+            ?assertMatch([
+                #handler_call{function = handle_exception},
+                #handler_call{function = handle_workflow_abruptly_stopped}
+            ], GatheredForLane);
         expect_empty_items_list ->
             ?assertMatch([#handler_call{function = handle_workflow_execution_stopped}], GatheredForLane)
     end.
@@ -791,7 +816,7 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{
     is_lane_prepared := IsLanePrepared,
     should_prepare_next_lane := ShouldPrepareNextLane,
     lane_id_to_be_prepared_in_advance := NextLaneId
-} = Context) ->
+} = Context, _Options) ->
     GatheredForLane = lists:sublist(Gathered, LaneElementsCount),
 
     {PrepareForLane, PrepareNextLane} = lists:foldl(fun
@@ -853,17 +878,34 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{
     case IsLanePrepared of
         true ->
             ?assertEqual(undefined, PrepareForLane),
-            {GatheredForLane3, CallsToIgnore};
+            [LaneStartedCallback | GatheredForLane4] = GatheredForLane3,
+            ?assertMatch(#handler_call{function = handle_lane_execution_started, lane_id = LaneId}, LaneStartedCallback),
+            {GatheredForLane4, CallsToIgnore};
         false ->
-            [FirstForLane | GatheredForLane4] = GatheredForLane3,
+            [FirstForLane, LaneStartedCallback | GatheredForLane4] = GatheredForLane3,
             ?assertEqual(PrepareForLane, FirstForLane),
+            ?assertMatch(#handler_call{function = handle_lane_execution_started, lane_id = LaneId}, LaneStartedCallback),
             {GatheredForLane4, CallsToIgnore}
     end;
-verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id := LaneId}) ->
-    [FirstForLane | GatheredForLane] = lists:sublist(Gathered, LaneElementsCount),
-    ?assertEqual(prepare_lane, FirstForLane#handler_call.function),
-    ?assertEqual(LaneId, FirstForLane#handler_call.lane_id),
-    {GatheredForLane, []}.
+verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id := LaneId}, Options) ->
+    FilterLaneStarted = case Options of
+        #{expect_prepare_fail := LaneId} -> false;
+        #{expect_prepare_exception := LaneId} -> false;
+        #{expect_lane_finish := LaneId} -> false;
+        _ -> true
+    end,
+
+    case FilterLaneStarted of
+        true ->
+            [FirstForLane, LaneStartedCallback | GatheredForLane] = lists:sublist(Gathered, LaneElementsCount),
+            ?assertMatch(#handler_call{function = prepare_lane, lane_id = LaneId}, FirstForLane),
+            ?assertMatch(#handler_call{function = handle_lane_execution_started, lane_id = LaneId}, LaneStartedCallback),
+            {GatheredForLane, []};
+        false ->
+            [FirstForLane | GatheredForLane] = lists:sublist(Gathered, LaneElementsCount),
+            ?assertMatch(#handler_call{function = prepare_lane, lane_id = LaneId}, FirstForLane),
+            {GatheredForLane, []}
+    end.
 
 verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
     ReversedGatheredForLane = lists:reverse(GatheredForLane),
@@ -1008,6 +1050,8 @@ filter_prepare_in_advance_handler(ExecutionHistory, LaneId, true = _IsPrepareInA
     lists:filter(fun
         (#handler_call{function = prepare_lane, lane_id = Id}) ->
             Id =/= integer_to_binary(binary_to_integer(LaneId) + 1);
+        (#handler_call{function = handle_lane_execution_started, lane_id = Id}) ->
+            Id =/= integer_to_binary(binary_to_integer(LaneId) + 1);
         (_) ->
             true
     end, ExecutionHistory);
@@ -1052,22 +1096,36 @@ filter_repeated_stream_callbacks(ExecutionHistory, LaneId, #{task_streams := Str
 filter_repeated_stream_callbacks(ExecutionHistory, _, _) ->
     ExecutionHistory.
 
-check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId, false = _IsPrepareInAdvanceSet) ->
+check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId, false = _IsPrepareInAdvanceSet, BeforeResumeHistory) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId} | _], ExecutionHistory),
     [_ | ExecutionHistoryTail] = ExecutionHistory,
-    ExecutionHistoryTail;
-check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->
+    filter_duplicated_lane_start(ExecutionHistoryTail, BeforeResumeHistory, LaneId);
+check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet, BeforeResumeHistory) ->
     ?assertMatch([#handler_call{function = prepare_lane} | _], ExecutionHistory),
     [#handler_call{lane_id = LaneIdToCheck} = FirstHandlerCall | ExecutionHistoryTail] = ExecutionHistory,
     NextLaneId = integer_to_binary(binary_to_integer(LaneId) + 1),
     case LaneIdToCheck of
         LaneId ->
-            ExecutionHistoryTail;
+            filter_duplicated_lane_start(ExecutionHistoryTail, BeforeResumeHistory, LaneId);
         NextLaneId ->
             ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId} | _], ExecutionHistoryTail),
             [_ | ExecutionHistoryTail2] = ExecutionHistoryTail,
-            [FirstHandlerCall | ExecutionHistoryTail2]
+            [FirstHandlerCall | filter_duplicated_lane_start(ExecutionHistoryTail2, BeforeResumeHistory, LaneId)]
     end.
+
+filter_duplicated_lane_start(ExecutionHistory, BeforeResumeHistory, LaneId) ->
+    case filter_lane_start(BeforeResumeHistory, LaneId) of
+        BeforeResumeHistory -> ExecutionHistory; % lane wasn't started before resume - do not filter
+        _ -> filter_lane_start(ExecutionHistory, LaneId)
+    end.
+
+filter_lane_start(ExecutionHistory, LaneId) ->
+    lists:filter(fun
+        (#handler_call{function = handle_lane_execution_started, lane_id = Id}) ->
+            Id =/= LaneId;
+        (_) ->
+            true
+    end, ExecutionHistory).
 
 verify_and_filter_duplicated_calls(ExecutionHistory, {ok, #document{
     value = #workflow_execution_state_dump{jobs_dump = JobsDump}
@@ -1279,8 +1337,9 @@ count_lane_elements(#{
         {true, false, true} -> 2;
         _ -> 1
     end,
-    NotificationsCount = TasksPerItemCount + TaskStreamCount + PrepareCallbacksCount + 1, % Notification for each task + prepare_lane
-                                                                                          % callbacks + handle_lane_execution_stopped
+    NotificationsCount = TasksPerItemCount + TaskStreamCount + PrepareCallbacksCount + 2, % Notification for each task + prepare_lane
+                                                                                          % callbacks + handle_lane_execution_started
+                                                                                          % handle_lane_execution_stopped
 
     DataProcessingCallbackCallCount = maps:fold(fun(_, CallbackCalls, Acc) ->
         lists:foldl(fun

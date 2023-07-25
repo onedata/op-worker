@@ -38,6 +38,7 @@
 -export([
     prepare_lane/3,
     resume_lane/3,
+    handle_lane_execution_started/2,
 
     run_task_for_item/5,
     process_task_result_for_item/5,
@@ -299,6 +300,15 @@ resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector)
         AtmWorkflowExecutionId,
         atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
     ).
+
+
+-spec handle_lane_execution_started(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record()
+) ->
+    atm_workflow_execution_env:record().
+handle_lane_execution_started(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionEnv.
 
 
 -spec run_task_for_item(
