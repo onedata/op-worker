@@ -6,9 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Unit tests that keep track if any datastore model that is synchronized between providers has been upgraded
-%%% (i.e. the record version has changed). Such upgrades are disallowed between minor system versions,
-%%% as they break the compatibility of providers. They can only be introduced when releasing a new major version.
+%%% Unit tests that keep track if any datastore model that is synchronized
+%%% between providers has been upgraded (i.e. the record version has changed).
+%%% Such upgrades are disallowed between minor system versions, as they break
+%%% the compatibility of providers. They can only be introduced when releasing
+%%% a new major version.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(synchronized_datastore_model_upgrade_test).
@@ -16,10 +18,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-%%The map of all synchronized models and their versions.
-%%If a version is changed, an adjustment to this map will be required for the tests to pass.
-%%The code author and reviewers **must make sure** that the change can be introduced
-%%(e.g. a new model is added or a new major version is to be released).
+%% The map of all synchronized models and their versions.
+%% If a version is changed, an adjustment to this map will be required
+%% for the tests to pass. The code author and reviewers **must make sure**
+%% that the change can be introduced (e.g. a new model is added or a new major
+%% version is to be released).
 -define(FROZEN_MODEL_VERSIONS, #{
     archive => 1,
     archive_recall_details => 1,
@@ -47,10 +50,11 @@ datastore_model_version_verification_test_() ->
         end
     end, datastore_config_plugin:get_models()),
 
-    lists:map(fun({Model, Version}) -> {
-        str_utils:to_binary(Model), fun() ->
-        ?_assertEqual({Model, Version}, {Model, maps:get(Model, ?FROZEN_MODEL_VERSIONS, unknown)})
-    end} end, ActualModelVersions).
+    lists:map(fun({Model, Version}) ->
+        {str_utils:to_binary(Model), fun() ->
+        ?_assertEqual(Version, maps:get(Model, ?FROZEN_MODEL_VERSIONS, unknown))
+        end}
+    end, ActualModelVersions).
 
 
 get_model_ctx(qos_entry_audit_log) ->
