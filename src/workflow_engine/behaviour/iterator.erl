@@ -56,7 +56,7 @@ encode(Iterator) ->
 
     json_utils:encode(#{
         <<"_type">> => atom_to_binary(Model, utf8),
-        <<"_data">> => persistent_record:encode(Iterator, Model)
+        <<"_data">> => persistent_record:to_string(Iterator, Model)
     }).
 
 
@@ -68,4 +68,4 @@ decode(IteratorBin) ->
     } = json_utils:decode(IteratorBin),
 
     Model = binary_to_atom(TypeBin, utf8),
-    persistent_record:decode(Data, Model).
+    persistent_record:from_string(Data, Model).

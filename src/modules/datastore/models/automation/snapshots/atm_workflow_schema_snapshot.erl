@@ -148,7 +148,7 @@ get_record_struct(1) ->
         {summary, string},
 
         {revision_number, integer},
-        {revision, {custom, string, {persistent_record, encode, decode, atm_workflow_schema_revision}}},
+        {revision, {custom, string, {persistent_record, to_string, from_string, atm_workflow_schema_revision}}},
 
         {atm_inventory, string}
     ]}.

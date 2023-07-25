@@ -105,6 +105,6 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {lambda_id, string},
-        {revision_registry, {custom, string, {persistent_record, encode, decode, atm_lambda_revision_registry}}},
+        {revision_registry, {custom, string, {persistent_record, to_string, from_string, atm_lambda_revision_registry}}},
         {atm_inventories, [string]}
     ]}.
