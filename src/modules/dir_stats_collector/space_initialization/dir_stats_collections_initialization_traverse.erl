@@ -24,6 +24,7 @@
 
 -include("tree_traverse.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -166,7 +167,7 @@ get_space_id(TaskId) ->
 
 -spec do_tree_traverse_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, #{task_id := TaskId} = MasterJobExtendedArgs) ->
+do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobExtendedArgs) ->
     NewJobsPreprocessor = fun(_SlaveJobs, MasterJobs, _ListExtendedInfo, _SubtreeProcessingStatus) ->
         {[], MasterJobs}
     end,
@@ -177,6 +178,7 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, #{task_id 
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ?error("Error when listing directory during stats initialization: ~s", [?autoformat([Error, FileUuid])]),
-            dir_stats_service_state:disable(file_ctx:get_space_id_const(FileCtx)),
+            ok = dir_stats_collector:update_stats_of_dir(
+                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERRORS_COUNT => 1}),
             {ok, #{}}
     end.

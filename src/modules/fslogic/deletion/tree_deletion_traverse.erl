@@ -54,6 +54,8 @@
 
 -export_type([id/0]).
 
+-define(ERROR_RESTART_MAX_BACKOFF_SEC, op_worker:get_env(tree_deletion_error_restart_max_backoff, 86400)). % 1 day
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -100,6 +102,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid, RootDirName) ->
     },
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
+            traverse_task:delete_ended(?POOL_NAME, TaskId),
             start_internal(RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
             Error
@@ -121,8 +124,17 @@ task_finished(TaskId, _Pool) ->
         #{<<"failed">> := <<"true">>} ->
             #{<<"user_id">> := UserId, <<"root_guid">> := RootGuid, <<"options">> := EncodedOptions} = AdditionalData,
             ?debug("dir deletion job ~p failed, reruning", [TaskId]),
-            timer:sleep(timer:seconds(10)),
-            ?MODULE:start_internal(file_ctx:new_by_guid(RootGuid), UserId, binary_to_term(EncodedOptions));
+            Backoff = min(binary_to_integer(maps:get(<<"backoff">>, AdditionalData, <<"8">>)) * 2, ?ERROR_RESTART_MAX_BACKOFF_SEC),
+            % start in another function so current traverse can finish
+            spawn(fun() ->
+                timer:sleep(Backoff),
+                ?MODULE:start_internal(file_ctx:new_by_guid(RootGuid), UserId, (binary_to_term(EncodedOptions))#{
+                    additional_data => maps:remove(
+                        <<"failed">>, AdditionalData#{<<"backoff">> => integer_to_binary(Backoff)}
+                    )
+                })
+            end),
+            ok;
         _ ->
             tree_traverse_session:close_for_task(TaskId),
             ?debug("dir deletion job ~p finished", [TaskId])

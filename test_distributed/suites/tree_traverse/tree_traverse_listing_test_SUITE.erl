@@ -14,6 +14,7 @@
 
 -include("qos_tests_utils.hrl").
 -include("onenv_test_utils.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -65,7 +66,7 @@ all() -> [
     dir_stats_collections_initialization_traverse_listing_interrupted_call_error
 ].
 
--define(SPACE_NAME, <<"space1">>).
+-define(SPACE_PLACEHOLDER, space1).
 -define(ATTEMPTS, 10).
 
 -define(UNEXPECTED_ERROR, {error, totally_unexpected_error}).
@@ -169,7 +170,7 @@ dir_stats_collections_initialization_traverse_listing_interrupted_call_error(_Co
 %%%===================================================================
 
 qos_traverse_listing_error_base() ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     FileUuid = file_id:guid_to_uuid(RootDirGuid),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -188,7 +189,7 @@ qos_traverse_listing_error_base() ->
 
 
 archivisation_traverse_listing_error_base(ErrorType) ->
-    onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{dataset = #dataset_spec{archives = 1}}),
+    onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{dataset = #dataset_spec{archives = 1}}, krakow),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     % archivisation traverse is scheduled with archive creation
     
@@ -203,7 +204,7 @@ archivisation_traverse_listing_error_base(ErrorType) ->
 
 
 archive_verification_traverse_listing_error_base() ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
     ok = opw_test_rpc:call(krakow, archive_verification_traverse, start, [#document{key = datastore_key:new(), value = #archive{data_dir_guid = RootDirGuid}}]),
@@ -214,7 +215,7 @@ archive_verification_traverse_listing_error_base() ->
 
 archive_recall_traverse_listing_error_base() ->
     #object{guid = RootDirGuid, dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{dataset = #dataset_spec{archives = 1}}),
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{dataset = #dataset_spec{archives = 1}}, krakow),
 
     {ok, ArchiveDoc} = opw_test_rpc:call(krakow, archive, get, [ArchiveId]),
     UserCtx = opw_test_rpc:call(krakow, user_ctx, new, [<<"0">>]),
@@ -231,7 +232,7 @@ archive_recall_traverse_listing_error_base() ->
 
 
 replica_eviction_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     FileUuid = file_id:guid_to_uuid(RootDirGuid),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -248,7 +249,7 @@ replica_eviction_traverse_listing_error_base(ErrorType) ->
 
 
 replication_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     FileUuid = file_id:guid_to_uuid(RootDirGuid),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -258,14 +259,14 @@ replication_traverse_listing_error_base(ErrorType) ->
     
     case ErrorType of
         unexpected ->
-            check_traverse_retries_until_listing_success(transfer_file_tree_traverse, replica_eviction_traverse:pool_name());
+            check_traverse_retries_until_listing_success(transfer_file_tree_traverse, replication_traverse:pool_name());
         known ->
             test_utils:mock_assert_num_calls_sum(KrakowNode, transfer_file_tree_traverse, task_finished, 2, 1, ?ATTEMPTS)
     end.
 
 
 bulk_download_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     UserCtx = opw_test_rpc:call(krakow, user_ctx, new, [<<"0">>]),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
@@ -281,7 +282,7 @@ bulk_download_traverse_listing_error_base(ErrorType) ->
 
 
 tree_deletion_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
     UserCtx = opw_test_rpc:call(krakow, user_ctx, new, [<<"0">>]),
     KrakowNode = oct_background:get_random_provider_node(krakow),
@@ -300,8 +301,9 @@ tree_deletion_traverse_listing_error_base(ErrorType) ->
 
 
 dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
-    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, krakow, #dir_spec{}),
+    #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
     ok = opw_test_rpc:call(krakow, dir_stats_collections_initialization_traverse, run,
@@ -309,8 +311,10 @@ dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
     
     case ErrorType of
         unexpected ->
-            test_utils:mock_assert_num_calls_sum(KrakowNode, dir_stats_service_state, disable, 1, 1),
-            test_utils:mock_assert_num_calls_sum(KrakowNode, dir_stats_collections_initialization_traverse, task_canceled, 2, 1, ?ATTEMPTS);
+            test_utils:mock_assert_num_calls_sum(KrakowNode,
+                dir_stats_collector, update_stats_of_dir, [SpaceDirGuid, dir_size_stats, #{?DIR_ERRORS_COUNT => 1}], 1),
+            test_utils:mock_assert_num_calls_sum(KrakowNode,
+                dir_stats_collections_initialization_traverse, task_finished, 2, 1, ?ATTEMPTS);
         known ->
             check_traverse_retries_until_listing_success(
                 dir_stats_collections_initialization_traverse, <<"dir_stats_collections_initialization_traverse">>)
@@ -479,7 +483,7 @@ tree_deletion_traverse_init_per_testcase(Config) ->
 dir_stats_collections_initialization_traverse_init_per_testcase(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, dir_stats_collections_initialization_traverse, [passthrough]),
-    test_utils:mock_new(Workers, dir_stats_service_state, [passthrough]),
+    test_utils:mock_new(Workers, dir_stats_collector, [passthrough]),
     % mock file_ctx:is_space_dir_const so no additional jobs for archive and trash dirs are created
     test_utils:mock_new(Workers, file_ctx, [passthrough]),
     test_utils:mock_expect(Workers, file_ctx, is_space_dir_const, fun(_) -> false end),
