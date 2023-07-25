@@ -6,7 +6,9 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Unit tests for verifying if any datastore model has been upgraded.
+%%% Unit tests that keep track if any datastore model that is synchronized between providers has been upgraded
+%%% (i.e. the record version has changed). Such upgrades are disallowed between minor system versions,
+%%% as they break the compatibility of providers. They can only be introduced when releasing a new major version.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(synchronized_datastore_model_upgrade_test).
@@ -14,22 +16,25 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-
--define(DATASTORE_MODELS, #{
-    file_meta => 12,
-    file_location => 6,
+%%The map of all synchronized models and their versions.
+%%If a version is changed, an adjustment to this map will be required for the tests to pass.
+%%The code author and reviewers **must make sure** that the change can be introduced
+%%(e.g. a new model is added or a new major version is to be released).
+-define(FROZEN_MODEL_VERSIONS, #{
+    archive => 1,
+    archive_recall_details => 1,
     custom_metadata => 3,
-    times => 1,
+    dataset => 2,
+    file_location => 6,
+    file_meta => 12,
+    index => 1,
+    qos_entry => 2,
+    replica_deletion => 3,
     space_transfer_stats => 1,
+    times => 1,
     transfer => 12,
     transferred_file => 2,
-    replica_deletion => 3,
-    index => 1,
-    tree_traverse_job => 6,
-    qos_entry => 2,
-    dataset => 2,
-    archive => 1,
-    archive_recall_details => 1
+    tree_traverse_job => 6
 }).
 
 
@@ -42,22 +47,16 @@ datastore_model_version_verification_test_() ->
         end
     end, datastore_config_plugin:get_models()),
 
-    ?assertEqual(lists:sort(maps:keys(maps:from_list(ActualModelVersions))), lists:sort(maps:keys(?DATASTORE_MODELS))),
-
-    lists:map(fun({Model, Version}) ->
-        ?_assertEqual({Model, Version}, {Model, maps:get(Model, ?DATASTORE_MODELS)})
-    end, ActualModelVersions).
+    lists:map(fun({Model, Version}) -> {
+        str_utils:to_binary(Model), fun() ->
+        ?_assertEqual({Model, Version}, {Model, maps:get(Model, ?FROZEN_MODEL_VERSIONS, unknown)})
+    end} end, ActualModelVersions).
 
 
 get_model_ctx(qos_entry_audit_log) ->
     json_infinite_log_model:get_ctx();
 get_model_ctx(Model) ->
-    case erlang:function_exported(Model, get_ctx, 0) of
-        true ->
-            Model:get_ctx();
-        false ->
-            #{}
-    end.
+    datastore_model_default:get_ctx(Model).
 
 
 is_sync_enabled(#{sync_enabled := true}) -> true;
