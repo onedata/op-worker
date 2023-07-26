@@ -111,18 +111,18 @@ get_record_struct(1) ->
 
         {executor, {custom, string, {persistent_record, to_string, from_string, atm_task_executor}}},
         {lambda_execution_config_entries, [{custom, string, {
-            persistent_record, encode, decode, atm_lambda_execution_config_entry
+            persistent_record, to_string, from_string, atm_lambda_execution_config_entry
         }}]},
         {argument_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_argument_spec
+            persistent_record, to_string, from_string, atm_task_execution_argument_spec
         }}]},
         %% FIX below field name mismatch (see record) on next model upgrade
         {job_result_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_result_spec
+            persistent_record, to_string, from_string, atm_task_execution_result_spec
         }}]},
         %% FIX below field name mismatch (see record) on next model upgrade
         {supplementary_result_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_result_spec
+            persistent_record, to_string, from_string, atm_task_execution_result_spec
         }}]},
 
         {system_audit_log_store_id, string},
