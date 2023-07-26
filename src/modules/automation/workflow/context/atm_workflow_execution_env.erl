@@ -30,6 +30,7 @@
     add_global_store_mapping/3,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
+    renew_stale_task_selector_registry/3,
     add_task_audit_log_store_container/3,
     add_task_time_series_store_id/3,
     ensure_task_registered/2
@@ -44,6 +45,7 @@
 
     get_lane_run_exception_store_container/1,
     get_task_time_series_store_id/2,
+    get_task_selector/2,
 
     acquire_auth/1,
 
@@ -64,8 +66,11 @@
     global_store_registry :: atm_workflow_execution:store_registry(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
 
-    % current lane run execution specific stores
+    % current lane run execution specific components
     lane_run_exception_store_container :: undefined | atm_store_container:record(),
+
+    task_selector_registry :: #{atm_task_execution:id() => atm_workflow_execution_logger:task_selector()},
+
     task_audit_logs_registry :: #{atm_task_execution:id() => atm_store_container:record()},
     task_time_series_registry :: #{atm_task_execution:id() => atm_store:id()}
 }).
@@ -116,7 +121,8 @@ build(
         workflow_audit_log_store_container = undefined,
         lane_run_exception_store_container = undefined,
         task_audit_logs_registry = #{},
-        task_time_series_registry = #{}
+        task_time_series_registry = #{},
+        task_selector_registry = #{}
     }.
 
 
@@ -143,6 +149,59 @@ set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record
     Record#atm_workflow_execution_env{
         lane_run_exception_store_container = AtmLaneRunExceptionStoreContainer
     }.
+
+
+-spec renew_stale_task_selector_registry(
+    atm_workflow_execution:id() | atm_workflow_execution:doc(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_env:record()
+) ->
+    atm_workflow_execution_env:record().
+renew_stale_task_selector_registry(
+    #document{value = AtmWorkflowExecution = #atm_workflow_execution{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+    }},
+    OriginalAtmLaneRunSelector,
+    Record
+) ->
+    AtmLaneRunSelector = {AtmLaneIndex, _} = atm_lane_execution:try_resolving_lane_run_selector(
+        OriginalAtmLaneRunSelector, AtmWorkflowExecution
+    ),
+    {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
+
+    case should_renew_task_selector_registry(AtmLaneRunSelector, AtmLaneRun, Record) of
+        false ->
+            Record;
+        true ->
+            {ok, #document{value = #atm_workflow_schema_snapshot{
+                revision = #atm_workflow_schema_revision{
+                    lanes = AtmLaneSchemas
+                }
+            }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+            AtmLaneSchema = lists:nth(AtmLaneIndex, AtmLaneSchemas),
+
+            Record#atm_workflow_execution_env{task_selector_registry = lists:foldl(fun(
+                {AtmParallelBoxIndex, {AtmParallelBoxSchema, AtmParallelBoxExecution}},
+                OuterAcc
+            ) ->
+                lists:foldl(fun({AtmTaskIndex, #atm_task_schema{id = AtmTaskSchemaId}}, InnerAcc) ->
+                    AtmTaskExecutionId = atm_parallel_box_execution:get_task_id(
+                        AtmTaskSchemaId, AtmParallelBoxExecution
+                    ),
+                    AtmTaskSelector = {AtmLaneRunSelector, AtmParallelBoxIndex, AtmTaskIndex},
+
+                    InnerAcc#{AtmTaskExecutionId => AtmTaskSelector}
+                end, OuterAcc, lists:enumerate(1, AtmParallelBoxSchema#atm_parallel_box_schema.tasks))
+            end, #{}, lists:enumerate(1, lists:zip(
+                AtmLaneSchema#atm_lane_schema.parallel_boxes,
+                AtmLaneRun#atm_lane_execution_run.parallel_boxes
+            )))}
+    end;
+
+renew_stale_task_selector_registry(AtmWorkflowExecutionId, OriginalAtmLaneRunSelector, Record) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    renew_stale_task_selector_registry(AtmWorkflowExecutionDoc, OriginalAtmLaneRunSelector, Record).
 
 
 -spec add_task_audit_log_store_container(
@@ -240,6 +299,14 @@ get_task_time_series_store_id(AtmTaskExecutionId, #atm_workflow_execution_env{
     maps:get(AtmTaskExecutionId, AtmTaskTSRegistry).
 
 
+-spec get_task_selector(atm_task_execution:id(), record()) ->
+    atm_workflow_execution_logger:task_selector().
+get_task_selector(AtmTaskExecutionId, #atm_workflow_execution_env{
+    task_selector_registry = AtmTaskSelectorRegistry
+}) ->
+    maps:get(AtmTaskExecutionId, AtmTaskSelectorRegistry).
+
+
 -spec acquire_auth(record()) -> atm_workflow_execution_auth:record() | no_return().
 acquire_auth(#atm_workflow_execution_env{
     space_id = SpaceId,
@@ -263,19 +330,38 @@ get_log_level_int(#atm_workflow_execution_env{log_level = LogLevel}) ->
 build_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_execution_env{
     log_level = LogLevel,
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
-    task_audit_logs_registry = AtmTaskAuditLogsRegistry
+    task_audit_logs_registry = AtmTaskAuditLogsRegistry,
+    task_selector_registry = AtmTaskSelectorRegistry
 }) ->
     atm_workflow_execution_logger:build(
         AtmWorkflowExecutionAuth,
         LogLevel,
         maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined),
-        AtmWorkflowAuditLogStoreContainer
+        AtmWorkflowAuditLogStoreContainer,
+        AtmTaskSelectorRegistry
     ).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec should_renew_task_selector_registry(
+    atm_workflow_execution:record(),
+    atm_lane_execution:run(),
+    atm_workflow_execution_env:record()
+) ->
+    boolean().
+should_renew_task_selector_registry(AtmLaneRunSelector, AtmLaneRun, Record) ->
+    case maps:values(Record#atm_workflow_execution_env.task_selector_registry) of
+        [{AtmLaneRunSelector, _, _} | _] ->
+            % registry is actual
+            false;
+        _ ->
+            AtmLaneRun#atm_lane_execution_run.parallel_boxes /= []
+    end.
 
 
 %% @private
