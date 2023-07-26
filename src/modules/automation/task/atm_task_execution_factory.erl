@@ -200,7 +200,7 @@ create_executor(CreationCtx = #creation_ctx{
 
     ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
         selector = get_task_selector(CreationCtx),
-        description = <<"executor created.">>
+        description = <<"Executor created.">>
     }),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -232,7 +232,7 @@ create_audit_log(CreationCtx = #creation_ctx{
 
     ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
         selector = get_task_selector(CreationCtx),
-        description = <<"audit log created.">>,
+        description = <<"Audit log created.">>,
         details = #{<<"auditLogStoreId">> => AtmSystemAuditLogStoreId}
     }),
 
@@ -274,7 +274,7 @@ create_time_series_store(CreationCtx = #creation_ctx{
 
     ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
         selector = get_task_selector(CreationCtx),
-        description = <<"time series store copied from origin run.">>,
+        description = <<"Time series store copied from origin run.">>,
         details = #{<<"timeSeriesStoreId">> => AtmTaskTSStoreId}
     }),
 
@@ -308,7 +308,7 @@ create_time_series_store(CreationCtx = #creation_ctx{
 
     ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
         selector = get_task_selector(CreationCtx),
-        description = <<"time series store created.">>,
+        description = <<"Time series store created.">>,
         details = #{<<"timeSeriesStoreId">> => AtmTaskTSStoreId}
     }),
 
@@ -423,7 +423,7 @@ create_task_execution_doc(CreationCtx = #creation_ctx{
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
     ?atm_workflow_debug(Logger, #atm_workflow_log_schema{
         selector = get_task_selector(CreationCtx),
-        description = <<"created.">>,
+        description = <<"Created.">>,
         details = #{<<"taskId">> => AtmTaskExecutionId}
     }),
 

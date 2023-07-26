@@ -333,7 +333,7 @@ crash_atm_workflow_execution_test_base(Testcase, ExpTasksFinalStatus, CrashingAt
 
 %% @private
 assert_no_action_possible_on_crashed_atm_workflow_execution(AtmMockCallCtx) ->
-    atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed(
+    atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_ended_workflow_execution(
         AtmMockCallCtx
     ),
 

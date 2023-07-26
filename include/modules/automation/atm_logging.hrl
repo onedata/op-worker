@@ -149,6 +149,10 @@
 
 -define(fmt_bin(Format, Args), str_utils:format_bin(Format, Args)).
 
+-define(lane_run_selector_json(__ATM_LANE_RUN_SELECTOR),
+    atm_lane_execution:lane_run_selector_to_json(__ATM_LANE_RUN_SELECTOR)
+).
+
 -record(atm_workflow_log_schema, {
     selector :: undefined | atm_workflow_execution_logger:component_selector(),
     description :: binary(),

@@ -109,7 +109,7 @@ get_record_struct(1) ->
 
         {schema_id, string},
 
-        {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
+        {executor, {custom, string, {persistent_record, to_string, from_string, atm_task_executor}}},
         {lambda_execution_config_entries, [{custom, string, {
             persistent_record, encode, decode, atm_lambda_execution_config_entry
         }}]},

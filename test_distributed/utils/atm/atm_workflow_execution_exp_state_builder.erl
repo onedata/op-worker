@@ -33,6 +33,8 @@
     assert_deleted/1
 ]).
 -export([
+    get_workflow_status/1,
+
     set_current_lane_run/3,
 
     get_task_selector/2,
@@ -90,6 +92,7 @@
     {all_tasks, atm_lane_execution:lane_run_selector(), abruptly, failed | cancelled | interrupted} |
     {all_tasks, atm_lane_execution:lane_run_selector(), stopping_due_to, pause | interrupt | cancel} |
 
+    {lane_run, atm_lane_execution:lane_run_selector(), scheduled} |
     {lane_run, atm_lane_execution:lane_run_selector(), automatic_retry_scheduled} |
     {lane_run, atm_lane_execution:lane_run_selector(), manual_retry_scheduled, atm_lane_execution:run_num()} |
     {lane_run, atm_lane_execution:lane_run_selector(), manual_rerun_scheduled, atm_lane_execution:run_num()} |
@@ -307,6 +310,9 @@ expect(ExpStateCtx, {all_tasks, AtmLaneRunSelector, stopping_due_to, Reason}) wh
 ->
     expect_all_tasks_stopping_due_to(ExpStateCtx, AtmLaneRunSelector, Reason);
 
+expect(ExpStateCtx, {lane_run, AtmLaneRunSelector, scheduled}) ->
+    expect_lane_run_scheduled(ExpStateCtx, AtmLaneRunSelector);
+
 expect(ExpStateCtx, {lane_run, AtmLaneRunSelector, automatic_retry_scheduled}) ->
     expect_lane_run_automatic_retry_scheduled(ExpStateCtx, AtmLaneRunSelector);
 
@@ -469,6 +475,13 @@ assert_deleted(ExpStateCtx) ->
     assert_workflow_related_docs_deleted(ExpStateCtx),
     assert_global_store_related_docs_deleted(ExpStateCtx),
     assert_task_related_docs_deleted(ExpStateCtx).
+
+
+-spec get_workflow_status(ctx()) -> binary().
+get_workflow_status(#exp_workflow_execution_state_ctx{
+    exp_workflow_execution_state = ExpAtmWorkflowExecutionState
+}) ->
+    maps:get(<<"status">>, ExpAtmWorkflowExecutionState).
 
 
 -spec set_current_lane_run(non_neg_integer(), non_neg_integer(), ctx()) -> ctx().
@@ -944,6 +957,31 @@ expect_lane_run_removed(
         exp_task_execution_state_ctx_registry = maps:without(
             AtmTaskExecutionIds, ExpAtmTaskExecutionsRegistry
         )
+    }.
+
+
+%% @private
+-spec expect_lane_run_scheduled(ctx(), atm_lane_execution:lane_run_selector()) ->
+    ctx().
+expect_lane_run_scheduled(
+    ExpStateCtx = #exp_workflow_execution_state_ctx{
+        exp_workflow_execution_state = ExpAtmWorkflowExecutionState0
+    },
+    {AtmLaneSelector, AtmRunSelector}
+) ->
+    AtmLaneIndex = resolve_lane_selector(AtmLaneSelector, ExpStateCtx),
+    AtmRunNum = resolve_run_selector(AtmRunSelector, ExpStateCtx),
+
+    AtmLanePath = ?JSON_PATH("lanes.[~B].runs", [AtmLaneIndex - 1]),
+    {ok, PrevRuns} = json_utils:query(ExpAtmWorkflowExecutionState0, AtmLanePath),
+
+    {ok, ExpAtmWorkflowExecutionState1} = json_utils:insert(
+        ExpAtmWorkflowExecutionState0,
+        [build_initial_regular_lane_run_exp_state(AtmRunNum, <<"scheduled">>) | PrevRuns],
+        AtmLanePath
+    ),
+    ExpStateCtx#exp_workflow_execution_state_ctx{
+        exp_workflow_execution_state = ExpAtmWorkflowExecutionState1
     }.
 
 
