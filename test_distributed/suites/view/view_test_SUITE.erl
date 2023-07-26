@@ -300,13 +300,13 @@ query_view_using_file_popularity(_Config) ->
 
     ok = ?rpc(file_popularity_api:enable(SpaceId)),
     FilePath = ?TEST_FILE(SpaceName),
-    {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath),
-    {ok, H} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(Guid), write),
-    lfm_proxy:write(Worker, H, 0, TestData),
-    lfm_proxy:close(Worker, H),
-    Uuid = file_id:guid_to_uuid(Guid),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessionId, FilePath),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(FileGuid), write),
+    lfm_proxy:write(Worker, FileHandle, 0, TestData),
+    lfm_proxy:close(Worker, FileHandle),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
 
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(Guid),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -321,7 +321,7 @@ query_view_using_file_popularity(_Config) ->
         <<"id">> := _,
         <<"key">> := SpaceObjectId,
         <<"value">> := #{
-            <<"file_uuid">> := Uuid,
+            <<"file_uuid">> := FileUuid,
             <<"space_id">> := SpaceId,
             <<"dy_hist">> :=[1 | _],
             <<"hr_hist">> := [1 | _],
@@ -332,7 +332,8 @@ query_view_using_file_popularity(_Config) ->
             <<"last_open">> := _,
             <<"open_count">> := 1,
             <<"size">> := TestDataSize
-    }}], ViewName, [{stale, false}]).
+        }
+    }], ViewName, [{stale, false}]).
 
 
 query_view_and_emit_ctx(_Config) ->
@@ -356,8 +357,8 @@ query_view_and_emit_ctx(_Config) ->
         <<"key">> := SpaceObjectId,
         <<"value">> := #{
             <<"providerId">> := ProviderId
-
-        }}], ViewName, [{stale, false}, {key, SpaceObjectId}]).
+        }
+    }], ViewName, [{stale, false}, {key, SpaceObjectId}]).
 
 
 wrong_map_function(_Config) ->
@@ -437,8 +438,10 @@ spatial_function_returning_integer_key_should_return_error(_Config) ->
     ">>,
 
     create_view(ViewName, SpatialFunction, undefined, [], true),
-    ?assertQuery(?ERROR_VIEW_QUERY_FAILED(_, _), ViewName, [{stale, false},
-        {spatial, true}]).
+    ?assertQuery(
+        ?ERROR_VIEW_QUERY_FAILED(_, _),
+        ViewName, [{stale, false}, {spatial, true}]
+    ).
 
 
 spatial_function_returning_string_key_should_return_error(_Config) ->
@@ -450,8 +453,10 @@ spatial_function_returning_string_key_should_return_error(_Config) ->
     ">>,
 
     create_view(ViewName, SpatialFunction, undefined, [], true),
-    ?assertQuery(?ERROR_VIEW_QUERY_FAILED(_, _), ViewName, [{stale, false},
-        {spatial, true}]).
+    ?assertQuery(
+        ?ERROR_VIEW_QUERY_FAILED(_, _),
+        ViewName,  [{stale, false}, {spatial, true}]
+    ).
 
 
 %%%===================================================================
