@@ -308,8 +308,17 @@ resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector)
     atm_lane_execution:lane_run_selector()
 ) ->
     {atm_lane_execution:lane_run_selector(), atm_workflow_execution_env:record()}.
-handle_lane_execution_started(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    {AtmLaneRunSelector, AtmWorkflowExecutionEnv}.
+handle_lane_execution_started(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv0, AtmLaneRunSelector) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    ResolvedAtmLaneRunSelector = atm_lane_execution:try_resolving_lane_run_selector(
+        AtmLaneRunSelector, AtmWorkflowExecutionDoc#document.value
+    ),
+    AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:renew_stale_task_selector_registry(
+        AtmWorkflowExecutionDoc, ResolvedAtmLaneRunSelector, AtmWorkflowExecutionEnv0
+    ),
+
+    {ResolvedAtmLaneRunSelector, AtmWorkflowExecutionEnv1}.
 
 
 -spec run_task_for_item(
@@ -540,7 +549,7 @@ handle_workflow_abruptly_stopped(
 
 %% @private
 -spec acquire_global_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
-acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+acquire_global_env(Doc = #document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
     incarnation = AtmWorkflowExecutionIncarnation,
     store_registry = AtmGlobalStoreRegistry,
@@ -550,13 +559,14 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     {ok, #atm_store{container = AtmWorkflowAuditLogStoreContainer}} = atm_store_api:get(
         AtmWorkflowAuditLogStoreId
     ),
-    Env = atm_workflow_execution_env:build(
+    Env0 = atm_workflow_execution_env:build(
         SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation,
         LogLevel, AtmGlobalStoreRegistry
     ),
-    atm_workflow_execution_env:set_workflow_audit_log_store_container(
-        AtmWorkflowAuditLogStoreContainer, Env
-    ).
+    Env1 = atm_workflow_execution_env:set_workflow_audit_log_store_container(
+        AtmWorkflowAuditLogStoreContainer, Env0
+    ),
+    atm_workflow_execution_env:renew_stale_task_selector_registry(Doc, {current, current}, Env1).
 
 
 %% @private

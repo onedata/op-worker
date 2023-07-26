@@ -311,7 +311,7 @@ unfreeze_exception_store(AtmLaneRunSelector, #document{value = AtmWorkflowExecut
     workflow_engine:lane_spec() | no_return().
 initiate_lane_run(
     AtmLaneRunSelector,
-    #document{value = AtmWorkflowExecution},
+    AtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution},
     AtmWorkflowExecutionCtx,
     InitiateParallelBoxExecutionsFun
 ) ->
@@ -319,18 +319,21 @@ initiate_lane_run(
         {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
 
         {ok, AtmStore} = atm_store_api:get(AtmLaneRun#atm_lane_execution_run.exception_store_id),
-        AtmWorkflowExecutionEnv = atm_workflow_execution_env:set_lane_run_exception_store_container(
+        AtmWorkflowExecutionEnv0 = atm_workflow_execution_env:set_lane_run_exception_store_container(
             AtmStore#atm_store.container,
             atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
         ),
+        AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:renew_stale_task_selector_registry(
+            AtmWorkflowExecutionDoc, AtmLaneRunSelector, AtmWorkflowExecutionEnv0
+        ),
 
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = InitiateParallelBoxExecutionsFun(
-            AtmWorkflowExecutionCtx,
+            atm_workflow_execution_ctx:set_env(AtmWorkflowExecutionEnv1, AtmWorkflowExecutionCtx),
             AtmLaneRun#atm_lane_execution_run.parallel_boxes
         ),
 
         #{
-            execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv),
+            execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv1),
             parallel_boxes => AtmParallelBoxExecutionSpecs
         }
     catch

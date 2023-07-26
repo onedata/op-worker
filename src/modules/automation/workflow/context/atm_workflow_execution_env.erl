@@ -154,9 +154,9 @@ set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record
 -spec renew_stale_task_selector_registry(
     atm_workflow_execution:id() | atm_workflow_execution:doc(),
     atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution_env:record()
+    record()
 ) ->
-    atm_workflow_execution_env:record().
+    record().
 renew_stale_task_selector_registry(
     #document{value = AtmWorkflowExecution = #atm_workflow_execution{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId
@@ -349,9 +349,9 @@ build_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_executi
 
 %% @private
 -spec should_renew_task_selector_registry(
-    atm_workflow_execution:record(),
+    atm_lane_execution:lane_run_selector(),
     atm_lane_execution:run(),
-    atm_workflow_execution_env:record()
+    record()
 ) ->
     boolean().
 should_renew_task_selector_registry(AtmLaneRunSelector, AtmLaneRun, Record) ->
