@@ -744,12 +744,16 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
     lists:foreach(fun(AtmLaneIndex) ->
-        AtmLaneRunSelector = {AtmLaneIndex, CurrentRunNum},
+        IsAtmLaneRunPreparedInAdvance = AtmLaneIndex > CurrentAtmLaneIndex,
+        AtmLaneRunSelector = {AtmLaneIndex, case IsAtmLaneRunPreparedInAdvance of
+            true -> current;  % lane runs prepared in advance do not have nums assigned
+            false -> CurrentRunNum
+        end},
 
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
-                    ?WAITING_PHASE when AtmLaneIndex > CurrentAtmLaneIndex ->
+                    ?WAITING_PHASE when IsAtmLaneRunPreparedInAdvance ->
                         atm_lane_execution_handler:init_stop(
                             AtmLaneRunSelector, interrupt, AtmWorkflowExecutionCtx
                         ),
