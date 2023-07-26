@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, resume_lane/3, handle_lane_execution_started/2,
+-export([prepare_lane/3, resume_lane/3, handle_lane_execution_started/3,
     run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
     handle_task_execution_stopped/3, handle_lane_execution_stopped/3,
@@ -144,11 +144,12 @@ resume_lane(ExecutionId, ExecutionContext, LaneId) ->
 
 -spec handle_lane_execution_started(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context()
+    workflow_engine:execution_context(),
+    workflow_engine:lane_id()
 ) ->
-    workflow_engine:execution_context().
-handle_lane_execution_started(_ExecutionId, ExecutionContext) ->
-    ExecutionContext.
+    {workflow_engine:lane_id(), workflow_engine:execution_context()}.
+handle_lane_execution_started(_ExecutionId, ExecutionContext, LaneId) ->
+    {LaneId, ExecutionContext}.
 
 
 -spec run_task_for_item(

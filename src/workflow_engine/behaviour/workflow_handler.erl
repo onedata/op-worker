@@ -99,9 +99,10 @@
 %%--------------------------------------------------------------------
 -callback handle_lane_execution_started(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context()
+    workflow_engine:execution_context(),
+    workflow_engine:lane_id()
 ) ->
-    workflow_engine:execution_context().
+    {workflow_engine:lane_id(), workflow_engine:execution_context()}.
 
 
 %%--------------------------------------------------------------------

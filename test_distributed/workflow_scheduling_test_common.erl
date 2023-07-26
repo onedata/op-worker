@@ -358,7 +358,7 @@ mock_handlers(Workers, Manager) ->
     end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_started, fun
-        (ExecutionId, #{lane_id := LaneId} = Context) ->
+        (ExecutionId, Context, LaneId) ->
             MockTemplate(
                 #handler_call{
                     function = handle_lane_execution_started,
@@ -366,7 +366,7 @@ mock_handlers(Workers, Manager) ->
                     context =  Context,
                     lane_id = LaneId
                 },
-                [ExecutionId, Context]
+                [ExecutionId, Context, LaneId]
             )
     end),
 

@@ -456,15 +456,15 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     init_type(),
     workflow_handler:prepare_lane_result()
 ) -> ok.
-report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, prepare, {ok, LaneSpec}) ->
-    case finish_lane_preparation(Handler, ExecutionId, LaneSpec, prepare) of
+report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, prepare, {ok, LaneSpec}) ->
+    case finish_lane_preparation(Handler, ExecutionId, LaneId, LaneSpec, prepare) of
         {ok, #current_lane{index = LaneIndex, id = LaneId}, IteratorToSave, NextLaneId} ->
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, LaneId, 0, IteratorToSave, NextLaneId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
         ?WF_ERROR_PREPARATION_FAILED -> ok
     end;
-report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, ?RESUMING(_, Iterator, _) = InitType, {ok, LaneSpec}) ->
-    case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}, InitType) of
+report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, ?RESUMING(_, Iterator, _) = InitType, {ok, LaneSpec}) ->
+    case finish_lane_preparation(Handler, ExecutionId, LaneId, LaneSpec#{iterator => Iterator}, InitType) of
         {ok, #current_lane{index = LaneIndex, id = LaneId}, IteratorToSave, NextLaneId} ->
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, LaneId, 0, IteratorToSave, NextLaneId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
@@ -649,12 +649,13 @@ get_boxes_map(#workflow_execution_state{current_lane = #current_lane{parallel_bo
 -spec finish_lane_preparation(
     workflow_handler:handler(),
     workflow_engine:execution_id(),
+    workflow_engine:lane_id(),
     workflow_engine:lane_spec(),
     init_type()
 ) ->
     {ok, current_lane(), iterator:iterator(), workflow_engine:lane_id() | undefined} |
     ?WF_ERROR_PREPARATION_FAILED | ?WF_ERROR_LANE_ALREADY_PREPARED.
-finish_lane_preparation(Handler, ExecutionId,
+finish_lane_preparation(Handler, ExecutionId, LaneId,
     #{
         parallel_boxes := Boxes,
         iterator := Iterator,
@@ -701,7 +702,7 @@ finish_lane_preparation(Handler, ExecutionId,
                     current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
                 }} = UpdatedDoc} ->
-                    case {update_lane_context(ExecutionId, Iterator, LaneExecutionContext, Handler), InitType} of
+                    case {update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler), InitType} of
                         {#workflow_execution_state{execution_status = #execution_cancelled{}}, _} ->
                             ok;
                         {#workflow_execution_state{prefetched_iteration_step = undefined}, ?RESUMING_FROM_DUMP(_, _)} ->
@@ -1385,20 +1386,19 @@ finish_lane_preparation_internal(
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext, _FailureCountToCancel) ->
     ?WF_ERROR_LANE_ALREADY_PREPARED.
 
--spec update_lane_context(workflow_engine:execution_id(), iterator:iterator(),
+-spec update_lane_context(workflow_engine:execution_id(), iterator:iterator(), workflow_engine:lane_id(),
     workflow_engine:execution_context(), workflow_handler:handler()) -> state().
-update_lane_context(ExecutionId, Iterator, LaneExecutionContext, Handler) ->
-    {UpdatedLaneExecutionContext, NextIterationStep} = case workflow_engine:call_handler(
-        ExecutionId, LaneExecutionContext, Handler, handle_lane_execution_started, []) of
-        error ->
-            {LaneExecutionContext, undefined};
-        HandlerResult -> {HandlerResult, get_next_iterator(Handler, HandlerResult, Iterator, ExecutionId)}
+update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler) ->
+    {UpdatedLaneId, UpdatedLaneExecutionContext, NextIterationStep} = case workflow_engine:call_handler(
+        ExecutionId, LaneExecutionContext, Handler, handle_lane_execution_started, [LaneId]) of
+        error -> {LaneId, LaneExecutionContext, undefined};
+        {Id, Context} -> {Id, Context, get_next_iterator(Handler, Context, Iterator, ExecutionId)}
     end,
     {ok, #document{value = UpdatedState}} = update(ExecutionId, fun
         (#workflow_execution_state{execution_status = #execution_cancelled{}, current_lane = CurrentLane} = State) ->
             {ok, State#workflow_execution_state{
                 prefetched_iteration_step = NextIterationStep,
-                current_lane = CurrentLane#current_lane{execution_context = UpdatedLaneExecutionContext}
+                current_lane = CurrentLane#current_lane{id = UpdatedLaneId, execution_context = UpdatedLaneExecutionContext}
             }};
         (#workflow_execution_state{current_lane = CurrentLane} = State) ->
             State2 = case NextIterationStep of
@@ -1411,7 +1411,7 @@ update_lane_context(ExecutionId, Iterator, LaneExecutionContext, Handler) ->
             {ok, State2#workflow_execution_state{
                 execution_status = ?EXECUTING,
                 prefetched_iteration_step = NextIterationStep,
-                current_lane = CurrentLane#current_lane{execution_context = UpdatedLaneExecutionContext}
+                current_lane = CurrentLane#current_lane{id = UpdatedLaneId, execution_context = UpdatedLaneExecutionContext}
             }}
     end),
     UpdatedState.
