@@ -9,6 +9,7 @@
 %%% This module contains functions that handle atm workflow execution status
 %%% transitions according to following state machine:
 %%%
+%%%                                      *
 %%%                                      |
 %%%                                      v
 %%% W                             +-------------+
@@ -60,9 +61,10 @@
 %%%  N   |  +----------+     +--------+    +-----------+      +-----------+   |                 |
 %%%  D   |  | FINISHED |     | FAILED |    | CANCELLED |      |  CRASHED  |   |                 |
 %%%  E   |  +----------+     +--------+    +-----------+      +-----------+   |                 |
-%%%  D   |                                                                    |                 |
-%%%       \                                                                   |                /
-%%%         ----------------------------- resuming ---------------------------o---------------
+%%%  D   |                       |                                            |                 |
+%%%      |                 force continue                                  resume            resume
+%%%       \                      |                                            |                /
+%%%         ---------------------o--------------------------------------------o---------------
 %%%
 %%% Workflow transition to STOPPING status when last lane run ended execution and all items were
 %%% processed but also when execution is halted (^stopping) and not all items were processed
@@ -106,7 +108,8 @@
     handle_crashed/1,
     handle_discard/1,
     handle_manual_lane_run_repeat/2,
-    handle_resume/2
+    handle_resume/2,
+    handle_forced_continue/1
 ]).
 
 
@@ -492,6 +495,46 @@ handle_resume(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE
     end,
 
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, AtmWorkflowExecutionDoc} = Result ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+            Result;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec handle_forced_continue(atm_workflow_execution:id()) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_forced_continue(AtmWorkflowExecutionId) ->
+    Diff = fun
+        (Record = #atm_workflow_execution{
+            status = ?FAILED_STATUS,
+            current_lane_index = CurrentAtmLaneIndex,
+            current_run_num = CurrentAtmRunNum,
+            lanes_count = AtmLanesCount
+        }) when CurrentAtmLaneIndex < AtmLanesCount ->
+
+            NextAtmLaneIndex = CurrentAtmLaneIndex + 1,
+            NextRun = #atm_lane_execution_run{
+                run_num = CurrentAtmRunNum,
+                status = ?SCHEDULED_STATUS
+            },
+            Diff = fun(_Run) -> ?ERROR_ALREADY_EXISTS end,
+
+            NewAtmWorkflowExecution = Record#atm_workflow_execution{
+                status = ?RESUMING_STATUS,
+                current_lane_index = NextAtmLaneIndex,
+                schedule_time = global_clock:timestamp_seconds(),
+                incarnation = Record#atm_workflow_execution.incarnation + 1
+            },
+            atm_lane_execution:update_run(
+                {NextAtmLaneIndex, CurrentAtmRunNum}, Diff, NextRun, NewAtmWorkflowExecution
+            );
+
+        (_) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE
+    end,
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} = Result ->
             ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),

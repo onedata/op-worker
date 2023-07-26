@@ -794,7 +794,7 @@ shift_monitored_lane_run_if_current_one_stopped(
         current_run_num = CurrentAtmRunNum
     }
 ) when
-    % Lane execution stopped callback may ba called during lane preparation in case of failure
+    % Lane execution stopped callback may be called during lane preparation in case of failure
     % - in such case it will be prepare_lane that will finish executing last
     Step =:= prepare_lane;
     Step =:= resume_lane;

@@ -203,7 +203,7 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {registry, #{
-            string => {custom, string, {persistent_record, encode, decode, atm_openfaas_function_pod_status_summary}}
+            string => {custom, string, {persistent_record, to_string, from_string, atm_openfaas_function_pod_status_summary}}
         }}
     ]}.
 

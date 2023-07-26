@@ -667,7 +667,7 @@ get_record_struct(1) ->
         {creation_time, integer},
         {creator, string},
         {state, {custom, atom, {archive, encode_state, decode_state}}},
-        {config, {custom, string, {persistent_record, encode, decode, archive_config}}},
+        {config, {custom, string, {persistent_record, to_string, from_string, archive_config}}},
         {modifiable_fields, {record, [
             {incarnation, integer},
             {preserved_callback, string},
@@ -676,7 +676,7 @@ get_record_struct(1) ->
         ]}},
         {root_dir_guid, string},
         {data_dir_guid, string},
-        {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
+        {stats, {custom, string, {persistent_record, to_string, from_string, archive_stats}}},
         {parent, string},
         {base_archive_id, string},
         {related_dip, string},
