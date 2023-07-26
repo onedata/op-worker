@@ -1727,7 +1727,7 @@ user_auth:
       name: ct_logs_user_auth.tar.gz
 
 view:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: INDEX
   artifacts:
     - <<: *ct_logs
