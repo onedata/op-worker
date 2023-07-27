@@ -30,7 +30,7 @@
     add_global_store_mapping/3,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
-    renew_stale_task_selector_registry/3,
+    ensure_task_selector_registry_up_to_date/3,
     add_task_audit_log_store_container/3,
     add_task_time_series_store_id/3,
     ensure_task_registered/2
@@ -151,13 +151,13 @@ set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record
     }.
 
 
--spec renew_stale_task_selector_registry(
+-spec ensure_task_selector_registry_up_to_date(
     atm_workflow_execution:id() | atm_workflow_execution:doc(),
     atm_lane_execution:lane_run_selector(),
     record()
 ) ->
     record().
-renew_stale_task_selector_registry(
+ensure_task_selector_registry_up_to_date(
     #document{value = AtmWorkflowExecution = #atm_workflow_execution{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId
     }},
@@ -199,9 +199,9 @@ renew_stale_task_selector_registry(
             )))}
     end;
 
-renew_stale_task_selector_registry(AtmWorkflowExecutionId, OriginalAtmLaneRunSelector, Record) ->
+ensure_task_selector_registry_up_to_date(AtmWorkflowExecutionId, OriginalAtmLaneRunSelector, Record) ->
     {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-    renew_stale_task_selector_registry(AtmWorkflowExecutionDoc, OriginalAtmLaneRunSelector, Record).
+    ensure_task_selector_registry_up_to_date(AtmWorkflowExecutionDoc, OriginalAtmLaneRunSelector, Record).
 
 
 -spec add_task_audit_log_store_container(

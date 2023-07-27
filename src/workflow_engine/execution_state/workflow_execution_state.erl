@@ -1390,7 +1390,8 @@ finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext, _Fail
     workflow_engine:execution_context(), workflow_handler:handler()) -> state().
 update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler) ->
     {UpdatedLaneId, UpdatedLaneExecutionContext, NextIterationStep} = case workflow_engine:call_handler(
-        ExecutionId, LaneExecutionContext, Handler, handle_lane_execution_started, [LaneId]) of
+        ExecutionId, LaneExecutionContext, Handler, handle_lane_execution_started, [LaneId]
+    ) of
         error -> {LaneId, LaneExecutionContext, undefined};
         {Id, Context} -> {Id, Context, get_next_iterator(Handler, Context, Iterator, ExecutionId)}
     end,

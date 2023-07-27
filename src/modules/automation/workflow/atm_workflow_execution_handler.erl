@@ -390,7 +390,7 @@ handle_lane_execution_started(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv0, 
     ResolvedAtmLaneRunSelector = atm_lane_execution:try_resolving_lane_run_selector(
         AtmLaneRunSelector, AtmWorkflowExecutionDoc#document.value
     ),
-    AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:renew_stale_task_selector_registry(
+    AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
         AtmWorkflowExecutionDoc, ResolvedAtmLaneRunSelector, AtmWorkflowExecutionEnv0
     ),
 
@@ -655,7 +655,7 @@ acquire_global_env(Doc = #document{key = AtmWorkflowExecutionId, value = #atm_wo
     Env1 = atm_workflow_execution_env:set_workflow_audit_log_store_container(
         AtmWorkflowAuditLogStoreContainer, Env0
     ),
-    atm_workflow_execution_env:renew_stale_task_selector_registry(Doc, {current, current}, Env1).
+    atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(Doc, {current, current}, Env1).
 
 
 %% @private
