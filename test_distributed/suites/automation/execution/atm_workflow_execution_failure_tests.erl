@@ -266,7 +266,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                     workflow_failed
                 ]
             },
-            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_ended_workflow_execution/1
         }]
     }).
 
@@ -523,7 +523,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureTestSpec = #fail_atm_work
                     workflow_failed
                 ]
             },
-            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_ended_workflow_execution/1
         }]
     }).
 

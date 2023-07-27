@@ -19,6 +19,7 @@
 %% API
 -export([
     acquire/1, acquire/2, acquire/3,
+    set_env/2,
     configure_processed_task_id/2
 ]).
 -export([
@@ -75,6 +76,11 @@ acquire(AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv) -
         workflow_execution_env = AtmWorkflowExecutionEnv,
         processed_task_id = AtmTaskExecutionId
     }.
+
+
+-spec set_env(atm_workflow_execution_env:record(), record()) -> record().
+set_env(AtmWorkflowExecutionEnv, Record) ->
+    Record#atm_workflow_execution_ctx{workflow_execution_env = AtmWorkflowExecutionEnv}.
 
 
 -spec configure_processed_task_id(undefined | atm_task_execution:id(), record()) -> record().

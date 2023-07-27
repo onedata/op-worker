@@ -119,7 +119,7 @@ get_record_struct(1) ->
         {schema_id, string},
         {initial_content, {custom, string, {?MODULE, encode_initial_content, decode_initial_content}}},
         {frozen, boolean},
-        {container, {custom, string, {persistent_record, encode, decode, atm_store_container}}}
+        {container, {custom, string, {persistent_record, to_string, from_string, atm_store_container}}}
     ]}.
 
 

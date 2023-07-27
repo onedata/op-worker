@@ -22,7 +22,7 @@
     start_all/2,
     init_stop_all/3,
     resume_all/2,
-    ensure_all_stopped/1,
+    ensure_all_stopped/2,
     teardown_all/2,
     delete_all/1, delete/1
 ]).
@@ -143,9 +143,13 @@ resume_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
     initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateFun).
 
 
--spec ensure_all_stopped([record()]) -> ok | no_return().
-ensure_all_stopped(AtmParallelBoxExecutions) ->
-    pforeach_running_task(fun atm_task_execution_handler:handle_stopped/1, AtmParallelBoxExecutions).
+-spec ensure_all_stopped([record()], atm_workflow_execution_ctx:record()) ->
+    ok | no_return().
+ensure_all_stopped(AtmParallelBoxExecutions, AtmWorkflowExecutionCtx0) ->
+    Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
+        catch atm_task_execution_handler:handle_stopped(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
+    end,
+    pforeach_running_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
 
 -spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
@@ -380,18 +384,24 @@ foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec pforeach_running_task(
-    fun((atm_task_execution:id()) -> ok | {error, term()}),
-    [atm_task_execution:id()]
+    atm_workflow_execution_ctx:record(),
+    [atm_task_execution:id()],
+    fun((atm_workflow_execution_ctx:record(), atm_task_execution:id()) -> ok | {error, term()})
 ) ->
     ok | no_return().
-pforeach_running_task(Callback, AtmParallelBoxExecutions) ->
+pforeach_running_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback) ->
     atm_parallel_runner:foreach(fun(#atm_parallel_box_execution{
         task_statuses = AtmTaskExecutionStatuses
     }) ->
         atm_parallel_runner:foreach(fun({AtmTaskExecutionId, AtmTaskExecutionStatus}) ->
             case atm_task_execution_status:is_running(AtmTaskExecutionStatus) of
-                true -> Callback(AtmTaskExecutionId);
-                false -> ok
+                true ->
+                    AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
+                        AtmTaskExecutionId, AtmWorkflowExecutionCtx0
+                    ),
+                    Callback(AtmWorkflowExecutionCtx1, AtmTaskExecutionId);
+                false ->
+                    ok
             end
         end, maps:to_list(AtmTaskExecutionStatuses))
     end, AtmParallelBoxExecutions).
