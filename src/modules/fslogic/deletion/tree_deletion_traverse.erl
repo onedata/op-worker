@@ -123,7 +123,7 @@ task_finished(TaskId, _Pool) ->
     case AdditionalData of
         #{<<"failed">> := <<"true">>} ->
             #{<<"user_id">> := UserId, <<"root_guid">> := RootGuid, <<"options">> := EncodedOptions} = AdditionalData,
-            ?debug("dir deletion job ~p failed, reruning", [TaskId]),
+            ?warning("dir deletion job ~p failed, reruning", [TaskId]),
             Backoff = min(binary_to_integer(maps:get(<<"backoff">>, AdditionalData, <<"8">>)) * 2, ?ERROR_RESTART_MAX_BACKOFF_SEC),
             % start in another function so current traverse can finish
             spawn(fun() ->
