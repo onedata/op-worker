@@ -701,15 +701,24 @@ finish_lane_preparation(Handler, ExecutionId, LaneId,
                 {ok, #document{value = #workflow_execution_state{
                     current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
-                }} = UpdatedDoc} ->
+                }}} ->
                     case {update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler), InitType} of
-                        {#workflow_execution_state{execution_status = #execution_cancelled{}}, _} ->
+                        {
+                            #document{value = #workflow_execution_state{execution_status = #execution_cancelled{}}},
+                            _
+                        } ->
                             ok;
-                        {#workflow_execution_state{prefetched_iteration_step = undefined}, ?RESUMING_FROM_DUMP(_, _)} ->
+                        {
+                            #document{value = #workflow_execution_state{prefetched_iteration_step = undefined}},
+                            ?RESUMING_FROM_DUMP(_, _)
+                        } ->
                             {ok, _} = update(ExecutionId, fun(StateToUpdate) ->
                                 remove_pending_callback(StateToUpdate, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR)
                             end);
-                        {#workflow_execution_state{prefetched_iteration_step = undefined}, _} ->
+                        {
+                            #document{value = #workflow_execution_state{prefetched_iteration_step = undefined}} = UpdatedDoc,
+                            _
+                        } ->
                             call_callbacks_for_empty_lane(UpdatedDoc, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR);
                         _ ->
                             ok
@@ -1387,7 +1396,7 @@ finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext, _Fail
     ?WF_ERROR_LANE_ALREADY_PREPARED.
 
 -spec update_lane_context(workflow_engine:execution_id(), iterator:iterator(), workflow_engine:lane_id(),
-    workflow_engine:execution_context(), workflow_handler:handler()) -> state().
+    workflow_engine:execution_context(), workflow_handler:handler()) -> doc().
 update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler) ->
     {UpdatedLaneId, UpdatedLaneExecutionContext, NextIterationStep} = case workflow_engine:call_handler(
         ExecutionId, LaneExecutionContext, Handler, handle_lane_execution_started, [LaneId]
@@ -1395,7 +1404,7 @@ update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler
         error -> {LaneId, LaneExecutionContext, undefined};
         {Id, Context} -> {Id, Context, get_next_iterator(Handler, Context, Iterator, ExecutionId)}
     end,
-    {ok, #document{value = UpdatedState}} = update(ExecutionId, fun
+    {ok, UpdatedDoc} = update(ExecutionId, fun
         (#workflow_execution_state{execution_status = #execution_cancelled{}, current_lane = CurrentLane} = State) ->
             {ok, State#workflow_execution_state{
                 prefetched_iteration_step = NextIterationStep,
@@ -1415,7 +1424,7 @@ update_lane_context(ExecutionId, Iterator, LaneId, LaneExecutionContext, Handler
                 current_lane = CurrentLane#current_lane{id = UpdatedLaneId, execution_context = UpdatedLaneExecutionContext}
             }}
     end),
-    UpdatedState.
+    UpdatedDoc.
 
 -spec finish_lane_preparation_in_advance(state(), workflow_engine:lane_id(), workflow_engine:lane_spec()) ->
     {ok, state()} | ?WF_ERROR_CURRENT_LANE | ?WF_ERROR_UNKNOWN_LANE.

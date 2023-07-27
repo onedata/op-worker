@@ -149,7 +149,7 @@ resume_lane(ExecutionId, ExecutionContext, LaneId) ->
 ) ->
     {workflow_engine:lane_id(), workflow_engine:execution_context()}.
 handle_lane_execution_started(_ExecutionId, ExecutionContext, LaneId) ->
-    {LaneId, ExecutionContext}.
+    {LaneId, ExecutionContext#{lane_started => true}}.
 
 
 -spec run_task_for_item(

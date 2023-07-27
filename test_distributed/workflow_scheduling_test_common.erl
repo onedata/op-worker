@@ -371,7 +371,7 @@ mock_handlers(Workers, Manager) ->
     end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, run_task_for_item,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, EncodedJobIdentifier, Item) ->
+        fun(ExecutionId, #{lane_id := LaneId, lane_started := true} = Context, TaskId, EncodedJobIdentifier, Item) ->
             maybe_stream_data(ExecutionId, TaskId, Context, Item),
             MockTemplate(
                 #handler_call{
@@ -387,7 +387,7 @@ mock_handlers(Workers, Manager) ->
         end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, process_task_result_for_item,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, Result) ->
+        fun(ExecutionId, #{lane_id := LaneId, lane_started := true} = Context, TaskId, Item, Result) ->
             MockTemplate(
                 #handler_call{
                     function = process_task_result_for_item,
@@ -404,7 +404,7 @@ mock_handlers(Workers, Manager) ->
 
 
     test_utils:mock_expect(Workers, workflow_test_handler, report_item_error,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, Item) ->
+        fun(ExecutionId, #{lane_id := LaneId, lane_started := true} = Context, Item) ->
             MockTemplate(
                 #handler_call{
                     function = report_item_error,
@@ -419,7 +419,7 @@ mock_handlers(Workers, Manager) ->
 
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_task_results_processed_for_all_items,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
+        fun(ExecutionId, #{lane_id := LaneId, lane_started := true} = Context, TaskId) ->
             Ans = MockTemplate(
                 #handler_call{
                     function = handle_task_results_processed_for_all_items,
@@ -442,7 +442,7 @@ mock_handlers(Workers, Manager) ->
 
 
     test_utils:mock_expect(Workers, workflow_test_handler, process_streamed_task_data,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Data) ->
+        fun(ExecutionId, #{lane_id := LaneId, lane_started := true} = Context, TaskId, Data) ->
             MockTemplate(
                 #handler_call{
                     function = process_streamed_task_data,
@@ -458,7 +458,7 @@ mock_handlers(Workers, Manager) ->
 
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_task_execution_stopped,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
+        fun(ExecutionId, #{lane_id := LaneId, lane_started := true} = Context, TaskId) ->
             MockTemplate(
                 #handler_call{
                     function = handle_task_execution_stopped,
@@ -472,7 +472,7 @@ mock_handlers(Workers, Manager) ->
         end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_stopped,
-        fun(ExecutionId, Context, LaneId) ->
+        fun(ExecutionId, #{lane_started := true} = Context, LaneId) ->
             op_worker:set_env({lane_finished, ExecutionId, LaneId}, true),
             MockTemplate(
                 #handler_call{
