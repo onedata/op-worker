@@ -50,7 +50,8 @@ datastore_model_version_verification_test_() ->
         end
     end, datastore_config_plugin:get_models()),
 
-    ?assertEqual(lists:sort(maps:keys(maps:from_list(ActualModelVersions))),
+    ?assertEqual(
+        lists:sort(proplists:get_keys(ActualModelVersions)),
         lists:sort(maps:keys(?FROZEN_MODEL_VERSIONS))
     ),
 
