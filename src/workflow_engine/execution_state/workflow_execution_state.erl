@@ -694,7 +694,7 @@ finish_lane_preparation(Handler, ExecutionId, LaneId,
                 )
             end) of
                 {ok, #document{value = #workflow_execution_state{
-                    execution_status = ?EXECUTION_CANCELLED(_), current_lane = CurrentLane,
+                    execution_status = #execution_cancelled{is_interrupted = true}, current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
                 }}} ->
                     {ok, CurrentLane, Iterator, NextLaneId};

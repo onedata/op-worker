@@ -891,7 +891,6 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id
     FilterLaneStarted = case Options of
         #{expect_prepare_fail := LaneId} -> false;
         #{expect_prepare_exception := LaneId} -> false;
-        #{expect_lane_finish := LaneId} -> false;
         _ -> true
     end,
 
