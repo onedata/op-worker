@@ -227,6 +227,7 @@ stages:
         - transfers_restart
         - trash
         - tree_deletion_traverse
+        - tree_traverse_listing
         - user_auth
         - view
         - webdav_helper
@@ -1719,6 +1720,13 @@ tree_deletion_traverse:
     - <<: *ct_logs
       name: ct_logs_tree_deletion_traverse.tar.gz
 
+tree_traverse_listing:
+  <<: *ct-onenv-job
+  key: TTL
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_tree_traverse_listing.tar.gz
+
 user_auth:
   <<: *ct-job
   key: USERAUTH
@@ -1985,6 +1993,7 @@ Coverage report:
     - artifact: ct_logs_transfers_restart.tar.gz
     - artifact: ct_logs_trash.tar.gz
     - artifact: ct_logs_tree_deletion_traverse.tar.gz
+    - artifact: ct_logs_tree_traverse_listing.tar.gz
     - artifact: ct_logs_user_auth.tar.gz
     - artifact: ct_logs_view.tar.gz
     - artifact: ct_logs_webdav_helper.tar.gz

@@ -103,9 +103,9 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
                 Link = {?FAILED_TRANSFER_LINK_NAME(UuidBasedPath), <<"failed_transfer">>},
                 lists:foreach(fun(QosEntryId) ->
                     ok = qos_status_links:add_link(?DOWNTREE_LINKS_KEY(QosEntryId), Link)
-                end, QosEntries),
-                ok = qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(InternalFileCtx))
-        end
+                end, QosEntries)
+        end,
+        ok = qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(InternalFileCtx))
     end, list_references(FileCtx)).
 
 

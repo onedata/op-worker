@@ -48,6 +48,7 @@ start(BulkDownloadId, UserCtx, Guid, SymlinksResolutionPolicy, InitialPath) ->
     Options = #{
         task_id => BulkDownloadId,
         batch_size => 1,
+        listing_errors_handling_policy => ignore_known,
         children_master_jobs_mode => sync,
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
         additional_data => #{<<"main_pid">> => utils:encode_pid(self())},

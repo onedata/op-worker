@@ -96,6 +96,7 @@ start_replica_eviction_file_tree_traverse(ReplicaHolderProviderId, #document{
             task_id => TransferId,
             callback_module => transfer_file_tree_traverse,
             batch_size => ?TRAVERSE_BATCH_SIZE,
+            listing_errors_handling_policy => ignore_known,
             children_master_jobs_mode => sync,
             traverse_info => #{
                 transfer_id => TransferId,
