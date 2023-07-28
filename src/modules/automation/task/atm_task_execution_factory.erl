@@ -443,4 +443,4 @@ get_task_selector(#creation_ctx{
         }
     }
 }) ->
-    {task, AtmLaneRunSelector, AtmParallelBoxIndex, AtmTaskSchemaIndex}.
+    {task, {AtmLaneRunSelector, AtmParallelBoxIndex, AtmTaskSchemaIndex}}.

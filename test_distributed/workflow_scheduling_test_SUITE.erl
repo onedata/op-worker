@@ -63,6 +63,7 @@
     lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test/1,
     lane_preparation_exception_test/1,
     lane_preparation_in_advance_exception_test/1,
+    lane_start_failure_test/1,
     
     execute_other_lane_than_the_one_prepared_in_advance_test/1,
     reuse_already_prepared_lane_test/1,
@@ -121,6 +122,7 @@ all() ->
         lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test,
         lane_preparation_exception_test,
         lane_preparation_in_advance_exception_test,
+        lane_start_failure_test,
 
         % TODO VFS-7784 - add test when lane is set to be prepared in advance twice
         % (callback should be called only once - test successful and failed execution)
@@ -341,7 +343,7 @@ exception_during_processing_result_test(Config) ->
 
 lane_preparation_failure_test(Config) ->
     lane_failure_test_base(Config,
-        #test_config{test_manager_failure_key = fail_lane_preparation}, expect_empty_items_list).
+        #test_config{test_manager_failure_key = fail_lane_preparation}, expect_prepare_fail).
 
 lane_preparation_in_advance_failure_test(Config) ->
     lane_failure_test_base(Config, #test_config{
@@ -380,10 +382,16 @@ lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test(Confi
     }, stop_on_lane).
 
 lane_preparation_exception_test(Config) ->
-    lane_preparation_exception_test_base(Config, <<"3">>, false).
+    lane_preparation_exception_test_base(Config, <<"3">>, expect_prepare_exception, false).
 
 lane_preparation_in_advance_exception_test(Config) ->
-    lane_preparation_exception_test_base(Config, <<"4">>, true).
+    lane_preparation_exception_test_base(Config, <<"4">>, expect_exception, true).
+
+
+lane_start_failure_test(Config) ->
+    lane_failure_test_base(Config,
+        #test_config{test_manager_failure_key = fail_lane_start}, expect_empty_items_list_and_exception).
+
 
 %%%===================================================================
 
@@ -533,14 +541,14 @@ lane_failure_test_base(Config, #test_config{
         verify_history_options = #{VerifyOptionKey => LaneId}
     }).
 
-lane_preparation_exception_test_base(Config, LineToThrow, PrepareInAdvance) ->
+lane_preparation_exception_test_base(Config, LineToThrow, HistoryOption, PrepareInAdvance) ->
     resume_on_exception_test_base(Config, #test_config{
         task_type = async,
         prepare_in_advance = PrepareInAdvance,
         generator_options = ?EXEMPLARY_STREAMS,
         test_execution_manager_options = [{throw_error, LineToThrow}],
         verify_statistics_options = #{ignore_async_slots_check => true},
-        verify_history_options = #{expect_exception => <<"3">>},
+        verify_history_options = #{HistoryOption => <<"3">>},
         resume_doc_present = true
     }, <<"3">>).
 
@@ -597,7 +605,7 @@ resume_on_exception_test_base(Config, #test_config{
             FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_advance_handler(
                 FilteredExecutionHistory, LaneId, PrepareInAdvance),
             FilteredExecutionHistoryAfterResume = workflow_scheduling_test_common:check_prepare_lane_in_head_and_filter(
-                ExecutionHistoryAfterResume, LaneId, PrepareInAdvance),
+                ExecutionHistoryAfterResume, LaneId, PrepareInAdvance, FilteredExecutionHistory2),
             FinalVerifyOptions = case {TestExecutionManagerOptions, TaskType} of
                 [{throw_error, {run_task_for_item, TId, Item}}] -> GeneratorOptions#{fail_and_resume_job => {LaneId, TId, Item}};
                 _ -> GeneratorOptions#{}
