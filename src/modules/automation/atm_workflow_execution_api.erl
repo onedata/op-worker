@@ -30,7 +30,7 @@
 %%% To learn more about stages of execution:
 %%% - @see atm_workflow_execution_status.erl - for overall workflow execution
 %%% - @see atm_lane_execution_status.erl - for particular lane execution
-%%% - @see atm_task_execution_handler.erl - for particular task execution
+%%% - @see atm_task_execution_status.erl - for particular task execution
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_api).

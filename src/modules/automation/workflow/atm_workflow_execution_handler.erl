@@ -426,7 +426,7 @@ process_streamed_task_data(
     AtmTaskExecutionId,
     StreamedData
 ) ->
-    atm_task_execution_handler:process_streamed_data(
+    atm_task_execution_stream_handler:process_streamed_data(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId, StreamedData
     ).
@@ -454,7 +454,9 @@ handle_task_results_processed_for_all_items(
         referenced_tasks = [AtmTaskExecutionId]
     }),
 
-    atm_task_execution_handler:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId).
+    atm_task_execution_stream_handler:trigger_stream_conclusion(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId
+    ).
 
 
 -spec handle_task_execution_stopped(
