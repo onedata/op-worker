@@ -175,5 +175,9 @@
     referenced_tasks = [__ATM_TASK_EXECUTION_ID]
 }).
 
+-define(ensure_log_term_size_not_exceeded(__TERM),
+    atm_workflow_execution_logger:ensure_log_term_size_not_exceeded(__TERM)
+).
+
 
 -endif.
