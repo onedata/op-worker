@@ -19,7 +19,6 @@
 %% API
 -export([
     start/2,
-    init_stop/3,
     resume/2,
 
     set_run_num/2,
@@ -27,10 +26,7 @@
     run_job_batch/4,
     process_job_batch_result/4,
     process_streamed_data/3,
-    trigger_stream_conclusion/2,
-
-    handle_stopped/2,
-    teardown/2
+    trigger_stream_conclusion/2
 ]).
 
 
@@ -70,34 +66,6 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     Result.
 
 
--spec init_stop(
-    atm_workflow_execution_ctx:record(),
-    atm_task_execution:id(),
-    atm_task_execution:stopping_reason()
-) ->
-    ok | no_return().
-init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
-    case atm_task_execution_status:handle_stopping(
-        AtmTaskExecutionId, Reason, get_incarnation(AtmWorkflowExecutionCtx)
-    ) of
-        {ok, _} when Reason =:= pause ->
-            % when execution is paused, ongoing jobs aren't abruptly stopped (the
-            % execution engine will wait for them before transitioning to paused status)
-            log_stopping_reason(AtmWorkflowExecutionCtx, Reason);
-
-        {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
-            log_stopping_reason(AtmWorkflowExecutionCtx, Reason),
-            % for other reasons than pause, ongoing jobs are immediately aborted
-            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
-
-        {error, task_already_stopping} ->
-            ok;
-
-        {error, task_already_stopped} ->
-            ok
-    end.
-
-
 -spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
 resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
@@ -120,7 +88,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
 
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
-                    teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
+                    atm_task_execution_stop_handler:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
                     throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING)
             end;
 
@@ -249,30 +217,6 @@ trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     AtmTaskExecutor = AtmTaskExecution#atm_task_execution.executor,
 
     atm_task_executor:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutor).
-
-
--spec handle_stopped(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
-    ok.
-handle_stopped(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    case atm_task_execution_status:handle_stopped(AtmTaskExecutionId) of
-        {ok, #document{value = AtmTaskExecution}} ->
-            Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-            ?atm_task_info(Logger, <<"Task stopped.">>),
-            ?atm_workflow_info(Logger, ?workflow_log(<<"Stopped.">>, AtmTaskExecutionId)),
-
-            freeze_stores(AtmTaskExecution);
-        {error, task_already_stopped} ->
-            ok
-    end.
-
-
--spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
-    ok | no_return().
-teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    atm_task_executor:teardown(
-        AtmWorkflowExecutionCtx,
-        ensure_atm_task_execution_doc(AtmTaskExecutionId)
-    ).
 
 
 %%%===================================================================
@@ -721,34 +665,6 @@ log_uncorrelated_results_processing_error(
     ?atm_workflow_critical(Logger, ?workflow_log(
         <<"Failed to process streamed results.">>, AtmTaskExecutionId
     )).
-
-
-%% @private
--spec log_stopping_reason(
-    atm_workflow_execution_ctx:record(),
-    atm_task_execution:stopping_reason()
-) ->
-    ok.
-log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
-    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    AtmTaskExecutionId = atm_workflow_execution_ctx:get_task_execution_id(AtmWorkflowExecutionCtx),
-    Details = #{<<"reason">> => StoppingReason},
-
-    ?atm_task_info(Logger, #{
-        <<"description">> => <<"Task stop initiated.">>,
-        <<"details">> => Details
-    }),
-    ?atm_workflow_info(Logger, ?workflow_log(<<"Stop initiated.">>, Details, AtmTaskExecutionId)).
-
-
-%% @private
--spec freeze_stores(atm_task_execution:record()) -> ok.
-freeze_stores(#atm_task_execution{
-    system_audit_log_store_id = AtmSystemAuditLogStoreId,
-    time_series_store_id = AtmTSStoreId
-}) ->
-    AtmTSStoreId /= undefined andalso atm_store_api:freeze(AtmTSStoreId),
-    atm_store_api:freeze(AtmSystemAuditLogStoreId).
 
 
 %% @private

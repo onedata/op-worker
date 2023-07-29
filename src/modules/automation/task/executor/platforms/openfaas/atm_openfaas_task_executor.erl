@@ -612,24 +612,6 @@ await_function_readiness(#initiation_ctx{
 
 
 %% @private
--spec assert_atm_workflow_execution_is_not_stopping(initiation_ctx()) -> ok | no_return().
-assert_atm_workflow_execution_is_not_stopping(#initiation_ctx{
-    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx
-    }
-}) ->
-    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
-        AtmWorkflowExecutionCtx
-    ),
-    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
-        {ok, #document{value = #atm_workflow_execution{status = ?STOPPING_STATUS}}} ->
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
-        _ ->
-            ok
-    end.
-
-
-%% @private
 -spec log_function_ready(initiation_ctx()) -> ok.
 log_function_ready(#initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
@@ -774,4 +756,22 @@ await_function_removal(InitiationCtx, RetriesLeft) ->
             await_function_removal(InitiationCtx, RetriesLeft - 1);
         false ->
             true
+    end.
+
+
+%% @private
+-spec assert_atm_workflow_execution_is_not_stopping(initiation_ctx()) -> ok | no_return().
+assert_atm_workflow_execution_is_not_stopping(#initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    }
+}) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
+        {ok, #document{value = #atm_workflow_execution{status = ?STOPPING_STATUS}}} ->
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+        _ ->
+            ok
     end.

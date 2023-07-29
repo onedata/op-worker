@@ -464,7 +464,7 @@ handle_task_results_processed_for_all_items(
 ) ->
     ok.
 handle_task_execution_stopped(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
-    atm_task_execution_handler:handle_stopped(
+    atm_task_execution_stop_handler:handle_stopped(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId
     ).

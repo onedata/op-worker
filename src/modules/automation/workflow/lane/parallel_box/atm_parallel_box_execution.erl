@@ -131,7 +131,9 @@ start_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
     ok.
 init_stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
     Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:init_stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
+        catch atm_task_execution_stop_handler:init_stop(
+            AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason
+        )
     end,
     foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
@@ -147,7 +149,9 @@ resume_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
     ok | no_return().
 ensure_all_stopped(AtmParallelBoxExecutions, AtmWorkflowExecutionCtx0) ->
     Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:handle_stopped(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
+        catch atm_task_execution_stop_handler:handle_stopped(
+            AtmWorkflowExecutionCtx1, AtmTaskExecutionId
+        )
     end,
     pforeach_running_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
@@ -155,7 +159,9 @@ ensure_all_stopped(AtmParallelBoxExecutions, AtmWorkflowExecutionCtx0) ->
 -spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
 teardown_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
     Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:teardown(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
+        catch atm_task_execution_stop_handler:teardown(
+            AtmWorkflowExecutionCtx1, AtmTaskExecutionId
+        )
     end,
     foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
