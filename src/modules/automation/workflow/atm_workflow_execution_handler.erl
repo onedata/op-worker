@@ -389,7 +389,7 @@ run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     AtmJobBatchId, ItemBatch
 ) ->
-    atm_task_execution_handler:run_job_batch(
+    atm_task_execution_job_handler:run_job_batch(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId, AtmJobBatchId, ItemBatch
     ).
@@ -407,7 +407,7 @@ process_task_result_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemBatch, JobBatchResult
 ) ->
-    atm_task_execution_handler:process_job_batch_result(
+    atm_task_execution_job_handler:process_job_batch_result(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId, ItemBatch, JobBatchResult
     ).
