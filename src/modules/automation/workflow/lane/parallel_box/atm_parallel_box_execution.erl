@@ -118,7 +118,7 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
 start_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
     InitiateFun = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
-        {ok, atm_task_execution_handler:start(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)}
+        {ok, atm_task_execution_setup_handler:start(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)}
     end,
     initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateFun).
 
@@ -141,7 +141,7 @@ init_stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
 -spec resume_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
 resume_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
-    InitiateFun = fun atm_task_execution_handler:resume/2,
+    InitiateFun = fun atm_task_execution_setup_handler:resume/2,
     initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateFun).
 
 
@@ -182,7 +182,7 @@ set_tasks_run_num(RunNum, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     atm_parallel_runner:foreach(fun(AtmTaskExecutionId) ->
-        atm_task_execution_handler:set_run_num(RunNum, AtmTaskExecutionId)
+        atm_task_execution_setup_handler:set_run_num(RunNum, AtmTaskExecutionId)
     end, maps:values(AtmTaskExecutionRegistry));
 
 set_tasks_run_num(RunNum, AtmParallelBoxExecutions) ->
