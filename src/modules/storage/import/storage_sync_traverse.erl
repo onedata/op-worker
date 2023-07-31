@@ -107,11 +107,11 @@ stop_pool() ->
     storage_traverse:stop(?POOL).
 
 
--spec run_scan(od_space:id()) -> ok | {error, already_started}.
+-spec run_scan(od_space:id()) -> ok | {error, term()}.
 run_scan(SpaceId) ->
     run_scan(SpaceId, undefined).
 
--spec run_scan(od_space:id(), storage_import:scan_config() | undefined) -> ok | {error, already_started}.
+-spec run_scan(od_space:id(), storage_import:scan_config() | undefined) -> ok | {error, term()}.
 run_scan(SpaceId, ScanConfig) ->
     {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
     case storage_import_monitoring:prepare_new_scan(SpaceId) of
@@ -119,7 +119,14 @@ run_scan(SpaceId, ScanConfig) ->
             {ok, ScansNum} = storage_import_monitoring:get_finished_scans_num(SSM),
             ?debug("Starting auto storage import scan no. ~p for space: ~p and storage: ~p", [ScansNum + 1, SpaceId, StorageId]),
             ScanConfigMap = ensure_scan_config_is_map(SpaceId, ScanConfig),
-            run(SpaceId, StorageId, ScansNum + 1, ScanConfigMap);
+            try
+                run(SpaceId, StorageId, ScansNum + 1, ScanConfigMap)
+            catch
+                Class:Reason:Stacktrace  ->
+                    ?error_exception(Class, Reason, Stacktrace),
+                    scan_finished(SpaceId, StorageId, true),
+                    {error, Reason}
+            end;
         {error, already_started} = Error ->
             Error
     end.

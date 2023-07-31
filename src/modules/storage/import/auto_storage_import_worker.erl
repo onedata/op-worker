@@ -83,11 +83,11 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    state_init(),
     case gs_channel_service:is_connected() of
         true -> notify_connection_to_oz();
         false -> ok
     end,
-    state_init(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -146,8 +146,13 @@ cleanup() ->
 
 -spec notify_connection_to_oz() -> ok.
 notify_connection_to_oz() ->
-    schedule_spaces_check(),
-    schedule_registry_revision().
+    case investigate_oz_connection_handling_status() of
+        first_try ->
+            schedule_spaces_check(),
+            schedule_registry_revision();
+        already_handled ->
+            ok
+    end.
 
 -spec notify_space_with_auto_import_configured(od_space:id()) -> ok.
 notify_space_with_auto_import_configured(SpaceId) ->
@@ -192,9 +197,17 @@ ensure_pool_initialized() ->
         true ->
             ok;
         false ->
-            ok = storage_sync_traverse:init_pool(),
-            mark_pool_initialized(),
-            ok
+            critical_section:run([?MODULE, init_pool], fun() ->
+                % Double check to prevent race
+                case is_pool_initialized() of
+                    true ->
+                        ok;
+                    false ->
+                        ok = storage_sync_traverse:init_pool(),
+                        mark_pool_initialized(),
+                        ok
+                end
+            end)
     end.
 
 -spec ensure_stalled_scans_are_fixed() -> ok.
@@ -203,19 +216,27 @@ ensure_stalled_scans_are_fixed() ->
         true ->
             ok;
         false ->
-            case provider_logic:get_spaces() of
-                {ok, SpaceIds} ->
-                    fix_stalled_scans(SpaceIds);
-                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-                    ?debug("auto_storage_import_worker was unable to fix stalled scans due to no connection to oz."),
-                    throw(?STALLED_SCANS_NOT_FIXED_ERROR);
-                ?ERROR_UNREGISTERED_ONEPROVIDER ->
-                    ?debug("auto_storage_import_worker was unable to fix stalled scans due to unregistered provider."),
-                    throw(?STALLED_SCANS_NOT_FIXED_ERROR);
-                {error, _} = Error ->
-                    ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
-                    throw(?STALLED_SCANS_NOT_FIXED_ERROR)
-            end
+            critical_section:run([?MODULE, fix_stalled_scans], fun() ->
+                % Double check to prevent race
+                case are_stalled_scans_fixed() of
+                    true ->
+                        ok;
+                    false ->
+                        case provider_logic:get_spaces() of
+                            {ok, SpaceIds} ->
+                                fix_stalled_scans(SpaceIds);
+                            ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                                ?debug("auto_storage_import_worker was unable to fix stalled scans due to no connection to oz."),
+                                throw(?STALLED_SCANS_NOT_FIXED_ERROR);
+                            ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                                ?debug("auto_storage_import_worker was unable to fix stalled scans due to unregistered provider."),
+                                throw(?STALLED_SCANS_NOT_FIXED_ERROR);
+                            {error, _} = Error ->
+                                ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
+                                throw(?STALLED_SCANS_NOT_FIXED_ERROR)
+                        end
+                end
+            end)
     end.
 
 
@@ -358,6 +379,13 @@ are_stalled_scans_fixed() ->
 -spec mark_stalled_scans_fixed() -> ok.
 mark_stalled_scans_fixed() ->
     state_put(?STALLED_SCAN_FIXED, true).
+
+-spec investigate_oz_connection_handling_status() -> first_try | already_handled.
+investigate_oz_connection_handling_status() ->
+    case ets:insert_new(?ETS_STATE, {oz_connection_handled, true}) of
+        true -> first_try;
+        _ -> already_handled
+    end.
 
     -spec state_init() -> ok.
 state_init() ->
