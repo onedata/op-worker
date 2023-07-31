@@ -337,17 +337,21 @@ initiate_lane_run(
             AtmStore#atm_store.container,
             atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
         ),
-        AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
-            AtmWorkflowExecutionDoc, AtmLaneRunSelector, AtmWorkflowExecutionEnv0
+        AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:set_lane_run_fail_for_exceptions_ratio(
+            %% TODO
+            1.0, AtmWorkflowExecutionEnv0
+        ),
+        AtmWorkflowExecutionEnv2 = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
+            AtmWorkflowExecutionDoc, AtmLaneRunSelector, AtmWorkflowExecutionEnv1
         ),
 
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = InitiateParallelBoxExecutionsFun(
-            atm_workflow_execution_ctx:set_env(AtmWorkflowExecutionEnv1, AtmWorkflowExecutionCtx),
+            atm_workflow_execution_ctx:set_env(AtmWorkflowExecutionEnv2, AtmWorkflowExecutionCtx),
             AtmLaneRun#atm_lane_execution_run.parallel_boxes
         ),
 
         #{
-            execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv1),
+            execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv2),
             parallel_boxes => AtmParallelBoxExecutionSpecs
         }
     catch
@@ -480,7 +484,6 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
     end, MaxBatchSize, lists:usort(AtmLambdas)),
 
     AtmStoreIteratorSpec#atm_store_iterator_spec{max_batch_size = NewMaxBatchSize}.
-
 
 
 %%-------------------------------------------------------------------

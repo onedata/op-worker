@@ -30,6 +30,7 @@
     add_global_store_mapping/3,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
+    set_lane_run_fail_for_exceptions_ratio/2,
     ensure_task_selector_registry_up_to_date/3,
     add_task_audit_log_store_container/3,
     add_task_time_series_store_id/3,
@@ -44,6 +45,7 @@
     get_global_store_id/2,
 
     get_lane_run_exception_store_container/1,
+    get_lane_run_fail_for_exceptions_ratio/1,
     get_task_time_series_store_id/2,
     get_task_selector/2,
 
@@ -68,6 +70,7 @@
 
     % current lane run execution specific components
     lane_run_exception_store_container :: undefined | atm_store_container:record(),
+    lane_run_fail_for_exceptions_ratio :: float(),  %% 0.0 .. 1.0
 
     task_selector_registry :: #{atm_task_execution:id() => atm_workflow_execution_logger:task_selector()},
 
@@ -120,6 +123,7 @@ build(
         global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_store_container = undefined,
         lane_run_exception_store_container = undefined,
+        lane_run_fail_for_exceptions_ratio = 1.0,
         task_audit_logs_registry = #{},
         task_time_series_registry = #{},
         task_selector_registry = #{}
@@ -149,6 +153,11 @@ set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record
     Record#atm_workflow_execution_env{
         lane_run_exception_store_container = AtmLaneRunExceptionStoreContainer
     }.
+
+
+-spec set_lane_run_fail_for_exceptions_ratio(float(), record()) -> record().
+set_lane_run_fail_for_exceptions_ratio(Ratio, Record) ->
+    Record#atm_workflow_execution_env{lane_run_fail_for_exceptions_ratio = Ratio}.
 
 
 -spec ensure_task_selector_registry_up_to_date(
@@ -289,6 +298,13 @@ get_lane_run_exception_store_container(#atm_workflow_execution_env{
     lane_run_exception_store_container = AtmLaneRunExceptionStoreContainer
 }) ->
     AtmLaneRunExceptionStoreContainer.
+
+
+-spec get_lane_run_fail_for_exceptions_ratio(record()) -> float().
+get_lane_run_fail_for_exceptions_ratio(#atm_workflow_execution_env{
+    lane_run_fail_for_exceptions_ratio = Ratio
+}) ->
+    Ratio.
 
 
 -spec get_task_time_series_store_id(atm_task_execution:id(), record()) ->
