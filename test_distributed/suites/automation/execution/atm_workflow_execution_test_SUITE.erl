@@ -69,6 +69,8 @@
     fail_atm_workflow_execution_due_to_lambda_item_exception/1,
     fail_atm_workflow_execution_due_to_lambda_batch_exception/1,
 
+    fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio/1,
+
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
 
@@ -254,7 +256,9 @@ groups() -> [
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
         fail_atm_workflow_execution_due_to_lambda_item_exception,
-        fail_atm_workflow_execution_due_to_lambda_batch_exception
+        fail_atm_workflow_execution_due_to_lambda_batch_exception,
+
+        fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio
     ]},
 
     {cancel_tests, [], [
@@ -618,6 +622,10 @@ fail_atm_workflow_execution_due_to_lambda_item_exception(_Config) ->
 
 
 fail_atm_workflow_execution_due_to_lambda_batch_exception(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio(_Config) ->
     ?RUN_FAILURE_TEST().
 
 

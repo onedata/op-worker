@@ -29,7 +29,9 @@
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
     fail_atm_workflow_execution_due_to_lambda_item_exception/0,
-    fail_atm_workflow_execution_due_to_lambda_batch_exception/0
+    fail_atm_workflow_execution_due_to_lambda_batch_exception/0,
+
+    fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio/0
 ]).
 
 
@@ -661,6 +663,10 @@ build_job_failure_lane_run_test_spec(AtmLaneRunSelector, IsLastExpLaneRun, #fail
             ]
         }
     }.
+
+
+fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio() ->
+    ok.
 
 
 %% @private

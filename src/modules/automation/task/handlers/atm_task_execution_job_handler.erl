@@ -362,7 +362,9 @@ handle_items_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Count) ->
         calc_task_exception_ratio(AtmTaskExecutionDoc), AtmWorkflowExecutionCtx
     ) of
         true ->
-            handle_exceeded_failed_jobs_threshold(AtmWorkflowExecutionCtx, AtmTaskExecutionId);
+            handle_exceeded_lane_run_fail_for_exceptions_ratio(
+                AtmWorkflowExecutionCtx, AtmTaskExecutionId
+            );
         false ->
             ok
     end.
@@ -379,12 +381,12 @@ calc_task_exception_ratio(#document{value = #atm_task_execution{
 
 
 %% @private
--spec handle_exceeded_failed_jobs_threshold(
+-spec handle_exceeded_lane_run_fail_for_exceptions_ratio(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id()
 ) ->
     ok.
-handle_exceeded_failed_jobs_threshold(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+handle_exceeded_lane_run_fail_for_exceptions_ratio(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_stopping(
         AtmTaskExecutionId,
         failure,

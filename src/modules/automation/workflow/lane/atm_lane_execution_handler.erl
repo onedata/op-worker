@@ -338,8 +338,9 @@ initiate_lane_run(
             atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
         ),
         AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:set_lane_run_fail_for_exceptions_ratio(
-            %% TODO
-            1.0, AtmWorkflowExecutionEnv0
+            %% TODO VFS-11226 use ratio defined in schema
+            op_worker:get_env(atm_lane_run_fail_for_exceptions_ratio, 1.0),
+            AtmWorkflowExecutionEnv0
         ),
         AtmWorkflowExecutionEnv2 = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
             AtmWorkflowExecutionDoc, AtmLaneRunSelector, AtmWorkflowExecutionEnv1

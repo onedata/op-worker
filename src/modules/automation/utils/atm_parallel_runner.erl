@@ -7,12 +7,6 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Convenience functions for parallel code execution in automation related modules.
-%%%
-%%% TODO VFS-8395 Do not use lists_utils but rather write custom pmap/pforeach.
-%%% Those from lists_utils have serious flaws like waiting for all processes
-%%% to end even if some of them already stopped execution with errors.
-%%% This may be desired behaviour in some rare circumstances but definitely
-%%% not in atm
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_parallel_runner).
