@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
--export([build/4]).
+-export([build/5]).
 -export([should_log/2, ensure_log_term_size_not_exceeded/1]).
 -export([task_append_system_log/3, task_handle_logs/3]).
 -export([workflow_append_system_log/3, workflow_handle_logs/3]).
@@ -30,15 +30,17 @@
 -type log_content() :: binary() | json_utils:json_map().
 -type log() :: json_utils:json_map() | audit_log:append_request().
 
+-type task_selector() :: {
+    atm_lane_execution:lane_run_selector(),
+    ParallelBoxIndex :: pos_integer(),
+    TaskIndex :: pos_integer()
+}.
+
 -type component_selector() ::
     workflow_engine |
     {lane, atm_lane_execution:selector()} |
     {lane_run, atm_lane_execution:lane_run_selector()} |
-    {task,
-        atm_lane_execution:lane_run_selector(),
-        ParallelBoxIndex :: pos_integer(),
-        TaskIndex :: pos_integer()
-    } |
+    {task, task_selector()} |
     {task, atm_task_execution:id()}.
 
 -type workflow_log_schema() :: #atm_workflow_log_schema{}.
@@ -48,13 +50,15 @@
     atm_workflow_execution_auth :: atm_workflow_execution_auth:record(),
     log_level :: audit_log:entry_severity_int(),
     task_audit_log_store_container :: undefined | atm_store_container:record(),
-    workflow_audit_log_store_container :: undefined | atm_store_container:record()
+    workflow_audit_log_store_container :: undefined | atm_store_container:record(),
+
+    task_selector_registry :: #{atm_task_execution:id() => task_selector()}
 }).
 -type record() :: #atm_workflow_execution_logger{}.
 
 -export_type([
     severity/0, log_content/0, log/0,
-    component_selector/0, workflow_log_schema/0,
+    task_selector/0, component_selector/0, workflow_log_schema/0,
     record/0
 ]).
 
@@ -71,20 +75,23 @@
     atm_workflow_execution_auth:record(),
     audit_log:entry_severity_int(),
     undefined | atm_store_container:record(),
-    undefined | atm_store_container:record()
+    undefined | atm_store_container:record(),
+    #{atm_task_execution:id() => task_selector()}
 ) ->
     record().
 build(
     AtmWorkflowExecutionAuth,
     LogLevel,
     AtmTaskAuditLogStoreContainer,
-    AtmWorkflowAuditLogStoreContainer
+    AtmWorkflowAuditLogStoreContainer,
+    AtmTaskSelectorRegistry
 ) ->
     #atm_workflow_execution_logger{
         atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
         log_level = LogLevel,
         task_audit_log_store_container = AtmTaskAuditLogStoreContainer,
-        workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
+        workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
+        task_selector_registry = AtmTaskSelectorRegistry
     }.
 
 
@@ -139,7 +146,7 @@ task_handle_logs(#atm_workflow_execution_logger{
 ) ->
     ok.
 workflow_append_system_log(Logger, LogSchemaOrContent, Severity) ->
-    LogContent = build_workflow_log_content(LogSchemaOrContent),
+    LogContent = build_workflow_log_content(Logger, LogSchemaOrContent),
 
     workflow_handle_logs(
         Logger,
@@ -170,14 +177,14 @@ workflow_handle_logs(#atm_workflow_execution_logger{
 
 
 %% @private
--spec build_workflow_log_content(workflow_log_schema() | log_content()) ->
+-spec build_workflow_log_content(record(), workflow_log_schema() | log_content()) ->
     json_utils:json_map().
-build_workflow_log_content(AtmWorkflowLogSchema = #atm_workflow_log_schema{
+build_workflow_log_content(Logger, AtmWorkflowLogSchema = #atm_workflow_log_schema{
     details = Details,
     referenced_tasks = ReferencedTasks
 }) ->
     Log = maps_utils:put_if_defined(
-        #{<<"description">> => format_description(AtmWorkflowLogSchema)},
+        #{<<"description">> => format_description(Logger, AtmWorkflowLogSchema)},
         <<"details">>,
         Details
     ),
@@ -186,25 +193,25 @@ build_workflow_log_content(AtmWorkflowLogSchema = #atm_workflow_log_schema{
         _ -> Log#{<<"referencedComponents">> => #{<<"tasks">> => ReferencedTasks}}
     end;
 
-build_workflow_log_content(LogContent) ->
+build_workflow_log_content(_Logger, LogContent) ->
     LogContent.
 
 
 %% @private
--spec format_description(workflow_log_schema()) -> binary().
-format_description(#atm_workflow_log_schema{
+-spec format_description(record(), workflow_log_schema()) -> binary().
+format_description(_Logger, #atm_workflow_log_schema{
     selector = undefined,
     description = Description
 }) ->
     Description;
 
-format_description(#atm_workflow_log_schema{
+format_description(_Logger, #atm_workflow_log_schema{
     selector = workflow_engine,
     description = Description
 }) ->
     ?fmt_bin("[workflow engine] ~ts", [Description]);
 
-format_description(#atm_workflow_log_schema{
+format_description(_Logger, #atm_workflow_log_schema{
     selector = {lane, LaneSelector},
     description = Description
 }) ->
@@ -213,7 +220,7 @@ format_description(#atm_workflow_log_schema{
         Description
     ]);
 
-format_description(#atm_workflow_log_schema{
+format_description(_Logger, #atm_workflow_log_schema{
     selector = {lane_run, {LaneSelector, RunSelector}},
     description = Description
 }) ->
@@ -223,8 +230,8 @@ format_description(#atm_workflow_log_schema{
         Description
     ]);
 
-format_description(#atm_workflow_log_schema{
-    selector = {task, {LaneSelector, RunSelector}, ParallelBoxIndex, TaskIndex},
+format_description(_Logger, #atm_workflow_log_schema{
+    selector = {task, {{LaneSelector, RunSelector}, ParallelBoxIndex, TaskIndex}},
     description = Description
 }) ->
     ?fmt_bin("[~ts, ~ts, PBox: ~B, Task: ~B] ~ts", [
@@ -235,25 +242,26 @@ format_description(#atm_workflow_log_schema{
         Description
     ]);
 
-format_description(#atm_workflow_log_schema{
+format_description(Logger, AtmWorkflowLogSchema = #atm_workflow_log_schema{
     selector = {task, AtmTaskExecutionId},
     description = Description
 }) ->
-    %% TODO VFS-11098 [Lane:2 ... Task: 6] selector
-    ?fmt_bin("[Task: ~ts...] ~ts", [
-        binary:part(AtmTaskExecutionId, 0, 4),
-        Description
-    ]).
+    case maps:find(AtmTaskExecutionId, Logger#atm_workflow_execution_logger.task_selector_registry) of
+        {ok, AtmTaskSelector} ->
+            format_description(Logger, AtmWorkflowLogSchema#atm_workflow_log_schema{
+                selector = {task, AtmTaskSelector}
+            });
+        error ->
+            ?fmt_bin("[Task: ~ts...] ~ts", [binary:part(AtmTaskExecutionId, 0, 4), Description])
+    end.
 
 
-%% TODO VFS-11098 is it possible to always have index?
 %% @private
 -spec format_lane_selector(atm_lane_execution:selector()) -> binary().
 format_lane_selector(current) -> <<"Lane: ?">>;
 format_lane_selector(Index) -> ?fmt_bin("Lane: ~B", [Index]).
 
 
-%% TODO VFS-11098 is it possible to always have number except for preparing in advance?
 %% @private
 -spec format_run_selector(atm_lane_execution:run_selector()) -> binary().
 format_run_selector(current) -> <<"Run: ?">>;
