@@ -1123,9 +1123,19 @@ end_per_group(gc_tests, Config) ->
     Config.
 
 
+init_per_testcase(fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio, Config) ->
+    %% TODO VFS-11226 rm and set ratio in schema
+    ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(atm_lane_run_fail_for_exceptions_ratio, 0.1)),
+    Config;
+
 init_per_testcase(_Case, Config) ->
     Config.
 
+
+end_per_testcase(fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio, _Config) ->
+    %% TODO VFS-11226 rm and set ratio in schema
+    ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(atm_lane_run_fail_for_exceptions_ratio, 1.0)),
+    ok;
 
 end_per_testcase(_Case, _Config) ->
     ok.

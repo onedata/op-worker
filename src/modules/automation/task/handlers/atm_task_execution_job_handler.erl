@@ -377,7 +377,7 @@ calc_task_exception_ratio(#document{value = #atm_task_execution{
     items_processed = ItemsProcessed,
     items_failed = ItemsFailed
 }}) ->
-    ItemsFailed / (ItemsInProcessing + ItemsProcessed + ItemsFailed).
+    ItemsFailed / (ItemsInProcessing + ItemsProcessed).
 
 
 %% @private
