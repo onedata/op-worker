@@ -24,6 +24,7 @@
 
 -include("tree_traverse.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -57,7 +58,10 @@ stop_pool() ->
 -spec run(file_id:space_id(), non_neg_integer()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 run(SpaceId, Incarnation) ->
     try
-        Options = #{task_id => gen_task_id(SpaceId, Incarnation)},
+        Options = #{
+            task_id => gen_task_id(SpaceId, Incarnation),
+            listing_errors_handling_policy => propagate_unknown
+        },
         FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
         {ok, _} = tree_traverse:run(?MODULE, FileCtx, Options),
         ok
@@ -95,11 +99,11 @@ do_master_job(#tree_traverse{
         initialization_finished -> ok
     end,
 
-    {ok, #{master_jobs := MasterJobs} = MasterJobMap} = Ans = try
+    {ok, MasterJobMap} = Ans = try
         do_tree_traverse_master_job(Job, MasterJobExtendedArgs)
     catch
         error:{badmatch, {error, not_found}} ->
-            {ok, #{slave_jobs => [], master_jobs => []}}
+            {ok, #{}}
     end,
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
@@ -108,7 +112,7 @@ do_master_job(#tree_traverse{
                 file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
             ArchiveJob = tree_traverse:get_child_master_job(Job,
                 file_ctx:new_by_uuid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId), ?ARCHIVES_ROOT_DIR_NAME),
-            {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob | MasterJobs]}};
+            {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob | maps:get(master_jobs, MasterJobMap, [])]}};
         false ->
             Ans
     end;
@@ -163,8 +167,18 @@ get_space_id(TaskId) ->
 
 -spec do_tree_traverse_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_tree_traverse_master_job(Job, MasterJobExtendedArgs) ->
+do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobExtendedArgs) ->
     NewJobsPreprocessor = fun(_SlaveJobs, MasterJobs, _ListExtendedInfo, _SubtreeProcessingStatus) ->
         {[], MasterJobs}
     end,
-    tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor).
+    case tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor) of
+        {ok, _} = Res ->
+            Res;
+        {error, _} = Error ->
+            %% @TODO VFS-11151 - log to system audit log
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            ?error("Error when listing directory during stats initialization: ~s", [?autoformat([Error, FileUuid])]),
+            ok = dir_stats_collector:update_stats_of_dir(
+                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERRORS_COUNT => 1}),
+            {ok, #{}}
+    end.

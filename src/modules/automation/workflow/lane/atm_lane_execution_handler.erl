@@ -67,20 +67,22 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_workflow_execution_ctx:record()
 ) ->
     {ok, stopping | stopped} | errors:error().
-init_stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
+init_stop(OriginalAtmLaneRunSelector, Reason, OriginalAtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
-        AtmWorkflowExecutionCtx
+        OriginalAtmWorkflowExecutionCtx
     ),
-    case atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
+    case atm_lane_execution_status:handle_stopping(
+        OriginalAtmLaneRunSelector, AtmWorkflowExecutionId, Reason
+    ) of
         {ok, AtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution}} ->
             % resolve selector in case it is {current. current} (aka stopping entire execution)
-            NewAtmLaneRunSelector = try_resolving_lane_run_selector(
-                AtmLaneRunSelector, AtmWorkflowExecution
+            {AtmLaneRunSelector, AtmWorkflowExecutionCtx} = ensure_task_selector_registry_up_to_date(
+                AtmWorkflowExecutionDoc, OriginalAtmLaneRunSelector, OriginalAtmWorkflowExecutionCtx
             ),
-            log_init_stop(NewAtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+            log_init_stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
 
             handle_lane_run_stopping(
-                NewAtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
             );
 
         {error, already_stopping} when Reason =:= cancel; Reason =:= pause ->
@@ -91,10 +93,11 @@ init_stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
             % repeat stopping procedure just in case if previously it wasn't finished
             % (e.g. provider abrupt shutdown and restart)
             {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+            {AtmLaneRunSelector, AtmWorkflowExecutionCtx} = ensure_task_selector_registry_up_to_date(
+                AtmWorkflowExecutionDoc, OriginalAtmLaneRunSelector, OriginalAtmWorkflowExecutionCtx
+            ),
             handle_lane_run_stopping(
-                % resolve selector in case it is {current. current} (aka stopping entire execution)
-                try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecutionDoc),
-                Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
             );
 
         {error, _} = Error ->
@@ -322,7 +325,7 @@ unfreeze_exception_store(AtmLaneRunSelector, #document{value = AtmWorkflowExecut
     workflow_engine:lane_spec() | no_return().
 initiate_lane_run(
     AtmLaneRunSelector,
-    #document{value = AtmWorkflowExecution},
+    AtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution},
     AtmWorkflowExecutionCtx,
     InitiateParallelBoxExecutionsFun
 ) ->
@@ -330,18 +333,21 @@ initiate_lane_run(
         {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
 
         {ok, AtmStore} = atm_store_api:get(AtmLaneRun#atm_lane_execution_run.exception_store_id),
-        AtmWorkflowExecutionEnv = atm_workflow_execution_env:set_lane_run_exception_store_container(
+        AtmWorkflowExecutionEnv0 = atm_workflow_execution_env:set_lane_run_exception_store_container(
             AtmStore#atm_store.container,
             atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
         ),
+        AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
+            AtmWorkflowExecutionDoc, AtmLaneRunSelector, AtmWorkflowExecutionEnv0
+        ),
 
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = InitiateParallelBoxExecutionsFun(
-            AtmWorkflowExecutionCtx,
+            atm_workflow_execution_ctx:set_env(AtmWorkflowExecutionEnv1, AtmWorkflowExecutionCtx),
             AtmLaneRun#atm_lane_execution_run.parallel_boxes
         ),
 
         #{
-            execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv),
+            execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv1),
             parallel_boxes => AtmParallelBoxExecutionSpecs
         }
     catch
@@ -476,16 +482,38 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
     AtmStoreIteratorSpec#atm_store_iterator_spec{max_batch_size = NewMaxBatchSize}.
 
 
+
+%%-------------------------------------------------------------------
 %% @private
--spec try_resolving_lane_run_selector(
+%% @doc
+%% Tries to resolve lane run selector (especially in case of '{current, current}'
+%% given when concrete lane run is not known beforehand) and ensures that task
+%% selector registry is actual for resolved lane run.
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_task_selector_registry_up_to_date(
+    atm_workflow_execution:doc(),
     atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution:record() | atm_workflow_execution:doc()
+    atm_workflow_execution_ctx:record()
 ) ->
-    {atm_lane_execution:index(), atm_lane_execution:run_selector()}.
-try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execution{}) ->
-    atm_lane_execution:try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecution);
-try_resolving_lane_run_selector(AtmLaneRunSelector, #document{value = AtmWorkflowExecution}) ->
-    try_resolving_lane_run_selector(AtmLaneRunSelector, AtmWorkflowExecution).
+    {atm_lane_execution:lane_run_selector(), atm_workflow_execution_ctx:record()}.
+ensure_task_selector_registry_up_to_date(
+    AtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution},
+    OriginalAtmLaneRunSelector,
+    OriginalAtmWorkflowExecutionCtx
+) ->
+    AtmLaneRunSelector = atm_lane_execution:try_resolving_lane_run_selector(
+        OriginalAtmLaneRunSelector, AtmWorkflowExecution
+    ),
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
+        AtmWorkflowExecutionDoc, AtmLaneRunSelector, atm_workflow_execution_ctx:get_env(
+            OriginalAtmWorkflowExecutionCtx
+        )
+    ),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:set_env(
+        AtmWorkflowExecutionEnv, OriginalAtmWorkflowExecutionCtx
+    ),
+    {AtmLaneRunSelector, AtmWorkflowExecutionCtx}.
 
 
 %% @private

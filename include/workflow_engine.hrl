@@ -78,6 +78,7 @@
 -define(PREPARATION_FAILED, preparation_failed).
 
 -define(EXECUTING, executing).
+-define(STARTING_EXECUTION, starting_execution).
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
 -define(EXECUTION_ENDED_WITH_EXCEPTION, execution_ended_with_exception).

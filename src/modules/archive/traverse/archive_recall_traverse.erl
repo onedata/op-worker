@@ -43,10 +43,11 @@
     do_slave_job/2
 ]).
 
-% exported for mocking in tests
+% exported for mocking/calling in tests
 -export([
     do_dir_master_job_unsafe/2,
-    do_slave_job_unsafe/2
+    do_slave_job_unsafe/2,
+    setup_recall_traverse/6
 ]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -237,6 +238,7 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
             UserId = user_ctx:get_user_id(UserCtx),
             Options = #{
                 task_id => RecallId,
+                listing_errors_handling_policy => retry_infinitely,
                 children_master_jobs_mode => async,
                 %% @TODO VFS-8851 do not resolve external symlinks (that are not nested archive) 
                 %% when archive was created without following symlinks
@@ -341,8 +343,7 @@ report_error(TaskId, Job, Reason, Stacktrace) ->
     {FileCtx, RelativePath, ArchiveDoc} = infer_job_context(Job),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    ?error_stacktrace("Unexpected error during recall(~p) of file ~p in archive ~p: ~p.", 
-        [TaskId, FileGuid, ArchiveId, Reason], Stacktrace),
+    ?error_exception("~s", [?autoformat([TaskId, FileGuid, ArchiveId])], error, Reason, Stacktrace),
     archive_recall:report_file_failed(TaskId, FileGuid, RelativePath, Reason).
 
 

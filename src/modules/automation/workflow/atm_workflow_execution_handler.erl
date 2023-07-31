@@ -39,6 +39,7 @@
 -export([
     prepare_lane/3,
     resume_lane/3,
+    handle_lane_execution_started/3,
 
     run_task_for_item/5,
     process_task_result_for_item/5,
@@ -377,6 +378,25 @@ resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector)
     ).
 
 
+-spec handle_lane_execution_started(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    atm_lane_execution:lane_run_selector()
+) ->
+    {atm_lane_execution:lane_run_selector(), atm_workflow_execution_env:record()}.
+handle_lane_execution_started(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv0, AtmLaneRunSelector) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    ResolvedAtmLaneRunSelector = atm_lane_execution:try_resolving_lane_run_selector(
+        AtmLaneRunSelector, AtmWorkflowExecutionDoc#document.value
+    ),
+    AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(
+        AtmWorkflowExecutionDoc, ResolvedAtmLaneRunSelector, AtmWorkflowExecutionEnv0
+    ),
+
+    {ResolvedAtmLaneRunSelector, AtmWorkflowExecutionEnv1}.
+
+
 -spec run_task_for_item(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
@@ -618,7 +638,7 @@ get_logger(UserCtx, AtmWorkflowExecutionEnv) ->
 
 %% @private
 -spec acquire_global_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
-acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+acquire_global_env(Doc = #document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
     incarnation = AtmWorkflowExecutionIncarnation,
     store_registry = AtmGlobalStoreRegistry,
@@ -628,13 +648,14 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     {ok, #atm_store{container = AtmWorkflowAuditLogStoreContainer}} = atm_store_api:get(
         AtmWorkflowAuditLogStoreId
     ),
-    Env = atm_workflow_execution_env:build(
+    Env0 = atm_workflow_execution_env:build(
         SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation,
         LogLevel, AtmGlobalStoreRegistry
     ),
-    atm_workflow_execution_env:set_workflow_audit_log_store_container(
-        AtmWorkflowAuditLogStoreContainer, Env
-    ).
+    Env1 = atm_workflow_execution_env:set_workflow_audit_log_store_container(
+        AtmWorkflowAuditLogStoreContainer, Env0
+    ),
+    atm_workflow_execution_env:ensure_task_selector_registry_up_to_date(Doc, {current, current}, Env1).
 
 
 %% @private
@@ -723,12 +744,16 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
     lists:foreach(fun(AtmLaneIndex) ->
-        AtmLaneRunSelector = {AtmLaneIndex, CurrentRunNum},
+        IsAtmLaneRunPreparedInAdvance = AtmLaneIndex > CurrentAtmLaneIndex,
+        AtmLaneRunSelector = {AtmLaneIndex, case IsAtmLaneRunPreparedInAdvance of
+            true -> current;  % lane runs prepared in advance do not have nums assigned
+            false -> CurrentRunNum
+        end},
 
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
-                    ?WAITING_PHASE when AtmLaneIndex > CurrentAtmLaneIndex ->
+                    ?WAITING_PHASE when IsAtmLaneRunPreparedInAdvance ->
                         atm_lane_execution_handler:init_stop(
                             AtmLaneRunSelector, interrupt, AtmWorkflowExecutionCtx
                         ),

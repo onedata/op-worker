@@ -86,6 +86,7 @@ start_replication_file_tree_traverse(#document{key = TransferId, value = #transf
             task_id => TransferId,
             callback_module => transfer_file_tree_traverse,
             batch_size => ?TRAVERSE_BATCH_SIZE,
+            listing_errors_handling_policy => ignore_known,
             children_master_jobs_mode => sync,
             traverse_info => #{
                 space_id => SpaceId,
