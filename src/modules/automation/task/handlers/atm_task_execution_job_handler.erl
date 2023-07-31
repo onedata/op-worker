@@ -239,8 +239,6 @@ handle_job_batch_processing_error(
     ItemBatch,
     Error
 ) ->
-    atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, length(ItemBatch)),
-
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     ?atm_task_error(Logger, #{
@@ -254,9 +252,12 @@ handle_job_batch_processing_error(
                 fun item_execution_to_json/1, ItemBatch
             ))
         }
-    }).
+    }),
+
+    handle_items_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, length(ItemBatch)).
 
 
+%% @private
 -spec process_job_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
@@ -278,6 +279,7 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
     ?atm_task_debug(Logger, #{
         <<"description">> => <<"Processing results for item...">>,
         <<"details">> => #{
@@ -287,18 +289,30 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
     }),
 
     try
-        atm_task_execution_results:consume_results(
-            AtmWorkflowExecutionCtx,
-            item_related,
-            AtmTaskExecution#atm_task_execution.item_related_result_specs,
-            JobResults
-        ),
+        consume_job_results(AtmWorkflowExecutionCtx, AtmTaskExecution, JobResults),
         atm_task_execution_status:handle_item_processed(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
         Error = ?examine_exception(Type, Reason, Stacktrace),
+
         handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
         error
     end.
+
+
+%% @private
+-spec consume_job_results(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:record(),
+    atm_task_executor:job_results()
+) ->
+    ok | error | no_return().
+consume_job_results(AtmWorkflowExecutionCtx, AtmTaskExecution, JobResults) ->
+    atm_task_execution_results:consume_results(
+        AtmWorkflowExecutionCtx,
+        item_related,
+        AtmTaskExecution#atm_task_execution.item_related_result_specs,
+        JobResults
+    ).
 
 
 %% @private
@@ -310,8 +324,6 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
 ) ->
     ok.
 handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error) ->
-    atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, 1),
-
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     ?atm_task_error(Logger, case Error of
@@ -331,7 +343,87 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
                     <<"item">> => ?ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
                 }
             }
-    end).
+    end),
+
+    handle_items_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, 1).
+
+
+%% @private
+-spec handle_items_failed(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    pos_integer()
+) ->
+    ok.
+handle_items_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Count) ->
+    AtmTaskExecutionDoc = atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, Count),
+
+    case atm_workflow_execution_ctx:is_lane_run_fail_for_exceptions_ratio_exceeded(
+        calc_task_exception_ratio(AtmTaskExecutionDoc), AtmWorkflowExecutionCtx
+    ) of
+        true ->
+            handle_exceeded_failed_jobs_threshold(AtmWorkflowExecutionCtx, AtmTaskExecutionId);
+        false ->
+            ok
+    end.
+
+
+%% @private
+-spec calc_task_exception_ratio(atm_task_execution:doc()) -> float().
+calc_task_exception_ratio(#document{value = #atm_task_execution{
+    items_in_processing = ItemsInProcessing,
+    items_processed = ItemsProcessed,
+    items_failed = ItemsFailed
+}}) ->
+    ItemsFailed / (ItemsInProcessing + ItemsProcessed + ItemsFailed).
+
+
+%% @private
+-spec handle_exceeded_failed_jobs_threshold(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id()
+) ->
+    ok.
+handle_exceeded_failed_jobs_threshold(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    case atm_task_execution_status:handle_stopping(
+        AtmTaskExecutionId,
+        failure,
+        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx)
+    ) of
+        {ok, #document{value = AtmTaskExecution = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+            Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+            ?atm_task_critical(Logger, <<"Exceeeded allowed failed jobs threshold.">>),
+            ?atm_workflow_critical(Logger, ?ATM_WORKFLOW_TASK_LOG(AtmTaskExecutionId, <<
+                "Exceeeded allowed failed jobs threshold."
+            >>)),
+
+            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+            init_lane_run_stop(AtmWorkflowExecutionCtx, AtmTaskExecution, failure);
+
+        {error, task_already_stopping} ->
+            ok;
+
+        {error, task_already_stopped} ->
+            ok
+    end.
+
+
+%% @private
+-spec init_lane_run_stop(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:record(),
+    atm_lane_execution:run_stopping_reason()
+) ->
+    ok.
+init_lane_run_stop(AtmWorkflowExecutionCtx, #atm_task_execution{
+    lane_index = AtmLaneIndex,
+    run_num = RunNum
+}, Reason) ->
+    {ok, _} = atm_lane_execution_handler:init_stop(
+        {AtmLaneIndex, RunNum}, Reason, AtmWorkflowExecutionCtx
+    ),
+    ok.
 
 
 %% @private
