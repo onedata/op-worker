@@ -436,7 +436,11 @@ resolve_conflict(_Ctx,
                         end
                 end,
 
-                case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
+                case
+                    file_meta:is_deleted(NewDoc) andalso
+                    (not file_meta:is_deleted(PrevDoc)) andalso
+                    dir_stats_collector:is_uuid_counted(Uuid)
+                of
                     true ->
                         dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
                     false ->
