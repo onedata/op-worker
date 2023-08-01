@@ -123,9 +123,8 @@ run_scan(SpaceId, ScanConfig) ->
                 run(SpaceId, StorageId, ScansNum + 1, ScanConfigMap)
             catch
                 Class:Reason:Stacktrace  ->
-                    ?error_exception(Class, Reason, Stacktrace),
                     scan_finished(SpaceId, StorageId, true),
-                    {error, Reason}
+                    ?examine_exception(Class, Reason, Stacktrace)
             end;
         {error, already_started} = Error ->
             Error
