@@ -19,6 +19,9 @@
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
+%% API
+-export([find_indices_by_trace_ids/3]).
+
 %% atm_store_container callbacks
 -export([
     create/1,
@@ -57,6 +60,73 @@
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
 ]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec find_indices_by_trace_ids(record(), [binary()], undefined | non_neg_integer()) ->
+    #{binary() => undefined | atm_store_container_infinite_log_backend:index()}.
+find_indices_by_trace_ids(Record, TraceIds, StartTimestamp) ->
+    ToFindCount = length(TraceIds),
+
+    Limit = max(ToFindCount, 100),
+    StartFrom = case StartTimestamp of
+        undefined -> undefined;
+        _ -> {timestamp, StartTimestamp}
+    end,
+
+    find_indices_by_trace_ids(
+        Record#atm_exception_store_container.backend_id,
+        #{start_from => StartFrom, limit => Limit},
+        maps:from_list([{TraceId, undefined} || TraceId <- TraceIds]),
+        ToFindCount
+    ).
+
+
+%% @private
+-spec find_indices_by_trace_ids(
+    atm_store_container_infinite_log_backend:id(),
+    atm_store_container_infinite_log_backend:listing_opts(),
+    #{binary() => undefined | atm_store_container_infinite_log_backend:index()},
+    non_neg_integer()
+) ->
+    #{binary() => undefined | atm_store_container_infinite_log_backend:index()}.
+find_indices_by_trace_ids(_BackendId, _ListingOpts, IndexPerTraceId, 0) ->
+    IndexPerTraceId;
+
+find_indices_by_trace_ids(BackendId, ListingOpts, IndexPerTraceId0, ToFindCount0) ->
+    ListingPostprocessor = fun({Index, {_Timestamp, #{<<"traceId">> := TraceId}}}) ->
+        {Index, TraceId}
+    end,
+    {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
+        BackendId, ListingOpts, ListingPostprocessor
+    ),
+
+    {IndexPerTraceId1, ToFindCount1} = lists:foldl(fun({Index, TraceId}, Acc = {IndexPerTraceIdAcc, ToFindCountAcc}) ->
+        case maps:find(TraceId, IndexPerTraceIdAcc) of
+            {ok, undefined} ->
+                {IndexPerTraceIdAcc#{TraceId => Index}, ToFindCountAcc - 1};
+            _ ->
+                Acc
+        end
+    end, {IndexPerTraceId0, ToFindCount0}, Entries),
+
+    case ProgressMarker of
+        done ->
+            IndexPerTraceId1;
+        more ->
+            {LastIndex, _} = lists:last(Entries),
+
+            NewListingOpts = #{
+                start_from => {index, LastIndex},
+                offset => 1,
+                limit => max(ToFindCount1, 100)
+            },
+            find_indices_by_trace_ids(BackendId, NewListingOpts, IndexPerTraceId1, ToFindCount1)
+    end.
 
 
 %%%===================================================================
