@@ -739,10 +739,9 @@ report_file_deleted(FileCtx) ->
     % for races on dbsync
     {ParentFileCtx, _} = file_tree:get_parent(FileCtx, undefined),
     {Type, _} = file_ctx:get_type(FileCtx),
-    case archivisation_tree:is_special_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
-        true -> ok;
-        false -> dir_size_stats:report_file_deleted(Type, file_ctx:get_logical_guid_const(ParentFileCtx))
-    end.
+    dir_stats_collector:is_uuid_counted(file_ctx:get_logical_uuid_const(FileCtx)) andalso
+        dir_size_stats:report_file_deleted(Type, file_ctx:get_logical_guid_const(ParentFileCtx)),
+    ok.
 
 
 -spec get_storage_file_id(file_ctx:ctx()) -> {helpers:file_id() | undefined, file_ctx:ctx()}.
