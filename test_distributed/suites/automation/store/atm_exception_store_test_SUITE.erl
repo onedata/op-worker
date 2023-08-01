@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -32,7 +33,9 @@
     update_content_test/1,
     iterator_test/1,
     browse_content_by_index_test/1,
-    browse_content_by_offset_test/1
+    browse_content_by_offset_test/1,
+
+    find_indices_by_trace_ids_test/1
 ]).
 
 groups() -> [
@@ -42,11 +45,15 @@ groups() -> [
         iterator_test,
         browse_content_by_index_test,
         browse_content_by_offset_test
+    ]},
+    {exception_store_specific_tests, [sequential], [
+        find_indices_by_trace_ids_test
     ]}
 ].
 
 all() -> [
-    {group, infinite_log_based_stores_common_tests}
+    {group, infinite_log_based_stores_common_tests},
+    {group, exception_store_specific_tests}
 ].
 
 
@@ -153,6 +160,61 @@ browse_content_by_offset_test(_Config) ->
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
     }).
+
+
+find_indices_by_trace_ids_test(_Config) ->
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
+        ?PROVIDER_SELECTOR, user1, space_krk
+    ),
+
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_exception_store_config{
+        item_data_spec = #atm_string_data_spec{}
+    }),
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+        AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
+    ))),
+
+    ItemsNum = rand:uniform(2000),
+    ContentUpdateOpts = build_content_update_options(append),
+    IndexPerTraceId = lists:foldl(fun(IndexInt, Acc) ->
+        Timestamp = time_test_utils:get_frozen_time_millis(),
+        TraceId = integer_to_binary(Timestamp),
+        ItemExecution = #atm_item_execution{trace_id = TraceId, value = ?RAND_STR()},
+
+        ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+            AtmWorkflowExecutionAuth, ItemExecution, ContentUpdateOpts, AtmStoreId
+        ))),
+        time_test_utils:simulate_millis_passing(1),
+
+        Acc#{TraceId => integer_to_binary(IndexInt)}
+    end, #{}, lists:seq(0, ItemsNum)),
+
+    lists:foreach(fun(_) ->
+        TraceIds = ?RAND_SUBLIST(maps:keys(IndexPerTraceId)),
+        {StartTimestamp, ExpIndexPerTraceId} = case ?RAND_ELEMENT([undefined | TraceIds]) of
+            undefined ->
+                {undefined, maps:with(TraceIds, IndexPerTraceId)};
+            TraceId ->
+                Timestamp = binary_to_integer(TraceId),
+
+                {Timestamp, lists:foldl(fun(TraceId, Acc) ->
+                    case binary_to_integer(TraceId) >= Timestamp of
+                        true -> Acc#{TraceId => maps:get(TraceId, IndexPerTraceId)};
+                        false -> Acc#{TraceId => undefined}
+                    end
+                end, #{}, TraceIds)}
+        end,
+
+        ?assertEqual(
+            ExpIndexPerTraceId,
+            ?rpc(begin
+                {ok, #atm_store{container = AtmStoreContainer}} = atm_store_api:get(AtmStoreId),
+                atm_exception_store_container:find_indices_by_trace_ids(
+                    AtmStoreContainer, TraceIds, StartTimestamp
+                )
+            end)
+        )
+    end, lists:seq(1, 10)).
 
 
 %===================================================================
@@ -320,11 +382,16 @@ end_per_suite(_Config) ->
 
 
 init_per_group(infinite_log_based_stores_common_tests, Config) ->
-    atm_infinite_log_based_stores_test_base:init_per_group(Config).
+    atm_infinite_log_based_stores_test_base:init_per_group(Config);
+init_per_group(exception_store_specific_tests, Config) ->
+    time_test_utils:freeze_time(Config),
+    Config.
 
 
 end_per_group(infinite_log_based_stores_common_tests, Config) ->
-    atm_infinite_log_based_stores_test_base:end_per_group(Config).
+    atm_infinite_log_based_stores_test_base:end_per_group(Config);
+end_per_group(exception_store_specific_tests, Config) ->
+    time_test_utils:unfreeze_time(Config).
 
 
 init_per_testcase(_Case, Config) ->
