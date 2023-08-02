@@ -29,7 +29,7 @@
     process_streamed_data/3,
     trigger_stream_conclusion/2,
 
-    handle_stopped/1,
+    handle_stopped/2,
     teardown/2
 ]).
 
@@ -65,7 +65,7 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     ?atm_task_info(Logger, <<"Task started.">>),
 
     AtmTaskExecutionId = AtmTaskExecutionDoc#document.key,
-    ?atm_workflow_info(Logger, ?workflow_log(<<"started.">>, AtmTaskExecutionId)),
+    ?atm_workflow_info(Logger, ?workflow_log(<<"Started.">>, AtmTaskExecutionId)),
 
     Result.
 
@@ -108,7 +108,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     ) of
         {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
             ?atm_task_debug(Logger, <<"Task resuming...">>),
-            ?atm_workflow_debug(Logger, ?workflow_log(<<"resuming...">>, AtmTaskExecutionId)),
+            ?atm_workflow_debug(Logger, ?workflow_log(<<"Resuming...">>, AtmTaskExecutionId)),
 
             unfreeze_stores(AtmTaskExecution),
             InitiationResult = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
@@ -116,7 +116,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
             case atm_task_execution_status:handle_resumed(AtmTaskExecutionId) of
                 {ok, _} ->
                     ?atm_task_info(Logger, <<"Task resumed.">>),
-                    ?atm_workflow_info(Logger, ?workflow_log(<<"resumed.">>, AtmTaskExecutionId)),
+                    ?atm_workflow_info(Logger, ?workflow_log(<<"Resumed.">>, AtmTaskExecutionId)),
 
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
@@ -251,10 +251,15 @@ trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     atm_task_executor:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
--spec handle_stopped(atm_task_execution:id()) -> ok.
-handle_stopped(AtmTaskExecutionId) ->
+-spec handle_stopped(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
+    ok.
+handle_stopped(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_stopped(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
+            Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+            ?atm_task_info(Logger, <<"Task stopped.">>),
+            ?atm_workflow_info(Logger, ?workflow_log(<<"Stopped.">>, AtmTaskExecutionId)),
+
             freeze_stores(AtmTaskExecution);
         {error, task_already_stopped} ->
             ok
@@ -714,7 +719,7 @@ log_uncorrelated_results_processing_error(
         <<"details">> => #{<<"reason">> => errors:to_json(Error)}
     }),
     ?atm_workflow_critical(Logger, ?workflow_log(
-        <<"failed to process streamed results.">>, AtmTaskExecutionId
+        <<"Failed to process streamed results.">>, AtmTaskExecutionId
     )).
 
 
@@ -733,7 +738,7 @@ log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
         <<"description">> => <<"Task stop initiated.">>,
         <<"details">> => Details
     }),
-    ?atm_workflow_info(Logger, ?workflow_log(<<"stop initiated.">>, Details, AtmTaskExecutionId)).
+    ?atm_workflow_info(Logger, ?workflow_log(<<"Stop initiated.">>, Details, AtmTaskExecutionId)).
 
 
 %% @private

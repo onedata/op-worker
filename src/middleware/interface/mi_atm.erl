@@ -20,6 +20,7 @@
     init_cancel_workflow_execution/2,
     init_pause_workflow_execution/2,
     resume_workflow_execution/2,
+    force_continue_workflow_execution/2,
     repeat_workflow_execution/4,
     discard_workflow_execution/3
 ]).
@@ -86,6 +87,16 @@ resume_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
     SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_resume_request{
+        atm_workflow_execution_id = AtmWorkflowExecutionId
+    }).
+
+
+-spec force_continue_workflow_execution(session:id(), atm_workflow_execution:id()) ->
+    ok | no_return().
+force_continue_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
+    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_force_continue_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 

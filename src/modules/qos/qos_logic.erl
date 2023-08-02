@@ -146,7 +146,7 @@ reevaluate_all_impossible_qos_in_space(SpaceId) ->
 retry_failed_files(SpaceId) ->
     qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
         FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-        ok = reconcile_qos(FileCtx),
+        ok = ?MODULE:reconcile_qos(FileCtx),
         ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid)
     end).
 

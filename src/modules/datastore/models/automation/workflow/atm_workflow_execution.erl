@@ -162,7 +162,7 @@ get_record_struct(1) ->
         {store_registry, #{string => string}},
         {system_audit_log_store_id, string},
 
-        {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
+        {lanes, #{integer => {custom, string, {persistent_record, to_string, from_string, atm_lane_execution}}}},
         {lanes_count, integer},
 
         {incarnation, integer},
@@ -197,7 +197,7 @@ get_record_struct(2) ->
         {store_registry, #{string => string}},
         {system_audit_log_store_id, string},
 
-        {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
+        {lanes, #{integer => {custom, string, {persistent_record, to_string, from_string, atm_lane_execution}}}},
         {lanes_count, integer},
 
         {incarnation, integer},

@@ -345,7 +345,10 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
 
 -spec is_uuid_counted(file_meta:uuid()) -> boolean().
 is_uuid_counted(Uuid) ->
-    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse archivisation_tree:is_special_uuid(Uuid)).
+    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse
+        archivisation_tree:is_special_uuid(Uuid) orelse
+        archivisation_tree:is_archive_dir_uuid(Uuid)
+    ).
 
 
 %%%===================================================================
@@ -1183,8 +1186,13 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
             CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
             % TODO VFS-9204 - handle flush errors
             {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState),
-            InitialDirStats = CollectionType:init_child(Guid, true),
-            ConsolidatedStats = dir_stats_collection:consolidate(CollectionType, InitialDirStats, CurrentStats),
+            ConsolidatedStats = case is_uuid_counted(file_id:guid_to_uuid(Guid)) of
+                true ->
+                    InitialDirStats = CollectionType:init_child(Guid, true),
+                    dir_stats_collection:consolidate(CollectionType, InitialDirStats, CurrentStats);
+                false ->
+                    CurrentStats
+            end,
 
             case dir_stats_collection:on_collection_move(CollectionType, ConsolidatedStats) of
                 {update_source_parent, CollectionUpdate} ->

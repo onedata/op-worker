@@ -472,7 +472,7 @@ cancel_and_resume_test_base(Config, #test_config{
             FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_advance_handler(
                 FilteredExecutionHistory, LaneId, PrepareInAdvance),
             FilteredExecutionHistoryAfterResume = workflow_scheduling_test_common:check_prepare_lane_in_head_and_filter(
-                ExecutionHistoryAfterResume, LaneId, PrepareInAdvance),
+                ExecutionHistoryAfterResume, LaneId, PrepareInAdvance, FilteredExecutionHistory2),
             FinalVerifyOptions = case {TestExecutionManagerOption, TaskType} of
                 {{fail_job, TId}, async} -> GeneratorOptions#{fail_and_resume_job => {LaneId, TId, <<"100">>}};
                 _ -> GeneratorOptions#{}

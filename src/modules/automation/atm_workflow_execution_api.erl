@@ -55,6 +55,7 @@
     init_cancel/2,
     init_pause/2,
     resume/2,
+    force_continue/2,
     repeat/4,
     discard/1
 ]).
@@ -225,6 +226,11 @@ init_pause(UserCtx, AtmWorkflowExecutionId) ->
 -spec resume(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
 resume(UserCtx, AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:resume(UserCtx, AtmWorkflowExecutionId).
+
+
+-spec force_continue(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+force_continue(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:force_continue(UserCtx, AtmWorkflowExecutionId).
 
 
 -spec repeat(

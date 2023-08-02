@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
@@ -281,6 +282,7 @@ remove_unsafe(#document{key = DatasetId} = Doc, DatasetType) ->
             false
     end,
     ok = file_meta_dataset:remove(Uuid),
+    ok = file_meta:delete(?DATASET_ARCHIVES_DIR_NAME(DatasetId)),
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
 
 

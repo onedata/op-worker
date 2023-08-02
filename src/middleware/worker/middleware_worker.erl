@@ -47,6 +47,7 @@
     #atm_workflow_execution_init_cancel_request{} |
     #atm_workflow_execution_init_pause_request{} |
     #atm_workflow_execution_resume_request{} |
+    #atm_workflow_execution_force_continue_request{} |
     #atm_workflow_execution_repeat_request{} |
     #atm_workflow_execution_discard_request{}.
 

@@ -50,7 +50,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1,
+-export([create_archive_dir/4, is_special_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
     uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
 %%%===================================================================
@@ -74,7 +74,6 @@ create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
             {ok, _} = create_dataset_archives_dir(DatasetId, SpaceId),
             ok = create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc)
     end,
-    dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(DatasetArchivesDirUuid, SpaceId)),
     {ok, ArchiveDirUuid}.
 
 
@@ -84,6 +83,13 @@ is_special_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
 is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(_) ->
+    false.
+
+
+-spec is_archive_dir_uuid(file_meta:uuid()) -> boolean().
+is_archive_dir_uuid(<<?ARCHIVE_DIR_UUID_PREFIX, _/binary>>) ->
+    true;
+is_archive_dir_uuid(_) ->
     false.
 
 

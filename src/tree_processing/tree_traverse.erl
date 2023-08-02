@@ -71,7 +71,9 @@
 %   * propagate - listing error is returned as a result of a master job.
 %   * ignore_known - on known listing error (see ?LISTING_KNOWN_ERRORS) such subtree is ignored,
 %                    for all other unexpected errors behaves the same as retry_infinitely.
--type listing_errors_handling_policy() :: retry_infinitely | ignore_known | propagate.
+%   * propagate_unknown - if error is unknown (i.e. not in ?LISTING_KNOWN_ERRORS list) it is returned as a result of a master job.
+%                         For all known listing errors behaves the same as retry_infinitely.
+-type listing_errors_handling_policy() :: retry_infinitely | propagate | ignore_known | propagate_unknown.
 % Symbolic links resolution policy:
 %   * preserve - every symbolic link encountered during traverse is passed as is to the slave job;
 %   * follow_all - every valid symbolic link is resolved and target file is passed to the slave job,
@@ -301,7 +303,7 @@ do_master_job(Job, MasterJobArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args(), new_jobs_preprocessor()) ->
-    {ok, traverse:master_job_map()}.
+    {ok, traverse:master_job_map()} | {error, term()}.
 do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
@@ -323,7 +325,7 @@ do_aborted_master_job(#tree_traverse{track_subtree_status = true} = Job, MasterJ
             {ok, #{}, undefined, undefined}
     end;
 do_aborted_master_job(#tree_traverse{track_subtree_status = false} = _Job, _MasterJobArgs) ->
-    {ok, #{}, undefined}.
+    {ok, #{}, undefined, undefined}.
 
 
 %%--------------------------------------------------------------------
@@ -436,6 +438,8 @@ do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
             case {ListingErrorsHandlingPolicy, lists:member(Reason, ?LISTING_KNOWN_ERRORS)} of
                 {ignore_known, true} ->
                     {ok, #{}};
+                {propagate_unknown, false} ->
+                    {error, Reason};
                 {propagate, _} ->
                     {error, Reason};
                 _ ->
