@@ -190,7 +190,7 @@ build_workflow_log_content(Logger, AtmWorkflowLogSchema = #atm_workflow_log_sche
     ),
     case ReferencedTasks of
         undefined -> Log;
-        _ -> Log#{<<"referencedComponents">> => #{<<"tasks">> => ReferencedTasks}}
+        _ -> Log#{<<"referencedElements">> => #{<<"tasks">> => ReferencedTasks}}
     end;
 
 build_workflow_log_content(_Logger, LogContent) ->

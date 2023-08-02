@@ -247,10 +247,12 @@ handle_job_batch_processing_error(
             <<"reason">> => case Error of
                 ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
                 _ -> errors:to_json(Error)
-            end,
-            <<"itemBatch">> => ?ensure_log_term_size_not_exceeded(lists:map(
-                fun item_execution_to_json/1, ItemBatch
-            ))
+            end
+        },
+        <<"referencedElements">> => #{
+            <<"itemTraceIds">> => lists:map(fun(Item) ->
+                Item#atm_item_execution.trace_id
+            end, ItemBatch)
         }
     }),
 
@@ -331,16 +333,20 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
             #{
                 <<"description">> => <<"Lambda exception occurred during item processing.">>,
                 <<"details">> => #{
-                    <<"reason">> => Reason,
-                    <<"item">> => ?ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
+                    <<"reason">> => Reason
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                 }
             };
         _SystemError = {error, _} ->
             #{
                 <<"description">> => <<"Failed to process item.">>,
                 <<"details">> => #{
-                    <<"reason">> => errors:to_json(Error),
-                    <<"item">> => ?ensure_log_term_size_not_exceeded(item_execution_to_json(Item))
+                    <<"reason">> => errors:to_json(Error)
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                 }
             }
     end),
