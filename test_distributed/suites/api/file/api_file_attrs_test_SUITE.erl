@@ -24,6 +24,8 @@
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 
 -export([
     groups/0, all/0,
@@ -97,6 +99,7 @@ all() -> [
 
 -define(BLOCK(__OFFSET, __SIZE), #file_block{offset = __OFFSET, size = __SIZE}).
 -define(ATTEMPTS, 30).
+-define(CURRENT_TIME, 1689168600).
 -define(NEWEST_TIMESTAMP, 1689169900).
 -define(OLDEST_TIMESTAMP, 1687380000).
 -define(MAX_WINDOW_LIMIT, 1000).
@@ -1292,7 +1295,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
-    time_test_utils:set_current_time_seconds(1689168600),
+    time_test_utils:set_current_time_seconds(?CURRENT_TIME),
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
         onenv_file_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
@@ -1308,15 +1311,17 @@ get_historical_dir_size_stats_slice_test(Config) ->
             ],
             krakow
     ),
-    timer:sleep(timer:seconds(10)),
+
+    ?assertEqual(8, gather_historical_dir_size_stats(DirGuid, krakow), ?ATTEMPTS),
+    ?assertEqual(8, gather_historical_dir_size_stats(DirGuid, paris), ?ATTEMPTS),
     time_test_utils:simulate_seconds_passing(100),
     onenv_file_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow),
-    timer:sleep(timer:seconds(10)),
+    ?assertEqual(24, gather_historical_dir_size_stats(DirGuid, krakow), ?ATTEMPTS),
+    ?assertEqual(24, gather_historical_dir_size_stats(DirGuid, paris), ?ATTEMPTS),
     time_test_utils:simulate_seconds_passing(180),
     onenv_file_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow),
-
 
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
     BaseLayout = maps_utils:random_submap(#{
@@ -1333,10 +1338,10 @@ get_historical_dir_size_stats_slice_test(Config) ->
         StopTimestamp = maps:get(<<"stopTimestamp">>, Data, ?OLDEST_TIMESTAMP),
         lists:sublist(lists:filter(fun(Window) ->
             Timestamp = maps:get(<<"timestamp">>, Window),
-            Timestamp < StartTimestamp andalso Timestamp > StopTimestamp
+            Timestamp =< StartTimestamp andalso Timestamp >= StopTimestamp
         end, Windows), maps:get(<<"windowLimit">>, Data, ?MAX_WINDOW_LIMIT))
     end,
-    ExpMetricsFun = fun(Data, ExpValues) ->
+    BuildExpMetricsFun = fun(Data, ExpValues) ->
         [Last, Middle, First] = ExpValues,
         lists:foldl(fun(Metric, Acc) ->
             Acc#{Metric =>
@@ -1354,12 +1359,12 @@ get_historical_dir_size_stats_slice_test(Config) ->
             }
         end, #{}, Metrics)
     end,
-    ExpSliceFun = fun(Data) -> maps:with(maps:keys(maps:get(<<"layout">>, Data, #{})), #{
-            ?DIR_COUNT => ExpMetricsFun(Data, [1, 1, 1]),
-            ?REG_FILE_AND_LINK_COUNT =>  ExpMetricsFun(Data, [3, 2, 1]),
-            ?SIZE_ON_STORAGE(P1StorageId) =>  ExpMetricsFun(Data, [32, 24, 8]),
-            ?SIZE_ON_STORAGE(P2StorageId) =>  ExpMetricsFun(Data, [0, 0, 0]),
-            ?TOTAL_SIZE => ExpMetricsFun(Data, [32, 24, 8])
+    BuildExpSliceFun = fun(Data) -> maps:with(maps:keys(maps:get(<<"layout">>, Data, #{})), #{
+            ?DIR_COUNT => BuildExpMetricsFun(Data, [1, 1, 1]),
+            ?REG_FILE_AND_LINK_COUNT =>  BuildExpMetricsFun(Data, [3, 2, 1]),
+            ?SIZE_ON_STORAGE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
+            ?SIZE_ON_STORAGE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
+            ?TOTAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
         })
     end,
     await_file_size_sync(krakow, 32, DirGuid),
@@ -1373,7 +1378,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
                 maps:without([<<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
             end, Windows)
         end, Slice),
-        ?assertEqual(ExpSliceFun(Data), ResultWithoutMeasurementTimestamps)
+        ?assertEqual(BuildExpSliceFun(Data), ResultWithoutMeasurementTimestamps)
     end,
     
     ValidateGsSuccessfulCallFun = fun(TestCtx, Result) ->
@@ -1398,8 +1403,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
             <<"mode">> => [<<"slice">>],
             <<"layout">> => [LayoutFun(ProviderId)],
             <<"windowLimit">> => [2, 5],
-            <<"startTimestamp">> => [1689166750, 1689166900],
-            <<"stopTimestamp">> => [1687380000, 1689166650]
+            <<"startTimestamp">> => [1689166750, 1689166800, 1689168840, 1689166900],
+            <<"stopTimestamp">> => [1687392000, 1687380000, 1689168660, 1689166650]
         },
         bad_values = [
             {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
@@ -1668,6 +1673,24 @@ assert_file_location_created(Node, FileUuid, LocationProviderId) ->
         file_location:id(FileUuid, LocationProviderId), FileUuid, false
     ]), ?ATTEMPTS).
 
+
+%% @private
+-spec gather_historical_dir_size_stats(dir_id:dir_guid(), oneprovider:id()) ->
+    window_info:value().
+gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
+    SessionId = oct_background:get_user_session_id(user3, ProviderPlaceholder),
+    ProviderId = oct_background:get_provider_id(ProviderPlaceholder),
+    Request = #time_series_slice_get_request{
+        layout = #{?TOTAL_SIZE => [?HOUR_METRIC]}
+    },
+    #time_series_slice_get_result{
+        slice = #{?TOTAL_SIZE := #{
+            ?HOUR_METRIC := [#window_info{value = Value}]
+        }}
+    } = ?rpc(ProviderPlaceholder, mi_file_metadata:get_historical_dir_size_stats(
+        SessionId, ?FILE_REF(DirGuid), ProviderId, Request)
+    ),
+    Value.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
