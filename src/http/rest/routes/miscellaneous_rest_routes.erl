@@ -30,6 +30,19 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
+    %% Get directory size statistics
+    {<<"/data/:id/dir_size_stats">>, rest_handler, #rest_req{
+        method = 'GET',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = {dir_size_stats_collection, ?QUERIED_PROVIDER_BINDING}, 
+            scope = private
+        }
+    }},
     %% Register file
     {<<"/data/register">>, rest_handler, #rest_req{
         method = 'POST',
@@ -40,19 +53,6 @@ routes() -> [
             type = op_file, 
             id = undefined, 
             aspect = register_file, 
-            scope = private
-        }
-    }},
-    %% Get directory size statistics.
-    {<<"/data/:id/dir_size_stats">>, rest_handler, #rest_req{
-        method = 'GET',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = {dir_size_stats_collection, ?QUERIED_PROVIDER_BINDING}, 
             scope = private
         }
     }}
