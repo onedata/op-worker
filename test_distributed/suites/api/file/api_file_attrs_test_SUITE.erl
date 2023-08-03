@@ -58,7 +58,8 @@
     
     get_historical_dir_size_stats_schema_test/1,
     get_historical_dir_size_stats_layout_test/1,
-    get_historical_dir_size_stats_slice_test/1
+    get_historical_dir_size_stats_slice_test/1,
+    get_historical_dir_size_stats_disabled_test/1
 ]).
 
 groups() -> [
@@ -87,7 +88,8 @@ groups() -> [
         get_dir_distribution_3_test,
         get_historical_dir_size_stats_schema_test,
         get_historical_dir_size_stats_layout_test,
-        get_historical_dir_size_stats_slice_test
+        get_historical_dir_size_stats_slice_test,
+        get_historical_dir_size_stats_disabled_test
     ]}
 ].
 
@@ -99,9 +101,6 @@ all() -> [
 
 -define(BLOCK(__OFFSET, __SIZE), #file_block{offset = __OFFSET, size = __SIZE}).
 -define(ATTEMPTS, 30).
--define(CURRENT_TIME, 1689168600).
--define(NEWEST_TIMESTAMP, 1689169900).
--define(OLDEST_TIMESTAMP, 1687380000).
 -define(MAX_WINDOW_LIMIT, 1000).
 
 
@@ -1093,6 +1092,23 @@ await_file_size_sync(ProviderPlaceholder, ExpectedSize, Guid) ->
 
 
 %% @private
+-spec await_dir_size_sync(
+    oct_background:entity_selector() | [oct_background:entity_selector()],
+    file_meta:size(),
+    file_id:file_guid()
+) ->
+    ok.
+await_dir_size_sync(ProviderPlaceholders, ExpectedSize, DirGuid) ->
+    lists:foreach(fun(ProviderPlaceholder) ->
+        ?assertEqual(
+            ExpectedSize,
+            gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder),
+            ?ATTEMPTS
+        )
+    end, utils:ensure_list(ProviderPlaceholders)).
+
+
+%% @private
 -spec get_storage_id(od_space:id(), oneprovider:id()) -> od_storage:id().
 get_storage_id(SpaceId, ProviderId) ->
     {ok, Storages} = ?rpc(krakow, space_logic:get_provider_storages(SpaceId, ProviderId)),
@@ -1286,6 +1302,10 @@ get_historical_dir_size_stats_layout_test(Config) ->
 
 
 get_historical_dir_size_stats_slice_test(Config) ->
+    CurrentTimestamp = 1689168600,
+    FutureTimestamp = 1689169900,
+    PastTimestamp = 1687380000,
+
     enable_dir_stats_collecting_for_space(krakow, space_krk_par),
     enable_dir_stats_collecting_for_space(paris, space_krk_par),
     
@@ -1295,7 +1315,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
-    time_test_utils:set_current_time_seconds(?CURRENT_TIME),
+    time_test_utils:set_current_time_seconds(CurrentTimestamp),
     [#object{guid = DirGuid, shares = [ShareId]}, #object{guid = FileGuid}] =
         onenv_file_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
@@ -1312,16 +1332,16 @@ get_historical_dir_size_stats_slice_test(Config) ->
             krakow
     ),
 
-    ?assertEqual(8, gather_historical_dir_size_stats(DirGuid, krakow), ?ATTEMPTS),
-    ?assertEqual(8, gather_historical_dir_size_stats(DirGuid, paris), ?ATTEMPTS),
+    await_dir_size_sync([krakow, paris], 8, DirGuid),
     time_test_utils:simulate_seconds_passing(100),
     onenv_file_test_utils:create_and_sync_file_tree(
-        user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow),
-    ?assertEqual(24, gather_historical_dir_size_stats(DirGuid, krakow), ?ATTEMPTS),
-    ?assertEqual(24, gather_historical_dir_size_stats(DirGuid, paris), ?ATTEMPTS),
+        user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow
+    ),
+    await_dir_size_sync([krakow, paris], 24, DirGuid),
     time_test_utils:simulate_seconds_passing(180),
     onenv_file_test_utils:create_and_sync_file_tree(
-        user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow),
+        user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow
+    ),
 
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
     BaseLayout = maps_utils:random_submap(#{
@@ -1334,8 +1354,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
         (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
     end,
     ExpTimestampFilter = fun(Data, Windows) ->
-        StartTimestamp = maps:get(<<"startTimestamp">>, Data, ?NEWEST_TIMESTAMP),
-        StopTimestamp = maps:get(<<"stopTimestamp">>, Data, ?OLDEST_TIMESTAMP),
+        StartTimestamp = maps:get(<<"startTimestamp">>, Data, FutureTimestamp),
+        StopTimestamp = maps:get(<<"stopTimestamp">>, Data, PastTimestamp),
         lists:sublist(lists:filter(fun(Window) ->
             Timestamp = maps:get(<<"timestamp">>, Window),
             Timestamp =< StartTimestamp andalso Timestamp >= StopTimestamp
@@ -1421,6 +1441,79 @@ get_historical_dir_size_stats_slice_test(Config) ->
     end,
     gather_historical_dir_size_stats_test_base(MemRef, DirGuid, ShareId, ValidateGsSuccessfulCallFun,
         ValidateRestSuccessfulCallFun, Config, DataSpecFun,
+        #{<<"mode">> => <<"slice">>} % add mode to data, when it is left out, as when it is omitted `layout` mode is assumed
+    ).
+
+
+get_historical_dir_size_stats_disabled_test(Config) ->
+    disable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    disable_dir_stats_collecting_for_space(paris, space_krk_par),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+
+    [#object{guid = DirGuid, shares = [ShareId]}] =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, space_krk_par, [
+                #dir_spec{
+                    mode = 8#707,
+                    shares = [#share_spec{}],
+                    children = [#file_spec{content = crypto:strong_rand_bytes(8)}]
+                }
+            ]
+        ),
+    MemRef = api_test_memory:init(),
+
+    Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
+    BaseLayout = maps_utils:random_submap(#{
+        ?DIR_COUNT => Metrics,
+        ?REG_FILE_AND_LINK_COUNT => Metrics,
+        ?TOTAL_SIZE => Metrics
+    }),
+    LayoutFun = fun
+        (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
+        (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
+    end,
+
+    ValidateGsErrorCallFun = fun(_TestCtx, Result) ->
+        ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE, Result)
+    end,
+    ValidateRestErrorCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
+        ?assertEqual(#{<<"error">> => errors:to_json(?ERROR_DIR_STATS_DISABLED_FOR_SPACE)}, RespBody)
+    end,
+
+    DataSpecFunLayout = fun(_) -> #data_spec{
+        optional = [<<"mode">>],
+        correct_values = #{<<"mode">> => [<<"layout">>]}
+    } end,
+
+    DataSpecFunSlice = fun(ProviderId) -> #data_spec{
+        required = [<<"layout">>],
+        optional = [
+            <<"mode">>,
+            <<"windowLimit">>,
+            <<"startTimestamp">>,
+            <<"stopTimestamp">>
+        ],
+        correct_values = #{
+            <<"mode">> => [<<"slice">>],
+            <<"layout">> => [LayoutFun(ProviderId)],
+            <<"windowLimit">> => [2, 5],
+            <<"startTimestamp">> => [1689166750, 1689166800, 1689168840, 1689166900],
+            <<"stopTimestamp">> => [1687392000, 1687380000, 1689168660, 1689166650]
+        }
+    } end,
+
+    gather_historical_dir_size_stats_test_base(
+        MemRef, DirGuid, ShareId, ValidateGsErrorCallFun, ValidateRestErrorCallFun, Config, DataSpecFunLayout, #{}
+    ),
+
+    gather_historical_dir_size_stats_test_base(MemRef, DirGuid, ShareId, ValidateGsErrorCallFun,
+        ValidateRestErrorCallFun,  Config, DataSpecFunSlice,
         #{<<"mode">> => <<"slice">>} % add mode to data, when it is left out, as when it is omitted `layout` mode is assumed
     ).
 
