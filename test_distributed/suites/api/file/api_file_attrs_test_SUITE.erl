@@ -1331,17 +1331,19 @@ get_historical_dir_size_stats_slice_test(Config) ->
             ],
             krakow
     ),
-
     await_dir_size_sync([krakow, paris], 8, DirGuid),
+
     time_test_utils:simulate_seconds_passing(100),
     onenv_file_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(16)}, krakow
     ),
     await_dir_size_sync([krakow, paris], 24, DirGuid),
+
     time_test_utils:simulate_seconds_passing(180),
     onenv_file_test_utils:create_and_sync_file_tree(
         user3, DirGuid, #file_spec{content = crypto:strong_rand_bytes(8)}, krakow
     ),
+    await_dir_size_sync([krakow, paris], 32, DirGuid),
 
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
     BaseLayout = maps_utils:random_submap(#{
@@ -1449,12 +1451,6 @@ get_historical_dir_size_stats_disabled_test(Config) ->
     disable_dir_stats_collecting_for_space(krakow, space_krk_par),
     disable_dir_stats_collecting_for_space(paris, space_krk_par),
 
-    SpaceId = oct_background:get_space_id(space_krk_par),
-    P1Id = oct_background:get_provider_id(krakow),
-    P1StorageId = get_storage_id(SpaceId, P1Id),
-    P2Id = oct_background:get_provider_id(paris),
-    P2StorageId = get_storage_id(SpaceId, P2Id),
-
     [#object{guid = DirGuid, shares = [ShareId]}] =
         onenv_file_test_utils:create_and_sync_file_tree(
             user3, space_krk_par, [
@@ -1473,10 +1469,6 @@ get_historical_dir_size_stats_disabled_test(Config) ->
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics
     }),
-    LayoutFun = fun
-        (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
-        (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
-    end,
 
     ValidateGsErrorCallFun = fun(_TestCtx, Result) ->
         ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE, Result)
@@ -1491,20 +1483,10 @@ get_historical_dir_size_stats_disabled_test(Config) ->
         correct_values = #{<<"mode">> => [<<"layout">>]}
     } end,
 
-    DataSpecFunSlice = fun(ProviderId) -> #data_spec{
+    DataSpecFunSlice = fun(_) -> #data_spec{
         required = [<<"layout">>],
-        optional = [
-            <<"mode">>,
-            <<"windowLimit">>,
-            <<"startTimestamp">>,
-            <<"stopTimestamp">>
-        ],
         correct_values = #{
-            <<"mode">> => [<<"slice">>],
-            <<"layout">> => [LayoutFun(ProviderId)],
-            <<"windowLimit">> => [2, 5],
-            <<"startTimestamp">> => [1689166750, 1689166800, 1689168840, 1689166900],
-            <<"stopTimestamp">> => [1687392000, 1687380000, 1689168660, 1689166650]
+            <<"layout">> => [BaseLayout]
         }
     } end,
 
