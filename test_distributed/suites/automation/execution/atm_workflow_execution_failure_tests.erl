@@ -292,12 +292,14 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                         ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                             IncorrectConst, atm_time_series_measurement_type
                         )
                     ))
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -323,12 +325,14 @@ fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                         ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
                             Item#atm_item_execution.value, IteratedItemQuery
                         )
                     ))
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -352,12 +356,14 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                         ?ECHO_ARG_NAME, ?ERROR_ATM_STORE_CONTENT_NOT_SET(
                             ?SV_STORE_SCHEMA_ID
                         )
                     ))
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -376,8 +382,10 @@ fail_atm_workflow_execution_due_to_job_timeout() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -400,8 +408,10 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -422,10 +432,12 @@ fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(
                             <<"value">>, [<<"schrodinger_cat">>, <<"schrodinger_dog">>]
                         ))
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -446,13 +458,15 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
                             <<"value">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                                 ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE,
                                 atm_time_series_measurement_type
                             )
                         ))
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -473,8 +487,10 @@ fail_atm_workflow_execution_due_to_lambda_item_exception() ->
                 #{
                     <<"description">> => <<"Lambda exception occurred during item processing.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3_EXCEPTION
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -493,8 +509,10 @@ fail_atm_workflow_execution_due_to_lambda_batch_exception() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end

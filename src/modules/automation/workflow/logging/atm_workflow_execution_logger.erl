@@ -100,6 +100,11 @@ should_log(#atm_workflow_execution_logger{log_level = LogLevel}, LogSeverityInt)
     audit_log:should_log(LogLevel, LogSeverityInt).
 
 
+%%-------------------------------------------------------------------
+%% @doc
+%% WARNING: log is encoded to binary if it exceeds size limit
+%% @end
+%%-------------------------------------------------------------------
 -spec ensure_log_term_size_not_exceeded(term()) -> term() | binary().
 ensure_log_term_size_not_exceeded(Bin) when is_binary(Bin), byte_size(Bin) =< ?LOG_TERM_SIZE_LIMIT ->
     Bin;
