@@ -30,12 +30,13 @@
     ts_browse_result:record().
 get_historical(UserCtx, FileCtx0, ProviderId, BrowseRequest) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    FileCtx2 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx1,
+    FileCtx2 = file_ctx:assert_is_dir(FileCtx1),
+    FileCtx3 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx2,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     
-    get_historical_insecure(FileCtx2, ProviderId, BrowseRequest).
+    get_historical_insecure(FileCtx3, ProviderId, BrowseRequest).
 
 %%%===================================================================
 %%% Internal functions

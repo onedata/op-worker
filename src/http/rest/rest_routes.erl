@@ -38,7 +38,7 @@ routes() ->
         dataset_rest_routes:routes(),
         file_distribution_rest_routes:routes(),
         file_path_resolution_rest_routes:routes(),
-        file_registration_rest_routes:routes(),
+        miscellaneous_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
         qos_rest_routes:routes(),
