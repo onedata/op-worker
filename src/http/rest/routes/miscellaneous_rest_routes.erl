@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file_registration REST methods.
+%%% This module contains definitions of miscellaneous REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_registration_rest_routes).
+-module(miscellaneous_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,11 +25,24 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file_registration REST paths.
+%% Definitions of miscellaneous REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
+    %% Get directory size statistics
+    {<<"/data/:id/dir_size_stats">>, rest_handler, #rest_req{
+        method = 'GET',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = {dir_size_stats_collection, ?QUERIED_PROVIDER_BINDING}, 
+            scope = private
+        }
+    }},
     %% Register file
     {<<"/data/register">>, rest_handler, #rest_req{
         method = 'POST',

@@ -285,6 +285,8 @@ resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     {ok, Guid} = middleware_utils:resolve_file_path(SessionId, Path),
     Guid;
+resolve_bindings(_SessionId, ?QUERIED_PROVIDER_BINDING, _Req) ->
+    oneprovider:get_id();
 resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
     {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};
 resolve_bindings(_SessionId, Other, _Req) ->

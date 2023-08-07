@@ -622,6 +622,7 @@ data_spec_get(#gri{aspect = {dir_size_stats_collection, _}}) -> #{
         <<"mode">> => {any, any},
         <<"layout">> => {any, any},
         <<"startTimestamp">> => {any, any},
+        <<"stopTimestamp">> => {any, any},
         <<"windowLimit">> => {any, any},
         <<"extendedInfo">> => {any, any}
     }
