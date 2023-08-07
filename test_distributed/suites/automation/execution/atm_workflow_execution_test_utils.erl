@@ -436,9 +436,21 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, SessionId),
 
     {ok, AtmStore = #atm_store{container = AtmStoreContainer}} = atm_store_api:get(AtmStoreId),
-    AtmStoreBrowseOpts = build_browse_opts(atm_store_container:get_store_type(AtmStoreContainer)),
+    AtmStoreType = atm_store_container:get_store_type(AtmStoreContainer),
+    AtmStoreBrowseOpts = build_browse_opts(AtmStoreType),
 
-    AtmStoreContent = atm_store_api:browse_content(AtmWorkflowExecutionAuth, AtmStoreBrowseOpts, AtmStore),
+    AtmStoreContent = try
+        atm_store_api:browse_content(AtmWorkflowExecutionAuth, AtmStoreBrowseOpts, AtmStore)
+    catch
+        throw:?ERROR_NOT_FOUND when AtmStoreType == audit_log ->
+            % audit log may not exist because of:
+            % 1. it is created only at first append
+            % 2. it may have been purged
+            #atm_audit_log_store_content_browse_result{result = #{
+                <<"logEntries">> => [],
+                <<"isLast">> => true
+            }}
+    end,
     atm_store_content_browse_result:to_json(AtmStoreContent).
 
 

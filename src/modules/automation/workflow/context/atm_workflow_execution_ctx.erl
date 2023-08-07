@@ -25,13 +25,18 @@
 -export([
     get_workflow_execution_id/1,
     get_workflow_execution_incarnation/1,
+
     get_env/1,
     get_auth/1,
+
     get_log_level_int/1,
     get_logger/1,
 
     is_global_store/2,
     get_global_store_id/2,
+
+    is_lane_run_fail_for_exceptions_ratio_exceeded/2,
+
     get_task_execution_id/1,
     get_task_time_series_store_id/1
 ]).
@@ -149,6 +154,15 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
     atm_workflow_execution_env:get_global_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
+
+
+-spec is_lane_run_fail_for_exceptions_ratio_exceeded(float(), record()) -> boolean().
+is_lane_run_fail_for_exceptions_ratio_exceeded(CurrentRatio, #atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
+}) ->
+    CurrentRatio > atm_workflow_execution_env:get_lane_run_fail_for_exceptions_ratio(
+        AtmWorkflowExecutionEnv
+    ).
 
 
 -spec get_task_execution_id(record()) -> undefined | atm_task_execution:id().

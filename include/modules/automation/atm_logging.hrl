@@ -17,6 +17,8 @@
 -include_lib("cluster_worker/include/audit_log.hrl").
 
 
+%% atm task level logging related macros
+
 -define(atm_task_system_log(__LOGGER, __LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL),
     case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
         true ->
@@ -81,6 +83,9 @@
 -define(atm_task_emergency(__LOGGER, __FORMAT, __ARGS), ?atm_task_emergency(
     __LOGGER, str_utils:format_bin(__FORMAT, __ARGS)
 )).
+
+
+%% Atm workflow level logging related macros
 
 -define(atm_workflow_system_log(__LOGGER, __LOG_CONTENT, __LOG_SEVERITY, __LOG_LEVEL),
     case atm_workflow_execution_logger:should_log(__LOGGER, __LOG_LEVEL) of
@@ -159,6 +164,20 @@
     details :: undefined | json_utils:json_map(),
     referenced_tasks :: undefined | [atm_task_execution:id()]
 }).
+
+-define(ATM_WORKFLOW_TASK_LOG(__ATM_TASK_EXECUTION_ID, __DESCRIPTION),
+    ?ATM_WORKFLOW_TASK_LOG(__ATM_TASK_EXECUTION_ID, __DESCRIPTION, undefined)
+).
+-define(ATM_WORKFLOW_TASK_LOG(__ATM_TASK_EXECUTION_ID, __DESCRIPTION, __DETAILS), #atm_workflow_log_schema{
+    selector = {task, __ATM_TASK_EXECUTION_ID},
+    description = __DESCRIPTION,
+    details = __DETAILS,
+    referenced_tasks = [__ATM_TASK_EXECUTION_ID]
+}).
+
+-define(ensure_log_term_size_not_exceeded(__TERM),
+    atm_workflow_execution_logger:ensure_log_term_size_not_exceeded(__TERM)
+).
 
 
 -endif.

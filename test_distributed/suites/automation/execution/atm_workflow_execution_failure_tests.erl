@@ -29,7 +29,9 @@
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
     fail_atm_workflow_execution_due_to_lambda_item_exception/0,
-    fail_atm_workflow_execution_due_to_lambda_batch_exception/0
+    fail_atm_workflow_execution_due_to_lambda_batch_exception/0,
+
+    fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio/0
 ]).
 
 
@@ -290,12 +292,14 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                         ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                             IncorrectConst, atm_time_series_measurement_type
                         )
                     ))
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -321,12 +325,14 @@ fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                         ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
                             Item#atm_item_execution.value, IteratedItemQuery
                         )
                     ))
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -350,12 +356,14 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                         ?ECHO_ARG_NAME, ?ERROR_ATM_STORE_CONTENT_NOT_SET(
                             ?SV_STORE_SCHEMA_ID
                         )
                     ))
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -374,8 +382,10 @@ fail_atm_workflow_execution_due_to_job_timeout() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -398,8 +408,10 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -420,10 +432,12 @@ fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(
                             <<"value">>, [<<"schrodinger_cat">>, <<"schrodinger_dog">>]
                         ))
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -444,13 +458,15 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
                             <<"value">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                                 ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE,
                                 atm_time_series_measurement_type
                             )
                         ))
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -471,8 +487,10 @@ fail_atm_workflow_execution_due_to_lambda_item_exception() ->
                 #{
                     <<"description">> => <<"Lambda exception occurred during item processing.">>,
                     <<"details">> => #{
-                        <<"item">> => atm_workflow_execution_test_utils:item_to_json(Item),
                         <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3_EXCEPTION
+                    },
+                    <<"referencedElements">> => #{
+                        <<"itemTraceIds">> => [Item#atm_item_execution.trace_id]
                     }
                 }
             end, ItemBatch)
@@ -491,8 +509,10 @@ fail_atm_workflow_execution_due_to_lambda_batch_exception() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"itemBatch">> => atm_workflow_execution_test_utils:item_batch_to_json(ItemBatch),
                     <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
+                },
+                <<"referencedElements">> => #{
+                    <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
                 }
             }
         end
@@ -663,6 +683,113 @@ build_job_failure_lane_run_test_spec(AtmLaneRunSelector, IsLastExpLaneRun, #fail
     }.
 
 
+fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio() ->
+    TotalItemCount = 5000,
+    %% TODO VFS-11226 value set in init_per_testcase - set in schema
+    FailToExceptionRatio = 0.1,
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
+            gen_time_series_measurements(TotalItemCount),
+            ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
+            ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
+        ),
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1},
+
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+                            <<"task1">> => fun(#atm_mock_call_ctx{
+                                workflow_execution_exp_state = ExpState,
+                                call_args = [_, _, AtmTaskExecutionId, ItemBatch, _]
+                            }) ->
+                                {IIP, IF, IP} = atm_workflow_execution_exp_state_builder:get_task_stats(
+                                    AtmTaskExecutionId, ExpState
+                                ),
+                                BatchSize = length(ItemBatch),
+                                FailedBatchItemCount = length(lists:filter(fun is_size_measurement/1, ItemBatch)),
+                                ExceptionRatio = (IF + FailedBatchItemCount) / (IIP + IP + BatchSize),
+
+                                FailingExpectations = case ExceptionRatio > FailToExceptionRatio of
+                                    true ->
+                                        [
+                                            {all_tasks, {1, 1}, stopping_due_to, interrupt},
+                                            {lane_run, {1, 1}, stopping},
+                                            workflow_stopping
+                                        ];
+                                    false ->
+                                        []
+                                end,
+
+                                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                                    {task, AtmTaskExecutionId, items_failed, FailedBatchItemCount},
+                                    {task, AtmTaskExecutionId, items_finished, BatchSize - FailedBatchItemCount} |
+                                    FailingExpectations
+                                ])}
+                            end,
+
+                            [<<"task2">>, <<"task3">>] => fun(#atm_mock_call_ctx{
+                                workflow_execution_exp_state = ExpState,
+                                call_args = [_, _, AtmTaskExecutionId, ItemBatch, _]
+                            }) ->
+                                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                                    {task, AtmTaskExecutionId, items_finished, length(ItemBatch)}
+                                ])}
+                            end
+                        })
+                    },
+
+                    handle_task_execution_stopped = #atm_step_mock_spec{
+                        after_step_hook = atm_workflow_execution_test_utils:build_task_step_hook(#{
+                            <<"task1">> => fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                                workflow_execution_exp_state = ExpState,
+                                call_args = [_, _, AtmTaskExecutionId]
+                            }) ->
+                                % Assert execution was aborted right after ratio has been exceeded so that
+                                % not all items could be executed
+                                {_, _, ExpItemsProcessed} = atm_workflow_execution_exp_state_builder:get_task_stats(
+                                    AtmTaskExecutionId, ExpState
+                                ),
+                                ?assert(ExpItemsProcessed < TotalItemCount),
+
+                                ?assert(atm_workflow_execution_test_utils:scan_audit_log(
+                                    ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx, fun
+                                        (#{<<"content">> := #{<<"description">> := <<
+                                            "Exceeeded allowed failed jobs threshold."
+                                        >>}}) ->
+                                            true;
+                                        (_) ->
+                                            false
+                                    end
+                                ))
+                            end
+                        }),
+                        after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+                            <<"task1">> => [{task, ?TASK_ID_PLACEHOLDER, failed}],
+                            <<"task2">> => [{task, ?TASK_ID_PLACEHOLDER, interrupted}],
+                            <<"task3">> => [{task, ?TASK_ID_PLACEHOLDER, interrupted}]
+                        })
+                    },
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = [{lane_run, {1, 1}, failed}]
+                    }
+                }
+            ],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_failed
+                ]
+            },
+            after_hook = fun atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_ended_workflow_execution/1
+        }]
+    }).
+
+
 %% @private
 -spec get_audit_log_contents(
     atm_task_execution:id(),
@@ -813,13 +940,19 @@ get_exp_items_processed_by_task3(TestcaseId, AtmLaneRunSelector) ->
 %% @private
 -spec gen_time_series_measurements() -> [json_utils:json_map()].
 gen_time_series_measurements() ->
+    gen_time_series_measurements(40).
+
+
+%% @private
+-spec gen_time_series_measurements(pos_integer()) -> [json_utils:json_map()].
+gen_time_series_measurements(ItemCount) ->
     lists_utils:generate(fun(_) ->
         #{
             <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
             <<"timestamp">> => ?RAND_ELEMENT([?NOW_SEC() - 100, ?NOW_SEC(), ?NOW_SEC() + 3700]),
             <<"value">> => ?RAND_INT(10000000)
         }
-    end, 40).
+    end, ItemCount).
 
 
 %% @private

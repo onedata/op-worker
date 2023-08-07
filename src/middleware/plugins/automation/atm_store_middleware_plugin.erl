@@ -53,6 +53,7 @@
     module() | no_return().
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, content, private) -> ?MODULE;
+resolve_handler(get, indices_by_trace_ids, private) -> ?MODULE;  %% supported only by exception store
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -73,6 +74,11 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = content}}) -> #{
     optional => #{<<"options">> => {json, any}}
+};
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = indices_by_trace_ids}}) -> #{
+    required => #{<<"traceIds">> => {list_of_binaries, any}},
+    optional => #{<<"timestamp">> => {integer, {not_lower_than, 0}}}
 }.
 
 
@@ -88,9 +94,11 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = content}}) -> #{
 fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
-fetch_entity(#op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
+fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
     case atm_store_api:get(AtmStoreId) of
         {ok, #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore} ->
+            assert_operation_supported(OpReq, AtmStore),
+
             case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
                 {ok, AtmWorkflowExecution} ->
                     AtmStoreCtx = #atm_store_ctx{
@@ -119,7 +127,8 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = As}}, #atm_s
     workflow_execution = AtmWorkflowExecution
 }) when
     As =:= instance;
-    As =:= content
+    As =:= content;
+    As =:= indices_by_trace_ids
 ->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
         Auth, AtmWorkflowExecution
@@ -134,7 +143,8 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = As}}, #atm_s
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
-    As =:= content
+    As =:= content;
+    As =:= indices_by_trace_ids
 ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok.
@@ -173,7 +183,17 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{aspect = content, scope = priva
     AtmWorkflowExecutionAuth = atm_workflow_execution_auth:build(
         SpaceId, AtmWorkflowExecutionId, Auth#auth.session_id
     ),
-    {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore)}.
+    {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore)};
+
+get(#op_req{data = Data, gri = #gri{aspect = indices_by_trace_ids, scope = private}}, #atm_store_ctx{
+    store = #atm_store{container = AtmStoreContainer}
+}) ->
+    IndicesPerTraceId = atm_exception_store_container:find_indices_by_trace_ids(
+        AtmStoreContainer,
+        maps:get(<<"traceIds">>, Data),
+        maps:get(<<"timestamp">>, Data, undefined)
+    ),
+    {ok, value, maps_utils:undefined_to_null(IndicesPerTraceId)}.
 
 
 %%--------------------------------------------------------------------
@@ -194,3 +214,24 @@ update(_) ->
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec assert_operation_supported(middleware:req(), atm_store:record()) ->
+    ok | no_return().
+assert_operation_supported(
+    #op_req{gri = #gri{aspect = indices_by_trace_ids}},
+    #atm_store{container = AtmStoreContainer}
+) ->
+    case atm_store_container:get_store_type(AtmStoreContainer) of
+        exception -> ok;
+        _ -> throw(?ERROR_NOT_SUPPORTED)
+    end;
+
+assert_operation_supported(_, _) ->
+    ok.

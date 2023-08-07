@@ -20,7 +20,8 @@
 -include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
--export([build/5, should_log/2]).
+-export([build/5]).
+-export([should_log/2, ensure_log_term_size_not_exceeded/1]).
 -export([task_append_system_log/3, task_handle_logs/3]).
 -export([workflow_append_system_log/3, workflow_handle_logs/3]).
 
@@ -62,6 +63,9 @@
 ]).
 
 
+-define(LOG_TERM_SIZE_LIMIT, 1000).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -94,6 +98,25 @@ build(
 -spec should_log(record(), audit_log:entry_severity_int()) -> boolean().
 should_log(#atm_workflow_execution_logger{log_level = LogLevel}, LogSeverityInt) ->
     audit_log:should_log(LogLevel, LogSeverityInt).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% WARNING: log is encoded to binary if it exceeds size limit
+%% @end
+%%-------------------------------------------------------------------
+-spec ensure_log_term_size_not_exceeded(term()) -> term() | binary().
+ensure_log_term_size_not_exceeded(Bin) when is_binary(Bin), byte_size(Bin) =< ?LOG_TERM_SIZE_LIMIT ->
+    Bin;
+ensure_log_term_size_not_exceeded(TooLongBinary) when is_binary(TooLongBinary) ->
+    trim_binary(TooLongBinary);
+ensure_log_term_size_not_exceeded(Term) ->
+    case json_utils:encode(Term) of
+        TooLongBinary when byte_size(TooLongBinary) > ?LOG_TERM_SIZE_LIMIT ->
+            trim_binary(TooLongBinary);
+        _ ->
+            Term
+    end.
 
 
 -spec task_append_system_log(record(), log_content(), severity()) -> ok.
@@ -172,7 +195,7 @@ build_workflow_log_content(Logger, AtmWorkflowLogSchema = #atm_workflow_log_sche
     ),
     case ReferencedTasks of
         undefined -> Log;
-        _ -> Log#{<<"referencedComponents">> => #{<<"tasks">> => ReferencedTasks}}
+        _ -> Log#{<<"referencedElements">> => #{<<"tasks">> => ReferencedTasks}}
     end;
 
 build_workflow_log_content(_Logger, LogContent) ->
@@ -289,3 +312,10 @@ handle_logs(UpdateOptions, Logs, AtmWorkflowExecutionAuth, AtmAuditLogStoreConta
         }
     ),
     ok.
+
+
+%% @private
+-spec trim_binary(binary()) -> binary().
+trim_binary(TooLongBinary) ->
+    TrimmedBinary = binary:part(TooLongBinary, 0, ?LOG_TERM_SIZE_LIMIT),
+    <<TrimmedBinary/binary, "...">>.

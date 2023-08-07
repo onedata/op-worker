@@ -409,7 +409,7 @@ run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     AtmJobBatchId, ItemBatch
 ) ->
-    atm_task_execution_handler:run_job_batch(
+    atm_task_execution_job_handler:run_job_batch(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId, AtmJobBatchId, ItemBatch
     ).
@@ -427,7 +427,7 @@ process_task_result_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemBatch, JobBatchResult
 ) ->
-    atm_task_execution_handler:process_job_batch_result(
+    atm_task_execution_job_handler:process_job_batch_result(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId, ItemBatch, JobBatchResult
     ).
@@ -446,7 +446,7 @@ process_streamed_task_data(
     AtmTaskExecutionId,
     StreamedData
 ) ->
-    atm_task_execution_handler:process_streamed_data(
+    atm_task_execution_stream_handler:process_streamed_data(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId, StreamedData
     ).
@@ -474,7 +474,9 @@ handle_task_results_processed_for_all_items(
         referenced_tasks = [AtmTaskExecutionId]
     }),
 
-    atm_task_execution_handler:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId).
+    atm_task_execution_stream_handler:trigger_stream_conclusion(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId
+    ).
 
 
 -spec handle_task_execution_stopped(
@@ -484,7 +486,7 @@ handle_task_results_processed_for_all_items(
 ) ->
     ok.
 handle_task_execution_stopped(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
-    atm_task_execution_handler:handle_stopped(
+    atm_task_execution_stop_handler:handle_stopped(
         atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
         AtmTaskExecutionId
     ).

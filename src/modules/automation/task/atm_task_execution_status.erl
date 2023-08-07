@@ -198,9 +198,9 @@ handle_items_withdrawn(AtmTaskExecutionId, ItemCount) ->
     end).
 
 
--spec handle_items_failed(atm_task_execution:id(), pos_integer()) -> ok.
+-spec handle_items_failed(atm_task_execution:id(), pos_integer()) -> atm_task_execution:doc().
 handle_items_failed(AtmTaskExecutionId, ItemCount) ->
-    {ok, _} = apply_diff(AtmTaskExecutionId, fun(#atm_task_execution{
+    {ok, AtmTaskExecutionDoc} = apply_diff(AtmTaskExecutionId, fun(#atm_task_execution{
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
@@ -211,7 +211,8 @@ handle_items_failed(AtmTaskExecutionId, ItemCount) ->
             items_failed = ItemsFailed + ItemCount
         }}
     end),
-    ok.
+
+    AtmTaskExecutionDoc.
 
 
 -spec handle_stopping(
