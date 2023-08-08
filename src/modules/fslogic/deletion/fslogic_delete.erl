@@ -131,7 +131,8 @@ handle_remotely_deleted_file(FileCtx) ->
         _ ->
             % Hardlink created by other provider or regular file has been
             % deleted - check if local documents should be cleaned
-            case inspect_references(FileCtx2) of
+            FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+            case file_meta_hardlinks:inspect_references(FileUuid) of
                 no_references_left ->
                     UserCtx = user_ctx:new(?ROOT_SESS_ID),
                     remove_or_handle_opened_file(UserCtx, FileCtx2, false, ?LOCAL_DOCS);
@@ -143,6 +144,7 @@ handle_remotely_deleted_file(FileCtx) ->
 %% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
+    % TODO - tutaj nie powinnismy ruszac dir_statsow
     case deregister_link_and_inspect_references(FileCtx) of
         no_references_left ->
             delete_file_meta(FileCtx), % Delete hardlink document
@@ -215,6 +217,8 @@ cleanup_opened_files() ->
 %%% Internal functions
 %%%===================================================================
 
+% TODO - jesli najpierw przyjdzie skasowane file_meta ostatniej referencji (ale nie danego providera)
+% a potem dopiero aktualizacja glownego file_meta to chyba tego nie obsluzymy
 -spec deregister_link_and_inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
 deregister_link_and_inspect_references(FileCtx) ->
     LinkUuid = file_ctx:get_logical_uuid_const(FileCtx),
@@ -233,6 +237,8 @@ deregister_link_and_inspect_references(FileCtx) ->
                         {#document{value = #file_location{size = TotalSize}}, _} ->
                             TotalSize
                     end,
+                        % TODO - zabezpiecztc przed wielokrotnym wywolaniem dla zdalnego kasowania
+                        % moze wystarczy bazowac czy jest juz on w referencjach?
                     case file_meta_hardlinks:list_references(FileUuid) of
                         {ok, [LinkUuid]} ->
                             dir_size_stats:report_link_size_changed(

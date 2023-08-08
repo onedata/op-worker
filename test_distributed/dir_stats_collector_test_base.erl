@@ -22,7 +22,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([basic_test/1, hardlinks_test/1, multiprovider_test/1, multiprovider_trash_test/1, transfer_after_enabling_test/1,
+-export([basic_test/1, hardlinks_test/1, multiprovider_hardlinks_test/1,
+    multiprovider_test/1, multiprovider_trash_test/1, transfer_after_enabling_test/1,
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_large_dirs_test/1,
     enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
@@ -47,7 +48,13 @@
     end
 ).
 -define(TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector),
-    ?SIZE_ON_STORAGE((lfm_test_utils:get_user1_first_storage_id(Config, NodesSelector)))).
+    case NodesSelector of
+        {initial_size_on_provider, ?PROVIDER_DELETING_FILES_NODES_SELECTOR} ->
+            ?SIZE_ON_STORAGE((lfm_test_utils:get_user1_first_storage_id(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR)));
+        _ ->
+            ?SIZE_ON_STORAGE((lfm_test_utils:get_user1_first_storage_id(Config, NodesSelector)))
+    end
+).
 
 -define(ATTEMPTS, 60).
 
@@ -131,10 +138,25 @@ basic_test(Config) ->
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
     }).
 
+
 hardlinks_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    hardlinks_test(Config, op_worker_nodes, op_worker_nodes).
+
+
+multiprovider_hardlinks_test(Config) ->
+    % TODO - dodac test gdzie bedziemy kasowali/zmieniali na drugim providerze a weryfikowali na pierwszym
+    % TODO - weryfikacja po rename (i cos piszemy do przeniesionego pliku)
+    hardlinks_test(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, ?PROVIDER_DELETING_FILES_NODES_SELECTOR).
+
+
+hardlinks_test(Config, WriteNodesSelector, ReadNodesSelector) ->
+    [Worker | _] = ?config(WriteNodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     SpaceName = lfm_test_utils:get_user1_first_space_name(Config),
+    NodesSelectors = case WriteNodesSelector of
+        ReadNodesSelector -> ReadNodesSelector;
+        _ -> [WriteNodesSelector, {initial_size_on_provider, ReadNodesSelector}]
+    end,
 
     % Setup dirs, files and links
     [Dir1Guid, Dir2Guid] = DirGuids = lists:map(fun(_) ->
@@ -156,31 +178,32 @@ hardlinks_test(Config) ->
     end, FileGuids),
 
     % Check operations on links
-    veryfy_hardlinks(Config, DirGuids, [{4, 4, 4}, {0, 4, 0}], FileSize),
+    % TODO - czesc kasowan/zmian robic na drugim providerze
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{4, 4, 4}, {0, 4, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link1Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{4, 4, 4}, {0, 3, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{4, 4, 4}, {0, 3, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File1Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{3, 3, 3}, {0, 3, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{3, 3, 3}, {0, 3, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File2Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{2, 2, 3}, {1, 3, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{2, 2, 3}, {1, 3, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link2Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{2, 2, 2}, {0, 2, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{2, 2, 2}, {0, 2, 0}], FileSize),
 
     {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link3Guid), rdwr)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File3Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{1, 1, 2}, {1, 2, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{1, 1, 2}, {1, 2, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link3Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{2, 1, 2}, {0, 1, 0}], FileSize),
+    veryfy_hardlinks(Config, WriteNodesSelector, DirGuids, [{2, 1, 2}, {0, 1, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle1)),
-    veryfy_hardlinks(Config, DirGuids, [{1, 1, 1}, {0, 1, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{1, 1, 1}, {0, 1, 0}], FileSize),
 
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link4Guid), rdwr)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link4Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{1, 1, 1}, {0, 0, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{1, 1, 1}, {0, 0, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File4Guid))),
-    veryfy_hardlinks(Config, DirGuids, [{1, 0, 1}, {0, 0, 0}], FileSize),
+    veryfy_hardlinks(Config, WriteNodesSelector, DirGuids, [{1, 0, 1}, {0, 0, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)),
-    veryfy_hardlinks(Config, DirGuids, [{0, 0, 0}, {0, 0, 0}], FileSize),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids, [{0, 0, 0}, {0, 0, 0}], FileSize),
 
     % Create additional dirs, files and links
     {ok, Dir3Guid} = ?assertMatch({ok, _},
@@ -203,41 +226,39 @@ hardlinks_test(Config) ->
         LinkGuid
     end, FileGuids2),
 
-    % TODO - przetestwac zmiany rozmiaru
-
     % Check additional dirs, files and links
     FileSize2 = append_files(Config, [File5Guid, Link6Guid, Link10Guid], FileSize),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 3, 0}, {0, 3, 0}, {3, 3, 3}], FileSize2),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 3, 0}, {0, 3, 0}, {3, 3, 3}], FileSize2),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File5Guid))),
     FileSize3 = append_files(Config, [Link5Guid, File6Guid, Link10Guid], FileSize2),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 3, 0}, {1, 3, 0}, {2, 2, 3}], FileSize3),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 3, 0}, {1, 3, 0}, {2, 2, 3}], FileSize3),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link8Guid))),
-    veryfy_hardlinks(Config, DirGuids2, [{1, 3, 0}, {0, 2, 0}, {2, 2, 3}], FileSize3),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{1, 3, 0}, {0, 2, 0}, {2, 2, 3}], FileSize3),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link5Guid))),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 2, 0}, {0, 2, 0}, {2, 2, 2}], FileSize3),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 2, 0}, {0, 2, 0}, {2, 2, 2}], FileSize3),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link9Guid))),
     FileSize4 = append_files(Config, [Link6Guid, File7Guid], FileSize3),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 2, 0}, {0, 1, 0}, {2, 2, 2}], FileSize4),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 2, 0}, {0, 1, 0}, {2, 2, 2}], FileSize4),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File6Guid))),
-    veryfy_hardlinks(Config, DirGuids2, [{1, 2, 0}, {0, 1, 0}, {1, 1, 2}], FileSize4),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{1, 2, 0}, {0, 1, 0}, {1, 1, 2}], FileSize4),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link6Guid))),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 1, 0}, {0, 1, 0}, {1, 1, 1}], FileSize4),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 1, 0}, {0, 1, 0}, {1, 1, 1}], FileSize4),
 
     {ok, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File7Guid), rdwr)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File7Guid))),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 1, 0}, {1, 1, 0}, {0, 0, 1}], FileSize4),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 1, 0}, {1, 1, 0}, {0, 0, 1}], FileSize4),
     FileSize5 = append_files(Config, [Link7Guid], FileSize4),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize5, <<"xyz">>)),
     FileSize6 = FileSize5 + 3,
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link7Guid))),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 0, 0}, {1, 1, 0}, {0, 0, 1}], FileSize6),
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 0, 0}, {1, 1, 0}, {0, 0, 1}], FileSize6),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link10Guid))),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize6, <<"xyz">>)),
     FileSize7 = FileSize6 + 3,
-    veryfy_hardlinks(Config, DirGuids2, [{0, 0, 0}, {0, 0, 0}, {1, 0, 1}], FileSize7),
+    veryfy_hardlinks(Config, WriteNodesSelector, DirGuids2, [{0, 0, 0}, {0, 0, 0}, {1, 0, 1}], FileSize7),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle3)),
-    veryfy_hardlinks(Config, DirGuids2, [{0, 0, 0}, {0, 0, 0}, {0, 0, 0}], FileSize7).
+    veryfy_hardlinks(Config, NodesSelectors, DirGuids2, [{0, 0, 0}, {0, 0, 0}, {0, 0, 0}], FileSize7).
 
 
 append_files(Config, Guids, CurrentSize) ->
@@ -250,27 +271,36 @@ append_files(Config, Guids, CurrentSize) ->
     CurrentSize + BytesToAppend.
 
 
-veryfy_hardlinks(Config, DirGuids, DirSizes, FileSize) ->
+veryfy_hardlinks(Config, NodesSelectors, DirGuids, DirSizes, FileSize) ->
     ct:print("aaaaaa"),
-%%    veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize),
+%%    veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize),
 %%    disable(Config),
 %%    enable(Config),
-    veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize).
+    veryfy_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize).
 
 
-veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize) ->
+veryfy_hardlinks_stats_enabled(_Config, [], _DirGuids, _DirSizes, _FileSize) ->
+    ok;
+
+veryfy_hardlinks_stats_enabled(Config, [NodesSelector | NodesSelectors], DirGuids, DirSizes, FileSize) ->
+    veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize),
+    veryfy_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize);
+
+veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize) ->
+    ct:print("bbbbbb"),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     lists:foreach(fun({Guid, {TotalSizesExpected, LinksExpected, OnStorageExpected}}) ->
         ct:print("xxxxx"),
-        check_dir_stats(Config, op_worker_nodes, Guid, #{
+        check_dir_stats(Config, NodesSelector, Guid, #{
             ?REG_FILE_AND_LINK_COUNT => LinksExpected,
             ?DIR_COUNT => 0,
             ?FILE_ERRORS_COUNT => 0,
             ?DIR_ERRORS_COUNT => 0,
             ?TOTAL_SIZE => TotalSizesExpected * FileSize,
             ?TOTAL_DOWNLOAD_SIZE => LinksExpected * FileSize,
-            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => OnStorageExpected * FileSize
+            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
+                ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, OnStorageExpected * FileSize)
         })
     end, lists:zip(DirGuids, DirSizes)),
 
@@ -279,14 +309,15 @@ veryfy_hardlinks_stats_enabled(Config, DirGuids, DirSizes, FileSize) ->
             {Acc1 + DirTotalSizesExpected, Acc2 + DirLinksExpected, Acc3 + DirOnStorageExpected}
         end, {0, 0, 0}, DirSizes),
 
-    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+    check_dir_stats(Config, NodesSelector, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => LinksExpectedSum,
         ?DIR_COUNT => length(DirGuids),
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => TotalSizesExpectedSum * FileSize,
         ?TOTAL_DOWNLOAD_SIZE => LinksExpectedSum * FileSize,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => OnStorageExpectedSum * FileSize
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
+            ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, OnStorageExpectedSum * FileSize)
     }).
 
 
@@ -1001,6 +1032,7 @@ check_initial_dir_stats(Config, NodesSelector) ->
     check_initial_dir_stats(Config, NodesSelector, {initial_size_on_provider, NodesSelector}).
 
 
+% TODO - uzyc tylko arguumentu NodesSelector po zmianie makra
 check_initial_dir_stats(Config, NodesSelector, SizeOnStorageValueSelector) ->
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
 
@@ -1176,6 +1208,9 @@ check_space_dir_values_map_and_time_series_collection(
             end, TimeStats)
     end.
 
+
+check_dir_stats(Config, {initial_size_on_provider, NodesSelector}, Guid, ExpectedMap) ->
+    check_dir_stats(Config, NodesSelector, Guid, ExpectedMap);
 
 check_dir_stats(Config, NodesSelector, Guid, ExpectedMap) when is_binary(Guid) ->
     [Worker | _] = ?config(NodesSelector, Config),

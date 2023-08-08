@@ -146,17 +146,35 @@ list_references(Key) ->
     end.
 
 -spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references()}.
-merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
-    #document{value = #file_meta{references = OldReferences}}) ->
+merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}} = NewDoc,
+    #document{key = Uuid, scope = SpaceId, value = #file_meta{references = OldReferences}} = OldDoc) ->
     % TODO - tutaj trzeba obsluzyc pojawienie/znikniecie linku uwzgledniajac race z lokalna zmiana rozmiaru
     % Do tego przydaloby sie nowe pole refow z nie uwzglednionym size updatowane w synchronizerze (tez mapa per provider)
     % Mozna dodane/usuniete linki zapisywac w jakims ets/pamieci i przy kazdej produkcji zmian ta pamiec sprawdzac (czysci sie przy obsludze dodania linka)
     ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
     OldMutatorReferences = maps:get(Mutator, OldReferences, []),
 
+    IsDeleted = file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(OldDoc),
     case ChangedMutatorReferences of
-        OldMutatorReferences -> not_mutated;
-        _ -> {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
+        OldMutatorReferences when IsDeleted ->
+            dir_size_stats:handle_references_list_changes(file_id:pack_guid(Uuid, SpaceId), [], [Uuid], [Uuid]),
+            not_mutated;
+        OldMutatorReferences ->
+            not_mutated;
+        _ ->
+            {ok, OldRefsList} = list_references(OldDoc),
+            RemovedReferences = case IsDeleted of
+                true -> [Uuid] ++ OldMutatorReferences -- ChangedMutatorReferences;
+                false -> OldMutatorReferences -- ChangedMutatorReferences
+            end,
+            dir_size_stats:handle_references_list_changes(
+                file_id:pack_guid(Uuid, SpaceId),
+                ChangedMutatorReferences -- OldMutatorReferences,
+                RemovedReferences,
+                OldRefsList
+            ),
+
+            {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
     end.
 
 %%%===================================================================
@@ -166,6 +184,7 @@ merge_references(#document{mutators = [Mutator | _], value = #file_meta{referenc
 -spec references_to_list(references()) -> [link()].
 references_to_list(References) ->
     % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
+    % TODO - zamiast values uzyc cos co da stala kolejnosc
     lists:flatmap(fun(ProviderReferences) -> ProviderReferences end, maps:values(References)).
 
 -spec count_references_in_map(references()) -> non_neg_integer().

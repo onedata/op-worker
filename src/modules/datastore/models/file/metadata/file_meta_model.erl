@@ -456,15 +456,21 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
-        not_mutated ->
+    % TODO -  czy trzeba tutaj uwzgledniac czy rewicja jest wieksza (przy obsludze skasowania glownego dokumentu)?
+    case fslogic_file_id:is_link_uuid(Uuid) of
+        true ->
             default;
-        {mutated, MergedReferences} ->
-            DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
-                true -> NewDoc;
-                false -> PrevDoc
-            end,
-            {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
+        false ->
+            case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
+                not_mutated ->
+                    default;
+                {mutated, MergedReferences} ->
+                    DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
+                        true -> NewDoc;
+                        false -> PrevDoc
+                    end,
+                    {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
+            end
     end.
 
 

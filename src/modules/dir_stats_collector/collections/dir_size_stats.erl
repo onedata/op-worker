@@ -52,7 +52,7 @@
     report_total_size_changed/2, report_link_size_changed/3, report_size_changed_on_storage/3,
     report_download_size_changed/2, report_child_download_size_changed/2,
     report_file_created/2, report_file_created_without_state_check/2,
-    report_file_deleted/2, report_remote_links_change/2,
+    report_file_deleted/2, report_remote_links_change/2, handle_references_list_changes/4,
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
@@ -137,17 +137,19 @@ report_total_size_changed(Guid, SizeDiff) ->
     % co z race kasowania file_location, file_meta linku?
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
     % Co jesli file_meta nie ma?
-    case file_meta_hardlinks:list_references(Uuid) of
-        {ok, [MainRef | References]} ->
+    {ok, ReferencesList} = file_meta_hardlinks:list_references(Uuid), % TODO - jesli not_found to dodac posthooka
+    {AddedReferences, RemovedReferences, DeletedMainRefAsList} = node_cache:get({?MODULE, Guid}, {[], [], []}),
+
+    case DeletedMainRefAsList ++ ReferencesList -- AddedReferences ++ RemovedReferences of
+        [MainRef | References] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId), ?MODULE,
                 #{?TOTAL_SIZE => SizeDiff, ?TOTAL_DOWNLOAD_SIZE => SizeDiff}),
             lists:foreach(fun(Ref) ->
                 ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(Ref, SpaceId), ?MODULE,
                     #{?TOTAL_DOWNLOAD_SIZE => SizeDiff})
             end, References);
-        {ok, []} ->
+        [] ->
             ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff})
-        % TODO - jesli not_found to dodac posthooka
     end.
 
 
@@ -226,6 +228,72 @@ report_remote_links_change(Uuid, SpaceId) ->
                     ok
             end
     end.
+
+
+handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefsList) ->
+    % TODO - upewnic sie ze to ten sam node co synchronizer
+    critical_section:run([?MODULE, Guid], fun() ->
+        {CachedAdded, CachedRemoved, UuidWithSizeRemovedAsList} = node_cache:get({?MODULE, Guid}, {[], [], []}),
+        UpdatedUuidWithSizeRemovedAsList = case {UuidWithSizeRemovedAsList, OldRefsList} of
+            {[], [FirstOldRef | _]} ->
+                case lists:member(FirstOldRef, RemovedReferences) of
+                    true -> [FirstOldRef];
+                    false -> []
+                end;
+            _ ->
+                UuidWithSizeRemovedAsList
+        end,
+        node_cache:put({?MODULE, Guid}, {
+            CachedAdded ++ AddedReferences,
+            CachedRemoved ++ RemovedReferences -- UpdatedUuidWithSizeRemovedAsList,
+            UpdatedUuidWithSizeRemovedAsList
+        })
+    end),
+
+    FileCtx = file_ctx:new_by_guid(Guid),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    spawn(fun() ->
+        replica_synchronizer:apply(FileCtx, fun() ->
+            Size = case file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
+                {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
+                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc));
+                {#document{value = #file_location{size = TotalSize}}, _} ->
+                    TotalSize
+            end,
+
+            {AddedList, RemoveList, MainRefAsList} = node_cache:get({?MODULE, Guid}, {[], [], []}),
+
+            lists:foreach(fun(Uuid) ->
+                report_link_size_changed(file_id:pack_guid(Uuid, SpaceId), Size, download_size_only)
+            end, AddedList -- RemoveList),
+
+            lists:foreach(fun(Uuid) ->
+                report_download_size_changed(file_id:pack_guid(Uuid, SpaceId), -Size)
+            end, RemoveList -- AddedList),
+
+            case MainRefAsList of
+                [] ->
+                    ok;
+                [MainRef] ->
+                    report_link_size_changed(file_id:pack_guid(MainRef, SpaceId), -Size, total_and_download_size),
+                    ReferencedUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+                    file_meta:update(ReferencedUuid, fun(_) -> {error, do_nothing} end), % hack to be sure that changes resolve has finished
+                    case file_meta_hardlinks:list_references(ReferencedUuid) of
+                        {ok, [NewMainRef | _]} ->
+                            report_link_size_changed(file_id:pack_guid(NewMainRef, SpaceId), Size, total_size_only);
+                        _ ->
+                            report_link_size_changed(Guid, Size, total_size_only)
+                    end
+            end,
+
+            critical_section:run([?MODULE, Guid], fun() ->
+                {ExistingAdded, ExistingRemove, _} = node_cache:get({?MODULE, Guid}, {[], [], []}),
+                node_cache:put({?MODULE, Guid}, {ExistingAdded -- AddedList, ExistingRemove -- RemoveList, []})
+            end),
+
+            ok
+        end)
+    end).
 
 
 -spec delete_stats(file_id:file_guid()) -> ok.
