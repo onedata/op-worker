@@ -428,7 +428,7 @@ init_lane_run_stop(AtmWorkflowExecutionCtx, #atm_task_execution{
     lane_index = AtmLaneIndex,
     run_num = RunNum
 }, Reason) ->
-    {ok, _} = atm_lane_execution_handler:init_stop(
+    {ok, _} = atm_lane_execution_stop_handler:init_stop(
         {AtmLaneIndex, RunNum}, Reason, AtmWorkflowExecutionCtx
     ),
     ok.
