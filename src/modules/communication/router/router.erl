@@ -37,7 +37,8 @@
     % This field is set only for incoming connection and left as undefined
     % for outgoing one (it is used for sending requests not handling and
     % responding so it does not even have async_request_manager).
-    respond_via = undefined :: undefined | async_request_manager:respond_via()
+    respond_via = undefined :: undefined | async_request_manager:respond_via(),
+    session_type :: session:type()
 }).
 
 -type rib() ::#rib{}.
@@ -89,7 +90,7 @@ build_rib(SessionId) ->
             undefined
     end,
 
-    #rib{respond_via = RespondVia}.
+    #rib{respond_via = RespondVia, session_type = SessionType}.
 
 
 %%--------------------------------------------------------------------
@@ -101,7 +102,7 @@ build_rib(SessionId) ->
 -spec route_message(message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_message(Msg, RIB) ->
-    case stream_router:is_stream_message(Msg) of
+    case stream_router:is_stream_message(Msg, RIB#rib.session_type) of
         true ->
             stream_router:route_message(Msg);
         false ->

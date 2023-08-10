@@ -17,7 +17,7 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([is_stream_message/1, route_message/1, make_message_direct/1]).
+-export([is_stream_message/2, route_message/1, make_message_direct/1]).
 
 %%%===================================================================
 %%% API
@@ -28,27 +28,29 @@
 %% Check if message is sequential, if so - proxy it throught sequencer
 %% @end
 %%--------------------------------------------------------------------
--spec is_stream_message(Msg :: #client_message{} | #server_message{}) ->
+-spec is_stream_message(Msg :: #client_message{} | #server_message{}, session:type()) ->
     boolean() | ignore.
-is_stream_message(#client_message{message_body = #message_request{}}) ->
+is_stream_message(#client_message{message_body = #subscription{}, message_id = undefined}, fuse) ->
+    ignore;
+is_stream_message(#client_message{message_body = #message_request{}}, _) ->
     true;
-is_stream_message(#client_message{message_body = #message_acknowledgement{}}) ->
+is_stream_message(#client_message{message_body = #message_acknowledgement{}}, _) ->
     true;
-is_stream_message(#client_message{message_body = #end_of_message_stream{}}) ->
+is_stream_message(#client_message{message_body = #end_of_message_stream{}}, _) ->
     true;
-is_stream_message(#client_message{message_body = #message_stream_reset{}}) ->
+is_stream_message(#client_message{message_body = #message_stream_reset{}}, _) ->
     true;
-is_stream_message(#server_message{message_body = #message_request{}}) ->
+is_stream_message(#server_message{message_body = #message_request{}}, _) ->
     true;
-is_stream_message(#server_message{message_body = #message_acknowledgement{}}) ->
+is_stream_message(#server_message{message_body = #message_acknowledgement{}}, _) ->
     true;
-is_stream_message(#server_message{message_body = #end_of_message_stream{}}) ->
+is_stream_message(#server_message{message_body = #end_of_message_stream{}}, _) ->
     true;
-is_stream_message(#server_message{message_body = #message_stream_reset{}}) ->
+is_stream_message(#server_message{message_body = #message_stream_reset{}}, _) ->
     true;
-is_stream_message(#client_message{message_stream = undefined}) ->
+is_stream_message(#client_message{message_stream = undefined}, _) ->
     false;
-is_stream_message(#client_message{} = Msg) ->
+is_stream_message(#client_message{} = Msg, _) ->
     SessId = router:effective_session_id(Msg),
     case session_utils:is_provider_session_id(SessId) of
         true ->
@@ -56,9 +58,9 @@ is_stream_message(#client_message{} = Msg) ->
         false ->
             true
     end;
-is_stream_message(#server_message{message_stream = undefined}) ->
+is_stream_message(#server_message{message_stream = undefined}, _) ->
     false;
-is_stream_message(#server_message{effective_session_id = SessId}) ->
+is_stream_message(#server_message{effective_session_id = SessId}, _) ->
     case session_utils:is_provider_session_id(SessId) of
         true ->
             ignore;
