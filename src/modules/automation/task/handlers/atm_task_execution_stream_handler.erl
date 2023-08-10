@@ -120,14 +120,11 @@ consume_uncorrelated_results(AtmWorkflowExecutionCtx, AtmTaskExecution, Uncorrel
 ) ->
     ok.
 handle_uncorrelated_results_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error) ->
-    case atm_task_execution_status:handle_stopping(
-        AtmTaskExecutionId,
-        failure,
-        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx)
+    case atm_task_execution_stop_handler:init_stop(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, failure, false
     ) of
-        {ok, #document{value = AtmTaskExecution = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+        {ok, #document{value = AtmTaskExecution}} ->
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-
             ?atm_task_critical(Logger, #{
                 <<"description">> => <<"Failed to process streamed results.">>,
                 <<"details">> => #{<<"reason">> => errors:to_json(Error)}
@@ -136,13 +133,9 @@ handle_uncorrelated_results_processing_error(AtmWorkflowExecutionCtx, AtmTaskExe
                 "Failed to process streamed results."
             >>)),
 
-            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor),
             init_lane_run_stop(AtmWorkflowExecutionCtx, AtmTaskExecution, failure);
 
-        {error, task_already_stopping} ->
-            ok;
-
-        {error, task_already_stopped} ->
+        {error, Reason} when Reason =:= task_already_stopping; Reason =:= task_already_stopped ->
             ok
     end.
 

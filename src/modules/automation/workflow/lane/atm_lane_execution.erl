@@ -16,6 +16,7 @@
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution).
 -feature(maybe_expr, enable).
+-compile({feature, maybe_expr, enable}).
 -author("Bartosz Walkowicz").
 
 -behaviour(persistent_record).
