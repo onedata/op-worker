@@ -23,34 +23,40 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if message is sequential, if so - proxy it throught sequencer
-%% @end
-%%--------------------------------------------------------------------
 -spec is_stream_message(Msg :: #client_message{} | #server_message{}, session:type()) ->
     boolean() | ignore.
-is_stream_message(#client_message{message_body = #subscription{}, message_id = undefined}, fuse) ->
-    ignore;
-is_stream_message(#client_message{message_body = #message_request{}}, _) ->
+is_stream_message(#client_message{message_body = #subscription{}, message_id = undefined} = Msg, fuse) ->
+    % Current version of oneclient is not able to prevent async subscriptions to be sent but hangs
+    % if such subscription is processed before sync one - ignore async subscriptions from client until its fixed.
+    % NOTE: use env to allow async subscriptions testing as its valid functionality from oneprovider's point of view.
+    case op_worker:get_env(ignore_async_subscriptions, true) of
+        true -> ignore;
+        false -> is_stream_message(Msg)
+    end;
+is_stream_message(Msg, _) ->
+    is_stream_message(Msg).
+
+-spec is_stream_message(Msg :: #client_message{} | #server_message{}) ->
+    boolean() | ignore.
+is_stream_message(#client_message{message_body = #message_request{}}) ->
     true;
-is_stream_message(#client_message{message_body = #message_acknowledgement{}}, _) ->
+is_stream_message(#client_message{message_body = #message_acknowledgement{}}) ->
     true;
-is_stream_message(#client_message{message_body = #end_of_message_stream{}}, _) ->
+is_stream_message(#client_message{message_body = #end_of_message_stream{}}) ->
     true;
-is_stream_message(#client_message{message_body = #message_stream_reset{}}, _) ->
+is_stream_message(#client_message{message_body = #message_stream_reset{}}) ->
     true;
-is_stream_message(#server_message{message_body = #message_request{}}, _) ->
+is_stream_message(#server_message{message_body = #message_request{}}) ->
     true;
-is_stream_message(#server_message{message_body = #message_acknowledgement{}}, _) ->
+is_stream_message(#server_message{message_body = #message_acknowledgement{}}) ->
     true;
-is_stream_message(#server_message{message_body = #end_of_message_stream{}}, _) ->
+is_stream_message(#server_message{message_body = #end_of_message_stream{}}) ->
     true;
-is_stream_message(#server_message{message_body = #message_stream_reset{}}, _) ->
+is_stream_message(#server_message{message_body = #message_stream_reset{}}) ->
     true;
-is_stream_message(#client_message{message_stream = undefined}, _) ->
+is_stream_message(#client_message{message_stream = undefined}) ->
     false;
-is_stream_message(#client_message{} = Msg, _) ->
+is_stream_message(#client_message{} = Msg) ->
     SessId = router:effective_session_id(Msg),
     case session_utils:is_provider_session_id(SessId) of
         true ->
@@ -58,9 +64,9 @@ is_stream_message(#client_message{} = Msg, _) ->
         false ->
             true
     end;
-is_stream_message(#server_message{message_stream = undefined}, _) ->
+is_stream_message(#server_message{message_stream = undefined}) ->
     false;
-is_stream_message(#server_message{effective_session_id = SessId}, _) ->
+is_stream_message(#server_message{effective_session_id = SessId}) ->
     case session_utils:is_provider_session_id(SessId) of
         true ->
             ignore;
