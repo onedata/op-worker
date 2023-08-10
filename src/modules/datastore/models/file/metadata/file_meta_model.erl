@@ -497,6 +497,8 @@ on_remote_doc_created(_Ctx, #document{
                 % in internal_call ; getting dir_stats_service_state can call tp process if value is not cached
                 % in memory - in such a case spawn process that will cache it in memory
                 % NOTE: handling internal_call instead of spawning for each doc is to optimize dbsync changes application
+                % TODO - podbic statystki rozmiaru od zdalnych provider'ow jak sa jakies referencje?
+                % czy raczej posthookami sie posluiwac jak przychodzi lokacja i nie ma file_meta?
                 case dir_stats_service_state:get(SpaceId) of
                     {ok, State} ->
                         case dir_stats_service_state:is_active(State) of
