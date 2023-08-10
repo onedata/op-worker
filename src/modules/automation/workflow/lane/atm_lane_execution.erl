@@ -15,6 +15,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution).
+-feature(maybe_expr, enable).
 -author("Bartosz Walkowicz").
 
 -behaviour(persistent_record).
@@ -127,7 +128,7 @@ resolve_selector(AtmLaneIndex, _) ->
 get_schema_id({AtmLaneSelector, _}, AtmWorkflowExecution) ->
     get_schema_id(AtmLaneSelector, AtmWorkflowExecution);
 get_schema_id(AtmLaneSelector, AtmWorkflowExecution) ->
-    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
+    {ok, AtmLaneExecution} = get(AtmLaneSelector, AtmWorkflowExecution),
     AtmLaneExecution#atm_lane_execution.schema_id.
 
 
@@ -153,11 +154,10 @@ get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
 -spec get_run(lane_run_selector(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
 get_run({AtmLaneSelector, RunSelector}, AtmWorkflowExecution) ->
-    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
-
-    case locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution) of
-        {ok, _, Run} -> {ok, Run};
-        {error, _} = Error -> Error
+    maybe
+        {ok, AtmLaneExecution} ?= get(AtmLaneSelector, AtmWorkflowExecution),
+        {ok, _, Run} ?= locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution),
+        {ok, Run}
     end.
 
 
@@ -205,9 +205,12 @@ update_run({AtmLaneSelector, RunSelector}, Diff, Default, AtmWorkflowExecution =
     end.
 
 
--spec get(selector(), atm_workflow_execution:record()) -> record().
+-spec get(selector(), atm_workflow_execution:record()) -> {ok, record()} | ?ERROR_NOT_FOUND.
 get(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
-    maps:get(resolve_selector(AtmLaneSelector, AtmWorkflowExecution), AtmLaneExecutions).
+    case maps:find(resolve_selector(AtmLaneSelector, AtmWorkflowExecution), AtmLaneExecutions) of
+        {ok, _} = Result -> Result;
+        error -> ?ERROR_NOT_FOUND
+    end.
 
 
 -spec update(selector(), diff(), atm_workflow_execution:record()) ->
@@ -229,7 +232,7 @@ update(AtmLaneSelector, Diff, AtmWorkflowExecution = #atm_workflow_execution{
 
 -spec to_json(selector(), atm_workflow_execution:record()) -> json_utils:json_map().
 to_json(AtmLaneSelector, AtmWorkflowExecution) ->
-    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
+    {ok, AtmLaneExecution} = get(AtmLaneSelector, AtmWorkflowExecution),
 
     {RunsJson, _} = lists:mapfoldr(fun(#atm_lane_execution_run{run_num = RunNum} = Run, RunsPerNum) ->
         RunType = infer_run_type(Run, RunsPerNum),

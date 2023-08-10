@@ -120,7 +120,7 @@ handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionC
         AtmLaneRunSelector, <<"Scheduled automatic retry.">>, #{
             <<"scheduledLaneRunSelector">> => ?lane_run_selector_json({NextAtmLaneIndex, NextRunNum}),
             <<"retriesLeft">> => begin
-                NextLane = atm_lane_execution:get(NextAtmLaneIndex, NextAtmWorkflowExecution),
+                {ok, NextLane} = atm_lane_execution:get(NextAtmLaneIndex, NextAtmWorkflowExecution),
                 NextLane#atm_lane_execution.retries_left
             end
         }

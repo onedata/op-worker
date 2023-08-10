@@ -40,15 +40,19 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = atm_workflow_execution_summaries}}) -> #{
-    optional => #{
-        <<"phase">> => {atom, [?WAITING_PHASE, ?ONGOING_PHASE, ?SUSPENDED_PHASE, ?ENDED_PHASE]},
-        <<"index">> => {binary, any},
-        <<"token">> => {binary, non_empty},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
-    }
-}.
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= atm_workflow_executions;
+    As =:= atm_workflow_execution_summaries
+->
+    #{
+        optional => #{
+            <<"phase">> => {atom, [?WAITING_PHASE, ?ONGOING_PHASE, ?SUSPENDED_PHASE, ?ENDED_PHASE]},
+            <<"index">> => {binary, any},
+            <<"token">> => {binary, non_empty},
+            <<"offset">> => {integer, any},
+            <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+        }
+    }.
 
 
 %%--------------------------------------------------------------------
@@ -70,10 +74,10 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
-    id = SpaceId,
-    aspect = atm_workflow_execution_summaries
-}}, _) ->
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= atm_workflow_executions;
+    As =:= atm_workflow_execution_summaries
+->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS).
 
 
@@ -83,10 +87,10 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{
-    id = SpaceId,
-    aspect = atm_workflow_execution_summaries
-}}, _) ->
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= atm_workflow_executions;
+    As =:= atm_workflow_execution_summaries
+->
     middleware_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -106,25 +110,23 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = atm_workflow_executions}}, _) ->
+    Phase = maps:get(<<"phase">>, Data, ?ONGOING_PHASE),
+    ListingOpts = prepare_listing_opts(Data),
+
+    {ok, Entries, IsLast} = atm_workflow_execution_api:list(SpaceId, Phase, basic, ListingOpts),
+    {Indices, AtmWorkflowExecutionIds} = lists:unzip(Entries),
+
+    NextPageToken = case IsLast of
+        true -> undefined;
+        false -> http_utils:base64url_encode(lists:last(Indices))
+    end,
+
+    {ok, value, {AtmWorkflowExecutionIds, NextPageToken, IsLast}};
+
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = atm_workflow_execution_summaries}}, _) ->
     Phase = maps:get(<<"phase">>, Data, ?ONGOING_PHASE),
-
-    Offset = maps:get(<<"offset">>, Data, 0),
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
-
-    ListingOpts = case maps:get(<<"token">>, Data, undefined) of
-        undefined ->
-            Index = maps:get(<<"index">>, Data, undefined),
-            maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index);
-        Token when is_binary(Token) ->
-            % if token is passed, offset has to be increased by 1
-            % to ensure that listing using token is exclusive
-            #{
-                start_index => http_utils:base64url_decode(Token),
-                offset => Offset + 1,
-                limit => Limit
-            }
-    end,
+    ListingOpts = prepare_listing_opts(Data),
 
     {ok, Entries, IsLast} = atm_workflow_execution_api:list(SpaceId, Phase, summary, ListingOpts),
     {_, AtmWorkflowExecutionSummaries} = lists:unzip(Entries),
@@ -150,3 +152,30 @@ update(_) ->
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec prepare_listing_opts(json_utils:json_map()) ->
+    atm_workflow_executions_forest:listing_opts().
+prepare_listing_opts(Data) ->
+    Offset = maps:get(<<"offset">>, Data, 0),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
+
+    case maps:get(<<"token">>, Data, undefined) of
+        undefined ->
+            Index = maps:get(<<"index">>, Data, undefined),
+            maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index);
+        Token when is_binary(Token) ->
+            % if token is passed, offset has to be increased by 1
+            % to ensure that listing using token is exclusive
+            #{
+                start_index => http_utils:base64url_decode(Token),
+                offset => Offset + 1,
+                limit => Limit
+            }
+    end.

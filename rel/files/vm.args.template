@@ -51,3 +51,5 @@
 # TODO VFS-7924 this is currently set only for op-worker,
 # unify in all components when the NIF sockets are no longer experimental
 -kernel inet_backend socket
+
+-enable-feature maybe_expr
