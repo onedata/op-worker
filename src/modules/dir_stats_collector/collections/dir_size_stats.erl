@@ -154,11 +154,24 @@ report_total_size_changed(Guid, SizeDiff) ->
 
 
 -spec report_link_size_changed(file_id:file_guid(), integer(),
-    total_and_download_size | total_size_only | download_size_only) -> ok.
+    total_and_download_size | total_size_only | download_size_only) -> ok. % TODO - fix dialyzer
 report_link_size_changed(_Guid, 0, _) ->
     ok;
+report_link_size_changed(Guid, SizeDiff, total_and_download_size) when is_list(SizeDiff) ->
+    ChangeMap = lists:foldl(fun
+        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size, ?TOTAL_DOWNLOAD_SIZE => Size};
+        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+    end, #{}, SizeDiff),
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, ChangeMap);
 report_link_size_changed(Guid, SizeDiff, total_and_download_size) ->
     ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff, ?TOTAL_DOWNLOAD_SIZE => SizeDiff});
+report_link_size_changed(Guid, SizeDiff, total_size_only) when is_list(SizeDiff) ->
+    ChangeMap = lists:foldl(fun
+        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+    end, #{}, SizeDiff),
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, ChangeMap);
+% TODO - rozbic na 2 funkcje bo jedne case update'uja storage a drugie nie
 report_link_size_changed(Guid, SizeDiff, total_size_only) ->
     ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff});
 report_link_size_changed(Guid, SizeDiff, download_size_only) ->
@@ -169,7 +182,15 @@ report_link_size_changed(Guid, SizeDiff, download_size_only) ->
 report_size_changed_on_storage(_Guid, _StorageId, 0) ->
     ok;
 report_size_changed_on_storage(Guid, StorageId, SizeDiff) ->
-    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?SIZE_ON_STORAGE(StorageId) => SizeDiff}).
+    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
+    {ok, ReferencesList} = file_meta_hardlinks:list_references(Uuid), % TODO - jesli not_found to dodac posthooka
+    {AddedReferences, RemovedReferences, DeletedMainRefAsList} = node_cache:get({?MODULE, Guid}, {[], [], []}),
+    ok = case DeletedMainRefAsList ++ ReferencesList -- AddedReferences ++ RemovedReferences of
+        [MainRef | _] ->
+            dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId), ?MODULE, #{?SIZE_ON_STORAGE(StorageId) => SizeDiff});
+        _ ->
+            dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?SIZE_ON_STORAGE(StorageId) => SizeDiff})
+    end.
 
 
 -spec report_download_size_changed(file_id:file_guid(), integer()) -> ok.
@@ -254,35 +275,33 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     spawn(fun() ->
         replica_synchronizer:apply(FileCtx, fun() ->
-            Size = case file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
-                {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
-                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc));
-                {#document{value = #file_location{size = TotalSize}}, _} ->
-                    TotalSize
-            end,
+            fslogic_cache:flush(), % TODO - sprawdzic czy wszystko flushowac i czy to samo nie trzeba w obsludze rename (rename w synchronizer?)
+            {FileSizes, _} = file_ctx:prepare_file_size_summary(FileCtx),
+            TotalSize = proplists:get_value(total, FileSizes),
 
             {AddedList, RemoveList, MainRefAsList} = node_cache:get({?MODULE, Guid}, {[], [], []}),
 
             lists:foreach(fun(Uuid) ->
-                report_link_size_changed(file_id:pack_guid(Uuid, SpaceId), Size, download_size_only)
+                report_link_size_changed(file_id:pack_guid(Uuid, SpaceId), TotalSize, download_size_only)
             end, AddedList -- RemoveList),
 
             lists:foreach(fun(Uuid) ->
-                report_download_size_changed(file_id:pack_guid(Uuid, SpaceId), -Size)
+                report_download_size_changed(file_id:pack_guid(Uuid, SpaceId), -TotalSize)
             end, RemoveList -- AddedList),
 
             case MainRefAsList of
                 [] ->
                     ok;
                 [MainRef] ->
-                    report_link_size_changed(file_id:pack_guid(MainRef, SpaceId), -Size, total_and_download_size),
+                    NegFileSizes = lists:map(fun({K, V}) -> {K, -V} end, FileSizes),
+                    report_link_size_changed(file_id:pack_guid(MainRef, SpaceId), NegFileSizes, total_and_download_size),
                     ReferencedUuid = file_ctx:get_referenced_uuid_const(FileCtx),
                     file_meta:update(ReferencedUuid, fun(_) -> {error, do_nothing} end), % hack to be sure that changes resolve has finished
                     case file_meta_hardlinks:list_references(ReferencedUuid) of
                         {ok, [NewMainRef | _]} ->
-                            report_link_size_changed(file_id:pack_guid(NewMainRef, SpaceId), Size, total_size_only);
+                            report_link_size_changed(file_id:pack_guid(NewMainRef, SpaceId), FileSizes, total_size_only);
                         _ ->
-                            report_link_size_changed(Guid, Size, total_size_only)
+                            report_link_size_changed(Guid, FileSizes, total_size_only)
                     end
             end,
 

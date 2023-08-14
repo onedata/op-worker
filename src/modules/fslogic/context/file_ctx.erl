@@ -371,8 +371,16 @@ set_file_doc(FileCtx, NewDoc) ->
 
 -spec is_synchronization_enabled(ctx()) -> {boolean(), ctx()}.
 is_synchronization_enabled(FileCtx) ->
-    {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc(FileCtx),
-    {not Ignore, FileCtx2}.
+    try
+        {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+        {not Ignore, FileCtx2}
+    catch
+        _:Error ->
+            case datastore_runner:normalize_error(Error) of
+                not_found -> true; % doc is not found so it must be due to synchronization
+                _ -> throw(Error)
+            end
+    end.
 
 -spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.
 list_references_const(FileCtx) ->
@@ -999,10 +1007,11 @@ get_file_size(FileCtx) ->
 prepare_file_size_summary(FileCtx) ->
     case get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
         {#document{value = #file_location{size = undefined, storage_id = StorageId}} = Doc, FileCtx2} ->
-            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(Doc)),
-            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
+            Blocks = fslogic_location_cache:get_blocks(Doc),
+            TotalSize = fslogic_blocks:upper(Blocks),
+            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Blocks)}], FileCtx2};
         {#document{value = #file_location{size = TotalSize, storage_id = StorageId}} = Doc, FileCtx2} ->
-            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2}
+            {[{total, TotalSize}, {StorageId, file_location:count_bytes(fslogic_location_cache:get_blocks(Doc))}], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------

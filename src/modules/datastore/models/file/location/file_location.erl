@@ -248,8 +248,10 @@ set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
 %% Returns total size used by given file_location.
 %% @end
 %%--------------------------------------------------------------------
--spec count_bytes(doc()) -> non_neg_integer().
+-spec count_bytes(doc() | [fslogic_blocks:block()]) -> non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
+    count_bytes(Blocks, 0);
+count_bytes(Blocks) ->
     count_bytes(Blocks, 0).
 
 

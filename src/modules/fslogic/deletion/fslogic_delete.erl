@@ -230,28 +230,26 @@ deregister_link_and_inspect_references(FileCtx) ->
             ReferencedFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
             replica_synchronizer:apply(ReferencedFileCtx, fun() ->
                 try
+                    fslogic_cache:flush(), % TODO - sprawdzic czy jest potrzebny w kazdym case i czy wszystko flushowac i czy to samo nie trzeba w obsludze dodawania/usuwania referencji
                     % TODO - ogarnac duplikacje kodu z liczeniem size
-                    Size = case file_ctx:get_or_create_local_regular_file_location_doc(ReferencedFileCtx, true, true) of
-                        {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
-                            fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc));
-                        {#document{value = #file_location{size = TotalSize}}, _} ->
-                            TotalSize
-                    end,
+                    {FileSizes, _} = file_ctx:prepare_file_size_summary(ReferencedFileCtx),
                         % TODO - zabezpiecztc przed wielokrotnym wywolaniem dla zdalnego kasowania
                         % moze wystarczy bazowac czy jest juz on w referencjach?
                     case file_meta_hardlinks:list_references(FileUuid) of
                         {ok, [LinkUuid]} ->
+                            NegFileSizes = lists:map(fun({K, V}) -> {K, -V} end, FileSizes),
                             dir_size_stats:report_link_size_changed(
-                                file_ctx:get_logical_guid_const(FileCtx), -Size, total_and_download_size),
+                                file_ctx:get_logical_guid_const(FileCtx), NegFileSizes, total_and_download_size),
                             dir_size_stats:report_link_size_changed(
-                                file_ctx:get_referenced_guid_const(FileCtx), Size, total_size_only);
+                                file_ctx:get_referenced_guid_const(FileCtx), FileSizes, total_size_only);
                         {ok, [LinkUuid, NextRef | _]} ->
+                            NegFileSizes = lists:map(fun({K, V}) -> {K, -V} end, FileSizes),
                             dir_size_stats:report_link_size_changed(
-                                file_ctx:get_logical_guid_const(FileCtx), -Size, total_and_download_size),
+                                file_ctx:get_logical_guid_const(FileCtx), NegFileSizes, total_and_download_size),
                             dir_size_stats:report_link_size_changed(
-                                file_id:pack_guid(NextRef, SpaceId), Size, total_size_only);
+                                file_id:pack_guid(NextRef, SpaceId), FileSizes, total_size_only);
                         _ ->
-                            dir_size_stats:report_download_size_changed(file_ctx:get_logical_guid_const(FileCtx), -Size)
+                            dir_size_stats:report_download_size_changed(file_ctx:get_logical_guid_const(FileCtx), -1 * proplists:get_value(total, FileSizes))
                     end,
                     file_meta_hardlinks:deregister(FileUuid, LinkUuid)
                 catch
@@ -270,23 +268,19 @@ inspect_references(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     replica_synchronizer:apply(FileCtx, fun() ->
         try
-            % TODO - ogarnac duplikacje kodu z liczeniem size
-            Size = case file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
-                {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
-                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc));
-                {#document{value = #file_location{size = TotalSize}}, _} ->
-                    TotalSize
-            end,
+            fslogic_cache:flush(), % TODO - sprawdzic czy jest potrzebny w kazdym case i czy wszystko flushowac i czy to samo nie trzeba w obsludze dodawania/usuwania referencji
+            {FileSizes, _} = file_ctx:prepare_file_size_summary(FileCtx),
             case file_meta_hardlinks:list_references(FileUuid) of
                 {ok, []} ->
                     dir_size_stats:report_link_size_changed(
-                        file_ctx:get_logical_guid_const(FileCtx), -Size, download_size_only),
+                        file_ctx:get_logical_guid_const(FileCtx), -1 * proplists:get_value(total, FileSizes), download_size_only),
                     no_references_left;
                 {ok, [NextRef | _]} ->
+                    NegFileSizes = lists:map(fun({K, V}) -> {K, -V} end, FileSizes),
                     dir_size_stats:report_link_size_changed(
-                        file_ctx:get_logical_guid_const(FileCtx), -Size, total_and_download_size),
+                        file_ctx:get_logical_guid_const(FileCtx), NegFileSizes, total_and_download_size),
                     dir_size_stats:report_link_size_changed(
-                        file_id:pack_guid(NextRef, SpaceId), Size, total_size_only),
+                        file_id:pack_guid(NextRef, SpaceId), FileSizes, total_size_only),
                     has_at_least_one_reference
             end
         catch

@@ -172,7 +172,7 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
         _ ->
             {
                 [WriteNodesSelector, {initial_size_on_provider, StatsCheckNodesSelector}],
-                [{initial_size_on_provider, WriteNodesSelector}, StatsCheckNodesSelector]
+                [WriteNodesSelector, {initial_size_on_provider, StatsCheckNodesSelector}]
             }
     end,
     [OpenedFileCheckSelector | _] = CheckSelectors,
@@ -302,10 +302,31 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File8Guid))),
     veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{1, 1, 0}, {0, 0, 1}, {0, 0, 0}, {0, 0, 0}], FileSize8),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link11Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}], FileSize8).
+    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}], FileSize8),
 
+    % Test rename of dir with hardlinks
+    File9Guid = file_ops_test_utils:create_file(Creator, CreatorSessId, Dir1Guid, generator:gen_name(), FileContent),
+    File10Guid = file_ops_test_utils:create_file(Creator, CreatorSessId, Dir2Guid, generator:gen_name(), FileContent),
+    ?assertMatch({ok, _},
+        lfm_proxy:make_link(Creator, CreatorSessId, ?FILE_REF(File10Guid), ?FILE_REF(Dir1Guid), generator:gen_name())),
+    ?assertMatch({ok, _},
+        lfm_proxy:make_link(Creator, CreatorSessId, ?FILE_REF(File9Guid), ?FILE_REF(Dir3Guid), generator:gen_name())),
 
+    veryfy_hardlinks(Config, CheckSelectors, DirGuids3, [{1, 2, 1}, {1, 1, 1}, {0, 1, 0}, {0, 0, 0}], FileSize),
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir2Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),
+    veryfy_hardlinks(Config, CheckSelectors, [Dir1Guid, Dir3Guid, Dir4Guid], [{1, 2, 1}, {0, 1, 0}, {1, 1, 1, 1}], FileSize),
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir3Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),
+    veryfy_hardlinks(Config, CheckSelectors, [Dir1Guid, Dir4Guid], [{1, 2, 1}, {1, 2, 1, 2}], FileSize),
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir1Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),
+    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 4, 2, 3}], FileSize),
 
+    ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir2Guid))),
+    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 3, 2, 2}], FileSize),
+    ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir3Guid))),
+    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 2, 2, 1}], FileSize),
+    ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir1Guid))),
+    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{0, 0, 0}], FileSize),
+    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir4Guid))).
 
 append_files(Config, NodesSelector, Guids, CurrentSize) ->
     [Worker | _] = ?config(NodesSelector, Config),
@@ -337,34 +358,50 @@ veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
     ct:print("bbbbbb"),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
-    lists:foreach(fun({Guid, {TotalSizesExpected, LinksExpected, OnStorageExpected}}) ->
-        ct:print("xxxxx"),
-        check_dir_stats(Config, NodesSelector, Guid, #{
-            ?REG_FILE_AND_LINK_COUNT => LinksExpected,
-            ?DIR_COUNT => 0,
-            ?FILE_ERRORS_COUNT => 0,
-            ?DIR_ERRORS_COUNT => 0,
-            ?TOTAL_SIZE => TotalSizesExpected * FileSize,
-            ?TOTAL_DOWNLOAD_SIZE => LinksExpected * FileSize,
-            ?TOTAL_SIZE_ON_STORAGE_KEY2(Config, NodesSelector) =>
-                ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, OnStorageExpected * FileSize)
-        })
+    lists:foreach(fun
+        ({Guid, {TotalSizesExpected, LinksExpected, OnStorageExpected}}) ->
+            ct:print("xxxxx"),
+            check_dir_stats(Config, NodesSelector, Guid, #{
+                ?REG_FILE_AND_LINK_COUNT => LinksExpected,
+                ?DIR_COUNT => 0,
+                ?FILE_ERRORS_COUNT => 0,
+                ?DIR_ERRORS_COUNT => 0,
+                ?TOTAL_SIZE => TotalSizesExpected * FileSize,
+                ?TOTAL_DOWNLOAD_SIZE => LinksExpected * FileSize,
+                ?TOTAL_SIZE_ON_STORAGE_KEY2(Config, NodesSelector) =>
+                    ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, TotalSizesExpected * FileSize)
+            });
+        ({Guid, {TotalSizesExpected, LinksExpected, OnStorageExpected, DirCount}}) ->
+            ct:print("xxxxx"),
+            check_dir_stats(Config, NodesSelector, Guid, #{
+                ?REG_FILE_AND_LINK_COUNT => LinksExpected,
+                ?DIR_COUNT => DirCount,
+                ?FILE_ERRORS_COUNT => 0,
+                ?DIR_ERRORS_COUNT => 0,
+                ?TOTAL_SIZE => TotalSizesExpected * FileSize,
+                ?TOTAL_DOWNLOAD_SIZE => LinksExpected * FileSize,
+                ?TOTAL_SIZE_ON_STORAGE_KEY2(Config, NodesSelector) =>
+                ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, TotalSizesExpected * FileSize)
+            })
     end, lists:zip(DirGuids, DirSizes)),
 
-    {TotalSizesExpectedSum, LinksExpectedSum, OnStorageExpectedSum} =
-        lists:foldl(fun({DirTotalSizesExpected, DirLinksExpected, DirOnStorageExpected}, {Acc1, Acc2, Acc3}) ->
-            {Acc1 + DirTotalSizesExpected, Acc2 + DirLinksExpected, Acc3 + DirOnStorageExpected}
-        end, {0, 0, 0}, DirSizes),
+    {TotalSizesExpectedSum, LinksExpectedSum, OnStorageExpectedSum, DirsCountSum} =
+        lists:foldl(fun
+            ({DirTotalSizesExpected, DirLinksExpected, DirOnStorageExpected}, {Acc1, Acc2, Acc3, Acc4}) ->
+                {Acc1 + DirTotalSizesExpected, Acc2 + DirLinksExpected, Acc3 + DirOnStorageExpected, Acc4};
+            ({DirTotalSizesExpected, DirLinksExpected, DirOnStorageExpected, DirsCount}, {Acc1, Acc2, Acc3, Acc4}) ->
+                {Acc1 + DirTotalSizesExpected, Acc2 + DirLinksExpected, Acc3 + DirOnStorageExpected, Acc4 + DirsCount}
+        end, {0, 0, 0, 0}, DirSizes),
 
     check_dir_stats(Config, NodesSelector, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => LinksExpectedSum,
-        ?DIR_COUNT => length(DirGuids),
+        ?DIR_COUNT => length(DirGuids) + DirsCountSum,
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => TotalSizesExpectedSum * FileSize,
         ?TOTAL_DOWNLOAD_SIZE => LinksExpectedSum * FileSize,
         ?TOTAL_SIZE_ON_STORAGE_KEY2(Config, NodesSelector) =>
-            ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, OnStorageExpectedSum * FileSize)
+            ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, TotalSizesExpectedSum * FileSize)
     }).
 
 
