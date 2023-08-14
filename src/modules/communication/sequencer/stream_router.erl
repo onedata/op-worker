@@ -17,25 +17,17 @@
 -include("proto/oneclient/client_messages.hrl").
 
 %% API
--export([is_stream_message/2, route_message/1, make_message_direct/1]).
+-export([is_stream_message/1, route_message/1, make_message_direct/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec is_stream_message(Msg :: #client_message{} | #server_message{}, session:type()) ->
-    boolean() | ignore.
-is_stream_message(#client_message{message_body = #subscription{}, message_id = undefined} = Msg, fuse) ->
-    % Current version of oneclient is not able to prevent async subscriptions to be sent but hangs
-    % if such subscription is processed before sync one - ignore async subscriptions from client until its fixed.
-    % NOTE: use env to allow async subscriptions testing as its valid functionality from oneprovider's point of view.
-    case op_worker:get_env(ignore_async_subscriptions, true) of
-        true -> ignore;
-        false -> is_stream_message(Msg)
-    end;
-is_stream_message(Msg, _) ->
-    is_stream_message(Msg).
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if message is sequential, if so - proxy it throught sequencer
+%% @end
+%%--------------------------------------------------------------------
 -spec is_stream_message(Msg :: #client_message{} | #server_message{}) ->
     boolean() | ignore.
 is_stream_message(#client_message{message_body = #message_request{}}) ->
