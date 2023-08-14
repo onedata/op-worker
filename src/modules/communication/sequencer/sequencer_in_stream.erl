@@ -397,6 +397,19 @@ store_message(
     {false, State};
 
 store_message(
+    #client_message{
+        message_id = undefined,
+        message_stream = #message_stream{sequence_number = MsgSeqNum}
+    } = Msg,
+    #state{sequence_number = SeqNum, messages = Msgs} = State
+) when is_integer(MsgSeqNum), MsgSeqNum >= SeqNum ->
+    % TODO VFS-11258 - remove when subscriptions are sent as direct messages (not stream messages)
+    case maps:find(MsgSeqNum, Msgs) of
+        {ok, #client_message{message_id = Id}} when Id =/= undefined -> {MsgSeqNum, State};
+        _ -> {MsgSeqNum, State#state{messages = maps:put(MsgSeqNum, Msg, Msgs)}}
+    end;
+
+store_message(
     #client_message{message_stream = #message_stream{sequence_number = MsgSeqNum}} = Msg,
     #state{sequence_number = SeqNum, messages = Msgs} = State
 ) when is_integer(MsgSeqNum), MsgSeqNum >= SeqNum ->
@@ -432,17 +445,23 @@ forward_message(#client_message{message_body = #end_of_message_stream{}},
 
 forward_message(
     #client_message{message_body = #subscription{}, message_id = undefined} = Msg,
-    #state{session_type = fuse, sequence_number = SeqNum} = State
+    #state{session_type = fuse, sequence_number = SeqNum, messages = Msgs} = State
 ) ->
     % Current version of oneclient is not able to prevent async subscriptions to be sent but hangs
     % if such subscription is processed before sync one - ignore async subscriptions from client until its fixed.
     % NOTE: sequence_number has to be processed (oneclient hangs on restart otherwise).
     % NOTE: use env to allow async subscriptions testing as its valid functionality from oneprovider's point of view.
     % TODO VFS-11258 - remove when subscriptions are sent as direct messages (not stream messages)
-    case op_worker:get_env(ignore_async_subscriptions, true) of
-        true -> ignore;
-        false -> event_router:route_message(stream_router:make_message_direct(Msg))
+    case maps:find(SeqNum, Msgs) of
+        {ok, #client_message{message_id = Id} = StoredMsg} when Id =/= undefined ->
+            event_router:route_message(stream_router:make_message_direct(StoredMsg));
+        _ ->
+            case op_worker:get_env(ignore_async_subscriptions, true) of
+                true -> ok;
+                false -> event_router:route_message(stream_router:make_message_direct(Msg))
+            end
     end,
+
     State#state{sequence_number = SeqNum + 1};
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
