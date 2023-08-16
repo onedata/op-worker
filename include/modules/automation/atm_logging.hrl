@@ -165,6 +165,20 @@
     referenced_tasks :: undefined | [atm_task_execution:id()]
 }).
 
+-define(ATM_WORKFLOW_ENGINE_LOG(__DESCRIPTION), #atm_workflow_log_schema{
+    selector = workflow_engine,
+    description = __DESCRIPTION
+}).
+
+-define(ATM_WORKFLOW_LANE_RUN_LOG(__ATM_LANE_RUN_SELECTOR, __DESCRIPTION),
+    ?ATM_WORKFLOW_LANE_RUN_LOG(__ATM_LANE_RUN_SELECTOR, __DESCRIPTION, undefined)
+).
+-define(ATM_WORKFLOW_LANE_RUN_LOG(__ATM_LANE_RUN_SELECTOR, __DESCRIPTION, __DETAILS), #atm_workflow_log_schema{
+    selector = {lane_run, __ATM_LANE_RUN_SELECTOR},
+    description = __DESCRIPTION,
+    details = __DETAILS
+}).
+
 -define(ATM_WORKFLOW_TASK_LOG(__ATM_TASK_EXECUTION_ID, __DESCRIPTION),
     ?ATM_WORKFLOW_TASK_LOG(__ATM_TASK_EXECUTION_ID, __DESCRIPTION, undefined)
 ).

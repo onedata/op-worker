@@ -17,7 +17,7 @@
 
 %% API
 -export([
-    init_stop/3,
+    init_stop/3, init_stop/4,
     handle_stopped/2,
 
     teardown/2
@@ -34,29 +34,39 @@
     atm_task_execution:id(),
     atm_task_execution:stopping_reason()
 ) ->
-    ok | no_return().
+    {ok, atm_task_execution:doc()} | {error, task_already_stopping} | {error, task_already_stopped}.
 init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
+    init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason, true).
+
+
+-spec init_stop(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    atm_task_execution:stopping_reason(),
+    boolean()
+) ->
+    {ok, atm_task_execution:doc()} | {error, task_already_stopping} | {error, task_already_stopped}.
+init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason, LogStoppingReason) ->
     case atm_task_execution_status:handle_stopping(
         AtmTaskExecutionId,
         Reason,
         atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx)
     ) of
-        {ok, _} when Reason =:= pause ->
+        {ok, _} = Result when Reason =:= pause ->
             % when execution is paused, ongoing jobs aren't abruptly stopped (the
             % execution engine will wait for them before transitioning to paused status)
-            log_stopping_reason(AtmWorkflowExecutionCtx, Reason);
+            LogStoppingReason andalso log_stopping_reason(AtmWorkflowExecutionCtx, Reason),
+            Result;
 
-        {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
-            log_stopping_reason(AtmWorkflowExecutionCtx, Reason),
+        {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} = Result ->
+            LogStoppingReason andalso log_stopping_reason(AtmWorkflowExecutionCtx, Reason),
 
             % for other reasons than pause, ongoing jobs are immediately aborted
-            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
+            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+            Result;
 
-        {error, task_already_stopping} ->
-            ok;
-
-        {error, task_already_stopped} ->
-            ok
+        {error, _} = Error ->
+            Error
     end.
 
 

@@ -133,7 +133,7 @@ init_stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
         atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, UserCtx),
         AtmWorkflowExecutionEnv
     ),
-    case atm_lane_execution_handler:init_stop({current, current}, Reason, AtmWorkflowExecutionCtx) of
+    case atm_lane_execution_stop_handler:init_stop({current, current}, Reason, AtmWorkflowExecutionCtx) of
         {ok, stopping} ->
             ok;
         {ok, stopped} ->
@@ -298,7 +298,7 @@ restart(AtmWorkflowExecutionId) ->
                     "Failed to cleanly suspend execution before the Oneprovider service has stopped."
                 >>),
 
-                atm_lane_execution_handler:init_stop(
+                atm_lane_execution_stop_handler:init_stop(
                     {current, current}, interrupt, AtmWorkflowExecutionCtx
                 ),
                 case finalize_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
@@ -337,7 +337,7 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
             <<"details">> => #{<<"reason">> => errors:to_json(Error)}
         }),
 
-        atm_lane_execution_handler:init_stop({current, current}, interrupt, AtmWorkflowExecutionCtx)
+        atm_lane_execution_stop_handler:init_stop({current, current}, interrupt, AtmWorkflowExecutionCtx)
     after
         workflow_engine:abandon(AtmWorkflowExecutionId, interrupt)
     end,
@@ -357,7 +357,7 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
 prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    atm_lane_execution_handler:prepare(
+    atm_lane_execution_setup_handler:prepare(
         AtmLaneRunSelector,
         AtmWorkflowExecutionId,
         atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
@@ -371,7 +371,7 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
 resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    atm_lane_execution_handler:resume(
+    atm_lane_execution_setup_handler:resume(
         AtmLaneRunSelector,
         AtmWorkflowExecutionId,
         atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
@@ -522,7 +522,7 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) -
 ) ->
     workflow_handler:lane_stopped_callback_result().
 handle_lane_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    atm_lane_execution_handler:handle_stopped(
+    atm_lane_execution_stop_handler:handle_stopped(
         AtmLaneRunSelector, AtmWorkflowExecutionId,
         atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
     ).
@@ -568,7 +568,7 @@ handle_exception(
         _ -> crash
     end,
 
-    case atm_lane_execution_handler:init_stop(
+    case atm_lane_execution_stop_handler:init_stop(
         {current, current}, AbruptStoppingReason, AtmWorkflowExecutionCtx
     ) of
         {ok, _} ->
@@ -756,14 +756,14 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
                     ?WAITING_PHASE when IsAtmLaneRunPreparedInAdvance ->
-                        atm_lane_execution_handler:init_stop(
+                        atm_lane_execution_stop_handler:init_stop(
                             AtmLaneRunSelector, interrupt, AtmWorkflowExecutionCtx
                         ),
-                        atm_lane_execution_handler:handle_stopped(
+                        atm_lane_execution_stop_handler:handle_stopped(
                             AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
                         );
                     ?ONGOING_PHASE ->
-                        atm_lane_execution_handler:handle_stopped(
+                        atm_lane_execution_stop_handler:handle_stopped(
                             AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
                         );
                     ?SUSPENDED_PHASE ->
