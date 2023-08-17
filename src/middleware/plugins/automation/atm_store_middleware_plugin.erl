@@ -193,7 +193,7 @@ get(#op_req{data = Data, gri = #gri{aspect = indices_by_trace_ids, scope = priva
         maps:get(<<"traceIds">>, Data),
         maps:get(<<"timestamp">>, Data, undefined)
     ),
-    {ok, value, maps_utils:undefined_to_null(IndicesPerTraceId)}.
+    {ok, value, IndicesPerTraceId}.
 
 
 %%--------------------------------------------------------------------
