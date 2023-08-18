@@ -86,7 +86,8 @@
     parallel_boxes :: [atm_test_schema_factory:atm_parallel_box_schema_draft()],
 
     store_iterator_spec :: atm_test_schema_factory:atm_store_iterator_spec_draft(),
-    max_retries = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | non_neg_integer()
+    max_retries = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | non_neg_integer(),
+    instant_failure_exception_threshold = 1.0 :: float()  % between 0.0 .. 1.0
 }).
 
 -record(atm_parallel_box_schema_draft, {

@@ -364,7 +364,7 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
 handle_items_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Count) ->
     AtmTaskExecutionDoc = atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, Count),
 
-    case atm_workflow_execution_ctx:is_lane_run_fail_for_exceptions_ratio_exceeded(
+    case atm_workflow_execution_ctx:is_lane_run_instant_failure_exception_threshold_breached(
         calc_task_exception_ratio(AtmTaskExecutionDoc), AtmWorkflowExecutionCtx
     ) of
         true ->
@@ -400,7 +400,7 @@ handle_exceeded_lane_run_fail_for_exceptions_ratio(AtmWorkflowExecutionCtx, AtmT
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
             ?atm_task_critical(Logger, <<"Exceeeded allowed failed jobs threshold.">>),
             ?atm_workflow_critical(Logger, ?ATM_WORKFLOW_TASK_LOG(AtmTaskExecutionId, <<
-                "Exceeeded allowed failed jobs threshold."
+                "Exceeeded allowed failed jobs threshold."  % TODO desc
             >>)),
 
             init_lane_run_stop(AtmWorkflowExecutionCtx, AtmTaskExecution, failure);
