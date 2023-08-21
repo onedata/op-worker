@@ -154,7 +154,6 @@ report_total_size_changed(_Guid, 0) ->
     ok;
 report_total_size_changed(Guid, SizeDiff) ->
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    % NOTE: file_meta must be present - otherwise writing/truncating would be impossible
     case conflict_protected_reference_list(Uuid) of
         [MainRef | References] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId), ?MODULE,
@@ -187,7 +186,6 @@ report_size_changed_on_storage(_Guid, _StorageId, 0) ->
     ok;
 report_size_changed_on_storage(Guid, StorageId, SizeDiff) ->
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    % NOTE: file_meta must be present - otherwise writing/truncating would be impossible
     ok = case conflict_protected_reference_list(Uuid) of
         [MainRef | _] ->
             dir_stats_collector:update_stats_of_parent(
@@ -792,7 +790,10 @@ decode_stat_name(6) -> ?TOTAL_DOWNLOAD_SIZE.
 %% @private
 -spec conflict_protected_reference_list(file_meta:uuid()) -> file_meta_hardlinks:references_list().
 conflict_protected_reference_list(Uuid) ->
-    {ok, ReferencesList} = file_meta_hardlinks:list_references(Uuid),
+    ReferencesList = case file_meta_hardlinks:list_references(Uuid) of
+        {ok, List} -> List;
+        {error,not_found} -> [Uuid] % Storage import creates location before file_meta
+    end,
     #reference_list_changes{added = Added, removed = Removed, removed_first_ref = First} =
         node_cache:get({?MODULE, Uuid}, #reference_list_changes{}),
     case First of
