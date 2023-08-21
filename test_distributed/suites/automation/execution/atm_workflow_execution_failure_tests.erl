@@ -774,7 +774,7 @@ fail_atm_workflow_execution_due_to_breached_instant_failure_exception_threshold(
                                 ?assert(atm_workflow_execution_test_utils:scan_audit_log(
                                     ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx, fun
                                         (#{<<"content">> := #{<<"description">> := <<
-                                            "Exceeeded allowed failed jobs threshold."  % TODO desc
+                                            "The instant failure exception threshold of 0.100 has been breached."
                                         >>}}) ->
                                             true;
                                         (_) ->

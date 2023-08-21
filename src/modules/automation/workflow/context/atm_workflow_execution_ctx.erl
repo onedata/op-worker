@@ -35,7 +35,7 @@
     is_global_store/2,
     get_global_store_id/2,
 
-    is_lane_run_instant_failure_exception_threshold_breached/2,
+    get_lane_run_instant_failure_exception_threshold/1,
 
     get_task_execution_id/1,
     get_task_time_series_store_id/1
@@ -156,11 +156,11 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
     atm_workflow_execution_env:get_global_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
 
 
--spec is_lane_run_instant_failure_exception_threshold_breached(float(), record()) -> boolean().
-is_lane_run_instant_failure_exception_threshold_breached(CurrentRatio, #atm_workflow_execution_ctx{
+-spec get_lane_run_instant_failure_exception_threshold(record()) -> float().
+get_lane_run_instant_failure_exception_threshold(#atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
-    CurrentRatio > atm_workflow_execution_env:get_lane_run_instant_failure_exception_threshold(
+    atm_workflow_execution_env:get_lane_run_instant_failure_exception_threshold(
         AtmWorkflowExecutionEnv
     ).
 

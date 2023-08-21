@@ -70,7 +70,7 @@
 
     % current lane run execution specific components
     lane_run_exception_store_container :: undefined | atm_store_container:record(),
-    lane_run_instant_failure_exception_threshold :: undefined | float(),  %% 0.0 .. 1.0
+    lane_run_instant_failure_exception_threshold :: float(),  %% 0.0 .. 1.0
 
     task_selector_registry :: #{atm_task_execution:id() => atm_workflow_execution_logger:task_selector()},
 
@@ -82,6 +82,8 @@
 -type diff() :: fun((record()) -> record()).
 
 -export_type([record/0, diff/0]).
+
+-define(DEFAULT_INSTANT_FAILURE_EXCEPTION_THRESHOLD, 1.0).
 
 
 %%%===================================================================
@@ -123,7 +125,7 @@ build(
         global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_store_container = undefined,
         lane_run_exception_store_container = undefined,
-        lane_run_instant_failure_exception_threshold = undefined,
+        lane_run_instant_failure_exception_threshold = ?DEFAULT_INSTANT_FAILURE_EXCEPTION_THRESHOLD,
         task_audit_logs_registry = #{},
         task_time_series_registry = #{},
         task_selector_registry = #{}
@@ -157,7 +159,9 @@ set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record
 
 -spec set_lane_run_instant_failure_exception_threshold(float(), record()) -> record().
 set_lane_run_instant_failure_exception_threshold(Threshold, Record) ->
-    Record#atm_workflow_execution_env{lane_run_instant_failure_exception_threshold = Threshold}.
+    Record#atm_workflow_execution_env{
+        lane_run_instant_failure_exception_threshold = float(Threshold)
+    }.
 
 
 -spec ensure_task_selector_registry_up_to_date(
@@ -300,7 +304,7 @@ get_lane_run_exception_store_container(#atm_workflow_execution_env{
     AtmLaneRunExceptionStoreContainer.
 
 
--spec get_lane_run_instant_failure_exception_threshold(record()) -> undefined | float().
+-spec get_lane_run_instant_failure_exception_threshold(record()) -> float().
 get_lane_run_instant_failure_exception_threshold(#atm_workflow_execution_env{
     lane_run_instant_failure_exception_threshold = Threshold
 }) ->
