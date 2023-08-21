@@ -12,6 +12,9 @@
 -author("Michal Wrzeszcz").
 
 
+-include_lib("ctool/include/test/test_utils.hrl").
+
+
 %% export for ct
 -export([
     all/0,
@@ -128,7 +131,13 @@ end_per_suite(Config) ->
     lfm_files_test_base:end_per_suite(Config).
 
 
-init_per_testcase(Case, Config) when Case =:= basic_test orelse Case =:= hardlinks_test ->
+init_per_testcase(basic_test = Case, Config) ->
+    dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
+        Case, Config
+    ));
+init_per_testcase(hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 1000),
     dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
         Case, Config
     ));
@@ -136,6 +145,11 @@ init_per_testcase(Case, Config) ->
     dir_stats_collector_test_base:init(lfm_files_test_base:init_per_testcase(Case, Config)).
 
 
+end_per_testcase(hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 30000),
+    dir_stats_collector_test_base:teardown(Config),
+    lfm_files_test_base:end_per_testcase(Case, Config);
 end_per_testcase(Case, Config) ->
     dir_stats_collector_test_base:teardown(Config),
     lfm_files_test_base:end_per_testcase(Case, Config).

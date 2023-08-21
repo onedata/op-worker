@@ -18,7 +18,7 @@
 -module(dir_stats_collections_initialization_traverse).
 -author("Michal Wrzeszcz").
 
-
+% TODO - inicjalizacja olewa otwarte skasowane pliki
 -behaviour(traverse_behaviour).
 
 

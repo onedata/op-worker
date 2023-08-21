@@ -326,6 +326,7 @@ report_file_moved(?DIRECTORY_TYPE, FileGuid, _SourceParentGuid, TargetParentGuid
     end;
 report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
     try
+        % Warning: rename is not protected from races with write so stats could be incorrect if such race appears
         lists:foreach(fun(CollectionType) ->
             ChildStats = CollectionType:init_child(FileGuid, true),
             case dir_stats_collection:on_collection_move(CollectionType, ChildStats) of

@@ -62,7 +62,7 @@
 
 % If update appears in less than ?RACE_PREVENTING_TIME from initialization
 % finish it is considered as possible race and initialization is repeated
--define(RACE_PREVENTING_TIME, op_worker:get_env(dir_stats_collector_race_preventing_time, 3000)). % TODO - przywrocic
+-define(RACE_PREVENTING_TIME, op_worker:get_env(dir_stats_collector_race_preventing_time, 30000)).
 -define(BATCH_SIZE, 100).
 
 %%%===================================================================

@@ -1863,13 +1863,18 @@ init_per_testcase(Case, Config)when
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
-    Case =:= dir_stats_collector_hardlinks_test;
     Case =:= dir_stats_collector_trash_test;
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
     Case =:= dir_stats_collector_parallel_write_to_empty_file_test
 ->
+    dir_stats_collector_test_base:init_and_enable_for_new_space(init_per_testcase(
+        ?DEFAULT_CASE(Case), Config
+    ));
+init_per_testcase(dir_stats_collector_hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 1000),
     dir_stats_collector_test_base:init_and_enable_for_new_space(init_per_testcase(
         ?DEFAULT_CASE(Case), Config
     ));
@@ -1954,13 +1959,18 @@ end_per_testcase(Case, Config) when
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
-    Case =:= dir_stats_collector_hardlinks_test;
     Case =:= dir_stats_collector_trash_test;
     Case =:= transfer_after_enabling_stats_test;
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
-    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test
+->
+    dir_stats_collector_test_base:teardown(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(dir_stats_collector_hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 30000),
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->
