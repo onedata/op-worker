@@ -8,6 +8,6 @@ images:
 
 sources:
   # Specification of branches from which sources for components will be pulled.
-  oz-worker: feature/VFS-11226-add-exceeded-items-failed-threshold-to-atm-schema
+  oz-worker: current_branch
   op-worker: current_branch
   onepanel: current_branch
