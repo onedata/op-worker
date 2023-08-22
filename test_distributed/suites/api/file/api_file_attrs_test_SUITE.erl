@@ -922,10 +922,12 @@ get_dir_distribution_2_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
+                download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
+                download_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0}
             }
         }
@@ -940,10 +942,12 @@ get_dir_distribution_2_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
+                download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
+                download_size = 50,
                 physical_size_per_storage = #{P2StorageId => 20}
             }
         }
@@ -977,6 +981,7 @@ get_dir_distribution_3_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
+                download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -995,6 +1000,7 @@ get_dir_distribution_3_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
+                download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
             },
             P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE

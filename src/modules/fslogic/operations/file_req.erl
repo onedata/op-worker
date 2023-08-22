@@ -424,27 +424,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             try
                 % TODO - schowac wywolanie synchronizera w statystykach
                 TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx3),
-                case dir_stats_service_state:is_active(SpaceId) of
-                    true ->
-                        ok = replica_synchronizer:apply(TargetFileCtx, fun() ->
-                            try
-                                {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
-                                case file_ctx:get_or_create_local_regular_file_location_doc(TargetFileCtx, true, true) of
-                                    {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
-                                        TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc)),
-                                        dir_size_stats:report_child_download_size_changed(TargetParentGuid, TotalSize);
-                                    {#document{value = #file_location{size = TotalSize}}, _} ->
-                                        dir_size_stats:report_child_download_size_changed(TargetParentGuid, TotalSize)
-                                end,
-                                ok
-                            catch
-                                _:Reason ->
-                                    {error, Reason}
-                            end
-                        end);
-                    false ->
-                        {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid) % TODO VFS-7445 - revert after error
-                end,
+                dir_size_stats:register_and_count_local_link(TargetFileCtx, TargetParentGuid, LinkUuid),
 
                 FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),

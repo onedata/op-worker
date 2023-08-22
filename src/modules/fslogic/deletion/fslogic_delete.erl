@@ -104,7 +104,7 @@ check_references_and_remove(UserCtx, FileCtx, Silent) ->
 -spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case dir_size_stats:on_local_link_delete(FileCtx) of
+    case dir_size_stats:deregister_and_count_local_link_deletion(FileCtx) of
         no_references_left ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS),
             % File meta for original file has not been deleted because hardlink existed - delete it now
@@ -144,7 +144,7 @@ handle_remotely_deleted_file(FileCtx) ->
 %% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
-    case dir_size_stats:on_local_link_delete(FileCtx) of
+    case dir_size_stats:deregister_and_count_local_link_deletion(FileCtx) of
         no_references_left ->
             delete_file_meta(FileCtx), % Delete hardlink document
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
