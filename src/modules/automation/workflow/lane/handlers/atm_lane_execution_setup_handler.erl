@@ -288,7 +288,7 @@ initiate_lane_run(
 update_workflow_ctx_with_lane_run_specific_data(
     AtmLaneRunSelector,
     #atm_lane_execution_run{exception_store_id = AtmExceptionStoreId},
-    AtmWorkflowExecutionDoc,
+    AtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution},
     AtmWorkflowExecutionCtx
 ) ->
     AtmWorkflowExecutionEnv0 = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
@@ -298,9 +298,9 @@ update_workflow_ctx_with_lane_run_specific_data(
         AtmExceptionStore#atm_store.container, AtmWorkflowExecutionEnv0
     ),
 
-    AtmWorkflowExecutionEnv2 = atm_workflow_execution_env:set_lane_run_fail_for_exceptions_ratio(
-        %% TODO VFS-11226 use ratio defined in schema
-        op_worker:get_env(atm_lane_run_fail_for_exceptions_ratio, 1.0),
+    AtmLaneSchema = atm_lane_execution:get_schema(AtmLaneRunSelector, AtmWorkflowExecution),
+    AtmWorkflowExecutionEnv2 = atm_workflow_execution_env:set_lane_run_instant_failure_exception_threshold(
+        AtmLaneSchema#atm_lane_schema.instant_failure_exception_threshold,
         AtmWorkflowExecutionEnv1
     ),
 

@@ -69,7 +69,7 @@
     fail_atm_workflow_execution_due_to_lambda_item_exception/1,
     fail_atm_workflow_execution_due_to_lambda_batch_exception/1,
 
-    fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio/1,
+    fail_atm_workflow_execution_due_to_breached_instant_failure_exception_threshold/1,
 
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
@@ -258,7 +258,7 @@ groups() -> [
         fail_atm_workflow_execution_due_to_lambda_item_exception,
         fail_atm_workflow_execution_due_to_lambda_batch_exception,
 
-        fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio
+        fail_atm_workflow_execution_due_to_breached_instant_failure_exception_threshold
     ]},
 
     {cancel_tests, [], [
@@ -625,7 +625,7 @@ fail_atm_workflow_execution_due_to_lambda_batch_exception(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
-fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio(_Config) ->
+fail_atm_workflow_execution_due_to_breached_instant_failure_exception_threshold(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
@@ -1123,19 +1123,9 @@ end_per_group(gc_tests, Config) ->
     Config.
 
 
-init_per_testcase(fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio, Config) ->
-    %% TODO VFS-11226 rm and set ratio in schema
-    ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(atm_lane_run_fail_for_exceptions_ratio, 0.1)),
-    Config;
-
 init_per_testcase(_Case, Config) ->
     Config.
 
-
-end_per_testcase(fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio, _Config) ->
-    %% TODO VFS-11226 rm and set ratio in schema
-    ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(atm_lane_run_fail_for_exceptions_ratio, 1.0)),
-    ok;
 
 end_per_testcase(_Case, _Config) ->
     ok.

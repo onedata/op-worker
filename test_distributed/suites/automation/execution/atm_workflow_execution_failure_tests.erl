@@ -31,7 +31,7 @@
     fail_atm_workflow_execution_due_to_lambda_item_exception/0,
     fail_atm_workflow_execution_due_to_lambda_batch_exception/0,
 
-    fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio/0
+    fail_atm_workflow_execution_due_to_breached_instant_failure_exception_threshold/0
 ]).
 
 
@@ -71,6 +71,20 @@
     __ITERATED_CONTENT,
     __FAILING_TASK_SCHEMA_DRAFT,
     __FAILING_LAMBDA_DRAFT
+), ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+    __TESTCASE,
+    __ITERATED_CONTENT,
+    __FAILING_TASK_SCHEMA_DRAFT,
+    __FAILING_LAMBDA_DRAFT,
+    1.0
+)).
+
+-define(FAILING_WORKFLOW_SCHEMA_DRAFT(
+    __TESTCASE,
+    __ITERATED_CONTENT,
+    __FAILING_TASK_SCHEMA_DRAFT,
+    __FAILING_LAMBDA_DRAFT,
+    __INSTANT_FAILURE_EXCEPTION_THRESHOLD
 ),
     #atm_workflow_schema_dump_draft{
         name = str_utils:to_binary(__TESTCASE),
@@ -99,7 +113,8 @@
                     store_schema_id = ?ITERATED_STORE_SCHEMA_ID,
                     max_batch_size = ?RAND_INT(5, 8)
                 },
-                max_retries = 2
+                max_retries = 2,
+                instant_failure_exception_threshold = __INSTANT_FAILURE_EXCEPTION_THRESHOLD
             }]
         },
         supplementary_lambdas = #{
@@ -683,17 +698,17 @@ build_job_failure_lane_run_test_spec(AtmLaneRunSelector, IsLastExpLaneRun, #fail
     }.
 
 
-fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio() ->
+fail_atm_workflow_execution_due_to_breached_instant_failure_exception_threshold() ->
     TotalItemCount = 5000,
-    %% TODO VFS-11226 value set in init_per_testcase - set in schema
-    FailToExceptionRatio = 0.1,
+    InstantFailureExceptionThreshold = 0.1,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
             ?FUNCTION_NAME,
             gen_time_series_measurements(TotalItemCount),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
-            ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
+            ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC),
+            InstantFailureExceptionThreshold
         ),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -714,7 +729,7 @@ fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio()
                                 FailedBatchItemCount = length(lists:filter(fun is_size_measurement/1, ItemBatch)),
                                 ExceptionRatio = (IF + FailedBatchItemCount) / (IIP + IP + BatchSize),
 
-                                FailingExpectations = case ExceptionRatio > FailToExceptionRatio of
+                                FailingExpectations = case ExceptionRatio > InstantFailureExceptionThreshold of
                                     true ->
                                         [
                                             {all_tasks, {1, 1}, stopping_due_to, interrupt},
@@ -759,7 +774,7 @@ fail_atm_workflow_execution_due_to_exceeded_lane_run_fail_for_exceptions_ratio()
                                 ?assert(atm_workflow_execution_test_utils:scan_audit_log(
                                     ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx, fun
                                         (#{<<"content">> := #{<<"description">> := <<
-                                            "Exceeeded allowed failed jobs threshold."
+                                            "The instant failure exception threshold of 0.100 has been breached."
                                         >>}}) ->
                                             true;
                                         (_) ->
