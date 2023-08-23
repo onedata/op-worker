@@ -14,9 +14,8 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 -export([
@@ -57,16 +56,15 @@
     download_file_in_blocks/1
 ]).
 
-all() ->
-    ?ALL([
+all() -> [
         list_dir_test,
         get_file_test,
         metadata_test,
         delete_file_test,
         delete_dir_test,
         create_file_test,
-        update_file_test,
         create_dir_test,
+        update_file_test,
         capabilities_test,
         use_supported_cdmi_version_test,
         use_unsupported_cdmi_version_test,
@@ -75,20 +73,20 @@ all() ->
         request_format_check_test,
         mimetype_and_encoding_test,
         out_of_range_test,
+        move_copy_conflict_test,
+        move_test,
+        copy_test,
         partial_upload_test,
         acl_test,
         errors_test,
         accept_header_test,
-        move_copy_conflict_test,
-        move_test,
-        copy_test,
         create_raw_file_with_cdmi_version_header_should_succeed_test,
         create_raw_dir_with_cdmi_version_header_should_succeed_test,
         create_cdmi_file_without_cdmi_version_header_should_fail_test,
         create_cdmi_dir_without_cdmi_version_header_should_fail_test,
         download_empty_file,
         download_file_in_blocks
-    ]).
+].
 
 
 -record(chunk, {
@@ -97,7 +95,6 @@ all() ->
 }).
 
 -define(DEFAULT_STORAGE_BLOCK_SIZE, 100).
-
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 
 
@@ -107,119 +104,120 @@ all() ->
 
 
 list_dir_test(Config) ->
-    cdmi_test_base:list_dir(Config).
+    cdmi_test_base:list_dir(Config, krakow, krakow, space_krk).
 
 
 get_file_test(Config) ->
-    cdmi_test_base:get_file(Config).
+    cdmi_test_base:get_file(Config, krakow, krakow, space_krk).
 
 
 metadata_test(Config) ->
-    cdmi_test_base:metadata(Config).
+    cdmi_test_base:metadata(Config, krakow, krakow, space_krk).
 
 
 delete_file_test(Config) ->
-    cdmi_test_base:delete_file(Config).
+    cdmi_test_base:delete_file(Config, krakow, krakow, space_krk).
 
 
 delete_dir_test(Config) ->
-    cdmi_test_base:delete_dir(Config).
+    cdmi_test_base:delete_dir(Config, krakow, krakow, space_krk).
 
 
 create_file_test(Config) ->
-    cdmi_test_base:create_file(Config).
-
-
-update_file_test(Config) ->
-    cdmi_test_base:update_file(Config).
+    cdmi_test_base:create_file(Config, krakow, krakow, space_krk).
 
 
 create_dir_test(Config) ->
-    cdmi_test_base:create_dir(Config).
+    cdmi_test_base:create_dir(Config, krakow, krakow, space_krk).
 
 
-objectid_test(Config) ->
-    cdmi_test_base:objectid(Config).
+update_file_test(Config) ->
+    cdmi_test_base:update_file(Config, krakow, krakow, space_krk).
 
 
 capabilities_test(Config) ->
-    cdmi_test_base:capabilities(Config).
+    cdmi_test_base:capabilities(Config, krakow, krakow).
 
 
 use_supported_cdmi_version_test(Config) ->
-    cdmi_test_base:use_supported_cdmi_version(Config).
+    cdmi_test_base:use_supported_cdmi_version(Config, krakow, krakow).
 
 
 use_unsupported_cdmi_version_test(Config) ->
-    cdmi_test_base:use_unsupported_cdmi_version(Config).
+    cdmi_test_base:use_unsupported_cdmi_version(Config, krakow, krakow).
 
 
 moved_permanently_test(Config) ->
-    cdmi_test_base:moved_permanently(Config).
+    cdmi_test_base:moved_permanently(Config, krakow, krakow, space_krk).
+
+
+objectid_test(Config) ->
+    cdmi_test_base:objectid(Config, krakow, krakow, space_krk).
 
 
 request_format_check_test(Config) ->
-    cdmi_test_base:request_format_check(Config).
+    cdmi_test_base:request_format_check(Config, krakow, krakow, space_krk).
 
 
 mimetype_and_encoding_test(Config) ->
-    cdmi_test_base:mimetype_and_encoding(Config).
+    cdmi_test_base:mimetype_and_encoding(Config, krakow, krakow, space_krk).
 
 
 out_of_range_test(Config) ->
-    cdmi_test_base:out_of_range(Config).
+    cdmi_test_base:out_of_range(Config, krakow, krakow, space_krk).
 
 
 move_copy_conflict_test(Config) ->
-    cdmi_test_base:move_copy_conflict(Config).
+    cdmi_test_base:move_copy_conflict(Config, krakow, krakow, space_krk).
 
 
 move_test(Config) ->
-    cdmi_test_base:move(Config).
+    cdmi_test_base:move(Config, krakow, krakow, space_krk).
 
 
 copy_test(Config) ->
-    cdmi_test_base:copy(Config).
+    cdmi_test_base:copy(Config, krakow, krakow, space_krk).
 
 
 partial_upload_test(Config) ->
-    cdmi_test_base:partial_upload(Config).
+    cdmi_test_base:partial_upload(Config, krakow, krakow, space_krk).
 
 
 acl_test(Config) ->
-    cdmi_test_base:acl(Config).
+    cdmi_test_base:acl(Config, krakow, krakow, space_krk).
 
 
 errors_test(Config) ->
-    cdmi_test_base:errors(Config).
+    cdmi_test_base:errors(Config, krakow, krakow, space_krk).
 
 
 accept_header_test(Config) ->
-    cdmi_test_base:accept_header(Config).
+    cdmi_test_base:accept_header(Config, krakow, krakow).
 
 
 create_raw_file_with_cdmi_version_header_should_succeed_test(Config) ->
-    cdmi_test_base:create_raw_file_with_cdmi_version_header_should_succeed(Config).
+    cdmi_test_base:create_raw_file_with_cdmi_version_header_should_succeed(Config, krakow, krakow, space_krk).
 
 
 create_raw_dir_with_cdmi_version_header_should_succeed_test(Config) ->
-    cdmi_test_base:create_raw_dir_with_cdmi_version_header_should_succeed(Config).
+    cdmi_test_base:create_raw_dir_with_cdmi_version_header_should_succeed(Config, krakow, krakow, space_krk).
 
 
 create_cdmi_file_without_cdmi_version_header_should_fail_test(Config) ->
-    cdmi_test_base:create_cdmi_file_without_cdmi_version_header_should_fail(Config).
+    cdmi_test_base:create_cdmi_file_without_cdmi_version_header_should_fail(Config, krakow, krakow, space_krk).
 
 
 create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
-    cdmi_test_base:create_cdmi_dir_without_cdmi_version_header_should_fail(Config).
+    cdmi_test_base:create_cdmi_dir_without_cdmi_version_header_should_fail(Config, krakow, krakow, space_krk).
 
 
-download_empty_file(Config) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    AuthHeaders = [rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config))],
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+download_empty_file(_Config) ->
+    [_WorkerP1, WorkerP2] = oct_background:get_provider_nodes(krakow),
+    SpaceName = oct_background:get_space_name(space_krk),
 
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    AuthHeaders = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
+    SessionId = oct_background:get_user_session_id(user2, krakow),
+    UserId2 = oct_background:get_user_id(user2),
 
     % Create file
     FileName = <<"download_empty_file">>,
@@ -231,13 +229,15 @@ download_empty_file(Config) ->
 
     {ok, _, _, Response} = ?assertMatch(
         {ok, 200, _Headers, _Response},
-        cdmi_test_utils:do_request(WorkerP2, FilePath, get, [?CDMI_VERSION_HEADER | AuthHeaders], <<>>)
+        cdmi_test_utils:do_request(
+            WorkerP2, FilePath, get, [?CDMI_VERSION_HEADER | AuthHeaders], <<>>
+        )
     ),
     ?assertMatch(
         #{
             <<"completionStatus">> := <<"Complete">>,
             <<"metadata">> := #{
-                <<"cdmi_owner">> := <<"user1">>,
+                <<"cdmi_owner">> := UserId2,
                 <<"cdmi_size">> := <<"0">>
             },
             <<"objectID">> := ObjectId,
@@ -251,18 +251,16 @@ download_empty_file(Config) ->
     ).
 
 
-download_file_in_blocks(Config) ->
-    [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    AuthHeaders = [rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config))],
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+download_file_in_blocks(_Config) ->
+    [_WorkerP1, WorkerP2] = Workers = oct_background:get_provider_nodes(krakow),
+    SpaceName = oct_background:get_space_name(space_krk),
 
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    FilePath = filename:join([SpaceName, <<"upload_file_in_blocks">>]),
-
-    Data = crypto:strong_rand_bytes(200),
+    AuthHeaders = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
+    SessionId = oct_background:get_user_session_id(user2, krakow),
 
     % Create file
-    {ok, Guid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
+    FilePath = filename:join([SpaceName, <<"upload_file_in_blocks">>]),
+    Data = crypto:strong_rand_bytes(200),{ok, Guid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
     {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(WorkerP2, Handle, 0, Data),
     ok = lfm_proxy:close(WorkerP2, Handle),
@@ -273,7 +271,6 @@ download_file_in_blocks(Config) ->
         cdmi_test_utils:do_request(WorkerP2, FilePath, get, AuthHeaders, <<>>)
     ),
     ?assertEqual(Data, Response1),
-
     ?assertEqual(
         [
             #chunk{offset = 0, size = 100},
@@ -312,34 +309,21 @@ download_file_in_blocks(Config) ->
 
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        ssl:start(),
-        application:ensure_all_started(hackney),
-        initializer:disable_quota_limit(NewConfig),
-        initializer:mock_provider_ids(NewConfig),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
-    end,
-    [{?LOAD_MODULES, [initializer]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    oct_background:init_per_suite(Config, #onenv_test_config{
+        onenv_scenario = "1op-2nodes"
+    }).
 
 
-end_per_suite(Config) ->
-    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    application:stop(hackney),
-    ssl:stop().
+end_per_suite(_Config) ->
+    oct_background:end_per_suite().
 
-
-init_per_testcase(choose_adequate_handler_test = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(download_file_in_blocks = Case, Config) ->
     Self = self(),
-    Workers = ?config(op_worker_nodes, Config),
+    Workers = oct_background:get_provider_nodes(krakow),
 
     test_utils:mock_new(Workers, [lfm], [passthrough]),
-    test_utils:mock_expect(Workers, lfm, read, fun(FileHandle, Offset, ToRead) ->
+    test_utils:mock_expect(Workers, lfm, check_size_and_read, fun(FileHandle, Offset, ToRead) ->
         {ok, _, Data} = Res = meck:passthrough([FileHandle, Offset, ToRead]),
         Self ! {read, #chunk{offset = Offset, size = byte_size(Data)}},
         Res
@@ -348,24 +332,19 @@ init_per_testcase(download_file_in_blocks = Case, Config) ->
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
+    lfm_proxy:init(Config),
+    Config.
 
-
-end_per_testcase(choose_adequate_handler_test = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    utils:rpc_multicall(Workers, code, ensure_loaded, [cdmi_object_handler]),
-    utils:rpc_multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(download_file_in_blocks = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
+    Workers = oct_background:get_provider_nodes(krakow),
     unmock_storage_get_block_size(Workers),
     ok = test_utils:mock_unload(Workers, [lfm]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+    lfm_proxy:teardown(Config),
+    ok.
 
 
 %%%===================================================================

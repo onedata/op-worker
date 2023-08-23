@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 
 %% API
--export([do_request/5, cdmi_endpoint/1]).
+-export([do_request/5, cdmi_endpoint/2]).
 
 
 %%%===================================================================
@@ -26,14 +26,14 @@
 % Performs a single request using http_client
 do_request(Node, CdmiSubPath, Method, Headers, Body) ->
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),
-    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
+    Domain = oct_background:get_provider_domain(krakow),
     Result = http_client:request(
         Method,
-        cdmi_endpoint(Node) ++ CdmiSubPath,
+        cdmi_endpoint(Node, Domain) ++ CdmiSubPath,
         maps:from_list(Headers),
         Body,
         [
-            {ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]},
+            {ssl_options, [{cacerts, CaCerts}, {hostname, Domain}]},
             {connect_timeout, timer:minutes(1)},
             {recv_timeout, timer:minutes(1)}
         ]
@@ -46,17 +46,23 @@ do_request(Node, CdmiSubPath, Method, Headers, Body) ->
     end.
 
 
-cdmi_endpoint(Node) ->
-    Port = case get(port) of
+cdmi_endpoint(Node, Domain) ->
+    Port = get_https_server_port_str(Node),
+    string:join(["https://", str_utils:to_list(Domain), Port, "/cdmi/"], "").
+
+
+%% @private
+-spec get_https_server_port_str(node()) -> PortStr :: string().
+get_https_server_port_str(Node) ->
+    case get(port) of
         undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PStr = case P of
+            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+            PortStr = case Port of
                 443 -> "";
-                _ -> ":" ++ integer_to_list(P)
+                _ -> ":" ++ integer_to_list(Port)
             end,
-            put(port, PStr),
-            PStr;
-        P -> P
-    end,
-    Ip = test_utils:get_docker_ip(Node),
-    string:join(["https://", str_utils:to_list(Ip), Port, "/cdmi/"], "").
+            put(port, PortStr),
+            PortStr;
+        Port ->
+            Port
+    end.

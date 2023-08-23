@@ -850,7 +850,7 @@ autocleaning:
       name: ct_logs_autocleaning.tar.gz
 
 cdmi:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: CDMI
   artifacts:
     - <<: *ct_logs
@@ -1268,7 +1268,7 @@ monitoring:
       name: ct_logs_monitoring.tar.gz
 
 multi_provider_cdmi:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: MULTIPROVCDMI
   artifacts:
     - <<: *ct_logs
