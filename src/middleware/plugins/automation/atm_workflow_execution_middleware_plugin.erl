@@ -100,7 +100,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = Aspect}}) when
     Aspect =:= rerun
 ->
     #{required => #{
-        <<"laneSchemaId">> => {binary, non_empty},
+        <<"laneIndex">> => {integer, {not_lower_than, 1}},
         <<"laneRunNumber">> => {integer, {not_lower_than, 1}}
     }};
 
@@ -284,18 +284,8 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{
     Aspect =:= retry;
     Aspect =:= rerun
 ->
-    {ok, Record} = atm_workflow_execution_api:get(AtmWorkflowExecutionId),
-
-    case infer_lane_selector(maps:get(<<"laneSchemaId">>, Data), Record) of
-        {ok, AtmLaneSelector} ->
-            AtmLaneRunSelector = {AtmLaneSelector, maps:get(<<"laneRunNumber">>, Data)},
-
-            mi_atm:repeat_workflow_execution(
-                SessionId, Aspect, AtmWorkflowExecutionId, AtmLaneRunSelector
-            );
-        {error, _} = Error ->
-            Error
-    end.
+    AtmLaneRunSelector = {maps:get(<<"laneIndex">>, Data), maps:get(<<"laneRunNumber">>, Data)},
+    mi_atm:repeat_workflow_execution(SessionId, Aspect, AtmWorkflowExecutionId, AtmLaneRunSelector).
 
 
 %%--------------------------------------------------------------------
@@ -362,20 +352,6 @@ delete(OpReq = #op_req{data = Data, gri = GRI = #gri{aspect = batch}}) ->
 %%%===================================================================
 %%% Utility functions
 %%%===================================================================
-
-
-%% @private
--spec infer_lane_selector(automation:id(), atm_workflow_execution:record()) ->
-    {ok, atm_lane_execution:index()} | ?ERROR_NOT_FOUND.
-infer_lane_selector(AtmLaneSchemaId, #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
-    Result = lists:search(
-        fun({_, #atm_lane_execution{schema_id = SchemaId}}) -> SchemaId == AtmLaneSchemaId end,
-        maps:to_list(AtmLaneExecutions)
-    ),
-    case Result of
-        {value, {Index, _}} -> {ok, Index};
-        false -> ?ERROR_NOT_FOUND
-    end.
 
 
 -spec has_access_to_workflow_execution_details(

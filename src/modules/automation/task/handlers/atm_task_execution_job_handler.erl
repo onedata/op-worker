@@ -363,13 +363,13 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
     ok.
 handle_items_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Count) ->
     AtmTaskExecutionDoc = atm_task_execution_status:handle_items_failed(AtmTaskExecutionId, Count),
-
-    case atm_workflow_execution_ctx:is_lane_run_fail_for_exceptions_ratio_exceeded(
-        calc_task_exception_ratio(AtmTaskExecutionDoc), AtmWorkflowExecutionCtx
-    ) of
+    ExceptionThreshold = atm_workflow_execution_ctx:get_lane_run_instant_failure_exception_threshold(
+        AtmWorkflowExecutionCtx
+    ),
+    case calc_task_exception_ratio(AtmTaskExecutionDoc) > ExceptionThreshold of
         true ->
-            handle_exceeded_lane_run_fail_for_exceptions_ratio(
-                AtmWorkflowExecutionCtx, AtmTaskExecutionId
+            handle_lane_run_instant_failure_exception_threshold_breached(
+                AtmWorkflowExecutionCtx, AtmTaskExecutionId, ExceptionThreshold
             );
         false ->
             ok
@@ -387,32 +387,31 @@ calc_task_exception_ratio(#document{value = #atm_task_execution{
 
 
 %% @private
--spec handle_exceeded_lane_run_fail_for_exceptions_ratio(
+-spec handle_lane_run_instant_failure_exception_threshold_breached(
     atm_workflow_execution_ctx:record(),
-    atm_task_execution:id()
+    atm_task_execution:id(),
+    float()
 ) ->
     ok.
-handle_exceeded_lane_run_fail_for_exceptions_ratio(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    case atm_task_execution_status:handle_stopping(
-        AtmTaskExecutionId,
-        failure,
-        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx)
+handle_lane_run_instant_failure_exception_threshold_breached(
+    AtmWorkflowExecutionCtx,
+    AtmTaskExecutionId,
+    InstantFailureExceptionThreshold
+) ->
+    case atm_task_execution_stop_handler:init_stop(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, failure, false
     ) of
-        {ok, #document{value = AtmTaskExecution = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+        {ok, #document{value = AtmTaskExecution}} ->
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+            Description = ?fmt_bin("The instant failure exception threshold of ~.3f has been breached.", [
+                InstantFailureExceptionThreshold
+            ]),
+            ?atm_task_critical(Logger, Description),
+            ?atm_workflow_critical(Logger, ?ATM_WORKFLOW_TASK_LOG(AtmTaskExecutionId, Description)),
 
-            ?atm_task_critical(Logger, <<"Exceeeded allowed failed jobs threshold.">>),
-            ?atm_workflow_critical(Logger, ?ATM_WORKFLOW_TASK_LOG(AtmTaskExecutionId, <<
-                "Exceeeded allowed failed jobs threshold."
-            >>)),
-
-            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor),
             init_lane_run_stop(AtmWorkflowExecutionCtx, AtmTaskExecution, failure);
 
-        {error, task_already_stopping} ->
-            ok;
-
-        {error, task_already_stopped} ->
+        {error, Reason} when Reason =:= task_already_stopping; Reason =:= task_already_stopped ->
             ok
     end.
 
@@ -428,7 +427,7 @@ init_lane_run_stop(AtmWorkflowExecutionCtx, #atm_task_execution{
     lane_index = AtmLaneIndex,
     run_num = RunNum
 }, Reason) ->
-    {ok, _} = atm_lane_execution_handler:init_stop(
+    {ok, _} = atm_lane_execution_stop_handler:init_stop(
         {AtmLaneIndex, RunNum}, Reason, AtmWorkflowExecutionCtx
     ),
     ok.
