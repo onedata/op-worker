@@ -15,6 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 
 -export([create_response/4, get_response/2]).
 
@@ -47,6 +48,8 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
 }) ->
     SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+    {ok, TrashDirRootObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
+    {ok, ArchivesDirRootObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
 
     Providers = lists:map(fun(ProviderId) ->
         {ok, ProviderName} = provider_logic:get_name(ProviderId),
@@ -60,6 +63,8 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
         <<"name">> => Name,
         <<"spaceId">> => SpaceId,
         <<"fileId">> => SpaceDirObjectId,
+        <<"trashDirId">> => TrashDirRootObjectId,
+        <<"archivesDirId">> => ArchivesDirRootObjectId,
         <<"providers">> => Providers
     });
 
