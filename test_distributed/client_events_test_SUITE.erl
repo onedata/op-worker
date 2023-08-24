@@ -16,6 +16,8 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -41,7 +43,8 @@
     attr_auth_filtering_test/1,
     location_auth_filtering_test/1,
     remove_auth_filtering_test/1,
-    rename_auth_filtering_test/1
+    rename_auth_filtering_test/1,
+    proxy_connection_error_test/1
 ]).
 
 all() ->
@@ -61,7 +64,8 @@ all() ->
         attr_auth_filtering_test,
         location_auth_filtering_test,
         remove_auth_filtering_test,
-        rename_auth_filtering_test
+        rename_auth_filtering_test,
+        proxy_connection_error_test
     ]).
 
 -define(CONFLICTING_FILE_NAME, <<"abc">>).
@@ -690,6 +694,61 @@ rename_auth_filtering_test(Config) ->
     ok.
 
 
+proxy_connection_error_test(Config) ->
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId1, <<"/space_name4">>),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId1, AccessToken),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker2, [{active, true}], SessionId2, AccessToken),
+
+    % Create dir and file
+    FileDirId = fuse_test_utils:create_directory(Sock1, SpaceGuid, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock1, FileDirId, generator:gen_name()),
+    fuse_test_utils:close(Sock1, FileGuid, HandleId),
+    {ok, Sub1RoutingKey} = subscription_type:get_routing_key(#file_renamed_subscription{file_guid = FileDirId}),
+    {ok, Sub2RoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = FileDirId}),
+
+    % Mock communicator to simulate proxy errors
+    test_utils:mock_expect(Worker2, communicator, send_to_provider, fun
+        (_, #client_message{message_id = #message_id{recipient = PidAsBinary}}) ->
+            % Send answer to allow errors on more than one message
+            % (test is created to verify fix of sequencer - is handled only first error properly)
+            binary_to_term(PidAsBinary) ! #server_message{message_body = #status{code = ?OK}},
+            throw(test_error)
+    end),
+
+    % Create and send subscriptions
+    Seq1 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_file_renamed_subscription_message(0, Seq1, -Seq1, FileDirId))),
+    Seq2 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_file_removed_subscription_message(0, Seq2, -Seq2, FileDirId))),
+
+    % Wait and check if subscriptions haven't been handled due to mock
+    timer:sleep(1000),
+    ?assertMatch({ok, []}, rpc:call(Worker1, subscription_manager, get_subscribers, [Sub1RoutingKey])),
+    ?assertMatch({ok, []}, rpc:call(Worker1, subscription_manager, get_subscribers, [Sub2RoutingKey])),
+
+    % Unmock and check if subscriptions have been handled
+    test_utils:mock_expect(Worker2, communicator, send_to_provider, fun(SessId, Msg) ->
+        meck:passthrough([SessId, Msg])
+    end),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, [_]}, rpc:call(Worker, subscription_manager, get_subscribers, [Sub1RoutingKey]), 30),
+        ?assertMatch({ok, [_]}, rpc:call(Worker, subscription_manager, get_subscribers, [Sub2RoutingKey]), 30)
+    end, Workers),
+
+    % Remove subscriptions
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -731,6 +790,10 @@ init_per_testcase(Case, Config) when
             meck:passthrough([UserCtx, FileCtx, AncestorPolicy, AccessRequirements])
     end),
     init_per_testcase(default, Config);
+init_per_testcase(proxy_connection_error_test, Config) ->
+    [_, Worker2] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker2, communicator),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     initializer:remove_pending_messages(),
@@ -749,6 +812,10 @@ end_per_testcase(Case, Config) when
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, data_constraints),
+    end_per_testcase(default, Config);
+end_per_testcase(proxy_connection_error_test, Config) ->
+    [_, Worker2] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker2, communicator),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
