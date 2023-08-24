@@ -51,7 +51,8 @@
     sequence_number = 0 :: sequence_number(),
     sequence_number_ack = -1 :: -1 | sequence_number(),
     messages = #{} :: #{sequence_number() => #client_message{}},
-    is_proxy :: boolean()
+    is_proxy :: boolean(),
+    session_type :: session:type()
 }).
 
 -define(MSG_ACK_THRESHOLD, application:get_env(?APP_NAME,
@@ -109,7 +110,8 @@ init([SeqMan, StmId, SessId]) ->
         sequencer_manager = SeqMan,
         session_id = SessId,
         stream_id = StmId,
-        is_proxy = IsProxy
+        is_proxy = IsProxy,
+        session_type = SessionType
     }, ?RECEIVING_TIMEOUT}.
 
 -spec callback_mode() -> state_functions.
@@ -382,9 +384,35 @@ send_message_request(UpperSeqNum, #state{stream_id = StmId,
 %%--------------------------------------------------------------------
 -spec store_message(Msg :: #client_message{}, State :: #state{}) ->
     {SeqNum :: sequence_number() | false, NewState :: #state{}}.
-store_message(#client_message{message_stream = #message_stream{
-    sequence_number = MsgSeqNum}} = Msg, #state{sequence_number = SeqNum,
-    messages = Msgs} = State) when is_integer(MsgSeqNum), MsgSeqNum >= SeqNum ->
+store_message(
+    #client_message{
+        message_id = Id,
+        message_stream = #message_stream{sequence_number = MsgSeqNum}
+    } = Msg,
+    #state{sequence_number = SeqNum} = State
+) when Id =/= undefined, is_integer(MsgSeqNum), MsgSeqNum < SeqNum ->
+    % Message with message_id has to be processed even if sequence number has been used
+    % TODO VFS-11258 - remove when subscriptions are sent as direct messages (not stream messages)
+    event_router:route_message(stream_router:make_message_direct(Msg)),
+    {false, State};
+
+store_message(
+    #client_message{
+        message_id = undefined,
+        message_stream = #message_stream{sequence_number = MsgSeqNum}
+    } = Msg,
+    #state{sequence_number = SeqNum, messages = Msgs} = State
+) when is_integer(MsgSeqNum), MsgSeqNum >= SeqNum ->
+    % TODO VFS-11258 - remove when subscriptions are sent as direct messages (not stream messages)
+    case maps:find(MsgSeqNum, Msgs) of
+        {ok, #client_message{message_id = Id}} when Id =/= undefined -> {MsgSeqNum, State};
+        _ -> {MsgSeqNum, State#state{messages = maps:put(MsgSeqNum, Msg, Msgs)}}
+    end;
+
+store_message(
+    #client_message{message_stream = #message_stream{sequence_number = MsgSeqNum}} = Msg,
+    #state{sequence_number = SeqNum, messages = Msgs} = State
+) when is_integer(MsgSeqNum), MsgSeqNum >= SeqNum ->
     {MsgSeqNum, State#state{messages = maps:put(MsgSeqNum, Msg, Msgs)}};
 
 store_message(#client_message{}, State) ->
@@ -413,6 +441,27 @@ remove_message(SeqNum, #state{messages = Msgs} = State) ->
 forward_message(#client_message{message_body = #end_of_message_stream{}},
     #state{sequence_number = SeqNum} = State) ->
     exit(self(), shutdown),
+    State#state{sequence_number = SeqNum + 1};
+
+forward_message(
+    #client_message{message_body = #subscription{}, message_id = undefined} = Msg,
+    #state{session_type = fuse, sequence_number = SeqNum, messages = Msgs} = State
+) ->
+    % Current version of oneclient is not able to prevent async subscriptions to be sent but hangs
+    % if such subscription is processed before sync one - ignore async subscriptions from client until its fixed.
+    % NOTE: sequence_number has to be processed (oneclient hangs on restart otherwise).
+    % NOTE: use env to allow async subscriptions testing as its valid functionality from oneprovider's point of view.
+    % TODO VFS-11258 - remove when subscriptions are sent as direct messages (not stream messages)
+    case maps:find(SeqNum, Msgs) of
+        {ok, #client_message{message_id = Id} = StoredMsg} when Id =/= undefined ->
+            event_router:route_message(stream_router:make_message_direct(StoredMsg));
+        _ ->
+            case op_worker:get_env(ignore_async_subscriptions, true) of
+                true -> ok;
+                false -> event_router:route_message(stream_router:make_message_direct(Msg))
+            end
+    end,
+
     State#state{sequence_number = SeqNum + 1};
 
 forward_message(Msg, #state{sequence_number = SeqNum} = State) ->
