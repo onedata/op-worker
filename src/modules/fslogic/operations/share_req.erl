@@ -107,10 +107,6 @@ remove_share_internal(UserCtx, FileCtx, ShareId) ->
 
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
-    case file_meta:remove_share(FileCtx, ShareId) of
-        {error, not_found} ->
-            throw({error, ?ENOENT});
-        ok ->
-            ok = share_logic:delete(SessionId, ShareId),
-            ok = permissions_cache:invalidate()
-    end.
+    ok = file_meta:remove_share(FileCtx, ShareId),
+    ok = share_logic:delete(SessionId, ShareId),
+    ok = permissions_cache:invalidate().
