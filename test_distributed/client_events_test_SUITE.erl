@@ -731,13 +731,7 @@ proxy_connection_error_test(Config) ->
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq2, -Seq2, DirGuid))),
 
     % Wait for confirmation of error and check if subscriptions haven't appeared
-    ?assertEqual(ok,
-        receive
-            send_to_provider_error -> ok
-        after
-            5000 -> timeout
-        end
-    ),
+    ?assertReceivedMatch(send_to_provider_error, 5000),
     ?assertMatch({ok, []}, rpc:call(Worker1, subscription_manager, get_subscribers, [SubRenamedRoutingKey])),
     ?assertMatch({ok, []}, rpc:call(Worker1, subscription_manager, get_subscribers, [SubRemovedRoutingKey])),
 

@@ -404,11 +404,9 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
 %%--------------------------------------------------------------------
 -spec maybe_log_failure(Request :: term(), Reason :: term(),
     Attempt :: non_neg_integer(), time:millis()) -> ok.
-maybe_log_failure(_, {badmatch, {error, empty_connection_pool}}, _, _) ->
+maybe_log_failure(_, {badmatch, {error, no_connections}}, _, _) ->
     ok;
-maybe_log_failure(_, {badmatch, {error, no_connection_to_peer_provider}}, _, _) ->
-    ok;
-maybe_log_failure(_, {badmatch, {error, no_connection_to_peer_oneprovider}}, _, _) ->
+maybe_log_failure(_, {badmatch, ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER}, _, _) ->
     ok;
 maybe_log_failure(_, {badmatch, {error, not_found}}, _, _) ->
     ok;
