@@ -66,6 +66,11 @@
 -export_type([function_id/0, record/0]).
 
 
+-define(ANNOTATIONS_OMITTED_WHEN_LOGGING, [
+    <<"oneclient.openfaas.onedata.org/token">>,
+    <<"resultstream.openfaas.onedata.org/secret">>
+]).
+
 -define(FUNCTION_REMOVAL_STRATEGY, op_worker:get_env(
     atm_openfaas_function_removal_strategy, always  %% possible values: always | upon_success | never
 )).
@@ -319,13 +324,13 @@ is_function_registered(#initiation_ctx{
 %% @private
 -spec register_function(initiation_ctx()) -> ok | no_return().
 register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = InitiationCtx) ->
-    log_function_registering(InitiationCtx),
-
     Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
-    Payload = json_utils:encode(prepare_function_definition(InitiationCtx)),
+    FunctionDefinition = prepare_function_definition(InitiationCtx),
 
-    case http_client:post(Endpoint, AuthHeaders, Payload) of
+    log_function_registering(InitiationCtx, FunctionDefinition),
+
+    case http_client:post(Endpoint, AuthHeaders, json_utils:encode(FunctionDefinition)) of
         {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
             log_function_registered(InitiationCtx);
         {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
@@ -343,7 +348,7 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
 
 
 %% @private
--spec log_function_registering(initiation_ctx()) -> ok.
+-spec log_function_registering(initiation_ctx(), json_utils:json_map()) -> ok.
 log_function_registering(#initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
@@ -352,11 +357,20 @@ log_function_registering(#initiation_ctx{
         function_name = FunctionName,
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }
-}) ->
+}, FunctionDefinition) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_task_debug(Logger, "Registering docker '~ts' as function '~ts' in OpenFaaS...", [
-        DockerImage, FunctionName
-    ]).
+
+    ?atm_task_info(Logger, #{
+        <<"description">> => ?fmt_bin(
+            "Registering docker '~ts' as function '~ts' in OpenFaaS...",
+            [DockerImage, FunctionName]
+        ),
+        <<"details">> => #{
+            <<"functionDefinition">> => maps:update_with(<<"annotations">>, fun(Annotations) ->
+                maps:without(?ANNOTATIONS_OMITTED_WHEN_LOGGING, Annotations)
+            end, FunctionDefinition)
+        }
+    }).
 
 
 %% @private
