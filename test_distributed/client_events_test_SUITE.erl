@@ -16,6 +16,8 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
+-include("proto/common/clproto_message_id.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -41,7 +43,8 @@
     attr_auth_filtering_test/1,
     location_auth_filtering_test/1,
     remove_auth_filtering_test/1,
-    rename_auth_filtering_test/1
+    rename_auth_filtering_test/1,
+    proxy_connection_error_test/1
 ]).
 
 all() ->
@@ -61,7 +64,8 @@ all() ->
         attr_auth_filtering_test,
         location_auth_filtering_test,
         remove_auth_filtering_test,
-        rename_auth_filtering_test
+        rename_auth_filtering_test,
+        proxy_connection_error_test
     ]).
 
 -define(CONFLICTING_FILE_NAME, <<"abc">>).
@@ -451,18 +455,18 @@ events_for_hardlinks_test(Config) ->
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    DirWithLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirWithLinkGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
 
     % Test subscription on link and emission on file
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkGuid, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
-    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkId, generator:gen_name()),
+    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkGuid, generator:gen_name()),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
 
     CheckList = receive_events_and_check(file_attr_changed, LinkGuid),
@@ -473,7 +477,7 @@ events_for_hardlinks_test(Config) ->
     % Test subscription on file and emission on link
     Seq2 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, FileDirId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, DirGuid, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
 
@@ -483,7 +487,7 @@ events_for_hardlinks_test(Config) ->
     % Test subscription on both link and file
     Seq3 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, DirWithLinkId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, DirWithLinkGuid, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
@@ -515,19 +519,19 @@ attr_auth_filtering_test(Config) ->
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file and link
-    FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    DirWithLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirWithLinkGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
-    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkId, generator:gen_name()),
+    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkGuid, generator:gen_name()),
 
     % Create subscriptions
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkGuid, 500))),
     Seq2 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, FileDirId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, DirGuid, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     % Test if events appear
@@ -589,8 +593,8 @@ location_auth_filtering_test(Config) ->
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
-    FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
     % Create subscription
@@ -621,14 +625,14 @@ remove_auth_filtering_test(Config) ->
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
-    FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
     % Create subscription
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, FileDirId))),
+        fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirGuid))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     % Delete file
@@ -655,28 +659,28 @@ rename_auth_filtering_test(Config) ->
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
-    FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
     % Create subscriptions
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_renamed_subscription_message(0, Seq1, -Seq1, FileDirId))),
+        fuse_test_utils:generate_file_renamed_subscription_message(0, Seq1, -Seq1, DirGuid))),
     Seq2 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_removed_subscription_message(0, Seq2, -Seq2, FileDirId))),
+        fuse_test_utils:generate_file_removed_subscription_message(0, Seq2, -Seq2, DirGuid))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
     % Test if event appears
     rpc:call(Worker1, fslogic_event_emitter, emit_file_renamed_no_exclude,
-        [file_ctx:new_by_guid(FileGuid), FileDirId, FileDirId, <<"n1">>, <<"n2">>]),
+        [file_ctx:new_by_guid(FileGuid), DirGuid, DirGuid, <<"n1">>, <<"n2">>]),
     receive_events_and_check(file_renamed, FileGuid),
 
     % Test if event is filtered
     make_guids_forbidden(Worker1, [FileGuid]),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_renamed_no_exclude,
-        [file_ctx:new_by_guid(FileGuid), FileDirId, FileDirId, <<"n1">>, <<"n2">>]),
+        [file_ctx:new_by_guid(FileGuid), DirGuid, DirGuid, <<"n1">>, <<"n2">>]),
     CheckList = receive_events_and_check({not_received, file_renamed}, FileGuid),
     case lists:member({file_removed, FileGuid}, CheckList) of
         true -> ok; % Event has been already received during previous check
@@ -686,6 +690,65 @@ rename_auth_filtering_test(Config) ->
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
     ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
+    ok.
+
+
+proxy_connection_error_test(Config) ->
+    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId1, <<"/space_name4">>),
+    {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId1, AccessToken),
+    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker2, [{active, true}], SessionId2, AccessToken),
+
+    % Create dir and file
+    DirGuid = fuse_test_utils:create_directory(Sock1, SpaceGuid, generator:gen_name()),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock1, DirGuid, generator:gen_name()),
+    fuse_test_utils:close(Sock1, FileGuid, HandleId),
+    {ok, SubRenamedRoutingKey} = subscription_type:get_routing_key(#file_renamed_subscription{file_guid = DirGuid}),
+    {ok, SubRemovedRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirGuid}),
+
+    Master = self(),
+    % Mock communicator to simulate proxy errors
+    test_utils:mock_expect(Worker2, communicator, send_to_provider, fun
+        (_, #client_message{message_id = #message_id{recipient = PidAsBinary}}) ->
+            % Send answer to allow errors on more than one message
+            % (test is created to verify fix of sequencer - before fix sequencer was losing changes in state during
+            % processing of an error and as a result next message after processing an error was lost)
+            binary_to_term(PidAsBinary) ! #server_message{message_body = #status{code = ?OK}},
+            Master ! send_to_provider_error,
+            throw(test_error)
+    end),
+
+    % Create and send subscriptions
+    Seq1 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_file_renamed_subscription_message(0, Seq1, -Seq1, DirGuid))),
+    Seq2 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_file_removed_subscription_message(0, Seq2, -Seq2, DirGuid))),
+
+    % Wait for confirmation of error and check if subscriptions haven't appeared
+    ?assertReceivedMatch(send_to_provider_error, 5000),
+    ?assertMatch({ok, []}, rpc:call(Worker1, subscription_manager, get_subscribers, [SubRenamedRoutingKey])),
+    ?assertMatch({ok, []}, rpc:call(Worker1, subscription_manager, get_subscribers, [SubRemovedRoutingKey])),
+
+    % Unmock (simulate restore of proxy connection) and check
+    % if subscriptions sent during problems with proxy have been handled
+    test_utils:mock_expect(Worker2, communicator, send_to_provider, fun(SessId, Msg) ->
+        meck:passthrough([SessId, Msg])
+    end),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, [_]}, rpc:call(Worker, subscription_manager, get_subscribers, [SubRenamedRoutingKey]), 30),
+        ?assertMatch({ok, [_]}, rpc:call(Worker, subscription_manager, get_subscribers, [SubRemovedRoutingKey]), 30)
+    end, Workers),
+
+    % Remove subscriptions
+    ?assertEqual(ok, ssl:send(Sock2,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+    ?assertEqual(ok, ssl:send(Sock2,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
 
@@ -731,6 +794,10 @@ init_per_testcase(Case, Config) when
             meck:passthrough([UserCtx, FileCtx, AncestorPolicy, AccessRequirements])
     end),
     init_per_testcase(default, Config);
+init_per_testcase(proxy_connection_error_test, Config) ->
+    [_, Worker2] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker2, communicator),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     initializer:remove_pending_messages(),
@@ -749,6 +816,10 @@ end_per_testcase(Case, Config) when
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, data_constraints),
+    end_per_testcase(default, Config);
+end_per_testcase(proxy_connection_error_test, Config) ->
+    [_, Worker2] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker2, communicator),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
