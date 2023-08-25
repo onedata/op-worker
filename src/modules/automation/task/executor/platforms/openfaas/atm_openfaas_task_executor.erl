@@ -18,6 +18,7 @@
 
 -include("http/gui_paths.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -517,7 +518,7 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
 ) ->
     FunctionDefinition;
 
-add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
+add_oneclient_annotations_if_required(FunctionDefinition, InitiationCtx = #initiation_ctx{
     openfaas_config = OpenfaasConfig,
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
@@ -526,8 +527,7 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
                 mount_oneclient = true,
-                oneclient_mount_point = MountPoint,
-                oneclient_options = LambdaSpecificOneclientOptions
+                oneclient_mount_point = MountPoint
             }
         }
     }
@@ -538,7 +538,6 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     {ok, OpDomain} = provider_logic:get_domain(),
 
     OneclientImage = atm_openfaas_config:get_oneclient_image(OpenfaasConfig),
-    EnvSpecificOneclientOptions = atm_openfaas_config:get_oneclient_options(OpenfaasConfig),
 
     insert_function_annotations(FunctionDefinition, #{
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
@@ -546,15 +545,54 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
         <<"oneclient.openfaas.onedata.org/input_spaces_ids">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/output_space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
-        <<"oneclient.openfaas.onedata.org/options">> => <<
-            EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary
-        >>,
+        <<"oneclient.openfaas.onedata.org/options">> => build_oneclient_options(InitiationCtx),
         <<"oneclient.openfaas.onedata.org/oneprovider_host">> => OpDomain,
         <<"oneclient.openfaas.onedata.org/token">> => case is_in_readonly_mode(AtmTaskExecutor) of
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end
     }).
+
+
+%% @private
+-spec build_oneclient_options(initiation_ctx()) -> binary().
+build_oneclient_options(#initiation_ctx{
+    openfaas_config = OpenfaasConfig,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
+    executor = #atm_openfaas_task_executor{
+        operation_spec = #atm_openfaas_operation_spec{
+            docker_execution_options = #atm_docker_execution_options{
+                oneclient_options = LambdaSpecificOneclientOptions
+            }
+        }
+    }
+}) ->
+    EnvSpecificOneclientOptions = atm_openfaas_config:get_oneclient_options(OpenfaasConfig),
+    Opts0 = <<EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary>>,
+
+    case re:run(Opts0, <<"--force-(direct|proxy)-io">>) of
+        nomatch ->
+            IoMode = infer_oneclient_io_mode(AtmWorkflowExecutionCtx),
+            <<Opts0/binary, " ", IoMode/binary>>;
+        _ ->
+            Opts0
+    end.
+
+
+%% @private
+-spec infer_oneclient_io_mode(atm_workflow_execution_ctx:record()) -> binary().
+infer_oneclient_io_mode(AtmWorkflowExecutionCtx) ->
+    AtmWorkflowExecutionEnv = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
+    SpaceId = atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
+    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+    HelperName = storage:get_helper_name(StorageId),
+
+    case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
+        true -> <<"--force-proxy-io">>;
+        false -> <<"--force-direct-io">>
+    end.
 
 
 %% @private
