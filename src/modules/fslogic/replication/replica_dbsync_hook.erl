@@ -302,7 +302,7 @@ reconcile_replicas(FileCtx,
             size = NewSize
         }}, ExternalDoc),
     NewDoc2 = fslogic_location_cache:set_blocks(NewDoc, TruncatedNewBlocks),
-    dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, NewSize - LocalSize),
+    dir_size_stats:report_total_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - LocalSize),
 
     RenameResult = case Rename of
         skip ->

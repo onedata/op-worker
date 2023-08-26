@@ -382,7 +382,7 @@ delete_doc(Key) ->
             storage_id = StorageId,
             size = LocationSize
         }}} ->
-            dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, -LocationSize),
+            dir_size_stats:report_total_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize),
             StorageSize = get_local_size(Key),
             cache_size_change(Key, SpaceId, StorageId, -StorageSize),
             apply_size_change(Key, FileUuid),
@@ -932,8 +932,8 @@ apply_size_change(Key, FileUuid) ->
                 end,
                 lists:foreach(fun({{SpaceId, StorageId}, ChangeSize}) ->
                     % TODO VFS-8835 - cache parent when rename works properly
-                    dir_size_stats:report_reg_file_size_changed(
-                        file_id:pack_guid(FileUuid, SpaceId), {on_storage, StorageId}, ChangeSize),
+                    dir_size_stats:report_size_changed_on_storage(
+                        file_id:pack_guid(FileUuid, SpaceId), StorageId, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
                         SpaceId, UserIdOrUndefined, ChangeSize)

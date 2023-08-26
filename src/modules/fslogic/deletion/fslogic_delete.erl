@@ -91,7 +91,7 @@ delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
 -spec check_references_and_remove(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 check_references_and_remove(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case inspect_references(FileCtx) of
+    case dir_size_stats:on_local_file_delete(FileCtx) of
         no_references_left ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS);
         has_at_least_one_reference ->
@@ -104,7 +104,7 @@ check_references_and_remove(UserCtx, FileCtx, Silent) ->
 -spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case deregister_link_and_inspect_references(FileCtx) of
+    case dir_size_stats:deregister_and_count_local_link_deletion(FileCtx) of
         no_references_left ->
             remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS),
             % File meta for original file has not been deleted because hardlink existed - delete it now
@@ -131,7 +131,8 @@ handle_remotely_deleted_file(FileCtx) ->
         _ ->
             % Hardlink created by other provider or regular file has been
             % deleted - check if local documents should be cleaned
-            case inspect_references(FileCtx2) of
+            FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+            case file_meta_hardlinks:inspect_references(FileUuid) of
                 no_references_left ->
                     UserCtx = user_ctx:new(?ROOT_SESS_ID),
                     remove_or_handle_opened_file(UserCtx, FileCtx2, false, ?LOCAL_DOCS);
@@ -143,7 +144,7 @@ handle_remotely_deleted_file(FileCtx) ->
 %% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
-    case deregister_link_and_inspect_references(FileCtx) of
+    case dir_size_stats:deregister_and_count_local_link_deletion(FileCtx) of
         no_references_left ->
             delete_file_meta(FileCtx), % Delete hardlink document
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -165,6 +166,7 @@ handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
 
 -spec handle_file_deleted_on_imported_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_imported_storage(FileCtx) ->
+    % NOTE: if there is any hardlink to this file, it will be corrupted
     report_file_deleted(FileCtx),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, false, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS)),
@@ -186,6 +188,7 @@ cleanup_file(FileCtx, RemoveStorageFile) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup_opened_files() -> ok.
+% TODO VFS-11289 - test stats after simulated system restart with opened files
 cleanup_opened_files() ->
     case file_handles:list() of
         {ok, Docs} ->
@@ -213,18 +216,6 @@ cleanup_opened_files() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec deregister_link_and_inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
-deregister_link_and_inspect_references(FileCtx) ->
-    LinkUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    {ok, ReferencesPresence} = file_meta_hardlinks:deregister(FileUuid, LinkUuid), % VFS-7444 - maybe update doc in FileCtx
-    ReferencesPresence.
-
--spec inspect_references(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
-inspect_references(FileCtx) ->
-    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    file_meta_hardlinks:inspect_references(FileUuid).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -264,6 +255,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
+    dir_size_stats:on_opened_file_delete(FileCtx3),
     % Check once more to prevent race with last handle being closed
     case file_handles:is_file_opened(FileUuid) of
         true ->

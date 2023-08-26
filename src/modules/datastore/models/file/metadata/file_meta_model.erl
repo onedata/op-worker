@@ -460,15 +460,20 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
-        not_mutated ->
+    case fslogic_file_id:is_link_uuid(Uuid) of
+        true ->
             default;
-        {mutated, MergedReferences} ->
-            DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
-                true -> NewDoc;
-                false -> PrevDoc
-            end,
-            {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
+        false ->
+            case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
+                not_mutated ->
+                    default;
+                {mutated, MergedReferences} ->
+                    DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
+                        true -> NewDoc;
+                        false -> PrevDoc
+                    end,
+                    {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
+            end
     end.
 
 
@@ -495,6 +500,8 @@ on_remote_doc_created(_Ctx, #document{
                 % in internal_call ; getting dir_stats_service_state can call tp process if value is not cached
                 % in memory - in such a case spawn process that will cache it in memory
                 % NOTE: handling internal_call instead of spawning for each doc is to optimize dbsync changes application
+                % NOTE: references does not have to be analyzed as it is impossible to create location before
+                %       file_meta is synced (no file size stats could be created before)
                 case dir_stats_service_state:get(SpaceId) of
                     {ok, State} ->
                         case dir_stats_service_state:is_active(State) of

@@ -28,8 +28,9 @@
 % into lists of links created by providers. Such structure is needed for
 % conflicts resolution (see merge_references/2).
 -type references() :: #{oneprovider:id() => [link()]}.
+-type references_list() :: [link()].
 -type references_presence() :: no_references_left | has_at_least_one_reference.
--export_type([link/0, references/0, references_presence/0]).
+-export_type([link/0, references/0, references_list/0, references_presence/0]).
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
 -define(MAX_LINKS_NUM, 65536). % 64 * 1024
@@ -146,14 +147,34 @@ list_references(Key) ->
     end.
 
 -spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references()}.
-merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
-    #document{value = #file_meta{references = OldReferences}}) ->
+merge_references(
+    #document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}} = NewDoc,
+    #document{key = Uuid, scope = SpaceId, value = #file_meta{references = OldReferences}} = OldDoc
+) ->
     ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
     OldMutatorReferences = maps:get(Mutator, OldReferences, []),
 
+    IsDeleted = file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(OldDoc),
     case ChangedMutatorReferences of
-        OldMutatorReferences -> not_mutated;
-        _ -> {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
+        OldMutatorReferences when IsDeleted ->
+            dir_size_stats:handle_references_list_changes(file_id:pack_guid(Uuid, SpaceId), [], [Uuid], [Uuid]),
+            not_mutated;
+        OldMutatorReferences ->
+            not_mutated;
+        _ ->
+            {ok, OldRefsList} = list_references(OldDoc),
+            RemovedReferences = case IsDeleted of
+                true -> [Uuid] ++ OldMutatorReferences -- ChangedMutatorReferences;
+                false -> OldMutatorReferences -- ChangedMutatorReferences
+            end,
+            dir_size_stats:handle_references_list_changes(
+                file_id:pack_guid(Uuid, SpaceId),
+                ChangedMutatorReferences -- OldMutatorReferences,
+                RemovedReferences,
+                OldRefsList
+            ),
+
+            {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
     end.
 
 %%%===================================================================
@@ -163,7 +184,11 @@ merge_references(#document{mutators = [Mutator | _], value = #file_meta{referenc
 -spec references_to_list(references()) -> [link()].
 references_to_list(References) ->
     % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
-    lists:flatmap(fun(ProviderReferences) -> ProviderReferences end, maps:values(References)).
+    % Note - it is expected that function returns references in the same order any time its called - if
+    %        new reference is added, the order of the others should remain unchanged
+    lists:flatmap(fun(Key) ->
+        maps:get(Key, References)
+    end, lists:sort(maps:keys(References))).
 
 -spec count_references_in_map(references()) -> non_neg_integer().
 count_references_in_map(References) ->

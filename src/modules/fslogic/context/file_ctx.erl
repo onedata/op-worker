@@ -57,7 +57,8 @@
 }).
 
 -type ctx() :: #file_ctx{}.
--export_type([ctx/0]).
+-type file_size_summary() :: [{total | storage:id(), non_neg_integer()}].
+-export_type([ctx/0, file_size_summary/0]).
 
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1,
@@ -99,7 +100,8 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3, get_or_create_local_regular_file_location_doc/4,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
+    prepare_file_size_summary/1, prepare_file_size_summary_if_doc_exists/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, ensure_synced/1
 ]).
@@ -371,8 +373,17 @@ set_file_doc(FileCtx, NewDoc) ->
 
 -spec is_synchronization_enabled(ctx()) -> {boolean(), ctx()}.
 is_synchronization_enabled(FileCtx) ->
-    {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc(FileCtx),
-    {not Ignore, FileCtx2}.
+    try
+        {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+        {not Ignore, FileCtx2}
+    catch
+        _:Error ->
+            case datastore_runner:normalize_error(Error) of
+                not_found -> true; % doc is not found so it must be due to synchronization or
+                                   % import (imported are sync enabled)
+                _ -> throw(Error)
+            end
+    end.
 
 -spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.
 list_references_const(FileCtx) ->
@@ -995,15 +1006,26 @@ get_file_size(FileCtx) ->
 %% Returns information about file size (logical and size on storage). Creates location doc if it does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_file_size_summary(ctx() | file_meta:uuid()) -> {[{total | storage:id(), non_neg_integer()}], ctx()}.
+-spec prepare_file_size_summary(ctx() | file_meta:uuid()) -> {file_size_summary(), ctx()}.
 prepare_file_size_summary(FileCtx) ->
-    case get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
-        {#document{value = #file_location{size = undefined, storage_id = StorageId}} = Doc, FileCtx2} ->
-            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(Doc)),
-            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
-        {#document{value = #file_location{size = TotalSize, storage_id = StorageId}} = Doc, FileCtx2} ->
-            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2}
+    {LocationDoc, FileCtx2} = get_or_create_local_regular_file_location_doc(FileCtx, true, true),
+    {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns information about file size (logical and size on storage). Creates location doc if it does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_file_size_summary_if_doc_exists(ctx() | file_meta:uuid()) -> {file_size_summary(), ctx()} | no_return().
+prepare_file_size_summary_if_doc_exists(FileCtx) ->
+    case get_local_file_location_doc(FileCtx, true) of
+        {undefined, _FileCtx2} ->
+            throw(file_location_missing);
+        {LocationDoc, FileCtx2} ->
+            {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1552,3 +1574,15 @@ get_type(FileCtx, FileMetaFun) ->
     Type = FileMetaFun(FileMeta),
     IsDir = Type =:= ?DIRECTORY_TYPE,
     {Type, FileCtx2#file_ctx{is_dir = IsDir}}.
+
+
+-spec prepare_file_size_summary_from_existing_doc(file_location:doc()) -> file_size_summary().
+prepare_file_size_summary_from_existing_doc(LocationDoc) ->
+    case LocationDoc of
+        #document{value = #file_location{size = undefined, storage_id = StorageId}} ->
+            Blocks = fslogic_location_cache:get_blocks(LocationDoc),
+            TotalSize = fslogic_blocks:upper(Blocks),
+            [{total, TotalSize}, {StorageId, file_location:count_bytes(Blocks)}];
+        #document{value = #file_location{size = TotalSize, storage_id = StorageId}} ->
+            [{total, TotalSize}, {StorageId, file_location:count_bytes(fslogic_location_cache:get_blocks(LocationDoc))}]
+    end.
