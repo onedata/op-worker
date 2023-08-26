@@ -422,7 +422,6 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             {ok, #document{key = LinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                % TODO - schowac wywolanie synchronizera w statystykach
                 TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx3),
                 dir_size_stats:register_and_count_local_link(TargetFileCtx, TargetParentGuid, LinkUuid),
 

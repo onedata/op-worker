@@ -188,6 +188,7 @@ cleanup_file(FileCtx, RemoveStorageFile) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup_opened_files() -> ok.
+% TODO VFS-11289 - test stats after simulated system restart with opened files
 cleanup_opened_files() ->
     case file_handles:list() of
         {ok, Docs} ->
@@ -254,6 +255,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
+    dir_size_stats:on_opened_file_delete(FileCtx3),
     % Check once more to prevent race with last handle being closed
     case file_handles:is_file_opened(FileUuid) of
         true ->

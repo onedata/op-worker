@@ -56,7 +56,8 @@
 -export([report_file_created/2, report_file_created_without_state_check/2, report_file_deleted/2]).
 %% API - hooks
 -export([register_and_count_local_link/3, deregister_and_count_local_link_deletion/1,
-    on_local_file_delete/1, report_remote_links_change/2, handle_references_list_changes/4]).
+    on_local_file_delete/1, report_remote_links_change/2, handle_references_list_changes/4,
+    on_opened_file_delete/1]).
 
 %% dir_stats_collection_behaviour callbacks
 -export([
@@ -264,7 +265,7 @@ deregister_and_count_local_link_deletion(FileCtx) ->
                         {ok, [LinkUuid]} ->
                             update_using_size_summary(file_ctx:get_logical_guid_const(FileCtx), FileSizes, true, subtract),
                             update_using_size_summary(file_ctx:get_referenced_guid_const(FileCtx),
-                                FileSizes, false, add);
+                                FileSizes, true, add);
                         {ok, [LinkUuid, NextRef | _]} ->
                             update_using_size_summary(file_ctx:get_logical_guid_const(FileCtx), FileSizes, true, subtract),
                             update_using_size_summary(file_id:pack_guid(NextRef, SpaceId), FileSizes, false, add);
@@ -305,8 +306,6 @@ on_local_file_delete(FileCtx) ->
             {FileSizes, _} = file_ctx:prepare_file_size_summary_if_doc_exists(FileCtx),
             case file_meta_hardlinks:list_references(FileUuid) of
                 {ok, []} ->
-                    report_download_size_changed(file_ctx:get_logical_guid_const(FileCtx),
-                        -1 * proplists:get_value(total, FileSizes)),
                     no_references_left;
                 {ok, [NextRef | _]} ->
                     update_using_size_summary(file_ctx:get_logical_guid_const(FileCtx), FileSizes, true, subtract),
@@ -406,15 +405,14 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
                     MainRef ->
                         update_using_size_summary(file_id:pack_guid(MainRef, SpaceId), FileSizes, true, subtract),
 
-                        ReferencedUuid = file_ctx:get_referenced_uuid_const(FileCtx),
                         % check changes resolve has finished (it blocks updates on file)
-                        file_meta:update(ReferencedUuid, fun(_) -> {error, do_nothing} end),
+                        file_meta:update(Uuid, fun(_) -> {error, do_nothing} end),
 
-                        case file_meta_hardlinks:list_references(ReferencedUuid) of
+                        case file_meta_hardlinks:list_references(Uuid) of
                             {ok, [NewMainRef | _]} ->
                                 update_using_size_summary(file_id:pack_guid(NewMainRef, SpaceId), FileSizes, false, add);
                             _ ->
-                                update_using_size_summary(Guid, FileSizes, false, add)
+                                update_using_size_summary(Guid, FileSizes, true, add)
                         end
                 end
             catch
@@ -438,6 +436,31 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
         end)
     end),
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% When deleting opened file report only download size change (it cannot be downloaded but still exists).
+%% @end
+%%--------------------------------------------------------------------
+-spec on_opened_file_delete(file_ctx:ctx()) -> ok.
+on_opened_file_delete(FileCtx) ->
+    ReferencedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    replica_synchronizer:apply(ReferencedFileCtx, fun() ->
+        try
+            fslogic_cache:flush(),
+            {FileSizes, _} = file_ctx:prepare_file_size_summary_if_doc_exists(ReferencedFileCtx),
+            report_download_size_changed(file_ctx:get_logical_guid_const(ReferencedFileCtx),
+                -1 * proplists:get_value(total, FileSizes))
+        catch
+            _:file_location_missing ->
+                % Do not log error - if file_location is missing no stats had been counted for file
+                ok;
+            Class:Reason:Stacktrace  ->
+                ?error_exception(Class, Reason, Stacktrace),
+                ok
+        end
+    end).
 
 
 %%%===================================================================
@@ -814,8 +837,15 @@ decode_stat_name(6) -> ?TOTAL_DOWNLOAD_SIZE.
 -spec conflict_protected_reference_list(file_meta:uuid()) -> file_meta_hardlinks:references_list().
 conflict_protected_reference_list(Uuid) ->
     ReferencesList = case file_meta_hardlinks:list_references(Uuid) of
-        {ok, List} -> List;
-        {error,not_found} -> [Uuid] % Storage import creates location before file_meta
+        {ok, []} ->
+            case file_handles:is_file_opened(Uuid) of
+                true -> [];
+                false -> [Uuid] % Race on dbsync (file_meta deleted before size change is handled)
+            end;
+        {ok, List} ->
+            List;
+        {error,not_found} ->
+            [Uuid] % Storage import creates location before file_meta
     end,
     #reference_list_changes{added = Added, removed = Removed, removed_first_ref = First} =
         node_cache:get({?MODULE, Uuid}, #reference_list_changes{}),
