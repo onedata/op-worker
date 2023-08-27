@@ -379,8 +379,8 @@ is_synchronization_enabled(FileCtx) ->
     catch
         _:Error ->
             case datastore_runner:normalize_error(Error) of
-                not_found -> true; % doc is not found so it must be due to synchronization or
-                                   % import (imported are sync enabled)
+                not_found -> {true, FileCtx}; % doc is not found so it must be due to synchronization or
+                                              % import (imported are sync enabled)
                 _ -> throw(Error)
             end
     end.
