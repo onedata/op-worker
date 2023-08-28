@@ -198,15 +198,9 @@ handle_text_message(Payload, #state{handler_module = HandlerModule, handler_stat
         ActivityReport = jsonable_record:from_json(json_utils:decode(Payload), atm_openfaas_activity_report),
         handle_activity_report(ActivityReport, State)
     catch Class:Reason:Stacktrace ->
-        TrimmedPayload = case byte_size(Payload) > ?MAX_LOGGED_REQUEST_SIZE of
-            true ->
-                Part = binary:part(Payload, 0, ?MAX_LOGGED_REQUEST_SIZE),
-                <<Part/binary, "... [truncated]">>;
-            false ->
-                Payload
-        end,
-        ?error_exception(?autoformat([TrimmedPayload]), Class, Reason, Stacktrace),
-        HandlerModule:handle_error(self(), ?ERROR_BAD_MESSAGE(TrimmedPayload), HandlerState),
+        PayloadSample = str_utils:truncate_overflow(Payload, ?MAX_LOGGED_REQUEST_SIZE),
+        ?error_exception(?autoformat([PayloadSample]), Class, Reason, Stacktrace),
+        HandlerModule:handle_error(self(), ?ERROR_BAD_MESSAGE(PayloadSample), HandlerState),
         {reply, [{text, <<"Bad request: ", Payload/binary>>}], State}
     end.
 

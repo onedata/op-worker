@@ -98,6 +98,27 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
+
+%% API
+-export([start_link/5, start_link/7, close/1]).
+-export([send_msg/2, send_keepalive/1]).
+-export([rebuild_rib/1]).
+-export([find_outgoing_session/1]).
+
+%% Private API
+-export([connect_with_provider/8]).
+
+%% cowboy_sub_protocol callbacks
+-export([init/2, upgrade/4, upgrade/5, takeover/7]).
+
+%% gen_server callbacks
+-export([
+    init/1,
+    handle_call/3, handle_cast/2, handle_info/2,
+    terminate/2, code_change/3
+]).
+
+
 -record(state, {
     socket :: ssl:sslsocket(),
     socket_mode = active_once :: active_always | active_once,
@@ -137,25 +158,6 @@
     op_worker:get_env(verify_msg_before_encoding, true)
 ).
 
-%% API
--export([start_link/5, start_link/7, close/1]).
--export([send_msg/2, send_keepalive/1]).
--export([rebuild_rib/1]).
--export([find_outgoing_session/1]).
-
-%% Private API
--export([connect_with_provider/8]).
-
-%% cowboy_sub_protocol callbacks
--export([init/2, upgrade/4, upgrade/5, takeover/7]).
-
-%% gen_server callbacks
--export([
-    init/1,
-    handle_call/3, handle_cast/2, handle_info/2,
-    terminate/2, code_change/3
-]).
-
 -define(REBUILD_RIB_MSG, rebuild_rib).
 
 -define(CONNECTION_AWAIT_LOG_INTERVAL, 300). % 5 minutes
@@ -181,6 +183,8 @@
     end
 ).
 
+% NOTE: lager defaults to truncating messages at 4096 bytes
+-define(MAX_LOGGED_DATA_SIZE, 1024).
 
 %%%===================================================================
 %%% API
@@ -379,12 +383,12 @@ handle_info({Ok, Socket, Data}, #state{
             {stop, normal, State}
     catch
         throw:{error, _} = Error ->
-            ?THROTTLE_ERROR(SessId, "Protocol upgrade failed due to ~p", [Error]),
+            ?THROTTLE_ERROR(SessId, "Protocol upgrade failed~s", [?autoformat(SessId, Error)]),
             {stop, normal, State};
         Class:Reason:Stacktrace ->
             ?THROTTLE_ERROR_EXCEPTION(
                 SessId,
-                "Unexpected error during protocol upgrade", [],
+                "Unexpected error during protocol upgrade~s", [?autoformat(SessId)],
                 Class, Reason, Stacktrace
             ),
             {stop, normal, State}
@@ -664,7 +668,7 @@ open_socket_to_provider(SessId, ProviderId, Domain,
 handle_protocol_upgrade_response(#state{session_id = SessId} = State, Data) ->
     case connection_utils:verify_protocol_upgrade_response(Data) of
         false ->
-            ?THROTTLE_ERROR(SessId, "Received invalid protocol upgrade response: ~p", [Data]),
+            ?THROTTLE_ERROR(SessId, "Received invalid protocol upgrade response~s", [?autoformat(SessId, Data)]),
             {error, invalid_protocol_upgrade_response};
         true ->
             #state{
@@ -684,7 +688,7 @@ handle_protocol_upgrade_response(#state{session_id = SessId} = State, Data) ->
                 }
             },
             ok = Transport:setopts(Socket, [binary, {packet, ?PACKET_VALUE}]),
-            send_client_message(State, ClientMsg)
+            socket_send(State, ClientMsg)
     end.
 
 
@@ -711,13 +715,13 @@ handle_handshake_request(#state{peer_ip = IpAddress} = State, Data) ->
             session_id = SessId,
             rib = router:build_rib(SessId)
         },
-        send_server_message(NewState, #server_message{
+        socket_send(NewState, #server_message{
             message_body = #handshake_response{status = 'OK'}
         })
     catch Type:Reason ->
         ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
         ErrorMsg = connection_auth:get_handshake_error_msg(Reason),
-        send_server_message(State, ErrorMsg),
+        socket_send(State, ErrorMsg),
         {error, handshake_failed}
     end.
 
@@ -729,31 +733,34 @@ handle_handshake_response(#state{
     peer_id = ProviderId,
     connection_manager = ConnManager
 } = State, Data) ->
+    ProviderInfo = provider_logic:to_printable(ProviderId),
     try clproto_serializer:deserialize_server_message(Data, SessId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
-            ?info("Successfully connected to provider ~ts", [
-                provider_logic:to_printable(ProviderId)
-            ]),
+            ?info("Successfully connected to provider ~ts", [ProviderInfo]),
             outgoing_connection_manager:report_successful_handshake(ConnManager),
             {ok, State};
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
             ?THROTTLE_ERROR(
                 SessId,
-                "Handshake refused by provider ~ts due to ~p, closing connection.",
-                [provider_logic:to_printable(ProviderId), Error]
+                "Handshake refused by peer provider, closing connection~s",
+                [?autoformat(ProviderInfo, Error)]
             ),
             {error, handshake_failed};
-        _ ->
+        Response ->
             ?THROTTLE_ERROR(
                 SessId,
-                "Received invalid handshake response from provider ~ts, closing connection.",
-                [provider_logic:to_printable(ProviderId)]
+                "Received invalid handshake response from peer provider, closing connection~s",
+                [?autoformat(ProviderInfo, Response)]
             ),
             {error, handshake_failed}
-    catch _:Error ->
-        ?THROTTLE_ERROR(SessId, "Handshake response from Provider ~ts decoding error: ~p", [
-            provider_logic:to_printable(ProviderId), Error
-        ]),
+    catch Class:Reason:Stacktrace ->
+        DataSample = str_utils:truncate_overflow(Data, ?MAX_LOGGED_DATA_SIZE),
+        ?THROTTLE_ERROR_EXCEPTION(
+            SessId,
+            "Error decoding handshake response from peer provider~s",
+            [?autoformat(ProviderInfo, DataSample)],
+            Class, Reason, Stacktrace
+        ),
         {error, handshake_failed}
     end.
 
@@ -781,9 +788,12 @@ handle_client_message(#state{
             ok ->
                 route_message(State, Msg);
             Error ->
-                ?THROTTLE_ERROR(SessId, "Failed to create proxied session for ~p due to: ~p", [
-                    clproto_utils:msg_to_string(Msg), Error
-                ]),
+                MsgStr = clproto_utils:msg_to_string(Msg),
+                ?THROTTLE_ERROR(
+                    SessId,
+                    "Failed to create proxied session while handling message~s",
+                    [?autoformat(Error, MsgStr)]
+                ),
                 % Respond with eacces error if request has msg_id
                 % (msg_id means that peer awaits answer)
                 case Msg#client_message.message_id of
@@ -799,23 +809,28 @@ handle_client_message(#state{
         end
     catch
         throw:{translation_failed, Reason, undefined} ->
-            ?THROTTLE_ERROR(SessId, "Client message decoding error - ~p", [Reason]),
+            ?THROTTLE_ERROR(SessId, "Client message deserialization error~s", [?autoformat(SessId, Reason)]),
             {ok, State};
         throw:{translation_failed, Reason, MsgId} ->
             Code = case Reason of
                 {unrecognized_message, Message} ->
-                    ?THROTTLE_WARNING(SessId, "Unrecognized client message ~p", [Message]),
+                    ?THROTTLE_WARNING(SessId, "Unrecognized client message~s", [?autoformat(SessId, Message)]),
                     ?EBADMSG;
                 _ ->
-                    ?THROTTLE_ERROR(SessId, "Client message decoding error - ~p", [Reason]),
+                    ?THROTTLE_ERROR(SessId, "Client message deserialization error~s", [?autoformat(SessId, Reason)]),
                     ?EINVAL
             end,
             send_response(State, #server_message{
                 message_id = MsgId,
                 message_body = #status{code = Code}
             });
-        Type:Reason ->
-            ?THROTTLE_ERROR(SessId, "Client message handling error - ~p:~p", [Type, Reason]),
+        Class:Reason:Stacktrace ->
+            DataSample = str_utils:truncate_overflow(Data, 1000),
+            ?THROTTLE_ERROR_EXCEPTION(
+                SessId,
+                "Client message handling error~s", [?autoformat(SessId, DataSample)],
+                Class, Reason, Stacktrace
+            ),
             {ok, State}
     end.
 
@@ -826,8 +841,9 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_server_message(Data, SessId),
         route_message(State, Msg)
-    catch Type:Error ->
-        ?THROTTLE_ERROR(SessId, "Server message handling error - ~p:~p", [Type, Error]),
+    catch Class:Reason:Stacktrace ->
+        DataSample = str_utils:truncate_overflow(Data, ?MAX_LOGGED_DATA_SIZE),
+        ?THROTTLE_ERROR_EXCEPTION(SessId, ?autoformat(SessId, DataSample), [], Class, Reason, Stacktrace),
         {ok, State}
     end.
 
@@ -841,10 +857,9 @@ route_message(#state{session_id = SessId, rib = RIB} = State, Msg) ->
             {ok, State};
         {ok, ServerMsg} ->
             send_response(State, ServerMsg);
-        {error, Reason} ->
-            ?THROTTLE_ERROR(SessId, "Message ~s handling error: ~p", [
-                clproto_utils:msg_to_string(Msg), Reason
-            ]),
+        {error, _} = Error ->
+            MsgStr = clproto_utils:msg_to_string(Msg),
+            ?THROTTLE_ERROR(SessId, "Message routing error~s", [?autoformat(Error, MsgStr)]),
             {ok, State}
     end.
 
@@ -853,7 +868,7 @@ route_message(#state{session_id = SessId, rib = RIB} = State, Msg) ->
 -spec send_response(state(), communicator:server_message()) ->
     {ok, state()} | error().
 send_response(#state{session_id = SessId} = State, ServerMsg) ->
-    case send_server_message(State, ServerMsg) of
+    case socket_send(State, ServerMsg) of
         {ok, _NewState} = Ans ->
             Ans;
         % Serialization errors should not break ready connection
@@ -874,76 +889,65 @@ send_response(#state{session_id = SessId} = State, ServerMsg) ->
 %% @private
 -spec send_message(state(), communicator:message()) -> {ok, state()} | error().
 send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
-    send_client_message(State, Msg);
+    socket_send(State, Msg);
 send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
-    send_server_message(State, Msg);
+    socket_send(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
-    ?warning("Attempt to send msg ~s via wrong connection ~p", [
-        clproto_utils:msg_to_string(Msg), ConnType
-    ]),
+    MsgStr = clproto_utils:msg_to_string(Msg),
+    ?error("Attempt to send msg via wrong connection~s", [?autoformat(ConnType, MsgStr)]),
     {error, sending_msg_via_wrong_conn_type}.
 
 
 %% @private
--spec send_client_message(state(), communicator:client_message()) ->
-    {ok, state()} | error().
-send_client_message(#state{
-    session_id = SessId, 
-    verify_msg = VerifyMsg
-} = State, ClientMsg) ->
-    try
-        {ok, Data} = clproto_serializer:serialize_client_message(
-            ClientMsg, VerifyMsg
-        ),
-        socket_send(State, Data)
-    catch Class:Reason:Stacktrace ->
-        ?THROTTLE_ERROR_EXCEPTION(
-            SessId,
-            "Unable to serialize client_message ~s", [clproto_utils:msg_to_string(ClientMsg)],
-            Class, Reason, Stacktrace
-        ),
-        {error, serialization_failed}
-    end.
-
-
-%% @private
--spec send_server_message(state(), communicator:server_message()) ->
-    {ok, state()} | error().
-send_server_message(#state{
-    session_id = SessId, 
-    verify_msg = VerifyMsg
-} = State, ServerMsg) ->
-    try
-        {ok, Data} = clproto_serializer:serialize_server_message(
-            ServerMsg, VerifyMsg
-        ),
-        socket_send(State, Data)
-    catch Class:Reason:Stacktrace ->
-        ?THROTTLE_ERROR_EXCEPTION(
-            SessId,
-            "Unable to serialize server_message ~s", [clproto_utils:msg_to_string(ServerMsg)],
-            Class, Reason, Stacktrace
-        ),
-        {error, serialization_failed}
-    end.
-
-
-%% @private
--spec socket_send(state(), Data :: binary()) -> {ok, state()} | error().
+-spec socket_send(state(), binary() | #client_message{} | #server_message{}) -> {ok, state()} | error().
 socket_send(#state{
-    session_id = SessId, 
-    transport = Transport, 
+    session_id = SessId,
+    transport = Transport,
     socket = Socket
-} = State, Data) ->
-    case Transport:send(Socket, Data) of
-        ok ->
-            {ok, State};
-        {error, Reason} = Error ->
-            ?THROTTLE_ERROR(SessId, "Unable to send message via socket ~p due to: ~p", [
-                Socket, Reason
-            ]),
-            Error
+} = State, DataOrMsg) ->
+    case to_serialized_data(State, DataOrMsg) of
+        {error, serialization_failed} ->
+            {error, serialization_failed};
+        {ok, Data} ->
+            case Transport:send(Socket, Data) of
+                ok ->
+                    {ok, State};
+                {error, closed} ->
+                    % the connection may have closed in the meantime, no need to log
+                    {error, closed};
+                {error, _} = Error ->
+                    MsgStr = case DataOrMsg of
+                        Bin when is_binary(Bin) -> Bin;
+                        _ -> clproto_utils:msg_to_string(DataOrMsg)
+                    end,
+                    ?THROTTLE_ERROR(SessId, "Unable to send message via socket~s", [
+                        Socket, Error, MsgStr
+                    ]),
+                    Error
+            end
     end.
+
+
+%% @private
+-spec to_serialized_data(state(), binary() | #client_message{} | #server_message{}) -> {ok, binary()} | errors:error().
+to_serialized_data(_State, Binary) when is_binary(Binary) ->
+    {ok, Binary};
+to_serialized_data(#state{session_id = SessId, verify_msg = VerifyMsg}, Msg) ->
+    try
+        serialize_message_unsafe(Msg, VerifyMsg)
+    catch Class:Reason:Stacktrace ->
+        MsgStr = clproto_utils:msg_to_string(Msg),
+        ?THROTTLE_ERROR_EXCEPTION(SessId, "Unable to serialize message: ~s", [MsgStr], Class, Reason, Stacktrace),
+        {error, serialization_failed}
+    end.
+
+
+%% @private
+-spec serialize_message_unsafe(state(), #client_message{} | #server_message{}) -> {ok, binary()} | errors:error().
+serialize_message_unsafe(#state{verify_msg = VerifyMsg}, #client_message{} = Msg) ->
+    clproto_serializer:serialize_client_message(Msg, VerifyMsg);
+serialize_message_unsafe(#state{verify_msg = VerifyMsg}, #server_message{} = Msg) ->
+    clproto_serializer:serialize_server_message(Msg, VerifyMsg).
 
 
 %%--------------------------------------------------------------------
@@ -992,10 +996,12 @@ call_connection_process(ConnPid, Msg) ->
                 ConnPid, maybe_stringify_msg(Msg)
             ]),
             ?ERROR_TIMEOUT;
-        Type:Reason ->
-            ?error("Connection ~p cannot send msg ~s due to ~p:~p", [
-                ConnPid, maybe_stringify_msg(Msg), Type, Reason
-            ]),
+        Class:Reason:Stacktrace ->
+            MsgStr = maybe_stringify_msg(Msg),
+            ?error_exception(
+                "Cannot send message via the connection process~s", [?autoformat(ConnPid, MsgStr)],
+                Class, Reason, Stacktrace
+            ),
             {error, Reason}
     end.
 

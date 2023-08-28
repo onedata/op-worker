@@ -29,7 +29,6 @@
 %%%===================================================================
 
 
-%% @private
 -spec handle(
     Type :: atom(),
     Reason :: term(),
@@ -38,30 +37,41 @@
     Request :: term()
 ) ->
     errors:error().
-handle(throw, Reason, _Stacktrace, _SessionId, _Request) ->
-    infer_error(Reason);
-
-handle(Class, Reason, Stacktrace, SessionId, Request) ->
-    Error = infer_error(Reason),
-
-    {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
-        true ->
-            MF = "Cannot process request:~n~p~nfor session: ~p~ndue to: ~p",
-            FA = [lager:pr(Request, ?MODULE), SessionId, Error],
-            {MF, FA};
+handle(Class, Reason, Stacktrace, SessionId, RequestTerm) ->
+    case infer_error(Reason) of
+        {true, Error} when Class =:= throw ->
+            % do not log at all when the error was thrown as execution flow control
+            Error;
+        {true, Error} ->
+            % log on debug level when it was possible to infer the error, but it happened
+            % as a result of an exception
+            ?debug_exception(format_log_message(SessionId, RequestTerm), Class, Reason, Stacktrace),
+            Error;
         false ->
-            MF = "Cannot process request for session: ~p~ndue to: ~p",
-            FA = [SessionId, Error],
-            {MF, FA}
+            % the error is not an errors:error() - log a full exception with stacktrace
+            ?examine_exception(format_log_message(SessionId, RequestTerm), Class, Reason, Stacktrace)
+    end.
+
+
+%%%===================================================================
+%%% Internals
+%%%===================================================================
+
+%% @private
+-spec format_log_message(session:id(), Request :: term()) -> {true, errors:error()} | false.
+format_log_message(SessionId, RequestTerm) ->
+    AutoformattedDetails = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
+        true ->
+            Request = lager:pr(RequestTerm, ?MODULE),
+            ?autoformat([SessionId, Request]);
+        false ->
+            ?autoformat([SessionId])
     end,
-
-    ?debug_exception(LogFormat, LogFormatArgs, Class, Reason, Stacktrace),
-
-    Error.
+    str_utils:format("Cannot process request~s", [AutoformattedDetails]).
 
 
 %% @private
--spec infer_error(term()) -> errors:error().
+-spec infer_error(term()) -> {true, errors:error()} | false.
 infer_error({badmatch, Error}) ->
     infer_error(Error);
 
@@ -69,12 +79,15 @@ infer_error({case_clause, Error}) ->
     infer_error(Error);
 
 infer_error({error, Reason} = Error) ->
-    case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true -> ?ERROR_POSIX(Reason);
-        false -> Error
+    case errors:is_posix_code(Reason) of
+        true ->
+            {true, ?ERROR_POSIX(Reason)};
+        false ->
+            case errors:is_known_error(Error) of
+                true -> {true, Error};
+                false -> false
+            end
     end;
 
-infer_error(Reason) ->
-    % wrap in a proper term in hope it's a standardized error;
-    % if not, it will finally generate a translation error log and return an internal server error
-    infer_error({error, Reason}).
+infer_error(_) ->
+    false.

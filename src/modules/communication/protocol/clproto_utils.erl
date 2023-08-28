@@ -59,14 +59,11 @@ fill_effective_session_info(Msg, SessionId) ->
 %% env variable is set whole msg is printed. Otherwise only relevant fields.
 %% @end
 %%--------------------------------------------------------------------
--spec msg_to_string(message()) -> string().
-msg_to_string(Request) ->
-    StringifyWholeMsg = application:get_env(?APP_NAME,
-        log_whole_messages_on_errors, false
-    ),
-    case StringifyWholeMsg of
-        true -> str_utils:format("~p", [Request]);
-        _ -> stringify_only_relevant_info(Request)
+-spec msg_to_string(message()) -> binary().
+msg_to_string(Msg) ->
+    case op_worker:get_env(log_whole_messages_on_errors, false) of
+        true -> str_utils:format_bin("~p", [Msg]);
+        _ -> stringify_only_relevant_info(Msg)
     end.
 
 
@@ -84,13 +81,9 @@ stringify_only_relevant_info(#server_message{
     message_body = MsgBody,
     effective_session_id = EffSessionId
 }) ->
-    str_utils:format(
-        "ServerMessage{
-            message_id = ~p,
-            effective_session_id = ~p,
-            message_stream = ~p,
-            message_body = ~p#{...}
-        }", [MsgId, EffSessionId, MsgStream, element(1, MsgBody)]
+    str_utils:format_bin(
+        "ServerMessage{id = ~s, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
+        [MsgId, EffSessionId, MsgStream, element(1, MsgBody)]
     );
 stringify_only_relevant_info(#client_message{
     message_id = MsgId,
@@ -99,12 +92,7 @@ stringify_only_relevant_info(#client_message{
     message_stream = MsgStream,
     message_body = MsgBody
 }) ->
-    str_utils:format(
-        "ClientMessage{
-            message_id = ~p,
-            session_id = ~p,
-            effective_session_id = ~p,
-            message_stream = ~p,
-            message_body = ~p#{...}
-        }", [MsgId, SessionId, EffSessionId, MsgStream, element(1, MsgBody)]
+    str_utils:format_bin(
+        "ClientMessage{id = ~s, sess_id = ~s, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
+        [MsgId, SessionId, EffSessionId, MsgStream, element(1, MsgBody)]
     ).
