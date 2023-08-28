@@ -115,28 +115,28 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
                 ?req(Worker, SessId, #resolve_guid{path = Path})
             ),
 
-        {OptionalAttrs, FullyReplicated} = case {CheckReplicationStatus, Type} of
-            {true, ?REGULAR_FILE_TYPE} -> {[replication_status], true};
-            {true, _} -> {[replication_status], undefined};
-            _ -> {[], undefined}
+        {Attrs, FullyReplicated} = case {CheckReplicationStatus, Type} of
+            {true, ?REGULAR_FILE_TYPE} -> {?BASIC_ATTRS ++ [is_fully_replicated], true};
+            {true, _} -> {?BASIC_ATTRS ++ [is_fully_replicated], undefined};
+            _ -> {?BASIC_ATTRS, undefined}
         end,
 
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
             fuse_response = #file_attr{
                 guid = Guid, name = Name, type = Type, mode = Mode,
-                uid = UID, parent_guid = ParentGuid, fully_replicated = FullyReplicated
+                uid  = UID, parent_guid = ParentGuid, is_fully_replicated = FullyReplicated
             }
-        }, ?file_req(Worker, SessId, Guid, #get_file_attr{optional_attrs = OptionalAttrs})),
+        }, ?file_req(Worker, SessId, Guid, #get_file_attr{attributes = Attrs})),
 
         case ParentGuid =/= undefined of
             true ->
                 ?assertMatch(#fuse_response{status = #status{code = ?OK},
                     fuse_response = #file_attr{
                         name = Name, type = Type, mode = Mode,
-                        uid = UID, parent_guid = ParentGuid, fully_replicated = FullyReplicated
+                        uid  = UID, parent_guid = ParentGuid, is_fully_replicated = FullyReplicated
                     }
                 }, ?file_req(Worker, SessId, ParentGuid,
-                    #get_child_attr{name = Name, optional_attrs = OptionalAttrs}));
+                    #get_child_attr{name = Name, attributes = Attrs}));
             false ->
                 ok
         end
@@ -170,15 +170,15 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
             #get_file_children_attrs{
                 listing_options = #{offset => 0, limit => 1000, tune_for_large_continuous_listing => false}, 
-                optional_attrs = [replication_status]
+                attributes = [replication_status]
             })),
     ?assertMatch([_ | _], ChildrenAttrs),
 
     lists:foreach(fun
         (#file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs) ->
-            ?assertMatch(#file_attr{fully_replicated = true}, FileAttrs);
+            ?assertMatch(#file_attr{is_fully_replicated = true}, FileAttrs);
         (FileAttrs) ->
-            ?assertMatch(#file_attr{fully_replicated = undefined}, FileAttrs)
+            ?assertMatch(#file_attr{is_fully_replicated = undefined}, FileAttrs)
     end, ChildrenAttrs),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {path, FilePath})).
@@ -235,9 +235,9 @@ fslogic_get_file_children_attrs_test(Config) ->
                                 owner_id = OwnerID
                             } = A1,
                             #file_attr{
-                                guid = Guid2, name = Name2, type = Type2, mode = Mode2,
-                                uid = UID2, parent_guid = ParentGuid2, provider_id = ProviderID2,
-                                owner_id = OwnerID2, fully_replicated = ReplicationStatus
+                                guid     = Guid2, name = Name2, type = Type2, mode = Mode2,
+                                uid      = UID2, parent_guid = ParentGuid2, provider_id = ProviderID2,
+                                owner_id = OwnerID2, is_fully_replicated = ReplicationStatus
                             } = A2,
 
                             ?assertMatch(Guid, Guid2),
@@ -410,8 +410,9 @@ fslogic_read_dir_test(Config) ->
                     fun(OffsetStep) ->
                         {_, Names} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
-                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{
-                                    listing_options = #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}
+                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children_attrs{
+                                    listing_options = #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false},
+                                    attributes = [name, guid]
                                 }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
@@ -590,8 +591,9 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?file_req(Worker, SessId, Guid, #get_file_children{
-                            listing_options = #{offset => 0, tune_for_large_continuous_listing => false}
+                        ?file_req(Worker, SessId, Guid, #get_file_children_attrs{
+                            listing_options = #{offset => 0, tune_for_large_continuous_listing => false},
+                            attributes = [name, guid]
                         }))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->

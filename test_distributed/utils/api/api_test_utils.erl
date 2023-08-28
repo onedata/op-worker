@@ -15,11 +15,13 @@
 -include("api_test_runner.hrl").
 -include("api_file_test_utils.hrl").
 -include("modules/dataset/dataset.hrl").
--include("modules/fslogic/file_details.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("test_utils/initializer.hrl").
+
 
 
 -export([
@@ -49,8 +51,7 @@
     randomly_create_share/3,
 
     guids_to_object_ids/1,
-    file_details_to_gs_json/2,
-    file_attrs_to_json/2
+    file_attr_to_json/4
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
@@ -140,7 +141,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
     boolean(),
     file_meta:name()
 ) ->
-    {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
+    {file_type(), file_meta:path(), file_id:file_guid(), #file_attr{}}.
 create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileName) ->
     FileType = randomly_choose_file_type_for_test(false),
     create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName).
@@ -152,7 +153,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     file_type(),
     file_meta:name()
 ) ->
-    {file_type(), file_meta:path(), file_id:file_guid(), #file_details{}}.
+    {file_type(), file_meta:path(), file_id:file_guid(), #file_attr{}}.
 create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, FileType, FileName) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -179,9 +180,12 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
         <<"dir">> ->
             0
     end,
-    {ok, FileAttrs} = ?assertMatch(
+    
+    file_test_utils:await_sync(Nodes, FileGuid),
+    
+    {ok, FileAttr} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
-        file_test_utils:get_attrs(P2Node, FileGuid),
+        lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), ?API_ATTRS),
         ?ATTEMPTS
     ),
 
@@ -189,25 +193,25 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     HasMetadata = randomly_set_metadata(Nodes, FileGuid),
     HasAcl = randomly_set_acl(Nodes, FileGuid),
 
-    FileDetails = #file_details{
-        file_attr = FileAttrs,
+    FinalFileAttr = FileAttr#file_attr{
         active_permissions_type = case HasAcl of
             true -> acl;
             false -> posix
         end,
-        eff_protection_flags = ?no_flags_mask,
-        eff_dataset_protection_flags = ?no_flags_mask,
         eff_qos_membership = case {HasDirectQos, HasParentQos} of
             {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
             {true, _} -> ?DIRECT_MEMBERSHIP;
             {_, true} -> ?ANCESTOR_MEMBERSHIP;
             _ -> ?NONE_MEMBERSHIP
         end,
-        eff_dataset_membership = ?NONE_MEMBERSHIP,
+        qos_status = case HasDirectQos orelse HasParentQos of
+            true -> ?IMPOSSIBLE_QOS_STATUS;
+            false -> undefined
+        end,
         has_metadata = HasMetadata
     },
 
-    {FileType, FilePath, FileGuid, FileDetails}.
+    {FileType, FilePath, FileGuid, FinalFileAttr}.
 
 
 -spec randomly_choose_file_type_for_test() -> file_type().
@@ -379,184 +383,102 @@ guids_to_object_ids(Guids) ->
     end, Guids).
 
 
--spec file_details_to_gs_json(undefined | od_share:id(), #file_details{}) -> map().
-file_details_to_gs_json(undefined, #file_details{
-    file_attr = #file_attr{
-        guid = FileGuid,
-        parent_guid = ParentGuid,
-        name = FileName,
-        type = Type,
-        mode = Mode,
-        size = Size,
-        mtime = MTime,
-        shares = Shares,
-        owner_id = OwnerId,
-        provider_id = ProviderId,
-        nlink = LinksCount,
-        index = Index
-    },
-    active_permissions_type = ActivePermissionsType,
-    eff_protection_flags = EffProtectionFlags,
-    eff_dataset_protection_flags = EffDatasetProtectionFlags,
-    eff_qos_membership = EffQosMembership,
-    eff_dataset_membership = EffDatasetMembership,
-    has_metadata = HasMetadata,
-    recall_root_id = RecallRootId
-}) ->
-    #{
-        <<"hasMetadata">> => HasMetadata,
-        <<"guid">> => FileGuid,
-        <<"name">> => FileName,
-        <<"index">> => file_listing:encode_index(Index),
-        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
-        <<"effDatasetProtectionFlags">> => file_meta:protection_flags_to_json(EffDatasetProtectionFlags),
-        % For space dir gs returns null as parentId instead of user root dir
-        % (gui doesn't know about user root dir)
-        <<"parentId">> => case fslogic_file_id:is_space_dir_guid(FileGuid) of
-            true -> null;
-            false -> ParentGuid
-        end,
-        <<"mtime">> => MTime,
-        <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => utils:undefined_to_null(Size),
-        <<"shares">> => Shares,
-        <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
-        <<"providerId">> => ProviderId,
-        <<"ownerId">> => OwnerId,
-        <<"effQosMembership">> => translate_membership(EffQosMembership),
-        <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
-        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount),
-        <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
-    };
-file_details_to_gs_json(ShareId, #file_details{
-    file_attr = #file_attr{
-        guid = FileGuid,
-        parent_guid = ParentGuid,
-        name = FileName,
-        type = Type,
-        mode = Mode,
-        size = Size,
-        mtime = MTime,
-        shares = Shares,
-        index = Index
-    },
-    active_permissions_type = ActivePermissionsType,
+-spec file_attr_to_json(undefined | od_share:id(), rest | gs, od_provider:id(), #file_attr{}) -> map().
+file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
+    guid = Guid, name = Name, mode = Mode, parent_guid = ParentGuid, uid = Uid, gid = Gid, atime = Atime,
+    mtime = Mtime, ctime = Ctime, type = Type, size = Size, shares = Shares, provider_id = ProviderId,
+    owner_id = OwnerId, link_count = HardlinksCount, index = Index, xattrs = Xattrs,
+    active_permissions_type = ActivePermissionsType, symlink_value = SymlinkValue,
+    conflicting_name = ConflictingName, recall_root_id = RecallRootId, eff_protection_flags = EffProtectionFlags,
+    eff_dataset_protection_flags = EffDatasetProtectionFlags, eff_dataset_membership = EffDatasetMembership,
+    eff_qos_membership = EffQosMembership, qos_status = QosStatus, archive_id = ArchiveId,
     has_metadata = HasMetadata
 }) ->
-    IsShareRoot = lists:member(ShareId, Shares),
-
-    #{
-        <<"hasMetadata">> => HasMetadata,
-        <<"guid">> => file_id:guid_to_share_guid(FileGuid, ShareId),
-        <<"name">> => FileName,
-        <<"index">> => file_listing:encode_index(Index),
-        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
-        <<"parentId">> => case IsShareRoot of
-            true -> null;
-            false -> file_id:guid_to_share_guid(ParentGuid, ShareId)
-        end,
-        <<"mtime">> => MTime,
-        <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => utils:undefined_to_null(Size),
-        <<"shares">> => case IsShareRoot of
-            true -> [ShareId];
-            false -> []
-        end,
-        <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8)
-    }.
-
-
--spec file_attrs_to_json(undefined | od_share:id(), #file_attr{}) -> map().
-file_attrs_to_json(undefined, #file_attr{
-    guid = Guid,
-    name = Name,
-    mode = Mode,
-    parent_guid = ParentGuid,
-    uid = Uid,
-    gid = Gid,
-    atime = Atime,
-    mtime = Mtime,
-    ctime = Ctime,
-    type = Type,
-    size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId,
-    nlink = HardlinksCount,
-    index = Index,
-    xattrs = Xattrs
-}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    LocalReplicationRate = case {Type, CheckingProviderId, Size} of
+        {_, _, 0} -> 1.0;
+        {?REGULAR_FILE_TYPE, ProviderId, _} -> 1.0;
+        {?DIRECTORY_TYPE, ProviderId, _} -> 1.0;
+        _ -> 0.0
+    end,
     
     BaseJson = #{
-        <<"file_id">> => ObjectId,
+        <<"fileId">> => map_file_id_for_api_type(ApiType, Guid),
         <<"name">> => Name,
-        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"parent_id">> => case ParentGuid of
-            undefined ->
-                null;
-            _ ->
-                {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
-                ParentObjectId
-        end,
-        <<"storage_user_id">> => Uid,
-        <<"storage_group_id">> => Gid,
+        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"parentId">> => map_file_id_for_api_type(ApiType, ParentGuid),
+        <<"storageUserId">> => Uid,
+        <<"storageGroupId">> => Gid,
         <<"atime">> => Atime,
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
         <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => Shares,
-        <<"provider_id">> => ProviderId,
-        <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"index">> => file_listing:encode_index(Index)
+        <<"providerId">> => ProviderId,
+        <<"ownerId">> => OwnerId,
+        <<"hardlinksCount">> => utils:undefined_to_null(HardlinksCount),
+        <<"index">> => file_listing:encode_index(Index),
+        
+        <<"hasMetadata">> => HasMetadata,
+        <<"activePermissionsType">> => case ActivePermissionsType of
+            undefined -> undefined;
+            _ -> atom_to_binary(ActivePermissionsType)
+        end,
+        % NOTE: this assumes that there were no remote file readings between creation and attrs check
+        <<"localReplicationRate">> => LocalReplicationRate,
+        <<"qosStatus">> => translate_qos_status(QosStatus),
+    
+        <<"effProtectionFlags">> => case EffProtectionFlags of
+            undefined -> undefined;
+            _ -> file_meta:protection_flags_to_json(EffProtectionFlags)
+        end,
+        <<"effDatasetProtectionFlags">> => case EffDatasetProtectionFlags of
+            undefined -> undefined;
+            _ -> file_meta:protection_flags_to_json(EffDatasetProtectionFlags)
+        end,
+        <<"effQosMembership">> => translate_membership(EffQosMembership),
+        <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
+        <<"recallRootId">> => RecallRootId,
+        <<"symlinkValue">> => SymlinkValue,
+        <<"conflictingName">> => ConflictingName,
+        <<"archiveId">> => ArchiveId
     },
-    maps:fold(fun(XattrName, XattrValue, Acc) ->
+    FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
-    end, BaseJson, Xattrs);
-file_attrs_to_json(ShareId, #file_attr{
+    end, BaseJson, utils:ensure_defined(Xattrs, #{})),
+    maps_utils:undefined_to_null(FinalJson);
+file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
     guid = FileGuid,
     parent_guid = ParentGuid,
-    name = Name,
-    type = Type,
     mode = Mode,
-    size = Size,
-    mtime = Mtime,
-    atime = Atime,
-    ctime = Ctime,
-    shares = Shares,
-    index = Index,
-    xattrs = Xattrs
-}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
+    shares = Shares
+} = FileAttr) ->
     IsShareRoot = lists:member(ShareId, Shares),
     
-    BaseJson = #{
-        <<"file_id">> => ObjectId,
-        <<"name">> => Name,
-        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
-        <<"parent_id">> => case IsShareRoot of
+    BaseJson = file_attr_to_json(undefined, ApiType, CheckingProviderId, FileAttr),
+    
+    maps:with(lists:map(fun file_attr_translator:attr_name_to_json/1, ?PUBLIC_ATTRS), BaseJson#{
+        <<"fileId">> => map_file_id_for_api_type(ApiType, file_id:guid_to_share_guid(FileGuid, ShareId)),
+        <<"parentId">> => case IsShareRoot of
             true -> null;
-            false ->
-                {ok, ParentObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(ParentGuid, ShareId)),
-                ParentObjectId
+            false -> map_file_id_for_api_type(ApiType, file_id:guid_to_share_guid(ParentGuid, ShareId))
         end,
-        <<"atime">> => Atime,
-        <<"mtime">> => Mtime,
-        <<"ctime">> => Ctime,
-        <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => utils:undefined_to_null(Size),
+        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
-        end,
-        <<"index">> => file_listing:encode_index(Index)
-    },
-    maps:fold(fun(XattrName, XattrValue, Acc) ->
-        Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
-    end, BaseJson, Xattrs).
+        end
+    }).
+
+
+-spec map_file_id_for_api_type(gs | rest, file_id:file_guid() | undefined) -> file_id:objectid() | file_id:file_guid().
+map_file_id_for_api_type(_, undefined) ->
+    null;
+map_file_id_for_api_type(gs, Guid) ->
+    Guid;
+map_file_id_for_api_type(rest, Guid) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    ObjectId.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -823,7 +745,13 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
 
 
 %% @private
+translate_membership(undefined) -> undefined;
 translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
 translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
 translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
 translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.
+
+
+%% @private
+translate_qos_status(undefined) -> undefined;
+translate_qos_status(Status) ->    atom_to_binary(Status).

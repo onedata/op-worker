@@ -28,7 +28,6 @@
     mkdir_test/1,
     get_children_test/1,
     get_children_attrs_test/1,
-    get_children_details_test/1,
     get_child_attr_test/1,
     mv_dir_test/1,
     rm_dir_test/1,
@@ -46,7 +45,6 @@
     get_file_path_test/1,
     get_file_guid_test/1,
     get_file_attr_test/1,
-    get_file_details_test/1,
     get_file_distribution_test/1,
     get_historical_dir_size_stats_test/1,
     get_file_storage_locations_test/1,
@@ -98,7 +96,6 @@ all() -> [
     mkdir_test,
     get_children_test,
     get_children_attrs_test,
-    get_children_details_test,
     get_child_attr_test,
     mv_dir_test,
     rm_dir_test,
@@ -116,7 +113,6 @@ all() -> [
     get_file_path_test,
     get_file_guid_test,
     get_file_attr_test,
-    get_file_details_test,
     get_file_distribution_test,
     get_historical_dir_size_stats_test,
     get_file_storage_locations_test,
@@ -193,10 +189,6 @@ get_children_attrs_test(Config) ->
     permissions_test_base:get_children_attrs_test(Config).
 
 
-get_children_details_test(Config) ->
-    permissions_test_base:get_children_details_test(Config).
-
-
 get_child_attr_test(Config) ->
     permissions_test_base:get_child_attr_test(Config).
 
@@ -255,10 +247,6 @@ get_file_guid_test(Config) ->
 
 get_file_attr_test(Config) ->
     permissions_test_base:get_file_attr_test(Config).
-
-
-get_file_details_test(Config) ->
-    permissions_test_base:get_file_details_test(Config).
 
 
 get_file_distribution_test(Config) ->

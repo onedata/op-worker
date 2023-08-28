@@ -344,7 +344,7 @@ build_sample_test_spec(<<"List directory files and subdirectories">>) -> #sample
         {ok, Children} = lfm_proxy:get_children(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid), 0, 100),
         ExpectedChildren = lists:map(fun({ChildGuid, ChildName}) ->
             {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
-            #{<<"file_id">> => ObjectId, <<"name">> => ChildName}
+            #{<<"fileId">> => ObjectId, <<"name">> => ChildName}
         end, Children),
         ?assertMatch(#{<<"children">> := _}, json_utils:decode(ResultBody)),
         ?assertMatch(ExpectedChildren, maps:get(<<"children">>, json_utils:decode(ResultBody)))

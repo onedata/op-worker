@@ -14,7 +14,6 @@
 
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/data_access_control.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -133,10 +132,10 @@ all() -> ?ALL([
 ).
 
 -define(assertDatasetMembership(Node, SessionId, Guid, ExpectedMembership, ExpectedProtectionFlags),
-    ?assertMatch({ok, #file_details{
+    ?assertMatch({ok, #file_attr{
         eff_dataset_membership = ExpectedMembership,
         eff_protection_flags = ExpectedProtectionFlags
-    }}, lfm_proxy:get_details(Node, SessionId, ?FILE_REF(Guid)), ?ATTEMPTS)
+    }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid), [eff_dataset_membership, eff_protection_flags]), ?ATTEMPTS)
 ).
 
 -define(assertFileEffDatasetSummary(Node, SessionId, Guid, ExpectedDirectDataset, ExpectedAncestorDatasets, ExpectedProtectionFlags),

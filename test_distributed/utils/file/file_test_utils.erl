@@ -15,6 +15,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
@@ -82,7 +83,7 @@ get_attrs(Node, SessId, FileGuid, RequestedXattrs) ->
         [] -> [];
         _ -> [{xattrs, RequestedXattrs}]
     end,
-    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), [size, replication_status, link_count] ++ XattrsOpt) of
+    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), ?ALL_ATTRS ++ XattrsOpt) of
         % File attrs are constructed from several records so it is possible that
         % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
         {ok, #file_attr{mtime = 0}} ->

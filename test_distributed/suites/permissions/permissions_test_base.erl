@@ -41,7 +41,6 @@
     mkdir_test/1,
     get_children_test/1,
     get_children_attrs_test/1,
-    get_children_details_test/1,
     get_child_attr_test/1,
     mv_dir_test/1,
     rm_dir_test/1,
@@ -59,7 +58,6 @@
     get_file_path_test/1,
     get_file_guid_test/1,
     get_file_attr_test/1,
-    get_file_details_test/1,
     get_file_distribution_test/1,
     get_historical_dir_size_stats_test/1,
     get_file_storage_locations_test/1,
@@ -720,32 +718,6 @@ get_children_attrs_test(Config) ->
     }, Config).
 
 
-get_children_details_test(Config) ->
-    [_, _, W] = ?config(op_worker_nodes, Config),
-
-    permissions_test_runner:run_scenarios(#perms_test_spec{
-        test_node = W,
-        root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
-            name = <<"dir1">>,
-            perms = [?traverse_container, ?list_container]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, #{offset => 0, limit => 100, tune_for_large_continuous_listing => false}))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
-    }, Config).
-
-
 get_child_attr_test(Config) ->
     [_, _, W] = ?config(op_worker_nodes, Config),
 
@@ -1174,27 +1146,6 @@ get_file_attr_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(lfm_proxy:stat(W, SessId, FileKey))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }, Config).
-
-
-get_file_details_test(Config) ->
-    [_, _, W] = ?config(op_worker_nodes, Config),
-
-    permissions_test_runner:run_scenarios(#perms_test_spec{
-        test_node = W,
-        root_dir_name = ?SCENARIO_NAME,
-        files = [#file{name = <<"file1">>}],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_details(W, SessId, FileKey))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}

@@ -15,7 +15,6 @@
 -include("api_file_test_utils.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -79,19 +78,17 @@ get_file_instance_test(_Config) ->
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    {FileType, _FilePath, FileGuid, #file_details{
-        file_attr = #file_attr{
-            guid = FileGuid
-        }
-    } = FileDetails} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
+    {FileType, _FilePath, FileGuid, #file_attr{
+        guid = FileGuid
+    } = FileAttrs} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
         <<"/", ?SPACE_KRK_PAR/binary>>, false, ?RANDOM_FILE_NAME()
     ),
-    ExpJsonFileDetails = file_details_to_gs_json(undefined, FileDetails),
+    ExpJsonFileDetails = fun(Node) -> file_attrs_to_gs_json(Node, undefined, FileAttrs) end,
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
-    ExpJsonSpaceDetails = file_details_to_gs_json(undefined, SpaceDetails),
+    ExpJsonSpaceDetails = fun(Node) -> file_attrs_to_gs_json(Node, undefined, SpaceDetails) end,
 
     ClientSpec = #client_spec{
         correct = [
@@ -147,24 +144,20 @@ get_shared_file_instance_test(_Config) ->
 
     SpaceOwnerSessId = oct_background:get_user_session_id(user2, krakow),
 
-    {FileType, _FilePath, FileGuid, #file_details{
-        file_attr = FileAttr = #file_attr{
+    {FileType, _FilePath, FileGuid, #file_attr{
             guid = FileGuid,
             shares = OriginalShares
-        }
-    } = OriginalFileDetails} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
+    } = OriginalFileAttrs} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
         <<"/", ?SPACE_KRK_PAR/binary>>, false, ?RANDOM_FILE_NAME()
     ),
 
     FileShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, FileGuid),
     FileShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, FileGuid),
 
-    FileDetailsWithShares = OriginalFileDetails#file_details{
-        file_attr = FileAttr#file_attr{shares = [FileShareId2, FileShareId1 | OriginalShares]}
-    },
+    FileDetailsWithShares = OriginalFileAttrs#file_attr{shares = [FileShareId2, FileShareId1 | OriginalShares]},
 
     ShareRootFileGuid = file_id:guid_to_share_guid(FileGuid, FileShareId1),
-    ExpJsonShareRootFileDetails = file_details_to_gs_json(FileShareId1, FileDetailsWithShares),
+    ExpJsonShareRootFileDetails = fun(Node) -> file_attrs_to_gs_json(Node, FileShareId1, FileDetailsWithShares) end,
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
@@ -172,10 +165,10 @@ get_shared_file_instance_test(_Config) ->
     ShareSpaceGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
 
     ShareSpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
-    ExpJsonShareSpaceDetails = file_details_to_gs_json(SpaceShareId, ShareSpaceDetails),
+    ExpJsonShareSpaceDetails = fun(Node) -> file_attrs_to_gs_json(Node, SpaceShareId, ShareSpaceDetails) end,
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
-    ExpJsonShareFileDetails = file_details_to_gs_json(SpaceShareId, FileDetailsWithShares),
+    ExpJsonShareFileDetails = fun(Node) -> file_attrs_to_gs_json(Node, SpaceShareId, FileDetailsWithShares) end,
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
@@ -243,12 +236,11 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
 
 %% @private
--spec file_details_to_gs_json(undefined | od_share:id(), #file_details{}) -> map().
-file_details_to_gs_json(ShareId, #file_details{file_attr = #file_attr{
-    guid = FileGuid
-}} = FileDetails) ->
-
-    JsonFileDetails = api_test_utils:file_details_to_gs_json(ShareId, FileDetails),
+-spec file_attrs_to_gs_json(node(), undefined | od_share:id(), #file_attr{}) -> map().
+file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttrs) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    
+    JsonFileDetails = api_test_utils:file_attr_to_json(ShareId, ProviderId, FileAttrs),
     JsonFileDetails#{
         <<"gri">> => gri:serialize(#gri{
             type = op_file,
@@ -278,25 +270,22 @@ build_get_instance_prepare_gs_args_fun(FileGuid, Scope) ->
 
 
 %% @private
--spec build_get_instance_validate_gs_call_fun(ExpJsonDetails :: map()) ->
+-spec build_get_instance_validate_gs_call_fun(fun((node()) -> ExpJsonDetails :: map())) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_instance_validate_gs_call_fun(ExpJsonDetails) ->
-    fun(_TestCtx, Result) ->
-        ?assertEqual({ok, ExpJsonDetails}, Result)
+build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
+    fun(#api_test_ctx{node = Node}, Result) ->
+        ?assertEqual({ok, ExpJsonDetailsFun(Node)}, Result)
     end.
 
 
 %% @private
--spec get_space_dir_details(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_details{}.
+-spec get_space_dir_details(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_attr{}.
 get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
     {ok, SpaceAttrs} = ?assertMatch(
         {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
     ),
-    #file_details{
-        file_attr = SpaceAttrs#file_attr{
-            name = SpaceName, 
-            index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
-        },
+    SpaceAttrs#file_attr{
+        name = SpaceName,
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,
