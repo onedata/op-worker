@@ -919,6 +919,8 @@ send_server_message(#state{
         ),
         socket_send(State, Data)
     catch Class:Reason:Stacktrace ->
+        %% @TODO to sobie na razie niech zostanie dopóki się pr nie skończy i wszystkie testy akpceptacyjne nie przemielą, na wszelki wypadek jakby jakiś błąd jednak jeszcze poleciał
+        ?critical("ble: ~p", [ServerMsg]), % fixme
         ?THROTTLE_ERROR_EXCEPTION(
             SessId,
             "Unable to serialize server_message ~s", [clproto_utils:msg_to_string(ServerMsg)],
