@@ -51,7 +51,6 @@ create_share(UserCtx, FileCtx0, Name, Description) ->
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
     ok | no_return().
 remove_share(UserCtx, FileCtx, ShareId) ->
-    data_constraints:assert_not_readonly_mode(UserCtx),
     remove_share_internal(UserCtx, FileCtx, ShareId).
 
 
