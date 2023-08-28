@@ -601,11 +601,10 @@ infer_oneclient_io_mode(AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionEnv = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
     SpaceId = atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
     {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-    HelperName = storage:get_helper_name(StorageId),
 
-    case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
-        true -> <<"--force-proxy-io">>;
-        false -> <<"--force-direct-io">>
+    case storage:get_helper_name(StorageId) of
+        ?POSIX_HELPER_NAME -> <<"--force-proxy-io">>;
+        _ -> <<"--force-direct-io">>
     end.
 
 
