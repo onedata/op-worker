@@ -206,8 +206,11 @@ register_release(FileCtx, SessId, Count) ->
 %%--------------------------------------------------------------------
 -spec mark_to_remove(file_ctx:ctx(), removal_status()) -> ok | {error, term()}.
 mark_to_remove(FileCtx, RemovalStatus) ->
-    Diff = fun(Handle = #file_handles{}) ->
-        {ok, Handle#file_handles{removal_status = RemovalStatus}}
+    Diff = fun
+        (Handle = #file_handles{removal_status = ?NOT_REMOVED}) ->
+            {ok, Handle#file_handles{removal_status = RemovalStatus}};
+        (_) ->
+            {error, already_removed}
     end,
     case datastore_model:update(?CTX, file_ctx:get_referenced_uuid_const(FileCtx), Diff) of
         {ok, _} -> ok;

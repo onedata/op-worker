@@ -304,7 +304,7 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     ?assertMatch({ok, _},
         lfm_proxy:make_link(Creator, CreatorSessId, ?FILE_REF(File9Guid), ?FILE_REF(Dir3Guid), generator:gen_name())),
 
-    % Note - list of tuples describe {INodesExpectedCount, LinksExpectedCount} or 
+    % Note - list of tuples describe {INodesExpectedCount, LinksExpectedCount} or
     %        {INodesExpectedCount, LinksExpectedCount, DirExpectedCount} if dir contains subdirectories
     veryfy_hardlinks(Config, CheckSelectors, DirGuids3, [{1, 2}, {1, 1}, {0, 1}, {0, 0}], FileSize),
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir2Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),

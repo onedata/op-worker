@@ -252,11 +252,17 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     ok = remove_file(FileCtx, UserCtx, false, ?SPEC(?TWO_STEP_DEL_INIT, DocsDeletionScope)),
     {HandlingMethod, FileCtx2} = fslogic_delete:get_open_file_handling_method(FileCtx),
     FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DocsDeletionScope, HandlingMethod),
+
     RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
-    ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
-    dir_size_stats:on_opened_file_delete(FileCtx3),
+    case file_handles:mark_to_remove(FileCtx3, RemovalStatus) of
+        ok ->
+            dir_size_stats:on_opened_file_delete(FileCtx3);
+        {error, already_removed} ->
+            ok
+    end,
+
     % Check once more to prevent race with last handle being closed
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
     case file_handles:is_file_opened(FileUuid) of
         true ->
             ok;
