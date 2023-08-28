@@ -17,7 +17,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/fslogic/file_details.hrl").
 
 -define(AUTO_HELPER_MODE, 'AUTO').
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
@@ -29,18 +28,15 @@
 }).
 
 -record(get_file_attr, {
-    optional_attrs = [] :: [attr_req:optional_attr()]
+    attributes = [] :: [attr_req:attribute()]
 }).
 
 -record(get_file_references, {
 }).
 
--record(get_file_details, {
-}).
-
 -record(get_child_attr, {
     name :: file_meta:name(),
-    optional_attrs = [] :: [attr_req:optional_attr()]
+    attributes = [] :: [attr_req:attribute()]
 }).
 
 -record(get_file_children, {
@@ -49,11 +45,7 @@
 
 -record(get_file_children_attrs, {
     listing_options :: file_listing:options(),
-    optional_attrs = [] :: [attr_req:optional_attr()]
-}).
-
--record(get_file_children_details, {
-    listing_options :: file_listing:options()
+    attributes = [] :: [attr_req:attribute()]
 }).
 
 -record(create_dir, {
@@ -149,6 +141,11 @@
     priority :: non_neg_integer()
 }).
 
+-record(xattr, {
+    name :: binary(),
+    value :: term()
+}).
+
 -record(get_xattr, {
     name :: custom_metadata:name(),
     inherited = false :: boolean()
@@ -179,7 +176,7 @@
 
 -record(get_file_attr_by_path, {
     path :: file_meta:path(),
-    optional_attrs :: [attr_req:optional_attr()]
+    attributes = [] :: [attr_req:attribute()]
 }).
 
 -record(create_path, {
@@ -198,13 +195,12 @@
 
 -record(get_recursive_file_list, {
     listing_options :: dir_req:recursive_listing_opts(),
-    optional_attrs = [] :: [attr_req:optional_attr()]
+    attributes = [] :: [attr_req:attribute()]
 }).
 
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
-    #get_file_details{} | #get_file_children_details{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
     #update_times{} | #change_mode{} |
     #rename{} | #create_file{} | #make_file{} |
@@ -324,11 +320,6 @@
     pagination_token :: file_listing:pagination_token()
 }).
 
--record(file_children_details, {
-    child_details :: [#file_details{}],
-    pagination_token :: file_listing:pagination_token()
-}).
-
 -record(helper_arg, {
     key :: binary(),
     value :: binary()
@@ -428,7 +419,7 @@
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #recursive_listing_result{} | 
-    #file_opened_extended{} | #file_details{} | #file_children_details{} | #fs_stats{} | #symlink{} | 
+    #file_opened_extended{} | #fs_stats{} | #symlink{} |
     #multipart_uploads{} | #multipart_upload{} | #multipart_parts{} |
     undefined.
 

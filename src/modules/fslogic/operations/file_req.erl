@@ -290,9 +290,10 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
-            name_conflicts_resolution_policy => allow_name_conflicts
+            name_conflicts_resolution_policy => allow_name_conflicts,
+            attributes => ?BASIC_ATTRS
         }),
-        FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
+        FileAttr2 = FileAttr#file_attr{size = 0, is_fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         dir_size_stats:report_file_created(?REGULAR_FILE_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
         #fuse_response{
@@ -385,9 +386,10 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
-            name_conflicts_resolution_policy => allow_name_conflicts
+            name_conflicts_resolution_policy => allow_name_conflicts,
+            attributes => ?BASIC_ATTRS
         }),
-        FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
+        FileAttr2 = FileAttr#file_attr{size = 0, is_fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         dir_size_stats:report_file_created(?REGULAR_FILE_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
         Ans#fuse_response{fuse_response = FileAttr2}
@@ -428,7 +430,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     name_conflicts_resolution_policy => allow_name_conflicts,
-                    include_optional_attrs => [size, replication_status]
+                    attributes => ?BASIC_ATTRS ++ [size, is_fully_replicated]
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
                 dir_size_stats:report_file_created(?LINK_TYPE, file_ctx:get_logical_guid_const(TargetParentFileCtx3)),
@@ -467,7 +469,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     name_conflicts_resolution_policy => allow_name_conflicts,
-                    include_optional_attrs => [size, replication_status]
+                    attributes => ?BASIC_ATTRS ++ [size, is_fully_replicated]
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
                 dir_size_stats:report_file_created(?SYMLINK_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),

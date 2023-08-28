@@ -15,7 +15,6 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/data_distribution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -37,16 +36,11 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = children_details, scope = Scope}, {ChildrenDetails, IsLast}) ->
+translate_value(#gri{aspect = children}, {ChildrenAttrsJson, IsLast, _PaginationToken}) ->
     #{
-        <<"children">> => lists:map(fun(ChildDetails) ->
-            translate_file_details(ChildDetails, Scope)
-        end, ChildrenDetails),
+        <<"children">> => lists:map(fun map_file_attr_fields_for_gui/1, ChildrenAttrsJson),
         <<"isLast">> => IsLast
     };
-
-translate_value(#gri{aspect = attrs}, Attrs) ->
-    #{<<"attributes">> => Attrs};
 
 translate_value(#gri{aspect = As}, Metadata) when
     As =:= xattrs;
@@ -75,8 +69,8 @@ translate_value(#gri{aspect = {dir_size_stats_collection, _}}, TSBrowseResult) -
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{aspect = instance, scope = Scope}, FileDetails) ->
-    translate_file_details(FileDetails, Scope);
+translate_resource(#gri{aspect = instance}, FileAttrsJson) ->
+    #{<<"attributes">> => map_file_attr_fields_for_gui(FileAttrsJson)};
 
 translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
     data_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
@@ -106,8 +100,8 @@ translate_resource(#gri{aspect = hardlinks, scope = private}, References) ->
 translate_resource(#gri{aspect = {hardlinks, _}, scope = private}, Result) ->
     Result;
 
-translate_resource(#gri{aspect = symlink_target, scope = Scope}, FileDetails) ->
-    translate_file_details(FileDetails, Scope);
+translate_resource(#gri{aspect = symlink_target}, FileAttrsJson) ->
+    map_file_attr_fields_for_gui(FileAttrsJson);
 
 translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
     #{
@@ -166,94 +160,6 @@ translate_dataset_summary(#file_eff_dataset_summary{
 %%% Internal functions
 %%%===================================================================
 
-
-%% @private
--spec translate_file_details(#file_details{}, gri:scope()) -> map().
-translate_file_details(#file_details{
-    has_metadata = HasMetadata,
-    eff_qos_membership = EffQosMembership,
-    active_permissions_type = ActivePermissionsType,
-    eff_dataset_membership = EffDatasetMembership,
-    eff_protection_flags = EffProtectionFlags,
-    eff_dataset_protection_flags = EffDatasetProtectionFlags,
-    recall_root_id = RecallRootId,
-    symlink_value = SymlinkValue,
-    file_attr = #file_attr{
-        guid = FileGuid,
-        name = FileName,
-        mode = Mode,
-        parent_guid = ParentGuid,
-        mtime = MTime,
-        type = TypeAttr,
-        size = SizeAttr,
-        shares = Shares,
-        provider_id = ProviderId,
-        owner_id = OwnerId,
-        nlink = NLink,
-        index = ListingIndex
-    },
-    conflicting_name = ConflictingName
-}, Scope) ->
-    PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-    {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"DIR">>, utils:undefined_to_null(SizeAttr)};
-        ?REGULAR_FILE_TYPE -> {<<"REG">>, SizeAttr};
-        ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
-    end,
-    IsRootDir = case file_id:guid_to_share_id(FileGuid) of
-        undefined -> fslogic_file_id:is_space_dir_guid(FileGuid);
-        ShareId -> lists:member(ShareId, Shares)
-    end,
-    ParentId = case IsRootDir of
-        true -> null;
-        false -> ParentGuid
-    end,
-    BasicPublicFields = #{
-        <<"hasMetadata">> => HasMetadata,
-        <<"guid">> => FileGuid,
-        <<"name">> => FileName,
-        <<"index">> => file_listing:encode_index(ListingIndex),
-        <<"posixPermissions">> => PosixPerms,
-        <<"parentId">> => ParentId,
-        <<"mtime">> => MTime,
-        <<"type">> => Type,
-        <<"size">> => Size,
-        <<"shares">> => Shares,
-        <<"activePermissionsType">> => ActivePermissionsType
-    },
-    PublicFields = case TypeAttr of
-        ?SYMLINK_TYPE ->
-            BasicPublicFields#{<<"targetPath">> => SymlinkValue};
-        _ ->
-            BasicPublicFields
-    end,
-    PublicFields2 = maps_utils:put_if_defined(PublicFields, <<"archiveId">>, 
-        archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(FileGuid))),
-    PublicFields3 = maps_utils:put_if_defined(PublicFields2, <<"conflictingName">>, ConflictingName),
-    case {Scope, EffQosMembership} of
-        {public, _} ->
-            PublicFields3;
-        {private, undefined} -> % all or none effective fields are undefined
-            PublicFields3#{
-                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
-                <<"effProtectionFlags">> => [],
-                <<"providerId">> => ProviderId,
-                <<"ownerId">> => OwnerId
-            };
-        {private, _} ->
-            PublicFields3#{
-                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
-                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
-                <<"effDatasetProtectionFlags">> => file_meta:protection_flags_to_json(EffDatasetProtectionFlags),
-                <<"providerId">> => ProviderId,
-                <<"ownerId">> => OwnerId,
-                <<"effQosMembership">> => translate_membership(EffQosMembership),
-                <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
-                <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
-            }
-    end.
-
-
 %% @private
 -spec translate_archive_recall_details(archive_recall:record()) -> map().
 translate_archive_recall_details(#archive_recall_details{
@@ -284,8 +190,26 @@ translate_archive_recall_details(#archive_recall_details{
 
 
 %% @private
--spec translate_membership(file_qos:membership() | dataset:membership()) -> binary().
-translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
-translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
-translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
-translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.
+-spec map_file_attr_fields_for_gui(json_utils:json_map()) -> json_utils:json_map().
+map_file_attr_fields_for_gui(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
+    map_file_attr_parent_for_gui(FileAttrJson#{<<"fileId">> => ensure_guid(ObjectId)});
+map_file_attr_fields_for_gui(FileAttrJson) ->
+    map_file_attr_parent_for_gui(FileAttrJson).
+
+
+%% @private
+-spec map_file_attr_parent_for_gui(json_utils:json_map()) -> json_utils:json_map().
+map_file_attr_parent_for_gui(#{<<"parentId">> := null} = FileAttrJson) ->
+    FileAttrJson;
+map_file_attr_parent_for_gui(#{<<"parentId">> := ParentObjectId} = FileAttrJson) ->
+    FileAttrJson#{<<"parentId">> => ensure_guid(ParentObjectId)};
+map_file_attr_parent_for_gui(FileAttrJson) ->
+    FileAttrJson.
+
+
+%% @private
+-spec ensure_guid(null | file_id:objectid()) -> null | file_id:file_guid().
+ensure_guid(null) -> null;
+ensure_guid(ObjectId) ->
+    {ok, Guid} = file_id:objectid_to_guid(ObjectId),
+    Guid.

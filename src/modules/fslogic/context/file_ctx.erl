@@ -100,7 +100,7 @@
     get_or_create_local_regular_file_location_doc/3, get_or_create_local_regular_file_location_doc/4,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/1,
-    get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
+    get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, ensure_synced/1
 ]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
@@ -1005,33 +1005,6 @@ prepare_file_size_summary(FileCtx) ->
             {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns information if file is fully replicated and size of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_replication_status_and_size(ctx() | file_meta:uuid()) ->
-    {FullyReplicated :: boolean(), Size :: non_neg_integer(), ctx()}.
-get_replication_status_and_size(FileCtx) ->
-    case get_local_file_location_doc(FileCtx, {blocks_num, 2}) of
-        {#document{value = #file_location{size = SizeInDoc}} = FLDoc, FileCtx2} ->
-            Size = case SizeInDoc of
-                undefined ->
-                    {FLDocWithBlocks, _} = get_local_file_location_doc(FileCtx2, true),
-                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FLDocWithBlocks));
-                _ ->
-                    SizeInDoc
-            end,
-
-            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
-                [#file_block{offset = 0, size = Size}] -> {true, Size, FileCtx2};
-                [] when Size =:= 0 -> {true, Size, FileCtx2};
-                _ -> {false, Size, FileCtx2}
-            end;
-        {undefined, FileCtx2} ->
-            {RemoteSize, FileCtx3} = get_file_size_from_remote_locations(FileCtx2),
-            {RemoteSize =:= 0, RemoteSize, FileCtx3}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1486,7 +1459,7 @@ get_file_size_from_remote_locations(FileCtx) ->
         [] ->
             {0, FileCtx2};
         [First | DocsTail] ->
-            ChocenDoc = lists:foldl(fun(
+            ChosenDoc = lists:foldl(fun(
                 New = #document{value = #file_location{
                     version_vector = NewVV
                 }},
@@ -1502,7 +1475,7 @@ get_file_size_from_remote_locations(FileCtx) ->
                 end
             end, First, DocsTail),
 
-            case ChocenDoc of
+            case ChosenDoc of
                 #document{
                     value = #file_location{
                         size = undefined

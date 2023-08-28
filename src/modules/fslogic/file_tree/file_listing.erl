@@ -136,7 +136,9 @@ decode_pagination_token(Token) ->
     end.
 
 
--spec encode_index(index()) -> binary().
+-spec encode_index(index() | undefined) -> binary().
+encode_index(undefined) ->
+    undefined;
 encode_index(#list_index{} = Index) ->
     mochiweb_base64url:encode(term_to_binary(Index)).
 

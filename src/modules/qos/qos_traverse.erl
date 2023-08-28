@@ -307,8 +307,8 @@ synchronize_file_for_entries_insecure(TaskId, #tree_traverse_slave{file_ctx = Fi
             ?debug("QoS file synchronization failed due to cancellation");
         {{error, _} = Error, FileCtx2} ->
             NormalizedError = normalize_error(Error),
-            ok = report_file_failed_for_entries(QosEntries, FileCtx2, NormalizedError),
-            ?error("Error during QoS file synchronization: ~p", [NormalizedError])
+            ?error("Error during QoS file synchronization: ~p", [NormalizedError]),
+            ok = report_file_failed_for_entries(QosEntries, FileCtx2, NormalizedError)
     end,
     
     lists:foreach(fun(QosEntry) ->

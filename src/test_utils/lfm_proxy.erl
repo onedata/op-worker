@@ -22,7 +22,7 @@
 %% API
 -export([init/1, init/2, init/3, teardown/1]).
 -export([
-    stat/3, stat/4, resolve_symlink/3, get_fs_stats/3, get_details/3,
+    stat/3, stat/4, resolve_symlink/3, get_fs_stats/3,
     get_file_references/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
@@ -52,7 +52,6 @@
     get_children/4, get_children/5,
     get_children_attrs/4, get_children_attrs/5,
     get_child_attr/4,
-    get_children_details/4,
     get_files_recursively/5,
 
     get_xattr/4, get_xattr/5,
@@ -153,10 +152,10 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
--spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), [attr_req:optional_attr()]) ->
+-spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), [file_attr:attribute()]) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
-stat(Worker, SessId, FileKey, OptionalAttrs) ->
-    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), OptionalAttrs)).
+stat(Worker, SessId, FileKey, Attributes) ->
+    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), Attributes)).
 
 
 -spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
@@ -169,12 +168,6 @@ resolve_symlink(Worker, SessId, FileKey) ->
     {ok, lfm_attrs:fs_stats()} | lfm:error_reply().
 get_fs_stats(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_fs_stats(SessId, uuid_to_file_ref(Worker, FileKey))).
-
-
--spec get_details(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, lfm_attrs:file_details()} | lfm:error_reply().
-get_details(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_details(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec get_file_references(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
@@ -547,18 +540,25 @@ create_dir_at_path(Worker, SessId, ParentGuid, Path) ->
     ?EXEC(Worker, lfm:create_dir_at_path(SessId, ParentGuid, Path)).
 
 
+%% @TODO VFS-7327 change all usages to get_children_attrs
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     file_listing:options()) -> 
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, ListOpts) ->
-    ?EXEC(Worker, lfm:get_children(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
+    case ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts, [guid, name])) of
+        {ok, Children, Token} ->
+            {ok, [{Guid, Name} || #file_attr{name = Name, guid = Guid} <- Children], Token};
+        Error ->
+            Error
+    end.
 
 
+%% @TODO VFS-7327 change all usages to get_children_attrs
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     file_listing:offset(), file_listing:limit()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, Offset, Limit) ->
-    % TODO VFS-7327 use get_children/4 function accepting options map everywhere in tests
+    %% @TODO VFS-7327 use get_children/4 function accepting options map everywhere in tests
     case get_children(Worker, SessId, FileKey, #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}) of
         {ok, List, _ListingToken} -> {ok, List};
         {error, _} = Error -> Error
@@ -572,10 +572,10 @@ get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_listing:options(), [attr_req:optional_attr()]) -> 
+    file_listing:options(), [file_attr:attribute()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
-get_children_attrs(Worker, SessId, FileKey, ListOpts, OptionalAttrs) ->
-    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts, OptionalAttrs)).
+get_children_attrs(Worker, SessId, FileKey, ListOpts, Attributes) ->
+    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts, Attributes)).
 
 
 -spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
@@ -584,22 +584,16 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     ?EXEC(Worker, lfm:get_child_attr(SessId, ParentGuid, ChildName)).
 
 
--spec get_children_details(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_listing:options()) -> {ok, [lfm_attrs:file_details()], file_listing:pagination_token()} | lfm:error_reply().
-get_children_details(Worker, SessId, FileKey, ListOpts) ->
-    ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
-
-
 -spec get_files_recursively(
     node(),
     session:id(),
     lfm:file_key(),
     dir_req:recursive_listing_opts(),
-    [attr_req:optional_attr()]
+    [file_attr:attribute()]
 ) ->
     {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()} | lfm:error_reply().
-get_files_recursively(Worker, SessId, FileKey, Options, OptionalAttrs) ->
-    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options, OptionalAttrs)).
+get_files_recursively(Worker, SessId, FileKey, Options, Attributes) ->
+    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options, Attributes)).
 
 
 %%%===================================================================

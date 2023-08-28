@@ -229,11 +229,11 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Options) ->
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_listing:options(), 
     [child_entry()], options()) -> {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, ListingOpts, ChildEntriesAcc, Options) ->
-    case lfm:get_children(SessId, ?FILE_REF(ParentGuid), ListingOpts) of
+    case lfm:get_children_attrs(SessId, ?FILE_REF(ParentGuid), ListingOpts, [guid, name]) of
         {ok, Children, ListingPaginationToken} ->
             % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
             % collision suffix which normally shouldn't be there
-            ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
+            ChildEntries = lists:foldl(fun(#file_attr{guid = ChildGuid, name = ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
                     copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName, Options),
                 [

@@ -103,7 +103,7 @@ routes() -> [
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = attrs, 
+            aspect = instance,
             scope = private
         }
     }},

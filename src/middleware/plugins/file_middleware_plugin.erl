@@ -24,6 +24,7 @@
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -42,9 +43,10 @@
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
--define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
--define(DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES, [<<"file_id">>, <<"path">>]).
+-define(DEFAULT_LIST_ATTRS, [guid, name]).
+-define(DEFAULT_RECURSIVE_FILE_LIST_ATTRS, [guid, path]).
 
+%% @TODO do reviewerów - myslę że to jest czas i miejsce żeby ustalić jakie powinny być attry zwracane by default w API
 
 %%%===================================================================
 %%% middleware_router callbacks
@@ -173,7 +175,11 @@ data_spec_create(#gri{aspect = instance}, Data) ->
             end
         end}
     },
-    AllOptional = #{<<"createAttempts">> => {integer, {between, 1, 200}}},
+    AllOptional = #{
+        <<"createAttempts">> => {integer, {between, 1, 200}},
+        <<"responseAttributes">> => build_attributes_param_spec(private)
+        % deprecated, left for backwards compatibility
+    },
 
     AllRequired = case maps:get(<<"type">>, Data, undefined) of
         <<"LNK">> ->
@@ -344,8 +350,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    {ok, FileDetails} = ?lfm_check(lfm:get_details(SessionId, ?FILE_REF(Guid))),
-    {ok, resource, {GRI#gri{id = Guid}, FileDetails}};
+    {ok, FileAttr} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid), maps:get(<<"responseAttributes">>, Data, ?API_ATTRS))),
+    {ok, resource, {GRI#gri{id = Guid}, file_attr_translator:to_json(FileAttr)}};
 
 create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -426,11 +432,7 @@ resolve_get_operation_handler(instance, private) -> ?MODULE;             % gs on
 resolve_get_operation_handler(instance, public) -> ?MODULE;              % gs only
 resolve_get_operation_handler(children, private) -> ?MODULE;             % REST only
 resolve_get_operation_handler(children, public) -> ?MODULE;              % REST only
-resolve_get_operation_handler(children_details, private) -> ?MODULE;     % gs only
-resolve_get_operation_handler(children_details, public) -> ?MODULE;      % gs only
 resolve_get_operation_handler(files, private) -> ?MODULE;                % REST only
-resolve_get_operation_handler(attrs, private) -> ?MODULE;                % REST/gs
-resolve_get_operation_handler(attrs, public) -> ?MODULE;                 % REST/gs
 resolve_get_operation_handler(xattrs, private) -> ?MODULE;               % REST/gs
 resolve_get_operation_handler(xattrs, public) -> ?MODULE;                % REST/gs
 resolve_get_operation_handler(json_metadata, private) -> ?MODULE;        % REST/gs
@@ -464,54 +466,27 @@ resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 %% @private
 -spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_get(#gri{aspect = instance}) -> #{
-    required => #{id => {binary, guid}}
-};
-
-data_spec_get(#gri{aspect = As}) when
-    As =:= children_details
--> #{
+data_spec_get(#gri{aspect = instance, scope = Sc}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
-        <<"index">> => {binary, fun
-            (null) ->
-                {true, undefined};
-            (undefined) ->
-                true;
-            (<<>>) ->
-                throw(?ERROR_BAD_VALUE_EMPTY(<<"index">>));
-            (IndexBin) when is_binary(IndexBin) ->
-                true;
-            (_) ->
-                false
-        end},
-        <<"offset">> => {integer, any},
-        <<"inclusive">> => {boolean, any}
+        <<"attributes">> => build_attributes_param_spec(Sc),
+        % deprecated, left for backwards compatibility
+        <<"attribute">> => build_attributes_param_spec(Sc)
     }
 };
 
 data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"token">> => {binary, fun
-            (null) ->
-                {true, undefined};
-            (undefined) ->
-                true;
-            (<<>>) ->
-                throw(?ERROR_BAD_VALUE_EMPTY(<<"token">>));
-            (IndexBin) when is_binary(IndexBin) ->
-                true;
-            (_) ->
-                false
-        end},
+        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
+        <<"token">> => build_listing_start_point_param_spec(<<"token">>),
+        <<"index">> => build_listing_start_point_param_spec(<<"index">>),
+        <<"offset">> => {integer, any},
+        <<"inclusive">> => {boolean, any},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
-        <<"attribute">> => {any, case Sc of
-            public -> build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES);
-            private -> build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)
-        end}
+        <<"attributes">> => build_attributes_param_spec(Sc),
+        % deprecated, left for backwards compatibility
+        <<"attribute">> => build_attributes_param_spec(Sc)
     }
 };
 
@@ -523,20 +498,10 @@ data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},
         <<"include_directories">> => {boolean, any},
-        <<"attribute">> => {any, case Sc of
-            public -> build_check_requested_attrs_fun([<<"path">> | ?PUBLIC_BASIC_ATTRIBUTES]);
-            private -> build_check_requested_attrs_fun([<<"path">> | ?PRIVATE_BASIC_ATTRIBUTES])
-        end}
+        <<"attributes">> => build_attributes_param_spec(Sc),
+        % deprecated, left for backwards compatibility
+        <<"attribute">> => build_attributes_param_spec(Sc)
     }
-};
-
-data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {any, build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)}}
-};
-data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
-    required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {any, build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES)}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
@@ -564,13 +529,17 @@ data_spec_get(#gri{aspect = rdf_metadata}) -> #{
     optional => #{<<"resolve_symlink">> => {boolean, any}}
 };
 
+data_spec_get(#gri{aspect = symlink_target, scope = Sc}) -> #{
+    required => #{id => {binary, guid}},
+    optional => #{<<"attributes">> => build_attributes_param_spec(Sc)}
+};
+
 data_spec_get(#gri{aspect = As}) when
     As =:= distribution;
     As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= symlink_value;
-    As =:= symlink_target;
     As =:= archive_recall_details;
     As =:= archive_recall_progress;
     As =:= api_samples
@@ -637,8 +606,6 @@ authorize_get(#op_req{gri = #gri{id = undefined, aspect = dir_size_stats_collect
 authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
-    As =:= children_details;
-    As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
@@ -651,9 +618,7 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= children;
-    As =:= children_details;
     As =:= files;
-    As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
@@ -706,9 +671,7 @@ validate_get(#op_req{gri = #gri{id = undefined, aspect = dir_size_stats_collecti
 validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= children;
-    As =:= children_details;
     As =:= files;
-    As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
@@ -747,101 +710,64 @@ validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
-    ?lfm_check(lfm:get_details(Auth#auth.session_id, ?FILE_REF(FileGuid)));
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance, scope = Sc}}, _) ->
+    DefaultAttrs = case Sc of
+        private -> ?API_ATTRS;
+        public -> ?PUBLIC_ATTRS
+    end,
+    RequestedAttributes = read_requested_attributes(Data, DefaultAttrs),
+    {ok, FileAttr} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), RequestedAttributes)),
+    {ok, file_attr_translator:to_json(FileAttr, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES)),
+    RequestedAttributes = read_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
 
     BaseOpts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
-    ListingOpts = case maps:get(<<"token">>, Data, null) of
-        null ->
+    ListingOpts = case maps:get(<<"token">>, Data, undefined) of
+        undefined ->
             BaseOpts#{
+                offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
+                index => case maps:find(<<"index">>, Data) of
+                    {ok, Index} -> file_listing:decode_index(Index);
+                    error -> undefined
+                end,
+                inclusive => maps:get(<<"inclusive">>, Data, true),
                 tune_for_large_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false)
-            }; 
+            };
         EncodedPaginationToken ->
             BaseOpts#{
                 pagination_token => file_listing:decode_pagination_token(EncodedPaginationToken)
             }
     end,
 
-    {ResultJson, ListingPaginationToken} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
-        ?DEFAULT_BASIC_ATTRIBUTES ->
-            {ok, Children, ReturnedListingPaginationToken} = ?lfm_check(lfm:get_children(
-                SessionId, ?FILE_REF(FileGuid), ListingOpts)),
-            ItemToJson = fun({Guid, Name}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                maps:with(RequestedAttributes, #{<<"file_id">> => ObjectId, <<"name">> => Name})
-            end,
-            {lists:map(ItemToJson, Children), ReturnedListingPaginationToken};
-        _ ->
-            OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
-            {ok, Children, ReturnedListingPaginationToken} = 
-                ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, OptionalAttrs)),
-            ItemToJson = fun(FileAttr) ->
-                file_attr_translator:to_json(FileAttr, RequestedAttributes)
-            end,
-            {lists:map(ItemToJson, Children), ReturnedListingPaginationToken}
-    end,
+    {ok, ChildrenAttrs, ListingPaginationToken} =
+        ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, RequestedAttributes)),
     
     {ok, value, {
-        ResultJson, 
+        lists:map(fun(ChildAttr) -> file_attr_translator:to_json(ChildAttr, RequestedAttributes) end, ChildrenAttrs),
         file_listing:is_finished(ListingPaginationToken), 
         file_listing:encode_pagination_token(ListingPaginationToken)}
     };
 
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
-    SessionId = Auth#auth.session_id,
-
-    {ok, ChildrenDetails, ListingPaginationToken} = ?lfm_check(lfm:get_children_details(
-        SessionId, ?FILE_REF(FileGuid), #{
-            offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-            limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-            index => case maps:find(<<"index">>, Data) of
-                {ok, Index} -> file_listing:decode_index(Index);
-                error -> undefined
-            end,
-            inclusive => maps:get(<<"inclusive">>, Data, true),
-            tune_for_large_continuous_listing => false
-        }
-    )),
-    {ok, value, {ChildrenDetails, file_listing:is_finished(ListingPaginationToken)}};
-
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}, _) ->
     SessionId = Auth#auth.session_id,
 
-    Options = maps_utils:remove_undefined(#{
+    ListingOptions = maps_utils:remove_undefined(#{
         limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
         pagination_token => maps:get(<<"token">>, Data, undefined),
         start_after_path => maps:get(<<"start_after">>, Data, undefined),
         prefix => maps:get(<<"prefix">>, Data, undefined),
         include_directories => maps:get(<<"include_directories">>, Data, undefined)
     }),
-    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
-    OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
+    RequestedAttributes = read_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
     {ok, Result, InaccessiblePaths, NextPageToken} =
-        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), Options, OptionalAttrs)),
+        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), ListingOptions, RequestedAttributes)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
         JsonAttrs = file_attr_translator:to_json(Attrs),
         file_attr_translator:select_attrs(JsonAttrs#{<<"path">> => Path}, RequestedAttributes)
     end, Result),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
-
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
-    RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
-        undefined ->
-            case Sc of
-                private -> ?PRIVATE_BASIC_ATTRIBUTES;
-                public -> ?PUBLIC_BASIC_ATTRIBUTES
-            end;
-        Attr ->
-            [Attr]
-    end,
-    OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
-    {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), OptionalAttrs)),
-
-    {ok, value, file_attr_translator:to_json(FileAttrs, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -967,17 +893,19 @@ get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
     ?lfm_check(lfm:read_symlink(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scope = Scope}}, _) ->
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scope = Scope}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
 
     {ok, TargetFileGuid} = ?lfm_check(lfm:resolve_symlink(SessionId, ?FILE_REF(FileGuid))),
-    {ok, TargetFileDetails} = ?lfm_check(lfm:get_details(SessionId, ?FILE_REF(TargetFileGuid))),
+    
+    RequestedAttributes = read_requested_attributes(Data, ?API_ATTRS),
+    {ok, TargetFileAttrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(TargetFileGuid), RequestedAttributes)),
 
     TargetFileGri = #gri{
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, TargetFileDetails};
+    {ok, TargetFileGri, file_attr_translator:to_json(TargetFileAttrs)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
     {ok, mi_archives:get_recall_details(Auth#auth.session_id, FileGuid)};
@@ -1188,7 +1116,6 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_
 %%% Internal functions
 %%%===================================================================
 
-
 %% @private
 -spec create_file(
     SessionId :: session:id(),
@@ -1247,19 +1174,63 @@ create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
 
 
--spec build_check_requested_attrs_fun([binary()]) -> 
-    fun((binary() | [binary()]) -> true | no_return()).
-build_check_requested_attrs_fun(AllowedValues) -> 
-    fun F(AttributeList) when is_list(AttributeList) ->
-            lists:foreach(fun(A) -> F(A) end, AttributeList),
+%% @private
+-spec build_listing_start_point_param_spec(binary()) -> middleware_sanitizer:param_spec().
+build_listing_start_point_param_spec(Key) ->
+    {binary, fun
+        (null) ->
+            {true, undefined};
+        (undefined) ->
             true;
-        F(<<"xattr.", _/binary>>) ->
+        (<<>>) ->
+            throw(?ERROR_BAD_VALUE_EMPTY(Key));
+        (Binary) when is_binary(Binary) ->
             true;
-        F(Attribute) ->
-            case lists:member(Attribute, AllowedValues) of
-                true ->
-                    true;
-                false ->
-                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedValues ++ [<<"xattr.*">>]))
-            end
+        (_) ->
+            false
+    end}.
+
+
+%% @private
+-spec build_attributes_param_spec(middleware:scope()) -> middleware_sanitizer:param_spec().
+build_attributes_param_spec(Scope) ->
+     {any, case Scope of
+        public -> build_check_requested_attrs_fun(?PUBLIC_ATTRS);
+        private -> build_check_requested_attrs_fun(?API_ATTRS)
+    end}.
+
+
+%% @private
+-spec build_check_requested_attrs_fun([binary()]) ->
+    fun((binary() | [binary()]) -> {true, [atom()]} | no_return()).
+build_check_requested_attrs_fun(AllowedValues) ->
+    fun(Attributes) ->
+        {TranslatedAttrs, Xattrs} = lists:foldl(fun
+            (<<"xattr.", _/binary>> = Xattr, {AttrAcc, XattrAcc}) ->
+                {AttrAcc, [Xattr | XattrAcc]};
+            (Attr, {AttrAcc, XattrAcc}) ->
+                try
+                    TranslatedAttr = file_attr_translator:attr_name_from_json(Attr),
+                    true = lists:member(TranslatedAttr, AllowedValues),
+                    {[TranslatedAttr | AttrAcc], XattrAcc}
+                catch _:_ ->
+                    AllowedValuesJson = [file_attr_translator:attr_name_to_json(A) || A <- AllowedValues],
+                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedValuesJson ++ [<<"xattr.*">>]))
+                end
+        end, {[], []}, utils:ensure_list(Attributes)),
+        {true, case Xattrs of
+            [] -> TranslatedAttrs;
+            _ -> [{xattrs, Xattrs} | TranslatedAttrs]
+        end}
+    end.
+
+
+%% @private
+-spec read_requested_attributes(middleware:data(), [file_attr:attribute()]) -> [file_attr:attribute()].
+read_requested_attributes(Data, Default) ->
+    case maps:get(<<"attributes">>, Data, undefined) of
+        undefined ->
+            maps:get(<<"attribute">>, Data, Default);
+        Attrs ->
+            utils:ensure_list(Attrs)
     end.

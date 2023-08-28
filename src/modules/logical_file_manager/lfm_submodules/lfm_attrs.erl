@@ -17,15 +17,13 @@
 -include("modules/fslogic/file_attr.hrl").
 
 -type file_attributes() :: #file_attr{}.
--type file_details() :: #file_details{}.
 -type fs_stats() :: #fs_stats{}.
 
--export_type([file_attributes/0, file_details/0, fs_stats/0]).
+-export_type([file_attributes/0, fs_stats/0]).
 
 %% API
 -export([
     stat/3,
-    get_details/2,
     get_fs_stats/2,
     get_references/2,
     resolve_symlink/2,
@@ -52,30 +50,14 @@
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(SessId :: session:id(), lfm:file_key(), [attr_req:optional_attr()]) ->
+-spec stat(SessId :: session:id(), lfm:file_key(), [file_attr:attribute()]) ->
     {ok, file_attributes()} | lfm:error_reply().
-stat(SessId, FileKey, OptionalAttrs) ->
+stat(SessId, FileKey, Attributes) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     
     remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_attr{optional_attrs = OptionalAttrs},
+        SessId, file_request, FileGuid, #get_file_attr{attributes = Attributes},
         fun(#file_attr{} = Attrs) -> {ok, Attrs} end
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file details (see file_details.hrl).
-%% @end
-%%--------------------------------------------------------------------
--spec get_details(session:id(), lfm:file_key()) ->
-    {ok, file_details()} | lfm:error_reply().
-get_details(SessId, FileKey) ->
-    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-
-    remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_details{},
-        fun(#file_details{} = FileDetails) -> {ok, FileDetails} end
     ).
 
 

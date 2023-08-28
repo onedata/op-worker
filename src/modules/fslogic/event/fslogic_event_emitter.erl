@@ -48,12 +48,12 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
             ok;
         {#document{}, FileCtx2} ->
             RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-            {#fuse_response{
-                fuse_response = #file_attr{} = FileAttr
-            }, ConflictingFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx2, #{
+            #fuse_response{
+                fuse_response = #file_attr{conflicting_files = ConflictingFiles} = FileAttr
+            } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => resolve_name_conflicts,
-                include_optional_attrs => [size]
+                attributes => ?BASIC_ATTRS ++ [size, conflicting_files]
             }),
             emit_suffixes(ConflictingFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
@@ -150,7 +150,8 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
                 fuse_response = #file_attr{} = FileAttr
             } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
-                name_conflicts_resolution_policy => resolve_name_conflicts
+                name_conflicts_resolution_policy => resolve_name_conflicts,
+                attributes => ?BASIC_ATTRS
             }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
@@ -348,18 +349,18 @@ emit_file_attr_changed_with_replication_status_internal(_FileCtx, [], []) ->
 emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSessIds, WithStatusSessIds) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     OptionalAttrs = case WithStatusSessIds of
-        [] -> [size];
-        _ -> [size, replication_status]
+        [] -> [];
+        _ -> [replication_status]
     end,
-    {#fuse_response{fuse_response = #file_attr{} = FileAttr}, ConflictingFiles, _} =
-        attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx, #{
+    #fuse_response{fuse_response = #file_attr{conflicting_files = ConflictingFiles} = FileAttr} =
+        attr_req:get_file_attr_insecure(RootUserCtx, FileCtx, #{
             allow_deleted_files => true,
             name_conflicts_resolution_policy => resolve_name_conflicts,
-            include_optional_attrs => OptionalAttrs
+            attributes => ?BASIC_ATTRS ++ [size, conflicting_files] ++ OptionalAttrs
         }),
     emit_suffixes(ConflictingFiles, {ctx, FileCtx}),
     event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithStatusSessIds),
-    event:emit(#file_attr_changed_event{file_attr = FileAttr#file_attr{fully_replicated = undefined}},
+    event:emit(#file_attr_changed_event{file_attr = FileAttr#file_attr{is_fully_replicated = undefined}},
         WithoutStatusSessIds -- WithStatusSessIds).
 
 %%--------------------------------------------------------------------

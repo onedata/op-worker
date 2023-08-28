@@ -28,7 +28,6 @@
 ]).
 
 -type key() :: binary().
--type tree_ids() :: all | oneprovider:id().
 -type link_name() :: qos_status:path().
 -type link_value() :: binary().
 -type link() :: {link_name(), link_value()}.

@@ -20,7 +20,6 @@
 -export([
     get_file_attr/3, 
     get_file_attr_by_path/4,
-    get_file_details/2,
     get_file_references/2,
     get_child_attr/4, chmod/3, update_times/5,
     get_fs_stats/2
@@ -29,30 +28,24 @@
 %% Protected API (for use only by *_req level modules)
 -export([
     get_file_attr_insecure/3,
-    get_file_attr_and_conflicts_insecure/3,
-    get_file_details_insecure/2,
     chmod_attrs_only_insecure/2
 ]).
 
--type optional_attr() :: file_attr:optional_attr().
--type compute_file_attr_opts() :: file_attr:compute_file_attr_opts().
-
--export_type([compute_file_attr_opts/0, optional_attr/0]).
+-type attribute() :: file_attr:attribute().
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @equiv get_file_attr_insecure/3 with permission checks and default options
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts() | [optional_attr()]) ->
+-spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts() | [attribute()]) ->
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx0, Options) when is_map(Options) ->
-    RequiredPrivs = case file_attr:should_fetch_xattrs(maps:get(include_optional_attrs, Options, [])) of
+    RequiredPrivs = case file_attr:should_fetch_xattrs(maps:get(attributes, Options, [])) of
         {true, _} -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
@@ -60,33 +53,16 @@ get_file_attr(UserCtx, FileCtx0, Options) when is_map(Options) ->
         UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
     ),
     get_file_attr_insecure(UserCtx, FileCtx1, Options);
-get_file_attr(UserCtx, FileCtx, OptionalAttrs) when is_list(OptionalAttrs) ->
-    get_file_attr(UserCtx, FileCtx, #{
-        allow_deleted_files => false,
-        name_conflicts_resolution_policy => resolve_name_conflicts,
-        include_optional_attrs => OptionalAttrs
-    }).
+get_file_attr(UserCtx, FileCtx, Attributes) when is_list(Attributes) ->
+    get_file_attr(UserCtx, FileCtx, #{attributes => Attributes}).
 
 
--spec get_file_attr_by_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), [optional_attr()]) ->
+-spec get_file_attr_by_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), [attribute()]) ->
     fslogic_worker:fuse_response().
-get_file_attr_by_path(UserCtx, RootFileCtx, Path, OptionalAttrs) ->
+get_file_attr_by_path(UserCtx, RootFileCtx, Path, Attributes) ->
     #fuse_response{fuse_response = #guid{guid = Guid}} =
         guid_req:resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path),
-    get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), OptionalAttrs).
-
-
-%%--------------------------------------------------------------------
-%% @equiv get_file_details_insecure/3 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_details(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:fuse_response().
-get_file_details(UserCtx, FileCtx0) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
-    ),
-    get_file_details_insecure(UserCtx, FileCtx1).
+    get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), Attributes).
 
 
 -spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->
@@ -113,11 +89,11 @@ get_file_references(UserCtx, FileCtx0) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name(), [optional_attr()]) -> fslogic_worker:fuse_response().
-get_child_attr(UserCtx, ParentFileCtx0, Name, OptionalAttrs) ->
+    Name :: file_meta:name(), [attribute()]) -> fslogic_worker:fuse_response().
+get_child_attr(UserCtx, ParentFileCtx0, Name, Attributes) ->
     ParentFileCtx1 = ensure_access_to_child(UserCtx, ParentFileCtx0, Name),
     get_child_attr_insecure(
-        UserCtx, ParentFileCtx1, Name, OptionalAttrs
+        UserCtx, ParentFileCtx1, Name, Attributes
     ).
 
 
@@ -174,34 +150,14 @@ get_fs_stats(UserCtx, FileCtx0) ->
 %% Returns file attributes depending on specific flags set.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
+-spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, Opts) ->
-    {Ans, _, _} = get_file_attr_and_conflicts_insecure(UserCtx, FileCtx, Opts),
-    Ans.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes and information about conflicts depending on
-%% specific flags set.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_attr_and_conflicts_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
-    {
-        fslogic_worker:fuse_response(),
-        Conflicts :: file_meta:conflicts(),
-        IsDeleted :: boolean()
-    }.
-get_file_attr_and_conflicts_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, FileDoc, ConflictingFiles, _FileCtx2} = file_attr:resolve(
-        UserCtx, FileCtx, Opts
-    ),
-    FuseResponse = #fuse_response{
+    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Opts),
+    #fuse_response{
         status = #status{code = ?OK},
         fuse_response = FileAttr
-    },
-    {FuseResponse, ConflictingFiles, file_meta:is_deleted(FileDoc)}.
+    }.
 
 
 %%--------------------------------------------------------------------
@@ -221,15 +177,6 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
     FileCtx2.
-
-
--spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:fuse_response().
-get_file_details_insecure(UserCtx, FileCtx) ->
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = file_details:resolve(UserCtx, FileCtx)
-    }.
 
 
 %%%===================================================================
@@ -271,10 +218,10 @@ ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name(), [optional_attr()]) -> fslogic_worker:fuse_response().
-get_child_attr_insecure(UserCtx, ParentFileCtx, Name, OptionalAttrs) ->
+    Name :: file_meta:name(), [attribute()]) -> fslogic_worker:fuse_response().
+get_child_attr_insecure(UserCtx, ParentFileCtx, Name, Attributes) ->
     {ChildFileCtx, _NewParentFileCtx} = file_tree:get_child(ParentFileCtx, Name, UserCtx),
-    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, OptionalAttrs),
+    Response = get_file_attr(UserCtx, ChildFileCtx, Attributes),
     ensure_proper_file_name(Response, Name).
 
 

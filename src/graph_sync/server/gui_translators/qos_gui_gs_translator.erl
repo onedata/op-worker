@@ -14,7 +14,6 @@
 -author("Michal Stanisz").
 
 -include("middleware/middleware.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
