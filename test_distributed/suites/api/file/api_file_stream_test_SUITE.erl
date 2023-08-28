@@ -1625,7 +1625,7 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     % TODO VFS-6828 - call needed to preload file_middleware module and add 'download_url' atom
     % to known/existing atoms. Otherwise gs_ws_handler may fail to decode this request (gri)
     % if it is the first request made.
-    utils:rpc_multicall(Providers, file_middleware_plugin, resolve_handler, [get, download_url, private]),
+    utils:rpc_multicall(Providers, file_middleware_plugin_get, resolve_handler, [download_url, private]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 40}),
