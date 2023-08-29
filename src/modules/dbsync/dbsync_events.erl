@@ -154,7 +154,8 @@ file_meta_change_replicated(SpaceId, #document{
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
             ?warning("file_meta_change_replicated: deleted hardlink file_meta ~p - posthook failed with error ~p",
                 [FileUuid, Error])
-    end;
+    end,
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{mode = CurrentMode, deleted = Del1},
@@ -164,7 +165,7 @@ file_meta_change_replicated(SpaceId, #document{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     fslogic_delete:handle_remotely_deleted_file(FileCtx2),
-    ok;
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{mode = CurrentMode, type = ?REGULAR_FILE_TYPE}
@@ -191,7 +192,8 @@ file_meta_change_replicated(SpaceId, #document{
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
             ?warning("file_meta_change_replicated: deleted hardlink file_meta ~p - posthook failed with error ~p",
                 [FileUuid, Error])
-    end;
+    end,
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     deleted = false,
