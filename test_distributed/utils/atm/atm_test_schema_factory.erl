@@ -184,7 +184,8 @@ create_from_draft(#atm_lane_schema_draft{
     parallel_boxes = AtmParallelBoxSchemaDrafts,
 
     store_iterator_spec = AtmStoreIteratorSpecDraft,
-    max_retries = PlaceholderOrMaxRetries
+    max_retries = PlaceholderOrMaxRetries,
+    instant_failure_exception_threshold = InstantFailureExceptionThreshold
 }) ->
     #atm_lane_schema{
         id = ensure_id(PlaceholderOrId),
@@ -193,7 +194,8 @@ create_from_draft(#atm_lane_schema_draft{
         parallel_boxes = lists:map(fun create_from_draft/1, AtmParallelBoxSchemaDrafts),
 
         store_iterator_spec = create_from_draft(AtmStoreIteratorSpecDraft),
-        max_retries = ensure_specified(PlaceholderOrMaxRetries, ?RAND_INT(1, 4))
+        max_retries = ensure_specified(PlaceholderOrMaxRetries, ?RAND_INT(1, 4)),
+        instant_failure_exception_threshold = InstantFailureExceptionThreshold
     };
 
 create_from_draft(#atm_parallel_box_schema_draft{

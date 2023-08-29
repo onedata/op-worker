@@ -696,6 +696,8 @@ rename_auth_filtering_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(Config2) ->
+        Workers = ?config(op_worker_nodes, Config2),
+        test_utils:set_env(Workers, op_worker, ignore_async_subscriptions, false),
         Config3 = initializer:setup_storage(init_seq_counter(Config2)),
         initializer:mock_auth_manager(Config3),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config3, "env_desc.json"), Config3)
