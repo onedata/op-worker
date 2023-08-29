@@ -58,7 +58,7 @@ handle(Class, Reason, Stacktrace, SessionId, RequestTerm) ->
 %%%===================================================================
 
 %% @private
--spec format_log_message(session:id(), Request :: term()) -> {true, errors:error()} | false.
+-spec format_log_message(session:id(), Request :: term()) -> string().
 format_log_message(SessionId, RequestTerm) ->
     AutoformattedDetails = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->

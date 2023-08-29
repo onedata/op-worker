@@ -74,7 +74,7 @@ msg_to_string(Msg) ->
 
 %% @private
 -spec stringify_only_relevant_info(#client_message{} | #server_message{}) ->
-    string().
+    binary().
 stringify_only_relevant_info(#server_message{
     message_id = MsgId,
     message_stream = MsgStream,
@@ -82,7 +82,7 @@ stringify_only_relevant_info(#server_message{
     effective_session_id = EffSessionId
 }) ->
     str_utils:format_bin(
-        "ServerMessage{id = ~s, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
+        "ServerMessage{id = ~w, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
         [MsgId, EffSessionId, MsgStream, element(1, MsgBody)]
     );
 stringify_only_relevant_info(#client_message{
@@ -93,6 +93,6 @@ stringify_only_relevant_info(#client_message{
     message_body = MsgBody
 }) ->
     str_utils:format_bin(
-        "ClientMessage{id = ~s, sess_id = ~s, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
+        "ClientMessage{id = ~w, sess_id = ~s, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
         [MsgId, SessionId, EffSessionId, MsgStream, element(1, MsgBody)]
     ).

@@ -932,9 +932,9 @@ socket_send(#state{
 -spec to_serialized_data(state(), binary() | #client_message{} | #server_message{}) -> {ok, binary()} | errors:error().
 to_serialized_data(_State, Binary) when is_binary(Binary) ->
     {ok, Binary};
-to_serialized_data(#state{session_id = SessId, verify_msg = VerifyMsg}, Msg) ->
+to_serialized_data(#state{session_id = SessId} = State, Msg) ->
     try
-        serialize_message_unsafe(Msg, VerifyMsg)
+        serialize_message_unsafe(State, Msg)
     catch Class:Reason:Stacktrace ->
         MsgStr = clproto_utils:msg_to_string(Msg),
         ?THROTTLE_ERROR_EXCEPTION(SessId, "Unable to serialize message: ~s", [MsgStr], Class, Reason, Stacktrace),
