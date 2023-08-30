@@ -115,12 +115,8 @@
 % Separator between space name and its id added in case of duplicated name.
 -define(SPACE_NAME_ID_SEPARATOR, <<"@">>).
 
--define(BASIC_ATTRS, [
-    guid, name, mode, parent_guid, uid, gid, atime, mtime, ctime, type, size, shares, provider_id, owner_id
-]).
-
--define(safeguard_not_found(_Code), ?safeguard_not_found(_Code, not_found)).
--define(safeguard_not_found(_Code, ReturnValue),
+-define(catch_not_found(_Code), ?catch_not_found(_Code, not_found)).
+-define(catch_not_found(_Code, ReturnValue),
     try
         _Code
     catch Class:Reason ->

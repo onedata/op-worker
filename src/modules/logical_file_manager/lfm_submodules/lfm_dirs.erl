@@ -104,7 +104,7 @@ get_children_attrs(SessId, FileKey, ListingOpts, Attributes) ->
 
 
 
--spec get_child_attr(session:id(), file_id:file_guid(), file_meta:name(), [file_attr:attributes()]) ->
+-spec get_child_attr(session:id(), file_id:file_guid(), file_meta:name(), [file_attr:attribute()]) ->
     {ok, #file_attr{}} | lfm:error_reply().
 get_child_attr(SessId, ParentGuid0, ChildName, Attributes)  ->
     ParentGuid1 = lfm_file_key:resolve_file_key(

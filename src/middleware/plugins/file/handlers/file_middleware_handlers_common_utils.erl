@@ -9,7 +9,7 @@
 %%% This module contains utility functions used across file_middleware_plugin_* modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_middleware_plugin_common_utils).
+-module(file_middleware_handlers_common_utils).
 -author("Michal Stanisz").
 
 
@@ -24,17 +24,16 @@
 %%%===================================================================
 
 -spec build_attributes_param_spec(middleware:scope()) -> middleware_sanitizer:param_spec().
-build_attributes_param_spec(Scope) ->
-     {any, case Scope of
-        public -> build_check_requested_attrs_fun(?PUBLIC_ATTRS);
-        private -> build_check_requested_attrs_fun(?API_ATTRS)
-    end}.
+build_attributes_param_spec(public) ->
+    {any, build_parse_requested_attrs_fun(?PUBLIC_ATTRS)};
+build_attributes_param_spec(private) ->
+    {any, build_parse_requested_attrs_fun(?API_ATTRS)}.
 
 
 %% @private
--spec build_check_requested_attrs_fun([binary()]) ->
+-spec build_parse_requested_attrs_fun([file_attr:attributes()]) ->
     fun((binary() | [binary()]) -> {true, [atom()]} | no_return()).
-build_check_requested_attrs_fun(AllowedValues) ->
+build_parse_requested_attrs_fun(AllowedValues) ->
     fun(Attributes) ->
         {TranslatedAttrs, Xattrs} = lists:foldl(fun
             (<<"xattr.", _/binary>> = Xattr, {AttrAcc, XattrAcc}) ->

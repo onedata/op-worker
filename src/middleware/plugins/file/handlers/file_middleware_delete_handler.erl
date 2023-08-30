@@ -14,7 +14,7 @@
 %%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_middleware_plugin_delete).
+-module(file_middleware_delete_handler).
 -author("Bartosz Walkowicz").
 
 -behaviour(middleware_handler).
@@ -24,7 +24,7 @@
 
 
 %% middleware_router callbacks
--export([resolve_handler/2]).
+-export([assert_operation_supported/2]).
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
@@ -35,13 +35,14 @@
 %%% API
 %%%===================================================================
 
--spec resolve_handler(gri:aspect(), middleware:scope()) ->
-    module() | no_return().
-resolve_handler(instance, private)      -> ?MODULE;        % gs only
-resolve_handler(xattrs, private)        -> ?MODULE;        % REST/gs
-resolve_handler(json_metadata, private) -> ?MODULE;        % REST/gs
-resolve_handler(rdf_metadata, private)  -> ?MODULE;        % REST/gs
-resolve_handler(_, _)                   -> throw(?ERROR_NOT_SUPPORTED).
+-spec assert_operation_supported(gri:aspect(), middleware:scope()) ->
+    ok | no_return().
+assert_operation_supported(instance, private)      -> ok;        % gs only
+assert_operation_supported(xattrs, private)        -> ok;        % REST/gs
+assert_operation_supported(json_metadata, private) -> ok;        % REST/gs
+assert_operation_supported(rdf_metadata, private)  -> ok;        % REST/gs
+assert_operation_supported(_, _)                   -> throw(?ERROR_NOT_SUPPORTED).
+
 
 %%%===================================================================
 %%% middleware_handler callbacks
@@ -51,11 +52,10 @@ resolve_handler(_, _)                   -> throw(?ERROR_NOT_SUPPORTED).
 data_spec(#op_req{gri = #gri{aspect = instance}}) ->
     #{required => #{id => {binary, guid}}};
 
-
 data_spec(#op_req{gri = #gri{aspect = As}}) when
     As =:= json_metadata;
     As =:= rdf_metadata
-    ->
+->
     #{
         required => #{id => {binary, guid}},
         optional => #{<<"resolve_symlink">> => {boolean, any}}
@@ -71,6 +71,7 @@ data_spec(#op_req{gri = #gri{aspect = xattrs}}) -> #{
     }
 }.
 
+
 -spec fetch_entity(middleware:req()) -> {ok, middleware:versioned_entity()}.
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
@@ -82,7 +83,7 @@ authorize(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
-    ->
+->
     middleware_utils:has_access_to_file_space(Auth, Guid).
 
 
@@ -92,7 +93,7 @@ validate(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
-    ->
+->
     middleware_utils:assert_file_managed_locally(Guid).
 
 

@@ -28,7 +28,7 @@
 }).
 
 -record(get_file_attr, {
-    attributes = [] :: [attr_req:attribute()]
+    attributes = [] :: [file_attr:attribute()]
 }).
 
 -record(get_file_references, {
@@ -36,7 +36,7 @@
 
 -record(get_child_attr, {
     name :: file_meta:name(),
-    attributes = [] :: [attr_req:attribute()]
+    attributes = [] :: [file_attr:attribute()]
 }).
 
 -record(get_file_children, {
@@ -45,7 +45,7 @@
 
 -record(get_file_children_attrs, {
     listing_options :: file_listing:options(),
-    attributes = [] :: [attr_req:attribute()]
+    attributes = [] :: [file_attr:attribute()]
 }).
 
 -record(create_dir, {
@@ -176,7 +176,7 @@
 
 -record(get_file_attr_by_path, {
     path :: file_meta:path(),
-    attributes = [] :: [attr_req:attribute()]
+    attributes = [] :: [file_attr:attribute()]
 }).
 
 -record(create_path, {
@@ -195,7 +195,7 @@
 
 -record(get_recursive_file_list, {
     listing_options :: dir_req:recursive_listing_opts(),
-    attributes = [] :: [attr_req:attribute()]
+    attributes = [] :: [file_attr:attribute()]
 }).
 
 -type file_request_type() ::

@@ -13,7 +13,7 @@
 %%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_middleware_plugin_create).
+-module(file_middleware_create_handler).
 -author("Bartosz Walkowicz").
 
 -behaviour(middleware_handler).
@@ -24,7 +24,7 @@
 -include_lib("ctool/include/privileges.hrl").
 
 
--export([resolve_handler/2]).
+-export([assert_operation_supported/2]).
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
@@ -35,17 +35,17 @@
 %%% API
 %%%===================================================================
 
--spec resolve_handler(gri:aspect(), middleware:scope()) ->
-    module() | no_return().
-resolve_handler(instance, private)              -> ?MODULE;
-resolve_handler(object_id, private)             -> ?MODULE;
-resolve_handler(attrs, private)                 -> ?MODULE;    % REST/gs
-resolve_handler(xattrs, private)                -> ?MODULE;    % REST/gs
-resolve_handler(json_metadata, private)         -> ?MODULE;    % REST/gs
-resolve_handler(rdf_metadata, private)          -> ?MODULE;    % REST/gs
-resolve_handler(register_file, private)         -> ?MODULE;
-resolve_handler(cancel_archive_recall, private) -> ?MODULE;
-resolve_handler(_, _)                           -> throw(?ERROR_NOT_SUPPORTED).
+-spec assert_operation_supported(gri:aspect(), middleware:scope()) ->
+    ok | no_return().
+assert_operation_supported(instance, private)              -> ok;
+assert_operation_supported(object_id, private)             -> ok;
+assert_operation_supported(attrs, private)                 -> ok;    % REST/gs
+assert_operation_supported(xattrs, private)                -> ok;    % REST/gs
+assert_operation_supported(json_metadata, private)         -> ok;    % REST/gs
+assert_operation_supported(rdf_metadata, private)          -> ok;    % REST/gs
+assert_operation_supported(register_file, private)         -> ok;
+assert_operation_supported(cancel_archive_recall, private) -> ok;
+assert_operation_supported(_, _)                           -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -56,6 +56,7 @@ resolve_handler(_, _)                           -> throw(?ERROR_NOT_SUPPORTED).
     undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{gri = Gri, data = Data}) ->
     data_spec(Gri, Data).
+
 
 %% @private
 -spec data_spec(gri:gri(), middleware:data()) ->
@@ -79,8 +80,7 @@ data_spec(#gri{aspect = instance}, Data) ->
     },
     AllOptional = #{
         <<"createAttempts">> => {integer, {between, 1, 200}},
-        <<"responseAttributes">> => file_middleware_plugin_common_utils:build_attributes_param_spec(private)
-        % deprecated, left for backwards compatibility
+        <<"responseAttributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(private)
     },
 
     AllRequired = case maps:get(<<"type">>, Data, undefined) of

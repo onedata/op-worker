@@ -2585,7 +2585,7 @@ verify_attrs(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limi
         lfm_proxy:get_children_attrs(
             Worker, SessId1, {path, MainDirPath},
             #{offset => Offset, limit => Limit, index => Index, tune_for_large_continuous_listing => false, inclusive => true},
-            ?BASIC_ATTRS ++ [index]
+            ?DEFAULT_ATTRS ++ [index]
         )
     ),
     ?assertEqual(ExpectedSize, length(List)),

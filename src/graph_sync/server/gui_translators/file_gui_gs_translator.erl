@@ -70,7 +70,7 @@ translate_value(#gri{aspect = {dir_size_stats_collection, _}}, TSBrowseResult) -
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance}, FileAttrsJson) ->
-    #{<<"attributes">> => map_file_attr_fields_for_gui(FileAttrsJson)};
+    map_file_attr_fields_for_gui(FileAttrsJson);
 
 translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
     data_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
@@ -199,8 +199,6 @@ map_file_attr_fields_for_gui(FileAttrJson) ->
 
 %% @private
 -spec map_file_attr_parent_for_gui(json_utils:json_map()) -> json_utils:json_map().
-map_file_attr_parent_for_gui(#{<<"parentId">> := null} = FileAttrJson) ->
-    FileAttrJson;
 map_file_attr_parent_for_gui(#{<<"parentId">> := ParentObjectId} = FileAttrJson) ->
     FileAttrJson#{<<"parentId">> => ensure_guid(ParentObjectId)};
 map_file_attr_parent_for_gui(FileAttrJson) ->

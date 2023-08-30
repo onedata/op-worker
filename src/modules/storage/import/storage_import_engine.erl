@@ -776,7 +776,7 @@ get_attr_including_deleted(FileCtx) ->
             attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => allow_name_conflicts,
-                attributes => ?BASIC_ATTRS ++ [size, is_deleted]
+                attributes => ?DEFAULT_ATTRS ++ [size, is_deleted]
             }),
         {ok, FileAttr}
     catch

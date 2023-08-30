@@ -30,11 +30,15 @@
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
 resolve_handler(create, Aspect, Scope) ->
-    file_middleware_plugin_create:resolve_handler(Aspect, Scope);
+    file_middleware_create_handler:assert_operation_supported(Aspect, Scope),
+    file_middleware_create_handler;
 resolve_handler(get, Aspect, Scope) ->
-    file_middleware_plugin_get:resolve_handler(Aspect, Scope);
+    file_middleware_get_handler:assert_operation_supported(Aspect, Scope),
+    file_middleware_get_handler;
 resolve_handler(update, Aspect, Scope) ->
-    file_middleware_plugin_update:resolve_handler(Aspect, Scope);
+    file_middleware_update_handler:assert_operation_supported(Aspect, Scope),
+    file_middleware_update_handler;
 resolve_handler(delete, Aspect, Scope) ->
-    file_middleware_plugin_delete:resolve_handler(Aspect, Scope).
+    file_middleware_delete_handler:assert_operation_supported(Aspect, Scope),
+    file_middleware_delete_handler.
 

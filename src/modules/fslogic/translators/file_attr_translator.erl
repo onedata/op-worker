@@ -105,7 +105,7 @@ attr_name_from_json(<<"ownerId">>)                   -> owner_id;
 attr_name_from_json(<<"parentId">>)                  -> parent_guid;
 attr_name_from_json(<<"providerId">>)                -> provider_id;
 attr_name_from_json(<<"symlinkValue">>)              -> symlink_value;
-attr_name_from_json(<<"hardlinksCount">>)            -> link_count;
+attr_name_from_json(<<"hardlinkCount">>)             -> link_count;
 attr_name_from_json(<<"localReplicationRate">>)      -> local_replication_rate;
 attr_name_from_json(<<"recallRootId">>)              -> recall_root_id;
 attr_name_from_json(<<"archiveId">>)                 -> archive_id;
@@ -132,7 +132,7 @@ attr_name_to_json(owner_id)                     -> <<"ownerId">>;
 attr_name_to_json(parent_guid)                  -> <<"parentId">>;
 attr_name_to_json(provider_id)                  -> <<"providerId">>;
 attr_name_to_json(symlink_value)                -> <<"symlinkValue">>;
-attr_name_to_json(link_count)                   -> <<"hardlinksCount">>;
+attr_name_to_json(link_count)                   -> <<"hardlinkCount">>;
 attr_name_to_json(local_replication_rate)       -> <<"localReplicationRate">>;
 attr_name_to_json(recall_root_id)               -> <<"recallRootId">>;
 attr_name_to_json(archive_id)                   -> <<"archiveId">>;
@@ -167,13 +167,13 @@ translate_mode(Mode) -> list_to_binary(string:right(integer_to_list(Mode, 8), 3,
 
 
 %% @private
--spec translate_protection_flags(file_qos:membership() | dataset:membership()) -> undefined | [binary()].
+-spec translate_protection_flags(undefined | file_qos:membership() | dataset:membership()) -> undefined | [binary()].
 translate_protection_flags(undefined) -> undefined;
 translate_protection_flags(ProtectionFlags) -> file_meta:protection_flags_to_json(ProtectionFlags).
 
 
 %% @private
--spec translate_membership(file_qos:membership() | dataset:membership()) -> undefined | binary().
+-spec translate_membership(undefined | file_qos:membership() | dataset:membership()) -> undefined | binary().
 translate_membership(?NONE_MEMBERSHIP)                -> <<"none">>;
 translate_membership(?DIRECT_MEMBERSHIP)              -> <<"direct">>;
 translate_membership(?ANCESTOR_MEMBERSHIP)            -> <<"ancestor">>;
@@ -182,7 +182,7 @@ translate_membership(undefined)                       -> undefined.
 
 
 %% @private
--spec translate_qos_status(qos_status:summary()) -> undefined | binary().
+-spec translate_qos_status(undefined | qos_status:summary()) -> undefined | binary().
 translate_qos_status(undefined) -> undefined;
 translate_qos_status(Status) ->    atom_to_binary(Status).
 

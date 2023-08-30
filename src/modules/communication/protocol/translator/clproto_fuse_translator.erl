@@ -277,7 +277,7 @@ from_protobuf(#'ListFilesRecursively'{
     xattrs = Xattrs
 }) ->
     #get_recursive_file_list{
-        attributes = ?BASIC_ATTRS ++ [size | xattrs_to_attrs_list(Xattrs)],
+        attributes = ?DEFAULT_ATTRS ++ [size | xattrs_to_attrs_list(Xattrs)],
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
             start_after_path => StartAfter,
@@ -375,10 +375,7 @@ to_protobuf(#file_attr{} = FileAttr) ->
             _ -> FileAttr#file_attr.size
         end,
         provider_id = FileAttr#file_attr.provider_id,
-        shares = case FileAttr#file_attr.shares of
-            undefined -> [];
-            Shares -> Shares
-        end,
+        shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.is_fully_replicated,
         nlink = FileAttr#file_attr.link_count,

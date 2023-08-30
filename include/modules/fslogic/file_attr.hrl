@@ -80,6 +80,10 @@
 
 -define(API_ATTRS, ?ALL_ATTRS -- ?INTERNAL_ATTRS).
 
+-define(DEFAULT_ATTRS, [
+    guid, name, mode, parent_guid, uid, gid, atime, mtime, ctime, type, size, shares, provider_id, owner_id
+]).
+
 % Macros defining types of membership
 -define(NONE_MEMBERSHIP, none).
 -define(DIRECT_MEMBERSHIP, direct).

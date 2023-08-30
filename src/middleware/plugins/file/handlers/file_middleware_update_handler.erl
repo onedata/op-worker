@@ -13,7 +13,7 @@
 %%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_middleware_plugin_update).
+-module(file_middleware_update_handler).
 -author("Bartosz Walkowicz").
 
 -behaviour(middleware_handler).
@@ -23,18 +23,23 @@
 
 
 %% middleware_router callbacks
--export([resolve_handler/2]).
+-export([assert_operation_supported/2]).
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([update/1]).
 
 
--spec resolve_handler(gri:aspect(), middleware:scope()) ->
-    module() | no_return().
-resolve_handler(instance, private) -> ?MODULE;              % gs only
-resolve_handler(acl, private)      -> ?MODULE;
-resolve_handler(_, _)              -> throw(?ERROR_NOT_SUPPORTED).
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec assert_operation_supported(gri:aspect(), middleware:scope()) ->
+    ok | no_return().
+assert_operation_supported(instance, private) -> ok;              % gs only
+assert_operation_supported(acl, private)      -> ok;
+assert_operation_supported(_, _)              -> throw(?ERROR_NOT_SUPPORTED).
+
 
 %%%===================================================================
 %%% middleware_handler callbacks
@@ -81,7 +86,7 @@ fetch_entity(_) ->
 authorize(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
-    ->
+->
     middleware_utils:has_access_to_file_space(Auth, Guid).
 
 
@@ -89,7 +94,7 @@ authorize(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
 validate(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
-    ->
+->
     middleware_utils:assert_file_managed_locally(Guid).
 
 

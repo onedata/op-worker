@@ -57,7 +57,7 @@
 
 -spec is_branching_node(tree_node()) -> {boolean(), tree_node()} | not_found.
 is_branching_node(FileCtx) ->
-    ?safeguard_not_found(file_ctx:is_dir(FileCtx)).
+    ?catch_not_found(file_ctx:is_dir(FileCtx)).
 
 
 -spec get_node_id(tree_node()) -> {node_id(), tree_node()}.
@@ -67,19 +67,19 @@ get_node_id(FileCtx) ->
 
 -spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()} | not_found.
 get_node_name(FileCtx0, UserCtx) ->
-    ?safeguard_not_found(file_ctx:get_aliased_name(FileCtx0, UserCtx)).
+    ?catch_not_found(file_ctx:get_aliased_name(FileCtx0, UserCtx)).
 
 
 -spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()} | not_found.
 get_node_path_tokens(FileCtx) ->
-    ?safeguard_not_found(begin
+    ?catch_not_found(begin
         {UuidPath, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
         [_Separator, SpaceId | Uuids] = filename:split(UuidPath),
         {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+        UserCtx = user_ctx:new(?ROOT_SESS_ID),
         PathTokens = lists:map(fun(Uuid) ->
-            UserCtx = user_ctx:new(?ROOT_SESS_ID),
             TokenFileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
-            case ?safeguard_not_found(file_attr:resolve(UserCtx, TokenFileCtx, #{attributes => [name]})) of
+            case ?catch_not_found(file_attr:resolve(UserCtx, TokenFileCtx, #{attributes => [name]})) of
                 not_found ->
                     throw(not_found);
                 {#file_attr{name = Name}, _Ctx} ->
@@ -143,7 +143,7 @@ get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
 -spec cache_file_doc_in_batch([file_ctx:ctx()]) -> [file_ctx:ctx()].
 cache_file_doc_in_batch(FileCtxs) ->
     FilterMapFun = fun(Ctx) ->
-        ?safeguard_not_found(begin
+        ?catch_not_found(begin
             {_, Ctx2} = file_ctx:get_file_doc(Ctx),
             {true, Ctx2}
         end, false)

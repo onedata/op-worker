@@ -57,7 +57,7 @@
     file_ctx :: file_ctx:ctx(),
     user_ctx :: user_ctx:ctx(),
     options :: resolve_opts(),
-    current_stage_attrs :: [attribute()] | [custom_metadata:key()]
+    current_stage_attrs = [] :: [attribute()] | [custom_metadata:name()]
 }).
 
 -type state() :: #state{}.
@@ -178,9 +178,9 @@ resolve_location_attrs(#state{file_ctx = FileCtx} = State) ->
     {Type, FileCtx2} = file_ctx:get_effective_type(FileCtx),
     UpdatedState = State#state{file_ctx = FileCtx2},
     case Type of
-        ?REGULAR_FILE_TYPE -> resolve_location_attrs_reg_file(UpdatedState);
-        ?DIRECTORY_TYPE -> resolve_location_attrs_dir(UpdatedState);
-        ?SYMLINK_TYPE -> resolve_location_attrs_symlink(UpdatedState)
+        ?REGULAR_FILE_TYPE -> resolve_location_attrs_for_reg_file(UpdatedState);
+        ?DIRECTORY_TYPE -> resolve_location_attrs_for_dir(UpdatedState);
+        ?SYMLINK_TYPE -> resolve_location_attrs_for_symlink(UpdatedState)
     end.
 
 
@@ -393,8 +393,8 @@ resolve_link_count(FileCtx, ShareId, Attrs) ->
 
 
 %% @private
--spec resolve_location_attrs_reg_file(state()) -> {state(), file_attr()}.
-resolve_location_attrs_reg_file(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs} = State) ->
+-spec resolve_location_attrs_for_reg_file(state()) -> {state(), file_attr()}.
+resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs} = State) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     {OptionalAttr, FileCtx3} = case {are_any_attrs_requested([local_replication_rate, is_fully_replicated], State), Size} of
         {true, 0} ->
@@ -409,7 +409,7 @@ resolve_location_attrs_reg_file(#state{file_ctx = FileCtx, current_stage_attrs =
                 %% do size'a byłoby dopuszczalne z punktu widzienia performancu? I czy nie ma tam jakichś możliwych rejsów?
                 %% (chodzi o to, żeby liczyć tylko local replication rate i potem na translacji dla clienta porównywać, czy jest 1)
                 (local_replication_rate, AccAttr) ->
-                    AccAttr#file_attr{local_replication_rate = file_location:count_bytes(FLDoc)/Size};
+                    AccAttr#file_attr{local_replication_rate = count_bytes(FLDoc)/Size};
                 (is_fully_replicated, AccAttr) ->
                     AccAttr#file_attr{is_fully_replicated = fslogic_location_cache:is_fully_replicated(FLDoc, Size)};
                 (_, AccAttr) ->
@@ -423,11 +423,11 @@ resolve_location_attrs_reg_file(#state{file_ctx = FileCtx, current_stage_attrs =
 
 
 %% @private
--spec resolve_location_attrs_dir(state()) -> {state(), file_attr()}.
-resolve_location_attrs_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
+-spec resolve_location_attrs_for_dir(state()) -> {state(), file_attr()}.
+resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {0, 0};
+            {State, #file_attr{}};
         _ ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
             ShouldCalculateRatio = are_any_attrs_requested([local_replication_rate], State),
@@ -454,6 +454,16 @@ resolve_location_attrs_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = Stat
 
 
 %% @private
+-spec resolve_location_attrs_for_symlink(state()) -> {state(), file_attr()}.
+resolve_location_attrs_for_symlink(State) ->
+    {FileDoc, UpdatedState} = get_file_doc(State),
+    {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
+    {UpdatedState, #file_attr{
+        size = byte_size(Symlink)
+    }}.
+
+
+%% @private
 -spec build_dir_size_attr(map(), boolean(), file_ctx:ctx()) -> file_attr().
 build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx) ->
     Size = maps:get(?TOTAL_SIZE, StatsResult, 0),
@@ -473,29 +483,24 @@ build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx) ->
 
 
 %% @private
--spec resolve_location_attrs_symlink(state()) -> {state(), file_attr()}.
-resolve_location_attrs_symlink(State) ->
-    {FileDoc, UpdatedState} = get_file_doc(State),
-    {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
-    {UpdatedState, #file_attr{
-        size = byte_size(Symlink)
-    }}.
+-spec count_bytes(undefined | file_location:doc()) -> non_neg_integer().
+count_bytes(undefined) -> 0;
+count_bytes(FileLocationDoc) -> file_location:count_bytes(FileLocationDoc).
 
 
 %% @private
 -spec resolve_name_attrs_internal(state()) -> {state(), file_attr()}.
 resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
-    FileName = file_ctx:get_aliased_name(FileCtx, UserCtx),
-    
     ShouldCalculateConflicts =
         are_any_attrs_requested([conflicting_name, conflicting_files], State) orelse
             read_option(name_conflicts_resolution_policy, State, resolve_name_conflicts) == resolve_name_conflicts,
 
-    case ShouldCalculateConflicts of
+    case ShouldCalculateConflicts andalso not file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            resolve_name_attrs_conflicts(State);
         false ->
-            {State, #file_attr{name = FileName}};
-        _ ->
-            resolve_name_attrs_conflicts(State)
+            {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
+            {State#state{file_ctx = FileCtx2}, #file_attr{name = FileName}}
     end.
 
 

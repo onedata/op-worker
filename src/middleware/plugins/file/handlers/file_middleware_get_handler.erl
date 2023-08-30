@@ -13,7 +13,7 @@
 %%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_middleware_plugin_get).
+-module(file_middleware_get_handler).
 -author("Bartosz Walkowicz").
 
 -behaviour(middleware_handler).
@@ -25,7 +25,7 @@
 -include_lib("ctool/include/privileges.hrl").
 
 
--export([resolve_handler/2]).
+-export([assert_operation_supported/2]).
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
@@ -44,42 +44,43 @@
 %%% API
 %%%===================================================================
 
--spec resolve_handler(gri:aspect(), middleware:scope()) ->
-    module() | no_return().
-resolve_handler(instance, private)                        -> ?MODULE;    % gs only
-resolve_handler(instance, public)                         -> ?MODULE;    % gs only
-resolve_handler(children, private)                        -> ?MODULE;    % REST only
-resolve_handler(children, public)                         -> ?MODULE;    % REST only
-resolve_handler(files, private)                           -> ?MODULE;    % REST only
-resolve_handler(xattrs, private)                          -> ?MODULE;    % REST/gs
-resolve_handler(xattrs, public)                           -> ?MODULE;    % REST/gs
-resolve_handler(json_metadata, private)                   -> ?MODULE;    % REST/gs
-resolve_handler(json_metadata, public)                    -> ?MODULE;    % REST/gs
-resolve_handler(rdf_metadata, private)                    -> ?MODULE;    % REST/gs
-resolve_handler(rdf_metadata, public)                     -> ?MODULE;    % REST/gs
-resolve_handler(distribution, private)                    -> ?MODULE;    % REST/gs
-resolve_handler(storage_locations, private)               -> ?MODULE;
-resolve_handler(acl, private)                             -> ?MODULE;
-resolve_handler(shares, private)                          -> ?MODULE;    % gs only
-resolve_handler(transfers, private)                       -> ?MODULE;
-resolve_handler(qos_summary, private)                     -> ?MODULE;    % REST/gs
-resolve_handler(dataset_summary, private)                 -> ?MODULE;
-resolve_handler(download_url, private)                    -> ?MODULE;    % gs only
-resolve_handler(download_url, public)                     -> ?MODULE;    % gs only
-resolve_handler(hardlinks, private)                       -> ?MODULE;
-resolve_handler({hardlinks, _}, private)                  -> ?MODULE;
-resolve_handler(symlink_value, public)                    -> ?MODULE;
-resolve_handler(symlink_value, private)                   -> ?MODULE;
-resolve_handler(symlink_target, public)                   -> ?MODULE;
-resolve_handler(symlink_target, private)                  -> ?MODULE;
-resolve_handler(archive_recall_details, private)          -> ?MODULE;
-resolve_handler(archive_recall_progress, private)         -> ?MODULE;
-resolve_handler(archive_recall_log, private)              -> ?MODULE;
-resolve_handler(api_samples, public)                      -> ?MODULE;
-resolve_handler(api_samples, private)                     -> ?MODULE;
-resolve_handler(dir_size_stats_collection_schema, public) -> ?MODULE;
-resolve_handler({dir_size_stats_collection, _}, private)  -> ?MODULE;
-resolve_handler(_, _)                                     -> throw(?ERROR_NOT_SUPPORTED).
+-spec assert_operation_supported(gri:aspect(), middleware:scope()) ->
+    ok | no_return().
+assert_operation_supported(instance, private)                        -> ok;    % REST/gs
+assert_operation_supported(instance, public)                         -> ok;    % REST/gs
+assert_operation_supported(children, private)                        -> ok;    % REST/gs
+assert_operation_supported(children, public)                         -> ok;    % REST/gs
+assert_operation_supported(files, private)                           -> ok;    % REST only
+assert_operation_supported(xattrs, private)                          -> ok;    % REST/gs
+assert_operation_supported(xattrs, public)                           -> ok;    % REST/gs
+assert_operation_supported(json_metadata, private)                   -> ok;    % REST/gs
+assert_operation_supported(json_metadata, public)                    -> ok;    % REST/gs
+assert_operation_supported(rdf_metadata, private)                    -> ok;    % REST/gs
+assert_operation_supported(rdf_metadata, public)                     -> ok;    % REST/gs
+assert_operation_supported(distribution, private)                    -> ok;    % REST/gs
+assert_operation_supported(storage_locations, private)               -> ok;
+assert_operation_supported(acl, private)                             -> ok;
+assert_operation_supported(shares, private)                          -> ok;    % gs only
+assert_operation_supported(transfers, private)                       -> ok;
+assert_operation_supported(qos_summary, private)                     -> ok;    % REST/gs
+assert_operation_supported(dataset_summary, private)                 -> ok;
+assert_operation_supported(download_url, private)                    -> ok;    % gs only
+assert_operation_supported(download_url, public)                     -> ok;    % gs only
+assert_operation_supported(hardlinks, private)                       -> ok;
+assert_operation_supported({hardlinks, _}, private)                  -> ok;
+assert_operation_supported(symlink_value, public)                    -> ok;
+assert_operation_supported(symlink_value, private)                   -> ok;
+assert_operation_supported(symlink_target, public)                   -> ok;
+assert_operation_supported(symlink_target, private)                  -> ok;
+assert_operation_supported(archive_recall_details, private)          -> ok;
+assert_operation_supported(archive_recall_progress, private)         -> ok;
+assert_operation_supported(archive_recall_log, private)              -> ok;
+assert_operation_supported(api_samples, public)                      -> ok;
+assert_operation_supported(api_samples, private)                     -> ok;
+assert_operation_supported(dir_size_stats_collection_schema, public) -> ok;
+assert_operation_supported({dir_size_stats_collection, _}, private)  -> ok;
+assert_operation_supported(_, _)                                     -> throw(?ERROR_NOT_SUPPORTED).
+
 
 %%%===================================================================
 %%% middleware_handler callbacks
@@ -89,9 +90,9 @@ resolve_handler(_, _)                                     -> throw(?ERROR_NOT_SU
 data_spec(#op_req{gri = #gri{aspect = instance, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"attributes">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)
     }
 };
 
@@ -104,9 +105,9 @@ data_spec(#op_req{gri = #gri{aspect = children, scope = Sc}}) -> #{
         <<"offset">> => {integer, any},
         <<"inclusive">> => {boolean, any},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
-        <<"attributes">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)
     }
 };
 
@@ -118,9 +119,9 @@ data_spec(#op_req{gri = #gri{aspect = files, scope = Sc}}) -> #{
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},
         <<"include_directories">> => {boolean, any},
-        <<"attributes">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)
     }
 };
 
@@ -151,7 +152,7 @@ data_spec(#op_req{gri = #gri{aspect = rdf_metadata}}) -> #{
 
 data_spec(#op_req{gri = #gri{aspect = symlink_target, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attributes">> => file_middleware_plugin_common_utils:build_attributes_param_spec(Sc)}
+    optional => #{<<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)}
 };
 
 data_spec(#op_req{gri = #gri{aspect = As}}) when
@@ -333,13 +334,13 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instanc
         private -> ?API_ATTRS;
         public -> ?PUBLIC_ATTRS
     end,
-    RequestedAttributes = read_requested_attributes(Data, DefaultAttrs),
+    RequestedAttributes = infer_requested_attributes(Data, DefaultAttrs),
     {ok, FileAttr} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), RequestedAttributes)),
     {ok, file_attr_translator:to_json(FileAttr, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    RequestedAttributes = read_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
+    RequestedAttributes = infer_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
 
     BaseOpts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
     ListingOpts = case maps:get(<<"token">>, Data, undefined) of
@@ -378,7 +379,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
         prefix => maps:get(<<"prefix">>, Data, undefined),
         include_directories => maps:get(<<"include_directories">>, Data, undefined)
     }),
-    RequestedAttributes = read_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
+    RequestedAttributes = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
     {ok, Result, InaccessiblePaths, NextPageToken} =
         ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), ListingOptions, RequestedAttributes)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
@@ -516,7 +517,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
 
     {ok, TargetFileGuid} = ?lfm_check(lfm:resolve_symlink(SessionId, ?FILE_REF(FileGuid))),
     
-    RequestedAttributes = read_requested_attributes(Data, ?API_ATTRS),
+    RequestedAttributes = infer_requested_attributes(Data, ?API_ATTRS),
     {ok, TargetFileAttrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(TargetFileGuid), RequestedAttributes)),
 
     TargetFileGri = #gri{
@@ -572,8 +573,8 @@ build_listing_start_point_param_spec(Key) ->
 
 
 %% @private
--spec read_requested_attributes(middleware:data(), [file_attr:attribute()]) -> [file_attr:attribute()].
-read_requested_attributes(Data, Default) ->
+-spec infer_requested_attributes(middleware:data(), [file_attr:attribute()]) -> [file_attr:attribute()].
+infer_requested_attributes(Data, Default) ->
     case maps:get(<<"attributes">>, Data, undefined) of
         undefined ->
             maps:get(<<"attribute">>, Data, Default);
