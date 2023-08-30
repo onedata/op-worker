@@ -50,12 +50,25 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
+-export([create_archives_root_dir/1, create_archive_dir/4, is_special_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
     uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+-spec create_archives_root_dir(od_space:id()) -> {ok, file_meta:uuid()}.
+create_archives_root_dir(SpaceId) ->
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
+    ArchivesRootDirDoc = file_meta:new_doc(
+        ArchivesRootDirUuid, ?ARCHIVES_ROOT_DIR_NAME,
+        ?DIRECTORY_TYPE, ?ARCHIVES_ROOT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
+        SpaceUuid, SpaceId
+    ),
+    ok = create_file_meta(SpaceUuid, ArchivesRootDirDoc),
+    {ok, ArchivesRootDirUuid}.
+
 
 -spec create_archive_dir(archive:id(), dataset:id(), od_space:id(), od_user:id()) ->
     {ok, file_meta:uuid()}.
@@ -162,19 +175,6 @@ create_dataset_archives_dir(DatasetId, SpaceId) ->
             ok = create_file_meta(ArchivesRootDirUuid, DatasetArchivedDirDoc)
     end,
     {ok, DatasetArchivesDirUuid}.
-
-
--spec create_archives_root_dir(od_space:id()) -> {ok, file_meta:uuid()}.
-create_archives_root_dir(SpaceId) ->
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
-    ArchivesRootDirDoc = file_meta:new_doc(
-        ArchivesRootDirUuid, ?ARCHIVES_ROOT_DIR_NAME,
-        ?DIRECTORY_TYPE, ?ARCHIVES_ROOT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
-        SpaceUuid, SpaceId
-    ),
-    ok = create_file_meta(SpaceUuid, ArchivesRootDirDoc),
-    {ok, ArchivesRootDirUuid}.
 
 
 -spec create_file_meta(file_meta:uuid(), file_meta:doc()) -> ok | {error, term()}.
