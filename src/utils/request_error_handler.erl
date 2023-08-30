@@ -79,15 +79,17 @@ infer_error({case_clause, Error}) ->
     infer_error(Error);
 
 infer_error({error, Reason} = Error) ->
-    case errors:is_posix_code(Reason) of
+    case errors:is_known_error(Error) of
         true ->
-            {true, ?ERROR_POSIX(Reason)};
+            {true, Error};
         false ->
-            case errors:is_known_error(Error) of
-                true -> {true, Error};
-                false -> false
-            end
+            infer_error(Reason)
     end;
 
-infer_error(_) ->
-    false.
+infer_error(Error) ->
+    case errors:is_posix_code(Error) of
+        true ->
+            {true, ?ERROR_POSIX(Error)};
+        false ->
+            false
+    end.
