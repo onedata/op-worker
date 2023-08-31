@@ -1567,10 +1567,10 @@ remove_share_test(Config) ->
 
     % Assert share removal requires only ?SPACE_MANAGE_SHARES space priv
     % and no file permissions
-    mock_space_user_privileges([W], ?SPACE_ID, UserId, []),
+    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, []),
     ?assertEqual(?ERROR_POSIX(?EPERM), RemoveShareFun(UserSessId)),
 
-    mock_space_user_privileges([W], ?SPACE_ID, UserId, privileges:space_admin()),
+    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, privileges:space_admin()),
     MainToken = initializer:create_access_token(UserId),
 
     % Assert api operations are unauthorized in case of data caveats
@@ -1594,7 +1594,7 @@ remove_share_test(Config) ->
         RemoveShareFun(CaveatSessId3)
     ),
 
-    mock_space_user_privileges([W], ?SPACE_ID, UserId, [?SPACE_MANAGE_SHARES]),
+    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, [?SPACE_MANAGE_SHARES]),
     ?assertEqual(ok, RemoveShareFun(UserSessId)).
 
 
@@ -2459,13 +2459,3 @@ extract_ok({ok, _}) -> ok;
 extract_ok({ok, _, _}) -> ok;
 extract_ok({ok, _, _, _}) -> ok;
 extract_ok({error, _} = Error) -> Error.
-
-
-%% @private
--spec mock_space_user_privileges([node()], od_space:id(), od_user:id(), [privileges:space_privilege()]) ->
-    ok.
-mock_space_user_privileges(Nodes, SpaceId, UserId, Privileges) ->
-    % Manually invalidate permissions cache as it is not done automatically
-    % due to initializer mocks
-    lists:foreach(fun(Node) -> rpc:call(Node, permissions_cache, invalidate, []) end, Nodes),
-    initializer:testmaster_mock_space_user_privileges(Nodes, SpaceId, UserId, Privileges).

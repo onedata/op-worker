@@ -757,10 +757,8 @@ remove_share(FileCtx, ShareId) ->
                 {error, not_found}
         end
     end,
-    case datastore_model:update(?CTX_WITH_REMOTE_SCOPE(SpaceId), FileUuid, Diff) of
-        {ok, _} -> ok;
-        {error, not_found} -> ok
-    end.
+    % Ignore case when file is not found as it may be zombie share with root file delete long ago
+    ok = ?ok_if_not_found(datastore_model:update(?CTX_WITH_REMOTE_SCOPE(SpaceId), FileUuid, Diff)).
 
 
 -spec get_shares(doc() | file_meta()) -> [od_share:id()].
