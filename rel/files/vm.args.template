@@ -53,3 +53,7 @@
 -kernel inet_backend socket
 
 -enable-feature maybe_expr
+
+# the default printable characters detection is set to latin1, but the system operates on unicode
+# this impacts the printing to console and logs during runtime
++pc unicode

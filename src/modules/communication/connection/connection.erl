@@ -921,7 +921,7 @@ socket_send(#state{
                         _ -> clproto_utils:msg_to_string(DataOrMsg)
                     end,
                     ?THROTTLE_ERROR(SessId, "Unable to send message via socket~s", [
-                        Socket, Error, MsgStr
+                        ?autoformat(Socket, Error, MsgStr)
                     ]),
                     Error
             end
