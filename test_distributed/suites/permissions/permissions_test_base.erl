@@ -1555,6 +1555,8 @@ remove_share_test(Config) ->
     {ok, ShareId} = opt_shares:create(W, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     RemoveShareFun = fun(SessId) ->
+        % Remove share via gs call to test token data caveats
+        % (middleware should reject any api call with data caveats)
         rpc:call(W, middleware, handle, [#op_req{
             auth = permissions_test_utils:get_auth(W, SessId),
             gri = #gri{type = op_share, id = ShareId, aspect = instance},
