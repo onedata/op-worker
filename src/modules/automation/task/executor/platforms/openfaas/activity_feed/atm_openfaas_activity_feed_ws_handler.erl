@@ -175,9 +175,11 @@ is_authorized(Req) ->
     % supports multiple OpenFaaS instances
     case op_worker:get_env(?AUTHORIZATION_SECRET_ENV_NAME, undefined) of
         undefined ->
-            ?alert("The ~p env variable is not set, the OpenFaaS activity feed will decline all requests", [
-                ?AUTHORIZATION_SECRET_ENV_NAME
-            ]),
+            utils:throttle(3600, fun() ->
+                ?alert("The ~p env variable is not set, the OpenFaaS activity feed will decline all requests", [
+                    ?AUTHORIZATION_SECRET_ENV_NAME
+                ])
+            end),
             false;
         Secret ->
             try
