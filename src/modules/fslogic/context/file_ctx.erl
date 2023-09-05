@@ -100,8 +100,7 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3, get_or_create_local_regular_file_location_doc/4,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
-    prepare_file_size_summary/1, prepare_file_size_summary_if_doc_exists/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/2,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, ensure_synced/1
 ]).
@@ -1001,27 +1000,21 @@ get_file_size(FileCtx) ->
             get_file_size_from_remote_locations(FileCtx2)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns information about file size (logical and size on storage). Creates location doc if it does not exist.
+%% Returns information about file size (logical and size on storage).
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_file_size_summary(ctx() | file_meta:uuid()) -> {file_size_summary(), ctx()}.
-prepare_file_size_summary(FileCtx) ->
+-spec prepare_file_size_summary(ctx(), create_missing_location | throw_on_missing_location) ->
+    {file_size_summary(), ctx()} | no_return().
+prepare_file_size_summary(FileCtx, create_missing_location) ->
     {LocationDoc, FileCtx2} = get_or_create_local_regular_file_location_doc(FileCtx, true, true),
-    {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns information about file size (logical and size on storage). Creates location doc if it does not exist.
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_file_size_summary_if_doc_exists(ctx() | file_meta:uuid()) -> {file_size_summary(), ctx()} | no_return().
-prepare_file_size_summary_if_doc_exists(FileCtx) ->
+    {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2};
+prepare_file_size_summary(FileCtx, throw_on_missing_location) ->
     case get_local_file_location_doc(FileCtx, true) of
         {undefined, _FileCtx2} ->
-            throw(file_location_missing);
+            throw({error, file_location_missing});
         {LocationDoc, FileCtx2} ->
             {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2}
     end.

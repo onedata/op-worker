@@ -21,7 +21,7 @@
 -export([empty_references/0, new_doc/4, merge_link_and_file_doc/2,
     register/2, deregister/2,
     count_references/1, inspect_references/1, list_references/1,
-    merge_references/2]).
+    merge_references/2, update_stats_on_merge/2]).
 
 -type link() :: file_meta:uuid().
 % List of links to file. It is kept as a map where list of links is divided
@@ -147,7 +147,19 @@ list_references(Key) ->
     end.
 
 -spec merge_references(file_meta:doc(), file_meta:doc()) -> not_mutated | {mutated, references()}.
-merge_references(
+merge_references(#document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}},
+    #document{value = #file_meta{references = OldReferences}}) ->
+    ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
+    OldMutatorReferences = maps:get(Mutator, OldReferences, []),
+
+    case ChangedMutatorReferences of
+        OldMutatorReferences -> not_mutated;
+        _ -> {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
+    end.
+
+
+-spec update_stats_on_merge(file_meta:doc(), file_meta:doc()) -> ok.
+update_stats_on_merge(
     #document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}} = NewDoc,
     #document{key = Uuid, scope = SpaceId, value = #file_meta{references = OldReferences}} = OldDoc
 ) ->
@@ -157,10 +169,9 @@ merge_references(
     IsDeleted = file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(OldDoc),
     case ChangedMutatorReferences of
         OldMutatorReferences when IsDeleted ->
-            dir_size_stats:handle_references_list_changes(file_id:pack_guid(Uuid, SpaceId), [], [Uuid], [Uuid]),
-            not_mutated;
+            dir_size_stats:handle_references_list_changes(file_id:pack_guid(Uuid, SpaceId), [], [Uuid], [Uuid]);
         OldMutatorReferences ->
-            not_mutated;
+            ok;
         _ ->
             {ok, OldRefsList} = list_references(OldDoc),
             RemovedReferences = case IsDeleted of
@@ -172,9 +183,7 @@ merge_references(
                 ChangedMutatorReferences -- OldMutatorReferences,
                 RemovedReferences,
                 OldRefsList
-            ),
-
-            {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
+            )
     end.
 
 %%%===================================================================

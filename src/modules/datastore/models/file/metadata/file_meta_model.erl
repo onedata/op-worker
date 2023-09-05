@@ -464,6 +464,7 @@ resolve_conflict(_Ctx,
         true ->
             default;
         false ->
+            file_meta_hardlinks:update_stats_on_merge(NewDoc, PrevDoc),
             case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
                 not_mutated ->
                     default;

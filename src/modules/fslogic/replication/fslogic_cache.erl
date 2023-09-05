@@ -932,7 +932,7 @@ apply_size_change(Key, FileUuid) ->
                 end,
                 lists:foreach(fun({{SpaceId, StorageId}, ChangeSize}) ->
                     % TODO VFS-8835 - cache parent when rename works properly
-                    dir_size_stats:report_size_changed_on_storage(
+                    dir_size_stats:report_size_on_storage_changed(
                         file_id:pack_guid(FileUuid, SpaceId), StorageId, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
