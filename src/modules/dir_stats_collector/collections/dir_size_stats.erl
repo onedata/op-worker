@@ -57,9 +57,8 @@
 %% API - reporting file count changes
 -export([report_file_created/2, report_file_created_without_state_check/2, report_file_deleted/2]).
 %% API - hooks
--export([register_and_count_local_link/3, deregister_and_count_local_link_deletion/1,
-    on_local_file_delete/1, report_remote_links_change/2, handle_references_list_changes/4,
-    on_opened_file_delete/1]).
+-export([on_link_register/2, on_link_deregister/1, on_local_file_delete/1,
+    report_remote_links_change/2, handle_references_list_changes/4, on_opened_file_delete/1]).
 
 %% dir_stats_collection_behaviour callbacks
 -export([
@@ -236,75 +235,51 @@ report_file_deleted(_, Guid) ->
 %%% API - hooks
 %%%===================================================================
 
--spec register_and_count_local_link(file_ctx:ctx(), file_id:file_guid(), file_meta:uuid()) -> ok.
-register_and_count_local_link(TargetFileCtx, TargetParentGuid, LinkUuid) ->
-    FileUuid = file_ctx:get_logical_uuid_const(TargetFileCtx),
-    SpaceId = file_id:guid_to_space_id(TargetParentGuid),
-    case dir_stats_service_state:is_active(SpaceId) of
-        true ->
-            ok = replica_synchronizer:apply(TargetFileCtx, fun() ->
-                try
-                    {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
-                    case file_ctx:get_or_create_local_regular_file_location_doc(TargetFileCtx, true, true) of
-                        {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
-                            case fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc)) of
-                                0 -> ok;
-                                TotalSize -> update_stats(TargetParentGuid, #{?TOTAL_DOWNLOAD_SIZE => TotalSize})
-                            end;
-                        {#document{value = #file_location{size = 0}}, _} ->
-                            ok;
-                        {#document{value = #file_location{size = TotalSize}}, _} ->
-                            update_stats(TargetParentGuid, #{?TOTAL_DOWNLOAD_SIZE => TotalSize})
-                    end
-                catch
-                    Class:Reason:Stacktrace -> ?examine_exception(Class, Reason, Stacktrace)
-                end
-            end);
-        false ->
-            {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
-            ok
+-spec on_link_register(file_ctx:ctx(), file_id:file_guid()) -> ok.
+on_link_register(TargetFileCtx, TargetParentGuid) ->
+    case file_ctx:get_or_create_local_regular_file_location_doc(TargetFileCtx, true, true) of
+        {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
+            case fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc)) of
+                0 -> ok;
+                TotalSize -> update_stats(TargetParentGuid, #{?TOTAL_DOWNLOAD_SIZE => TotalSize})
+            end;
+        {#document{value = #file_location{size = 0}}, _} ->
+            ok;
+        {#document{value = #file_location{size = TotalSize}}, _} ->
+            update_stats(TargetParentGuid, #{?TOTAL_DOWNLOAD_SIZE => TotalSize})
     end.
 
 
--spec deregister_and_count_local_link_deletion(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().
-deregister_and_count_local_link_deletion(FileCtx) ->
+-spec on_link_deregister(file_ctx:ctx()) -> ok.
+on_link_deregister(FileCtx) ->
     LinkUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    LinkGuid = file_ctx:get_logical_guid_const(FileCtx),
+    ReferencedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
 
-    {ok, ReferencesPresence} = case dir_stats_service_state:is_active(SpaceId) of
-        true ->
-            ReferencedFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-            replica_synchronizer:apply(ReferencedFileCtx, fun() ->
-                ?IGNORE_LOCATION_MISSING(begin
-                    fslogic_cache:flush(),
-                    {FileSizes, _} = file_ctx:prepare_file_size_summary(ReferencedFileCtx, throw_on_missing_location),
-                    case file_meta_hardlinks:list_references(FileUuid) of
-                        {ok, [LinkUuid]} ->
-                            update_using_size_summary(file_ctx:get_logical_guid_const(FileCtx), FileSizes, true, subtract),
-                            update_using_size_summary(file_ctx:get_referenced_guid_const(FileCtx),
-                                FileSizes, true, add);
-                        {ok, [LinkUuid, NextRef | _]} ->
-                            update_using_size_summary(file_ctx:get_logical_guid_const(FileCtx), FileSizes, true, subtract),
-                            update_using_size_summary(file_id:pack_guid(NextRef, SpaceId), FileSizes, false, add);
-                        {ok, References} ->
-                            case lists:member(LinkUuid, References) of
-                                true ->
-                                    report_download_size_changed(file_ctx:get_logical_guid_const(FileCtx),
-                                        -1 * proplists:get_value(total, FileSizes));
-                                false ->
-                                    ok
-                            end;
-                        _ ->
-                            ok
-                    end
-                end),
-                file_meta_hardlinks:deregister(FileUuid, LinkUuid)
-            end);
-        false ->
-            file_meta_hardlinks:deregister(FileUuid, LinkUuid)
-    end,
-    ReferencesPresence.
+    ?IGNORE_LOCATION_MISSING(begin
+        fslogic_cache:flush(),
+        {FileSizes, _} = file_ctx:prepare_file_size_summary(ReferencedFileCtx, throw_on_missing_location),
+        case file_meta_hardlinks:list_references(file_ctx:get_logical_uuid_const(ReferencedFileCtx)) of
+            {ok, [LinkUuid]} ->
+                update_using_size_summary(LinkGuid, FileSizes, true, subtract),
+                update_using_size_summary(file_ctx:get_logical_guid_const(ReferencedFileCtx),
+                    FileSizes, true, add);
+            {ok, [LinkUuid, NextRef | _]} ->
+                update_using_size_summary(LinkGuid, FileSizes, true, subtract),
+                SpaceId = file_ctx:get_space_id_const(FileCtx),
+                update_using_size_summary(file_id:pack_guid(NextRef, SpaceId), FileSizes, false, add);
+            {ok, References} ->
+                case lists:member(LinkUuid, References) of
+                    true ->
+                        report_download_size_changed(LinkGuid,
+                            -1 * proplists:get_value(total, FileSizes));
+                    false ->
+                        ok
+                end;
+            _ ->
+                ok
+        end
+    end).
 
 
 -spec on_local_file_delete(file_ctx:ctx()) -> file_meta_hardlinks:references_presence().

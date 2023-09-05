@@ -423,7 +423,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
 
             try
                 TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx3),
-                dir_size_stats:register_and_count_local_link(TargetFileCtx, TargetParentGuid, LinkUuid),
+                hardlink_registry_utils:register(TargetFileCtx, TargetParentGuid, LinkUuid),
 
                 FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
