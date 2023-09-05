@@ -107,6 +107,7 @@ stages:
         - atm_workflow_executions_collection
         - autocleaning
         - cdmi
+        - cdmi_multi_provider
         - ceph_helper
         - cephrados_helper
         - client_events
@@ -164,7 +165,6 @@ stages:
         - memory_pools_cleanup
         - model_file_meta
         - monitoring
-        - multi_provider_cdmi
         - multi_provider_changes_rest
         - multi_provider_db_sync
         - multi_provider_file_ops
@@ -856,6 +856,13 @@ cdmi:
     - <<: *ct_logs
       name: ct_logs_cdmi.tar.gz
 
+cdmi_multi_provider:
+  <<: *ct-onenv-job
+  key: MULTIPROVCDMI
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_cdmi_multi_provider.tar.gz
+
 ceph_helper:
   <<: *ct-job
   key: CE
@@ -1266,13 +1273,6 @@ monitoring:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_monitoring.tar.gz
-
-multi_provider_cdmi:
-  <<: *ct-onenv-job
-  key: MULTIPROVCDMI
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_cdmi.tar.gz
 
 multi_provider_changes_rest:
   <<: *ct-job
@@ -1873,6 +1873,7 @@ Coverage report:
     - artifact: ct_logs_atm_workflow_executions_collection.tar.gz
     - artifact: ct_logs_autocleaning.tar.gz
     - artifact: ct_logs_cdmi.tar.gz
+    - artifact: ct_logs_cdmi_multi_provider.tar.gz
     - artifact: ct_logs_ceph_helper.tar.gz
     - artifact: ct_logs_cephrados_helper.tar.gz
     - artifact: ct_logs_client_events.tar.gz
@@ -1930,7 +1931,6 @@ Coverage report:
     - artifact: ct_logs_memory_pools_cleanup.tar.gz
     - artifact: ct_logs_model_file_meta.tar.gz
     - artifact: ct_logs_monitoring.tar.gz
-    - artifact: ct_logs_multi_provider_cdmi.tar.gz
     - artifact: ct_logs_multi_provider_changes_rest.tar.gz
     - artifact: ct_logs_multi_provider_db_sync.tar.gz
     - artifact: ct_logs_multi_provider_file_ops.tar.gz

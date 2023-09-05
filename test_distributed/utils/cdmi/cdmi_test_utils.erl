@@ -48,7 +48,7 @@ do_request(Node, CdmiSubPath, Method, Headers, Body) ->
 
 cdmi_endpoint(Node, Domain) ->
     Port = get_https_server_port_str(Node),
-    string:join(["https://", str_utils:to_list(Domain), Port, "/cdmi/"], "").
+    str_utils:format("https://~s~s/cdmi/", [str_utils:to_list(Domain), str_utils:to_list(Port)]).
 
 
 %% @private
