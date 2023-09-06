@@ -22,7 +22,9 @@
 %% API
 -export([
     download_single_file/3, download_single_file/4, download_single_file/5,
-    download_tarball/6
+    download_tarball/6,
+
+    set_content_disposition_header/2
 ]).
 
 -type on_success_callback() :: fun(() -> ok).
@@ -76,6 +78,20 @@ download_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSy
         Range ->
             stream_partial_tarball(BulkDownloadId, TarballName, Range, Req0)
     end.
+
+
+-spec set_content_disposition_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
+set_content_disposition_header(FileName, Req) ->
+    NormalizedFileName = normalize_filename(FileName),
+    %% @todo VFS-2073 - check if needed
+    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
+    cowboy_req:set_resp_header(
+        ?HDR_CONTENT_DISPOSITION,
+        <<"attachment; filename=\"", NormalizedFileName/binary, "\"">>,
+        %% @todo VFS-2073 - check if needed
+        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
+        Req
+    ).
 
 
 %%%===================================================================
@@ -294,21 +310,6 @@ execute_on_success_callback(Guid, OnSuccessCallback) ->
         ?warning("Failed to execute file download successfully finished callback for file (~p) "
                  "due to ~p:~p", [Guid, Type, Reason])
     end.
-
-
-%% @private
--spec set_content_disposition_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
-set_content_disposition_header(FileName, Req) ->
-    NormalizedFileName = normalize_filename(FileName),
-    %% @todo VFS-2073 - check if needed
-    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
-    cowboy_req:set_resp_header(
-        ?HDR_CONTENT_DISPOSITION,
-        <<"attachment; filename=\"", NormalizedFileName/binary, "\"">>,
-        %% @todo VFS-2073 - check if needed
-        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-        Req
-    ).
 
 
 %% @private
