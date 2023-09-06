@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
+-include("http/rest.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
@@ -36,6 +37,7 @@
 -export([
     scan_audit_log/3, scan_audit_log/4,
     browse_store/2, browse_store/3,
+    download_store/2, download_store/3,
     get_exception_store_content/2
 ]).
 -export([
@@ -219,6 +221,42 @@ browse_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCal
     SpaceId = oct_background:get_space_id(SpaceSelector),
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
+
+
+-spec download_store(automation:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    json_utils:json_term().
+download_store(AtmStoreSchemaId, AtmMockCallCtx) ->
+    download_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
+
+
+-spec download_store
+    (exception_store, atm_lane_execution:lane_run_selector(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+        {ok, json_utils:json_term()} | errors:error();
+    (automation:id(), undefined | atm_task_execution:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+        {ok, json_utils:json_term()} | errors:error().
+download_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx = #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId
+}) ->
+    Endpoint = str_utils:format_bin("https://~s/automation/execution/stores/~s", [
+        oct_background:get_provider_domain(ProviderSelector),
+        get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx)
+    ]),
+
+    {ok, UserId} = ?rpc(ProviderSelector, session:get_user_id(SessionId)),
+    Headers = maps:from_list([
+        rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId))]
+    ),
+
+    Opts = [{recv_timeout, 60000} | rest_test_utils:cacerts_opts(ProviderSelector)],
+
+    case http_client:request(get, Endpoint, Headers, <<>>, Opts) of
+        {ok, ?HTTP_200_OK, _, Body} ->
+            {ok, json_utils:decode(Body)};
+        {ok, _, _, Body} ->
+            #{<<"error">> := ErrorJson} = json_utils:decode(Body),
+            errors:from_json(ErrorJson)
+    end.
 
 
 -spec get_exception_store_content(
