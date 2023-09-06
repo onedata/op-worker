@@ -90,8 +90,8 @@ handle_download(Req, AaiAuth = ?USER(_, SessionId), AtmStoreId) ->
 -spec assert_operation_supported(atm_store:record()) -> ok | no_return().
 assert_operation_supported(#atm_store{container = AtmStoreContainer}) ->
     case atm_store_container:get_store_type(AtmStoreContainer) of
-        time_series -> throw(?ERROR_NOT_SUPPORTED);
-        _ -> ok
+        audit_log -> ok;
+        _ -> throw(?ERROR_NOT_SUPPORTED)
     end.
 
 
@@ -150,7 +150,6 @@ get_store_name(
         AtmStoreSchemas
     ),
     AtmStoreName.
-
 
 
 %% @private
