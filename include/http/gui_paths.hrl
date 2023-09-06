@@ -31,6 +31,9 @@
 % Endpoint for downloading files
 -define(FILE_DOWNLOAD_PATH, "/download").
 
+% Endpoint for downloading atm store content
+-define(ATM_STORE_CONTENT_DOWNLOAD_PATH, "/automation/execution/stores/:id").
+
 %% Endpoint used to get provider's identity token
 -define(IDENTITY_TOKEN_PATH, "/identity_token").
 
