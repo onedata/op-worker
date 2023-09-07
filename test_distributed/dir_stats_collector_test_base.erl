@@ -321,7 +321,70 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     verify_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 2, 1}], FileSize),
     ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir1Guid))),
     verify_hardlinks(Config, CheckSelectors, [Dir4Guid], [{0, 0}], FileSize),
-    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir4Guid))).
+    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir4Guid))),
+
+
+    % Verify multiple open/close operations on single file/hardlink and cleaning of files after provider restart
+    [Dir5Guid, Dir6Guid] = DirGuids4 = lists:map(fun(_) ->
+        {ok, DirGuid} = ?assertMatch({ok, _},
+            lfm_proxy:mkdir(Creator, CreatorSessId, filename:join(["/", SpaceName, generator:gen_name()]))),
+        DirGuid
+    end, lists:seq(1,2)),
+    [File12Guid, File13Guid, File14Guid, File15Guid] = FileGuids3 = lists:map(fun(_) ->
+        file_ops_test_utils:create_file(Creator, CreatorSessId, Dir5Guid, generator:gen_name(), FileContent)
+    end, lists:seq(1,4)),
+    [Link12Guid, Link13Guid, Link14Guid, Link15Guid] = lists:map(fun(FileGuid) ->
+        {ok, #file_attr{guid = LinkGuid}} = ?assertMatch({ok, _},
+            lfm_proxy:make_link(Creator, CreatorSessId, ?FILE_REF(FileGuid), ?FILE_REF(Dir6Guid), generator:gen_name())),
+        LinkGuid
+    end, FileGuids3),
+
+    verify_hardlinks(Config, CheckSelectors, DirGuids4, [{4, 4}, {0, 4}], FileSize),
+    {ok, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link12Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File12Guid))),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{3, 3}, {1, 4}], 0, FileSize),
+    {ok, Handle5} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link12Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link12Guid))),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{3, 3}, {0, 3}], 1, FileSize),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle4)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle5)),
+    verify_after_delete_of_opened_file(Config, CheckSelectors, DirGuids4, [{3, 3}, {0, 3}], 0, FileSize),
+
+    {ok, Handle6} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File13Guid), rdwr)),
+    {ok, Handle7} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link13Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File13Guid))),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{2, 2}, {1, 3}], 0, FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link13Guid))),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{2, 2}, {0, 2}], 1, FileSize),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle6)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle7)),
+    verify_after_delete_of_opened_file(Config, CheckSelectors, DirGuids4, [{2, 2}, {0, 2}], 0, FileSize),
+
+    {ok, Handle8} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File14Guid), rdwr)),
+    {ok, Handle9} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link14Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File14Guid))),
+    verify_after_delete_of_opened_file(Config, CheckSelectors, DirGuids4, [{1, 1}, {1, 2}], 0, FileSize),
+
+    {ok, Handle10} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File15Guid), rdwr)),
+    {ok, Handle11} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link15Guid), rdwr)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File15Guid))),
+    verify_after_delete_of_opened_file(Config, CheckSelectors, DirGuids4, [{0, 0}, {2, 2}], 0, FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link15Guid))),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{0, 0}, {1, 1}], 1, FileSize),
+
+    ?assertMatch(ok, rpc:call(Worker, fslogic_delete, cleanup_opened_files, [])),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{0, 0}, {1, 1}], 0, FileSize),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link14Guid))),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{0, 0}, {0, 0}], 0, FileSize),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle8)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle9)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle10)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle11)),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{0, 0}, {0, 0}], 0, FileSize),
+
+    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir5Guid))),
+    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir6Guid))).
+
 
 
 verify_hardlinks(Config, NodesSelectors, DirGuids, DirSizes, FileSize) ->

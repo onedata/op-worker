@@ -23,7 +23,7 @@
 
 %% API
 -export([is_file_opened/1, delete/1, list/0]).
--export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
+-export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1, get_removal_status/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 -export([gen_handle_id/1, get_open_flag/1]).
 
@@ -83,6 +83,13 @@ is_removed(#document{value = FileHandles}) ->
     is_removed(FileHandles);
 is_removed(#file_handles{removal_status = RemovalStatus}) ->
     RemovalStatus =/= ?NOT_REMOVED.
+
+
+-spec get_removal_status(record() | doc()) -> removal_status().
+get_removal_status(#document{value = FileHandles}) ->
+    get_removal_status(FileHandles);
+get_removal_status(#file_handles{removal_status = RemovalStatus}) ->
+    RemovalStatus.
 
 %%--------------------------------------------------------------------
 %% @doc

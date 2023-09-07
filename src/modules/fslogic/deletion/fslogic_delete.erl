@@ -193,18 +193,22 @@ cleanup_file(FileCtx, RemoveStorageFile) ->
 cleanup_opened_files() ->
     case file_handles:list() of
         {ok, Docs} ->
-            RemovedFiles = lists:filter(fun(Doc) -> file_handles:is_removed(Doc) end, Docs),
-            UserCtx = user_ctx:new(?ROOT_SESS_ID),
-            lists:foreach(fun(#document{key = FileUuid} = Doc) ->
+            RemovedUuidsWithStatus = lists:filtermap(fun(#document{key = Uuid} = Doc) ->
+                case file_handles:is_removed(Doc) of
+                    true -> {true, {Uuid, file_handles:get_removal_status(Doc)}};
+                    false -> false
+                end
+            end, Docs),
+            lists:foreach(fun({FileUuid, RemovalStatus}) ->
                 try
                     FileGuid = fslogic_file_id:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, ?ALL_DOCS))
+                    handle_release_of_deleted_file(FileCtx, RemovalStatus)
                 catch
                     Class:Reason:Stacktrace ->
-                        ?warning_exception(?autoformat([Doc]), Class, Reason, Stacktrace)
+                        ?warning_exception(?autoformat([FileUuid, RemovalStatus]), Class, Reason, Stacktrace)
                 end
-            end, RemovedFiles),
+            end, RemovedUuidsWithStatus),
 
             lists:foreach(fun(#document{key = FileUuid}) ->
                 ok = file_handles:delete(FileUuid)
