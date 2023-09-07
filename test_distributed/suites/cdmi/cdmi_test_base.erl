@@ -162,7 +162,7 @@ selective_params_list(Config) ->
 
 
 childrenrange_list(Config) ->
-    {Workers, RootName, RootPath, TestDirName, TestDirNameCheck, TestFileNameBin} = list_dir_base(Config),
+    {Workers, _, RootPath, _, _, _} = list_dir_base(Config),
     %%---- childrenrange list ------
     Children = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
         "12", "13", "14"],
@@ -249,8 +249,6 @@ objectid_root(Config) ->
     RequestHeaders0 = [?CDMI_VERSION_HEADER, user_2_token_header()],
     {ok, Code0, _Headers0, Response0} = cdmi_internal:do_request(Workers, RootPath, get, RequestHeaders0, []),
     ?assertEqual(?HTTP_200_OK, Code0),
-    CdmiResponse0 = json_utils:decode(Response0),
-    SpaceRootId = maps:get(<<"objectID">>, CdmiResponse0),
     CdmiResponse1 = json_utils:decode(Response1),
     RootId = maps:get(<<"objectID">>, CdmiResponse1, undefined),
 
@@ -1209,8 +1207,6 @@ update_file_http(Config) ->
     {_SpaceName, _ShortTestDirName, _TestDirName, _TestFileName, FullTestFileName, TestFileContent} =
         cdmi_internal:create_test_dir_and_file(Config),
 
-    NewValue = <<"New Value!">>,
-    UpdatedValue = <<"123 Value!">>,
     %%--- value replace, http ------
     RequestBody3 = TestFileContent,
     {ok, Code3, _Headers3, _Response3} =
@@ -1843,7 +1839,7 @@ acl_read_file(Config) ->
     {ok, Code2, _, Response2} = cdmi_internal:do_request(Workers, Filename1, get, [user_2_token_header()], []),
     ?assertMatch(EaccesError, {Code2, json_utils:decode(Response2)}),
     ?assertEqual({error, ?EACCES}, cdmi_internal:open_file(
-        Config#cdmi_test_config.p2_selector, Filename1, read, Config), ?ATTEMPTS
+        Config#cdmi_test_config.p2_selector, Filename1, read), ?ATTEMPTS
     ),
 
     % set acl to 'read&write' and test cdmi/non-cdmi get request (should succeed)
@@ -1903,7 +1899,7 @@ acl_write_file(Config) ->
     ?assertEqual(<<"new_data2">>, cdmi_internal:get_file_content(Filename1, Config), ?ATTEMPTS),
     ?assertEqual(
         {error, ?EACCES},
-        cdmi_internal:open_file(Config#cdmi_test_config.p2_selector, Filename1, write, Config),
+        cdmi_internal:open_file(Config#cdmi_test_config.p2_selector, Filename1, write),
         ?ATTEMPTS
     ),
     ?assertEqual(<<"new_data2">>, cdmi_internal:get_file_content(Filename1, Config), ?ATTEMPTS).

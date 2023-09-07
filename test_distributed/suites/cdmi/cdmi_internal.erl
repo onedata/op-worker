@@ -21,7 +21,7 @@
 %% API
 -export([
     get_file_content/2, object_exists/2, do_request/4, do_request/5,
-    create_test_dir_and_file/1, create_new_file/2, write_to_file/4, open_file/4,
+    create_test_dir_and_file/1, create_new_file/2, write_to_file/4, open_file/3,
     mock_opening_file_without_perms/1, unmock_opening_file_without_perms/1,
     get_json_metadata/2, get_xattrs/2, get_acl/2, set_acl/3, get_random_string/0
 ]).
@@ -187,7 +187,7 @@ create_new_file(Path, Config) ->
     lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path)).
 
 
-open_file(ProviderSelector, Path, OpenMode, Config) ->
+open_file(ProviderSelector, Path, OpenMode) ->
     Worker = oct_background:get_random_provider_node(ProviderSelector),
     SessionId = oct_background:get_user_session_id(user2, ProviderSelector),
     lfm_proxy:open(Worker, SessionId, {path, absolute_binary_path(Path)}, OpenMode).
@@ -195,7 +195,7 @@ open_file(ProviderSelector, Path, OpenMode, Config) ->
 
 write_to_file(Path, Data, Offset, Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    {ok, FileHandle} = ?assertMatch({ok, _}, open_file(Config#cdmi_test_config.p1_selector, Path, write, Config), ?ATTEMPTS),
+    {ok, FileHandle} = ?assertMatch({ok, _}, open_file(Config#cdmi_test_config.p1_selector, Path, write), ?ATTEMPTS),
     Result = lfm_proxy:write(WorkerP1, FileHandle, Offset, Data),
     lfm_proxy:close(WorkerP1, FileHandle),
     Result.
@@ -203,7 +203,7 @@ write_to_file(Path, Data, Offset, Config) ->
 
 get_file_content(Path, Config) ->
     WorkerP2 = oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector),
-    case open_file(Config#cdmi_test_config.p2_selector, Path, read, Config) of
+    case open_file(Config#cdmi_test_config.p2_selector, Path, read) of
         {ok, FileHandle} ->
             Result = case lfm_proxy:check_size_and_read(WorkerP2, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
                 {error, Error} -> {error, Error};
