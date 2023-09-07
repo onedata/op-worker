@@ -393,8 +393,7 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
                 end
             end),
 
-            critical_section:run([?MODULE, Uuid], fun() ->
-                NewReferenceListChanges = node_cache:get({?MODULE, Uuid}, #reference_list_changes{}),
+            node_cache:update([?MODULE, Uuid], fun(NewReferenceListChanges) ->
                 NewRecord = #reference_list_changes{
                     added = NewReferenceListChanges#reference_list_changes.added -- AddedList,
                     removed = NewReferenceListChanges#reference_list_changes.removed -- RemovedList,
@@ -402,11 +401,11 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
                 },
                 case NewRecord of
                     #reference_list_changes{added = [], removed = [], removed_main_refs = []} ->
-                        node_cache:clear({?MODULE, Uuid});
+                        clear;
                     _ ->
-                        node_cache:put({?MODULE, Uuid}, NewRecord)
+                        {ok, NewRecord, infinity}
                 end
-            end),
+            end, #reference_list_changes{}),
 
             ok
         end)

@@ -744,10 +744,11 @@ add_share(FileCtx, ShareId) ->
 %% Remove shareId from file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
+-spec remove_share(file_ctx:ctx(), od_share:id()) -> ok.
 remove_share(FileCtx, ShareId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    Diff = fun(FileMeta = #file_meta{shares = Shares}) ->
         Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
             case ShareId == ShId of
                 true -> {found, Acc};
@@ -761,7 +762,13 @@ remove_share(FileCtx, ShareId) ->
             {not_found, _} ->
                 {error, not_found}
         end
-    end)).
+    end,
+    % Ignore cases of:
+    % - detached share with its root file already deleted
+    % - share not found in file_meta due to nonexistent doc conflict resolution for 'shares' field
+    ok = ?ok_if_not_found(?extract_ok(datastore_model:update(
+        ?CTX_WITH_REMOTE_SCOPE(SpaceId), FileUuid, Diff
+    ))).
 
 
 -spec get_shares(doc() | file_meta()) -> [od_share:id()].

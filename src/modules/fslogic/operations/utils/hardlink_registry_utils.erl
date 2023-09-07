@@ -10,7 +10,7 @@
 %%% It is created because both link registration/deregistration and stats
 %%% update have to be handled inside replica_synchronizer when stats
 %%% are active. Thus, this module hides dependency between these concepts
-%%% and can be deleted after replica_synchronizer refactoring.
+%%% and can be deleted after replica_synchronizer refactoring (VFS-11341).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(hardlink_registry_utils).

@@ -168,24 +168,11 @@ upgrade_cluster(4) ->
 upgrade_cluster(5) ->
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
-
         lists:foreach(fun(SpaceId) ->
             ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
-            file_meta:make_opened_deleted_files_dir_exist(SpaceId),
-
-            case dir_stats_service_state:is_active(SpaceId) of
-                true ->
-                    ?info("Reinitializing stats for space '~s'.", [SpaceId]),
-                    dir_stats_service_state:disable(SpaceId),
-                    % Wait until status is not active - otherwise when initialization is in progress,
-                    % disable/enable sequence may not result in initialization restart (pending initialization
-                    % can be continued) and it is expected to reinitialize whole space (stats set has changed).
-                    wait_until_stats_are_not_active(SpaceId),
-                    dir_stats_service_state:enable(SpaceId);
-                false ->
-                    ok
-            end
+            file_meta:make_opened_deleted_files_dir_exist(SpaceId)
         end, SpaceIds)
+        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
     end),
     {ok, 6}.
 
@@ -373,14 +360,3 @@ await_zone_connection_and_run(false, Retries, Fun) ->
     await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
-
-%% @private
--spec wait_until_stats_are_not_active(od_space:id()) -> ok.
-wait_until_stats_are_not_active(SpaceId) ->
-    case dir_stats_service_state:is_active(SpaceId) of
-        true ->
-            timer:sleep(timer:seconds(1000)),
-            wait_until_stats_are_not_active(SpaceId);
-        false ->
-            ok
-    end.

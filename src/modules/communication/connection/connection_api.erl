@@ -123,11 +123,9 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
 
 
 %% @private
--spec log_sending_msg_error(session:id(), communicator:message(),
-    {error, term()}) -> ok.
+-spec log_sending_msg_error(session:id(), communicator:message(), {error, term()}) -> ok.
 log_sending_msg_error(SessionId, _Msg, {error, no_connections}) ->
-    ?debug("Failed to send msg to ~p due to lack of available "
-           "connections", [SessionId]);
+    ?debug("Failed to send msg to ~p due to lack of available connections", [SessionId]);
 
 log_sending_msg_error(SessionId, _Msg, ?ERROR_NOT_FOUND) ->
     % there is no registry of tasks for session and therefore they are not
@@ -136,6 +134,5 @@ log_sending_msg_error(SessionId, _Msg, ?ERROR_NOT_FOUND) ->
     ?debug("Failed to send msg to session ~p as it no longer exist", [SessionId]);
 
 log_sending_msg_error(SessionId, Msg, Error) ->
-    ?error("Failed to send msg ~s to peer ~p due to: ~p", [
-        clproto_utils:msg_to_string(Msg), SessionId, Error
-    ]).
+    MsgStr = clproto_utils:msg_to_string(Msg),
+    ?error("Failed to send msg to peer~s", [?autoformat(SessionId, Error, MsgStr)]).

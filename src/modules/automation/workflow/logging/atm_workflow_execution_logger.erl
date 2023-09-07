@@ -106,14 +106,12 @@ should_log(#atm_workflow_execution_logger{log_level = LogLevel}, LogSeverityInt)
 %% @end
 %%-------------------------------------------------------------------
 -spec ensure_log_term_size_not_exceeded(term()) -> term() | binary().
-ensure_log_term_size_not_exceeded(Bin) when is_binary(Bin), byte_size(Bin) =< ?LOG_TERM_SIZE_LIMIT ->
-    Bin;
-ensure_log_term_size_not_exceeded(TooLongBinary) when is_binary(TooLongBinary) ->
-    trim_binary(TooLongBinary);
+ensure_log_term_size_not_exceeded(Bin) when is_binary(Bin) ->
+    str_utils:truncate_overflow(Bin, ?LOG_TERM_SIZE_LIMIT);
 ensure_log_term_size_not_exceeded(Term) ->
     case json_utils:encode(Term) of
         TooLongBinary when byte_size(TooLongBinary) > ?LOG_TERM_SIZE_LIMIT ->
-            trim_binary(TooLongBinary);
+            str_utils:truncate_overflow(TooLongBinary, ?LOG_TERM_SIZE_LIMIT);
         _ ->
             Term
     end.
@@ -312,10 +310,3 @@ handle_logs(UpdateOptions, Logs, AtmWorkflowExecutionAuth, AtmAuditLogStoreConta
         }
     ),
     ok.
-
-
-%% @private
--spec trim_binary(binary()) -> binary().
-trim_binary(TooLongBinary) ->
-    TrimmedBinary = binary:part(TooLongBinary, 0, ?LOG_TERM_SIZE_LIMIT),
-    <<TrimmedBinary/binary, "...">>.
