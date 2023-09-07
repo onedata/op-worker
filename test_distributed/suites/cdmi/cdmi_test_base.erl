@@ -247,7 +247,7 @@ objectid_root(Config) ->
     ?assertEqual(?HTTP_200_OK, Code1),
 
     RequestHeaders0 = [?CDMI_VERSION_HEADER, user_2_token_header()],
-    {ok, Code0, _Headers0, Response0} = cdmi_internal:do_request(Workers, RootPath, get, RequestHeaders0, []),
+    {ok, Code0, _Headers0, _Response0} = cdmi_internal:do_request(Workers, RootPath, get, RequestHeaders0, []),
     ?assertEqual(?HTTP_200_OK, Code0),
     CdmiResponse1 = json_utils:decode(Response1),
     RootId = maps:get(<<"objectID">>, CdmiResponse1, undefined),
