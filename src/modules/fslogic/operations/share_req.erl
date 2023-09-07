@@ -50,13 +50,16 @@ create_share(UserCtx, FileCtx0, Name, Description) ->
 %%--------------------------------------------------------------------
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
     ok | no_return().
-remove_share(UserCtx, FileCtx0, ShareId) ->
-    data_constraints:assert_not_readonly_mode(UserCtx),
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [?TRAVERSE_ANCESTORS]
-    ),
-    remove_share_internal(UserCtx, FileCtx1, ShareId).
+remove_share(UserCtx, FileCtx, ShareId) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+
+    ok = file_meta:remove_share(FileCtx, ShareId),
+    ok = share_logic:delete(SessionId, ShareId),
+    ok = permissions_cache:invalidate().
 
 
 %%%===================================================================
@@ -94,23 +97,4 @@ create_share_internal(UserCtx, FileCtx0, Name, Description) ->
             end;
         _ ->
             throw({error, ?EAGAIN})
-    end.
-
-
-%% @private
--spec remove_share_internal(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
-    ok | no_return().
-remove_share_internal(UserCtx, FileCtx, ShareId) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
-    UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
-    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
-
-    case file_meta:remove_share(FileCtx, ShareId) of
-        {error, not_found} ->
-            throw({error, ?ENOENT});
-        ok ->
-            ok = share_logic:delete(SessionId, ShareId),
-            ok = permissions_cache:invalidate()
     end.
