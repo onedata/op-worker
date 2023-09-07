@@ -171,7 +171,7 @@ upgrade_cluster(5) ->
         lists:foreach(fun(SpaceId) ->
             ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
             file_meta:make_opened_deleted_files_dir_exist(SpaceId)
-        end, SpaceIds)
+        end, SpaceIds),
         lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
     end),
     {ok, 6}.
