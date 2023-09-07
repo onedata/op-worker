@@ -124,8 +124,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec apply(Function :: atom(), Args :: [term()]) ->
-    Result :: term() | {badrpc, {'EXIT', {Reason, Stacktrace}}} when
-    Reason :: term(), Stacktrace :: list().
+    Result :: term() | {badrpc, {'EXIT', {Reason :: term(), stacktrace()}}}.
 apply(Function, Args) ->
     try
         erlang:apply(?MODULE, Function, Args)

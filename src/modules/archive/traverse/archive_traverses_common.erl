@@ -25,7 +25,7 @@
 -export([execute_unsafe_job/5]).
 -export([is_cancelling/1]).
 
--type error_handler(T) :: fun((tree_traverse:job(), Error :: any(), Stacktrace :: list() | undefined) -> T).
+-type error_handler(T) :: fun((tree_traverse:job(), Error :: any(), stacktrace() | undefined) -> T).
 
 %%%===================================================================
 %%% API functions

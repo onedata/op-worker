@@ -174,10 +174,11 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
     case tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor) of
         {ok, _} = Res ->
             Res;
-        {error, _} = Error ->
+        {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error("Error when listing directory during stats initialization: ~s", [?autoformat([Error, FileUuid])]),
+            ?error_exception("Error when listing directory during stats initialization: ~s",
+                [?autoformat([FileUuid])], error, Reason, Stacktrace),
             ok = dir_stats_collector:update_stats_of_dir(
                 file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERRORS_COUNT => 1}),
             {ok, #{}}

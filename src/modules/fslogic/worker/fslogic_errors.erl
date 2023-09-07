@@ -51,7 +51,7 @@ is_access_error(_) -> false.
 %% Handle error caught during processing of fslogic request.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_error(fslogic_worker:request(), Type :: atom(), Reason :: term(), Stacktrace :: list()) ->
+-spec handle_error(fslogic_worker:request(), Type :: atom(), Reason :: term(), stacktrace()) ->
     fslogic_worker:response().
 handle_error(Request, Type, Error, Stacktrace) ->
     Status = #status{code = Code} =

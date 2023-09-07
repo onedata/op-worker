@@ -33,7 +33,7 @@
 -spec handle(
     Type :: atom(),
     Reason :: term(),
-    Stacktrace :: list(),
+    stacktrace(),
     session:id(),
     Request :: term()
 ) ->

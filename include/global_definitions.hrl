@@ -16,6 +16,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
+
+-type stacktrace() :: list().
+
 %%%===================================================================
 %%% Global names
 %%%===================================================================
