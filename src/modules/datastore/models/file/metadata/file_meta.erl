@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
--export([save/1, create/2, save/2, get/1, exists/1, update/2]).
+-export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
@@ -320,6 +320,11 @@ update({path, Path}, Diff) ->
     end);
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
+
+
+-spec update(uuid(), diff(), doc()) -> {ok, doc()} | {error, term()}.
+update(Key, Diff, Default) ->
+    datastore_model:update(?CTX, Key, Diff, Default).
 
 
 %%--------------------------------------------------------------------

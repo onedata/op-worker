@@ -46,7 +46,8 @@
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
     {4, ?LINE_21_02(<<"2">>)},
-    {5, op_worker:get_release_version()}
+    {5, ?LINE_21_02(<<"3">>)},
+    {6, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -163,7 +164,11 @@ upgrade_cluster(4) ->
             end
         end, SpaceIds)
     end),
-    {ok, 5}.
+    {ok, 5};
+upgrade_cluster(5) ->
+    await_zone_connection_and_run(fun trash:ensure_exists_for_all_spaces/0),
+    await_zone_connection_and_run(fun archivisation_tree:ensure_archives_root_dir_for_all_spaces/0),
+    {ok, 6}.
 
 %%--------------------------------------------------------------------
 %% @doc
