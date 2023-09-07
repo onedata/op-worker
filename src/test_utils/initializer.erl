@@ -662,6 +662,9 @@ unmock_provider_ids(Workers) ->
 -spec testmaster_mock_space_user_privileges([node()], od_space:id(), od_user:id(),
     [privileges:space_privilege()]) -> ok.
 testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
+    % Manually invalidate permissions cache as it is not done automatically
+    % due to initializer mocks
+    lists:foreach(fun(Node) -> rpc:call(Node, permissions_cache, invalidate, []) end, Workers),
     utils:rpc_multicall(Workers, node_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
     ok.
 
