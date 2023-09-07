@@ -49,7 +49,9 @@
     outbox = queue:new() :: messages()
 }).
 
--define(PROCESS_REQUEST_RETRY_DELAY, timer:seconds(5)).
+-define(PROCESS_REQUEST_RETRY_FIRST_BACKOFF, timer:seconds(5)).
+-define(PROCESS_REQUEST_RETRY_MAX_BACKOFF, timer:hours(1)).
+-define(THROTTLE_LOG(LogId, Log), utils:throttle(LogId, 300, fun() -> Log end)). % log no more often than every 5 minutes
 -define(LOG_FAILED_ATTEMPTS_THRESHOLD, 10).
 
 %%%===================================================================
@@ -155,8 +157,8 @@ handle_cast(Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(process_pending_requests, State) ->
-    {noreply, process_pending_requests(State)};
+handle_info({process_pending_requests, Backoff}, State) ->
+    {noreply, process_pending_requests(State, Backoff)};
 
 handle_info({'EXIT', _, shutdown}, State) ->
     {stop, normal, State};
@@ -231,9 +233,8 @@ handle_request(Request, #state{inbox = Inbox} = State) ->
                 process_request(Request, State)
             catch
                 _:Reason ->
-                    erlang:send_after(?PROCESS_REQUEST_RETRY_DELAY, self(),
-                        process_pending_requests),
-                    maybe_log_failure(Request, Reason, 1),
+                    schedule_retry_of_pending_requests_processing(?PROCESS_REQUEST_RETRY_FIRST_BACKOFF),
+                    maybe_log_failure(Request, Reason, 1, ?PROCESS_REQUEST_RETRY_FIRST_BACKOFF),
                     State#state{inbox = queue:in({Request, 1}, Inbox)}
             end;
         false ->
@@ -247,18 +248,17 @@ handle_request(Request, #state{inbox = Inbox} = State) ->
 %% If an error occurs, processing is stopped and will be restarted after timeout.
 %% @end
 %%--------------------------------------------------------------------
--spec process_pending_requests(State :: #state{}) -> NewState :: #state{}.
-process_pending_requests(#state{inbox = Inbox} = State) ->
+-spec process_pending_requests(State :: #state{}, time:millis()) -> NewState :: #state{}.
+process_pending_requests(#state{inbox = Inbox} = State, Backoff) ->
     case queue:peek(Inbox) of
         {value, {Request, Attempts}} ->
             try
-                process_request(Request, State),
-                State#state{inbox = queue:drop(Inbox)}
+                NewState = process_request(Request, State#state{inbox = queue:drop(Inbox)}),
+                process_pending_requests(NewState, ?PROCESS_REQUEST_RETRY_FIRST_BACKOFF)
             catch
                 _:Reason ->
-                    erlang:send_after(?PROCESS_REQUEST_RETRY_DELAY, self(),
-                        process_pending_requests),
-                    maybe_log_failure(Request, Reason, Attempts + 1),
+                    schedule_retry_of_pending_requests_processing(Backoff),
+                    maybe_log_failure(Request, Reason, Attempts + 1, Backoff),
                     State#state{inbox = queue:in_r({Request, Attempts + 1}, queue:drop(Inbox))}
             end;
         empty -> State
@@ -403,20 +403,25 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_log_failure(Request :: term(), Reason :: term(),
-    Attempt :: non_neg_integer()) -> ok.
-maybe_log_failure(_, {badmatch, {error, empty_connection_pool}}, _) ->
+    Attempt :: non_neg_integer(), time:millis()) -> ok.
+maybe_log_failure(_, {badmatch, {error, no_connections}}, _, _) ->
     ok;
-maybe_log_failure(_, {badmatch, {error, no_connection_to_peer_provider}}, _) ->
+maybe_log_failure(_, {badmatch, ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER}, _, _) ->
     ok;
-maybe_log_failure(_, {badmatch, {error, not_found}}, _) ->
+maybe_log_failure(_, {badmatch, {error, not_found}}, _, _) ->
     ok;
-maybe_log_failure(Request, Reason, Attempt) ->
-    case Attempt > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
+maybe_log_failure(Request, Reason, AttemptNumber, RetryInMillis) ->
+    case AttemptNumber > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
         true ->
-            ?error("Cannot process request ~p due to: ~p. "
-            "There has been ~p unsuccessful attempts so far. "
-            "Retrying in ~p milliseconds...",
-                [Request, Reason, Attempt, ?PROCESS_REQUEST_RETRY_DELAY]);
+            ?THROTTLE_LOG(Request, ?error("Cannot process request in ~p~s",
+                [?MODULE, ?autoformat([Request, Reason, AttemptNumber, RetryInMillis])]
+            ));
         false ->
             ok
     end.
+
+-spec schedule_retry_of_pending_requests_processing(time:millis()) -> ok.
+schedule_retry_of_pending_requests_processing(CurrentBackoff) ->
+    NextBackoff = round(min(1.2 * CurrentBackoff, ?PROCESS_REQUEST_RETRY_MAX_BACKOFF)),
+    erlang:send_after(CurrentBackoff, self(), {process_pending_requests, NextBackoff}),
+    ok.
