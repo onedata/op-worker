@@ -270,7 +270,6 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link10Guid))),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize6, <<"xyz">>)),
     FileSize7 = FileSize6 + 3,
-    % TODO - zweryfikowac otwarcie kilku plikow na raz i przez wiele openow/close'ow
     verify_after_delete_of_opened_file(Config, OverriddenOpenedFileCheckSelector, DirGuids2,
         [{0, 0}, {0, 0}, {0, 0}], 1, FileSize7),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle3)),

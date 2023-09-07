@@ -81,8 +81,6 @@ create_hidden_hardlink_for_opened_deleted_file(FileCtx) ->
         true ->
             ok = replica_synchronizer:apply(ReferencedFileCtx, fun() ->
                 try
-                % TODO - przetestowac handlowanie czyszczenia zamykanych plikow pod katem statystyk
-                % TODO - przetestowac wielokrotny open/close
                     ParentUuid = ?OPENED_DELETED_FILES_DIR_UUID(SpaceId),
                     Doc = file_meta_hardlinks:new_doc(FileUuid, FileUuid, ParentUuid, SpaceId, true),
                     LinkUuid = fslogic_file_id:gen_deleted_opnened_file_ink_uuid(FileUuid),

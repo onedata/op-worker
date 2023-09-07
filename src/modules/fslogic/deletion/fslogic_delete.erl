@@ -189,7 +189,6 @@ cleanup_file(FileCtx, RemoveStorageFile) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup_opened_files() -> ok.
-% TODO VFS-11289 - test stats after simulated system restart with opened files
 cleanup_opened_files() ->
     case file_handles:list() of
         {ok, Docs} ->
