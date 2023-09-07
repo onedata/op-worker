@@ -72,7 +72,7 @@ basic_test(Config) ->
 
     check_dir_stats(Config, op_worker_nodes, TmpDirGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 0,
-        ?DIR_COUNT => 1,
+        ?DIR_COUNT => 2, % includes dir for opened deleted dirs (created with space)
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
@@ -83,7 +83,7 @@ basic_test(Config) ->
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(NotCountedDirGuid))),
     check_dir_stats(Config, op_worker_nodes, TmpDirGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 0,
-        ?DIR_COUNT => 0,
+        ?DIR_COUNT => 1, % includes dir for opened deleted dirs (created with space)
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
@@ -191,31 +191,31 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     end, FileGuids),
 
     % Check operations on links - list of tuples describe {INodesExpectedCount, LinksExpectedCount} for each dir
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{4, 4}, {0, 4}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{4, 4}, {0, 4}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link1Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{4, 4}, {0, 3}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{4, 4}, {0, 3}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File1Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{3, 3}, {0, 3}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{3, 3}, {0, 3}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File2Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{2, 2}, {1, 3}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{2, 2}, {1, 3}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link2Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{2, 2}, {0, 2}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{2, 2}, {0, 2}], FileSize),
 
     {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link3Guid), rdwr)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File3Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{1, 1}, {1, 2}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{1, 1}, {1, 2}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link3Guid))),
-    veryfy_hardlinks_stats_enabled(Config, OpenedFileCheckSelector, DirGuids, [{2, 1}, {0, 1}], FileSize),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids, [{1, 1}, {0, 1}], 1, FileSize),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle1)),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{1, 1}, {0, 1}], FileSize),
+    verify_after_delete_of_opened_file(Config, CheckSelectors, DirGuids, [{1, 1}, {0, 1}], 0, FileSize),
 
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Link4Guid), rdwr)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link4Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{1, 1}, {0, 0}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids, [{1, 1}, {0, 0}], FileSize),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File4Guid))),
-    veryfy_hardlinks_stats_enabled(Config, OpenedFileCheckSelector, DirGuids, [{1, 0}, {0, 0}], FileSize),
+    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids, [{0, 0}, {0, 0}], 1, FileSize),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids, [{0, 0}, {0, 0}], FileSize),
+    verify_after_delete_of_opened_file(Config, CheckSelectors, DirGuids, [{0, 0}, {0, 0}], 0, FileSize),
 
     % Create additional dirs, files and links
     {ok, Dir3Guid} = ?assertMatch({ok, _},
@@ -239,41 +239,42 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     end, FileGuids2),
 
     % Check additional dirs, files and links
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids2, [{0, 3}, {0, 3}, {3, 3}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids2, [{0, 3}, {0, 3}, {3, 3}], FileSize),
     append_files(Config, WriteNodesSelector, [File5Guid, Link6Guid, Link10Guid], 0), % Override on writer node
     FileSize2 = append_files(Config, WriteNodesSelector, [File5Guid, Link6Guid, Link10Guid], FileSize),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 3}, {0, 3}, {3, 3}], FileSize2),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 3}, {0, 3}, {3, 3}], FileSize2),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File5Guid))),
     FileSize3 = append_files(Config, WriteNodesSelector, [Link5Guid, File6Guid, Link10Guid], FileSize2),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 3}, {1, 3}, {2, 2}], FileSize3),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 3}, {1, 3}, {2, 2}], FileSize3),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link8Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{1, 3}, {0, 2}, {2, 2}], FileSize3),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{1, 3}, {0, 2}, {2, 2}], FileSize3),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link5Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 2}, {0, 2}, {2, 2}], FileSize3),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 2}, {0, 2}, {2, 2}], FileSize3),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link9Guid))),
     FileSize4 = append_files(Config, WriteNodesSelector, [Link6Guid, File7Guid], FileSize3),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 2}, {0, 1}, {2, 2}], FileSize4),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 2}, {0, 1}, {2, 2}], FileSize4),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File6Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{1, 2}, {0, 1}, {1, 1}], FileSize4),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{1, 2}, {0, 1}, {1, 1}], FileSize4),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link6Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 1}, {0, 1}, {1, 1}], FileSize4),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 1}, {0, 1}, {1, 1}], FileSize4),
 
     {ok, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(File7Guid), rdwr)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File7Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 1}, {1, 1}, {0, 0}], FileSize4),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 1}, {1, 1}, {0, 0}], FileSize4),
     FileSize5 = append_files(Config, WriteNodesSelector, [Link7Guid], FileSize4),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize5, <<"xyz">>)),
     FileSize6 = FileSize5 + 3,
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link7Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 0}, {1, 1}, {0, 0}], FileSize6),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 0}, {1, 1}, {0, 0}], FileSize6),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link10Guid))),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle3, FileSize6, <<"xyz">>)),
     FileSize7 = FileSize6 + 3,
-    % TODO VFS-11289 - verify reinit
-    veryfy_hardlinks_stats_enabled(Config, OverriddenOpenedFileCheckSelector, DirGuids2, [{0, 0}, {0, 0}, {1, 0}], FileSize7),
+    % TODO - zweryfikowac otwarcie kilku plikow na raz i przez wiele openow/close'ow
+    verify_after_delete_of_opened_file(Config, OverriddenOpenedFileCheckSelector, DirGuids2,
+        [{0, 0}, {0, 0}, {0, 0}], 1, FileSize7),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle3)),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 0}, {0, 0}, {0, 0}], FileSize7),
+    verify_after_delete_of_opened_file(Config, OverriddenFileCheckSelectors, DirGuids2, [{0, 0}, {0, 0}, {0, 0}], 0, FileSize7),
 
     % Test rename on hardlinks
     {ok, Dir4Guid} = ?assertMatch({ok, _},
@@ -283,18 +284,18 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
     {ok, #file_attr{guid = Link11Guid}} = ?assertMatch({ok, _},
         lfm_proxy:make_link(Creator, CreatorSessId, ?FILE_REF(File8Guid), ?FILE_REF(Dir3Guid), generator:gen_name())),
 
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids3, [{0, 0}, {0, 0}, {0, 1}, {1, 1}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids3, [{0, 0}, {0, 0}, {0, 1}, {1, 1}], FileSize),
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Link11Guid), ?FILE_REF(Dir1Guid), generator:gen_name())),
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids3, [{0, 1}, {0, 0}, {0, 0}, {1, 1}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids3, [{0, 1}, {0, 0}, {0, 0}, {1, 1}], FileSize),
     append_files(Config, WriteNodesSelector, [Link11Guid], 0), % Override on writer node
     FileSize8 = append_files(Config, WriteNodesSelector, [Link11Guid], FileSize),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 1}, {0, 0}, {0, 0}, {1, 1}], FileSize8),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 1}, {0, 0}, {0, 0}, {1, 1}], FileSize8),
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(File8Guid), ?FILE_REF(Dir2Guid), generator:gen_name())),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 1}, {1, 1}, {0, 0}, {0, 0}], FileSize8),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 1}, {1, 1}, {0, 0}, {0, 0}], FileSize8),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(File8Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{1, 1}, {0, 0}, {0, 0}, {0, 0}], FileSize8),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{1, 1}, {0, 0}, {0, 0}, {0, 0}], FileSize8),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Link11Guid))),
-    veryfy_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 0}, {0, 0}, {0, 0}, {0, 0}], FileSize8),
+    verify_hardlinks(Config, OverriddenFileCheckSelectors, DirGuids3, [{0, 0}, {0, 0}, {0, 0}, {0, 0}], FileSize8),
 
     % Test rename of dir with hardlinks
     File9Guid = file_ops_test_utils:create_file(Creator, CreatorSessId, Dir1Guid, generator:gen_name(), FileContent),
@@ -306,46 +307,46 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
 
     % Note - list of tuples describe {INodesExpectedCount, LinksExpectedCount} or
     %        {INodesExpectedCount, LinksExpectedCount, DirExpectedCount} if dir contains subdirectories
-    veryfy_hardlinks(Config, CheckSelectors, DirGuids3, [{1, 2}, {1, 1}, {0, 1}, {0, 0}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, DirGuids3, [{1, 2}, {1, 1}, {0, 1}, {0, 0}], FileSize),
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir2Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),
-    veryfy_hardlinks(Config, CheckSelectors, [Dir1Guid, Dir3Guid, Dir4Guid], [{1, 2}, {0, 1}, {1, 1, 1}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, [Dir1Guid, Dir3Guid, Dir4Guid], [{1, 2}, {0, 1}, {1, 1, 1}], FileSize),
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir3Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),
-    veryfy_hardlinks(Config, CheckSelectors, [Dir1Guid, Dir4Guid], [{1, 2}, {1, 2, 2}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, [Dir1Guid, Dir4Guid], [{1, 2}, {1, 2, 2}], FileSize),
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker, SessId, ?FILE_REF(Dir1Guid), ?FILE_REF(Dir4Guid), generator:gen_name())),
-    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 4, 3}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 4, 3}], FileSize),
 
     ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir2Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 3, 2}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 3, 2}], FileSize),
     ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir3Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 2, 1}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, [Dir4Guid], [{2, 2, 1}], FileSize),
     ?assertMatch(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(Dir1Guid))),
-    veryfy_hardlinks(Config, CheckSelectors, [Dir4Guid], [{0, 0}], FileSize),
+    verify_hardlinks(Config, CheckSelectors, [Dir4Guid], [{0, 0}], FileSize),
     ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir4Guid))).
 
 
-veryfy_hardlinks(Config, NodesSelectors, DirGuids, DirSizes, FileSize) ->
-    ct:print("Vefify existing hardlinks stats"),
-    veryfy_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize),
+verify_hardlinks(Config, NodesSelectors, DirGuids, DirSizes, FileSize) ->
+    ct:print("Verify existing hardlinks stats"),
+    verify_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize),
     disable(Config),
     enable(Config),
-    ct:print("Vefify reinitialized hardlinks stats"),
-    veryfy_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize).
+    ct:print("Verify reinitialized hardlinks stats"),
+    verify_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize).
 
 
-veryfy_hardlinks_stats_enabled(_Config, [], _DirGuids, _DirSizes, _FileSize) ->
+verify_hardlinks_stats_enabled(_Config, [], _DirGuids, _DirSizes, _FileSize) ->
     ok;
 
-veryfy_hardlinks_stats_enabled(Config, [NodesSelector | NodesSelectors], DirGuids, DirSizes, FileSize) ->
-    veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize),
-    veryfy_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize);
+verify_hardlinks_stats_enabled(Config, [NodesSelector | NodesSelectors], DirGuids, DirSizes, FileSize) ->
+    verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize),
+    verify_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize);
 
-veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize) ->
-    ct:print("Vefify hardlinks stats for nodes: ~p", [NodesSelector]),
+verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize) ->
+    ct:print("Verify hardlinks stats for nodes: ~p", [NodesSelector]),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     lists:foreach(fun
         ({Guid, {INodesExpected, LinksExpected}}) ->
-            ct:print("Vefify hardlinks stats for dir: ~p", [Guid]),
+            ct:print("Verify hardlinks stats for dir: ~p", [Guid]),
             check_dir_stats(Config, NodesSelector, Guid, #{
                 ?REG_FILE_AND_LINK_COUNT => LinksExpected,
                 ?DIR_COUNT => 0,
@@ -357,7 +358,7 @@ veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
                     ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, INodesExpected * FileSize)
             });
         ({Guid, {INodesExpected, LinksExpected, SubdirsExpected}}) ->
-            ct:print("Vefify hardlinks stats for dir: ~p", [Guid]),
+            ct:print("Verify hardlinks stats for dir: ~p", [Guid]),
             check_dir_stats(Config, NodesSelector, Guid, #{
                 ?REG_FILE_AND_LINK_COUNT => LinksExpected,
                 ?DIR_COUNT => SubdirsExpected,
@@ -378,6 +379,7 @@ veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
                 {Acc1 + DirINodesExpected, Acc2 + DirLinksExpected, Acc3 + DirSubdirsExpected}
         end, {0, 0, 0}, DirSizes),
 
+    ct:print("Verify hardlinks stats for space"),
     check_dir_stats(Config, NodesSelector, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => LinksExpectedSum,
         ?DIR_COUNT => length(DirGuids) + SubdirsExpectedSum,
@@ -387,6 +389,40 @@ veryfy_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
         ?TOTAL_DOWNLOAD_SIZE => LinksExpectedSum * FileSize,
         ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
             ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, INodesExpectedSum * FileSize)
+    }).
+
+
+verify_after_delete_of_opened_file(Config, NodesSelectors, DirGuids, DirSizes, DeletedFilesCount, FileSize) ->
+    ct:print("Verify files stats after delete of opened file"),
+    verify_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize),
+    verify_opened_deleted_files_stats_enabled(Config, NodesSelectors, DeletedFilesCount, FileSize),
+    disable(Config),
+    enable(Config),
+    ct:print("Verify reinitialized stats after delete of opened file"),
+    verify_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize),
+    verify_opened_deleted_files_stats_enabled(Config, NodesSelectors, DeletedFilesCount, FileSize).
+
+
+verify_opened_deleted_files_stats_enabled(_Config, [], _FilesExpected, _FileSize) ->
+    ok;
+
+verify_opened_deleted_files_stats_enabled(Config, [NodesSelector | NodesSelectors], FilesExpected, FileSize) ->
+    verify_opened_deleted_files_stats_enabled(Config, NodesSelector, FilesExpected, FileSize),
+    verify_opened_deleted_files_stats_enabled(Config, NodesSelectors, FilesExpected, FileSize);
+
+verify_opened_deleted_files_stats_enabled(Config, NodesSelector, FilesExpected, FileSize) ->
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    ct:print("Verify opened deleted files stats for nodes ~p", [NodesSelector]),
+    check_dir_stats(Config, NodesSelector, TmpDirGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => FilesExpected,
+        ?DIR_COUNT => 1,
+        ?FILE_ERRORS_COUNT => 0,
+        ?DIR_ERRORS_COUNT => 0,
+        ?TOTAL_SIZE => FilesExpected * FileSize,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
+            ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, FilesExpected * FileSize)
     }).
 
 

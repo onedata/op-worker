@@ -17,11 +17,14 @@
 -author("Michal Wrzeszcz").
 
 
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([register/3, deregister/1]).
+-export([register/3, deregister/1,
+    create_hidden_hardlink_for_opened_deleted_file/1, delete_hidden_hardlink_for_opened_deleted_file/1]).
 
 
 %%%===================================================================
@@ -39,7 +42,9 @@ register(TargetFileCtx, TargetParentGuid, LinkUuid) ->
                     {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
                     dir_size_stats:on_link_register(TargetFileCtx, TargetParentGuid)
                 catch
-                    Class:Reason:Stacktrace -> ?examine_exception(Class, Reason, Stacktrace)
+                    Class:Reason:Stacktrace ->
+                        ?examine_exception(Class, Reason, Stacktrace),
+                        ok
                 end
             end);
         false ->
@@ -65,3 +70,57 @@ deregister(FileCtx) ->
             file_meta_hardlinks:deregister(FileUuid, LinkUuid)
     end,
     ReferencesPresence.
+
+
+-spec create_hidden_hardlink_for_opened_deleted_file(file_ctx:ctx()) -> ok.
+create_hidden_hardlink_for_opened_deleted_file(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ReferencedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(ReferencedFileCtx),
+    case dir_stats_service_state:is_active(SpaceId) of
+        true ->
+            ok = replica_synchronizer:apply(ReferencedFileCtx, fun() ->
+                try
+                % TODO - przetestowac handlowanie czyszczenia zamykanych plikow pod katem statystyk
+                % TODO - przetestowac wielokrotny open/close
+                    ParentUuid = ?OPENED_DELETED_FILES_DIR_UUID(SpaceId),
+                    Doc = file_meta_hardlinks:new_doc(FileUuid, FileUuid, ParentUuid, SpaceId, true),
+                    LinkUuid = fslogic_file_id:gen_deleted_opnened_file_ink_uuid(FileUuid),
+                    file_meta:create({uuid, ParentUuid}, Doc#document{key = LinkUuid}),
+                    {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid),
+                    dir_size_stats:on_opened_file_delete(ReferencedFileCtx, LinkUuid)
+                catch
+                    Class:Reason:Stacktrace ->
+                        ?examine_exception(Class, Reason, Stacktrace),
+                        ok
+                end
+            end);
+        false ->
+            ok
+    end.
+
+
+-spec delete_hidden_hardlink_for_opened_deleted_file(file_ctx:ctx()) -> ok.
+delete_hidden_hardlink_for_opened_deleted_file(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ReferencedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(ReferencedFileCtx),
+    case dir_stats_service_state:is_active(SpaceId) of
+        true ->
+            ok = replica_synchronizer:apply(ReferencedFileCtx, fun() ->
+                try
+                    case file_meta_hardlinks:list_references(FileUuid) of
+                        {ok, [LinkUuid | _]} ->
+                            file_meta_hardlinks:deregister(FileUuid, LinkUuid),
+                            file_meta:delete(LinkUuid),
+                            dir_size_stats:on_deleted_file_close(ReferencedFileCtx, LinkUuid);
+                        {ok, []} ->
+                            ok
+                    end
+                catch
+                    Class:Reason:Stacktrace -> ?examine_exception(Class, Reason, Stacktrace)
+                end
+            end);
+        false ->
+            ok
+    end.

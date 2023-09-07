@@ -161,6 +161,7 @@ handle_remotely_deleted_local_hardlink(FileCtx) ->
 handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     DocsDeletionScope = removal_status_to_docs_deletion_scope(RemovalStatus),
+    hardlink_registry_utils:delete_hidden_hardlink_for_opened_deleted_file(FileCtx),
     ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope)).
 
 
@@ -256,7 +257,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
     case file_handles:mark_to_remove(FileCtx3, RemovalStatus) of
         ok ->
-            dir_size_stats:on_opened_file_delete(FileCtx3);
+            hardlink_registry_utils:create_hidden_hardlink_for_opened_deleted_file(FileCtx3);
         {error, already_removed} ->
             ok
     end,

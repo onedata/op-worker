@@ -170,6 +170,9 @@ upgrade_cluster(5) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
         lists:foreach(fun(SpaceId) ->
+            ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
+            file_meta:make_opened_deleted_files_dir_exist(SpaceId),
+
             case dir_stats_service_state:is_active(SpaceId) of
                 true ->
                     ?info("Reinitializing stats for space '~s'.", [SpaceId]),

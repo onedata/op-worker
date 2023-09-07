@@ -58,7 +58,8 @@
 -export([report_file_created/2, report_file_created_without_state_check/2, report_file_deleted/2]).
 %% API - hooks
 -export([on_link_register/2, on_link_deregister/1, on_local_file_delete/1,
-    report_remote_links_change/2, handle_references_list_changes/4, on_opened_file_delete/1]).
+    report_remote_links_change/2, handle_references_list_changes/4,
+    on_opened_file_delete/2, on_deleted_file_close/2]).
 
 %% dir_stats_collection_behaviour callbacks
 -export([
@@ -173,6 +174,9 @@ report_total_size_changed(_Guid, 0) ->
 report_total_size_changed(Guid, SizeDiff) ->
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
     case get_conflict_protected_reference_list(Uuid) of
+        [?OPENED_DELETED_FILE_LINK_PATTERN = MainRef] ->
+            ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId),
+                ?MODULE, #{?TOTAL_SIZE => SizeDiff});
         [MainRef | References] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId), ?MODULE,
                 #{?TOTAL_SIZE => SizeDiff, ?TOTAL_DOWNLOAD_SIZE => SizeDiff}),
@@ -412,19 +416,38 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
 
 %%--------------------------------------------------------------------
 %% @doc
-%% When deleting opened file report only download size change (it cannot be downloaded but still exists).
+%% When opened file is deleted, a special link is created in ?OPENED_DELETED_FILES_DIR_UUID(SpaceId) directory.
+%% This link is used to count stats of opened file in this special directory.
 %% @end
 %%--------------------------------------------------------------------
--spec on_opened_file_delete(file_ctx:ctx()) -> ok.
-on_opened_file_delete(FileCtx) ->
+-spec on_opened_file_delete(file_ctx:ctx(), file_meta:uuid()) -> ok.
+on_opened_file_delete(FileCtx, TmpLinkUuid) ->
     ReferencedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
-    replica_synchronizer:apply(ReferencedFileCtx, fun() ->
-        ?IGNORE_LOCATION_MISSING(begin
-            fslogic_cache:flush(),
-            {FileSizes, _} = file_ctx:prepare_file_size_summary(ReferencedFileCtx, throw_on_missing_location),
-            report_download_size_changed(file_ctx:get_logical_guid_const(ReferencedFileCtx),
-                -1 * proplists:get_value(total, FileSizes))
-        end)
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ?IGNORE_LOCATION_MISSING(begin
+        fslogic_cache:flush(),
+        {FileSizes, _} = file_ctx:prepare_file_size_summary(ReferencedFileCtx, throw_on_missing_location),
+        update_using_size_summary(file_ctx:get_logical_guid_const(ReferencedFileCtx), FileSizes, true, subtract),
+        ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(TmpLinkUuid, SpaceId), ?MODULE,
+            size_summary_to_stats(FileSizes, #{?REG_FILE_AND_LINK_COUNT => 1}, false))
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% When deleted file is closed, its stats should not be counted in ?OPENED_DELETED_FILES_DIR_UUID(SpaceId) directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_deleted_file_close(file_ctx:ctx(), file_meta:uuid()) -> ok.
+on_deleted_file_close(FileCtx, TmpLinkUuid) ->
+    ReferencedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ?IGNORE_LOCATION_MISSING(begin
+        fslogic_cache:flush(),
+        {FileSizes, _} = file_ctx:prepare_file_size_summary(ReferencedFileCtx, throw_on_missing_location),
+        ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(TmpLinkUuid, SpaceId), ?MODULE,
+            size_summary_to_stats(lists:map(fun({K, V}) -> {K, -V} end, FileSizes), #{?REG_FILE_AND_LINK_COUNT => -1}, false)),
+        update_using_size_summary(file_ctx:get_logical_guid_const(ReferencedFileCtx), FileSizes, false, add)
     end).
 
 
@@ -541,7 +564,7 @@ get_ctx() ->
 
 %% @private
 -spec init_existing_child(file_id:file_guid(), file_meta:doc()) -> dir_stats_collection:collection().
-init_existing_child(Guid, Doc) ->
+init_existing_child(Guid, #document{key = Uuid} = Doc) ->
     case file_meta:get_type(Doc) of
         ?DIRECTORY_TYPE ->
             try
@@ -555,11 +578,12 @@ init_existing_child(Guid, Doc) ->
             end;
         Type ->
             try
-                case Type of
-                    ?REGULAR_FILE_TYPE ->
+                case {Type, Uuid} of
+                    {?REGULAR_FILE_TYPE,_} ->
                         init_reg_file(Guid);
-                    ?LINK_TYPE -> % Hardlink
-                        Uuid = file_id:guid_to_uuid(Guid),
+                    {?LINK_TYPE, ?OPENED_DELETED_FILE_LINK_PATTERN} -> % Hardlink of deleted opened file
+                        (init_reg_file(Guid))#{?TOTAL_DOWNLOAD_SIZE => 0};
+                    {?LINK_TYPE, _} -> % Standard hardlink
                         case file_meta_hardlinks:list_references(fslogic_file_id:ensure_referenced_uuid(Uuid)) of
                             {ok, [Uuid | _]} ->
                                 init_reg_file(Guid); % Referenced file_meta is deleted - first hardlink is counted as file
@@ -583,7 +607,7 @@ init_existing_child(Guid, Doc) ->
 -spec init_reg_file(file_id:file_guid()) -> dir_stats_collection:collection().
 init_reg_file(Guid) ->
     EmptyCurrentStats = gen_empty_current_stats(Guid),
-    FileCtx = file_ctx:new_by_guid(Guid),
+    FileCtx = file_ctx:new_by_guid(fslogic_file_id:ensure_referenced_guid(Guid)),
     {FileSizes, _} = try
         file_ctx:prepare_file_size_summary(FileCtx, create_missing_location)
     catch
@@ -804,7 +828,7 @@ get_conflict_protected_reference_list(Uuid) ->
     ReferencesList = case file_meta_hardlinks:list_references(Uuid) of
         {ok, List} ->
             List;
-        {error,not_found} ->
+        {error, not_found} ->
             [Uuid] % Storage import creates location before file_meta
     end,
 
