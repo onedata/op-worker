@@ -120,7 +120,7 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
 -spec ensure_exists(od_space:id()) -> ok.
 ensure_exists(SpaceId) ->
     #document{key = Key} = TrashDoc = prepare_doc(SpaceId),
-    ok = ?ok_if_exists(file_meta:update(Key, fun(#document{}) -> {error, already_exists} end, TrashDoc)).
+    ok = ?ok_if_exists(?extract_ok(file_meta:update(Key, fun(_) -> {error, already_exists} end, TrashDoc))).
 
 
 %% @private

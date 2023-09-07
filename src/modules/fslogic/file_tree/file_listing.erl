@@ -42,6 +42,7 @@
 -export([encode_index/1, decode_index/1]).
 -export([is_finished/1, get_last_listed_filename/1]).
 -export([infer_pagination_token/3]).
+-export([default_limit/0]).
 
 -record(list_index, {
     file_name :: file_meta:name(),
@@ -83,6 +84,7 @@
 -type datastore_list_opts() :: file_meta_forest:list_opts().
 -type encoded_pagination_token() :: binary().
 -type entry() :: file_meta_forest:link().
+-type post_list_operation() :: {crop_first, non_neg_integer()}.
 
 -export_type([offset/0, limit/0, index/0, pagination_token/0, options/0]).
 
@@ -172,9 +174,24 @@ infer_pagination_token(_Result, LastName, _Limit) ->
     #pagination_token{progress_marker = more, last_index = build_index(LastName)}.
 
 
+-spec default_limit() -> non_neg_integer().
+default_limit() ->
+    ?DEFAULT_LS_BATCH_LIMIT.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec check_exclusive_options(options()) -> ok | no_return().
+check_exclusive_options(#{pagination_token := _} = Options) ->
+    maps_utils:is_empty(maps:with([tune_for_large_continuous_listing, index, offset, inclusive], Options)) orelse
+        %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
+    throw(?EINVAL),
+    ok;
+check_exclusive_options(_Options) ->
+    ok.
+
 
 %% @private
 -spec list_internal(atom(), file_meta:uuid(), options(), [any()]) -> 
@@ -184,17 +201,19 @@ list_internal(_FunctionName, _FileUuid, #{limit := 0, pagination_token := Pagina
 list_internal(_FunctionName, _FileUuid, #{pagination_token := #pagination_token{progress_marker = done}} = PaginationToken, _ExtraArgs) ->
     {ok, [], PaginationToken};
 list_internal(_FunctionName, _FileUuid, #{limit := 0} = ListOpts, _ExtraArgs) ->
+    {DatastoreListOpts, _PostListOperations} = convert_to_datastore_options(ListOpts),
     {ok, [], #pagination_token{
         last_index = maps:get(index, ListOpts, undefined),
-        datastore_token = maps:get(token, convert_to_datastore_options(ListOpts), undefined),
+        datastore_token = maps:get(token, DatastoreListOpts, undefined),
         progress_marker = more
     }};
 list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
     ?run(begin
-        DatastoreListOpts = convert_to_datastore_options(ListOpts),
+        {DatastoreListOpts, PostListOperations} = convert_to_datastore_options(ListOpts),
         case erlang:apply(file_meta_forest, FunctionName, [FileUuid, DatastoreListOpts | ExtraArgs]) of
             {ok, Result, ExtendedInfo} ->
-                {ok, Result, datastore_info_to_pagination_token(ExtendedInfo)};
+                FinalResult = apply_post_list_operations(PostListOperations, Result),
+                {ok, FinalResult, datastore_info_to_pagination_token(ExtendedInfo)};
             {error, _} = Error ->
                 Error
         end
@@ -202,29 +221,26 @@ list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
 
 
 %% @private
--spec check_exclusive_options(options()) -> ok | no_return().
-check_exclusive_options(#{pagination_token := _} = Options) ->
-    maps_utils:is_empty(maps:with([tune_for_large_continuous_listing, index, offset, inclusive], Options)) orelse
-        %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
-        throw(?EINVAL),
-    ok;
-check_exclusive_options(_Options) ->
-    ok.
+-spec apply_post_list_operations([post_list_operation()], [entry()]) -> [entry()].
+apply_post_list_operations([], Result) ->
+    Result;
+apply_post_list_operations([{crop_first, ToCrop} | Tail], Result) ->
+    apply_post_list_operations(Tail, lists:sublist(Result, ToCrop + 1, length(Result))).
 
 
 %% @private
--spec convert_to_datastore_options(options()) -> datastore_list_opts().
+-spec convert_to_datastore_options(options()) -> {datastore_list_opts(), [post_list_operation()]}.
 convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     #pagination_token{
         last_index = Index,
         datastore_token = DatastoreToken
     } = PaginationToken,
     BaseOpts = index_to_datastore_list_opts(Index),
-    maps_utils:remove_undefined(BaseOpts#{
+    {maps_utils:remove_undefined(BaseOpts#{
         token => DatastoreToken,
         ignore_missing_links => sanitize_ignore_missing_links_opt(maps:get(ignore_missing_links, Opts, undefined)),
         size => sanitize_limit(maps:get(limit, Opts, undefined))
-    });
+    }), []};
 convert_to_datastore_options(Opts) ->
     BaseOpts = index_to_datastore_list_opts(maps:get(index, Opts, undefined)),
     DatastoreToken = case maps:find(tune_for_large_continuous_listing, Opts) of
@@ -237,19 +253,30 @@ convert_to_datastore_options(Opts) ->
             %% throw(?ERROR_MISSING_REQUIRED_VALUE(tune_for_large_continuous_listing)),
             throw(?EINVAL)
     end,
-    maps_utils:remove_undefined(BaseOpts#{
-        size => sanitize_limit(
-            maps:get(limit, Opts, undefined)),
-        offset => sanitize_offset(
-            maps:get(offset, Opts, undefined), 
-            maps:get(prev_link_name, BaseOpts, undefined),
-            maps:get(whitelist, Opts, undefined)),
+    Offset = sanitize_offset(
+        maps:get(offset, Opts, undefined),
+        maps:get(prev_link_name, BaseOpts, undefined),
+        maps:get(whitelist, Opts, undefined)),
+    Size = sanitize_limit(
+        maps:get(limit, Opts, undefined)),
+    {FinalOffset, FinalSize, PostListOperations} = handle_offset(Offset, Size),
+    {maps_utils:remove_undefined(BaseOpts#{
+        size => FinalSize,
+        offset => FinalOffset,
         inclusive => sanitize_inclusive(
             maps:get(inclusive, Opts, undefined)),
         ignore_missing_links => sanitize_ignore_missing_links_opt(
             maps:get(ignore_missing_links, Opts, undefined)),
         token => DatastoreToken
-    }).
+    }), PostListOperations}.
+
+
+%% @private
+-spec handle_offset(offset(), limit()) -> {offset(), limit(), [post_list_operation()]}.
+handle_offset(Offset, Size) when is_integer(Offset) andalso Offset > 0 ->
+    {undefined, Size + Offset, [{crop_first, Offset}]};
+handle_offset(Offset, Size) ->
+    {Offset, Size, []}.
 
 
 %% @private

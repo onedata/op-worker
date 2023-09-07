@@ -166,18 +166,18 @@ list(ParentUuid, Opts) ->
                 links_tree_interrupted_call_retries => 0
             }
     end,
-    Result = fold(Ctx, ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
+    Result = fold(Ctx, ParentUuid, fun(Link = #link{name = Name}, {ListAcc, _PrevLink, ListedLinksCount}) ->
         case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
-            true -> {ok, {[Link | ListAcc], ListedLinksCount + 1}};
-            _ -> {ok, {ListAcc, ListedLinksCount + 1}}
+            true -> {ok, {[Link | ListAcc], Link, ListedLinksCount + 1}};
+            _ -> {ok, {ListAcc, Link, ListedLinksCount + 1}}
         end
-    end, {[], 0}, Opts),
+    end, {[], undefined, 0}, Opts),
 
     case Result of
-        {{ok, {ReversedLinks, ListedLinksCount}}, NewToken} ->
-            prepare_list_result(ReversedLinks, NewToken, ListedLinksCount < ExpectedSize);
-        {ok, {ReversedLinks, ListedLinksCount}} ->
-            prepare_list_result(ReversedLinks, undefined, ListedLinksCount < ExpectedSize);
+        {{ok, {ReversedLinks, LastLink, ListedLinksCount}}, NewToken} ->
+            prepare_list_result(ReversedLinks, NewToken, ListedLinksCount < ExpectedSize, LastLink);
+        {ok, {ReversedLinks, LastLink, ListedLinksCount}} ->
+            prepare_list_result(ReversedLinks, undefined, ListedLinksCount < ExpectedSize, LastLink);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -290,9 +290,9 @@ fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
 %% preparing #list_extended_info{} structure.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean()) ->
+-spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean(), internal_link()) ->
     {ok, [link()], list_extended_info()}.
-prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested) ->
+prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested, LastLink) ->
     ExtendedInfo = case TokenOrUndefined of
         #link_token{} = Token -> #list_extended_info{
             datastore_token = Token,
@@ -302,10 +302,10 @@ prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested) ->
             is_finished = ListedLessThanRequested
         }
     end,
-    ExtendedInfo2 = case ReversedLinks of
-        [#link{name = Name, tree_id = Tree} | _] ->
+    ExtendedInfo2 = case LastLink of
+        #link{name = Name, tree_id = Tree} ->
             ExtendedInfo#list_extended_info{last_name = Name, last_tree = Tree};
-        _ ->
+        undefined ->
             ExtendedInfo
     end,
     {ok, tag_ambiguous(lists:reverse(ReversedLinks)), ExtendedInfo2}.

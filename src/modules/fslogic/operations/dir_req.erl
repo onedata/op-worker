@@ -41,7 +41,8 @@
 }.
 
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
-    fslogic_worker:fuse_response()) | no_return().
+    fslogic_worker:fuse_response() | no_return()).
+-type listing_fun() :: fun((State, file_listing:opts()) -> {[any()], file_listing:pagination_token(), State}).
 
 -export_type([recursive_listing_opts/0]).
 
@@ -90,43 +91,48 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    {ChildrenCtxs, ListingToken, FileCtx1} = get_children_ctxs(
-        UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?list_container_mask)),
-    ChildrenNum = length(ChildrenCtxs),
+    ListFun = fun(Ctx, Opts) ->
+        {ChildrenCtxs, Token, Ctx1} = get_children_ctxs(
+            UserCtx, Ctx, Opts, ?OPERATIONS(?list_container_mask)),
+        ChildrenNum = length(ChildrenCtxs),
 
-    ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
-        ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
-        ChildUuid = file_ctx:get_logical_uuid_const(ChildCtx),
-        {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
-        case (Num == 1 orelse Num == ChildrenNum) of
-            true ->
-                try
-                    {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
-                    % Get parent uuid from doc - if function is executed for regular file uuid from FileCtx
-                    % cannot be used (file is returned as its own child for regular files so uuid from FileCtx
-                    % is equal to ChildUuid is such a case)
-                    {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
-                    ProviderId = file_meta:get_provider_id(FileDoc),
-                    Scope = file_meta:get_scope(FileDoc),
-                    case file_meta:check_name_and_get_conflicting_files(
-                        ParentUuid, ChildName, ChildUuid, ProviderId, Scope)
-                    of
-                        {conflicting, ExtendedName, _ConflictingFiles} ->
-                            {true, #child_link{name = ExtendedName, guid = ChildGuid}};
-                        _ ->
-                            {true, #child_link{name = ChildName, guid = ChildGuid}}
-                    end
-                catch _:_ ->
-                    % Documents for file have not yet synchronized
-                    false
-                end;
-            false ->
-                % Other files than first and last don't need to resolve name
-                % conflicts (to check for collisions) as list_children
-                % (file_meta:tag_children to be precise) already did it
-                {true, #child_link{name = ChildName, guid = ChildGuid}}
-        end
-    end, lists_utils:enumerate(ChildrenCtxs)),
+        Result = lists:filtermap(fun({Num, ChildCtx}) ->
+            ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
+            ChildUuid = file_ctx:get_logical_uuid_const(ChildCtx),
+            {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
+            case (Num == 1 orelse Num == ChildrenNum) of
+                true ->
+                    try
+                        {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
+                        % Get parent uuid from doc - if function is executed for regular file uuid from FileCtx
+                        % cannot be used (file is returned as its own child for regular files so uuid from FileCtx
+                        % is equal to ChildUuid is such a case)
+                        {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
+                        ProviderId = file_meta:get_provider_id(FileDoc),
+                        Scope = file_meta:get_scope(FileDoc),
+                        case file_meta:check_name_and_get_conflicting_files(
+                            ParentUuid, ChildName, ChildUuid, ProviderId, Scope)
+                        of
+                            {conflicting, ExtendedName, _ConflictingFiles} ->
+                                {true, #child_link{name = ExtendedName, guid = ChildGuid}};
+                            _ ->
+                                {true, #child_link{name = ChildName, guid = ChildGuid}}
+                        end
+                    catch _:_ ->
+                        % Documents for file have not yet synchronized
+                        false
+                    end;
+                false ->
+                    % Other files than first and last don't need to resolve name
+                    % conflicts (to check for collisions) as list_children
+                    % (file_meta:tag_children to be precise) already did it
+                    {true, #child_link{name = ChildName, guid = ChildGuid}}
+            end
+        end, lists_utils:enumerate(ChildrenCtxs)),
+        {Result, Token, Ctx1}
+    end,
+    
+    {ChildrenLinks, ListingToken, FileCtx1} = list_up_to_limit(ListFun, FileCtx0, ListOpts, []),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -295,22 +301,26 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
 ) ->
-    {Children, ListingToken, FileCtx1} = file_tree:list_children(
-        FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-    ComputeAttrsOpts = #{
-        allow_deleted_files => false,
-        include_optional_attrs => OptionalAttrs
-    },
-    GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
-        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
-        {true, _} -> fun attr_req:get_file_attr/3;
-        false -> fun attr_req:get_file_attr_insecure/3
+    ListFun = fun(Ctx, Opts) ->
+        {Children, Token, Ctx1} = file_tree:list_children(
+            Ctx, UserCtx, Opts, CanonicalChildrenWhiteList),
+        ComputeAttrsOpts = #{
+            allow_deleted_files => false,
+            include_optional_attrs => OptionalAttrs
+        },
+        GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+            % fetching xattrs require more privileges than file listing, so insecure version cannot be called
+            {true, _} -> fun attr_req:get_file_attr/3;
+            false -> fun attr_req:get_file_attr_insecure/3
+        end,
+        Result = readdir_plus:gather_attributes(
+            child_attrs_mapper(GetAttrFun, UserCtx),
+            Children,
+            ComputeAttrsOpts
+        ),
+        {Result, Token, Ctx1}
     end,
-    ChildrenAttrs = readdir_plus:gather_attributes(
-        child_attrs_mapper(GetAttrFun, UserCtx),
-        Children,
-        ComputeAttrsOpts
-    ),
+    {ChildrenAttrs, ListingToken, FileCtx1} = list_up_to_limit(ListFun, FileCtx0, ListOpts, []),
 
     fslogic_times:update_atime(FileCtx1),
 
@@ -408,4 +418,37 @@ child_attrs_mapper(AttrsMappingFun, UserCtx) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
             AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
         Result
+    end.
+
+
+%% @private
+-spec list_up_to_limit(listing_fun(), State, file_listing:options(), [ListedEntry]) ->
+    {ListedEntry, file_listing:pagination_token(), State}.
+list_up_to_limit(ListFun, InitialState, Opts, Acc) ->
+    {Result, NextToken, State} = erlang:apply(ListFun, [InitialState, Opts]),
+    case infer_listing_finished(length(Result), NextToken, Opts) of
+        {continue, NextBatchOpts} ->
+            list_up_to_limit(ListFun, State, NextBatchOpts, Acc ++ Result);
+        stop ->
+            {Acc ++ Result, NextToken, State}
+    end.
+
+
+%% @private
+-spec infer_listing_finished(non_neg_integer(), file_listing:pagination_token(), file_listing:options()) ->
+    {continue, file_listing:options()} | stop.
+infer_listing_finished(ListedCount, Token, PrevOpts) ->
+    PrevLimit = maps:get(limit, PrevOpts, file_listing:default_limit()),
+    case {file_listing:is_finished(Token), PrevLimit - ListedCount} of
+        {true, _} ->
+            stop;
+        {_, 0} ->
+            stop;
+        {false, NewLimit} when NewLimit > 0 ->
+            {continue, maps_utils:remove_undefined(#{
+                pagination_token => Token,
+                whitelist => maps:get(whitelist, PrevOpts, undefined),
+                ignore_missing_links => maps:get(ignore_missing_links, PrevOpts, undefined),
+                limit => NewLimit
+            })}
     end.

@@ -48,8 +48,8 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
 }) ->
     SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
-    {ok, TrashDirRootObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
-    {ok, ArchivesDirRootObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
+    {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
+    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
 
     Providers = lists:map(fun(ProviderId) ->
         {ok, ProviderName} = provider_logic:get_name(ProviderId),
@@ -62,9 +62,10 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
     ?OK_REPLY(#{
         <<"name">> => Name,
         <<"spaceId">> => SpaceId,
-        <<"fileId">> => SpaceDirObjectId,
-        <<"trashDirId">> => TrashDirRootObjectId,
-        <<"archivesDirId">> => ArchivesDirRootObjectId,
+        <<"fileId">> => SpaceDirObjectId, % deprecated, left for backward compatibility
+        <<"dirId">> => SpaceDirObjectId,
+        <<"trashDirId">> => TrashRootDirObjectId,
+        <<"archivesDirId">> => ArchivesRootDirObjectId,
         <<"providers">> => Providers
     });
 
