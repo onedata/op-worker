@@ -706,8 +706,12 @@ get_times(
 %%--------------------------------------------------------------------
 -spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
 get_storage_id(FileCtx) ->
-    {Storage, FileCtx2} = get_storage(FileCtx),
-    {storage:get_id(Storage), FileCtx2}.
+    case get_storage(FileCtx) of
+        {undefined, FileCtx2} ->
+            {undefined, FileCtx2};
+        {Storage, FileCtx2} ->
+            {storage:get_id(Storage), FileCtx2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

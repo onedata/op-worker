@@ -31,7 +31,7 @@ build_attributes_param_spec(private) ->
 
 
 %% @private
--spec build_parse_requested_attrs_fun([file_attr:attributes()]) ->
+-spec build_parse_requested_attrs_fun([file_attr:attribute()]) ->
     fun((binary() | [binary()]) -> {true, [atom()]} | no_return()).
 build_parse_requested_attrs_fun(AllowedValues) ->
     fun(Attributes) ->

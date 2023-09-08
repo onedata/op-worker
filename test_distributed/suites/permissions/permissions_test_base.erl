@@ -18,6 +18,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("permissions_test.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("storage_files_test_SUITE.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/aai/aai.hrl").

@@ -479,11 +479,11 @@ get_user_root_dir_children_test(_Config) ->
     #file_attr{}.
 get_space_dir_details(Node, SpaceDirGuid) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
-    User4SessId = oct_background:get_user_session_id(ProviderId, user4),
+    User4SessId = oct_background:get_user_session_id(user4, ProviderId),
     {ok, SpaceAttr} = ?assertMatch(
-        {ok, _}, lfm_proxy:stat(Node, User4SessId, ?FILE_REF(SpaceDirGuid), [file_attr_translator:to_json(A) || A <- ?API_ATTRS]), ?ATTEMPTS
+        {ok, _}, lfm_proxy:stat(Node, User4SessId, ?FILE_REF(SpaceDirGuid), ?API_ATTRS), ?ATTEMPTS
     ),
-    SpaceAttr.
+    SpaceAttr#file_attr{parent_guid = undefined}.
 
 
 get_dir_children_on_provider_not_supporting_space_test(_Config) ->
@@ -627,8 +627,8 @@ build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
             data = case Data1 of
                 undefined -> undefined;
                 _ -> Data1#{<<"attributes">> => case Scope of
-                    public -> ?PUBLIC_ATTRS;
-                    private -> ?API_ATTRS
+                    public -> [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_ATTRS];
+                    private -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS]
                 end}
             end
         }

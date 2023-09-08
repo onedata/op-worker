@@ -451,7 +451,7 @@ atm_file_value_validation_test(_Config) ->
 
     BuildBareFileObjectFun = fun(Guid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{<<"file_id">> => ObjectId}
+        #{<<"fileId">> => ObjectId}
     end,
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
@@ -468,7 +468,7 @@ atm_file_value_validation_test(_Config) ->
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
-                [5.5, <<"NaN">>, [5], #{<<"file_id">> => 5}]
+                [5.5, <<"NaN">>, [5], #{<<"fileId">> => 5}]
             ),
 
             lists:map(fun({Guid, UnverifiedConstraint}) ->
@@ -519,10 +519,10 @@ atm_file_value_to_from_store_item_test(_Config) ->
             attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
         },
         values = lists:flatten([
-            #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+            #{<<"fileId">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
                 <<"removed_file_id">>, SpaceKrkId
             )))},
-            #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
+            #{<<"fileId">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
 
             lists:map(fun(Guid) ->
                 {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
@@ -532,7 +532,7 @@ atm_file_value_to_from_store_item_test(_Config) ->
                 {
                     different,
                     file_attr_translator:to_json(FileAttrs),
-                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))}
+                    #{<<"fileId">> => ?ok(file_id:guid_to_objectid(Guid))}
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
         ])
@@ -562,14 +562,14 @@ atm_file_value_describe_test(_Config) ->
         values = lists:flatten([
             {
                 error,
-                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+                #{<<"fileId">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
                     <<"removed_file_id">>, SpaceKrkId
                 )))},
                 ?ERROR_POSIX(?ENOENT)
             },
             {
                 error,
-                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
+                #{<<"fileId">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
                 ?ERROR_POSIX(?EACCES)
             },
 
@@ -580,7 +580,7 @@ atm_file_value_describe_test(_Config) ->
                 % as such describe should resolve all attributes
                 {
                     different,
-                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
+                    #{<<"fileId">> => ?ok(file_id:guid_to_objectid(Guid))},
                     file_attr_translator:to_json(FileAttrs)
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])

@@ -61,7 +61,6 @@
 }).
 
 -type state() :: #state{}.
--type stage_type() :: direct | effective.
 
 % xattrs are handled specially (see resolve_state/3)
 -define(XATTRS_STAGE, xattrs).
@@ -73,7 +72,7 @@
     {?LOCATION_ATTRS, direct, fun resolve_location_attrs/1},
     {?LUMA_ATTRS, direct, fun resolve_luma_attrs/1},
     {?DATASET_ATTRS, effective, fun resolve_dataset_attrs/1},
-    {?ARCHIVE_RECALL_ATTRS, direct, fun resolve_archive_recall_attrs/1},
+    {?ARCHIVE_RECALL_ATTRS, effective, fun resolve_archive_recall_attrs/1},
     {?QOS_STATUS_ATTRS, effective, fun resolve_qos_status_attrs/1},
     {?QOS_EFF_VALUE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
     {?METADATA_ATTRS, direct, fun resolve_metadata_attrs/1},
@@ -100,10 +99,18 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
         user_ctx = UserCtx,
         options = Opts#{attributes => ExpandedRequestedAttrs}
     },
-    {FinalState, FinalFileAttr} = lists:foldl(fun({AttrsSubset, Type, StageFun}, {AccState, AccFileAttr}) ->
-        {StageState, StageFileAtrr} = resolve_stage(Type, AccState, AccFileAttr, AttrsSubset, StageFun),
-        {StageState, merge_records(AccFileAttr, StageFileAtrr)}
-    end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
+    % for spaces not supported locally effective value cache is not initialized
+    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
+        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
+    {FinalState, FinalFileAttr} = lists:foldl(fun
+        ({_, effective, _}, {AccState, #file_attr{link_count = LinkCount} = AccFileAttr})
+            when LinkCount > ?REFERENCES_LIMIT orelse IsRemoteOnlySpace
+        ->
+            {AccState, AccFileAttr};
+        ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttr}) ->
+            {StageState, StageFileAtrr} = resolve_stage(AccState, AttrsSubset, StageFun),
+            {StageState, merge_records(AccFileAttr, StageFileAtrr)}
+        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
     {FinalFileAttr, FinalState#state.file_ctx}.
 
 
@@ -280,20 +287,16 @@ resolve_xattrs(#state{file_ctx = FileCtx, current_stage_attrs = XattrNames} = St
 %%%===================================================================
 
 %% @private
--spec resolve_stage(stage_type(), state(), file_attr(), [attribute()], fun((state()) -> {state(), file_attr()})) ->
+-spec resolve_stage(state(), [attribute()], fun((state()) -> {state(), file_attr()})) ->
     {state(), file_attr()}.
-resolve_stage(effective, State, #file_attr{link_count = LinkCount}, _StageAttrs, _StageFun)
-    when LinkCount > ?REFERENCES_LIMIT
-->
-    {State, #file_attr{}};
-resolve_stage(direct, #state{options = #{attributes := RequestedAttrs}} = State, _FileAttr, ?XATTRS_STAGE, StageFun) ->
+resolve_stage(#state{options = #{attributes := RequestedAttrs}} = State, ?XATTRS_STAGE, StageFun) ->
     case should_fetch_xattrs(RequestedAttrs) of
         {true, XattrsNames} ->
             StageFun(State#state{current_stage_attrs = XattrsNames});
         false ->
             {State, #file_attr{}}
     end;
-resolve_stage(_, #state{options = #{attributes := RequestedAttrs}} = State, _FileAttr, StageAttrs, StageFun) ->
+resolve_stage(#state{options = #{attributes := RequestedAttrs}} = State, StageAttrs, StageFun) ->
     case lists_utils:intersect(RequestedAttrs, StageAttrs) of
         [] ->
             {State, #file_attr{}};
@@ -433,8 +436,10 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             ShouldCalculateRatio = are_any_attrs_requested([local_replication_rate], State),
             {StatsToGet, FileCtx2} = case ShouldCalculateRatio of
                 true ->
-                    {StorageId, FC2} = file_ctx:get_storage_id(FileCtx),
-                    {[?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)], FC2};
+                    case file_ctx:get_storage_id(FileCtx) of
+                        {undefined, FC2} -> {[?TOTAL_SIZE], FC2};
+                        {StorageId, FC2} -> {[?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)], FC2}
+                    end;
                 false ->
                     {[?TOTAL_SIZE], FileCtx}
             end,

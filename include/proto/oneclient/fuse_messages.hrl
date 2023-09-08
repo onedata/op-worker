@@ -22,6 +22,7 @@
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
 -define(FORCE_DIRECT_HELPER_MODE, 'FORCE_DIRECT').
 
+%% @TODO VFS-11299 deprecated, left for compatibility with oneclient
 -record(child_link, {
     guid :: fslogic_worker:file_guid(),
     name :: binary()
@@ -39,6 +40,7 @@
     attributes = [] :: [file_attr:attribute()]
 }).
 
+%% @TODO VFS-11299 deprecated, left for compatibility with oneclient
 -record(get_file_children, {
     listing_options :: file_listing:options()
 }).

@@ -100,13 +100,18 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    {ChildrenAttrs, PaginationToken, _FileCtx1} = get_children_attrs(UserCtx, FileCtx0, ListOpts, [guid, size]),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_children{
-            child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
-            pagination_token = PaginationToken
-        }
-    }.
+    case get_children_attrs(UserCtx, FileCtx0, ListOpts, [guid, size]) of
+        #fuse_response{status = #status{code = ?OK}, fuse_response = FuseResponse} ->
+            #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #file_children{
+                    child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
+                    pagination_token = PaginationToken
+                }
+            };
+        ErrorReponse ->
+            ErrorReponse
+    end.
 
 
 -spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()]) ->
@@ -236,7 +241,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
 
 
 %% @private
--spec ensure_extended_name_in_edge_files(user_ctx:ctx(), [file_ctx:ctx()]) -> file_ctx:ctx().
+-spec ensure_extended_name_in_edge_files(user_ctx:ctx(), [file_ctx:ctx()]) -> [file_ctx:ctx()].
 ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
     TotalNum = length(FilesBatch),
     lists:filtermap(fun({Num, FileCtx}) ->

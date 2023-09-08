@@ -416,7 +416,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"shares">> => Shares,
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"hardlinksCount">> => utils:undefined_to_null(HardlinksCount),
+        <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
         <<"index">> => file_listing:encode_index(Index),
         
         <<"hasMetadata">> => HasMetadata,
