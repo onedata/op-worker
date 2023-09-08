@@ -69,7 +69,8 @@ file_links_reconciliation_traverse_test(Config) ->
         lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Listed))
     end,
     
-    ?assertEqual(ok, opw_test_rpc:call(KrakowNode, file_links_reconciliation_traverse, start, [])),
+    ?assertEqual(ok, opw_test_rpc:call(KrakowNode, file_links_reconciliation_traverse, start_for_space,
+        [oct_background:get_space_id(space1)])),
     
     % check that traverse started and hangs
     ?assertEqual({ok, 1}, get_number_of_ongoing_traverses(KrakowNode), ?ATTEMPTS),
