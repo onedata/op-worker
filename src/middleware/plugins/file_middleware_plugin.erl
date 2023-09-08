@@ -496,7 +496,7 @@ data_spec_get(#gri{aspect = As}) when
 data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_ENTRIES}},
         <<"token">> => {binary, fun
             (null) ->
                 {true, undefined};

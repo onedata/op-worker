@@ -143,8 +143,9 @@ query_view_using_file_meta(_Config) ->
     TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
     
-    ArchiveRootDirGuid = file_id:pack_guid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId),
-    {ok, ArchiveRootDirObjectId} = file_id:guid_to_objectid(ArchiveRootDirGuid),
+    ArchivesRootDirGuid = file_id:pack_guid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId),
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(ArchivesRootDirGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -200,16 +201,16 @@ query_view_using_file_meta(_Config) ->
         },
         #{
             <<"id">> := _,
-            <<"key">> := ArchiveRootDirObjectId,
+            <<"key">> := ArchivesRootDirObjectId,
             <<"value">> := #{
-                <<"name">> := ?ARCHIVES_ROOT_DIR_NAME,
+                <<"name">> := ArchivesRootDirName,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_MODE,
+                <<"mode">> := ?ARCHIVES_ROOT_DIR_PERMS,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
                 <<"deleted">> := false,
-                <<"parent_uuid">> := <<"">>
+                <<"parent_uuid">> := SpaceUuid
             }
         }
     ], ViewName, [{stale, false}]).

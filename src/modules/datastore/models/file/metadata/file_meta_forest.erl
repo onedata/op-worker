@@ -277,7 +277,7 @@ fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
 
 %% @private
 -spec get_links_up_to_limit(forest(), [link_name()], limit()) ->
-    {ok, [link()], non_neg_integer()} | {error, term()}.
+    {ok, [internal_link()], non_neg_integer()} | {error, term()}.
 get_links_up_to_limit(ParentUuid, LinkNames, Limit) ->
     lists_utils:foldl_while(fun
         (_, {ok, AccLinks, ListedCount}) when ListedCount == Limit ->
@@ -318,7 +318,7 @@ prepare_list_result(Links, TokenOrUndefined, ListedLessThanRequested, LastLink, 
         undefined ->
             ExtendedInfo
     end,
-    CroppedLinks = lists:sublist(Links, InitialOffset + 1, length(Links)),
+    CroppedLinks = lists:sublist(Links, max(1, InitialOffset + 1), length(Links)),
     {ok, tag_ambiguous(CroppedLinks), ExtendedInfo2}.
 
 
