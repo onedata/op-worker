@@ -35,7 +35,7 @@
 
 
 %% API
--export([create/1, ensure_exists_for_all_spaces/0]).
+-export([create/1, ensure_exists/1]).
 -export([move_to_trash/2, schedule_deletion_from_trash/5]).
 
 
@@ -57,10 +57,10 @@ create(SpaceId) ->
     ok.
 
 
--spec ensure_exists_for_all_spaces() -> ok.
-ensure_exists_for_all_spaces() ->
-    {ok, SpaceIds} = provider_logic:get_spaces(),
-    lists:foreach(fun ensure_exists/1, SpaceIds).
+-spec ensure_exists(od_space:id()) -> ok.
+ensure_exists(SpaceId) ->
+    #document{key = Key} = TrashDoc = prepare_doc(SpaceId),
+    ok = ?ok_if_exists(?extract_ok(file_meta:update(Key, fun(_) -> {error, already_exists} end, TrashDoc))).
 
 
 -spec move_to_trash(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
@@ -115,12 +115,6 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%% @private
--spec ensure_exists(od_space:id()) -> ok.
-ensure_exists(SpaceId) ->
-    #document{key = Key} = TrashDoc = prepare_doc(SpaceId),
-    ok = ?ok_if_exists(?extract_ok(file_meta:update(Key, fun(_) -> {error, already_exists} end, TrashDoc))).
 
 
 %% @private

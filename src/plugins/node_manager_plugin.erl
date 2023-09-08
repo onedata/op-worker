@@ -166,8 +166,11 @@ upgrade_cluster(4) ->
     end),
     {ok, 5};
 upgrade_cluster(5) ->
-    await_zone_connection_and_run(fun trash:ensure_exists_for_all_spaces/0),
-    await_zone_connection_and_run(fun archivisation_tree:ensure_archives_root_dir_for_all_spaces/0),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+        lists:foreach(fun archivisation_tree:create_archives_root_dir/1, SpaceIds)
+    end),
     {ok, 6}.
 
 %%--------------------------------------------------------------------

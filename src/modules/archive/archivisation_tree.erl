@@ -50,7 +50,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_archives_root_dir/1, ensure_archives_root_dir_for_all_spaces/0, create_archive_dir/4,
+-export([create_archives_root_dir/1, create_archive_dir/4,
     is_special_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
     uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
@@ -69,12 +69,6 @@ create_archives_root_dir(SpaceId) ->
     ),
     ok = ?ok_if_exists(create_file_meta(SpaceUuid, ArchivesRootDirDoc)),
     {ok, ArchivesRootDirUuid}.
-
-
--spec ensure_archives_root_dir_for_all_spaces() -> ok.
-ensure_archives_root_dir_for_all_spaces() ->
-    {ok, SpaceIds} = provider_logic:get_spaces(),
-    lists:foreach(fun create_archives_root_dir/1, SpaceIds).
 
 
 -spec create_archive_dir(archive:id(), dataset:id(), od_space:id(), od_user:id()) ->
