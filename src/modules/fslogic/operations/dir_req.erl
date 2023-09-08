@@ -42,7 +42,7 @@
 
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
     fslogic_worker:fuse_response() | no_return()).
--type listing_fun() :: fun((State, file_listing:opts()) -> {[any()], file_listing:pagination_token(), State}).
+-type listing_fun() :: fun((State, file_listing:options()) -> {[any()], file_listing:pagination_token(), State}).
 
 -export_type([recursive_listing_opts/0]).
 

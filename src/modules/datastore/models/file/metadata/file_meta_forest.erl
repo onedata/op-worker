@@ -59,7 +59,7 @@
 %% @formatter:off
 -type list_opts() :: #{
     % required keys
-    size := non_neg_integer(),
+    size := limit(),
     % one of: token, offset, last_name is required so that we know were to start listing
     token => binary(),
     offset => non_neg_integer(),
@@ -155,8 +155,9 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 
 -spec list(forest(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list(ParentUuid, Opts) ->
-    ExpectedSize = maps:get(size, Opts),
-    Ctx = case maps:get(ignore_missing_links, Opts, false) of
+    FinalListingOpts = adjust_opts_for_offset(Opts),
+    ExpectedSize = maps:get(size, FinalListingOpts),
+    Ctx = case maps:get(ignore_missing_links, FinalListingOpts, false) of
         true ->
             ?CTX;
         false ->
@@ -171,22 +172,22 @@ list(ParentUuid, Opts) ->
             true -> {ok, {[Link | ListAcc], Link, ListedLinksCount + 1}};
             _ -> {ok, {ListAcc, Link, ListedLinksCount + 1}}
         end
-    end, {[], undefined, 0}, Opts),
+    end, {[], undefined, 0}, FinalListingOpts),
 
     case Result of
-        {{ok, {ReversedLinks, LastLink, ListedLinksCount}}, NewToken} ->
-            prepare_list_result(ReversedLinks, NewToken, ListedLinksCount < ExpectedSize, LastLink);
-        {ok, {ReversedLinks, LastLink, ListedLinksCount}} ->
-            prepare_list_result(ReversedLinks, undefined, ListedLinksCount < ExpectedSize, LastLink);
+        {{ok, {ReversedLinks, LastLink, ListedLinksCount}}, NextToken} ->
+            prepare_list_result(lists:reverse(ReversedLinks), NextToken, ListedLinksCount < ExpectedSize,
+                LastLink, maps:get(offset, Opts, 0));
         {error, Reason} ->
             {error, Reason}
     end.
 
 
--spec list_whitelisted(forest(),list_opts(), [link_name()]) -> {ok, [link()], list_extended_info()} | {error, term()}.
+-spec list_whitelisted(forest(), list_opts(), [link_name()]) ->
+    {ok, [link()], list_extended_info()} | {error, term()}.
 list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
     Size = maps:get(size, Opts),
-    NonNegOffset = maps:get(offset, Opts, undefined),
+    NonNegOffset = maps:get(offset, Opts, 0),
     LastName = maps:get(prev_link_name, Opts, undefined),
     FilteredChildrenWhiteList = case LastName of
         undefined ->
@@ -194,28 +195,14 @@ list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
         LastName ->
             lists:dropwhile(fun(Name) -> Name < LastName end, SortedChildrenWhiteList)
     end,
-    try
-        ValidLinks = lists:flatmap(fun
-            ({ok, L}) ->
-                L;
-            ({error, not_found}) ->
-                [];
-            ({error, _} = Error) ->
-                throw(Error)
-        end, get(ParentUuid, all, FilteredChildrenWhiteList)),
-
-        case NonNegOffset < length(ValidLinks) of
-            true ->
-                RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Size),
-                {ok, tag_ambiguous(RequestedLinks), #list_extended_info{
-                    is_finished = NonNegOffset + Size >= length(ValidLinks)
-                }};
-            false ->
-                {ok, [], #list_extended_info{is_finished = true}}
-        end
-    catch
-        throw:{error, _} = Error2 ->
-            Error2
+    case get_links_up_to_limit(ParentUuid, FilteredChildrenWhiteList, Size + NonNegOffset) of
+        {ok, [], _} ->
+            {ok, [], #list_extended_info{is_finished = true}};
+        {ok, ValidLinks, ListedLinksCount} ->
+            prepare_list_result(ValidLinks, undefined, ListedLinksCount < Size + NonNegOffset,
+                lists:last(ValidLinks), NonNegOffset);
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -273,26 +260,49 @@ check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProvide
 get_all(ParentUuid, Name) ->
     get(ParentUuid, all, Name).
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), list_opts()) ->
-    {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
-    datastore_model:fold_links(Ctx, ParentUuid, all, Fun, AccIn, Opts).
-
-
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Prepares result of list by tagging ambiguous file names and
-%% preparing #list_extended_info{} structure.
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean(), internal_link()) ->
-    {ok, [link()], list_extended_info()}.
-prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested, LastLink) ->
+-spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), list_opts()) ->
+    {{ok, fold_acc()}, datastore_links_iter:token() | undefined} | {error, term()}.
+fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
+    case datastore_model:fold_links(Ctx, ParentUuid, all, Fun, AccIn, Opts) of
+        {ok, Result} -> {{ok, Result}, undefined};
+        Other -> Other
+    end.
+
+
+%% @private
+-spec get_links_up_to_limit(forest(), [link_name()], limit()) ->
+    {ok, [link()], non_neg_integer()} | {error, term()}.
+get_links_up_to_limit(ParentUuid, LinkNames, Limit) ->
+    lists_utils:foldl_while(fun
+        (_, {ok, AccLinks, ListedCount}) when ListedCount == Limit ->
+            {halt, {ok, AccLinks, ListedCount}};
+        ({ok, L}, {ok, AccLinks, ListedCount}) ->
+            {cont, {ok, AccLinks ++ L, ListedCount + 1}};
+        ({error, not_found}, {ok, AccLinks, ListedCount}) ->
+            {cont, {ok, AccLinks, ListedCount}};
+        ({error, _} = Error, _) ->
+            {halt, Error}
+    end, {ok, [], 0}, get(ParentUuid, all, LinkNames)).
+
+
+%% @private
+-spec adjust_opts_for_offset(list_opts()) -> list_opts().
+adjust_opts_for_offset(#{offset := Offset, size := Size} = Opts) when is_integer(Offset) andalso Offset > 0 ->
+    maps:remove(offset, Opts#{size => Size + Offset});
+adjust_opts_for_offset(Opts) ->
+    Opts.
+
+
+%% @private
+-spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean(),
+    internal_link(), offset()) -> {ok, [link()], list_extended_info()}.
+prepare_list_result(Links, TokenOrUndefined, ListedLessThanRequested, LastLink, InitialOffset) ->
     ExtendedInfo = case TokenOrUndefined of
         #link_token{} = Token -> #list_extended_info{
             datastore_token = Token,
@@ -308,7 +318,8 @@ prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested, La
         undefined ->
             ExtendedInfo
     end,
-    {ok, tag_ambiguous(lists:reverse(ReversedLinks)), ExtendedInfo2}.
+    CroppedLinks = lists:sublist(Links, InitialOffset + 1, length(Links)),
+    {ok, tag_ambiguous(CroppedLinks), ExtendedInfo2}.
 
 
 %%--------------------------------------------------------------------
@@ -338,6 +349,7 @@ tag_ambiguous(Links) ->
     end, [], Groups).
 
 
+%% @private
 -spec calculate_suffix_length(group()) -> non_neg_integer().
 calculate_suffix_length(Group) ->
     RemoteTreeIds = get_remote_tree_ids(Group),
@@ -345,6 +357,7 @@ calculate_suffix_length(Group) ->
     max(?MINIMAL_TREE_ID_SUFFIX_LEN, LongestCommonPrefixLen + 1).
 
 
+%% @private
 -spec get_remote_tree_ids(group()) -> tree_ids().
 get_remote_tree_ids(Group) ->
     LocalTreeId = ?LOCAL_TREE_ID,
@@ -356,6 +369,7 @@ get_remote_tree_ids(Group) ->
     end, Group).
 
 
+%% @private
 -spec group_by_name([internal_link()]) -> [group()].
 group_by_name(Links) ->
     {LastGroup, FinalGroupsAcc} = lists:foldl(fun
@@ -384,6 +398,7 @@ group_by_name(Links) ->
     [LastGroup | FinalGroupsAcc].
 
 
+%% @private
 -spec tag_remote_files(internal_link(), tree_id(), non_neg_integer()) -> link().
 tag_remote_files(#link{name = Name, target = FileUuid, tree_id = LocalTreeId}, LocalTreeId, _) ->
     ?LINK(Name, FileUuid);

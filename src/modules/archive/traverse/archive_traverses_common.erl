@@ -32,7 +32,7 @@
 %%%===================================================================
 
 -spec do_master_job(module(), tree_traverse:master_job(), traverse:master_job_extended_args(), 
-    error_handler({ok, traverse:master_job_map()})) -> {ok, traverse:master_job_map()} | {error, term()}.
+    error_handler({ok, traverse:master_job_map()})) -> {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job(
     TraverseModule, 
     Job = #tree_traverse{file_ctx = FileCtx}, 

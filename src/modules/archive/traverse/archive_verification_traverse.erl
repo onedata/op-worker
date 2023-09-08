@@ -210,7 +210,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
 
 
 -spec do_dir_master_job_unsafe(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
-    {ok, traverse:master_job_map()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_dir_master_job_unsafe(#tree_traverse{
     user_id = UserId, 
     file_ctx = FileCtx
