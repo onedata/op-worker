@@ -220,7 +220,7 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
         },
         {stop, route_to_proper_handler(OpReq, Req2), State}
     catch
-        throw:Error ->
+        throw:{error, _} = Error ->
             {stop, http_req:send_error(Error, Req), State};
         Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
