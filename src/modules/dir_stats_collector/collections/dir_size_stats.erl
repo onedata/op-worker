@@ -393,7 +393,7 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
                 end
             end),
 
-            node_cache:update([?MODULE, Uuid], fun(NewReferenceListChanges) ->
+            node_cache:update({?MODULE, Uuid}, fun(NewReferenceListChanges) ->
                 NewRecord = #reference_list_changes{
                     added = NewReferenceListChanges#reference_list_changes.added -- AddedList,
                     removed = NewReferenceListChanges#reference_list_changes.removed -- RemovedList,
