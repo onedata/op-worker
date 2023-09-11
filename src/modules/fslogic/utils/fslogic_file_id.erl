@@ -131,6 +131,7 @@ is_special_uuid(FileUuid) ->
         orelse is_space_dir_uuid(FileUuid)
         orelse is_trash_dir_uuid(FileUuid)
         orelse is_tmp_dir_uuid(FileUuid)
+        orelse is_opened_deleted_files_dir_uuid(FileUuid)
         orelse is_share_root_dir_uuid(FileUuid)
         orelse archivisation_tree:is_special_uuid(FileUuid).
 
@@ -185,6 +186,11 @@ is_trash_dir_guid(FileGuid) ->
 -spec is_tmp_dir_uuid(file_meta:uuid()) -> boolean().
 is_tmp_dir_uuid(<<?TMP_DIR_UUID_PREFIX, _SpaceId/binary>>) -> true;
 is_tmp_dir_uuid(_) -> false.
+
+
+-spec is_opened_deleted_files_dir_uuid(file_meta:uuid()) -> boolean().
+is_opened_deleted_files_dir_uuid(?OPENED_DELETED_FILES_DIR_UUID(_)) -> true;
+is_opened_deleted_files_dir_uuid(_) -> false.
 
 
 -spec is_tmp_dir_guid(file_id:file_guid()) -> boolean().
