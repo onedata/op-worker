@@ -138,6 +138,7 @@ query_view_using_file_meta(_Config) ->
     {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
 
     TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    TmpUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
 
     OpenedDeletedGuid = file_id:pack_guid(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId),
@@ -209,7 +210,7 @@ query_view_using_file_meta(_Config) ->
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
                 <<"deleted">> := false,
-                <<"parent_uuid">> := SpaceUuid
+                <<"parent_uuid">> := TmpUuid
             }
         }
     ], ViewName, [{stale, false}]).
