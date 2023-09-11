@@ -1523,7 +1523,7 @@ clean_space_and_verify_stats(Config) ->
                 }}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS),
 
                 TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
-                check_dir_stats(Config, op_worker_nodes, TmpDirGuid, #{
+                ?assertEqual({ok, #{
                     ?REG_FILE_AND_LINK_COUNT => 0,
                     ?DIR_COUNT => 1, % includes dir for opened deleted dirs (created with space)
                     ?FILE_ERRORS_COUNT => 0,
@@ -1531,7 +1531,7 @@ clean_space_and_verify_stats(Config) ->
                     ?TOTAL_SIZE => 0,
                     ?TOTAL_DOWNLOAD_SIZE => 0,
                     ?SIZE_ON_STORAGE(StorageId) => 0
-                });
+                }}, rpc:call(Worker, dir_size_stats, get_stats, [TmpDirGuid]), ?ATTEMPTS);
             _ ->
                 ok
         end
