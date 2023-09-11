@@ -642,7 +642,7 @@ mkdir_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_subcontainer]
         }],
@@ -673,7 +673,7 @@ get_children_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?list_container]
         }],
@@ -699,7 +699,7 @@ get_children_attrs_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?list_container]
         }],
@@ -725,10 +725,10 @@ get_child_attr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?traverse_container],
-            children = [#file{name = <<"file1">>}]
+            children = [#test_file{name = <<"file1">>}]
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
@@ -751,17 +751,17 @@ mv_dir_test(Config) ->
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
-            #dir{
+            #test_dir{
                 name = <<"dir1">>,
                 perms = [?traverse_container, ?delete_subcontainer],
                 children = [
-                    #dir{
+                    #test_dir{
                         name = <<"dir11">>,
                         perms = [?delete]
                     }
                 ]
             },
-            #dir{
+            #test_dir{
                 name = <<"dir2">>,
                 perms = [?traverse_container, ?add_subcontainer]
             }
@@ -791,11 +791,11 @@ rm_dir_test(Config) ->
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
-            #dir{
+            #test_dir{
                 name = <<"dir1">>,
                 perms = [?traverse_container, ?delete_subcontainer],
                 children = [
-                    #dir{
+                    #test_dir{
                         name = <<"dir2">>,
                         perms = [?delete, ?list_container]
                     }
@@ -821,7 +821,7 @@ create_file_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
         }],
@@ -852,7 +852,7 @@ open_for_read_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_object],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -884,7 +884,7 @@ open_for_write_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_object],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -916,7 +916,7 @@ open_for_rdwr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_object, ?write_object],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -948,7 +948,7 @@ create_and_open_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -980,7 +980,7 @@ truncate_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_object]
         }],
@@ -1007,17 +1007,17 @@ mv_file_test(Config) ->
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
-            #dir{
+            #test_dir{
                 name = <<"dir1">>,
                 perms = [?traverse_container, ?delete_object],
                 children = [
-                    #file{
+                    #test_file{
                         name = <<"file11">>,
                         perms = [?delete]
                     }
                 ]
             },
-            #dir{
+            #test_dir{
                 name = <<"dir2">>,
                 perms = [?traverse_container, ?add_object]
             }
@@ -1047,11 +1047,11 @@ rm_file_test(Config) ->
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
         files = [
-            #dir{
+            #test_dir{
                 name = <<"dir1">>,
                 perms = [?traverse_container, ?delete_object],
                 children = [
-                    #file{
+                    #test_file{
                         name = <<"file1">>,
                         perms = [?delete]
                     }
@@ -1077,7 +1077,7 @@ get_parent_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{name = <<"file1">>}],
+        files = [#test_file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
         available_in_open_handle_mode = true,
@@ -1098,7 +1098,7 @@ get_file_path_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{name = <<"file1">>}],
+        files = [#test_file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = false, % TODO VFS-6057
         available_in_open_handle_mode = false, % TODO VFS-6057
@@ -1119,7 +1119,7 @@ get_file_guid_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{name = <<"file1">>}],
+        files = [#test_file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
         available_in_open_handle_mode = false,
@@ -1139,7 +1139,7 @@ get_file_attr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{name = <<"file1">>}],
+        files = [#test_file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
         available_in_open_handle_mode = true,
@@ -1160,7 +1160,7 @@ get_file_distribution_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_metadata]
         }],
@@ -1187,11 +1187,11 @@ get_historical_dir_size_stats_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             perms = [?read_metadata],
             children = [
-                #file{
+                #test_file{
                     name = <<"file1">>,
                     perms = []
                 }
@@ -1221,7 +1221,7 @@ get_file_storage_locations_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_metadata]
         }],
@@ -1397,7 +1397,7 @@ check_read_perms_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_object]
         }],
@@ -1423,7 +1423,7 @@ check_write_perms_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_object]
         }],
@@ -1449,7 +1449,7 @@ check_rdwr_perms_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_object, ?write_object]
         }],
@@ -1475,7 +1475,7 @@ create_share_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{name = <<"dir1">>}],
+        files = [#test_dir{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
@@ -1499,7 +1499,7 @@ remove_share_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
+        files = [#test_dir{
             name = <<"dir1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(
@@ -1574,7 +1574,7 @@ get_acl_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_acl]
         }],
@@ -1598,7 +1598,7 @@ set_acl_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_acl]
         }],
@@ -1630,7 +1630,7 @@ remove_acl_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_acl]
         }],
@@ -1656,7 +1656,7 @@ get_transfer_encoding_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_attributes],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -1685,7 +1685,7 @@ set_transfer_encoding_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_attributes]
         }],
@@ -1712,7 +1712,7 @@ get_cdmi_completion_status_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_attributes],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -1741,7 +1741,7 @@ set_cdmi_completion_status_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_attributes]
         }],
@@ -1768,7 +1768,7 @@ get_mimetype_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_attributes],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -1797,7 +1797,7 @@ set_mimetype_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_attributes]
         }],
@@ -1824,7 +1824,7 @@ get_metadata_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -1855,7 +1855,7 @@ set_metadata_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_metadata]
         }],
@@ -1882,7 +1882,7 @@ remove_metadata_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -1913,7 +1913,7 @@ get_xattr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -1944,7 +1944,7 @@ list_xattr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
@@ -1972,7 +1972,7 @@ set_xattr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_metadata]
         }],
@@ -2000,7 +2000,7 @@ remove_xattr_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             perms = [?write_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
@@ -2031,7 +2031,7 @@ add_qos_entry_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{name = <<"file1">>}],
+        files = [#test_file{name = <<"file1">>}],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
         available_in_open_handle_mode = false,
@@ -2053,7 +2053,7 @@ get_qos_entry_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = opt_qos:add_qos_entry(
@@ -2083,7 +2083,7 @@ remove_qos_entry_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = opt_qos:add_qos_entry(
@@ -2113,7 +2113,7 @@ get_effective_file_qos_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, _QosEntryId} = opt_qos:add_qos_entry(
@@ -2143,7 +2143,7 @@ check_qos_fulfillment_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
+        files = [#test_file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
                 {ok, QosEntryId} = opt_qos:add_qos_entry(

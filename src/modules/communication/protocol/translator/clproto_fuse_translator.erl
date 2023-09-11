@@ -108,17 +108,17 @@ from_protobuf(#'FileAttr'{} = FileAttr) ->
         uid = FileAttr#'FileAttr'.uid,
         gid = FileAttr#'FileAttr'.gid,
         atime = FileAttr#'FileAttr'.atime,
-        mtime               = FileAttr#'FileAttr'.mtime,
-        ctime               = FileAttr#'FileAttr'.ctime,
-        type                = FileAttr#'FileAttr'.type,
-        size                = FileAttr#'FileAttr'.size,
-        provider_id         = FileAttr#'FileAttr'.provider_id,
-        shares              = FileAttr#'FileAttr'.shares,
-        owner_id            = FileAttr#'FileAttr'.owner_id,
+        mtime = FileAttr#'FileAttr'.mtime,
+        ctime = FileAttr#'FileAttr'.ctime,
+        type = FileAttr#'FileAttr'.type,
+        size = FileAttr#'FileAttr'.size,
+        provider_id = FileAttr#'FileAttr'.provider_id,
+        shares = FileAttr#'FileAttr'.shares,
+        owner_id = FileAttr#'FileAttr'.owner_id,
         is_fully_replicated = FileAttr#'FileAttr'.fully_replicated,
-        link_count          = FileAttr#'FileAttr'.nlink,
-        index               = file_listing:decode_index(FileAttr#'FileAttr'.index),
-        xattrs              = Xattrs
+        link_count = FileAttr#'FileAttr'.nlink,
+        index = file_listing:decode_index(FileAttr#'FileAttr'.index),
+        xattrs = Xattrs
     };
 from_protobuf(#'Xattr'{
     name = Name,
@@ -379,6 +379,7 @@ to_protobuf(#file_attr{} = FileAttr) ->
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.is_fully_replicated,
         nlink = FileAttr#file_attr.link_count,
+        index = file_listing:encode_index(FileAttr#file_attr.index),
         xattrs = TranslatedXattrs
     }};
 to_protobuf(#xattr{

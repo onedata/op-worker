@@ -100,18 +100,15 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
-    case get_children_attrs(UserCtx, FileCtx0, ListOpts, [guid, size]) of
-        #fuse_response{status = #status{code = ?OK}, fuse_response = FuseResponse} ->
-            #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children{
-                    child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
-                    pagination_token = PaginationToken
-                }
-            };
-        ErrorReponse ->
-            ErrorReponse
-    end.
+    #fuse_response{status = #status{code = ?OK}, fuse_response = FuseResponse} =
+        get_children_attrs(UserCtx, FileCtx0, ListOpts, [guid, name]),
+    #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children{
+            child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
+            pagination_token = PaginationToken
+        }
+    }.
 
 
 -spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()]) ->

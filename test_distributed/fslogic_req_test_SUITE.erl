@@ -215,6 +215,7 @@ fslogic_get_file_children_attrs_test(Config) ->
                             fun(_, {Offset, CurrentChildren}) ->
                                 Response = ?file_req(Worker, SessId, FileGuid,
                                     #get_file_children_attrs{
+                                        attributes = [guid, name, type, mode, uid, parent_guid, provider_id, owner_id, is_fully_replicated],
                                         listing_options = #{offset => Offset, limit => Size, tune_for_large_continuous_listing => false}
                                     }),
 
@@ -317,7 +318,7 @@ fslogic_get_child_attr_test(Config) ->
                 name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
                 uid = UID, parent_guid = ParentGuid
             }
-        }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
+        }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName, attributes = [name, type, mode, uid, parent_guid]}))
     end, [
         {SessId1, <<"space_name1">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid1, <<"space_name1">>},
         {SessId2, <<"space_name2">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid2, <<"space_name2">>},
@@ -416,12 +417,12 @@ fslogic_read_dir_test(Config) ->
                                 }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
-                                #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
+                                #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildAttrs}} = Response,
 
                                 RespNames = lists:map(
-                                    fun(#child_link{guid = _, name = Name}) ->
+                                    fun(#file_attr{name = Name}) ->
                                         Name
-                                    end, Links),
+                                    end, ChildAttrs),
 
                                 ?assertEqual(min(max(0, length(ExpectedNames) - Offset), Limit), length(RespNames)),
 
@@ -489,7 +490,7 @@ chmod_test(Config) ->
 
             ?assertMatch(
                 #fuse_response{status = #status{code = ?OK}, fuse_response = #file_attr{mode = 8#123}},
-                ?file_req(Worker, SessId, Guid, #get_file_attr{})
+                ?file_req(Worker, SessId, Guid, #get_file_attr{attributes = [mode]})
             )
 
 
@@ -710,7 +711,7 @@ update_times_test(Config) ->
 
     GetTimes =
         fun(Guid, SessId) ->
-            FileAttr = ?file_req(Worker, SessId, Guid, #get_file_attr{}),
+            FileAttr = ?file_req(Worker, SessId, Guid, #get_file_attr{attributes = [atime, mtime, ctime]}),
             ?assertMatch(#fuse_response{status = #status{code = ?OK}}, FileAttr),
             #fuse_response{fuse_response = #file_attr{atime = ATime, mtime = MTime, ctime = CTime}} = FileAttr,
             {ATime, MTime, CTime}

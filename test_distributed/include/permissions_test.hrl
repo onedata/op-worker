@@ -65,7 +65,7 @@
 }).
 
 
--record(file, {
+-record(test_file, {
     % name of file
     name :: binary(),
     % permissions needed to perform #test_spec.operation
@@ -75,7 +75,7 @@
     on_create = undefined :: undefined | fun((OwnerSessId :: session:id(), file_id:file_guid()) -> term())
 }).
 
--record(dir, {
+-record(test_dir, {
     % name of directory
     name :: binary(),
     % permissions needed to perform #test_spec.operation
@@ -84,7 +84,7 @@
     % and can be used during test (described in `operation` of #test_spec{}).
     on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
     % children of directory if needed
-    children = [] :: [#dir{} | #file{}]
+    children = [] :: [#test_dir{} | #test_file{}]
 }).
 
 % Main space used in permissions tests
@@ -141,7 +141,7 @@
 
     % Description of environment (files and permissions on them) needed to
     % perform `operation`.
-    files :: [#dir{} | #file{}],
+    files :: [#test_dir{} | #test_file{}],
 
     % Tells whether operation should work in readonly mode (readonly caveats set)
     available_in_readonly_mode = false :: boolean(),

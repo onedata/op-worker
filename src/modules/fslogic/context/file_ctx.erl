@@ -704,7 +704,7 @@ get_times(
 %% Returns storage id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
+-spec get_storage_id(ctx()) -> {storage:id() | undefined, ctx()}.
 get_storage_id(FileCtx) ->
     case get_storage(FileCtx) of
         {undefined, FileCtx2} ->
