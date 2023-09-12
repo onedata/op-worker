@@ -1063,7 +1063,7 @@ teardown(Config, SpaceId, CleanSpace) ->
                 <<"dir_stats_collections_initialization_traverse">>,
                 dir_stats_collections_initialization_traverse:gen_task_id(SpaceId, Incarnation)
             ])
-        end, lists:seq(1, 10))
+        end, lists:seq(1, 200))
     end, initializer:get_different_domain_workers(Config)),
 
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
