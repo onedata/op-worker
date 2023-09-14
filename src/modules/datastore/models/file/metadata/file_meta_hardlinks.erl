@@ -155,7 +155,7 @@ merge_references(#document{mutators = [Mutator | _], value = #file_meta{referenc
 
     case ChangedMutatorReferences of
         OldMutatorReferences -> not_mutated;
-        _ -> {mutated, OldReferences#{Mutator => filter_special_references(ChangedMutatorReferences)}}
+        _ -> {mutated, OldReferences#{Mutator => ChangedMutatorReferences}}
     end.
 
 
@@ -191,19 +191,25 @@ update_stats_on_merge(
 %%% Internal functions
 %%%===================================================================
 
--spec references_to_list(references()) -> [link()].
+-spec references_to_list(references()) -> references_list().
 references_to_list(References) ->
     % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
     % Note - it is expected that function returns references in the same order any time its called - if
     %        new reference is added, the order of the others should remain unchanged
-    lists:flatmap(fun(Key) ->
-        maps:get(Key, References)
+    ProviderId = oneprovider:get_id(),
+    lists:flatmap(fun
+        (Key) when Key =:= ProviderId -> maps:get(Key, References);
+        (Key) -> filter_special_references(maps:get(Key, References))
     end, lists:sort(maps:keys(References))).
 
 
 -spec count_references_in_map(references()) -> non_neg_integer().
 count_references_in_map(References) ->
-    maps:fold(fun(_, ProviderReferences, Acc) -> length(ProviderReferences) + Acc end, 0, References).
+    ProviderId = oneprovider:get_id(),
+    maps:fold(fun
+        (Key, ProviderReferences, Acc) when Key =:= ProviderId -> length(ProviderReferences) + Acc;
+        (_, ProviderReferences, Acc) -> length(filter_special_references(ProviderReferences)) + Acc
+    end, 0, References).
 
 
 -spec filter_special_references(references_list()) -> references_list().
