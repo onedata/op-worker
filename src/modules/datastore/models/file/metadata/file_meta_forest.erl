@@ -57,12 +57,12 @@
 -type tree_ids() :: datastore_model:tree_ids().
 
 %% @formatter:off
--type list_opts() :: #{
+-type datastore_fold_opts() :: #{
     % required keys
     size := limit(),
     % one of: token, offset, last_name is required so that we know were to start listing
     token => binary(),
-    offset => non_neg_integer(),
+    offset => offset(),
     last_name => last_name(),
     % optional keys
     last_tree => last_tree(),
@@ -72,6 +72,15 @@
     % * `false` - in case described above `interrupted_call` error will be returned.
     ignore_missing_links => boolean() % default: false
 }.
+
+-type whitelisted_list_opts() :: #{
+    size := limit(),
+    offset => non_neg_integer(),
+    % optional keys
+    last_name => last_name()
+}.
+
+-type list_opts() :: datastore_fold_opts() | whitelisted_list_opts().
 
 -type list_extended_info() :: #list_extended_info{}.
 
@@ -153,7 +162,7 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
     ok = datastore_model:mark_links_deleted(?CTX(Scope), ParentUuid, TreeId, {FileName, Revision}).
 
 
--spec list(forest(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
+-spec list(forest(), datastore_fold_opts()) -> {ok, [link()], datastore_fold_opts()} | {error, term()}.
 list(ParentUuid, Opts) ->
     FinalListingOpts = adjust_opts_for_offset(Opts),
     ExpectedSize = maps:get(size, FinalListingOpts),
@@ -183,7 +192,7 @@ list(ParentUuid, Opts) ->
     end.
 
 
--spec list_whitelisted(forest(), list_opts(), [link_name()]) ->
+-spec list_whitelisted(forest(), whitelisted_list_opts(), [link_name()]) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
 list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
     Size = maps:get(size, Opts),
@@ -266,7 +275,7 @@ get_all(ParentUuid, Name) ->
 %%%===================================================================
 
 %% @private
--spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), list_opts()) ->
+-spec fold(datastore:ctx(), forest(), fold_fun(), fold_acc(), datastore_fold_opts()) ->
     {{ok, fold_acc()}, datastore_links_iter:token() | undefined} | {error, term()}.
 fold(Ctx, ParentUuid, Fun, AccIn, Opts) ->
     case datastore_model:fold_links(Ctx, ParentUuid, all, Fun, AccIn, Opts) of
@@ -301,7 +310,7 @@ adjust_opts_for_offset(Opts) ->
 
 %% @private
 -spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean(),
-    internal_link(), offset()) -> {ok, [link()], list_extended_info()}.
+    internal_link() | undefined, offset()) -> {ok, [link()], list_extended_info()}.
 prepare_list_result(Links, TokenOrUndefined, ListedLessThanRequested, LastLink, InitialOffset) ->
     ExtendedInfo = case TokenOrUndefined of
         #link_token{} = Token -> #list_extended_info{
