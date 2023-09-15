@@ -27,8 +27,19 @@
 %%% API
 %%%===================================================================
 
-
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = list}, Spaces) ->
+    lists:map(fun({SpaceId, #od_space{name = SpaceName}}) ->
+        SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+        {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+        
+        #{
+            <<"spaceId">> => SpaceId,
+            <<"fileId">> => SpaceDirObjectId,
+            <<"name">> => SpaceName
+        }
+    end, Spaces);
+
 translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
     #{<<"list">> => lists:map(fun(TransferId) -> gri:serialize(#gri{
         type = op_transfer,
