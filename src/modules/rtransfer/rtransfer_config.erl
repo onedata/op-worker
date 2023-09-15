@@ -208,16 +208,24 @@ add_storage(StorageId) ->
     AdminCtx = helper:get_admin_ctx(Helper),
     {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
     HelperName = helper:get_name(Helper),
-    {NodesAns, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
+    AllNodes = consistent_hashing:get_all_nodes(),
+    {GatheredResults, BadNodes} = utils:rpc_multicall(AllNodes,
                                   rtransfer_link, add_storage,
                                   [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
     BadNodes =/= [] andalso
-        ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]),
+        ?error("Failed to call some nodes to add storage to rtransfer~s", [
+            ?autoformat([StorageId, BadNodes])
+        ]),
 
-    FilteredNodesAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, NodesAns),
-    FilteredNodesAns =/= [] andalso
-        ?error("Error adding storage ~p, rpc answer: ~p", [StorageId, NodesAns]),
+    case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
+        [] ->
+            ok;
+        _ErrorResults ->
+            ?error("There were errors while adding storage to rtransfer~s", [
+                ?autoformat([StorageId, AllNodes, GatheredResults])
+            ])
+    end,
 
     ok.
 

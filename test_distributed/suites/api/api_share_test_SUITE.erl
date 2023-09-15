@@ -72,7 +72,7 @@ create_share_test(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
+            verify_fun = build_verify_shares_in_file_meta_fun(MemRef, Providers, user3, FileGuid),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create share for ", FileType/binary, " using /shares rest endpoint">>,
@@ -446,7 +446,7 @@ delete_share_test(_Config) ->
     Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
 
-    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 4)]),
+    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 20)]),
     #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, SpaceId, FileSpec
     ),
@@ -454,20 +454,24 @@ delete_share_test(_Config) ->
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, shares, ShareIds),
 
-    ?assert(onenv_api_test_runner:run_tests([
+    BuildTestSpecFun = fun(VerifyFun, ShareTypeBin) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            verify_fun = build_verify_file_shares_fun(MemRef, Providers, user3, FileGuid),
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Delete share for ", FileType/binary, " using /shares rest endpoint">>,
+                    name = str_utils:format_bin("Delete ~s for ~s using /shares rest endpoint", [
+                        ShareTypeBin, FileType
+                    ]),
                     type = rest,
                     prepare_args_fun = build_delete_share_prepare_rest_args_fun(MemRef),
                     validate_result_fun = build_delete_share_validate_rest_call_result_fun(MemRef, Providers)
                 },
                 #scenario_template{
-                    name = <<"Delete share for ", FileType/binary, " using gs api">>,
+                    name = str_utils:format_bin("Delete ~s for ~s using /shares gs api", [
+                        ShareTypeBin, FileType
+                    ]),
                     type = gs,
                     prepare_args_fun = build_delete_share_prepare_gs_args_fun(MemRef),
                     validate_result_fun = build_delete_share_validate_gs_call_result_fun(MemRef, Providers)
@@ -479,7 +483,19 @@ delete_share_test(_Config) ->
                 ]
             }
         }
-    ])).
+    end,
+    ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
+        build_verify_shares_in_file_meta_fun(MemRef, Providers, user3, FileGuid),
+        <<"share">>
+    )])),
+
+    % Assert zombie shares can be deleted
+    onenv_file_test_utils:rm_and_sync_file(user3, FileGuid),
+    assert_zombie_shares_exist(api_test_memory:get(MemRef, shares), user3, Providers),
+
+    ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
+        fun(_, _) -> true end, <<"zombie share">>
+    )])).
 
 
 %% @private
@@ -564,6 +580,31 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
     end, Providers),
 
     api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).
+
+
+%% @private
+-spec assert_zombie_shares_exist(
+    [od_share:id()],
+    oct_background:entity_selector(),
+    [oct_background:entity_selector()]
+) ->
+    ok | no_return().
+assert_zombie_shares_exist(ShareIds, UserSelector, Providers) ->
+    UserId = oct_background:get_user_id(UserSelector),
+
+    lists:foreach(fun(ShareId) ->
+        Provider = ?RAND_ELEMENT(Providers),
+        ProviderNode = oct_background:get_random_provider_node(Provider),
+        UserSessId = oct_background:get_user_session_id(UserId, Provider),
+
+        {ok, #document{value = #od_share{root_file = ShareFileGuid}}} = ?assertMatch(
+            {ok, _},
+            get_share_doc(Provider, UserId, ShareId)
+        ),
+
+        FileGuid = file_id:share_guid_to_guid(ShareFileGuid),
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(ProviderNode, UserSessId, ?FILE_REF(FileGuid)))
+    end, ShareIds).
 
 
 %%%===================================================================
@@ -679,14 +720,14 @@ assert_proper_gs_share_translation(SpaceId, ShareId, ShareName, Description, Sco
 
 
 %% @private
--spec build_verify_file_shares_fun(
+-spec build_verify_shares_in_file_meta_fun(
     api_test_memory:mem_ref(),
     [oct_background:entity_selector()],
     oct_background:entity_selector(),
     file_id:file_guid()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_file_shares_fun(MemRef, Providers, UserSelector, FileGuid) ->
+build_verify_shares_in_file_meta_fun(MemRef, Providers, UserSelector, FileGuid) ->
     fun(_, _) ->
         ExpShares = lists:sort(api_test_memory:get(MemRef, shares, [])),
 

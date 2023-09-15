@@ -14,6 +14,7 @@
 -module(permissions_test_base).
 -author("Bartosz Walkowicz").
 
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("permissions_test.hrl").
@@ -1544,33 +1545,59 @@ create_share_test(Config) ->
 remove_share_test(Config) ->
     [_, _, W] = ?config(op_worker_nodes, Config),
 
-    permissions_test_runner:run_scenarios(#perms_test_spec{
-        test_node = W,
-        root_dir_name = ?SCENARIO_NAME,
-        files = [#dir{
-            name = <<"dir1">>,
-            on_create = fun(FileOwnerSessId, Guid) ->
-                {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(
-                    W, FileOwnerSessId, ?FILE_REF(Guid), <<"share_to_remove">>
-                )),
-                ShareId
-            end
-        }],
-        posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
-        acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
-        available_in_readonly_mode = false,
-        available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = false,
-        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ShareId = maps:get(DirPath, ExtraData),
-            opt_shares:remove(W, SessId, ShareId)
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
-    }, Config).
+    SpaceOwnerSessId = ?config({session_id, {<<"owner">>, ?GET_DOMAIN(W)}}, Config),
+    {ok, SpaceName} = rpc:call(W, space_logic, get_name, [?ROOT_SESS_ID, ?SPACE_ID]),
+    ScenariosRootDirPath = filename:join(["/", SpaceName, ?SCENARIO_NAME]),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SpaceOwnerSessId, ScenariosRootDirPath, 8#700)),
+
+    FilePath = filename:join([ScenariosRootDirPath, ?RAND_STR()]),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SpaceOwnerSessId, FilePath, 8#700)),
+    {ok, ShareId} = opt_shares:create(W, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
+
+    RemoveShareFun = fun(SessId) ->
+        % Remove share via gs call to test token data caveats
+        % (middleware should reject any api call with data caveats)
+        rpc:call(W, middleware, handle, [#op_req{
+            auth = permissions_test_utils:get_auth(W, SessId),
+            gri = #gri{type = op_share, id = ShareId, aspect = instance},
+            operation = delete
+        }])
+    end,
+
+    UserId = <<"user2">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+
+    % Assert share removal requires only ?SPACE_MANAGE_SHARES space priv
+    % and no file permissions
+    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, []),
+    ?assertEqual(?ERROR_POSIX(?EPERM), RemoveShareFun(UserSessId)),
+
+    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, privileges:space_admin()),
+    MainToken = initializer:create_access_token(UserId),
+
+    % Assert api operations are unauthorized in case of data caveats
+    Token1 = tokens:confine(MainToken, #cv_data_readonly{}),
+    CaveatSessId1 = permissions_test_utils:create_session(W, UserId, Token1),
+    ?assertEqual(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED({cv_data_readonly})),
+        RemoveShareFun(CaveatSessId1)
+    ),
+    Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [ScenariosRootDirPath]}),
+    CaveatSessId2 = permissions_test_utils:create_session(W, UserId, Token2),
+    ?assertMatch(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED({cv_data_path, [ScenariosRootDirPath]})),
+        RemoveShareFun(CaveatSessId2)
+    ),
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    Token3 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ObjectId]}),
+    CaveatSessId3 = permissions_test_utils:create_session(W, UserId, Token3),
+    ?assertMatch(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED({cv_data_objectid, [ObjectId]})),
+        RemoveShareFun(CaveatSessId3)
+    ),
+
+    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, [?SPACE_MANAGE_SHARES]),
+    ?assertEqual(ok, RemoveShareFun(UserSessId)).
 
 
 share_perms_test(Config) ->
