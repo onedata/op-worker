@@ -804,7 +804,7 @@ make_space_exist(SpaceId) ->
             end,
 
             trash:create(SpaceId),
-            archivisation_tree:create_archives_root_dir(SpaceId),
+            archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
             make_tmp_dir_exist(SpaceId),
 
             emit_space_dir_created(SpaceDirUuid, SpaceId);
