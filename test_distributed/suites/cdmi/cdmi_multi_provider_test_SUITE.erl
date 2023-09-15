@@ -12,6 +12,7 @@
 -module(cdmi_multi_provider_test_SUITE).
 -author("Tomasz Lichon").
 
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include("onenv_test_utils.hrl").
@@ -22,7 +23,7 @@
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
     init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/1
+    init_per_testcase/2, end_per_testcase/2
 ]).
 
 -export([
@@ -31,9 +32,9 @@
     list_nonexisting_dir/1,
     selective_params_list/1,
     childrenrange_list/1,
-    objectid_root/1,
-    objectid_dir/1,
-    objectid_file/1,
+    get_root_with_objectid_endpoint/1,
+    get_dir_with_objectid_endpoint/1,
+    get_file_with_objectid_endpoint/1,
     unauthorized_access_by_object_id/1,
     unauthorized_access_error/1,
     wrong_create_path_error/1,
@@ -56,15 +57,19 @@
     base64_create_file/1,
     create_empty_file/1,
     create_noncdmi_file/1,
+    create_raw_file_with_cdmi_version_header_should_succeed/1,
+    create_cdmi_file_without_cdmi_version_header_should_fail/1,
     basic_create_dir/1,
     create_noncdmi_dir_and_update/1,
     missing_parent_create_dir/1,
+    create_raw_dir_with_cdmi_version_header_should_succeed/1,
+    create_cdmi_dir_without_cdmi_version_header_should_fail/1,
 
     update_file_cdmi/1,
     update_file_http/1,
-    system_capabilities/1,
-    container_capabilities/1,
-    dataobject_capabilities/1,
+    get_system_capabilities/1,
+    get_container_capabilities/1,
+    get_dataobject_capabilities/1,
     use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1,
 
@@ -88,7 +93,8 @@
     acl_write_file/1,
     acl_delete_file/1,
     acl_read_write_dir/1,
-    accept_header/1
+    accept_header/1,
+    download_empty_file/1
 ]).
 
 groups() -> [
@@ -99,9 +105,9 @@ groups() -> [
         list_nonexisting_dir,
         selective_params_list,
         childrenrange_list,
-        objectid_root,
-        objectid_dir,
-        objectid_file,
+        get_root_with_objectid_endpoint,
+        get_dir_with_objectid_endpoint,
+        get_file_with_objectid_endpoint,
         unauthorized_access_by_object_id,
         unauthorized_access_error,
         wrong_create_path_error,
@@ -125,14 +131,18 @@ groups() -> [
         base64_create_file,
         create_empty_file,
         create_noncdmi_file,
+        create_raw_file_with_cdmi_version_header_should_succeed,
+        create_cdmi_file_without_cdmi_version_header_should_fail,
         basic_create_dir,
         create_noncdmi_dir_and_update,
         missing_parent_create_dir,
+        create_raw_dir_with_cdmi_version_header_should_succeed,
+        create_cdmi_dir_without_cdmi_version_header_should_fail,
         update_file_cdmi,
         update_file_http,
-        system_capabilities,
-        container_capabilities,
-        dataobject_capabilities,
+        get_system_capabilities,
+        get_container_capabilities,
+        get_dataobject_capabilities,
         use_supported_cdmi_version,
         use_unsupported_cdmi_version,
         copy_file,
@@ -155,7 +165,8 @@ groups() -> [
         acl_write_file,
         acl_delete_file,
         acl_read_write_dir,
-        accept_header
+        accept_header,
+        download_empty_file
     ]}
 
 ].
@@ -180,6 +191,8 @@ all() -> [
 -define(RUN_BASE_TEST(), ?RUN_TEST(cdmi_test_base)).
 -define(RUN_CREATE_TEST(), ?RUN_TEST(cdmi_create_test_base)).
 -define(RUN_MOVE_COPY_TEST(), ?RUN_TEST(cdmi_move_copy_test_base)).
+-define(RUN_GET_TEST(), ?RUN_TEST(cdmi_get_test_base)).
+-define(RUN_ACL_TEST(), ?RUN_TEST(cdmi_acl_test_base)).
 
 %%%===================================================================
 %%% Test functions
@@ -190,37 +203,37 @@ all() -> [
 %%%===================================================================
 
 list_basic_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 list_root_space_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 list_nonexisting_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 selective_params_list(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 childrenrange_list(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
-objectid_root(_Config) ->
-    ?RUN_BASE_TEST().
+get_root_with_objectid_endpoint(_Config) ->
+    ?RUN_GET_TEST().
 
-objectid_dir(_Config) ->
-    ?RUN_BASE_TEST().
+get_dir_with_objectid_endpoint(_Config) ->
+    ?RUN_GET_TEST().
 
-objectid_file(_Config) ->
-    ?RUN_BASE_TEST().
+get_file_with_objectid_endpoint(_Config) ->
+    ?RUN_GET_TEST().
 
 unauthorized_access_by_object_id(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 unauthorized_access_error(_Config) ->
     ?RUN_BASE_TEST().
 
 wrong_create_path_error(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 wrong_base_error(_Config) ->
     ?RUN_BASE_TEST().
@@ -239,16 +252,16 @@ open_cdmi_file_without_permission(_Config) ->
 %%%===================================================================
 
 basic_read(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 get_file_cdmi(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 get_file_non_cdmi(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 create_file_with_metadata(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 selective_metadata_read(_Config) ->
     ?RUN_BASE_TEST().
@@ -257,10 +270,10 @@ update_user_metadata_file(_Config) ->
     ?RUN_BASE_TEST().
 
 create_and_update_dir_with_user_metadata(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 write_acl_metadata(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 delete_file(_Config) ->
     ?RUN_BASE_TEST().
@@ -280,6 +293,12 @@ create_empty_file(_Config) ->
 create_noncdmi_file(_Config) ->
     ?RUN_CREATE_TEST().
 
+create_raw_file_with_cdmi_version_header_should_succeed(_Config) ->
+    ?RUN_CREATE_TEST().
+
+create_cdmi_file_without_cdmi_version_header_should_fail(_Config) ->
+    ?RUN_CREATE_TEST().
+
 basic_create_dir(_Config) ->
     ?RUN_CREATE_TEST().
 
@@ -289,20 +308,26 @@ create_noncdmi_dir_and_update(_Config) ->
 missing_parent_create_dir(_Config) ->
     ?RUN_CREATE_TEST().
 
+create_raw_dir_with_cdmi_version_header_should_succeed(_Config) ->
+    ?RUN_CREATE_TEST().
+
+create_cdmi_dir_without_cdmi_version_header_should_fail(_Config) ->
+    ?RUN_CREATE_TEST().
+
 update_file_cdmi(_Config) ->
     ?RUN_BASE_TEST().
 
 update_file_http(_Config) ->
     ?RUN_BASE_TEST().
 
-system_capabilities(_Config) ->
-    ?RUN_BASE_TEST().
+get_system_capabilities(_Config) ->
+    ?RUN_GET_TEST().
 
-container_capabilities(_Config) ->
-    ?RUN_BASE_TEST().
+get_container_capabilities(_Config) ->
+    ?RUN_GET_TEST().
 
-dataobject_capabilities(_Config) ->
-    ?RUN_BASE_TEST().
+get_dataobject_capabilities(_Config) ->
+    ?RUN_GET_TEST().
 
 use_supported_cdmi_version(_Config) ->
     ?RUN_BASE_TEST().
@@ -344,10 +369,10 @@ update_mimetype_and_encoding(_Config) ->
     ?RUN_BASE_TEST().
 
 mimetype_and_encoding_create_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 mimetype_and_encoding_create_file_non_cdmi_request(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 out_of_range(_Config) ->
     ?RUN_BASE_TEST().
@@ -359,18 +384,21 @@ partial_upload_non_cdmi(_Config) ->
     ?RUN_BASE_TEST().
 
 acl_read_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 acl_write_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 acl_delete_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 acl_read_write_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 accept_header(_Config) ->
+    ?RUN_BASE_TEST().
+
+download_empty_file(_Config) ->
     ?RUN_BASE_TEST().
 
 
@@ -417,6 +445,5 @@ init_per_testcase(_Case, Config) ->
     Config.
 
 
-end_per_testcase(_Case) ->
+end_per_testcase(_Case, _Config) ->
     ok.
-

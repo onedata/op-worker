@@ -26,7 +26,7 @@
 % Performs a single request using http_client
 do_request(Node, CdmiSubPath, Method, Headers, Body) ->
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),
-    Domain = oct_background:get_provider_domain(krakow),
+    Domain = opw_test_rpc:get_provider_domain(Node),
     Result = http_client:request(
         Method,
         cdmi_endpoint(Node, Domain) ++ CdmiSubPath,

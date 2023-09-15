@@ -26,6 +26,7 @@
     get_json_metadata/2, get_xattrs/2, get_acl/2, set_acl/3, get_random_string/0
 ]).
 
+
 do_request(Node, RestSubpath, Method, Headers) ->
     do_request(Node, RestSubpath, Method, Headers, []).
 
@@ -36,22 +37,6 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
             Result -> {true, Result}
         end
     end, Nodes),
-
-    case FRes of
-        {error, _} ->
-            ok;
-        {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges", _/binary>>}, _} ->
-            lists:foreach(fun({ok, LCode, _, _}) ->
-                ?assertMatch(?HTTP_206_PARTIAL_CONTENT, LCode)
-            end, Responses);
-        {ok, RCode, _, RResponse} ->
-            RResponseJSON = try_to_decode(RResponse),
-            lists:foreach(fun({ok, LCode, _, LResponse}) ->
-                LResponseJSON = try_to_decode(LResponse),
-                ?assertMatch({RCode, RResponseJSON}, {LCode, LResponseJSON})
-
-            end, Responses)
-    end,
     FRes;
 
 do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->

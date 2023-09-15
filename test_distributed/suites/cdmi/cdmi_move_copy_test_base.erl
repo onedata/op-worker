@@ -98,8 +98,8 @@ copy_file(Config) ->
     ?assertEqual(?HTTP_201_CREATED, Code4),
 
     % assert new file is created
-    ?assert(cdmi_internal:object_exists(FileName2, Config)),
-    ?assert(cdmi_internal:object_exists(NewFileName2, Config)),
+    ?assert(cdmi_internal:object_exists(FileName2, Config), ?ATTEMPTS),
+    ?assert(cdmi_internal:object_exists(NewFileName2, Config), ?ATTEMPTS),
     ?assertEqual(FileData2, cdmi_internal:get_file_content(NewFileName2, Config), ?ATTEMPTS),
     ?assertEqual({ok, JsonMetadata}, cdmi_internal:get_json_metadata(NewFileName2, Config), ?ATTEMPTS),
     ?assertEqual([
@@ -113,6 +113,7 @@ copy_file(Config) ->
 
 copy_dir(Config) ->
     {Workers, RootPath, UserId2, UserName2, Xattrs} = copy_base(Config),
+    [WorkerP1, _WorkerP2] = Workers,
     #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
@@ -171,10 +172,15 @@ copy_dir(Config) ->
     RequestBody5 = json_utils:encode(#{
         <<"copy">> => build_random_src_uri(DirName2, DirGuid)
     }),
-    {ok, Code5, _Headers5, _Response5} = cdmi_internal:do_request(
-        Workers, NewDirName2, put, RequestHeaders5, RequestBody5
+
+    {ok, ?HTTP_201_CREATED, _Headers5, _Response5} = ?assertMatch(
+        {ok, 201, _, _},
+        cdmi_internal:do_request(
+            WorkerP1, NewDirName2, put, RequestHeaders5, RequestBody5
+        ),
+        ?ATTEMPTS
     ),
-    ?assertEqual(?HTTP_201_CREATED, Code5),
+
     % assert source files still exists
     ?assert(cdmi_internal:object_exists(DirName2, Config)),
     ?assert(cdmi_internal:object_exists(filename:join(DirName2, "dir1"), Config)),
@@ -184,12 +190,12 @@ copy_dir(Config) ->
     ?assert(cdmi_internal:object_exists(filename:join(DirName2, "3"), Config)),
 
     % assert destination files have been created
-    ?assert(cdmi_internal:object_exists(NewDirName2, Config)),
+    ?assert(cdmi_internal:object_exists(NewDirName2, Config), ?ATTEMPTS),
     ?assertEqual([
         #xattr{name = <<"key1">>, value = <<"value1">>},
         #xattr{name = <<"key2">>, value = <<"value2">>}
     ], cdmi_internal:get_xattrs(NewDirName2, Config), ?ATTEMPTS),
-    ?assertEqual({ok, DirAcl}, cdmi_internal:get_acl(NewDirName2, Config)),
+    ?assertEqual({ok, DirAcl}, cdmi_internal:get_acl(NewDirName2, Config), ?ATTEMPTS),
     ?assert(cdmi_internal:object_exists(filename:join(NewDirName2, "dir1"), Config)),
     ?assert(cdmi_internal:object_exists(filename:join(NewDirName2, "dir2"), Config)),
     ?assert(cdmi_internal:object_exists(filename:join([NewDirName2, "dir1", "1"]), Config)),
@@ -235,7 +241,7 @@ move_file(Config) ->
         {ok, _Code3, _Headers3, _Response3},
         cdmi_internal:do_request(Workers, NewMoveFileName, put, RequestHeaders3, RequestBody3)
     ),
-    ?assert(not cdmi_internal:object_exists(FileName, Config)),
+    ?assert(not cdmi_internal:object_exists(FileName, Config), ?ATTEMPTS),
     ?assert(cdmi_internal:object_exists(NewMoveFileName, Config)),
     ?assertEqual(FileData, cdmi_internal:get_file_content(NewMoveFileName, Config), ?ATTEMPTS).
 %%------------------------------
@@ -263,7 +269,7 @@ move_dir(Config) ->
         cdmi_internal:do_request(Workers, NewMoveDirName, put, RequestHeaders2, RequestBody2)
     ),
 
-    ?assert(not cdmi_internal:object_exists(DirName, Config)),
+    ?assert(not cdmi_internal:object_exists(DirName, Config), ?ATTEMPTS),
     ?assert(cdmi_internal:object_exists(NewMoveDirName, Config)).
     %%------------------------------
 

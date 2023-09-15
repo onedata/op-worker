@@ -32,9 +32,9 @@
     list_nonexisting_dir/1,
     selective_params_list/1,
     childrenrange_list/1,
-    objectid_root/1,
-    objectid_dir/1,
-    objectid_file/1,
+    get_root_with_objectid_endpoint/1,
+    get_dir_with_objectid_endpoint/1,
+    get_file_with_objectid_endpoint/1,
     unauthorized_access_by_object_id/1,
     unauthorized_access_error/1,
     wrong_create_path_error/1,
@@ -68,9 +68,9 @@
 
     update_file_cdmi/1,
     update_file_http/1,
-    system_capabilities/1,
-    container_capabilities/1,
-    dataobject_capabilities/1,
+    get_system_capabilities/1,
+    get_container_capabilities/1,
+    get_dataobject_capabilities/1,
     use_supported_cdmi_version/1,
     use_unsupported_cdmi_version/1,
     copy_file/1,
@@ -106,9 +106,9 @@ groups() -> [
         list_nonexisting_dir,
         selective_params_list,
         childrenrange_list,
-        objectid_root,
-        objectid_dir,
-        objectid_file,
+        get_root_with_objectid_endpoint,
+        get_dir_with_objectid_endpoint,
+        get_file_with_objectid_endpoint,
         unauthorized_access_by_object_id,
         unauthorized_access_error,
         wrong_create_path_error,
@@ -142,9 +142,9 @@ groups() -> [
         create_cdmi_dir_without_cdmi_version_header_should_fail,
         update_file_cdmi,
         update_file_http,
-        system_capabilities,
-        container_capabilities,
-        dataobject_capabilities,
+        get_system_capabilities,
+        get_container_capabilities,
+        get_dataobject_capabilities,
         use_supported_cdmi_version,
         use_unsupported_cdmi_version,
         copy_file,
@@ -178,13 +178,6 @@ all() -> [
     {group, parallel_tests}
 ].
 
--record(chunk, {
-    offset :: non_neg_integer(),
-    size :: non_neg_integer()
-}).
-
--define(DEFAULT_STORAGE_BLOCK_SIZE, 100).
-
 -define(RUN_TEST(__TEST_BASE_MODULE),
     try
         __TEST_BASE_MODULE:?FUNCTION_NAME(#cdmi_test_config{
@@ -200,6 +193,8 @@ all() -> [
 -define(RUN_BASE_TEST(), ?RUN_TEST(cdmi_test_base)).
 -define(RUN_CREATE_TEST(), ?RUN_TEST(cdmi_create_test_base)).
 -define(RUN_MOVE_COPY_TEST(), ?RUN_TEST(cdmi_move_copy_test_base)).
+-define(RUN_GET_TEST(), ?RUN_TEST(cdmi_get_test_base)).
+-define(RUN_ACL_TEST(), ?RUN_TEST(cdmi_acl_test_base)).
 
 
 %%%===================================================================
@@ -211,37 +206,37 @@ all() -> [
 %%%===================================================================
 
 list_basic_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 list_root_space_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 list_nonexisting_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 selective_params_list(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 childrenrange_list(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
-objectid_root(_Config) ->
-    ?RUN_BASE_TEST().
+get_root_with_objectid_endpoint(_Config) ->
+    ?RUN_GET_TEST().
 
-objectid_dir(_Config) ->
-    ?RUN_BASE_TEST().
+get_dir_with_objectid_endpoint(_Config) ->
+    ?RUN_GET_TEST().
 
-objectid_file(_Config) ->
-    ?RUN_BASE_TEST().
+get_file_with_objectid_endpoint(_Config) ->
+    ?RUN_GET_TEST().
 
 unauthorized_access_by_object_id(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 unauthorized_access_error(_Config) ->
     ?RUN_BASE_TEST().
 
 wrong_create_path_error(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 wrong_base_error(_Config) ->
     ?RUN_BASE_TEST().
@@ -319,16 +314,16 @@ download_file_in_blocks(_Config) ->
 %%%===================================================================
 
 basic_read(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 get_file_cdmi(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 get_file_non_cdmi(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 create_file_with_metadata(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 selective_metadata_read(_Config) ->
     ?RUN_BASE_TEST().
@@ -337,10 +332,10 @@ update_user_metadata_file(_Config) ->
     ?RUN_BASE_TEST().
 
 create_and_update_dir_with_user_metadata(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 write_acl_metadata(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 delete_file(_Config) ->
     ?RUN_BASE_TEST().
@@ -387,14 +382,14 @@ update_file_cdmi(_Config) ->
 update_file_http(_Config) ->
     ?RUN_BASE_TEST().
 
-system_capabilities(_Config) ->
-    ?RUN_BASE_TEST().
+get_system_capabilities(_Config) ->
+    ?RUN_GET_TEST().
 
-container_capabilities(_Config) ->
-    ?RUN_BASE_TEST().
+get_container_capabilities(_Config) ->
+    ?RUN_GET_TEST().
 
-dataobject_capabilities(_Config) ->
-    ?RUN_BASE_TEST().
+get_dataobject_capabilities(_Config) ->
+    ?RUN_GET_TEST().
 
 use_supported_cdmi_version(_Config) ->
     ?RUN_BASE_TEST().
@@ -436,10 +431,10 @@ update_mimetype_and_encoding(_Config) ->
     ?RUN_BASE_TEST().
 
 mimetype_and_encoding_create_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 mimetype_and_encoding_create_file_non_cdmi_request(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
 out_of_range(_Config) ->
     ?RUN_BASE_TEST().
@@ -451,60 +446,22 @@ partial_upload_non_cdmi(_Config) ->
     ?RUN_BASE_TEST().
 
 acl_read_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 acl_write_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 acl_delete_file(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 acl_read_write_dir(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_ACL_TEST().
 
 accept_header(_Config) ->
     ?RUN_BASE_TEST().
 
 download_empty_file(_Config) ->
-    [_WorkerP1, WorkerP2] = oct_background:get_provider_nodes(krakow),
-    SpaceName = binary_to_list(oct_background:get_space_name(space_krk)),
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = SpaceName ++ "/" ++ RootName,
-
-    AuthHeaders = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
-    SessionId = oct_background:get_user_session_id(user2, krakow),
-    UserId2 = oct_background:get_user_id(user2),
-
-    % Create file
-    FileName = <<"download_empty_file">>,
-    FilePath = filename:join([RootPath, FileName]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-
-    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, ?FILE_REF(FileGuid), 0)),
-
-    {ok, _, _, Response} = ?assertMatch(
-        {ok, 200, _Headers, _Response},
-        cdmi_test_utils:do_request(
-            WorkerP2, FilePath, get, [?CDMI_VERSION_HEADER | AuthHeaders], <<>>
-        )
-    ),
-    ?assertMatch(
-        #{
-            <<"completionStatus">> := <<"Complete">>,
-            <<"metadata">> := #{
-                <<"cdmi_owner">> := UserId2,
-                <<"cdmi_size">> := <<"0">>
-            },
-            <<"objectID">> := ObjectId,
-            <<"objectName">> := FileName,
-            <<"objectType">> := <<"application/cdmi-object">>,
-            <<"value">> := <<>>,
-            <<"valuerange">> := <<"0--1">>,
-            <<"valuetransferencoding">> := <<"base64">>
-        },
-        json_utils:decode(Response)
-    ).
+    ?RUN_BASE_TEST().
 
 
 %%%===================================================================
@@ -577,7 +534,6 @@ end_per_testcase(_Case) ->
 %%% Internal functions
 %%%===================================================================
 
-
 get_read_chunks() ->
     get_read_chunks([]).
 
@@ -591,6 +547,13 @@ get_read_chunks(Chunks) ->
     end.
 
 
+set_storage_block_size(Workers, BlockSize) ->
+    ?assertMatch(
+        {_, []},
+        utils:rpc_multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
+    ).
+
+
 mock_storage_get_block_size(Workers) ->
     test_utils:mock_new(Workers, [storage], [passthrough]),
     test_utils:mock_expect(Workers, storage, get_block_size, fun(_) ->
@@ -601,9 +564,3 @@ mock_storage_get_block_size(Workers) ->
 unmock_storage_get_block_size(Workers) ->
     ok = test_utils:mock_unload(Workers, [storage]).
 
-
-set_storage_block_size(Workers, BlockSize) ->
-    ?assertMatch(
-        {_, []},
-        utils:rpc_multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
-    ).
