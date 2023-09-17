@@ -18,7 +18,7 @@
 -include_lib("ctool/include/posix/errno.hrl").
 
 %% API
--export([empty_references/0, new_doc/4, merge_link_and_file_doc/2,
+-export([empty_references/0, new_doc/5, merge_link_and_file_doc/2,
     register/2, deregister/2,
     count_references/1, inspect_references/1, list_references/1,
     merge_references/2, update_stats_on_merge/2]).
@@ -55,8 +55,8 @@ empty_references() ->
 %% link and document representing target file (see file_meta:get_including_deleted/1).
 %% @end
 %%--------------------------------------------------------------------
--spec new_doc(file_meta:uuid(), file_meta:name(), file_meta:uuid(), od_space:id()) -> file_meta:doc().
-new_doc(FileUuid, FileName, ParentUuid, SpaceId) ->
+-spec new_doc(file_meta:uuid(), file_meta:name(), file_meta:uuid(), od_space:id(), boolean()) -> file_meta:doc().
+new_doc(FileUuid, FileName, ParentUuid, SpaceId, IgnoreInChanges) ->
     #document{
         key = fslogic_file_id:gen_link_uuid(FileUuid),
         value = #file_meta{
@@ -65,7 +65,8 @@ new_doc(FileUuid, FileName, ParentUuid, SpaceId) ->
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
         },
-        scope = SpaceId
+        scope = SpaceId,
+        ignore_in_changes = IgnoreInChanges
     }.
 
 -spec merge_link_and_file_doc(file_meta:doc(), file_meta:doc()) -> {ok, file_meta:doc()}.
@@ -82,7 +83,7 @@ merge_link_and_file_doc(LinkDoc = #document{value = LinkRecord}, #document{value
 -spec register(file_meta:uuid(), link()) -> {ok, file_meta:doc()} | {error, term()}.
 register(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
-    file_meta:update(FileUuid, fun(#file_meta{references = References} = Record) ->
+    file_meta:update_including_deleted(FileUuid, fun(#file_meta{references = References} = Record) ->
         case count_references_in_map(References) of
             LinksNum when LinksNum > ?MAX_LINKS_NUM ->
                 {error, ?EMLINK};
@@ -95,7 +96,7 @@ register(FileUuid, LinkUuid) ->
 -spec deregister(file_meta:uuid(), link()) -> {ok, references_presence()} | {error, term()}.
 deregister(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
-    UpdateAns = file_meta:update(FileUuid, fun(#file_meta{references = References} = Record) ->
+    UpdateAns = file_meta:update_including_deleted(FileUuid, fun(#file_meta{references = References} = Record) ->
         ProviderReferences = maps:get(ProviderId, References, []),
         case ProviderReferences -- [LinkUuid] of
             [] -> {ok, Record#file_meta{references = maps:remove(ProviderId, References)}};
@@ -163,7 +164,7 @@ update_stats_on_merge(
     #document{mutators = [Mutator | _], value = #file_meta{references = NewReferences}} = NewDoc,
     #document{key = Uuid, scope = SpaceId, value = #file_meta{references = OldReferences}} = OldDoc
 ) ->
-    ChangedMutatorReferences = maps:get(Mutator, NewReferences, []),
+    ChangedMutatorReferences = filter_special_references(maps:get(Mutator, NewReferences, [])),
     OldMutatorReferences = maps:get(Mutator, OldReferences, []),
 
     IsDeleted = file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(OldDoc),
@@ -190,15 +191,30 @@ update_stats_on_merge(
 %%% Internal functions
 %%%===================================================================
 
--spec references_to_list(references()) -> [link()].
+-spec references_to_list(references()) -> references_list().
 references_to_list(References) ->
     % Note - do not use lists:flatten as it traverses sublists and it is not necessary here
     % Note - it is expected that function returns references in the same order any time its called - if
     %        new reference is added, the order of the others should remain unchanged
-    lists:flatmap(fun(Key) ->
-        maps:get(Key, References)
+    ProviderId = oneprovider:get_id(),
+    lists:flatmap(fun
+        (Key) when Key =:= ProviderId -> maps:get(Key, References);
+        (Key) -> filter_special_references(maps:get(Key, References))
     end, lists:sort(maps:keys(References))).
+
 
 -spec count_references_in_map(references()) -> non_neg_integer().
 count_references_in_map(References) ->
-    maps:fold(fun(_, ProviderReferences, Acc) -> length(ProviderReferences) + Acc end, 0, References).
+    ProviderId = oneprovider:get_id(),
+    maps:fold(fun
+        (Key, ProviderReferences, Acc) when Key =:= ProviderId -> length(ProviderReferences) + Acc;
+        (_, ProviderReferences, Acc) -> length(filter_special_references(ProviderReferences)) + Acc
+    end, 0, References).
+
+
+-spec filter_special_references(references_list()) -> references_list().
+filter_special_references(References) ->
+    lists:filter(fun
+        (?OPENED_DELETED_FILE_LINK_PATTERN) -> false;
+        (_) -> true
+    end, References).

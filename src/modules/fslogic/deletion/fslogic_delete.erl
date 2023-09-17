@@ -161,6 +161,7 @@ handle_remotely_deleted_local_hardlink(FileCtx) ->
 handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     DocsDeletionScope = removal_status_to_docs_deletion_scope(RemovalStatus),
+    hardlink_registry_utils:delete_hidden_hardlink_for_opened_deleted_file(FileCtx),
     ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope)).
 
 
@@ -188,22 +189,25 @@ cleanup_file(FileCtx, RemoveStorageFile) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cleanup_opened_files() -> ok.
-% TODO VFS-11289 - test stats after simulated system restart with opened files
 cleanup_opened_files() ->
     case file_handles:list() of
         {ok, Docs} ->
-            RemovedFiles = lists:filter(fun(Doc) -> file_handles:is_removed(Doc) end, Docs),
-            UserCtx = user_ctx:new(?ROOT_SESS_ID),
-            lists:foreach(fun(#document{key = FileUuid} = Doc) ->
+            RemovedUuidsWithStatus = lists:filtermap(fun(#document{key = Uuid} = Doc) ->
+                case file_handles:is_removed(Doc) of
+                    true -> {true, {Uuid, file_handles:get_removal_status(Doc)}};
+                    false -> false
+                end
+            end, Docs),
+            lists:foreach(fun({FileUuid, RemovalStatus}) ->
                 try
                     FileGuid = fslogic_file_id:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, ?ALL_DOCS))
+                    handle_release_of_deleted_file(FileCtx, RemovalStatus)
                 catch
                     Class:Reason:Stacktrace ->
-                        ?warning_exception(?autoformat([Doc]), Class, Reason, Stacktrace)
+                        ?warning_exception(?autoformat([FileUuid, RemovalStatus]), Class, Reason, Stacktrace)
                 end
-            end, RemovedFiles),
+            end, RemovedUuidsWithStatus),
 
             lists:foreach(fun(#document{key = FileUuid}) ->
                 ok = file_handles:delete(FileUuid)
@@ -256,7 +260,7 @@ handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
     RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
     case file_handles:mark_to_remove(FileCtx3, RemovalStatus) of
         ok ->
-            dir_size_stats:on_opened_file_delete(FileCtx3);
+            hardlink_registry_utils:create_hidden_hardlink_for_opened_deleted_file(FileCtx3);
         {error, already_removed} ->
             ok
     end,

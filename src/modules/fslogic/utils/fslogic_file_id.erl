@@ -31,7 +31,8 @@
 -export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
--export([gen_link_uuid/1, is_link_uuid/1, ensure_referenced_uuid/1, ensure_referenced_guid/1]).
+-export([gen_link_uuid/1, gen_link_uuid/2, gen_deleted_opnened_file_ink_uuid/1,
+    is_link_uuid/1, ensure_referenced_uuid/1, ensure_referenced_guid/1]).
 -export([gen_symlink_uuid/0, is_symlink_uuid/1, is_symlink_guid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
@@ -39,7 +40,6 @@
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
 -define(SHARE_ROOT_DIR_UUID_PREFIX, "share_").
 % Macros for hard links (link is equal to hardlink - see file_meta_hardlinks.erl)
--define(LINK_UUID_PREFIX, "link_").
 -define(LINK_UUID_SEPARATOR, "_file_").
 -define(LINK_UUID_RAND_PART_BYTES, 8).
 % Macro for symlinks
@@ -131,6 +131,7 @@ is_special_uuid(FileUuid) ->
         orelse is_space_dir_uuid(FileUuid)
         orelse is_trash_dir_uuid(FileUuid)
         orelse is_tmp_dir_uuid(FileUuid)
+        orelse is_opened_deleted_files_dir_uuid(FileUuid)
         orelse is_share_root_dir_uuid(FileUuid)
         orelse archivisation_tree:is_special_uuid(FileUuid).
 
@@ -185,6 +186,11 @@ is_trash_dir_guid(FileGuid) ->
 -spec is_tmp_dir_uuid(file_meta:uuid()) -> boolean().
 is_tmp_dir_uuid(<<?TMP_DIR_UUID_PREFIX, _SpaceId/binary>>) -> true;
 is_tmp_dir_uuid(_) -> false.
+
+
+-spec is_opened_deleted_files_dir_uuid(file_meta:uuid()) -> boolean().
+is_opened_deleted_files_dir_uuid(?OPENED_DELETED_FILES_DIR_UUID(_)) -> true;
+is_opened_deleted_files_dir_uuid(_) -> false.
 
 
 -spec is_tmp_dir_guid(file_id:file_guid()) -> boolean().
@@ -245,8 +251,14 @@ unpack_space_owner(_) ->
 
 -spec gen_link_uuid(file_meta:uuid()) -> file_meta_hardlinks:link().
 gen_link_uuid(FileUuid) ->
-    RandPart = str_utils:rand_hex(?LINK_UUID_RAND_PART_BYTES),
-    <<?LINK_UUID_PREFIX, RandPart/binary, ?LINK_UUID_SEPARATOR, FileUuid/binary>>.
+    gen_link_uuid(FileUuid, str_utils:rand_hex(?LINK_UUID_RAND_PART_BYTES)).
+
+-spec gen_link_uuid(file_meta:uuid(), binary()) -> file_meta_hardlinks:link().
+gen_link_uuid(FileUuid, LinkPart) ->
+    <<?LINK_UUID_PREFIX, LinkPart/binary, ?LINK_UUID_SEPARATOR, FileUuid/binary>>.
+
+gen_deleted_opnened_file_ink_uuid(FileUuid) ->
+    gen_link_uuid(FileUuid, ?OPENED_DELETED_FILE_LINK_ID_SEED).
 
 -spec is_link_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> boolean().
 is_link_uuid(<<?LINK_UUID_PREFIX, _/binary>>) -> true;

@@ -23,12 +23,19 @@
 
 -define(FSLOGIC_WORKER_SUP, fslogic_worker_sup).
 
+-define(LINK_UUID_PREFIX, "link_").
+
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 %% Tmp file prefix
 -define(TMP_DIR_NAME, <<?HIDDEN_FILE_PREFIX, "tmp">>).
 -define(TMP_DIR_UUID_PREFIX, "tmp_").
 -define(TMP_DIR_UUID(SpaceId), <<?TMP_DIR_UUID_PREFIX, SpaceId/binary>>).
+-define(OPENED_DELETED_FILES_DIR_DIR_NAME, <<"opened_deleted_files">>).
+-define(OPENED_DELETED_FILES_DIR_UUID(Origin), <<"TO_DEL_", Origin/binary>>).
+-define(OPENED_DELETED_FILE_LINK_ID_SEED_STR, "to_del_").
+-define(OPENED_DELETED_FILE_LINK_ID_SEED, <<?OPENED_DELETED_FILE_LINK_ID_SEED_STR>>).
+-define(OPENED_DELETED_FILE_LINK_PATTERN, <<?LINK_UUID_PREFIX, ?OPENED_DELETED_FILE_LINK_ID_SEED_STR, _/binary>>).
 
 %% Directory name for deleted opened files
 -define(DELETED_OPENED_FILES_DIR, <<?HIDDEN_FILE_PREFIX, "deleted">>).

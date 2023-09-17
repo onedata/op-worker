@@ -1505,7 +1505,7 @@ tmp_files_test_base(Config0, User, SpaceId) ->
 
     wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 
-    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+    ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
     lists:foreach(fun(G) ->
@@ -1563,7 +1563,7 @@ tmp_files_delete_test(Config0) ->
 
     wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 
-    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+    ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
     lists:foreach(fun(G) ->
@@ -1656,7 +1656,7 @@ create_tmp_files(Config, SpaceId) ->
         ?assertEqual(ok, lfm_proxy:close(Worker1, Handle))
     end, [Handle1, Handle2, Handle3]),
 
-    ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+    ?assertMatch({ok, [_, _, _], _}, lfm_proxy:get_children(
         Worker1, SessId(Worker1), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
 

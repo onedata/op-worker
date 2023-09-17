@@ -377,7 +377,7 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) ->
-    default | {true, file_meta:doc()}.
+    default | {true, file_meta:doc()} | ignore.
 resolve_conflict(_Ctx,
     NewDoc = #document{
         key = Uuid,
@@ -387,8 +387,9 @@ resolve_conflict(_Ctx,
             type = Type,
             mode = Mode,
             acl = Acl,
-            shares = Shares
-        },
+            shares = Shares,
+            references = NewReferences
+        } = NewRecord,
         revs = [NewRev | _],
         scope = SpaceId
     }, PrevDoc = #document{
@@ -397,12 +398,13 @@ resolve_conflict(_Ctx,
             parent_uuid = PrevParentUuid,
             mode = PrevMode,
             acl = PrevAcl,
-            shares = PrevShares
+            shares = PrevShares,
+            references = PrevReferences
         },
-        revs = [PrevlRev | _]
+        revs = [PrevRev | _]
     }
 ) ->
-    case datastore_rev:is_greater(NewRev, PrevlRev) of
+    case datastore_rev:is_greater(NewRev, PrevRev) of
         true ->
             invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
             invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
@@ -466,10 +468,15 @@ resolve_conflict(_Ctx,
         false ->
             file_meta_hardlinks:update_stats_on_merge(NewDoc, PrevDoc),
             case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
-                not_mutated ->
+                not_mutated when NewReferences =:= PrevReferences ->
                     default;
+                not_mutated ->
+                    case datastore_rev:is_greater(NewRev, PrevRev) of
+                        true -> {true, NewDoc#document{value = NewRecord#file_meta{references = PrevReferences}}};
+                        false -> ignore
+                    end;
                 {mutated, MergedReferences} ->
-                    DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
+                    DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevRev) of
                         true -> NewDoc;
                         false -> PrevDoc
                     end,
