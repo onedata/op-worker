@@ -77,8 +77,8 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
                     UpdateDescription = #{location_changes => LocationTruncateChanges ++ LocationAppendChanges},
                     fslogic_location_cache:save_location(UpdatedLocation),
                     #document{value = #file_location{size = UpdatedSize}} = UpdatedLocation,
-                    dir_size_stats:report_reg_file_size_changed(
-                        file_ctx:get_referenced_guid_const(FileCtx), total, UpdatedSize - OldSize),
+                    dir_size_stats:report_total_size_changed(
+                        file_ctx:get_referenced_guid_const(FileCtx), UpdatedSize - OldSize),
                     FirstLocalBlocks = fslogic_location_cache:get_blocks(UpdatedLocation, #{count => 2}),
                     ReplicaStatusChanged = has_replica_status_changed(
                         FirstLocalBlocksBeforeAppend, FirstLocalBlocks, OldSize, UpdatedSize),

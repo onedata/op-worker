@@ -163,6 +163,7 @@ get_expected_stats(Config) ->
         ?REG_FILE_AND_LINK_COUNT => FilesNum * RepsNum,
         ?DIR_COUNT => get(dirs_created),
         ?TOTAL_SIZE => 0,
+        ?TOTAL_DOWNLOAD_SIZE => 0,
         ?SIZE_ON_STORAGE(StorageId) => 0,
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0

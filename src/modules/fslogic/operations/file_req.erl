@@ -418,11 +418,13 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
             FileUuid = file_ctx:get_logical_uuid_const(TargetFileCtx),
             ParentUuid = file_ctx:get_logical_uuid_const(TargetParentFileCtx3),
             SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx3),
-            Doc = file_meta_hardlinks:new_doc(FileUuid, Name, ParentUuid, SpaceId),
+            Doc = file_meta_hardlinks:new_doc(FileUuid, Name, ParentUuid, SpaceId, false),
             {ok, #document{key = LinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
+                TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx3),
+                hardlink_registry_utils:register(TargetFileCtx, TargetParentGuid, LinkUuid),
+
                 FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
@@ -431,7 +433,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                     include_optional_attrs => [size, replication_status]
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
-                dir_size_stats:report_file_created(?LINK_TYPE, file_ctx:get_logical_guid_const(TargetParentFileCtx3)),
+                dir_size_stats:report_file_created(?LINK_TYPE, TargetParentGuid),
                 ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
                 Ans#fuse_response{fuse_response = FileAttr}
             catch

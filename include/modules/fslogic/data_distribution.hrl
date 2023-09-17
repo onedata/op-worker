@@ -15,6 +15,7 @@
 
 -record(provider_dir_distribution_get_result, {
     logical_size :: file_meta:size(),
+    download_size :: file_meta:size(),
     physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()}
 }).
 
