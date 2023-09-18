@@ -134,8 +134,8 @@ create(_) ->
 get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
-            {ok, value, lists:map(fun(SpaceId) ->
-                {ok, Space} = space_logic:get_protected_data(SessionId, SpaceId),
+            {ok, lists:map(fun(SpaceId) ->
+                {ok, #document{value = Space}} = space_logic:get_protected_data(SessionId, SpaceId),
                 {SpaceId, Space}
             end, EffSpaces)};
         {error, _} = Error ->

@@ -1193,6 +1193,22 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     end,
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),
+    test_utils:mock_expect(Workers, space_logic, get_protected_data, fun(SessId, SpaceId) ->
+        case GetSpaceFun(SessId, SpaceId) of
+            {ok, Doc = #document{value = Space}} ->
+                {ok, Doc#document{value = Space#od_space{
+                    owners = [],
+                    direct_users = #{},
+                    eff_users = #{},
+                    direct_groups = #{},
+                    eff_groups = #{},
+                    shares = [],
+                    harvesters = []
+                }}};
+            Error ->
+                Error
+        end
+    end),
 
     test_utils:mock_expect(Workers, space_logic, get_name, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(Client, SpaceId),

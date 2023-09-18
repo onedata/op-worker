@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/rest.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -345,23 +346,35 @@ metric_get(Config) ->
 
 
 list_spaces(Config) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
-
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    P1 = ?GET_DOMAIN_BIN(WorkerP1),
+    P2 = ?GET_DOMAIN_BIN(WorkerP2),
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"spaces">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
-    ExpSpaces = lists:sort(lists:map(fun(SpaceId) ->
+    ExpSpaces = lists:sort(lists:map(fun({SpaceId, Providers}) ->
         SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
         {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
-
+        {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
+        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
+        
         #{
             <<"name">> => SpaceId,
             <<"spaceId">> => SpaceId,
-            <<"fileId">> => SpaceDirObjectId
+            <<"fileId">> => SpaceDirObjectId,
+            <<"dirId">> => SpaceDirObjectId,
+            <<"trashDirId">> => TrashRootDirObjectId,
+            <<"archivesDirId">> => ArchivesRootDirObjectId,
+            <<"providers">> => lists:map(fun(P) ->
+                #{
+                    <<"providerId">> => P,
+                    <<"providerName">> => P
+                }
+            end, Providers)
         }
-    end, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space4">>])),
+    end, [{<<"space1">>, [P1]}, {<<"space2">>, [P1, P2]}, {<<"space3">>, [P1, P2]}, {<<"space4">>, [P1, P2]}])),
 
     ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))).
 

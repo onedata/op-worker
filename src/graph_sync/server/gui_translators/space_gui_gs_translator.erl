@@ -28,18 +28,6 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = list}, Spaces) ->
-    lists:map(fun({SpaceId, #od_space{name = SpaceName}}) ->
-        SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-        {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
-        
-        #{
-            <<"spaceId">> => SpaceId,
-            <<"fileId">> => SpaceDirObjectId,
-            <<"name">> => SpaceName
-        }
-    end, Spaces);
-
 translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
     #{<<"list">> => lists:map(fun(TransferId) -> gri:serialize(#gri{
         type = op_transfer,
@@ -78,6 +66,18 @@ translate_value(#gri{aspect = dir_stats_service_state, scope = private}, Result)
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
+translate_resource(#gri{aspect = list}, Spaces) ->
+    lists:map(fun({SpaceId, #od_space{name = SpaceName}}) ->
+        SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+        {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+        
+        #{
+            <<"spaceId">> => SpaceId,
+            <<"fileId">> => SpaceDirObjectId,
+            <<"name">> => SpaceName
+        }
+    end, Spaces);
+
 translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
     IsSpaceSupportedLocally = space_logic:is_supported(Space, oneprovider:get_id()),
 

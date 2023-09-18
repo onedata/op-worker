@@ -219,6 +219,8 @@ rest_endpoint(Node) ->
 mock_provider_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, provider_logic, [passthrough]),
+    test_utils:mock_expect(Workers, provider_logic, get_name,
+        fun(ProviderId) -> {ok, ProviderId} end),
     test_utils:mock_expect(Workers, provider_logic, has_eff_user,
         fun(UserId) ->
             UserId =:= ?USER_ID
@@ -236,6 +238,13 @@ mock_space_logic(Config) ->
             {ok, #document{value = #od_space{
                 name = ?SPACE_NAME,
                 eff_users = #{?USER_ID => []},
+                providers = #{?PROVIDER_ID => 1000000000}
+            }}}
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_protected_data,
+        fun(_, ?SPACE_ID) ->
+            {ok, #document{value = #od_space{
+                name = ?SPACE_NAME,
                 providers = #{?PROVIDER_ID => 1000000000}
             }}}
         end),
