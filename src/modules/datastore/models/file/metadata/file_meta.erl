@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
--export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3]).
+-export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
@@ -40,7 +40,8 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    make_space_exist/1, make_tmp_dir_exist/1, new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
+    make_space_exist/1, make_tmp_dir_exist/1, make_opened_deleted_files_dir_exist/1,
+    new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
@@ -325,6 +326,11 @@ update(Key, Diff) ->
 -spec update(uuid(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff, Default) ->
     datastore_model:update(?CTX, Key, Diff, Default).
+
+
+-spec update_including_deleted(uuid() | entry(), diff()) -> {ok, doc()} | {error, term()}.
+update_including_deleted(Key, Diff) ->
+    datastore_model:update(?CTX#{include_deleted => true}, Key, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -806,6 +812,7 @@ make_space_exist(SpaceId) ->
             trash:create(SpaceId),
             archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
             make_tmp_dir_exist(SpaceId),
+            make_opened_deleted_files_dir_exist(SpaceId),
 
             emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
@@ -829,6 +836,25 @@ make_tmp_dir_exist(SpaceId) ->
             end;
         {error, already_exists} ->
             already_exists
+    end.
+
+
+-spec make_opened_deleted_files_dir_exist(od_space:id()) -> ok.
+make_opened_deleted_files_dir_exist(SpaceId) ->
+    TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
+    Doc = new_doc(
+        ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
+        ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId, true
+    ),
+    case file_meta:create({uuid, TmpDirUuid}, Doc) of
+        {ok, _} ->
+            dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
+            case times:save_with_current_times(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId, true) of
+                {ok, _} -> ok;
+                {error, already_exists} -> ok
+            end;
+        {error, already_exists} ->
+            ok
     end.
 
 

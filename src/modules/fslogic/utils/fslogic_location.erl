@@ -62,7 +62,7 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IsSyncE
     }, GeneratedKey) of
         {ok, _LocId} ->
             FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
-            dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx5), total, Size),
+            dir_size_stats:report_total_size_changed(file_ctx:get_referenced_guid_const(FileCtx5), Size),
             case Size > QoSCheckSizeLimit of
                 true -> ok = qos_logic:reconcile_qos(FileCtx5);
                 false -> ok
@@ -124,7 +124,7 @@ create_imported_file_doc(SpaceId, StorageId, FileUuid, StorageFileId, Size, Owne
     },
     LocationDoc2 = fslogic_location_cache:set_blocks(LocationDoc, create_file_blocks(Size)),
     {ok, _LocId} = file_location:save_and_bump_version(LocationDoc2, OwnerId),
-    dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, Size),
+    dir_size_stats:report_total_size_changed(file_id:pack_guid(FileUuid, SpaceId), Size),
     ok.
 
 
