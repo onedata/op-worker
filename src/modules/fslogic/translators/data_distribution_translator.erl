@@ -63,7 +63,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
             }) ->
                 #{
                     <<"success">> => true,
-                    <<"VirtualSize">> => utils:undefined_to_null(VirtualDirSize),
+                    <<"virtualSize">> => utils:undefined_to_null(VirtualDirSize),
                     <<"downloadSize">> => utils:undefined_to_null(DownloadSize),
                     <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
                         <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
@@ -80,7 +80,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlin
         <<"type">> => atom_to_binary(?SYMLINK_TYPE),
             <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) -> #{ 
                 <<"success">> => true,
-               <<"VirtualSize">> => 0,
+               <<"virtualSize">> => 0,
                <<"distributionPerStorage">> =>
                    lists:foldl(fun(StorageId, Acc) ->   
                        Acc#{StorageId => #{<<"physicalSize">> => 0}}
@@ -119,7 +119,7 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
             end, #{}, BlocksPerStorage),
             #{
                 <<"success">> => true,
-                <<"VirtualSize">> => VirtualSize,
+                <<"virtualSize">> => VirtualSize,
                 <<"distributionPerStorage">> => DistributionPerStorage,
                 <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
             }
@@ -155,7 +155,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                 end, #{}, BlocksPerStorage),
                 #{
                     <<"success">> => true,
-                    <<"VirtualSize">> => VirtualSize,
+                    <<"virtualSize">> => VirtualSize,
                     <<"distributionPerStorage">> => DistributionPerStorage,
                     <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
                 }
