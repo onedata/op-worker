@@ -829,12 +829,12 @@ get_reg_file_distribution_test(Config) ->
     ExpDist1 = #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
-                logical_size = 20,
+                virtual_size = 20,
                 blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
                 locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
-                logical_size = 20,
+                virtual_size = 20,
                 blocks_per_storage = #{P2StorageId => []},
                 locations_per_storage = #{P2StorageId => undefined}
             }
@@ -849,12 +849,12 @@ get_reg_file_distribution_test(Config) ->
     ExpDist2 = #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
                 locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]},
                 locations_per_storage = #{P2StorageId => FileStorageLocation}
             }
@@ -926,12 +926,12 @@ get_dir_distribution_2_test(Config) ->
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
-                logical_size = 0,
+                virtual_size = 0,
                 download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
-                logical_size = 0,
+                virtual_size = 0,
                 download_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0}
             }
@@ -946,12 +946,12 @@ get_dir_distribution_2_test(Config) ->
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 download_size = 50,
                 physical_size_per_storage = #{P2StorageId => 20}
             }
@@ -985,7 +985,7 @@ get_dir_distribution_3_test(Config) ->
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
-                logical_size = 0,
+                virtual_size = 0,
                 download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
@@ -1004,7 +1004,7 @@ get_dir_distribution_3_test(Config) ->
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
             },
@@ -1029,7 +1029,7 @@ get_symlink_distribution_test(Config) ->
     ),
     
     ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
-        logical_size = 0,
+        virtual_size = 0,
         storages_per_provider = #{
             P1Id => [P1StorageId],
             P2Id => [P2StorageId]

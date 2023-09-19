@@ -14,7 +14,7 @@
 
 
 -record(provider_dir_distribution_get_result, {
-    logical_size :: file_meta:size(),
+    virtual_size :: file_meta:size(),
     download_size :: file_meta:size(),
     physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()}
 }).
@@ -28,7 +28,7 @@
 
 % NOTE: translated to protobuf
 -record(provider_reg_distribution_get_result, {
-    logical_size = 0 :: file_meta:size(),
+    virtual_size = 0 :: file_meta:size(),
     blocks_per_storage = #{} :: #{storage:id() => fslogic_blocks:blocks()},
     locations_per_storage = #{} :: data_distribution:locations_per_storage()
 }).
@@ -41,7 +41,7 @@
 
 
 -record(symlink_distribution_get_result, {
-    logical_size = 0 :: 0, % symlink has always 0 logical size
+    virtual_size = 0 :: 0, % symlink has always 0 logical size
     storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
 }).
 
