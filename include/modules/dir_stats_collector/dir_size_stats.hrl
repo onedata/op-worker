@@ -28,7 +28,7 @@
 -define(FILE_ERRORS_COUNT, <<"file_errors_count">>).
 -define(DIR_ERRORS_COUNT, <<"dir_errors_count">>).
 -define(TOTAL_SIZE, <<"total_size">>).
--define(TOTAL_DOWNLOAD_SIZE, <<"total_download_size">>).
+-define(LOGICAL_SIZE, <<"logical_size">>).
 -define(SIZE_ON_STORAGE(StorageId), <<?SIZE_ON_STORAGE_TS_PREFIX_STR, StorageId/binary>>).
 
 
