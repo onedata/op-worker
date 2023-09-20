@@ -41,7 +41,7 @@
 
 
 -record(symlink_distribution_get_result, {
-    virtual_size = 0 :: 0, % symlink has always 0 logical size
+    virtual_size = 0 :: 0, % symlink has always 0 virtual size
     storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
 }).
 

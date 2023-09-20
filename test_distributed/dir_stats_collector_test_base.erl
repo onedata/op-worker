@@ -40,7 +40,7 @@
 -define(PROVIDER_CREATING_FILES_NODES_SELECTOR, workers1).
 -define(PROVIDER_DELETING_FILES_NODES_SELECTOR, workers2).
 
--define(TOTAL_SIZE_ON_STORAGE_VALUE(Selector, BytesWritten),
+-define(PHYSICAL_SIZE_VALUE(Selector, BytesWritten),
     case Selector of
         {empty_provider, _} -> 0;
         % initially the files are not replicated - all blocks are located on the creating provider
@@ -48,8 +48,8 @@
         _ -> BytesWritten
     end
 ).
--define(TOTAL_SIZE_ON_STORAGE_KEY(Config, Selector),
-    ?SIZE_ON_STORAGE((lfm_test_utils:get_user1_first_storage_id(Config, get_config_nodes_selector(Selector))))).
+-define(PHYSICAL_SIZE_KEY(Config, Selector),
+    ?PHYSICAL_SIZE((lfm_test_utils:get_user1_first_storage_id(Config, get_config_nodes_selector(Selector))))).
 
 -define(ATTEMPTS, 60).
 
@@ -77,7 +77,7 @@ basic_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(NotCountedDirGuid))),
@@ -88,7 +88,7 @@ basic_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }),
 
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
@@ -107,7 +107,7 @@ basic_test(Config) ->
             ?DIR_ERRORS_COUNT => 0,
             ?TOTAL_SIZE => 0,
             ?LOGICAL_SIZE => 0,
-            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+            ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
         }),
 
         ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {uuid, file_id:guid_to_uuid(Guid)}))
@@ -120,7 +120,7 @@ basic_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }),
 
     check_dir_stats(Config, op_worker_nodes, fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId), #{
@@ -130,7 +130,7 @@ basic_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }).
 
 
@@ -431,8 +431,8 @@ verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
                 ?DIR_ERRORS_COUNT => 0,
                 ?TOTAL_SIZE => INodesExpected * FileSize,
                 ?LOGICAL_SIZE => LinksExpected * FileSize,
-                ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
-                    ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, INodesExpected * FileSize)
+                ?PHYSICAL_SIZE_KEY(Config, NodesSelector) =>
+                    ?PHYSICAL_SIZE_VALUE(NodesSelector, INodesExpected * FileSize)
             });
         ({Guid, {INodesExpected, LinksExpected, SubdirsExpected}}) ->
             ct:print("Verify hardlinks stats for dir: ~p", [Guid]),
@@ -443,8 +443,8 @@ verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
                 ?DIR_ERRORS_COUNT => 0,
                 ?TOTAL_SIZE => INodesExpected * FileSize,
                 ?LOGICAL_SIZE => LinksExpected * FileSize,
-                ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
-                    ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, INodesExpected * FileSize)
+                ?PHYSICAL_SIZE_KEY(Config, NodesSelector) =>
+                    ?PHYSICAL_SIZE_VALUE(NodesSelector, INodesExpected * FileSize)
             })
     end, lists:zip(DirGuids, DirSizes)),
 
@@ -464,8 +464,8 @@ verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => INodesExpectedSum * FileSize,
         ?LOGICAL_SIZE => LinksExpectedSum * FileSize,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
-            ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, INodesExpectedSum * FileSize)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) =>
+            ?PHYSICAL_SIZE_VALUE(NodesSelector, INodesExpectedSum * FileSize)
     }).
 
 
@@ -498,8 +498,8 @@ verify_opened_deleted_files_stats_enabled(Config, NodesSelector, FilesExpected, 
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => FilesExpected * FileSize,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) =>
-            ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, FilesExpected * FileSize)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) =>
+            ?PHYSICAL_SIZE_VALUE(NodesSelector, FilesExpected * FileSize)
     }).
 
 
@@ -514,7 +514,7 @@ multiprovider_test(Config) ->
 
     check_update_times(Config, [?PROVIDER_CREATING_FILES_NODES_SELECTOR, ?PROVIDER_DELETING_FILES_NODES_SELECTOR]),
 
-    % Read from file on PROVIDER_DELETING_FILES to check if size on storage is calculated properly
+    % Read from file on PROVIDER_DELETING_FILES to check if physical size is calculated properly
     read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [1, 1, 1], [1], 10),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [1, 1, 1], #{
         ?REG_FILE_AND_LINK_COUNT => 12,
@@ -523,14 +523,14 @@ multiprovider_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
         ?LOGICAL_SIZE => 104,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 10
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 10
     }),
 
-    % Write 20 bytes to file on PROVIDER_DELETING_FILES to decrease the file's size on storage on PROVIDER_CREATING_FILES
+    % Write 20 bytes to file on PROVIDER_DELETING_FILES to decrease the file's physical size on PROVIDER_CREATING_FILES
     % The file ([1, 1, 1], [1]) was previously 30 bytes on storage on PROVIDER_CREATING_FILES
-    % The total size on storage of directory ([1, 1, 1]) was previously 104 bytes on PROVIDER_CREATING_FILES
-    % The total size on storage of space was previously 1334 bytes on PROVIDER_CREATING_FILES
-    % Size on storage of directory and space should be 20 bytes on PROVIDER_DELETING_FILES and 20 bytes less than before
+    % The physical size of directory ([1, 1, 1]) was previously 104 bytes on PROVIDER_CREATING_FILES
+    % The physical size of space was previously 1334 bytes on PROVIDER_CREATING_FILES
+    % Physical size of directory and space should be 20 bytes on PROVIDER_DELETING_FILES and 20 bytes less than before
     % on PROVIDER_CREATING_FILES (20 bytes were invalidated)
     write_to_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [1, 1, 1], [1], 20),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [1, 1, 1], #{
@@ -540,7 +540,7 @@ multiprovider_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
         ?LOGICAL_SIZE => 104,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20
     }),
     check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [1, 1, 1], #{
         ?REG_FILE_AND_LINK_COUNT => 12,
@@ -549,7 +549,7 @@ multiprovider_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
         ?LOGICAL_SIZE => 104,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 84
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 84
     }),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 363,
@@ -558,7 +558,7 @@ multiprovider_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
         ?LOGICAL_SIZE => 1334,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20
     }),
     check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 363,
@@ -567,7 +567,7 @@ multiprovider_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
         ?LOGICAL_SIZE => 1334,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 1314
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 1314
     }).
 
 
@@ -613,7 +613,7 @@ multiprovider_trash_test(Config) ->
             ?DIR_ERRORS_COUNT => 0,
             ?TOTAL_SIZE => 0,
             ?LOGICAL_SIZE => 0,
-            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+            ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
         },
         ExpectedResult = lists:duplicate(length(GuidsAndNames) + 2, {ok, EmptyDirStats}),
         ?assertEqual(ExpectedResult, CheckFun(), ?ATTEMPTS)
@@ -675,7 +675,7 @@ enabling_large_dirs_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }).
 
 
@@ -701,7 +701,7 @@ race_with_file_adding_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
         ?LOGICAL_SIZE => 10,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 10
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 10
     }).
 
 
@@ -720,7 +720,7 @@ race_with_file_writing_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
         ?LOGICAL_SIZE => 10,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 10
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 10
     }).
 
 
@@ -749,7 +749,7 @@ race_with_subtree_adding_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }).
 
 
@@ -776,7 +776,7 @@ race_with_subtree_filling_with_data_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 200,
         ?LOGICAL_SIZE => 200,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 200
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 200
     }).
 
 
@@ -824,7 +824,7 @@ race_with_file_adding_to_large_dir_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
         ?LOGICAL_SIZE => 10,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 10
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 10
     }).
 
 
@@ -918,7 +918,7 @@ adding_file_when_disabled_test(Config) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1344,
         ?LOGICAL_SIZE => 1344,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 1344
+        ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 1344
     }),
     check_update_times(Config, [op_worker_nodes]).
 
@@ -956,7 +956,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 0
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 0
     }, true, enabled),
 
     % Create files and fill using 100 processes (spawn is hidden in pmap)
@@ -991,7 +991,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 20 * FileSize,
         ?LOGICAL_SIZE => 20 * FileSize,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 20 * FileSize
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 20 * FileSize
     }),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 20,
@@ -1000,7 +1000,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 20 * FileSize,
         ?LOGICAL_SIZE => 20 * FileSize,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 0
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 0
     }),
 
     % Read files using 20 processes (spawn is hidden in pmap)
@@ -1030,7 +1030,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 20 * FileSize,
         ?LOGICAL_SIZE => 20 * FileSize,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
+        ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
     }).
 
 
@@ -1105,7 +1105,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
     },
     Expectations = lists:foldl(fun
         (#file_attr{type = ?DIRECTORY_TYPE, guid = ChildGuid}, Acc) ->
@@ -1116,7 +1116,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
                 ?REG_FILE_AND_LINK_COUNT => 1,
                 ?TOTAL_SIZE => ChildSize,
                 ?LOGICAL_SIZE => ChildSize,
-                ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ChildSize,
+                ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ChildSize,
                 update_time => max(ChildMTime, ChildCTime)
             })
     end, StatsForEmptyDir, Children),
@@ -1188,7 +1188,7 @@ create_initial_file_tree(Config, NodesSelector, CollectingStatus) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
     }, true, CollectingStatus),
 
     Structure = [{3, 3}, {3, 3}, {3, 3}, {3, 3}, {0, 3}],
@@ -1224,7 +1224,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
     }),
     check_dir_stats(Config, NodesSelector, [2, 1, 1], #{
         ?REG_FILE_AND_LINK_COUNT => 12,
@@ -1233,7 +1233,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
     }),
     check_dir_stats(Config, NodesSelector, [2, 1], #{
         ?REG_FILE_AND_LINK_COUNT => 39,
@@ -1242,7 +1242,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
     }),
     check_dir_stats(Config, NodesSelector, [2], #{
         ?REG_FILE_AND_LINK_COUNT => 120,
@@ -1251,7 +1251,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => 0
     }),
 
     check_dir_stats(Config, NodesSelector, [1, 1, 1, 1], #{
@@ -1261,7 +1261,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 55,
         ?LOGICAL_SIZE => 55,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, 55)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ?PHYSICAL_SIZE_VALUE(NodesSelector, 55)
     }),
     check_dir_stats(Config, NodesSelector, [1, 1, 1], #{
         ?REG_FILE_AND_LINK_COUNT => 12,
@@ -1270,7 +1270,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 104,
         ?LOGICAL_SIZE => 104,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, 104)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ?PHYSICAL_SIZE_VALUE(NodesSelector, 104)
     }),
     check_dir_stats(Config, NodesSelector, [1, 1], #{
         ?REG_FILE_AND_LINK_COUNT => 39,
@@ -1279,7 +1279,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 124,
         ?LOGICAL_SIZE => 124,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, 124)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ?PHYSICAL_SIZE_VALUE(NodesSelector, 124)
     }),
     check_dir_stats(Config, NodesSelector, [1], #{
         ?REG_FILE_AND_LINK_COUNT => 120,
@@ -1288,7 +1288,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 334,
         ?LOGICAL_SIZE => 334,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, 334)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ?PHYSICAL_SIZE_VALUE(NodesSelector, 334)
     }),
 
     % the space dir should have a sum of all statistics
@@ -1299,7 +1299,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
         ?LOGICAL_SIZE => 1334,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, 1334)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ?PHYSICAL_SIZE_VALUE(NodesSelector, 1334)
     }),
     check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 363,
@@ -1308,7 +1308,7 @@ check_filled_tree(Config, NodesSelector) ->
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 1334,
         ?LOGICAL_SIZE => 1334,
-        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => ?TOTAL_SIZE_ON_STORAGE_VALUE(NodesSelector, 1334)
+        ?PHYSICAL_SIZE_KEY(Config, NodesSelector) => ?PHYSICAL_SIZE_VALUE(NodesSelector, 1334)
     }, false, enabled).
 
 
@@ -1534,7 +1534,7 @@ clean_space_and_verify_stats(Config) ->
                     ?DIR_ERRORS_COUNT => 0,
                     ?TOTAL_SIZE => 0,
                     ?LOGICAL_SIZE => 0,
-                    ?SIZE_ON_STORAGE(StorageId) => 0
+                    ?PHYSICAL_SIZE(StorageId) => 0
                 }}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS),
 
                 TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
@@ -1545,7 +1545,7 @@ clean_space_and_verify_stats(Config) ->
                     ?DIR_ERRORS_COUNT => 0,
                     ?TOTAL_SIZE => 0,
                     ?LOGICAL_SIZE => 0,
-                    ?SIZE_ON_STORAGE(StorageId) => 0
+                    ?PHYSICAL_SIZE(StorageId) => 0
                 }}, rpc:call(Worker, dir_size_stats, get_stats, [TmpDirGuid]), ?ATTEMPTS);
             _ ->
                 ok

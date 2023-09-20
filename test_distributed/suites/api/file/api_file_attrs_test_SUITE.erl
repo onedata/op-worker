@@ -1275,8 +1275,8 @@ get_historical_dir_size_stats_layout_test(Config) ->
     },
     
     ExpLayoutFun = fun
-        (krakow) -> ExpLayoutBase#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
-        (paris) -> ExpLayoutBase#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
+        (krakow) -> ExpLayoutBase#{?PHYSICAL_SIZE(P1StorageId) => Metrics};
+        (paris) -> ExpLayoutBase#{?PHYSICAL_SIZE(P2StorageId) => Metrics}
     end,
 
     await_file_size_sync(krakow, 8, DirGuid),
@@ -1360,8 +1360,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
         ?LOGICAL_SIZE => Metrics
     }),
     LayoutFun = fun
-        (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
-        (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
+        (krakow) -> BaseLayout#{?PHYSICAL_SIZE(P1StorageId) => Metrics};
+        (paris) -> BaseLayout#{?PHYSICAL_SIZE(P2StorageId) => Metrics}
     end,
     ExpTimestampFilter = fun(Data, Windows) ->
         StartTimestamp = maps:get(<<"startTimestamp">>, Data, FutureTimestamp),
@@ -1392,8 +1392,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
     BuildExpSliceFun = fun(Data) -> maps:with(maps:keys(maps:get(<<"layout">>, Data, #{})), #{
             ?DIR_COUNT => BuildExpMetricsFun(Data, [1, 1, 1]),
             ?REG_FILE_AND_LINK_COUNT =>  BuildExpMetricsFun(Data, [3, 2, 1]),
-            ?SIZE_ON_STORAGE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
-            ?SIZE_ON_STORAGE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
+            ?PHYSICAL_SIZE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
+            ?PHYSICAL_SIZE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
             ?TOTAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8]),
             ?LOGICAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
         })

@@ -131,7 +131,7 @@ build_dir_size_stat_provider_requests(FileCtx) ->
     maps:map(fun(_ProviderId, SupportingStorages) ->
         #provider_current_dir_size_stats_browse_request{
             stat_names = maps:fold(fun(StorageId, _, Acc) ->
-                 [?SIZE_ON_STORAGE(StorageId) | Acc]
+                 [?PHYSICAL_SIZE(StorageId) | Acc]
             end, [?TOTAL_SIZE, ?LOGICAL_SIZE], SupportingStorages)
         }
     end, StoragesByProvider).
@@ -145,7 +145,7 @@ build_provider_dir_distribution(#provider_current_dir_size_stats_browse_result{s
         virtual_size = maps:get(?TOTAL_SIZE, ProviderDirStats),
         logical_size = maps:get(?LOGICAL_SIZE, ProviderDirStats),
         physical_size_per_storage = maps:fold(fun
-            (?SIZE_ON_STORAGE(StorageId), Value, Acc) ->
+            (?PHYSICAL_SIZE(StorageId), Value, Acc) ->
                 Acc#{StorageId => Value};
             (_, _, Acc) ->
                 Acc

@@ -21,7 +21,7 @@
 %%% Names of statistics.
 %%%===================================================================
 
--define(SIZE_ON_STORAGE_TS_PREFIX_STR, "storage_use_").
+-define(PHYSICAL_SIZE_TS_PREFIX_STR, "physical_size_").
 
 -define(REG_FILE_AND_LINK_COUNT, <<"reg_file_and_link_count">>).
 -define(DIR_COUNT, <<"dir_count">>).
@@ -29,7 +29,7 @@
 -define(DIR_ERRORS_COUNT, <<"dir_errors_count">>).
 -define(TOTAL_SIZE, <<"total_size">>).
 -define(LOGICAL_SIZE, <<"logical_size">>).
--define(SIZE_ON_STORAGE(StorageId), <<?SIZE_ON_STORAGE_TS_PREFIX_STR, StorageId/binary>>).
+-define(PHYSICAL_SIZE(StorageId), <<?PHYSICAL_SIZE_TS_PREFIX_STR, StorageId/binary>>).
 
 
 %%%===================================================================
@@ -104,7 +104,7 @@
     },
     #time_series_schema{
         name_generator_type = add_prefix,
-        name_generator = <<?SIZE_ON_STORAGE_TS_PREFIX_STR>>,
+        name_generator = <<?PHYSICAL_SIZE_TS_PREFIX_STR>>,
         unit = bytes,
         metrics = ?DIR_SIZE_STATS_METRICS
     }
