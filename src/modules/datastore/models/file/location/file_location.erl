@@ -204,7 +204,7 @@ delete_and_update_quota(Key) ->
 report_size_changed(on_storage, #file_location{uuid = FileUuid, space_id = SpaceId, storage_id = StorageId}, SizeChange) ->
     dir_size_stats:report_physical_size_changed(file_id:pack_guid(FileUuid, SpaceId), StorageId, SizeChange);
 report_size_changed(total, #file_location{uuid = FileUuid, space_id = SpaceId}, SizeChange) ->
-    dir_size_stats:report_total_size_changed(file_id:pack_guid(FileUuid, SpaceId), SizeChange).
+    dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), SizeChange).
 
 
 -spec is_storage_file_created(doc() | record()) -> boolean().

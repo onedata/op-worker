@@ -35,7 +35,7 @@
 invalidate_changes(FileCtx, Doc = #document{value = #file_location{size = OldSize} = Loc}, [], NewSize, ChangedBlocks) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = fslogic_location_cache:save_location(NewDoc),
-    dir_size_stats:report_total_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - OldSize),
+    dir_size_stats:report_virtual_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - OldSize),
     {NewDoc, file_ctx:reset(FileCtx), ChangedBlocks};
 invalidate_changes(FileCtx, Doc = #document{value = #file_location{size = OldSize} = Loc}, [{rename, Rename}],
     NewSize, ChangedBlocks) ->
@@ -46,11 +46,11 @@ invalidate_changes(FileCtx, Doc = #document{value = #file_location{size = OldSiz
             {deleted, FileCtx2, ChangedBlocks};
         {skipped, FileCtx2} ->
             {ok, _} = fslogic_location_cache:save_location(NewDoc),
-            dir_size_stats:report_total_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - OldSize),
+            dir_size_stats:report_virtual_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - OldSize),
             {NewDoc, file_ctx:reset(FileCtx2), ChangedBlocks};
         {{renamed, RenamedDoc, _FileUuid, _TargetSpaceId}, FileCtx2} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
-            dir_size_stats:report_total_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - OldSize),
+            dir_size_stats:report_virtual_size_changed(file_ctx:get_referenced_guid_const(FileCtx), NewSize - OldSize),
             {RenamedDoc, file_ctx:reset(FileCtx2), ChangedBlocks}
     end;
 invalidate_changes(FileCtx, Doc = #document{

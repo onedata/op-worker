@@ -382,7 +382,7 @@ delete_doc(Key) ->
             storage_id = StorageId,
             size = LocationSize
         }}} ->
-            dir_size_stats:report_total_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize),
+            dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize),
             StorageSize = get_local_size(Key),
             cache_size_change(Key, SpaceId, StorageId, -StorageSize),
             apply_size_change(Key, FileUuid),

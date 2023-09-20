@@ -11,13 +11,13 @@
 %%% It provides following statistics for each directory:
 %%%    - ?REG_FILE_AND_LINK_COUNT - total number of regular files, hardlinks and symlinks,
 %%%    - ?DIR_COUNT - total number of nested directories,
-%%%    - ?TOTAL_SIZE - total byte size of the logical data (if file has multiple hardlinks,
+%%%    - ?VIRTUAL_SIZE - total byte size of the logical data (if file has multiple hardlinks,
 %%%                    size is counted only for first reference),
 %%%    - ?LOGICAL_SIZE - total size in case of download (hardlinks of same file are downloaded multiple times),
 %%%    - ?PHYSICAL_SIZE(StorageId) - physical byte size on a specific storage.
-%%% NOTE: the total size is not a sum of sizes on different storages, as the blocks stored
+%%% NOTE: the virtual size is not a sum of sizes on different storages, as the blocks stored
 %%%       on different storages may overlap.
-%%% NOTE: all references have the same LOGICAL_SIZE, but only first has TOTAL_SIZE set
+%%% NOTE: all references have the same LOGICAL_SIZE, but only first has VIRTUAL_SIZE set
 %%%       (it is equal to LOGICAL_SIZE for this reference).
 %%%
 %%% This module offers two types of statistics in its API:
@@ -57,7 +57,7 @@
 %% API - generic stats
 -export([get_stats/1, get_stats/2, browse_historical_stats_collection/2, delete_stats/1]).
 %% API - reporting file size changes
--export([report_total_size_changed/2, report_logical_size_changed/2, report_physical_size_changed/3]).
+-export([report_virtual_size_changed/2, report_logical_size_changed/2, report_physical_size_changed/3]).
 %% API - reporting file count changes
 -export([report_file_created/2, report_file_created_without_state_check/2, report_file_deleted/2]).
 %% API - hooks
@@ -120,8 +120,8 @@ end).
     removed = [] :: file_meta_hardlinks:references_list(),
     % If main reference is removed, it is stored in this field as it has to be treated differently
     % (the field is list as this record can aggregate information about multiple operations).
-    % The reason for this special handling is that only one reference per file can have TOTAL_SIZE greater than 0
-    % (all references have the same LOGICAL_SIZE, but only first has TOTAL_SIZE set).
+    % The reason for this special handling is that only one reference per file can have VIRTUAL_SIZE greater than 0
+    % (all references have the same LOGICAL_SIZE, but only first has VIRTUAL_SIZE set).
     removed_main_refs = [] :: file_meta_hardlinks:references_list()
 }).
 
@@ -176,24 +176,24 @@ delete_stats(Guid) ->
 %%%===================================================================
 
 
--spec report_total_size_changed(file_id:file_guid(), integer()) -> ok.
-report_total_size_changed(_Guid, 0) ->
+-spec report_virtual_size_changed(file_id:file_guid(), integer()) -> ok.
+report_virtual_size_changed(_Guid, 0) ->
     ok;
-report_total_size_changed(Guid, SizeDiff) ->
+report_virtual_size_changed(Guid, SizeDiff) ->
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
     case get_conflict_protected_reference_list(Uuid) of
         [?OPENED_DELETED_FILE_LINK_PATTERN = MainRef] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId),
-                ?MODULE, #{?TOTAL_SIZE => SizeDiff});
+                ?MODULE, #{?VIRTUAL_SIZE => SizeDiff});
         [MainRef | References] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId), ?MODULE,
-                #{?TOTAL_SIZE => SizeDiff, ?LOGICAL_SIZE => SizeDiff}),
+                #{?VIRTUAL_SIZE => SizeDiff, ?LOGICAL_SIZE => SizeDiff}),
             lists:foreach(fun(Ref) ->
                 ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(Ref, SpaceId), ?MODULE,
                     #{?LOGICAL_SIZE => SizeDiff})
             end, References);
         [] ->
-            ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff})
+            ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?VIRTUAL_SIZE => SizeDiff})
     end.
 
 
@@ -253,12 +253,12 @@ on_link_register(TargetFileCtx, TargetParentGuid) ->
         {#document{value = #file_location{size = undefined}} = FMDoc, _} ->
             case fslogic_blocks:upper(fslogic_location_cache:get_blocks(FMDoc)) of
                 0 -> ok;
-                TotalSize -> update_stats(TargetParentGuid, #{?LOGICAL_SIZE => TotalSize})
+                Size -> update_stats(TargetParentGuid, #{?LOGICAL_SIZE => Size})
             end;
         {#document{value = #file_location{size = 0}}, _} ->
             ok;
-        {#document{value = #file_location{size = TotalSize}}, _} ->
-            update_stats(TargetParentGuid, #{?LOGICAL_SIZE => TotalSize})
+        {#document{value = #file_location{size = Size}}, _} ->
+            update_stats(TargetParentGuid, #{?LOGICAL_SIZE => Size})
     end.
 
 
@@ -283,7 +283,7 @@ on_link_deregister(FileCtx) ->
                 case lists:member(LinkUuid, References) of
                     true ->
                         report_logical_size_changed(LinkGuid,
-                            -1 * proplists:get_value(total, FileSizes));
+                            -1 * proplists:get_value(virtual, FileSizes));
                     false ->
                         ok
                 end;
@@ -375,10 +375,10 @@ handle_references_list_changes(Guid, AddedReferences, RemovedReferences, OldRefs
 
             ?IGNORE_LOCATION_MISSING(?FLUSH(begin
                 {FileSizes, _} = file_ctx:prepare_file_size_summary(FileCtx, throw_on_missing_location),
-                TotalSize = proplists:get_value(total, FileSizes),
+                Size = proplists:get_value(virtual, FileSizes),
 
-                report_logical_size_changed_for_ref_list(AddedList -- RemovedList, SpaceId, TotalSize),
-                report_logical_size_changed_for_ref_list(RemovedList -- AddedList, SpaceId, -TotalSize),
+                report_logical_size_changed_for_ref_list(AddedList -- RemovedList, SpaceId, Size),
+                report_logical_size_changed_for_ref_list(RemovedList -- AddedList, SpaceId, -Size),
 
                 case RemovedMainRefs of
                     [] ->
@@ -617,10 +617,10 @@ init_hardlink(Guid) ->
     FileCtx = file_ctx:new_by_guid(fslogic_file_id:ensure_referenced_guid(Guid)),
     case file_ctx:get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
         {#document{value = #file_location{size = undefined}} = FLDoc, _} ->
-            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(FLDoc)),
-            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?LOGICAL_SIZE => TotalSize};
-        {#document{value = #file_location{size = TotalSize}}, _} ->
-            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?LOGICAL_SIZE => TotalSize}
+            Size = fslogic_blocks:upper(fslogic_location_cache:get_blocks(FLDoc)),
+            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?LOGICAL_SIZE => Size};
+        {#document{value = #file_location{size = Size}}, _} ->
+            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?LOGICAL_SIZE => Size}
     end.
 
 
@@ -648,7 +648,7 @@ stat_names(Guid) ->
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT,
-                ?TOTAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
+                ?VIRTUAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
         {error, not_found} ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
@@ -797,7 +797,7 @@ encode_stat_name(?REG_FILE_AND_LINK_COUNT) -> 0;
 encode_stat_name(?DIR_COUNT) -> 1;
 encode_stat_name(?FILE_ERRORS_COUNT) -> 2;
 encode_stat_name(?DIR_ERRORS_COUNT) -> 3;
-encode_stat_name(?TOTAL_SIZE) -> 4;
+encode_stat_name(?VIRTUAL_SIZE) -> 4;
 encode_stat_name(?PHYSICAL_SIZE(StorageId)) -> {5, StorageId};
 encode_stat_name(?LOGICAL_SIZE) -> 6.
 
@@ -808,7 +808,7 @@ decode_stat_name(0) -> ?REG_FILE_AND_LINK_COUNT;
 decode_stat_name(1) -> ?DIR_COUNT;
 decode_stat_name(2) -> ?FILE_ERRORS_COUNT;
 decode_stat_name(3) -> ?DIR_ERRORS_COUNT;
-decode_stat_name(4) -> ?TOTAL_SIZE;
+decode_stat_name(4) -> ?VIRTUAL_SIZE;
 decode_stat_name({5, StorageId}) -> ?PHYSICAL_SIZE(StorageId);
 decode_stat_name(6) -> ?LOGICAL_SIZE.
 
@@ -851,8 +851,8 @@ update_using_size_summary(Guid, SizeSummary, UpdateLogicalSize, subtract) ->
     dir_stats_collection:collection().
 size_summary_to_stats(SizeSummary, InitialStats, UpdateLogicalSize) ->
     lists:foldl(fun
-        ({total, Size}, Acc) when UpdateLogicalSize -> Acc#{?TOTAL_SIZE => Size, ?LOGICAL_SIZE => Size};
-        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+        ({virtual, Size}, Acc) when UpdateLogicalSize -> Acc#{?VIRTUAL_SIZE => Size, ?LOGICAL_SIZE => Size};
+        ({virtual, Size}, Acc) -> Acc#{?VIRTUAL_SIZE => Size};
         ({StorageId, Size}, Acc) -> Acc#{?PHYSICAL_SIZE(StorageId) => Size}
     end, InitialStats, SizeSummary).
 

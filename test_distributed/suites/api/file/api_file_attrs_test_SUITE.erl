@@ -1268,7 +1268,7 @@ get_historical_dir_size_stats_layout_test(Config) ->
     ExpLayoutBase = #{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics,
+        ?VIRTUAL_SIZE => Metrics,
         ?LOGICAL_SIZE => Metrics,
         ?FILE_ERRORS_COUNT => Metrics,
         ?DIR_ERRORS_COUNT => Metrics
@@ -1356,7 +1356,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics,
+        ?VIRTUAL_SIZE => Metrics,
         ?LOGICAL_SIZE => Metrics
     }),
     LayoutFun = fun
@@ -1394,7 +1394,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
             ?REG_FILE_AND_LINK_COUNT =>  BuildExpMetricsFun(Data, [3, 2, 1]),
             ?PHYSICAL_SIZE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
             ?PHYSICAL_SIZE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
-            ?TOTAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8]),
+            ?VIRTUAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8]),
             ?LOGICAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
         })
     end,
@@ -1476,7 +1476,7 @@ get_historical_dir_size_stats_disabled_test(Config) ->
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics
+        ?VIRTUAL_SIZE => Metrics
     }),
 
     ValidateGsErrorCallFun = fun(_TestCtx, Result) ->
@@ -1765,10 +1765,10 @@ gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
     SessionId = oct_background:get_user_session_id(user3, ProviderPlaceholder),
     ProviderId = oct_background:get_provider_id(ProviderPlaceholder),
     Request = #time_series_slice_get_request{
-        layout = #{?TOTAL_SIZE => [?HOUR_METRIC]}
+        layout = #{?VIRTUAL_SIZE => [?HOUR_METRIC]}
     },
     #time_series_slice_get_result{
-        slice = #{?TOTAL_SIZE := #{
+        slice = #{?VIRTUAL_SIZE := #{
             ?HOUR_METRIC := [#window_info{value = Value}]
         }}
     } = ?rpc(ProviderPlaceholder, mi_file_metadata:get_historical_dir_size_stats(
