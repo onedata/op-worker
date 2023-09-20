@@ -70,6 +70,8 @@
     report_collections_initialization_finished/1, report_collectors_stopped/1,
     enable_for_new_support/2
 ]).
+%% API - reinitialization
+-export([reinitialize_stats_for_space/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -428,6 +430,29 @@ enable_for_new_support(_SpaceId, _SupportParameters) ->
 
 
 %%%===================================================================
+%%% API - reinitialization
+%%%===================================================================
+
+-spec reinitialize_stats_for_space(od_space:id()) -> ok.
+reinitialize_stats_for_space(SpaceId) ->
+    case is_active(SpaceId) of
+        true ->
+            ?info("Reinitializing stats for space '~s'.", [SpaceId]),
+            ok = disable(SpaceId),
+            % Wait until status is not active - otherwise when initialization is in progress,
+            % disable/enable sequence may not result in initialization restart (pending initialization
+            % can be continued) and it is expected to reinitialize whole space (stats set has changed).
+            % NOTE: disable/enable sequence will result in 2 notifications to onezone - onezone will
+            % change status to initializing (instead of disable) after first notification, and onezone
+            % status will be enabled after second notification.
+            wait_until_stats_are_not_active(SpaceId),
+            ok = enable(SpaceId);
+        false ->
+            ok
+    end.
+
+
+%%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
@@ -541,3 +566,15 @@ report_status_change_to_oz(SpaceId, NewStatus) ->
     ok = space_logic:update_support_parameters(SpaceId, #support_parameters{
         dir_stats_service_status = NewStatus
     }).
+
+
+%% @private
+-spec wait_until_stats_are_not_active(od_space:id()) -> ok.
+wait_until_stats_are_not_active(SpaceId) ->
+    case is_active(SpaceId) of
+        true ->
+            timer:sleep(timer:seconds(1000)),
+            wait_until_stats_are_not_active(SpaceId);
+        false ->
+            ok
+    end.

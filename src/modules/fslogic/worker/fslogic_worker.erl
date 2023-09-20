@@ -560,12 +560,12 @@ handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) 
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
-    dir_req:get_children(UserCtx, FileCtx, ListingOpts);
+    dir_req:list_children(UserCtx, FileCtx, ListingOpts);
 handle_file_request(UserCtx, #get_file_children_attrs{
     listing_options = ListingOpts,
     attributes = Attributes
 }, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, Attributes);
+    dir_req:list_children_attrs(UserCtx, FileCtx, ListingOpts, Attributes);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName

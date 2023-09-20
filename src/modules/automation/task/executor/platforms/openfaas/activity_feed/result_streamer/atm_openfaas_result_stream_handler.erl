@@ -170,7 +170,7 @@ handle_streamed_task_data(ConnRef, ReportId, StreamedTaskData, #result_streamer_
                     ResultStreamerId,
                     WorkflowExecutionId,
                     TaskExecutionId,
-                    truncate_binary_for_logging(str_utils:format_bin("~p", [StreamedTaskData]))
+                    str_utils:truncate_overflow(str_utils:format_bin("~p", [StreamedTaskData]), ?MAX_LOGGED_DATA_SIZE)
                 ]
             );
         duplicate ->
@@ -202,16 +202,4 @@ conclude(WorkflowExecutionId, TaskExecutionId) ->
                 atm_openfaas_activity_feed_ws_connection:push_json_to_client(ConnRef, EncodedFinalizationSignalJson)
             end, ConnRefs),
             atm_openfaas_result_streamer_registry:await_deregistration_of_all_streamers()
-    end.
-
-
-%% @private
--spec truncate_binary_for_logging(binary()) -> binary().
-truncate_binary_for_logging(Data) ->
-    case byte_size(Data) > ?MAX_LOGGED_DATA_SIZE of
-        true ->
-            Part = binary:part(Data, 0, ?MAX_LOGGED_DATA_SIZE),
-            <<Part/binary, "... [truncated]">>;
-        false ->
-            Data
     end.

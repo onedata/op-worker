@@ -156,19 +156,19 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
-        ?error_stacktrace("Unexpected error during verification of archive ~s",
-            [?autoformat([TaskId, Reason])], Stacktrace),
+        ?error_exception("Unexpected error during verification of archive ~s",
+            [?autoformat([TaskId])], error, Reason, Stacktrace),
         {ok, #{}} % unexpected error - no jobs can be created
     end,
     case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
         {ok, _} = Result ->
             Result;
-        {error, _} = Error ->
+        {error, Reason, Stacktrace} ->
             handle_verification_error(TaskId, InitialJob),
             {FileCtx, FilePath} = job_to_error_info(InitialJob),
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error("Unexpected error in archive verification traverse during listing of directory ~s",
-                [?autoformat([Error, TaskId, FileGuid, FilePath])]),
+            ?error_exception("Unexpected error in archive verification traverse during listing of directory ~s",
+                [?autoformat([TaskId, FileGuid, FilePath])], error, Reason, Stacktrace),
             {ok, #{}}
     end.
 
@@ -177,8 +177,8 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
 do_slave_job(InitialJob, TaskId) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
-        ?error_stacktrace("Unexpected error during verification of archive ~p:~n~p", 
-            [TaskId, Reason], Stacktrace)
+        ?error_exception("Unexpected error during verification of archive ~p",
+            [TaskId], error, Reason, Stacktrace)
     end,
     archive_traverses_common:execute_unsafe_job(
         ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler).
@@ -210,7 +210,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
 
 
 -spec do_dir_master_job_unsafe(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
-    {ok, traverse:master_job_map()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_dir_master_job_unsafe(#tree_traverse{
     user_id = UserId, 
     file_ctx = FileCtx

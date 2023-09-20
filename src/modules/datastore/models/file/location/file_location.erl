@@ -202,9 +202,9 @@ delete_and_update_quota(Key) ->
 %% @private
 -spec report_size_changed(ReportType :: on_storage | total, record(), integer()) -> ok.
 report_size_changed(on_storage, #file_location{uuid = FileUuid, space_id = SpaceId, storage_id = StorageId}, SizeChange) ->
-    dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), {on_storage, StorageId}, SizeChange);
+    dir_size_stats:report_size_on_storage_changed(file_id:pack_guid(FileUuid, SpaceId), StorageId, SizeChange);
 report_size_changed(total, #file_location{uuid = FileUuid, space_id = SpaceId}, SizeChange) ->
-    dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, SizeChange).
+    dir_size_stats:report_total_size_changed(file_id:pack_guid(FileUuid, SpaceId), SizeChange).
 
 
 -spec is_storage_file_created(doc() | record()) -> boolean().
@@ -248,8 +248,10 @@ set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
 %% Returns total size used by given file_location.
 %% @end
 %%--------------------------------------------------------------------
--spec count_bytes(doc()) -> non_neg_integer().
+-spec count_bytes(doc() | [fslogic_blocks:block()]) -> non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
+    count_bytes(Blocks, 0);
+count_bytes(Blocks) ->
     count_bytes(Blocks, 0).
 
 

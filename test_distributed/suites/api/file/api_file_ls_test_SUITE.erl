@@ -543,9 +543,9 @@ get_children_data_spec(gs, _Scope) ->
         },
         bad_values = [
             {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-            {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 10001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
             {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
         ]
     };
@@ -568,9 +568,9 @@ get_children_data_spec(rest, Scope) ->
         },
         bad_values = [
             {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-            {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 10001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
             {<<"attributes">>, <<"abc">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson)},
             {<<"attributes">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson)}
         ]

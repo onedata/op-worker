@@ -291,7 +291,7 @@ get_sync_info() ->
 %%%===================================================================
 
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> 
-    {ok, traverse:master_job_map()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job(Job, MasterJobArgs) ->
     do_master_job(Job, MasterJobArgs, ?NEW_JOBS_DEFAULT_PREPROCESSOR).
 
@@ -303,7 +303,7 @@ do_master_job(Job, MasterJobArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args(), new_jobs_preprocessor()) ->
-    {ok, traverse:master_job_map()} | {error, term()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
@@ -391,7 +391,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 
 %% @private
 -spec do_master_job_internal(file_meta:type(), master_job(), id(), new_jobs_preprocessor()) ->
-    {ok, traverse:master_job_map()} | {error, term()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor) ->
     do_dir_master_job(Job, TaskId, NewJobsPreprocessor, ?LISTING_ERROR_RETRY_INITIAL_BACKOFF);
 do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, _, _) ->
@@ -416,7 +416,7 @@ do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, 
 
 %% @private
 -spec do_dir_master_job(master_job(), id(), new_jobs_preprocessor(), non_neg_integer()) ->
-    {ok, traverse:master_job_map()} | {error, term()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
     #tree_traverse{
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -439,9 +439,9 @@ do_dir_master_job(Job, TaskId, NewJobsPreprocessor, Sleep) ->
                 {ignore_known, true} ->
                     {ok, #{}};
                 {propagate_unknown, false} ->
-                    {error, Reason};
+                    {error, Reason, Stacktrace};
                 {propagate, _} ->
-                    {error, Reason};
+                    {error, Reason, Stacktrace};
                 _ ->
                     ?error_exception(error, Reason, Stacktrace),
                     timer:sleep(Sleep),
@@ -475,7 +475,7 @@ build_next_jobs(Job, TaskId, ChildrenCtxs, NewJobsPreprocessor) ->
 
 %% @private
 -spec list_children(master_job(), id()) ->
-    {ok, {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}} | {error, term(), Stacktrace :: list()}.
+    {ok, {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}} | {error, term(), stacktrace()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     pagination_token = PaginationToken,
@@ -490,7 +490,7 @@ list_children(#tree_traverse{
     end,
     try
         {ok, UserCtx} = acquire_user_ctx(Job, TaskId),
-        {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
+        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
             limit => BatchSize,
             ignore_missing_links => ListingErrorsHandlingPolicy == ignore_known
         })}

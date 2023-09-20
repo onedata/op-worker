@@ -662,7 +662,7 @@ validate_error_result(Type, ExpError, Result) when
     Got :: term(),
     ErrType :: error | exit | throw,
     ErrReason :: term(),
-    Stacktrace :: list()
+    stacktrace()
 ) ->
     ok.
 log_failure(

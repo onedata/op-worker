@@ -120,7 +120,7 @@ init_node_iterator(FileCtx, StartFileName, Limit) ->
     {more | done, [tree_node()], node_iterator()} | no_access.
 get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
     try
-        {Children, PaginationToken, FileCtx2} = dir_req:get_children_ctxs(
+        {Children, PaginationToken, FileCtx2} = dir_req:list_children_ctxs(
             UserCtx, FileCtx, ListOpts
         ),
         ProgressMarker = case file_listing:is_finished(PaginationToken) of

@@ -175,10 +175,11 @@ do_master_job(Job = #tree_traverse{
     case tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook) of
         {ok, _} = Res ->
             Res;
-        {error, _} = Error ->
+        {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error("Error when listing directory during tree deletion: ~s", [?autoformat([Error, FileUuid])]),
+            ?error_exception("Error when listing directory during tree deletion: ~s",
+                [?autoformat([FileUuid])], error, Reason, Stacktrace),
             tree_traverse_progress:delete(TaskId, FileUuid),
             tree_traverse:cancel(?POOL_NAME, TaskId),
             traverse_task:update_additional_data(traverse_task:get_ctx(), ?POOL_NAME, TaskId, fun(AdditionalData) ->

@@ -933,10 +933,12 @@ get_dir_distribution_2_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
+                download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
+                download_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0}
             }
         }
@@ -951,10 +953,12 @@ get_dir_distribution_2_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
+                download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
+                download_size = 50,
                 physical_size_per_storage = #{P2StorageId => 20}
             }
         }
@@ -988,6 +992,7 @@ get_dir_distribution_3_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
+                download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -1006,6 +1011,7 @@ get_dir_distribution_3_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
+                download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
             },
             P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -1269,6 +1275,7 @@ get_historical_dir_size_stats_layout_test(Config) ->
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics,
+        ?TOTAL_DOWNLOAD_SIZE => Metrics,
         ?FILE_ERRORS_COUNT => Metrics,
         ?DIR_ERRORS_COUNT => Metrics
     },
@@ -1355,7 +1362,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics
+        ?TOTAL_SIZE => Metrics,
+        ?TOTAL_DOWNLOAD_SIZE => Metrics
     }),
     LayoutFun = fun
         (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
@@ -1392,7 +1400,8 @@ get_historical_dir_size_stats_slice_test(Config) ->
             ?REG_FILE_AND_LINK_COUNT =>  BuildExpMetricsFun(Data, [3, 2, 1]),
             ?SIZE_ON_STORAGE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
             ?SIZE_ON_STORAGE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
-            ?TOTAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
+            ?TOTAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8]),
+            ?TOTAL_DOWNLOAD_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
         })
     end,
     await_file_size_sync(krakow, 32, DirGuid),
@@ -1408,7 +1417,7 @@ get_historical_dir_size_stats_slice_test(Config) ->
         end, Slice),
         ?assertEqual(BuildExpSliceFun(Data), ResultWithoutMeasurementTimestamps)
     end,
-    
+
     ValidateGsSuccessfulCallFun = fun(TestCtx, Result) ->
         {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
         ValidateSliceFun(maps:get(<<"slice">> , ResultData), TestCtx#api_test_ctx.data)

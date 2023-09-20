@@ -34,6 +34,8 @@
 
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
+-define(MAX_LIST_ENTRIES, 10000).
+-define(MAX_LIST_OFFSET, 500).
 
 -define(DEFAULT_LIST_ATTRS, [guid, name]).
 -define(DEFAULT_RECURSIVE_FILE_LIST_ATTRS, [guid, path]).
@@ -89,38 +91,44 @@ assert_operation_supported(_, _)                                     -> throw(?E
 data_spec(#op_req{gri = #gri{aspect = instance, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, deprecated, <<"attribute">>)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, deprecated, <<"attribute">>)
     }
 };
 
 data_spec(#op_req{gri = #gri{aspect = children, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_ENTRIES}},
         <<"token">> => build_listing_start_point_param_spec(<<"token">>),
         <<"index">> => build_listing_start_point_param_spec(<<"index">>),
-        <<"offset">> => {integer, any},
+        <<"offset">> => {integer, {between, -?MAX_LIST_OFFSET, ?MAX_LIST_OFFSET}},
         <<"inclusive">> => {boolean, any},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
-        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, deprecated, <<"attribute">>)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, deprecated, <<"attribute">>)
     }
 };
 
 data_spec(#op_req{gri = #gri{aspect = files, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_ENTRIES}},
         <<"token">> => {binary, any},
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},
         <<"include_directories">> => {boolean, any},
-        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, deprecated, <<"attribute">>)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, deprecated, <<"attribute">>)
     }
 };
 
@@ -151,7 +159,8 @@ data_spec(#op_req{gri = #gri{aspect = rdf_metadata}}) -> #{
 
 data_spec(#op_req{gri = #gri{aspect = symlink_target, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
-    <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>)
+    <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+        Sc, current, <<"attributes">>)
 };
 
 data_spec(#op_req{gri = #gri{aspect = As}}) when

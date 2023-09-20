@@ -12,6 +12,9 @@
 -author("Michal Wrzeszcz").
 
 
+-include_lib("ctool/include/test/test_utils.hrl").
+
+
 %% export for ct
 -export([
     all/0,
@@ -22,6 +25,7 @@
 %% tests
 -export([
     basic_test/1,
+    hardlinks_test/1,
     enabling_for_empty_space_test/1,
     enabling_for_not_empty_space_test/1,
     enabling_large_dirs_test/1,
@@ -39,6 +43,7 @@
 
 all() -> [
     basic_test,
+    hardlinks_test,
     enabling_for_empty_space_test,
     enabling_for_not_empty_space_test,
     enabling_large_dirs_test,
@@ -60,6 +65,10 @@ all() -> [
 
 basic_test(Config) ->
     dir_stats_collector_test_base:basic_test(Config).
+
+
+hardlinks_test(Config) ->
+    dir_stats_collector_test_base:hardlinks_test(Config).
 
 
 enabling_for_empty_space_test(Config) ->
@@ -122,7 +131,13 @@ end_per_suite(Config) ->
     lfm_files_test_base:end_per_suite(Config).
 
 
-init_per_testcase(Case = basic_test, Config) ->
+init_per_testcase(basic_test = Case, Config) ->
+    dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
+        Case, Config
+    ));
+init_per_testcase(hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 1000),
     dir_stats_collector_test_base:init_and_enable_for_new_space(lfm_files_test_base:init_per_testcase(
         Case, Config
     ));
@@ -130,6 +145,11 @@ init_per_testcase(Case, Config) ->
     dir_stats_collector_test_base:init(lfm_files_test_base:init_per_testcase(Case, Config)).
 
 
+end_per_testcase(hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 30000),
+    dir_stats_collector_test_base:teardown(Config),
+    lfm_files_test_base:end_per_testcase(Case, Config);
 end_per_testcase(Case, Config) ->
     dir_stats_collector_test_base:teardown(Config),
     lfm_files_test_base:end_per_testcase(Case, Config).

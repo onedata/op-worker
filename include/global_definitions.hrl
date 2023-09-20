@@ -15,6 +15,8 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
+-include_lib("ctool/include/global_definitions.hrl").
+
 
 %%%===================================================================
 %%% Global names

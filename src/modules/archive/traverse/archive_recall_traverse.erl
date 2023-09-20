@@ -87,7 +87,7 @@ stop_pool() ->
 start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
     {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
     % archive data dir contains only one file which is a copy of a dataset file
-    {[StartFileCtx], _, _} = dir_req:get_children_ctxs(UserCtx, file_ctx:new_by_guid(DataFileGuid), 
+    {[StartFileCtx], _, _} = dir_req:list_children_ctxs(UserCtx, file_ctx:new_by_guid(DataFileGuid),
         #{limit => 1, offset => 0, tune_for_large_continuous_listing => false}),
     {FinalName, StartFileCtx1} = case TargetFilename of
         default ->

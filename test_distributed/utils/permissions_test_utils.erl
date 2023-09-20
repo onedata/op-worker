@@ -28,6 +28,7 @@
     ensure_dir_created_on_storage/2,
 
     create_session/3, create_session/4,
+    get_auth/2,
 
     all_perms/2, complementary_perms/3,
     perms_to_bitmask/1, perm_to_bitmask/1,
@@ -126,6 +127,13 @@ create_session(Node, UserId, AccessToken, SessionMode) ->
         [Nonce, Identity, SessionMode, TokenCredentials]
     )),
     SessionId.
+
+
+-spec get_auth(node(), session:id()) -> aai:auth().
+get_auth(Node, SessionId) ->
+    {ok, Credentials} = rpc:call(Node, session, get_credentials, [SessionId]),
+    {ok, Auth, _} = rpc:call(Node, auth_manager, verify_credentials, [Credentials]),
+    Auth#auth{session_id = SessionId}.
 
 
 -spec all_perms(node(), file_id:file_guid()) -> Perms :: [binary()].
