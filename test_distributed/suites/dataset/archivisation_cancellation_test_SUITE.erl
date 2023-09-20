@@ -378,7 +378,6 @@ cancel_verification_dip_with_delete(_Config) ->
         preservation_policy = delete
     }).
 
-
 cancel_preserved_archive_test(_Config) ->
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} = 
         setup_initial_environment(#test_config{}),

@@ -134,16 +134,9 @@ create(_) ->
 get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
-            {ok ,lists:map(fun(SpaceId) ->
-                SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-                {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
-                {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-
-                #{
-                    <<"spaceId">> => SpaceId,
-                    <<"fileId">> => SpaceDirObjectId,
-                    <<"name">> => SpaceName
-                }
+            {ok, lists:map(fun(SpaceId) ->
+                {ok, #document{value = Space}} = space_logic:get_protected_data(SessionId, SpaceId),
+                {SpaceId, Space}
             end, EffSpaces)};
         {error, _} = Error ->
             Error

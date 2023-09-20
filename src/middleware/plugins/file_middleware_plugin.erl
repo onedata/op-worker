@@ -41,6 +41,8 @@
 
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
+-define(MAX_LIST_ENTRIES, 10000).
+-define(MAX_LIST_OFFSET, 500).
 
 -define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
 -define(DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES, [<<"file_id">>, <<"path">>]).
@@ -473,7 +475,7 @@ data_spec_get(#gri{aspect = As}) when
 -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_ENTRIES}},
         <<"index">> => {binary, fun
             (null) ->
                 {true, undefined};
@@ -486,7 +488,7 @@ data_spec_get(#gri{aspect = As}) when
             (_) ->
                 false
         end},
-        <<"offset">> => {integer, any},
+        <<"offset">> => {integer, {between, -?MAX_LIST_OFFSET, ?MAX_LIST_OFFSET}},
         <<"inclusive">> => {boolean, any}
     }
 };
@@ -494,7 +496,7 @@ data_spec_get(#gri{aspect = As}) when
 data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_ENTRIES}},
         <<"token">> => {binary, fun
             (null) ->
                 {true, undefined};
@@ -518,7 +520,7 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
 data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_ENTRIES}},
         <<"token">> => {binary, any},
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},

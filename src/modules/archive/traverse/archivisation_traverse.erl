@@ -175,11 +175,11 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
         {ok, _} = Result ->
             Result;
-        {error, interrupted_call} ->
+        {error, interrupted_call, _} ->
             ?warning("Dataset content changed on remote provider during archivisation - some files might be missing in final archive."),
             {ok, #{}};
-        {error, _} = Error ->
-            ErrorHandler(InitialJob, Error, undefined)
+        {error, Reason, Stacktrace} ->
+            ErrorHandler(InitialJob, {error, Reason}, Stacktrace)
     end.
 
 
@@ -207,7 +207,7 @@ do_slave_job(InitialJob, TaskId) ->
 %%%===================================================================
 
 -spec do_dir_master_job_unsafe(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
-    {ok, traverse:master_job_map()}.
+    {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_dir_master_job_unsafe(Job = #tree_traverse{
     user_id = UserId,
     file_ctx = FileCtx,
@@ -300,7 +300,7 @@ build_new_jobs_preprocessor_fun(TaskId, FileCtx, TraverseInfo, UserCtx, Relative
 %%% Helper functions
 %%%===================================================================
 
--spec report_error(id(), tree_traverse:job(), Reason :: any(), Stacktrace :: list() | undefined) -> ok.
+-spec report_error(id(), tree_traverse:job(), Reason :: any(), stacktrace() | undefined) -> ok.
 report_error(TaskId, Job, Reason, Stacktrace) ->
     {ArchiveDocs, FileGuid} = job_to_error_info(Job),
     lists:foreach(fun(ArchiveDoc) ->

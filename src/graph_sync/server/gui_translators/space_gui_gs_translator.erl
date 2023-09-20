@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 
 %% API
 -export([
@@ -25,7 +26,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
@@ -69,7 +69,7 @@ translate_value(#gri{aspect = dir_stats_service_state, scope = private}, Result)
 translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
     IsSpaceSupportedLocally = space_logic:is_supported(Space, oneprovider:get_id()),
 
-    {RootDir, PreferableWriteBlockSize} = case IsSpaceSupportedLocally of
+    {DirIdsJson, PreferableWriteBlockSize} = case IsSpaceSupportedLocally of
         true ->
             RootDirGRI = gri:serialize(#gri{
                 type = op_file,
@@ -77,16 +77,20 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
                 aspect = instance,
                 scope = private
             }),
-            {RootDirGRI, file_upload_utils:get_preferable_write_block_size(SpaceId)};
+            {#{
+                <<"rootDir">> => RootDirGRI,
+                <<"trashDirId">> => file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId),
+                <<"archivesDirId">> => file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)
+            }, file_upload_utils:get_preferable_write_block_size(SpaceId)};
         false ->
-            {undefined, undefined}
+            {#{<<"rootDir">> => null}, undefined}
     end,
 
     ProvidersWithReadonlySupport = lists:filter(fun(ProviderId) ->
         space_logic:has_readonly_support_from(SpaceId, ProviderId)
     end, maps:keys(Space#od_space.storages_by_provider)),
 
-    Result = #{
+    Result = DirIdsJson#{
         <<"name">> => Space#od_space.name,
         <<"effUserList">> => gri:serialize(#gri{
             type = op_space,
@@ -112,7 +116,6 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             aspect = providers,
             scope = private
         }),
-        <<"rootDir">> => utils:undefined_to_null(RootDir),
         <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize),
         <<"providersWithReadonlySupport">> => ProvidersWithReadonlySupport
     },

@@ -42,6 +42,7 @@
 -export([encode_index/1, decode_index/1]).
 -export([is_finished/1, get_last_listed_filename/1]).
 -export([infer_pagination_token/3]).
+-export([default_limit/0]).
 
 -record(list_index, {
     file_name :: file_meta:name(),
@@ -59,8 +60,8 @@
 -opaque index() :: #list_index{}.
 -opaque pagination_token() :: #pagination_token{}.
 -type datastore_list_token() :: binary().
--type offset() :: integer().
--type limit() :: non_neg_integer().
+-type offset() :: file_meta_forest:offset().
+-type limit() :: file_meta_forest:limit().
 -type whitelist() :: [file_meta:name()].
 
 %% @formatter:off
@@ -172,9 +173,24 @@ infer_pagination_token(_Result, LastName, _Limit) ->
     #pagination_token{progress_marker = more, last_index = build_index(LastName)}.
 
 
+-spec default_limit() -> non_neg_integer().
+default_limit() ->
+    ?DEFAULT_LS_BATCH_LIMIT.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec check_exclusive_options(options()) -> ok | no_return().
+check_exclusive_options(#{pagination_token := _} = Options) ->
+    maps_utils:is_empty(maps:with([tune_for_large_continuous_listing, index, offset, inclusive], Options)) orelse
+        %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
+    throw(?EINVAL),
+    ok;
+check_exclusive_options(_Options) ->
+    ok.
+
 
 %% @private
 -spec list_internal(atom(), file_meta:uuid(), options(), [any()]) -> 
@@ -199,17 +215,6 @@ list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
                 Error
         end
     end).
-
-
-%% @private
--spec check_exclusive_options(options()) -> ok | no_return().
-check_exclusive_options(#{pagination_token := _} = Options) ->
-    maps_utils:is_empty(maps:with([tune_for_large_continuous_listing, index, offset, inclusive], Options)) orelse
-        %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
-        throw(?EINVAL),
-    ok;
-check_exclusive_options(_Options) ->
-    ok.
 
 
 %% @private
@@ -241,7 +246,7 @@ convert_to_datastore_options(Opts) ->
         size => sanitize_limit(
             maps:get(limit, Opts, undefined)),
         offset => sanitize_offset(
-            maps:get(offset, Opts, undefined), 
+            maps:get(offset, Opts, undefined),
             maps:get(prev_link_name, BaseOpts, undefined),
             maps:get(whitelist, Opts, undefined)),
         inclusive => sanitize_inclusive(

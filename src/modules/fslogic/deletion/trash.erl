@@ -35,7 +35,8 @@
 
 
 %% API
--export([create/1, move_to_trash/2, schedule_deletion_from_trash/5]).
+-export([create/1, ensure_exists/1]).
+-export([move_to_trash/2, schedule_deletion_from_trash/5]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
@@ -47,17 +48,19 @@
 
 -spec create(od_space:id()) -> ok.
 create(SpaceId) ->
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    TrashDoc = file_meta:new_doc(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
-        ?TRASH_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId),
-        SpaceUuid, SpaceId
-    ),
+    TrashDoc = prepare_doc(SpaceId),
     % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added
     %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
     %  * maybe there should be option passed to file_meta_forest:list that would exclude trash from the result
     %% {ok, _} = file_meta:create({uuid, SpaceUuid}, TrashDoc),
     {ok, _} = file_meta:save(TrashDoc),
     ok.
+
+
+-spec ensure_exists(od_space:id()) -> ok.
+ensure_exists(SpaceId) ->
+    #document{key = Key} = TrashDoc = prepare_doc(SpaceId),
+    ok = ?ok_if_exists(?extract_ok(file_meta:update(Key, fun(_) -> {error, already_exists} end, TrashDoc))).
 
 
 -spec move_to_trash(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
@@ -113,6 +116,18 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
+-spec prepare_doc(od_space:id()) -> file_meta:doc().
+prepare_doc(SpaceId) ->
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    file_meta:new_doc(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
+        ?TRASH_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId),
+        SpaceUuid, SpaceId
+    ).
+
+
+%% @private
 -spec add_deletion_marker_if_applicable(file_meta:uuid(), file_ctx:ctx()) -> file_ctx:ctx().
 add_deletion_marker_if_applicable(ParentUuid, FileCtx) ->
     case file_ctx:is_imported_storage(FileCtx) of

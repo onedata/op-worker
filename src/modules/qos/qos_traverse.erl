@@ -242,11 +242,12 @@ do_master_jobs_with_repeats(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobA
     case tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook) of
         {ok, _} = Result ->
             Result;
-        {error, _} = Error ->
+        {error, Reason, Stacktrace} ->
             case global_clock:timestamp_seconds() - FirstListingTimestamp > ?LISTING_ERRORS_REPEAT_TIMEOUT_SEC of
                 true ->
                     {ok, AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-                    report_file_failed_for_entries(get_traverse_qos_entries(AdditionalData), FileCtx, Error),
+                    ?error_exception(error, Reason, Stacktrace),
+                    report_file_failed_for_entries(get_traverse_qos_entries(AdditionalData), FileCtx, {error, Reason}),
                     {ok, #{}};
                 false ->
                     timer:sleep(timer:seconds(1)),
@@ -282,8 +283,8 @@ synchronize_file_for_entries(TaskId, #tree_traverse_slave{file_ctx = FileCtx} = 
     try
         synchronize_file_for_entries_insecure(TaskId, Job, QosEntries)
     catch Class:Reason:Stacktrace ->
-        ?error_stacktrace("Unexpected error during QoS synchronization for file ~p: ~p", 
-            [file_ctx:get_logical_uuid_const(FileCtx), {Class, Reason}], Stacktrace),
+        ?error_exception("Unexpected error during QoS synchronization for file ~p",
+            [file_ctx:get_logical_uuid_const(FileCtx)], Class, Reason, Stacktrace),
         ok = report_file_failed_for_entries(QosEntries, FileCtx, Reason)
     end.
 

@@ -11,6 +11,7 @@
 -module(view_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("modules/dataset/archivisation_tree.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("onenv_test_utils.hrl").
@@ -146,6 +147,10 @@ query_view_using_file_meta(_Config) ->
 
     TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
+    
+    ArchivesRootDirGuid = file_id:pack_guid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId),
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(ArchivesRootDirGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -197,6 +202,20 @@ query_view_using_file_meta(_Config) ->
                 <<"shares">> := [],
                 <<"deleted">> := false,
                 <<"parent_uuid">> := <<"">>
+            }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := ArchivesRootDirObjectId,
+            <<"value">> := #{
+                <<"name">> := ArchivesRootDirName,
+                <<"type">> := <<"DIR">>,
+                <<"mode">> := ?ARCHIVES_ROOT_DIR_PERMS,
+                <<"owner">> := SpaceOwnerId,
+                <<"provider_id">> := ProviderId,
+                <<"shares">> := [],
+                <<"deleted">> := false,
+                <<"parent_uuid">> := SpaceUuid
             }
         },
         #{

@@ -14,6 +14,7 @@
 -ifndef(FSLOGIC_COMMON_HRL).
 -define(FSLOGIC_COMMON_HRL, 1).
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").

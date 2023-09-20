@@ -17,6 +17,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/storage/import/storage_import.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -31,7 +33,8 @@
 -export([
     upgrade_from_20_02_1_space_strategies/1,
     upgrade_from_20_02_1_storage_sync_monitoring/1,
-    upgrade_from_21_02_2_tmp_dir/1
+    upgrade_from_21_02_2_tmp_dir/1,
+    upgrade_from_21_02_3_missing_dirs/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -46,7 +49,8 @@
 all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
     upgrade_from_20_02_1_storage_sync_monitoring,
-    upgrade_from_21_02_2_tmp_dir
+    upgrade_from_21_02_2_tmp_dir,
+    upgrade_from_21_02_3_missing_dirs
 ]).
 
 %%%===================================================================
@@ -380,13 +384,30 @@ upgrade_from_21_02_2_tmp_dir(Config) ->
 
     ?assertNot(lists:any(TmpDirExistsFun, TmdDirUuids)),
 
-    % Assert tm dirs are created on upgrade
+    % Assert tmp dirs are created on upgrade
     ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
     ?assert(lists:all(TmpDirExistsFun, TmdDirUuids)),
 
     % Assert upgrade is idempotent
     ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
     ?assert(lists:all(TmpDirExistsFun, TmdDirUuids)).
+
+
+upgrade_from_21_02_3_missing_dirs(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    DirUuids = [?TRASH_DIR_UUID(?DUMMY_SPACE_ID1), ?ARCHIVES_ROOT_DIR_UUID(?DUMMY_SPACE_ID1)],
+    DirExistsFun = fun(Uuid) -> rpc:call(Worker, file_meta, exists, [Uuid]) end,
+    
+    ?assertNot(lists:any(DirExistsFun, DirUuids)),
+    
+    % Assert dirs are created on upgrade
+    ?assertEqual({ok, 6}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [5])),
+    ?assert(lists:all(DirExistsFun, DirUuids)),
+    
+    % Assert upgrade is idempotent
+    ?assertEqual({ok, 6}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [5])),
+    ?assert(lists:all(DirExistsFun, DirUuids)).
 
 
 %%%===================================================================
@@ -419,6 +440,20 @@ init_per_testcase(Case = upgrade_from_21_02_2_tmp_dir, Config) ->
         {ok, [?DUMMY_SPACE_ID1, ?DUMMY_SPACE_ID2]}
     end),
 
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(Case = upgrade_from_21_02_3_missing_dirs, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_new(Worker, space_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?DUMMY_SPACE_ID1]}
+    end),
+    test_utils:mock_expect(Worker, space_logic, get_name, fun(_, SpaceId) ->
+        {ok, SpaceId}
+    end),
+    
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
