@@ -711,7 +711,7 @@ get_recursive_file_list_should_read_xattrs(Config) ->
         ListingOpts = #{offset => 0, limit => 10, tune_for_large_continuous_listing => false},
         Ans = lfm_proxy:get_files_recursively(Worker, SessId1, {path, MainDirPath}, ListingOpts, [{xattrs, Xattrs}]),
         {ok, List, _, _} = ?assertMatch({ok, _, _, _}, Ans),
-        lists:map(fun({_Path, Attrs}) -> Attrs end, List)
+        List
     end,
     readdir_plus_read_xattrs_base(Config, ReadFun).
 
@@ -2585,7 +2585,7 @@ verify_attrs(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limi
         lfm_proxy:get_children_attrs(
             Worker, SessId1, {path, MainDirPath},
             #{offset => Offset, limit => Limit, index => Index, tune_for_large_continuous_listing => false, inclusive => true},
-            ?DEFAULT_ATTRS ++ [index]
+            ?ONECLIENT_ATTRS ++ [index]
         )
     ),
     ?assertEqual(ExpectedSize, length(List)),
@@ -2683,9 +2683,9 @@ produce_truncate_event(Worker, SessId, FileKey, Size) ->
     ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).
 
 get_files_recursively(Worker, SessId, FileRef, Options) ->
-    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options, [guid]) of
+    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options, [guid, path]) of
         {ok, Res, IP, Token} ->
-            {ok, lists:map(fun({Path, #file_attr{guid = Guid}}) -> {Guid, Path} end, Res), IP, Token};
+            {ok, lists:map(fun(#file_attr{guid = Guid, path = Path}) -> {Guid, Path} end, Res), IP, Token};
         Other ->
             Other
     end.

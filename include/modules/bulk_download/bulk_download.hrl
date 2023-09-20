@@ -25,4 +25,6 @@
 
 -define(LOOP_TIMEOUT, timer:seconds(5)).
 
+-define(BULK_DOWNLOAD_ATTRS, [guid, type, mode, mtime, size, name]).
+
 -endif.

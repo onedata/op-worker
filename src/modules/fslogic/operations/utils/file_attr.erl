@@ -10,6 +10,7 @@
 %%% Attrs are resolved in independent stages that require different documents to be
 %%% fetched in order to optimize attrs calculation. Only stages that resolve attrs
 %%% that where requested are calculated.
+%%% TODO opisać ładnie o co chodzi z tymi direct/effective
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_attr).
@@ -34,6 +35,8 @@
     eff_dataset_protection_flags | eff_protection_flags | archive_id | eff_qos_membership | qos_status | has_metadata |
     {xattrs, [custom_metadata:name()]}.
 
+-type file_type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE | ?SYMLINK_TYPE.
+
 -type name_conflicts_resolution_policy() ::
     resolve_name_conflicts |
     allow_name_conflicts.
@@ -51,7 +54,7 @@
 
 -type file_attr() :: #file_attr{}.
 
--export_type([file_attr/0, resolve_opts/0, attribute/0]).
+-export_type([file_attr/0, file_type/0, resolve_opts/0, attribute/0]).
 
 -record(state, {
     file_ctx :: file_ctx:ctx(),
@@ -75,6 +78,7 @@
     {?ARCHIVE_RECALL_ATTRS, effective, fun resolve_archive_recall_attrs/1},
     {?QOS_STATUS_ATTRS, effective, fun resolve_qos_status_attrs/1},
     {?QOS_EFF_VALUE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
+    {?PATH_ATTRS, effective, fun resolve_path/1},
     {?METADATA_ATTRS, direct, fun resolve_metadata_attrs/1},
     {?XATTRS_STAGE, direct, fun resolve_xattrs/1}
 ]).
@@ -255,6 +259,13 @@ resolve_qos_eff_value_attrs(State) ->
     {FileDoc, UpdatedState} = get_file_doc(State),
     EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
     {UpdatedState, #file_attr{eff_qos_membership = EffectiveQoSMembership}}.
+
+
+%% @private
+-spec resolve_path(state()) -> {state(), file_attr()}.
+resolve_path(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
+    {Path, FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
+    {State#state{file_ctx = FileCtx2}, #file_attr{path = Path}}.
 
 
 %% @private
@@ -547,7 +558,6 @@ get_file_doc(#state{file_ctx = FileCtx} = State) ->
 merge_records(RecordA, RecordB) ->
     list_to_tuple(lists:map(fun
         ({undefined, ValB}) -> ValB;
-        ({[], ValB}) when is_list(ValB) -> ValB;
         ({ValA, _}) -> ValA
     end, lists:zip(tuple_to_list(RecordA), tuple_to_list(RecordB)))).
 

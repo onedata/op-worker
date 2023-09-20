@@ -233,9 +233,6 @@ to_protobuf(#end_of_message_stream{} = Msg) -> clproto_connection_translator:to_
 %% SESSION
 to_protobuf(#close_session{} = Msg) -> clproto_connection_translator:to_protobuf(Msg);
 
-%% @TODO pytanie do reviewerów - czy wolimy mieć tutaj wszystkie message (trzeba by je wszystkie zroutować i mamy cykliczne zależności
-%% pomiędzy modułami(ale wtedy nie musimy się zastanawiać gdzie jest jakiś message jak trzeba zrobić translację z innego modułu),
-%% ale jest wszystko w jednym miejscu i ładnie to widać i nie trzeba duplikować undefined wszędzie), czy jednak shierarchizować (tak jak jest teraz)
 %% FUSE
 to_protobuf(#fuse_request{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);
 to_protobuf(#fuse_response{} = Msg) -> clproto_fuse_translator:to_protobuf(Msg);

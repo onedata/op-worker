@@ -133,7 +133,7 @@ get_children_count(SessId, FileKey) ->
     dir_req:recursive_listing_opts(),
     [file_attr:attribute()]
 ) ->
-    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()}.
+    {ok, [file_attr:file_attr()], [file_meta:path()], recursive_listing:pagination_token()}.
 get_files_recursively(SessId, FileKey, Options, Attributes) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
@@ -142,7 +142,7 @@ get_files_recursively(SessId, FileKey, Options, Attributes) ->
             listing_options = Options,
             attributes = Attributes
         },
-        fun(#recursive_listing_result{
+        fun(#file_recursive_listing_result{
             entries = Result,
             inaccessible_paths = InaccessiblePaths,
             pagination_token = PaginationToken

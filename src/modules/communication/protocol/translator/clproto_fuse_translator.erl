@@ -277,7 +277,7 @@ from_protobuf(#'ListFilesRecursively'{
     xattrs = Xattrs
 }) ->
     #get_recursive_file_list{
-        attributes = ?DEFAULT_ATTRS ++ [size | xattrs_to_attrs_list(Xattrs)],
+        attributes = ?ONECLIENT_ATTRS ++ [size | xattrs_to_attrs_list(Xattrs)],
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
             start_after_path => StartAfter,
@@ -375,7 +375,7 @@ to_protobuf(#file_attr{} = FileAttr) ->
             _ -> FileAttr#file_attr.size
         end,
         provider_id = FileAttr#file_attr.provider_id,
-        shares = FileAttr#file_attr.shares,
+        shares = utils:ensure_defined(FileAttr#file_attr.shares, []),
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.is_fully_replicated,
         nlink = FileAttr#file_attr.link_count,
@@ -573,14 +573,12 @@ to_protobuf(#get_recursive_file_list{
         include_dirs = maps:get(include_directories , ListingOptions, undefined),
         xattrs = Xattrs
     }};
-to_protobuf(#recursive_listing_result{
-    % currently only recursive file listing can be requested with clproto therefore entry is always
-    % of type recursive_file_listing_node:entry().
+to_protobuf(#file_recursive_listing_result{
     entries = Entries,
     pagination_token = PaginationToken
 }) ->
     {files_list, #'FileList'{
-        files = lists:map(fun({Path, FileAttr}) ->
+        files = lists:map(fun(#file_attr{path = Path} = FileAttr) ->
             % put file path as name as that is expected by oneclient
             {file_attr, TranslatedFileAttr} = to_protobuf(FileAttr#file_attr{name = Path}),
             TranslatedFileAttr

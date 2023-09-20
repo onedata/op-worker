@@ -15,6 +15,8 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/recursive_listing.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
@@ -172,13 +174,22 @@ list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
     
     {ok, DatasetInfo} = dataset_api:get_info(DatasetId),
     FinalOpts = Opts#{include_branching_nodes => true},
-    {ok, recursive_listing:list(recursive_dataset_listing_node, UserCtx, DatasetInfo, FinalOpts)}.
+    #recursive_listing_result{
+        entries = Entries,
+        inaccessible_paths = InaccessiblePaths,
+        pagination_token = PaginationToken
+    } = recursive_listing:list(
+        recursive_dataset_listing_node, UserCtx, DatasetInfo, FinalOpts),
+    {ok, #dataset_recursive_listing_result{
+        entries = Entries,
+        inaccessible_paths = InaccessiblePaths,
+        pagination_token = PaginationToken
+    }}.
     
 
 %%%===================================================================
 %%% Archives API functions
 %%%===================================================================
-
 
 -spec create_archive(
     file_ctx:ctx(),

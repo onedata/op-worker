@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/recursive_listing.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -81,7 +82,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 create_dir_at_path(UserCtx, RootFileCtx, Path) ->
     #fuse_response{fuse_response = #guid{guid = Guid}} =
         guid_req:ensure_dir(UserCtx, RootFileCtx, Path, ?DEFAULT_DIR_MODE),
-    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), ?DEFAULT_ATTRS ++ [size]) of
+    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), ?ONECLIENT_ATTRS) of
         % if dir does not exist, it will be created during error handling
         #fuse_response{fuse_response = #file_attr{type = ?DIRECTORY_TYPE}} = Response ->
             Response;
@@ -201,7 +202,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                 allow_deleted_files => false,
                 name_conflicts_resolution_policy => allow_name_conflicts,
-                attributes => ?DEFAULT_ATTRS
+                attributes => ?ONECLIENT_ATTRS
             }),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
@@ -285,13 +286,13 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
     } = Result = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
     
     MapperFun = fun({Path, EntryFileCtx}, GetAttrFun, Opts) ->
-        #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} =
+        #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
             GetAttrFun(UserCtx, EntryFileCtx, Opts),
-        {Path, FileAttrs}
+        FileAttr#file_attr{path = Path}
     end,
-    MappedEntries = gather_attributes(MapperFun, Entries, #{attributes => Attributes}),
+    MappedEntries = gather_attributes(MapperFun, Entries, #{attributes => Attributes -- [path]}),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = Result#recursive_listing_result{entries = MappedEntries}
+        fuse_response = Result#file_recursive_listing_result{entries = MappedEntries}
     }.
 
 

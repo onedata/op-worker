@@ -462,7 +462,8 @@ atm_file_value_validation_test(_Config) ->
         valid_values = lists:map(fun(Guid) ->
             BareFileObject = BuildBareFileObjectFun(Guid),
             {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
-            ResolvedFileObject = maps:with(FileAttrsToResolveBin, file_attr_translator:to_json(FileAttrs)),
+            ResolvedFileObject = maps:with(FileAttrsToResolveBin, file_attr_translator:to_json(
+                FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)),
             {BareFileObject, ResolvedFileObject}
         end, FilesWithAllowedType),
         invalid_values_with_exp_errors = lists:flatten([
@@ -531,7 +532,7 @@ atm_file_value_to_from_store_item_test(_Config) ->
                 % as such compressing and expanding should remove any attribute but file_id
                 {
                     different,
-                    file_attr_translator:to_json(FileAttrs),
+                    file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS),
                     #{<<"fileId">> => ?ok(file_id:guid_to_objectid(Guid))}
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
@@ -581,7 +582,7 @@ atm_file_value_describe_test(_Config) ->
                 {
                     different,
                     #{<<"fileId">> => ?ok(file_id:guid_to_objectid(Guid))},
-                    file_attr_translator:to_json(FileAttrs)
+                    file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
         ])

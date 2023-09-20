@@ -383,6 +383,7 @@ guids_to_object_ids(Guids) ->
     end, Guids).
 
 
+%% @TODO VFS-11376 Use file_attr_translator after it is properly unit tested
 -spec file_attr_to_json(undefined | od_share:id(), rest | gs, od_provider:id(), #file_attr{}) -> map().
 file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     guid = Guid, name = Name, mode = Mode, parent_guid = ParentGuid, uid = Uid, gid = Gid, atime = Atime,

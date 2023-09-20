@@ -38,7 +38,6 @@
 -define(DEFAULT_LIST_ATTRS, [guid, name]).
 -define(DEFAULT_RECURSIVE_FILE_LIST_ATTRS, [guid, path]).
 
-%% @TODO do reviewerów - myslę że to jest czas i miejsce żeby ustalić jakie powinny być attry zwracane by default w API
 
 %%%===================================================================
 %%% API
@@ -90,9 +89,9 @@ assert_operation_supported(_, _)                                     -> throw(?E
 data_spec(#op_req{gri = #gri{aspect = instance, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, deprecated, <<"attribute">>)
     }
 };
 
@@ -105,9 +104,9 @@ data_spec(#op_req{gri = #gri{aspect = children, scope = Sc}}) -> #{
         <<"offset">> => {integer, any},
         <<"inclusive">> => {boolean, any},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
-        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, deprecated, <<"attribute">>)
     }
 };
 
@@ -119,9 +118,9 @@ data_spec(#op_req{gri = #gri{aspect = files, scope = Sc}}) -> #{
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},
         <<"include_directories">> => {boolean, any},
-        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc),
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
-        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)
+        <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, deprecated, <<"attribute">>)
     }
 };
 
@@ -152,7 +151,7 @@ data_spec(#op_req{gri = #gri{aspect = rdf_metadata}}) -> #{
 
 data_spec(#op_req{gri = #gri{aspect = symlink_target, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc)}
+    <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(Sc, current, <<"attributes">>)
 };
 
 data_spec(#op_req{gri = #gri{aspect = As}}) when
@@ -331,16 +330,16 @@ validate(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance, scope = Sc}}, _) ->
     DefaultAttrs = case Sc of
-        private -> ?API_ATTRS;
-        public -> ?PUBLIC_ATTRS
+        private -> ?DEPRECATED_ALL_ATTRS;
+        public -> ?DEPRECATED_PUBLIC_ATTRS
     end,
-    RequestedAttributes = infer_requested_attributes(Data, DefaultAttrs),
+    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, DefaultAttrs),
     {ok, FileAttr} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), RequestedAttributes)),
-    {ok, file_attr_translator:to_json(FileAttr, RequestedAttributes)};
+    {ok, file_attr_translator:to_json(FileAttr, AttrType, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    RequestedAttributes = infer_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
+    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
 
     BaseOpts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
     ListingOpts = case maps:get(<<"token">>, Data, undefined) of
@@ -364,7 +363,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, RequestedAttributes)),
     
     {ok, value, {
-        lists:map(fun(ChildAttr) -> file_attr_translator:to_json(ChildAttr, RequestedAttributes) end, ChildrenAttrs),
+        lists:map(fun(ChildAttr) -> file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes) end, ChildrenAttrs),
         file_listing:is_finished(ListingPaginationToken), 
         file_listing:encode_pagination_token(ListingPaginationToken)}
     };
@@ -379,12 +378,11 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
         prefix => maps:get(<<"prefix">>, Data, undefined),
         include_directories => maps:get(<<"include_directories">>, Data, undefined)
     }),
-    RequestedAttributes = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
+    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
     {ok, Result, InaccessiblePaths, NextPageToken} =
         ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), ListingOptions, RequestedAttributes)),
-    JsonResult = lists:map(fun({Path, Attrs}) ->
-        JsonAttrs = file_attr_translator:to_json(Attrs),
-        file_attr_translator:select_attrs(JsonAttrs#{<<"path">> => Path}, RequestedAttributes)
+    JsonResult = lists:map(fun(Attrs) ->
+        file_attr_translator:to_json(Attrs, AttrType, RequestedAttributes)
     end, Result),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
@@ -517,14 +515,14 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
 
     {ok, TargetFileGuid} = ?lfm_check(lfm:resolve_symlink(SessionId, ?FILE_REF(FileGuid))),
     
-    RequestedAttributes = infer_requested_attributes(Data, ?API_ATTRS),
+    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?API_ATTRS),
     {ok, TargetFileAttrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(TargetFileGuid), RequestedAttributes)),
 
     TargetFileGri = #gri{
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, file_attr_translator:to_json(TargetFileAttrs)};
+    {ok, TargetFileGri, file_attr_translator:to_json(TargetFileAttrs, AttrType, RequestedAttributes)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
     {ok, mi_archives:get_recall_details(Auth#auth.session_id, FileGuid)};
@@ -573,11 +571,12 @@ build_listing_start_point_param_spec(Key) ->
 
 
 %% @private
--spec infer_requested_attributes(middleware:data(), [file_attr:attribute()]) -> [file_attr:attribute()].
+-spec infer_requested_attributes(middleware:data(), [file_attr:attribute()]) ->
+    {file_attr_translator:attr_type(), [file_attr:attribute()]}.
 infer_requested_attributes(Data, Default) ->
     case maps:get(<<"attributes">>, Data, undefined) of
         undefined ->
-            maps:get(<<"attribute">>, Data, Default);
+            {deprecated, maps:get(<<"attribute">>, Data, Default)};
         Attrs ->
-            utils:ensure_list(Attrs)
+            {current, utils:ensure_list(Attrs)}
     end.

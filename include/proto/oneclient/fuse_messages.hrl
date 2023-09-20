@@ -364,9 +364,15 @@
     link :: file_meta_symlinks:symlink()
 }).
 
--record(recursive_listing_result, {
-    entries :: [any()], % [recursive_listing:result_entry()] but dialyzer does not accept it
-    inaccessible_paths :: [any()], % [recursive_listing:node_path()] but dialyzer does not accept it
+-record(file_recursive_listing_result, {
+    entries :: [#file_attr{}],
+    inaccessible_paths :: [file_meta:path()],
+    pagination_token :: undefined | recursive_listing:pagination_token()
+}).
+
+-record(dataset_recursive_listing_result, {
+    entries :: [{file_meta:path(), dataset_api:info()}],
+    inaccessible_paths :: [file_meta:path()],
     pagination_token :: undefined | recursive_listing:pagination_token()
 }).
 
@@ -420,7 +426,8 @@
     #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    #file_children_attrs{} | #file_location_changed{} | #recursive_listing_result{} | 
+    #file_children_attrs{} | #file_location_changed{} |
+    #file_recursive_listing_result{} | #dataset_recursive_listing_result{} |
     #file_opened_extended{} | #fs_stats{} | #symlink{} |
     #multipart_uploads{} | #multipart_upload{} | #multipart_parts{} |
     undefined.

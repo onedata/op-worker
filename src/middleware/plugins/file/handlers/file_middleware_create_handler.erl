@@ -80,7 +80,8 @@ data_spec(#gri{aspect = instance}, Data) ->
     },
     AllOptional = #{
         <<"createAttempts">> => {integer, {between, 1, 200}},
-        <<"responseAttributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(private)
+        <<"responseAttributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            private, current, <<"responseAttributes">>)
     },
 
     AllRequired = case maps:get(<<"type">>, Data, undefined) of
@@ -250,8 +251,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    {ok, FileAttr} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid), maps:get(<<"responseAttributes">>, Data, ?API_ATTRS))),
-    {ok, resource, {GRI#gri{id = Guid}, file_attr_translator:to_json(FileAttr)}};
+    RequestedAttrs = maps:get(<<"responseAttributes">>, Data, ?API_ATTRS),
+    {ok, FileAttr} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid), RequestedAttrs)),
+    {ok, resource, {GRI#gri{id = Guid}, file_attr_translator:to_json(FileAttr, current, RequestedAttrs)}};
 
 create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),

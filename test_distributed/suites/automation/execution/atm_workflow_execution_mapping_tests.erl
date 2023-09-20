@@ -449,7 +449,7 @@ map_from_file_list_to_object_list_store() ->
         {ok, FileAttrs} = ?rpc(?PROVIDER_SELECTOR, lfm:stat(UserSessionId, ?FILE_REF(Guid))),
         maps:with(
             lists:map(fun str_utils:to_binary/1, FileAttrsToResolve),
-            file_attr_translator:to_json(FileAttrs)
+            file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)
         )
     end, FileObjects),
 

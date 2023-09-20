@@ -29,17 +29,16 @@
     atime :: undefined | times:a_time(),
     mtime :: undefined | times:m_time(),
     ctime :: undefined | times:c_time(),
-    type :: undefined | ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE | ?SYMLINK_TYPE,
+    type :: undefined | file_attr:file_type(),
     size :: undefined | file_meta:size(),
-    shares = [] :: [od_share:id()],
+    shares :: undefined | [od_share:id()],
     provider_id :: undefined | od_provider:id(),
     owner_id :: undefined | od_user:id(),
     is_fully_replicated :: undefined | boolean(),
     link_count :: undefined | non_neg_integer(),
     % Listing index can be used to list parent dir children starting from this file
     index :: undefined | file_listing:index(),
-    xattrs = #{} :: #{custom_metadata:name() => custom_metadata:value()},
-    %% @TODO do reviewerów - dałem nazwy jakie do tej pory były w file_details, teraz jest miejsce i czas żeby je ustalić
+    xattrs :: undefined | #{custom_metadata:name() => custom_metadata:value()},
     active_permissions_type :: undefined | file_meta:permissions_type(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     conflicting_name :: undefined | file_meta:name(),
@@ -52,8 +51,9 @@
     qos_status :: undefined | qos_status:summary(),
     has_metadata :: undefined | boolean(),
     is_deleted :: undefined | boolean(),
-    conflicting_files = [] :: file_meta:conflicts(),
-    archive_id :: undefined | archive:id()
+    conflicting_files :: undefined | file_meta:conflicts(),
+    archive_id :: undefined | archive:id(),
+    path :: undefined | file_meta:path()
 }).
 
 
@@ -68,10 +68,11 @@
 -define(DATASET_ATTRS, [eff_dataset_membership, eff_dataset_protection_flags, eff_protection_flags, archive_id]).
 -define(QOS_STATUS_ATTRS, [qos_status]).
 -define(QOS_EFF_VALUE_ATTRS, [eff_qos_membership]).
+-define(PATH_ATTRS, [path]).
 -define(METADATA_ATTRS, [has_metadata]).
 
 -define(ALL_ATTRS, lists:merge([?IMPLICIT_ATTRS, ?LINKS_ATTRS, ?FILE_META_ATTRS, ?TIMES_ATTRS, ?LOCATION_ATTRS, ?LUMA_ATTRS,
-    ?ARCHIVE_RECALL_ATTRS, ?DATASET_ATTRS, ?QOS_STATUS_ATTRS, ?QOS_EFF_VALUE_ATTRS, ?METADATA_ATTRS])).
+    ?ARCHIVE_RECALL_ATTRS, ?DATASET_ATTRS, ?QOS_STATUS_ATTRS, ?QOS_EFF_VALUE_ATTRS, ?PATH_ATTRS, ?METADATA_ATTRS])).
 
 -define(PUBLIC_ATTRS, [guid, parent_guid, name, mode, atime, mtime, ctime, type, size, shares, index]).
 
@@ -80,9 +81,14 @@
 
 -define(API_ATTRS, ?ALL_ATTRS -- ?INTERNAL_ATTRS).
 
--define(DEFAULT_ATTRS, [
+-define(ONECLIENT_ATTRS, [
     guid, name, mode, parent_guid, uid, gid, atime, mtime, ctime, type, size, shares, provider_id, owner_id
 ]).
+
+%% @TODO VFS-11377 deprecated, remove when possible
+-define(DEPRECATED_ALL_ATTRS, [guid, parent_guid, name, mode, atime, mtime, ctime, type, size, shares, index,
+    uid, gid, owner_id, provider_id, link_count]).
+-define(DEPRECATED_PUBLIC_ATTRS, [guid, parent_guid, name, mode, atime, mtime, ctime, type, size, shares, index]).
 
 % Macros defining types of membership
 -define(NONE_MEMBERSHIP, none).
