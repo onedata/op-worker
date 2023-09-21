@@ -167,7 +167,7 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
     recursive_listing_opts(),
     user_ctx:ctx()
 ) ->
-    {ok, recursive_dataset_listing_node:result()} | error().
+    {ok, fuse_response_type()} | error().
 list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
     SpaceDirCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),

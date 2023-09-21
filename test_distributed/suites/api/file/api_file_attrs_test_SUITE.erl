@@ -475,13 +475,8 @@ build_get_attrs_validate_rest_call_fun(FileAttrs, ShareId) ->
             _ -> undefined
         end,
         JsonAttrs = api_test_utils:file_attr_to_json(ShareId, rest, ProviderId, FileAttrs),
-        case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
-            {ok, ExpAttrs} ->
-                ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
-            {error, _} = Error ->
-                ExpRestError = {errors:to_http_code(Error), ?REST_ERROR(Error)},
-                ?assertEqual(ExpRestError, {RespCode, RespBody})
-        end
+        {ok, ExpAttrs} = get_attrs_exp_result(TestCtx, JsonAttrs, ShareId),
+        ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody})
     end.
 
 
@@ -491,13 +486,9 @@ build_get_attrs_validate_rest_call_fun(FileAttrs, ShareId) ->
 build_get_attrs_validate_gs_call_fun(FileAttrs, ShareId) ->
     fun(#api_test_ctx{node = Node} = TestCtx, Result) ->
         JsonAttrs = api_test_utils:file_attr_to_json(ShareId, gs, opw_test_rpc:get_provider_id(Node), FileAttrs),
-        case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
-            {ok, ExpAttrs} ->
-                {ok, ResultMap} = ?assertMatch({ok, _}, Result),
-                ?assertEqual(#{<<"attributes">> => ExpAttrs}, maps:without([<<"gri">>, <<"revision">>], ResultMap));
-            {error, _} = ExpError ->
-                ?assertEqual(ExpError, Result)
-        end
+        {ok, ExpAttrs} = get_attrs_exp_result(TestCtx, JsonAttrs, ShareId),
+        {ok, ResultMap} = ?assertMatch({ok, _}, Result),
+        ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap))
     end.
 
 
@@ -509,16 +500,21 @@ build_get_attrs_validate_gs_call_fun(FileAttrs, ShareId) ->
 ) ->
     {ok, ExpectedFileAttrs :: map()}.
 get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
-    RequestedAttributesJson = case maps:get(<<"attributes">>, Data, undefined) of
+    {AttrType, RequestedAttributesJson} = case maps:get(<<"attributes">>, Data, undefined) of
         undefined ->
             case ShareId of
-                undefined -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS];
-                _ -> [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_ATTRS]
+                %% @TODO VFS-11377 change defaults after deprecated attrs are removed
+                undefined -> {deprecated, [file_attr_translator:attr_name_to_json(deprecated, A) || A <- ?DEPRECATED_ALL_ATTRS]};
+                _ -> {deprecated, [file_attr_translator:attr_name_to_json(deprecated, A) || A <- ?DEPRECATED_PUBLIC_ATTRS]}
             end;
         Attr ->
-            utils:ensure_list(Attr)
+            {current, utils:ensure_list(Attr)}
     end,
-    {ok, maps:with(RequestedAttributesJson, JsonAttrs)}.
+    JsonAttrs2 = case AttrType of
+        deprecated -> api_test_utils:replace_attrs_with_deprecated(JsonAttrs);
+        current -> JsonAttrs
+    end,
+    {ok, maps:with(RequestedAttributesJson, JsonAttrs2)}.
 
 
 %%%===================================================================

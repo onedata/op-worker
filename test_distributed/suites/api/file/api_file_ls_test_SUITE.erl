@@ -65,7 +65,6 @@ all() -> [
 %%% List/Get children test functions
 %%%===================================================================
 
-
 get_dir_children_test(Config) ->
     {_DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(normal_mode),
 
@@ -671,12 +670,12 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
                     case Attributes of
                         undefined ->
                             #{
-                                <<"fileId">> => ObjectId,
+                                <<"file_id">> => ObjectId,
                                 <<"name">> => Name
                             };
                         [] ->
                             #{
-                                <<"fileId">> => ObjectId,
+                                <<"file_id">> => ObjectId,
                                 <<"name">> => Name
                             };
                         _ ->

@@ -74,13 +74,15 @@
 -define(ALL_ATTRS, lists:merge([?IMPLICIT_ATTRS, ?LINKS_ATTRS, ?FILE_META_ATTRS, ?TIMES_ATTRS, ?LOCATION_ATTRS, ?LUMA_ATTRS,
     ?ARCHIVE_RECALL_ATTRS, ?DATASET_ATTRS, ?QOS_STATUS_ATTRS, ?QOS_EFF_VALUE_ATTRS, ?PATH_ATTRS, ?METADATA_ATTRS])).
 
--define(PUBLIC_ATTRS, [guid, parent_guid, name, mode, atime, mtime, ctime, type, size, shares, index]).
+-define(PUBLIC_ATTRS, [guid, parent_guid, name, mode, atime, mtime, ctime, type, size, shares, index,
+    conflicting_name, symlink_value]).
 
 % attrs that should not be visible in API
 -define(INTERNAL_ATTRS, [is_deleted, conflicting_files, is_fully_replicated]).
 
 -define(API_ATTRS, ?ALL_ATTRS -- ?INTERNAL_ATTRS).
 
+%% @TODO VFS-11378 remove when all usages provide their custom required attrs
 -define(ONECLIENT_ATTRS, [
     guid, name, mode, parent_guid, uid, gid, atime, mtime, ctime, type, size, shares, provider_id, owner_id
 ]).

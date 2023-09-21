@@ -277,7 +277,7 @@ from_protobuf(#'ListFilesRecursively'{
     xattrs = Xattrs
 }) ->
     #get_recursive_file_list{
-        attributes = ?ONECLIENT_ATTRS ++ [size | xattrs_to_attrs_list(Xattrs)],
+        attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs),
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
             start_after_path => StartAfter,

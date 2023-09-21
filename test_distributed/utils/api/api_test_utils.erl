@@ -51,7 +51,8 @@
     randomly_create_share/3,
 
     guids_to_object_ids/1,
-    file_attr_to_json/4
+    file_attr_to_json/4,
+    replace_attrs_with_deprecated/1
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
@@ -395,11 +396,19 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     eff_qos_membership = EffQosMembership, qos_status = QosStatus, archive_id = ArchiveId,
     has_metadata = HasMetadata
 }) ->
+    % NOTE: this assumes that there were no remote file readings between creation and attrs check
     LocalReplicationRate = case {Type, CheckingProviderId, Size} of
         {_, _, 0} -> 1.0;
         {?REGULAR_FILE_TYPE, ProviderId, _} -> 1.0;
         {?DIRECTORY_TYPE, ProviderId, _} -> 1.0;
         _ -> 0.0
+    end,
+    
+    LocalReplicationRate2 = case CheckingProviderId == undefined orelse
+        opw_test_rpc:supports_space(CheckingProviderId, file_id:guid_to_space_id(Guid))
+    of
+        true -> LocalReplicationRate;
+        false -> null
     end,
     
     BaseJson = #{
@@ -425,8 +434,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
             undefined -> undefined;
             _ -> atom_to_binary(ActivePermissionsType)
         end,
-        % NOTE: this assumes that there were no remote file readings between creation and attrs check
-        <<"localReplicationRate">> => LocalReplicationRate,
+        <<"localReplicationRate">> => LocalReplicationRate2,
         <<"qosStatus">> => translate_qos_status(QosStatus),
     
         <<"effProtectionFlags">> => case EffProtectionFlags of
@@ -470,6 +478,20 @@ file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
             false -> []
         end
     }).
+
+
+-spec replace_attrs_with_deprecated(json_utils:json_map()) -> json_utils:json_map().
+replace_attrs_with_deprecated(JsonAttrs) ->
+    maps:fold(fun(K, V, Acc) ->
+        A = file_attr_translator:attr_name_from_json(K),
+        case lists:member(A, ?DEPRECATED_ALL_ATTRS) of
+            true ->
+                DeprecatedKey = file_attr_translator:attr_name_to_json(deprecated, A),
+                Acc#{DeprecatedKey => V};
+            false ->
+                Acc
+        end
+    end, #{}, JsonAttrs).
 
 
 -spec map_file_id_for_api_type(gs | rest, file_id:file_guid() | undefined) -> file_id:objectid() | file_id:file_guid().

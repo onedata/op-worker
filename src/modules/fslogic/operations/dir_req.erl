@@ -291,8 +291,10 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
         ListOpts
     ),
     #recursive_listing_result{
-        entries = Entries
-    } = Result = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
+        entries = Entries,
+        inaccessible_paths = InaccessiblePaths,
+        pagination_token = PaginationToken
+    } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
     
     MapperFun = fun({Path, EntryFileCtx}, GetAttrFun, Opts) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
@@ -301,7 +303,11 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
     end,
     MappedEntries = gather_attributes(MapperFun, Entries, #{attributes => Attributes -- [path]}),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = Result#file_recursive_listing_result{entries = MappedEntries}
+        fuse_response = #file_recursive_listing_result{
+            entries = MappedEntries,
+            inaccessible_paths = InaccessiblePaths,
+            pagination_token = PaginationToken
+        }
     }.
 
 

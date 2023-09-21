@@ -49,7 +49,7 @@ build_parse_requested_attrs_fun(Key, AttrType, AllowedValues) ->
                 {AttrAcc, [Xattr | XattrAcc]};
             (Attr, {AttrAcc, XattrAcc}) ->
                 try
-                    TranslatedAttr = file_attr_translator:attr_name_from_json(Attr),
+                    TranslatedAttr = file_attr_translator:attr_name_from_json(AttrType, Attr),
                     true = lists:member(TranslatedAttr, AllowedValues),
                     {[TranslatedAttr | AttrAcc], XattrAcc}
                 catch _:_ ->

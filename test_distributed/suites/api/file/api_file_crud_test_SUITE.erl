@@ -240,7 +240,8 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
 file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttrs) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
     
-    JsonFileDetails = api_test_utils:file_attr_to_json(ShareId, ProviderId, FileAttrs),
+    JsonFileDetails = api_test_utils:replace_attrs_with_deprecated(
+        api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttrs)),
     JsonFileDetails#{
         <<"gri">> => gri:serialize(#gri{
             type = op_file,
@@ -274,7 +275,9 @@ build_get_instance_prepare_gs_args_fun(FileGuid, Scope) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
     fun(#api_test_ctx{node = Node}, Result) ->
-        ?assertEqual({ok, ExpJsonDetailsFun(Node)}, Result)
+        {ok, ResultMap} = ?assertMatch({ok, _}, Result),
+        % do not compare size in attrs, as stats may not be fully calculated yet (which is normal and expected)
+        ?assertEqual(maps:without([size, ctime], ExpJsonDetailsFun(Node)), maps:without([size, ctime], ResultMap))
     end.
 
 
@@ -286,6 +289,7 @@ get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
     ),
     SpaceAttrs#file_attr{
         name = SpaceName,
+        parent_guid = undefined,
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,

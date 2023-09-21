@@ -16,7 +16,7 @@
 -include("modules/fslogic/file_attr.hrl").
 
 -export([
-    to_json/2, to_json/3
+    to_json/3
 ]).
 
 -export([
@@ -32,15 +32,9 @@
 %%% API
 %%%===================================================================
 
--spec to_json(lfm_attrs:file_attributes(), [binary()]) -> json_utils:json_map().
-to_json(FileAttrs, RequestedAttributes) ->
-    select_attrs(to_json(FileAttrs), current, RequestedAttributes).
-
-
-%% @TODO VFS-11377 deprecated, remove when possible
--spec to_json(lfm_attrs:file_attributes(), attr_type(), [binary()]) -> json_utils:json_map().
+-spec to_json(lfm_attrs:file_attributes(), attr_type(), [file_attr:attribute()]) -> json_utils:json_map().
 to_json(FileAttrs, AttrType, RequestedAttributes) ->
-    select_attrs(to_json(FileAttrs), AttrType, RequestedAttributes).
+    select_attrs(to_json(AttrType, FileAttrs), AttrType, RequestedAttributes).
 
 
 %% @TODO VFS-11377 deprecated, remove when possible
@@ -60,6 +54,7 @@ attr_name_to_json(deprecated, Attr) ->
 
 
 -spec attr_name_from_json(binary()) -> file_attr:attribute().
+attr_name_from_json(<<"fileId">>)                    -> guid;
 attr_name_from_json(<<"name">>)                      -> name;
 attr_name_from_json(<<"atime">>)                     -> atime;
 attr_name_from_json(<<"mtime">>)                     -> mtime;
@@ -68,7 +63,7 @@ attr_name_from_json(<<"type">>)                      -> type;
 attr_name_from_json(<<"size">>)                      -> size;
 attr_name_from_json(<<"shares">>)                    -> shares;
 attr_name_from_json(<<"index">>)                     -> index;
-attr_name_from_json(<<"fileId">>)                    -> guid;
+attr_name_from_json(<<"path">>)                      -> path;
 attr_name_from_json(<<"conflictingName">>)           -> conflicting_name;
 attr_name_from_json(<<"conflictingFiles">>)          -> conflicting_files;
 attr_name_from_json(<<"activePermissionsType">>)     -> active_permissions_type;
@@ -103,6 +98,7 @@ attr_name_to_json(type)                         -> <<"type">>;
 attr_name_to_json(size)                         -> <<"size">>;
 attr_name_to_json(shares)                       -> <<"shares">>;
 attr_name_to_json(index)                        -> <<"index">>;
+attr_name_to_json(path)                         -> <<"path">>;
 attr_name_to_json(conflicting_name)             -> <<"conflictingName">>;
 attr_name_to_json(conflicting_files)            -> <<"conflictingFiles">>;
 attr_name_to_json(active_permissions_type)      -> <<"activePermissionsType">>;
@@ -160,11 +156,11 @@ attr_name_to_json_deprecated(type)        -> <<"type">>;
 attr_name_to_json_deprecated(size)        -> <<"size">>;
 attr_name_to_json_deprecated(shares)      -> <<"shares">>;
 attr_name_to_json_deprecated(index)       -> <<"index">>;
-attr_name_to_json_deprecated(uid)         -> <<"storageUserId">>;
-attr_name_to_json_deprecated(gid)         -> <<"storageGroupId">>;
-attr_name_to_json_deprecated(owner_id)    -> <<"ownerId">>;
-attr_name_to_json_deprecated(parent_guid) -> <<"parentId">>;
-attr_name_to_json_deprecated(provider_id) -> <<"providerId">>;
+attr_name_to_json_deprecated(uid)         -> <<"storage_user_id">>;
+attr_name_to_json_deprecated(gid)         -> <<"storage_group_id">>;
+attr_name_to_json_deprecated(owner_id)    -> <<"owner_id">>;
+attr_name_to_json_deprecated(parent_guid) -> <<"parent_id">>;
+attr_name_to_json_deprecated(provider_id) -> <<"provider_id">>;
 attr_name_to_json_deprecated(link_count)  -> <<"hardlinks_count">>;
 attr_name_to_json_deprecated(mode)        -> <<"mode">>.
 
@@ -174,8 +170,8 @@ attr_name_to_json_deprecated(mode)        -> <<"mode">>.
 %%%===================================================================
 
 %% @private
--spec to_json(lfm_attrs:file_attributes()) -> json_utils:json_map().
-to_json(#file_attr{
+-spec to_json(attr_type(), lfm_attrs:file_attributes()) -> json_utils:json_map().
+to_json(AttrType, #file_attr{
     guid = Guid,
     name = Name,
     mode = Mode,
@@ -243,11 +239,17 @@ to_json(#file_attr{
         archive_id => ArchiveId
     },
     BaseJson = maps:fold(fun(Key, Value, Acc) ->
-        Acc#{attr_name_to_json(Key) => utils:undefined_to_null(Value)}
-    end, #{}, BaseMap),
+        Acc#{attr_name_to_json(AttrType, Key) => utils:undefined_to_null(Value)}
+    end, #{}, maps:with(all_attrs(AttrType), BaseMap)),
     maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
     end, BaseJson, utils:ensure_defined(Xattrs, #{})).
+
+
+%% @private
+-spec all_attrs(attr_type()) -> [file_attr:attribute()].
+all_attrs(deprecated) -> ?DEPRECATED_ALL_ATTRS;
+all_attrs(current) -> ?ALL_ATTRS.
 
 
 %% @private
