@@ -181,6 +181,6 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ?error("Error when listing directory during stats initialization: ~s", [?autoformat([Error, FileUuid])]),
             ok = dir_stats_collector:update_stats_of_dir(
-                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERRORS_COUNT => 1}),
+                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1}),
             {ok, #{}}
     end.

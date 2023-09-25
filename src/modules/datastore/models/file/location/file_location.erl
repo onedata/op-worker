@@ -189,7 +189,7 @@ delete_and_update_quota(Key) ->
             StorageSize = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -StorageSize),
             report_size_changed(on_storage, Record, -StorageSize),
-            report_size_changed(total, Record, -FileSize),
+            report_size_changed(virtual, Record, -FileSize),
             {ok, UserId} = get_owner_id(FileUuid),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, -StorageSize);
@@ -200,10 +200,10 @@ delete_and_update_quota(Key) ->
 
 
 %% @private
--spec report_size_changed(ReportType :: on_storage | total, record(), integer()) -> ok.
+-spec report_size_changed(ReportType :: on_storage | virtual, record(), integer()) -> ok.
 report_size_changed(on_storage, #file_location{uuid = FileUuid, space_id = SpaceId, storage_id = StorageId}, SizeChange) ->
     dir_size_stats:report_physical_size_changed(file_id:pack_guid(FileUuid, SpaceId), StorageId, SizeChange);
-report_size_changed(total, #file_location{uuid = FileUuid, space_id = SpaceId}, SizeChange) ->
+report_size_changed(virtual, #file_location{uuid = FileUuid, space_id = SpaceId}, SizeChange) ->
     dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), SizeChange).
 
 

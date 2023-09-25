@@ -11,9 +11,9 @@
 %%% It provides following statistics for each directory:
 %%%    - ?REG_FILE_AND_LINK_COUNT - total number of regular files, hardlinks and symlinks,
 %%%    - ?DIR_COUNT - total number of nested directories,
+%%%    - ?LOGICAL_SIZE - total size in case of download (hardlinks of same file are downloaded multiple times),
 %%%    - ?VIRTUAL_SIZE - total byte size of the logical data (if file has multiple hardlinks,
 %%%                    size is counted only for first reference),
-%%%    - ?LOGICAL_SIZE - total size in case of download (hardlinks of same file are downloaded multiple times),
 %%%    - ?PHYSICAL_SIZE(StorageId) - physical byte size on a specific storage.
 %%% NOTE: the virtual size is not a sum of sizes on different storages, as the blocks stored
 %%%       on different storages may overlap.
@@ -565,7 +565,7 @@ init_existing_child(Guid, #document{key = Uuid} = Doc) ->
             catch
                 Error:Reason:Stacktrace ->
                     handle_init_error(Guid, Error, Reason, Stacktrace),
-                    #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
+                    #{?DIR_COUNT => 1, ?DIR_ERROR_COUNT => 1}
             end;
         Type ->
             try
@@ -589,7 +589,7 @@ init_existing_child(Guid, #document{key = Uuid} = Doc) ->
             catch
                 Error:Reason:Stacktrace ->
                     handle_init_error(Guid, Error, Reason, Stacktrace),
-                    #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
+                    #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERROR_COUNT => 1}
             end
     end.
 
@@ -647,7 +647,7 @@ stat_names(Guid) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
-            [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT,
+            [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERROR_COUNT, ?DIR_ERROR_COUNT,
                 ?VIRTUAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
         {error, not_found} ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
@@ -795,8 +795,8 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
 -spec encode_stat_name(dir_stats_collection:stat_name()) -> non_neg_integer() | {non_neg_integer(), binary()}.
 encode_stat_name(?REG_FILE_AND_LINK_COUNT) -> 0;
 encode_stat_name(?DIR_COUNT) -> 1;
-encode_stat_name(?FILE_ERRORS_COUNT) -> 2;
-encode_stat_name(?DIR_ERRORS_COUNT) -> 3;
+encode_stat_name(?FILE_ERROR_COUNT) -> 2;
+encode_stat_name(?DIR_ERROR_COUNT) -> 3;
 encode_stat_name(?VIRTUAL_SIZE) -> 4;
 encode_stat_name(?PHYSICAL_SIZE(StorageId)) -> {5, StorageId};
 encode_stat_name(?LOGICAL_SIZE) -> 6.
@@ -806,8 +806,8 @@ encode_stat_name(?LOGICAL_SIZE) -> 6.
 -spec decode_stat_name(non_neg_integer() | {non_neg_integer(), binary()}) -> dir_stats_collection:stat_name().
 decode_stat_name(0) -> ?REG_FILE_AND_LINK_COUNT;
 decode_stat_name(1) -> ?DIR_COUNT;
-decode_stat_name(2) -> ?FILE_ERRORS_COUNT;
-decode_stat_name(3) -> ?DIR_ERRORS_COUNT;
+decode_stat_name(2) -> ?FILE_ERROR_COUNT;
+decode_stat_name(3) -> ?DIR_ERROR_COUNT;
 decode_stat_name(4) -> ?VIRTUAL_SIZE;
 decode_stat_name({5, StorageId}) -> ?PHYSICAL_SIZE(StorageId);
 decode_stat_name(6) -> ?LOGICAL_SIZE.

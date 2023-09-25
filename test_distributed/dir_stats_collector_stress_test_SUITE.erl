@@ -160,6 +160,6 @@ get_expected_stats(Config) ->
         ?VIRTUAL_SIZE => 0,
         ?LOGICAL_SIZE => 0,
         ?PHYSICAL_SIZE(StorageId) => 0,
-        ?FILE_ERRORS_COUNT => 0,
-        ?DIR_ERRORS_COUNT => 0
+        ?FILE_ERROR_COUNT => 0,
+        ?DIR_ERROR_COUNT => 0
     }.

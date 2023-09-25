@@ -1001,11 +1001,6 @@ get_file_size(FileCtx) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns information about file size.
-%% @end
-%%--------------------------------------------------------------------
 -spec prepare_file_size_summary(ctx(), create_missing_location | throw_on_missing_location) ->
     {file_size_summary(), ctx()} | no_return().
 prepare_file_size_summary(FileCtx, create_missing_location) ->

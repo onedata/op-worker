@@ -1270,8 +1270,8 @@ get_historical_dir_size_stats_layout_test(Config) ->
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?VIRTUAL_SIZE => Metrics,
         ?LOGICAL_SIZE => Metrics,
-        ?FILE_ERRORS_COUNT => Metrics,
-        ?DIR_ERRORS_COUNT => Metrics
+        ?FILE_ERROR_COUNT => Metrics,
+        ?DIR_ERROR_COUNT => Metrics
     },
     
     ExpLayoutFun = fun

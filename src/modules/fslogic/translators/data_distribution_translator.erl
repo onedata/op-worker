@@ -57,13 +57,13 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                 build_error_response(Error, Guid, ProviderId);
 
             (_ProviderId, #provider_dir_distribution_get_result{
-                virtual_size = VirtualDirSize,
+                virtual_size = VirtualSize,
                 logical_size = LogicalSize,
                 physical_size_per_storage = PhysicalDirSizePerStorage
             }) ->
                 #{
                     <<"success">> => true,
-                    <<"virtualSize">> => utils:undefined_to_null(VirtualDirSize),
+                    <<"virtualSize">> => utils:undefined_to_null(VirtualSize),
                     <<"logicalSize">> => utils:undefined_to_null(LogicalSize),
                     <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
                         <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)

@@ -955,7 +955,7 @@ translate_from_protobuf(#'TimeSeriesSliceGetResult'{
 }) ->
     ts_browse_result:from_json(json_utils:decode(EncodedSliceGetResult));
 translate_from_protobuf(#'ProviderRegDistributionGetResult'{
-    virtual_size = VirtualSize,
+    logical_size = VirtualSize, % TODO VFS-11386 - logical size is renamed to virtual_size ; change clproto with next major version
     distribution_per_storage = DistributionPerStorage
 }) ->
     {BlocksPerStorage, LocationsPerStorage} = lists:foldl(
@@ -2170,7 +2170,7 @@ translate_to_protobuf(#provider_reg_distribution_get_result{
     locations_per_storage = LocationsPerStorage
 }) ->
     {provider_reg_distribution_get_result, #'ProviderRegDistributionGetResult'{
-        virtual_size = VirtualSize,
+        logical_size = VirtualSize, % TODO VFS-11386 - logical size is renamed to virtual_size ; change clproto with next major version
         distribution_per_storage = maps:fold(fun(StorageId, StorageBlocks, Acc) ->
             [#'StorageRegDistributionGetResult'{
                 storage_id = StorageId,
