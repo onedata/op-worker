@@ -396,11 +396,9 @@ hardlinks_test(Config, CreatorSelector, WriteNodesSelector, StatsCheckNodesSelec
 %%
 %%    timer:sleep(15000),
 %%    verify_after_delete_of_opened_file(Config, OpenedFileCheckSelector, DirGuids4, [{0, 0}, {0, 0}], 0, FileSize),
-%%
-%%    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir5Guid))),
-%%    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir6Guid))),
 
-    ok.
+    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir5Guid))),
+    ?assertMatch(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Dir6Guid))).
 
 
 
