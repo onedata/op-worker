@@ -955,7 +955,7 @@ translate_from_protobuf(#'TimeSeriesSliceGetResult'{
 }) ->
     ts_browse_result:from_json(json_utils:decode(EncodedSliceGetResult));
 translate_from_protobuf(#'ProviderRegDistributionGetResult'{
-    logical_size = LogicalSize,
+    logical_size = VirtualSize, % TODO VFS-11386 - logical size is renamed to virtual_size ; change clproto with next major version
     distribution_per_storage = DistributionPerStorage
 }) ->
     {BlocksPerStorage, LocationsPerStorage} = lists:foldl(
@@ -971,7 +971,7 @@ translate_from_protobuf(#'ProviderRegDistributionGetResult'{
         end,
     {#{}, #{}}, DistributionPerStorage),
     #provider_reg_distribution_get_result{
-        logical_size = LogicalSize,
+        virtual_size = VirtualSize,
         blocks_per_storage = BlocksPerStorage,
         locations_per_storage = LocationsPerStorage
     };
@@ -2165,12 +2165,12 @@ translate_to_protobuf(#time_series_slice_get_result{} = SliceGetResult) ->
         slice_as_json = json_utils:encode(ts_browse_result:to_json(SliceGetResult))
     }};
 translate_to_protobuf(#provider_reg_distribution_get_result{
-    logical_size = LogicalSize,
+    virtual_size = VirtualSize,
     blocks_per_storage = BlocksPerStorage,
     locations_per_storage = LocationsPerStorage
 }) ->
     {provider_reg_distribution_get_result, #'ProviderRegDistributionGetResult'{
-        logical_size = LogicalSize,
+        logical_size = VirtualSize, % TODO VFS-11386 - logical size is renamed to virtual_size ; change clproto with next major version
         distribution_per_storage = maps:fold(fun(StorageId, StorageBlocks, Acc) ->
             [#'StorageRegDistributionGetResult'{
                 storage_id = StorageId,

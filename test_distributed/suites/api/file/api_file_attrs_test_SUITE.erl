@@ -829,12 +829,12 @@ get_reg_file_distribution_test(Config) ->
     ExpDist1 = #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
-                logical_size = 20,
+                virtual_size = 20,
                 blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
                 locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
-                logical_size = 20,
+                virtual_size = 20,
                 blocks_per_storage = #{P2StorageId => []},
                 locations_per_storage = #{P2StorageId => undefined}
             }
@@ -849,12 +849,12 @@ get_reg_file_distribution_test(Config) ->
     ExpDist2 = #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
                 locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
-                logical_size = 50,
+                virtual_size = 50,
                 blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]},
                 locations_per_storage = #{P2StorageId => FileStorageLocation}
             }
@@ -926,13 +926,13 @@ get_dir_distribution_2_test(Config) ->
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
+                virtual_size = 0,
                 logical_size = 0,
-                download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
+                virtual_size = 0,
                 logical_size = 0,
-                download_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0}
             }
         }
@@ -946,13 +946,13 @@ get_dir_distribution_2_test(Config) ->
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
+                virtual_size = 50,
                 logical_size = 50,
-                download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution_get_result{
+                virtual_size = 50,
                 logical_size = 50,
-                download_size = 50,
                 physical_size_per_storage = #{P2StorageId => 20}
             }
         }
@@ -985,8 +985,8 @@ get_dir_distribution_3_test(Config) ->
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
+                virtual_size = 0,
                 logical_size = 0,
-                download_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -1004,8 +1004,8 @@ get_dir_distribution_3_test(Config) ->
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
+                virtual_size = 50,
                 logical_size = 50,
-                download_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
             },
             P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -1029,7 +1029,7 @@ get_symlink_distribution_test(Config) ->
     ),
     
     ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
-        logical_size = 0,
+        virtual_size = 0,
         storages_per_provider = #{
             P1Id => [P1StorageId],
             P2Id => [P2StorageId]
@@ -1268,15 +1268,15 @@ get_historical_dir_size_stats_layout_test(Config) ->
     ExpLayoutBase = #{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics,
-        ?TOTAL_DOWNLOAD_SIZE => Metrics,
-        ?FILE_ERRORS_COUNT => Metrics,
-        ?DIR_ERRORS_COUNT => Metrics
+        ?VIRTUAL_SIZE => Metrics,
+        ?LOGICAL_SIZE => Metrics,
+        ?FILE_ERROR_COUNT => Metrics,
+        ?DIR_ERROR_COUNT => Metrics
     },
     
     ExpLayoutFun = fun
-        (krakow) -> ExpLayoutBase#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
-        (paris) -> ExpLayoutBase#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
+        (krakow) -> ExpLayoutBase#{?PHYSICAL_SIZE(P1StorageId) => Metrics};
+        (paris) -> ExpLayoutBase#{?PHYSICAL_SIZE(P2StorageId) => Metrics}
     end,
 
     await_file_size_sync(krakow, 8, DirGuid),
@@ -1356,12 +1356,12 @@ get_historical_dir_size_stats_slice_test(Config) ->
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics,
-        ?TOTAL_DOWNLOAD_SIZE => Metrics
+        ?VIRTUAL_SIZE => Metrics,
+        ?LOGICAL_SIZE => Metrics
     }),
     LayoutFun = fun
-        (krakow) -> BaseLayout#{?SIZE_ON_STORAGE(P1StorageId) => Metrics};
-        (paris) -> BaseLayout#{?SIZE_ON_STORAGE(P2StorageId) => Metrics}
+        (krakow) -> BaseLayout#{?PHYSICAL_SIZE(P1StorageId) => Metrics};
+        (paris) -> BaseLayout#{?PHYSICAL_SIZE(P2StorageId) => Metrics}
     end,
     ExpTimestampFilter = fun(Data, Windows) ->
         StartTimestamp = maps:get(<<"startTimestamp">>, Data, FutureTimestamp),
@@ -1392,10 +1392,10 @@ get_historical_dir_size_stats_slice_test(Config) ->
     BuildExpSliceFun = fun(Data) -> maps:with(maps:keys(maps:get(<<"layout">>, Data, #{})), #{
             ?DIR_COUNT => BuildExpMetricsFun(Data, [1, 1, 1]),
             ?REG_FILE_AND_LINK_COUNT =>  BuildExpMetricsFun(Data, [3, 2, 1]),
-            ?SIZE_ON_STORAGE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
-            ?SIZE_ON_STORAGE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
-            ?TOTAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8]),
-            ?TOTAL_DOWNLOAD_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
+            ?PHYSICAL_SIZE(P1StorageId) =>  BuildExpMetricsFun(Data, [32, 24, 8]),
+            ?PHYSICAL_SIZE(P2StorageId) =>  BuildExpMetricsFun(Data, [0, 0, 0]),
+            ?VIRTUAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8]),
+            ?LOGICAL_SIZE => BuildExpMetricsFun(Data, [32, 24, 8])
         })
     end,
     await_file_size_sync(krakow, 32, DirGuid),
@@ -1476,7 +1476,7 @@ get_historical_dir_size_stats_disabled_test(Config) ->
     BaseLayout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
-        ?TOTAL_SIZE => Metrics
+        ?VIRTUAL_SIZE => Metrics
     }),
 
     ValidateGsErrorCallFun = fun(_TestCtx, Result) ->
@@ -1765,10 +1765,10 @@ gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
     SessionId = oct_background:get_user_session_id(user3, ProviderPlaceholder),
     ProviderId = oct_background:get_provider_id(ProviderPlaceholder),
     Request = #time_series_slice_get_request{
-        layout = #{?TOTAL_SIZE => [?HOUR_METRIC]}
+        layout = #{?VIRTUAL_SIZE => [?HOUR_METRIC]}
     },
     #time_series_slice_get_result{
-        slice = #{?TOTAL_SIZE := #{
+        slice = #{?VIRTUAL_SIZE := #{
             ?HOUR_METRIC := [#window_info{value = Value}]
         }}
     } = ?rpc(ProviderPlaceholder, mi_file_metadata:get_historical_dir_size_stats(

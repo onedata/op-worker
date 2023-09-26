@@ -42,7 +42,7 @@ get(FileCtx0) ->
             {#{StorageId => []}, #{StorageId => undefined}}
     end,
     {ok, #provider_reg_distribution_get_result{
-        logical_size = FileSize,
+        virtual_size = FileSize,
         blocks_per_storage = StorageDistribution,
         locations_per_storage = StorageLocations
     }}.
