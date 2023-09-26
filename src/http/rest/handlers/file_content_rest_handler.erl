@@ -28,7 +28,7 @@
     {ok, file_id:file_guid()} | {error, term()}).
 
 -type create_link_fun() :: fun((session:id(), lfm:file_ref(), file_meta:name(),
-file_id:file_guid() | file_meta:path()) -> {ok, file_id:file_guid()} | {error, term()}).
+    file_id:file_guid() | file_meta:path()) -> {ok, file_id:file_guid()} | {error, term()}).
 
 % timeout after which cowboy returns the data read from socket, regardless of its size
 % the value was decided upon experimentally
