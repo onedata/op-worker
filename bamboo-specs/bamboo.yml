@@ -598,7 +598,7 @@ api_archive: &ct-onenv-job
     - script:
         scripts:
           - |-
-            echo No real testing done on build 2 - only unpacking of surefire artifact (see above logs). The job is forced to fail.
+            echo "No real testing done on build 2 - only unpacking of surefire artifact (see above logs). The job is forced to fail."
             false
         conditions:
           - variable:
