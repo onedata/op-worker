@@ -55,114 +55,112 @@ attr_name_to_json(deprecated, Attr) ->
 
 -spec attr_name_from_json(binary()) -> file_attr:attribute().
 attr_name_from_json(<<"fileId">>)                    -> guid;
+attr_name_from_json(<<"index">>)                     -> index;
+attr_name_from_json(<<"type">>)                      -> type;
+attr_name_from_json(<<"activePermissionsType">>)     -> active_permissions_type;
+attr_name_from_json(<<"posixPermissions">>)          -> mode;
+attr_name_from_json(<<"acl">>)                       -> acl;
 attr_name_from_json(<<"name">>)                      -> name;
+attr_name_from_json(<<"conflictingName">>)           -> conflicting_name;
+attr_name_from_json(<<"path">>)                      -> path;
+attr_name_from_json(<<"parentFileId">>)              -> parent_guid;
+attr_name_from_json(<<"displayGid">>)                -> gid;
+attr_name_from_json(<<"displayUid">>)                -> uid;
 attr_name_from_json(<<"atime">>)                     -> atime;
 attr_name_from_json(<<"mtime">>)                     -> mtime;
 attr_name_from_json(<<"ctime">>)                     -> ctime;
-attr_name_from_json(<<"type">>)                      -> type;
 attr_name_from_json(<<"size">>)                      -> size;
-attr_name_from_json(<<"shares">>)                    -> shares;
-attr_name_from_json(<<"index">>)                     -> index;
-attr_name_from_json(<<"path">>)                      -> path;
-attr_name_from_json(<<"conflictingName">>)           -> conflicting_name;
-attr_name_from_json(<<"conflictingFiles">>)          -> conflicting_files;
-attr_name_from_json(<<"activePermissionsType">>)     -> active_permissions_type;
-attr_name_from_json(<<"storageUserId">>)             -> uid;
-attr_name_from_json(<<"storageGroupId">>)            -> gid;
-attr_name_from_json(<<"ownerId">>)                   -> owner_id;
-attr_name_from_json(<<"parentId">>)                  -> parent_guid;
-attr_name_from_json(<<"providerId">>)                -> provider_id;
-attr_name_from_json(<<"symlinkValue">>)              -> symlink_value;
-attr_name_from_json(<<"hardlinkCount">>)             -> link_count;
+attr_name_from_json(<<"isFullyReplicatedLocally">>)  -> is_fully_replicated;
 attr_name_from_json(<<"localReplicationRate">>)      -> local_replication_rate;
-attr_name_from_json(<<"recallRootId">>)              -> recall_root_id;
-attr_name_from_json(<<"archiveId">>)                 -> archive_id;
-attr_name_from_json(<<"effDatasetMembership">>)      -> eff_dataset_membership;
-attr_name_from_json(<<"effDatasetProtectionFlags">>) -> eff_dataset_protection_flags;
+attr_name_from_json(<<"originProviderId">>)          -> provider_id;
+attr_name_from_json(<<"directShareIds">>)            -> shares;
+attr_name_from_json(<<"ownerUserId">>)               -> owner_id;
+attr_name_from_json(<<"hardlinkCount">>)             -> hardlink_count;
+attr_name_from_json(<<"symlinkValue">>)              -> symlink_value;
+attr_name_from_json(<<"hasCustomMetadata">>)         -> has_custom_metadata;
 attr_name_from_json(<<"effProtectionFlags">>)        -> eff_protection_flags;
+attr_name_from_json(<<"effDatasetProtectionFlags">>) -> eff_dataset_protection_flags;
+attr_name_from_json(<<"effDatasetMembership">>)      -> eff_dataset_membership;
 attr_name_from_json(<<"effQosMembership">>)          -> eff_qos_membership;
 attr_name_from_json(<<"qosStatus">>)                 -> qos_status;
-attr_name_from_json(<<"hasMetadata">>)               -> has_metadata;
-attr_name_from_json(<<"posixPermissions">>)          -> mode;
-attr_name_from_json(<<"isDeleted">>)                 -> is_deleted;
-attr_name_from_json(<<"isFullyReplicated">>)         -> is_fully_replicated.
+attr_name_from_json(<<"recallRootId">>)              -> recall_root_id.
 
 
 -spec attr_name_to_json(file_attr:attribute()) -> binary().
 attr_name_to_json(guid)                         -> <<"fileId">>;
+attr_name_to_json(index)                        -> <<"index">>;
+attr_name_to_json(type)                         -> <<"type">>;
+attr_name_to_json(active_permissions_type)      -> <<"activePermissionsType">>;
+attr_name_to_json(mode)                         -> <<"posixPermissions">>;
+attr_name_to_json(acl)                          -> <<"acl">>;
 attr_name_to_json(name)                         -> <<"name">>;
+attr_name_to_json(conflicting_name)             -> <<"conflictingName">>;
+attr_name_to_json(path)                         -> <<"path">>;
+attr_name_to_json(parent_guid)                  -> <<"parentFileId">>;
+attr_name_to_json(gid)                          -> <<"displayGid">>;
+attr_name_to_json(uid)                          -> <<"displayUid">>;
 attr_name_to_json(atime)                        -> <<"atime">>;
 attr_name_to_json(mtime)                        -> <<"mtime">>;
 attr_name_to_json(ctime)                        -> <<"ctime">>;
-attr_name_to_json(type)                         -> <<"type">>;
 attr_name_to_json(size)                         -> <<"size">>;
-attr_name_to_json(shares)                       -> <<"shares">>;
-attr_name_to_json(index)                        -> <<"index">>;
-attr_name_to_json(path)                         -> <<"path">>;
-attr_name_to_json(conflicting_name)             -> <<"conflictingName">>;
-attr_name_to_json(conflicting_files)            -> <<"conflictingFiles">>;
-attr_name_to_json(active_permissions_type)      -> <<"activePermissionsType">>;
-attr_name_to_json(uid)                          -> <<"storageUserId">>;
-attr_name_to_json(gid)                          -> <<"storageGroupId">>;
-attr_name_to_json(owner_id)                     -> <<"ownerId">>;
-attr_name_to_json(parent_guid)                  -> <<"parentId">>;
-attr_name_to_json(provider_id)                  -> <<"providerId">>;
-attr_name_to_json(symlink_value)                -> <<"symlinkValue">>;
-attr_name_to_json(link_count)                   -> <<"hardlinkCount">>;
+attr_name_to_json(is_fully_replicated)          -> <<"isFullyReplicatedLocally">>;
 attr_name_to_json(local_replication_rate)       -> <<"localReplicationRate">>;
-attr_name_to_json(recall_root_id)               -> <<"recallRootId">>;
-attr_name_to_json(archive_id)                   -> <<"archiveId">>;
-attr_name_to_json(eff_dataset_membership)       -> <<"effDatasetMembership">>;
-attr_name_to_json(eff_dataset_protection_flags) -> <<"effDatasetProtectionFlags">>;
+attr_name_to_json(provider_id)                  -> <<"originProviderId">>;
+attr_name_to_json(shares)                       -> <<"directShareIds">>;
+attr_name_to_json(owner_id)                     -> <<"ownerUserId">>;
+attr_name_to_json(hardlink_count)               -> <<"hardlinkCount">>;
+attr_name_to_json(symlink_value)                -> <<"symlinkValue">>;
+attr_name_to_json(has_custom_metadata)          -> <<"hasCustomMetadata">>;
 attr_name_to_json(eff_protection_flags)         -> <<"effProtectionFlags">>;
+attr_name_to_json(eff_dataset_protection_flags) -> <<"effDatasetProtectionFlags">>;
+attr_name_to_json(eff_dataset_membership)       -> <<"effDatasetMembership">>;
 attr_name_to_json(eff_qos_membership)           -> <<"effQosMembership">>;
 attr_name_to_json(qos_status)                   -> <<"qosStatus">>;
-attr_name_to_json(has_metadata)                 -> <<"hasMetadata">>;
-attr_name_to_json(mode)                         -> <<"posixPermissions">>;
-attr_name_to_json(is_deleted)                   -> <<"isDeleted">>;
-attr_name_to_json(is_fully_replicated)          -> <<"isFullyReplicated">>.
+attr_name_to_json(recall_root_id)               -> <<"recallRootId">>.
 
 
 %% @TODO VFS-11377 deprecated, remove when possible
 %% @private
 -spec attr_name_from_json_deprecated(binary()) -> file_attr:attribute().
-attr_name_from_json_deprecated(<<"file_id">>)            -> guid;
-attr_name_from_json_deprecated(<<"name">>)               -> name;
-attr_name_from_json_deprecated(<<"atime">>)              -> atime;
-attr_name_from_json_deprecated(<<"mtime">>)              -> mtime;
-attr_name_from_json_deprecated(<<"ctime">>)              -> ctime;
-attr_name_from_json_deprecated(<<"type">>)               -> type;
-attr_name_from_json_deprecated(<<"size">>)               -> size;
-attr_name_from_json_deprecated(<<"shares">>)             -> shares;
-attr_name_from_json_deprecated(<<"index">>)              -> index;
-attr_name_from_json_deprecated(<<"storage_user_id">>)    -> uid;
-attr_name_from_json_deprecated(<<"storage_group_id">>)   -> gid;
-attr_name_from_json_deprecated(<<"owner_id">>)           -> owner_id;
-attr_name_from_json_deprecated(<<"parent_id">>)          -> parent_guid;
-attr_name_from_json_deprecated(<<"provider_id">>)        -> provider_id;
-attr_name_from_json_deprecated(<<"hardlinks_count">>)    -> link_count;
-attr_name_from_json_deprecated(<<"mode">>)               -> mode.
+attr_name_from_json_deprecated(<<"file_id">>)             -> guid;
+attr_name_from_json_deprecated(<<"name">>)                -> name;
+attr_name_from_json_deprecated(<<"atime">>)               -> atime;
+attr_name_from_json_deprecated(<<"mtime">>)               -> mtime;
+attr_name_from_json_deprecated(<<"ctime">>)               -> ctime;
+attr_name_from_json_deprecated(<<"type">>)                -> type;
+attr_name_from_json_deprecated(<<"size">>)                -> size;
+attr_name_from_json_deprecated(<<"shares">>)              -> shares;
+attr_name_from_json_deprecated(<<"index">>)               -> index;
+attr_name_from_json_deprecated(<<"storage_user_id">>)     -> uid;
+attr_name_from_json_deprecated(<<"storage_group_id">>)    -> gid;
+attr_name_from_json_deprecated(<<"owner_id">>)            -> owner_id;
+attr_name_from_json_deprecated(<<"parent_id">>)           -> parent_guid;
+attr_name_from_json_deprecated(<<"provider_id">>)         -> provider_id;
+attr_name_from_json_deprecated(<<"hardlinks_count">>)     -> hardlink_count;
+attr_name_from_json_deprecated(<<"is_fully_replicated">>) -> is_fully_replicated;
+attr_name_from_json_deprecated(<<"mode">>)                -> mode.
 
 
 %% @TODO VFS-11377 deprecated, remove when possible
 %% @private
 -spec attr_name_to_json_deprecated(file_attr:attribute()) -> binary().
-attr_name_to_json_deprecated(guid)        -> <<"file_id">>;
-attr_name_to_json_deprecated(name)        -> <<"name">>;
-attr_name_to_json_deprecated(atime)       -> <<"atime">>;
-attr_name_to_json_deprecated(mtime)       -> <<"mtime">>;
-attr_name_to_json_deprecated(ctime)       -> <<"ctime">>;
-attr_name_to_json_deprecated(type)        -> <<"type">>;
-attr_name_to_json_deprecated(size)        -> <<"size">>;
-attr_name_to_json_deprecated(shares)      -> <<"shares">>;
-attr_name_to_json_deprecated(index)       -> <<"index">>;
-attr_name_to_json_deprecated(uid)         -> <<"storage_user_id">>;
-attr_name_to_json_deprecated(gid)         -> <<"storage_group_id">>;
-attr_name_to_json_deprecated(owner_id)    -> <<"owner_id">>;
-attr_name_to_json_deprecated(parent_guid) -> <<"parent_id">>;
-attr_name_to_json_deprecated(provider_id) -> <<"provider_id">>;
-attr_name_to_json_deprecated(link_count)  -> <<"hardlinks_count">>;
-attr_name_to_json_deprecated(mode)        -> <<"mode">>.
+attr_name_to_json_deprecated(guid)                -> <<"file_id">>;
+attr_name_to_json_deprecated(name)                -> <<"name">>;
+attr_name_to_json_deprecated(atime)               -> <<"atime">>;
+attr_name_to_json_deprecated(mtime)               -> <<"mtime">>;
+attr_name_to_json_deprecated(ctime)               -> <<"ctime">>;
+attr_name_to_json_deprecated(type)                -> <<"type">>;
+attr_name_to_json_deprecated(size)                -> <<"size">>;
+attr_name_to_json_deprecated(shares)              -> <<"shares">>;
+attr_name_to_json_deprecated(index)               -> <<"index">>;
+attr_name_to_json_deprecated(uid)                 -> <<"storage_user_id">>;
+attr_name_to_json_deprecated(gid)                 -> <<"storage_group_id">>;
+attr_name_to_json_deprecated(owner_id)            -> <<"owner_id">>;
+attr_name_to_json_deprecated(parent_guid)         -> <<"parent_id">>;
+attr_name_to_json_deprecated(provider_id)         -> <<"provider_id">>;
+attr_name_to_json_deprecated(hardlink_count)      -> <<"hardlinks_count">>;
+attr_name_to_json_deprecated(is_fully_replicated) -> <<"is_fully_replicated">>;
+attr_name_to_json_deprecated(mode)                -> <<"mode">>.
 
 
 %%%===================================================================
@@ -173,70 +171,72 @@ attr_name_to_json_deprecated(mode)        -> <<"mode">>.
 -spec to_json(attr_type(), lfm_attrs:file_attributes()) -> json_utils:json_map().
 to_json(AttrType, #file_attr{
     guid = Guid,
-    name = Name,
+    index = Index,
+    type = Type,
+    active_permissions_type = ActivePermissionsType,
     mode = Mode,
+    acl = Acl,
+    name = Name,
+    conflicting_name = ConflictingName,
+    path = Path,
     parent_guid = ParentGuid,
-    uid = Uid,
     gid = Gid,
+    uid = Uid,
     atime = Atime,
     mtime = Mtime,
     ctime = Ctime,
-    type = Type,
     size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId,
-    link_count = HardlinksCount,
-    index = Index,
-    xattrs = Xattrs,
-    active_permissions_type = ActivePermissionsType,
-    symlink_value = SymlinkValue,
-    conflicting_name = ConflictingName,
+    is_fully_replicated = FullyReplicated,
     local_replication_rate = LocalReplicationRate,
-    recall_root_id = RecallRootId,
+    provider_id = ProviderId,
+    shares = Shares,
+    owner_id = OwnerId,
+    hardlink_count = HardlinksCount,
+    symlink_value = SymlinkValue,
+    has_custom_metadata = HasMetadata,
     eff_protection_flags = EffProtectionFlags,
-    archive_id = ArchiveId,
     eff_dataset_protection_flags = EffDatasetProtectionFlags,
     eff_dataset_membership = EffDatasetMembership,
     eff_qos_membership = EffQosMembership,
     qos_status = QosStatus,
-    is_fully_replicated = FullyReplicated,
-    has_metadata = HasMetadata,
+    recall_root_id = RecallRootId,
     is_deleted = IsDeleted,
-    conflicting_files = ConflictingFiles
+    conflicting_files = ConflictingFiles,
+    xattrs = Xattrs
 }) ->
     BaseMap = #{
         guid => translate_guid(Guid),
-        name => Name,
+        index => file_listing:encode_index(Index),
+        type => translate_type(Type),
+        active_permissions_type => ActivePermissionsType,
         mode => translate_mode(Mode),
+        acl => acl:to_json(Acl, gui),
+        name => Name,
+        conflicting_name => ConflictingName,
+        path => Path,
         parent_guid => translate_guid(map_parent_id(ParentGuid)),
-        uid => Uid,
         gid => Gid,
+        uid => Uid,
         atime => Atime,
         mtime => Mtime,
         ctime => Ctime,
-        type => translate_type(Type),
         size => Size,
-        shares => Shares,
-        provider_id => ProviderId,
-        owner_id => OwnerId,
-        link_count => HardlinksCount,
-        index => file_listing:encode_index(Index),
-        has_metadata => HasMetadata,
-        active_permissions_type => ActivePermissionsType,
-        local_replication_rate => LocalReplicationRate,
         is_fully_replicated => FullyReplicated,
-        qos_status => translate_qos_status(QosStatus),
+        local_replication_rate => LocalReplicationRate,
+        provider_id => ProviderId,
+        shares => Shares,
+        owner_id => OwnerId,
+        hardlink_count => HardlinksCount,
+        symlink_value => SymlinkValue,
+        has_custom_metadata => HasMetadata,
         eff_protection_flags => translate_protection_flags(EffProtectionFlags),
         eff_dataset_protection_flags => translate_protection_flags(EffDatasetProtectionFlags),
-        eff_qos_membership => translate_membership(EffQosMembership),
         eff_dataset_membership => translate_membership(EffDatasetMembership),
+        eff_qos_membership => translate_membership(EffQosMembership),
+        qos_status => translate_qos_status(QosStatus),
         recall_root_id => RecallRootId,
-        symlink_value => SymlinkValue,
-        conflicting_name => ConflictingName,
         is_deleted => IsDeleted,
-        conflicting_files => ConflictingFiles,
-        archive_id => ArchiveId
+        conflicting_files => ConflictingFiles
     },
     BaseJson = maps:fold(fun(Key, Value, Acc) ->
         Acc#{attr_name_to_json(AttrType, Key) => utils:undefined_to_null(Value)}

@@ -1370,8 +1370,8 @@ lfm_stat2(Config) ->
         size = undefined,
         index = Index1,
         active_permissions_type = posix,
-        has_metadata = false
-    }}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2">>}, [name, size, index, active_permissions_type, has_metadata])),
+        has_custom_metadata = false
+    }}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2">>}, [name, size, index, active_permissions_type, has_custom_metadata])),
 
     Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
     ?assertMatch({ok, #file_attr{
@@ -1379,8 +1379,8 @@ lfm_stat2(Config) ->
         size = 0,
         index = Index2,
         active_permissions_type = posix,
-        has_metadata = false
-    }}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}, [name, size, index, active_permissions_type, has_metadata])),
+        has_custom_metadata = false
+    }}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}, [name, size, index, active_permissions_type, has_custom_metadata])),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
     ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
@@ -1395,7 +1395,7 @@ lfm_stat2(Config) ->
     ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch(ok, lfm_proxy:set_xattr(W, SessId1, ?FILE_REF(FileGuid), #xattr{name = <<"123456789">>, value = <<"!@#">>})),
-    ?assertMatch({ok, #file_attr{has_metadata = true}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}, [has_metadata]), 10).
+    ?assertMatch({ok, #file_attr{has_custom_metadata = true}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}, [has_custom_metadata]), 10).
 
 lfm_synch_stat(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

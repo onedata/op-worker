@@ -251,7 +251,7 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
 
 %% @private
 -spec list_children_attrs_internal(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()],
-    [file_attr:file_attr()]) -> {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
+    [file_attr:file_attr()]) -> {[file_attr:file_attr()], file_listing:pagination_token(), file_ctx:ctx()}.
 list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
     

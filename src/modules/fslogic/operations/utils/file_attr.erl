@@ -10,7 +10,6 @@
 %%% Attrs are resolved in independent stages that require different documents to be
 %%% fetched in order to optimize attrs calculation. Only stages that resolve attrs
 %%% that where requested are calculated.
-%%% TODO opisać ładnie o co chodzi z tymi direct/effective
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_attr).
@@ -29,11 +28,11 @@
     should_fetch_xattrs/1
 ]).
 
--type attribute() :: guid | active_permissions_type | index | mode | owner_id | parent_guid | provider_id | shares |
-    symlink_value | type | link_count | is_deleted | name | conflicting_name | conflicting_files | atime | mtime |
-    ctime | local_replication_rate | size | is_fully_replicated | gid | uid | recall_root_id | eff_dataset_membership |
-    eff_dataset_protection_flags | eff_protection_flags | archive_id | eff_qos_membership | qos_status | has_metadata |
-    {xattrs, [custom_metadata:name()]}.
+-type attribute() :: guid | index | type | active_permissions_type | mode | acl | name | conflicting_name | path |
+    parent_guid | gid | uid | atime | mtime | ctime | size | is_fully_replicated | local_replication_rate |
+    provider_id | shares | owner_id | hardlink_count | symlink_value | has_custom_metadata | eff_protection_flags |
+    eff_dataset_protection_flags | eff_dataset_membership | eff_qos_membership | qos_status | recall_root_id |
+    is_deleted | conflicting_files | {xattrs, [custom_metadata:name()]}.
 
 -type file_type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE | ?SYMLINK_TYPE.
 
@@ -65,27 +64,23 @@
 
 -type state() :: #state{}.
 
-% xattrs are handled specially (see resolve_state/3)
+% xattrs are handled specially (see resolve_stage/3)
 -define(XATTRS_STAGE, xattrs).
 
 -define(STAGES, [
     {?FILE_META_ATTRS, direct, fun resolve_file_meta_attrs/1},
     {?LINKS_ATTRS, direct, fun resolve_name_attrs/1},
+    {?PATH_ATTRS, effective, fun resolve_path/1},
+    {?LUMA_ATTRS, direct, fun resolve_luma_attrs/1},
     {?TIMES_ATTRS, direct, fun resolve_times_attrs/1},
     {?LOCATION_ATTRS, direct, fun resolve_location_attrs/1},
-    {?LUMA_ATTRS, direct, fun resolve_luma_attrs/1},
-    {?DATASET_ATTRS, effective, fun resolve_dataset_attrs/1},
-    {?ARCHIVE_RECALL_ATTRS, effective, fun resolve_archive_recall_attrs/1},
-    {?QOS_STATUS_ATTRS, effective, fun resolve_qos_status_attrs/1},
-    {?QOS_EFF_VALUE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
-    {?PATH_ATTRS, effective, fun resolve_path/1},
     {?METADATA_ATTRS, direct, fun resolve_metadata_attrs/1},
+    {?DATASET_ATTRS, effective, fun resolve_dataset_attrs/1},
+    {?QOS_EFF_VALUE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
+    {?QOS_STATUS_ATTRS, effective, fun resolve_qos_status_attrs/1},
+    {?ARCHIVE_RECALL_ATTRS, effective, fun resolve_archive_recall_attrs/1},
     {?XATTRS_STAGE, direct, fun resolve_xattrs/1}
 ]).
-
-% do not calculate effective values attrs when references limit is exceeded
--define(REFERENCES_LIMIT, 100).
--define(EFFECTIVE_VALUE_ATTRS, ?DATASET_ATTRS ++ ?QOS_STATUS_ATTRS ++ ?QOS_EFF_VALUE_ATTRS).
 
 
 %%%===================================================================
@@ -94,22 +89,20 @@
 
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {file_attr(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
-    ExpandedRequestedAttrs = case lists_utils:intersect(?EFFECTIVE_VALUE_ATTRS, RequestedAttributes) of
-        [] -> RequestedAttributes;
-        _ -> lists:usort([link_count | RequestedAttributes])
+    FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
+        undefined -> RequestedAttributes;
+        _ -> lists_utils:intersect(RequestedAttributes, ?PUBLIC_ATTRS)
     end,
     InitialState = #state{
         file_ctx = FileCtx,
         user_ctx = UserCtx,
-        options = Opts#{attributes => ExpandedRequestedAttrs}
+        options = Opts#{attributes => FinalRequestedAttributes}
     },
     % for spaces not supported locally effective value cache is not initialized
     IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
     {FinalState, FinalFileAttr} = lists:foldl(fun
-        ({_, effective, _}, {AccState, #file_attr{link_count = LinkCount} = AccFileAttr})
-            when LinkCount > ?REFERENCES_LIMIT orelse IsRemoteOnlySpace
-        ->
+        ({_, effective, _}, {AccState, AccFileAttr}) when IsRemoteOnlySpace ->
             {AccState, AccFileAttr};
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttr}) ->
             {StageState, StageFileAtrr} = resolve_stage(AccState, AttrsSubset, StageFun),
@@ -143,17 +136,16 @@ resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} 
         _ -> get_masked_private_base_attrs(ShareId, FileDoc)
     end,
     {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {Acl, FileCtx3} = file_ctx:get_acl(FileCtx2),
     
-    {UpdatedState#state{file_ctx = FileCtx2}, BaseAttrs#file_attr{
+    {UpdatedState#state{file_ctx = FileCtx3}, BaseAttrs#file_attr{
         active_permissions_type = ActivePermissionsType,
         index = build_index(FileCtx, FileDoc),
-        %% @TODO do reviewerów - czy nie chcielibyśmy zrobić haka, że jak plik jest rootem archiwum (mamy to za darmo, vide archive_id),
-        %% to wtedy nie dajemy parenta (czyli logicznie byśmy odpieli archiwa od filestytemu spejsa)
-        %% Pytanie czy to może mieć niepożądane konsekwencje?
         parent_guid = ParentGuid,
+        acl = Acl,
         symlink_value = resolve_symlink_value(FileDoc),
         type = file_meta:get_effective_type(FileDoc),
-        link_count = resolve_link_count(FileCtx2, ShareId, Attrs),
+        hardlink_count = resolve_link_count(FileCtx3, ShareId, Attrs),
         is_deleted = file_meta:is_deleted(FileDoc)
     }}.
 
@@ -221,8 +213,7 @@ resolve_dataset_attrs(#state{file_ctx = FileCtx} = State) ->
     {State#state{file_ctx = FileCtx2}, #file_attr{
         eff_dataset_membership = EffectiveDatasetMembership,
         eff_protection_flags = EffectiveProtectionFlags,
-        eff_dataset_protection_flags = EffDatasetProtectionFlags,
-        archive_id = archivisation_tree:uuid_to_archive_id(file_ctx:get_logical_uuid_const(FileCtx2))
+        eff_dataset_protection_flags = EffDatasetProtectionFlags
     }}.
 
 
@@ -274,7 +265,7 @@ resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, XattrList} = xattr:list_insecure(RootUserCtx, FileCtx, false, true),
     {State, #file_attr{
-        has_metadata = lists:any(fun
+        has_custom_metadata = lists:any(fun
             (<<?CDMI_PREFIX_STR, _/binary>>) -> false;
             (?JSON_METADATA_KEY) -> true;
             (?RDF_METADATA_KEY) -> true;
@@ -397,7 +388,7 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 -spec resolve_link_count(file_ctx:ctx(), od_share:id(), [attribute()]) ->
     non_neg_integer() | undefined.
 resolve_link_count(FileCtx, ShareId, Attrs) ->
-    case {ShareId, lists:member(link_count, Attrs)} of
+    case {ShareId, lists:member(hardlink_count, Attrs)} of
         {undefined, true} ->
             {ok, LinkCount} = file_ctx:count_references_const(FileCtx),
             LinkCount;
@@ -419,9 +410,6 @@ resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_att
         {true, _} ->
             {FLDoc, FC3} = file_ctx:get_local_file_location_doc(FileCtx2),
             ResAttr = lists:foldl(fun
-                %% @TODO do MW - czy zliczanie wszystkich bloków zamiast tylko patrzenie czy są 2 i potem porównianie
-                %% do size'a byłoby dopuszczalne z punktu widzienia performancu? I czy nie ma tam jakichś możliwych rejsów?
-                %% (chodzi o to, żeby liczyć tylko local replication rate i potem na translacji dla clienta porównywać, czy jest 1)
                 (local_replication_rate, AccAttr) ->
                     AccAttr#file_attr{local_replication_rate = count_bytes(FLDoc)/Size};
                 (is_fully_replicated, AccAttr) ->

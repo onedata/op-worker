@@ -104,7 +104,7 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
             file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx0, Name),
             TargetParentFileCtx1 = file_ctx:assert_synchronization_enabled(TargetParentFileCtx0),
             TargetFileCtx1 = file_ctx:assert_synchronization_enabled(TargetFileCtx0),
-            % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
+            % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deleted
             % Check permissions on original target
             TargetFileCtx2 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx1),
 

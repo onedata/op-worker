@@ -156,9 +156,6 @@ get_shared_file_instance_test(_Config) ->
 
     FileDetailsWithShares = OriginalFileAttrs#file_attr{shares = [FileShareId2, FileShareId1 | OriginalShares]},
 
-    ShareRootFileGuid = file_id:guid_to_share_guid(FileGuid, FileShareId1),
-    ExpJsonShareRootFileDetails = fun(Node) -> file_attrs_to_gs_json(Node, FileShareId1, FileDetailsWithShares) end,
-
     SpaceId = oct_background:get_space_id(space_krk_par),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, SpaceGuid),
@@ -169,6 +166,9 @@ get_shared_file_instance_test(_Config) ->
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
     ExpJsonShareFileDetails = fun(Node) -> file_attrs_to_gs_json(Node, SpaceShareId, FileDetailsWithShares) end,
+    
+    ShareRootFileGuid = file_id:guid_to_share_guid(FileGuid, FileShareId1),
+    ExpJsonShareRootFileDetails = fun(Node) -> file_attrs_to_gs_json(Node, FileShareId1, FileDetailsWithShares) end,
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
@@ -277,7 +277,8 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
     fun(#api_test_ctx{node = Node}, Result) ->
         {ok, ResultMap} = ?assertMatch({ok, _}, Result),
         % do not compare size in attrs, as stats may not be fully calculated yet (which is normal and expected)
-        ?assertEqual(maps:without([size, ctime], ExpJsonDetailsFun(Node)), maps:without([size, ctime], ResultMap))
+        %% @TODO VFS-11380 analyze why ctime is updated here and whether it should be
+        ?assertEqual(maps:without([<<"size">>, <<"ctime">>], ExpJsonDetailsFun(Node)), maps:without([<<"size">>, <<"ctime">>], ResultMap))
     end.
 
 
@@ -294,7 +295,7 @@ get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,
         eff_dataset_membership = ?NONE_MEMBERSHIP,
-        has_metadata = false
+        has_custom_metadata = false
     }.
 
 

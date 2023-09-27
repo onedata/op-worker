@@ -209,7 +209,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> ?IMPOSSIBLE_QOS_STATUS;
             false -> undefined
         end,
-        has_metadata = HasMetadata
+        has_custom_metadata = HasMetadata
     },
 
     {FileType, FilePath, FileGuid, FinalFileAttr}.
@@ -387,14 +387,35 @@ guids_to_object_ids(Guids) ->
 %% @TODO VFS-11376 Use file_attr_translator after it is properly unit tested
 -spec file_attr_to_json(undefined | od_share:id(), rest | gs, od_provider:id(), #file_attr{}) -> map().
 file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
-    guid = Guid, name = Name, mode = Mode, parent_guid = ParentGuid, uid = Uid, gid = Gid, atime = Atime,
-    mtime = Mtime, ctime = Ctime, type = Type, size = Size, shares = Shares, provider_id = ProviderId,
-    owner_id = OwnerId, link_count = HardlinksCount, index = Index, xattrs = Xattrs,
-    active_permissions_type = ActivePermissionsType, symlink_value = SymlinkValue,
-    conflicting_name = ConflictingName, recall_root_id = RecallRootId, eff_protection_flags = EffProtectionFlags,
-    eff_dataset_protection_flags = EffDatasetProtectionFlags, eff_dataset_membership = EffDatasetMembership,
-    eff_qos_membership = EffQosMembership, qos_status = QosStatus, archive_id = ArchiveId,
-    has_metadata = HasMetadata
+    guid = Guid,
+    index = Index,
+    type = Type,
+    active_permissions_type = ActivePermissionsType,
+    mode = Mode,
+    acl = Acl,
+    name = Name,
+    conflicting_name = ConflictingName,
+    parent_guid = ParentGuid,
+    gid = Gid,
+    uid = Uid,
+    atime = Atime,
+    mtime = Mtime,
+    ctime = Ctime,
+    size = Size,
+    local_replication_rate = LocalReplicationRate,
+    provider_id = ProviderId,
+    shares = Shares,
+    owner_id = OwnerId,
+    hardlink_count = HardlinksCount,
+    symlink_value = SymlinkValue,
+    has_custom_metadata = HasMetadata,
+    eff_protection_flags = EffProtectionFlags,
+    eff_dataset_protection_flags = EffDatasetProtectionFlags,
+    eff_dataset_membership = EffDatasetMembership,
+    eff_qos_membership = EffQosMembership,
+    qos_status = QosStatus,
+    recall_root_id = RecallRootId,
+    xattrs = Xattrs
 }) ->
     % NOTE: this assumes that there were no remote file readings between creation and attrs check
     LocalReplicationRate = case {Type, CheckingProviderId, Size} of
@@ -413,30 +434,31 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     
     BaseJson = #{
         <<"fileId">> => map_file_id_for_api_type(ApiType, Guid),
-        <<"name">> => Name,
-        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"parentId">> => map_file_id_for_api_type(ApiType, ParentGuid),
-        <<"storageUserId">> => Uid,
-        <<"storageGroupId">> => Gid,
-        <<"atime">> => Atime,
-        <<"mtime">> => Mtime,
-        <<"ctime">> => Ctime,
-        <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => utils:undefined_to_null(Size),
-        <<"shares">> => Shares,
-        <<"providerId">> => ProviderId,
-        <<"ownerId">> => OwnerId,
-        <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
         <<"index">> => file_listing:encode_index(Index),
-        
-        <<"hasMetadata">> => HasMetadata,
+        <<"type">> => str_utils:to_binary(Type),
         <<"activePermissionsType">> => case ActivePermissionsType of
             undefined -> undefined;
             _ -> atom_to_binary(ActivePermissionsType)
         end,
+        <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"acl">> => acl:to_json(Acl, gui),
+        <<"name">> => Name,
+        <<"conflictingName">> => ConflictingName,
+        <<"parentFileId">> => map_file_id_for_api_type(ApiType, ParentGuid),
+        <<"displayGid">> => Gid,
+        <<"displayUid">> => Uid,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"size">> => utils:undefined_to_null(Size),
+        <<"isFullyReplicatedLocally">> => LocalReplicationRate2 == 1.0,
         <<"localReplicationRate">> => LocalReplicationRate2,
-        <<"qosStatus">> => translate_qos_status(QosStatus),
-    
+        <<"originProviderId">> => ProviderId,
+        <<"directShareIds">> => Shares,
+        <<"ownerUserId">> => OwnerId,
+        <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
+        <<"symlinkValue">> => SymlinkValue,
+        <<"hasCustomMetadata">> => HasMetadata,
         <<"effProtectionFlags">> => case EffProtectionFlags of
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffProtectionFlags)
@@ -445,12 +467,10 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffDatasetProtectionFlags)
         end,
-        <<"effQosMembership">> => translate_membership(EffQosMembership),
         <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
-        <<"recallRootId">> => RecallRootId,
-        <<"symlinkValue">> => SymlinkValue,
-        <<"conflictingName">> => ConflictingName,
-        <<"archiveId">> => ArchiveId
+        <<"effQosMembership">> => translate_membership(EffQosMembership),
+        <<"qosStatus">> => translate_qos_status(QosStatus),
+        <<"recallRootId">> => RecallRootId
     },
     FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
@@ -458,8 +478,8 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     maps_utils:undefined_to_null(FinalJson);
 file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
     guid = FileGuid,
-    parent_guid = ParentGuid,
     mode = Mode,
+    parent_guid = ParentGuid,
     shares = Shares
 } = FileAttr) ->
     IsShareRoot = lists:member(ShareId, Shares),
@@ -468,12 +488,12 @@ file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
     
     maps:with(lists:map(fun file_attr_translator:attr_name_to_json/1, ?PUBLIC_ATTRS), BaseJson#{
         <<"fileId">> => map_file_id_for_api_type(ApiType, file_id:guid_to_share_guid(FileGuid, ShareId)),
-        <<"parentId">> => case IsShareRoot of
+        <<"parentFileId">> => case IsShareRoot of
             true -> null;
             false -> map_file_id_for_api_type(ApiType, file_id:guid_to_share_guid(ParentGuid, ShareId))
         end,
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
-        <<"shares">> => case IsShareRoot of
+        <<"directShareIds">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
         end

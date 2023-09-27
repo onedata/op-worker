@@ -116,7 +116,7 @@ from_protobuf(#'FileAttr'{} = FileAttr) ->
         shares = FileAttr#'FileAttr'.shares,
         owner_id = FileAttr#'FileAttr'.owner_id,
         is_fully_replicated = FileAttr#'FileAttr'.fully_replicated,
-        link_count = FileAttr#'FileAttr'.nlink,
+        hardlink_count = FileAttr#'FileAttr'.nlink,
         index = file_listing:decode_index(FileAttr#'FileAttr'.index),
         xattrs = Xattrs
     };
@@ -378,7 +378,7 @@ to_protobuf(#file_attr{} = FileAttr) ->
         shares = utils:ensure_defined(FileAttr#file_attr.shares, []),
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.is_fully_replicated,
-        nlink = FileAttr#file_attr.link_count,
+        nlink = FileAttr#file_attr.hardlink_count,
         index = file_listing:encode_index(FileAttr#file_attr.index),
         xattrs = TranslatedXattrs
     }};

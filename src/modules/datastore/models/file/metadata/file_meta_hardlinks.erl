@@ -32,8 +32,7 @@
 -type references_presence() :: no_references_left | has_at_least_one_reference.
 -export_type([link/0, references/0, references_list/0, references_presence/0]).
 
-% TODO VFS-7441 - Test number of links that can be stored in file_meta doc
--define(MAX_LINKS_NUM, 65536). % 64 * 1024
+-define(MAX_LINKS_NUM, 1000).
 
 %%%===================================================================
 %%% API
@@ -85,7 +84,7 @@ register(FileUuid, LinkUuid) ->
     ProviderId = oneprovider:get_id(),
     file_meta:update_including_deleted(FileUuid, fun(#file_meta{references = References} = Record) ->
         case count_references_in_map(References) of
-            LinksNum when LinksNum > ?MAX_LINKS_NUM ->
+            LinksNum when LinksNum >= ?MAX_LINKS_NUM ->
                 {error, ?EMLINK};
             _ ->
                 ProviderReferences = maps:get(ProviderId, References, []),

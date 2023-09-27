@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module provides basic functionality for navigating through Oneprovider's
 %%% files tree. The structure of it is presented and described below.
-%%%
+%%%o% fixme opisać te wirtualne katalogi (archive_root, trash etc)
 %%%                       +----------+
 %%%                       |  !ROOT   |_______________________
 %%%                       +----------+                \      \
@@ -103,19 +103,32 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns 'undefined' if file is root file (either userRootDir or share root)
-%% or proper ParentGuid otherwise.
+%% Returns 'undefined' if file is root file (either userRootDir, share root, archive root, trash, tmp dir or shared
+%% file accessed in share ctx) or proper ParentGuid otherwise.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent_guid_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
 get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
-
-    case file_ctx:get_logical_guid_const(ParentCtx) of
-        FileGuid -> {undefined, FileCtx2};
-        ParentGuid -> {ParentGuid, FileCtx2}
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    IsRootDir = lists:any(fun(F) -> F(FileUuid) end, [
+        fun fslogic_file_id:is_user_root_dir_uuid/1,
+        fun fslogic_file_id:is_share_root_dir_uuid/1,
+        fun archivisation_tree:is_archives_root_dir_uuid/1,
+        fun fslogic_file_id:is_trash_dir_uuid/1,
+        fun fslogic_file_id:is_tmp_dir_uuid/1
+    ]),
+    
+    case IsRootDir of
+        true ->
+            {undefined, FileCtx};
+        false ->
+            % get_parent/2 returns the same file_ctx when file is shared and accessed in share ctx.
+            {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
+            case file_ctx:equals(ParentCtx, FileCtx2) of
+                true -> {undefined, FileCtx2};
+                false -> {file_ctx:get_logical_guid_const(ParentCtx), FileCtx2}
+            end
     end.
 
 
