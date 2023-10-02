@@ -425,7 +425,7 @@ _Dialyze:
     - script:
         <<: *run-script-working-dir
         scripts:
-          - ./make.py --cpuset-cpus 0 dialyzer
+          - ./make.py dialyzer
         description: Dialyze
   final-tasks:
     - test-parser:

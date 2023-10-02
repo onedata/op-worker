@@ -356,13 +356,13 @@ translate(GRI, Result) ->
     datastore:value().
 overwrite_cached_record(#gri{type = od_user, aspect = instance}, Previous, New) ->
     % compare the previous and current user doc to infer whether the blocked value has changed
-    {NewBlocked, _} = New#od_user.blocked,
     {PreviousBlocked, _} = Previous#od_user.blocked,
-    case PreviousBlocked of
+    {NewBlocked, _} = New#od_user.blocked,
+    case NewBlocked of
         undefined ->
             % undefined is set for shared user scope (the value is unknown)
             New#od_user{blocked = {NewBlocked, unchanged}};
-        NewBlocked ->
+        PreviousBlocked ->
             % the blocked value is the same
             New#od_user{blocked = {PreviousBlocked, unchanged}};
         _ ->

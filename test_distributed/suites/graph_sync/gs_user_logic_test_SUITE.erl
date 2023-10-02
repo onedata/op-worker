@@ -296,7 +296,8 @@ mixed_get_test(Config) ->
     ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, UserGriMatcher)),
 
     ?assertMatch(
-        {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1)},
+        % the block value is detected as changed because in the shared scope it was not known (undefined)
+        {ok, ?USER_PROTECTED_DATA_MATCHER(?USER_1, {false, changed})},
         rpc:call(Node, user_logic, get_protected_data, [User1Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),

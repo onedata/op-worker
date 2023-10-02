@@ -24,10 +24,10 @@
 %% API
 -export([handle_request/2]).
 
--type create_fun() :: fun((session:id(), file_id:file_guid() , file_meta:name(), file_meta:mode()) -> 
+-type create_fun() :: fun((session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode()) ->
     {ok, file_id:file_guid()} | {error, term()}).
 
--type create_link_fun() :: fun((session:id(), lfm:file_ref(), file_meta:name(), 
+-type create_link_fun() :: fun((session:id(), lfm:file_ref(), file_meta:name(),
     file_id:file_guid() | file_meta:path()) -> {ok, file_id:file_guid()} | {error, term()}).
 
 % timeout after which cowboy returns the data read from socket, regardless of its size
@@ -45,7 +45,27 @@
 
 
 -spec handle_request(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
-handle_request(OpReq0, Req) ->
+handle_request(OpReq, Req) ->
+    try
+        handle_request_unsafe(OpReq, Req)
+    catch
+        Class:Reason:Stacktrace ->
+            Error = case request_error_handler:infer_error(Reason) of
+                {true, KnownError} ->
+                    KnownError;
+                false ->
+                    ?examine_exception(Class, Reason, Stacktrace)
+            end,
+            http_req:send_error(Error, Req)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+handle_request_unsafe(OpReq0, Req) ->
     OpReq1 = #op_req{
         auth = Auth,
         operation = Operation,
@@ -60,18 +80,11 @@ handle_request(OpReq0, Req) ->
     ensure_operation_supported(Operation, Aspect, Scope),
     OpReq2 = sanitize_params(OpReq1, Req),
 
-    case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
-        ok -> ensure_has_access_to_file(OpReq1);
-        {error, _} = Error -> throw(Error)
-    end,
+    ?check(api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI)),
+    ensure_has_access_to_file(OpReq1),
     middleware_utils:assert_file_managed_locally(FileGuid),
 
     process_request(OpReq2, Req).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 
 %% @private
@@ -186,7 +199,7 @@ ensure_has_access_to_file(#op_req{auth = ?GUEST}) ->
     throw(?ERROR_UNAUTHORIZED);
 ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
     middleware_utils:has_access_to_file_space(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
-    
+
 
 %% @private
 -spec process_request(middleware:req(), cowboy_req:req()) ->
@@ -235,13 +248,13 @@ process_request(#op_req{
         ?REGULAR_FILE_TYPE ->
             Mode = maps:get(<<"mode">>, Params, ?DEFAULT_FILE_PERMS),
             {FileGuid, NewFileCreated} = create(fun lfm:create/4, SessionId, ParentGuid, Name, Mode, UpdateExisting),
-        
+
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
                     {FileGuid, Req};
                 {Offset, _} ->
                     FileRef = ?FILE_REF(FileGuid),
-                
+
                     try
                         Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
                         {FileGuid, Req2}
@@ -290,9 +303,10 @@ process_request(#op_req{
     operation = delete,
     auth = #auth{session_id = SessionId},
     gri = #gri{aspect = file_at_path}
-} = OpReq, _Req) ->
+} = OpReq, Req) ->
     FileGuid = resolve_target_file(OpReq),
-    lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid)).
+    ?check(lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid))),
+    http_req:send_response(?NO_CONTENT_REPLY, Req).
 
 
 %% @private
@@ -360,7 +374,7 @@ resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
 
 
 %% @private
--spec create(create_fun(), session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode(), 
+-spec create(create_fun(), session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode(),
     UpdateExisting :: boolean()) -> {file_id:file_guid(), NewFileCreated :: boolean()} | no_return().
 create(CreateFun, SessionId, ParentGuid, Name, Mode, false) ->
     {ok, Guid} = ?lfm_check(CreateFun(SessionId, ParentGuid, Name, Mode)),
@@ -420,7 +434,7 @@ delete_file(SessionId, ParentGuid, Name) ->
 
 
 %% @private
--spec resolve_guid(session:id(), file_id:file_guid(), file_meta:name(), fun(() -> Term)) -> 
+-spec resolve_guid(session:id(), file_id:file_guid(), file_meta:name(), fun(() -> Term)) ->
     file_id:file_guid() | Term.
 resolve_guid(SessionId, ParentGuid, Name, Fallback) ->
     case lfm:resolve_guid_by_relative_path(SessionId, ParentGuid, Name) of

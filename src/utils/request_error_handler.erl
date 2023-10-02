@@ -19,6 +19,7 @@
 
 %% API
 -export([handle/5]).
+-export([infer_error/1]).
 
 -define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
     ?CLUSTER_WORKER_APP_NAME, log_requests_on_error, false
@@ -53,24 +54,6 @@ handle(Class, Reason, Stacktrace, SessionId, RequestTerm) ->
     end.
 
 
-%%%===================================================================
-%%% Internals
-%%%===================================================================
-
-%% @private
--spec format_log_message(session:id(), Request :: term()) -> string().
-format_log_message(SessionId, RequestTerm) ->
-    AutoformattedDetails = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
-        true ->
-            Request = lager:pr(RequestTerm, ?MODULE),
-            ?autoformat([SessionId, Request]);
-        false ->
-            ?autoformat([SessionId])
-    end,
-    str_utils:format("Cannot process request~s", [AutoformattedDetails]).
-
-
-%% @private
 -spec infer_error(term()) -> {true, errors:error()} | false.
 infer_error({badmatch, Error}) ->
     infer_error(Error);
@@ -93,3 +76,21 @@ infer_error(Error) ->
         false ->
             false
     end.
+
+
+%%%===================================================================
+%%% Internals
+%%%===================================================================
+
+
+%% @private
+-spec format_log_message(session:id(), Request :: term()) -> string().
+format_log_message(SessionId, RequestTerm) ->
+    AutoformattedDetails = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
+        true ->
+            Request = lager:pr(RequestTerm, ?MODULE),
+            ?autoformat([SessionId, Request]);
+        false ->
+            ?autoformat([SessionId])
+    end,
+    str_utils:format("Cannot process request~s", [AutoformattedDetails]).
