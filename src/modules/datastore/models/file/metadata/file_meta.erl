@@ -39,14 +39,13 @@
     update_protection_flags/3, validate_protection_flags/1,
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
--export([get_scope_id/1, reconcile_spaces_for_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    make_space_exist/1, make_tmp_dir_exist/1, make_opened_deleted_files_dir_exist/1,
+-export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
+    ensure_space_docs_exist/1, make_tmp_dir_exist/1, make_opened_deleted_files_dir_exist/1,
     new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
 -export([get_ctx_with_remote_set/2]).
--export([emit_space_dir_created/2, emit_space_dir_deleted/2]).
 
 
 %% datastore_model callbacks
@@ -96,6 +95,19 @@
 % For root directory and users' root directories we use "special" scope
 % as they don't belong to any space
 -define(ROOT_DIR_SCOPE, <<>>).
+
+
+-define(SPACE_DOC(SpaceId), #document{
+    key = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    value = #file_meta{
+        name = SpaceId,
+        type = ?DIRECTORY_TYPE,
+        mode = ?DEFAULT_DIR_MODE,
+        owner = ?SPACE_OWNER_ID(SpaceId),
+        is_scope = true,
+        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
+    }
+}).
 
 %%%===================================================================
 %%% API
@@ -294,7 +306,7 @@ get_including_deleted(Uuid, Ctx) ->
                             % Until space doc creation is finally properly handled on space creation
                             % create space document here if it was requested before any user login.
                             ?debug("make_space_exist called in file_meta:get_including_deleted"),
-                            make_space_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
+                            ensure_space_docs_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
                             datastore_model:get(Ctx#{include_deleted => true}, Uuid);
                         false ->
                             {error, not_found}
@@ -684,43 +696,6 @@ get_mode(#file_meta{mode = Mode}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes files metadata for onedata user.
-%% This function can and should be used to ensure that user's FS is fully synchronised. Normally
-%% this function is called asynchronously automatically after user's document is updated.
-%% @end
-%%--------------------------------------------------------------------
--spec reconcile_spaces_for_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
-reconcile_spaces_for_user(UserId, ChangedSpaces) ->
-    try
-        lists:foreach(fun make_space_exist/1, ChangedSpaces),
-
-        FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
-        case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
-            #document{
-                key = FileUuid,
-                value = #file_meta{
-                    name = UserId,
-                    type = ?DIRECTORY_TYPE,
-                    mode = 8#1755,
-                    owner = ?ROOT_USER_ID,
-                    is_scope = true,
-                    parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-                }
-            })
-        of
-            {ok, _} ->
-                ?extract_ok(times:save_with_current_times(FileUuid, ?ROOT_DIR_SCOPE, false));
-            {error, already_exists} ->
-                ok
-        end
-    catch Class:Reason:Stacktrace ->
-        ?error_exception("Failed to reconcile spaces for user ~s", [?autoformat([UserId, ChangedSpaces])],
-            Class, Reason, Stacktrace)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
@@ -771,38 +746,12 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file meta entry for space if not exists
-%% @end
-%%--------------------------------------------------------------------
--spec make_space_exist(SpaceId :: od_space:id()) -> ok | no_return().
-make_space_exist(SpaceId) ->
-    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    FileDoc = #document{
-        key = SpaceDirUuid,
-        value = #file_meta{
-            name = SpaceId,
-            type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_DIR_MODE,
-            owner = ?SPACE_OWNER_ID(SpaceId),
-            is_scope = true,
-            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-        }
-    },
-    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
-        {ok, _} ->
-            case times:save_with_current_times(SpaceDirUuid, SpaceId, false) of
-                {ok, _} -> ok;
-                {error, already_exists} -> ok
-            end,
-
-            trash:create(SpaceId),
-            archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
-            make_tmp_dir_exist(SpaceId),
-            make_opened_deleted_files_dir_exist(SpaceId),
-
-            emit_space_dir_created(SpaceDirUuid, SpaceId);
+-spec ensure_space_docs_exist(SpaceId :: od_space:id()) -> ok | no_return().
+ensure_space_docs_exist(SpaceId) ->
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_DOC(SpaceId)) of
+        {ok, #document{key = SpaceDirUuid}} ->
+            ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false)),
+            space_logic:on_space_dir_created(SpaceId);
         {error, already_exists} ->
             ok
     end.
@@ -1146,24 +1095,6 @@ get_uuid(FileUuid) ->
 -spec get_ctx_with_remote_set(od_space:id(), od_space:id() | undefined) -> datastore:ctx().
 get_ctx_with_remote_set(Scope, RemoteScope) ->
     ?CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope).
-
-
--spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: od_space:id()) -> ok | no_return().
-emit_space_dir_created(DirUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
-    #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
-            allow_deleted_files => false,
-            name_conflicts_resolution_policy => resolve_name_conflicts
-        }),
-    FileAttr2 = FileAttr#file_attr{size = 0},
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
-
-
--spec emit_space_dir_deleted(od_space:id(), od_user:id()) -> ok | no_return().
-emit_space_dir_deleted(SpaceId, UserId) ->
-    FileCtx = file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId),
-    ok = fslogic_event_emitter:emit_file_removed(FileCtx, [], fslogic_file_id:user_root_dir_guid(UserId)).
 
 %%%===================================================================
 %%% Internal functions

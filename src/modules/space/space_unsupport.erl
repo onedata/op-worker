@@ -70,7 +70,7 @@ init_pools() ->
 run(SpaceId, StorageId) ->
     % ensure that file_meta doc for space is created, so it is not needed to always 
     % check if it exists when doing operations on files
-    file_meta:make_space_exist(SpaceId),
+    file_meta:ensure_space_docs_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init})).
 

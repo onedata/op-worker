@@ -65,6 +65,7 @@ update_cache(Id, Diff, Default) ->
         end,
         case datastore_model:update(?CTX, Id, Diff, Default) of
             {ok, #document{value = NewVal}} = Res ->
+                handle_new_doc(Id, PrevVal, NewVal),
                 handle_new_spaces(Id, PrevVal, NewVal),
                 handle_spaces_removed(Id, PrevVal, NewVal),
                 Res;
@@ -155,50 +156,23 @@ run_in_critical_section(UserId, Fun) ->
 -spec handle_new_spaces(id(), PrevVal :: record(), NewVal :: record()) -> ok.
 handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
     case NewSpaces -- PrevSpaces of
-        [] ->
-            ok;
-        SpacesDiff ->
-            case find_user_fuse_session(UserId) of
-                undefined -> ok;
-                SessId ->
-                    SpacesByName = space_logic:group_spaces_by_name(SessId, PrevSpaces),
-                    ParentGuid = fslogic_file_id:user_root_dir_guid(UserId),
-                    lists:foreach(fun(SpaceId) ->
-                        case space_logic:get_name(SessId, SpaceId) of
-                            {ok, Name} ->
-                                ExtendedSpacesByName = SpacesByName#{Name => [SpaceId | maps:get(Name, SpacesByName, [])]},
-                                od_space:handle_space_name_appeared(SpaceId, Name, ParentGuid, ExtendedSpacesByName, create);
-                            ?ERROR_NOT_FOUND -> ok;
-                            ?ERROR_FORBIDDEN -> ok
-                        end
-                    end, SpacesDiff)
-            end,
-            file_meta:reconcile_spaces_for_user(UserId, SpacesDiff)
+        [] -> ok;
+        SpacesDiff -> user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
     end.
 
 
 %% @private
 -spec handle_spaces_removed(id(), PrevVal :: record(), NewVal :: record()) -> ok.
 handle_spaces_removed(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
-    %% @TODO VFS-10923 user does not have access to space anymore so he cannot get its name and therefore unnecessary
-    %% space name suffix can remain (when there were 2 spaces with the same name and user left one of this spaces).
     case PrevSpaces -- NewSpaces of
-        [] ->
-            ok;
-        SpacesDiff ->
-            lists:foreach(fun(SpaceId) ->
-                file_meta:emit_space_dir_deleted(SpaceId, UserId)
-            end, SpacesDiff)
+        [] -> ok;
+        SpacesDiff -> user_root_dir:report_spaces_removed([UserId], SpacesDiff)
     end.
 
 
 %% @private
--spec find_user_fuse_session(id()) -> session:id() | undefined.
-find_user_fuse_session(UserId) ->
-    {ok, SessList} = session:list(),
-    lists_utils:foldl_while(fun
-        (#document{key = SessId, value = #session{type = fuse, identity = ?SUB(user, U)}}, _Acc) when U == UserId ->
-            {halt, SessId};
-        (_, Acc) ->
-            {cont, Acc}
-    end, undefined, SessList).
+-spec handle_new_doc(id(), PrevVal :: record(), NewVal :: record()) -> ok.
+handle_new_doc(UserId, #od_user{username = undefined}, _) ->
+    user_root_dir:ensure_docs_exist(UserId);
+handle_new_doc(_, _, _) ->
+    ok.

@@ -46,7 +46,7 @@
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
 -export([group_spaces_by_name/2, disambiguate_space_name/2]).
--export([on_space_supported/1]).
+-export([on_space_supported/1, on_space_dir_created/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -495,6 +495,14 @@ get_harvesters(SpaceId) ->
 -spec on_space_supported(od_space:id()) -> ok.
 on_space_supported(SpaceId) ->
     ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
+
+
+-spec on_space_dir_created(od_space:id()) -> ok.
+on_space_dir_created(SpaceId) ->
+    trash:create(SpaceId),
+    archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
+    file_meta:make_tmp_dir_exist(SpaceId),
+    file_meta:make_opened_deleted_files_dir_exist(SpaceId).
 
 
 -spec group_spaces_by_name(gs_client_worker:client(), [od_space:id()]) -> #{od_space:name() => [od_space:id()]}.

@@ -126,7 +126,8 @@ on_connect_to_oz() ->
     ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
     ok = qos_worker:init_retry_failed_files(),
-    ok = qos_worker:init_traverse_pools().
+    ok = qos_worker:init_traverse_pools(),
+    ok = user_root_dir:ensure_cache_updated().
 
 
 %% NOTE: these procedures are run on a single cluster node.

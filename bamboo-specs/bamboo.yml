@@ -110,6 +110,7 @@ stages:
         - ceph_helper
         - cephrados_helper
         - client_events
+        - client_user_root_dir_events
         - cluster_upgrade
         - connection
         - connection_layer
@@ -877,6 +878,13 @@ client_events:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_client_events.tar.gz
+
+client_user_root_dir_events:
+  <<: *ct-onenv-job
+  key: CLIUSROOTDIREVE
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_client_user_root_dir_events.tar.gz
 
 cluster_upgrade:
   <<: *ct-job
@@ -1876,6 +1884,7 @@ Coverage report:
     - artifact: ct_logs_ceph_helper.tar.gz
     - artifact: ct_logs_cephrados_helper.tar.gz
     - artifact: ct_logs_client_events.tar.gz
+    - artifact: ct_logs_client_user_root_dir_events.tar.gz
     - artifact: ct_logs_cluster_upgrade.tar.gz
     - artifact: ct_logs_connection.tar.gz
     - artifact: ct_logs_connection_layer.tar.gz
