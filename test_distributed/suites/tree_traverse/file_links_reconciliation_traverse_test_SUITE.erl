@@ -82,7 +82,7 @@ file_links_reconciliation_traverse_test(Config) ->
     stop_op_worker(Config, paris),
     
     lists:foreach(fun(LinkNodeId) ->
-        ?assertMatch({ok, _, _}, get_doc_from_db(KrakowNode, LinkNodeId))
+        ?assertMatch({ok, _, _}, get_doc_from_db(KrakowNode, LinkNodeId), ?ATTEMPTS)
     end, LinkNodeIds),
     
     ?assertEqual(ExpectedChildren, ListChildrenFun()),

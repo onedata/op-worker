@@ -26,12 +26,15 @@
 -export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
 -export([prepare_file/2, use_file/4]).
 -export([create_new_file_subscriptions/3, cancel_subscriptions/3]).
+-export([reset_sequence_counter/0]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
--define(SeqID, erlang:unique_integer([positive, monotonic]) - 1).
--define(MsgID, integer_to_binary(fuse_test_utils:generate_msg_id())).
+
+-define(SEQ_COUNTER_KEY, client_simulation_test_base_seq_id).
+% Event sequence ids must be monotonic integers and start from 0
+-define(SeqID(), element(2, node_cache:update(?SEQ_COUNTER_KEY, fun(PrevValue) -> {ok, PrevValue + 1, infinity} end, -1))).
 
 %%%===================================================================
 %%% API
@@ -40,7 +43,6 @@
 simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
     AllArgs = [write, read, release, unsub, directory],
     [Write, Read, Release, Unsub, Directory] = lists:map(fun(A) -> lists:member(A, Args) end, AllArgs),
-
 
     Filename = generator:gen_name(),
     {ParentGuid, DirSubs} = maybe_create_directory(Sock, SpaceGuid, Directory),
@@ -66,10 +68,10 @@ simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
 prepare_file(Sock, SpaceGuid) ->
     Filename = generator:gen_name(),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, SpaceGuid, Filename),
-     create_new_file_subscriptions(Sock, FileGuid, 0),
+        create_new_file_subscriptions(Sock, FileGuid, 0),
     fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
 
-    SubId = ?SeqID,
+    SubId = ?SeqID(),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
         0, SubId, -SubId, FileGuid, 500)),
 
@@ -121,6 +123,10 @@ get_guid(Worker, SessId, Path) ->
         ),
     Guid.
 
+
+reset_sequence_counter() ->
+    node_cache:clear(?SEQ_COUNTER_KEY).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -139,7 +145,7 @@ maybe_write(Sock, FileGuid, HandleId, Write) ->
     Data = <<"test_data">>,
     case Write of
         true ->
-            SubId = ?SeqID,
+            SubId = ?SeqID(),
             ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
                 0, SubId, -SubId, FileGuid, 500)),
             fuse_test_utils:proxy_write(Sock, FileGuid, HandleId, 0, Data),
@@ -154,7 +160,7 @@ maybe_write(Sock, FileGuid, HandleId, Write) ->
 maybe_read(Sock, FileGuid, HandleId, ExpectedData, Read) ->
     case Read of
         true ->
-            SubId1 = ?SeqID,
+            SubId1 = ?SeqID(),
             ok = ssl:send(Sock, fuse_test_utils:generate_file_location_changed_subscription_message(
                 0, SubId1,-SubId1, FileGuid, 500)),
             ?assertMatch(ExpectedData, fuse_test_utils:proxy_read(Sock, FileGuid, HandleId, 0, byte_size(ExpectedData))),
@@ -190,7 +196,7 @@ maybe_unsub(Sock, Subs, Unsub) ->
     end.
 
 create_new_file_subscriptions(Sock, Guid, StreamId) ->
-    [Seq1, Seq2, Seq3] = [?SeqID, ?SeqID, ?SeqID],
+    [Seq1, Seq2, Seq3] = [?SeqID(), ?SeqID(), ?SeqID()],
     ok = ssl:send(Sock, fuse_test_utils:generate_file_removed_subscription_message(
         StreamId, Seq1, -Seq1, Guid)),
     ok = ssl:send(Sock, fuse_test_utils:generate_file_renamed_subscription_message(
@@ -201,7 +207,7 @@ create_new_file_subscriptions(Sock, Guid, StreamId) ->
 
 cancel_subscriptions(Sock, StreamId, Subs) ->
     lists:foreach(fun(SubId) ->
-        ok = ssl:send(Sock, fuse_test_utils:generate_subscription_cancellation_message(StreamId,?SeqID,SubId))
+        ok = ssl:send(Sock, fuse_test_utils:generate_subscription_cancellation_message(StreamId, ?SeqID(), SubId))
     end, Subs).
 
 %%%===================================================================
@@ -209,7 +215,11 @@ cancel_subscriptions(Sock, StreamId, Subs) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        Workers = ?config(op_worker_nodes, NewConfig),
+        test_utils:set_env(Workers, op_worker, ignore_async_subscriptions, false),
+        initializer:setup_storage(NewConfig)
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
 
 init_per_testcase(Config) ->
@@ -225,5 +235,6 @@ init_per_testcase(Config) ->
 end_per_testcase(Config) ->
     lfm_proxy:teardown(Config),
     ssl:stop(),
+    client_simulation_test_base:reset_sequence_counter(),
     initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).

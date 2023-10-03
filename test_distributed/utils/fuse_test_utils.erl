@@ -314,7 +314,7 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
 
 connect_and_upgrade_proto(Hostname, Port) ->
     {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
-        {active, once}, {reuse_sessions, false}
+        {active, once}, {reuse_sessions, false}, {verify, verify_none}
     ], timer:minutes(1))),
     ssl:send(Sock, connection_utils:protocol_upgrade_request(list_to_binary(Hostname))),
     receive {ssl, Sock, Data} ->
