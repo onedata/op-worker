@@ -13,9 +13,13 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
+-include("../suites/cdmi/cdmi_test.hrl").
 
 %% API
--export([do_request/5, cdmi_endpoint/2]).
+-export([
+    do_request/5, cdmi_endpoint/2, user_2_token_header/0,
+    get_tests_root_path/1, get_cdmi_endpoint/1, build_test_root_path/2
+]).
 
 
 %%%===================================================================
@@ -48,7 +52,29 @@ do_request(Node, CdmiSubPath, Method, Headers, Body) ->
 
 cdmi_endpoint(Node, Domain) ->
     Port = get_https_server_port_str(Node),
-    str_utils:format("https://~s~s/cdmi/", [str_utils:to_list(Domain), str_utils:to_list(Port)]).
+    str_utils:format("https://~s~s/cdmi/", [Domain, Port]).
+
+
+user_2_token_header() ->
+    rest_test_utils:user_token_header(oct_background:get_user_access_token(user2)).
+
+
+get_tests_root_path(Config) ->
+    SpaceName = binary_to_list(oct_background:get_space_name(
+        Config#cdmi_test_config.space_selector)
+    ),
+    RootName = node_cache:get(root_dir_name),
+    RootPath = filename:join(SpaceName, RootName) ++ "/",
+    RootPath.
+
+build_test_root_path(Config, TestName) ->
+    filename:join([get_tests_root_path(Config), TestName]).
+
+
+get_cdmi_endpoint(Config) ->
+    WorkerP1= oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
+    Domain = opw_test_rpc:get_provider_domain(WorkerP1),
+    cdmi_test_utils:cdmi_endpoint(WorkerP1, Domain).
 
 
 %% @private

@@ -27,16 +27,23 @@
     acl_read_write_dir/1
 ]).
 
-user_2_token_header() ->
-    rest_test_utils:user_token_header(oct_background:get_user_access_token(user2)).
+
+%%%===================================================================
+%%% Test functions
+%%%===================================================================
 
 write_acl_metadata(Config) ->
     UserName2 = <<"Unnamed User">>,
-    {Workers, RootPath, UserId2} = cdmi_test_base:metadata_base(Config),
+    Workers = [
+        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
+        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
+    ],
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    UserId2 = oct_background:get_user_id(user2),
     DirName = filename:join([RootPath, "metadataTestDir2"]) ++ "/",
-    RequestHeaders1 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_2_token_header()],
+    RequestHeaders1 = [?CDMI_OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
 
-    RequestHeaders2 = [?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_2_token_header()],
+    RequestHeaders2 = [?CDMI_CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     RequestBody11 = #{<<"metadata">> => #{<<"my_metadata">> => <<"my_dir_value">>}},
     RawRequestBody11 = json_utils:encode(RequestBody11),
     {ok, ?HTTP_201_CREATED, _Headers11, _Response11} = cdmi_internal:do_request(
@@ -79,7 +86,7 @@ write_acl_metadata(Config) ->
 
     RequestBody15 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace1, Ace2Full]}},
     RawRequestBody15 = json_utils:encode(RequestBody15),
-    RequestHeaders15 = [?OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, user_2_token_header()],
+    RequestHeaders15 = [?CDMI_OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
 
     {ok, Code15, _Headers15, Response15} = cdmi_internal:do_request(
         Workers, FileName2 ++ "?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15
@@ -107,7 +114,7 @@ write_acl_metadata(Config) ->
     ?assertMatch(#{<<"cdmi_acl">> := [Ace1, Ace2]}, Metadata16),
 
     {ok, Code17, _Headers17, Response17} = cdmi_internal:do_request(
-        Workers, FileName2, get, [user_2_token_header()], []
+        Workers, FileName2, get, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assertEqual(?HTTP_200_OK, Code17),
     ?assertEqual(<<"data">>, Response17),
@@ -130,12 +137,12 @@ write_acl_metadata(Config) ->
     }, cdmi),
     RequestBody18 = #{<<"metadata">> => #{<<"cdmi_acl">> => [Ace3, Ace4]}},
     RawRequestBody18 = json_utils:encode(RequestBody18),
-    RequestHeaders18 = [user_2_token_header(), ?CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
+    RequestHeaders18 = [cdmi_test_utils:user_2_token_header(), ?CDMI_CONTAINER_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER],
 
     {ok, Code18, _Headers18, _Response18} = ?assertMatch(
         {ok, 204, _, _},
         cdmi_internal:do_request(
-            Workers, DirName ++ "?metadata:cdmi_acl", put, RequestHeaders18, RawRequestBody18
+            Workers, filename:join([DirName, "?metadata:cdmi_acl"]), put, RequestHeaders18, RawRequestBody18
         ),
         ?ATTEMPTS
     ),
@@ -143,7 +150,7 @@ write_acl_metadata(Config) ->
 
     Fun2 = fun() ->
         {ok, Code19, _Headers19, Response19} = cdmi_internal:do_request(
-            Workers, filename:join(DirName, "some_file"), put, [user_2_token_header()], []
+            Workers, filename:join(DirName, "some_file"), put, [cdmi_test_utils:user_2_token_header()], []
         ),
         {Code19, json_utils:decode(Response19)}
     end,
@@ -158,7 +165,7 @@ acl_file_base(Config) ->
     ],
     SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
     RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = SpaceName ++ "/" ++ RootName,
+    RootPath = filename:join(SpaceName, RootName),
 
     UserId2 = oct_background:get_user_id(user2),
     UserName2 = <<"Unnamed User">>,
@@ -233,8 +240,8 @@ acl_file_base(Config) ->
 
 acl_read_file(Config) ->
     {Workers, RootPath, _, _, MetadataAclWrite, _, MetadataAclReadWriteFull} = acl_file_base(Config),
-    Filename1 = filename:join([RootPath, "acl_test_file1"]),
 
+    Filename1 = filename:join(RootPath, "acl_test_file1"),
     %%----- read file test ---------
     % create test file with dummy data
     ?assert(not cdmi_internal:object_exists(Filename1, Config)),
@@ -249,7 +256,7 @@ acl_read_file(Config) ->
     EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
 
     % set acl to 'write' and test cdmi/non-cdmi get request (should return 403 forbidden)
-    RequestHeaders1 = [user_2_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders1 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
         Workers, Filename1, put, RequestHeaders1, MetadataAclWrite
     ),
@@ -262,7 +269,7 @@ acl_read_file(Config) ->
 
     {ok, Code2, _, Response2} = ?assertMatch(
         {ok, 400, _, _},
-        cdmi_internal:do_request(Workers, Filename1, get, [user_2_token_header()], []),
+        cdmi_internal:do_request(Workers, Filename1, get, [cdmi_test_utils:user_2_token_header()], []),
         ?ATTEMPTS
     ),
     ?assertMatch(EaccesError, {Code2, json_utils:decode(Response2)}),
@@ -285,15 +292,13 @@ acl_read_file(Config) ->
     ),
     {ok, ?HTTP_200_OK, _, _} = ?assertMatch(
         {ok, 200, _, _},
-        cdmi_internal:do_request(Workers, Filename1, get, [user_2_token_header()], []),
+        cdmi_internal:do_request(Workers, Filename1, get, [cdmi_test_utils:user_2_token_header()], []),
         ?ATTEMPTS
     ).
-%%------------------------------
 
 
 acl_write_file(Config) ->
-    {[WorkerP1, WorkerP2], RootPath, MetadataAclReadFull, _, _, MetadataAclReadWrite, _} = acl_file_base(Config),
-%%    [WorkerP1, WorkerP2] = Workers,
+    {[WorkerP1, _WorkerP2], RootPath, MetadataAclReadFull, _, _, MetadataAclReadWrite, _} = acl_file_base(Config),
     Filename1 = filename:join([RootPath, "acl_test_file2"]),
     % create test file with dummy data
     ?assert(not cdmi_internal:object_exists(Filename1, Config)),
@@ -304,7 +309,7 @@ acl_write_file(Config) ->
             content = <<"data">>
         }, Config#cdmi_test_config.p1_selector
     ),
-    RequestHeaders1 = [user_2_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders1 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
     %%------- write file test ------
     % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
@@ -321,14 +326,13 @@ acl_write_file(Config) ->
     ),
     ?assertEqual(<<"new_data">>, cdmi_internal:get_file_content(Filename1, Config), ?ATTEMPTS),
 
-    cdmi_internal:write_to_file(Filename1, <<"1">>, 8, Config),
-    timer:sleep(5000),
+    ?assertMatch({ok, _}, cdmi_internal:write_to_file(Filename1, <<"1">>, 8, Config), ?ATTEMPTS),
     ?assertEqual(<<"new_data1">>, cdmi_internal:get_file_content(Filename1, Config), ?ATTEMPTS),
 
     {ok, ?HTTP_204_NO_CONTENT, _, _} = ?assertMatch(
         {ok, 204, _, _},
         cdmi_internal:do_request(
-            WorkerP1, Filename1, put, [user_2_token_header()], <<"new_data2">>
+            WorkerP1, Filename1, put, [cdmi_test_utils:user_2_token_header()], <<"new_data2">>
         ),
         ?ATTEMPTS
     ),
@@ -351,7 +355,7 @@ acl_write_file(Config) ->
     ?assertMatch(EaccesError, {Code3, json_utils:decode(Response3)}),
 
     {ok, Code4, _, Response4} = cdmi_internal:do_request(
-        WorkerP1, Filename1, put, [user_2_token_header()], <<"new_data4">>
+        WorkerP1, Filename1, put, [cdmi_test_utils:user_2_token_header()], <<"new_data4">>
     ),
     ?assertMatch(EaccesError, {Code4, json_utils:decode(Response4)}),
     ?assertEqual(<<"new_data2">>, cdmi_internal:get_file_content(Filename1, Config), ?ATTEMPTS),
@@ -376,7 +380,7 @@ acl_delete_file(Config) ->
             content = <<"data">>
         }, Config#cdmi_test_config.p1_selector
     ),
-    RequestHeaders1 = [user_2_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders1 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     %%------ delete file test ------
     % set acl to 'delete'
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
@@ -385,7 +389,7 @@ acl_delete_file(Config) ->
 
     % delete file
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
-        Workers, Filename3, delete, [user_2_token_header()], []
+        Workers, Filename3, delete, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assert(not cdmi_internal:object_exists(Filename3, Config), ?ATTEMPTS).
 %%------------------------------
@@ -396,9 +400,9 @@ acl_dir_base(Config) ->
         oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
         oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
     ],
-    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
+    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)) ++ "/",
     RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = SpaceName ++ "/" ++ RootName,
+    RootPath = filename:join([SpaceName, RootName]),
 
     UserId2 = oct_background:get_user_id(user2),
     UserName2 = <<"Unnamed User">>,
@@ -438,7 +442,7 @@ acl_dir_base(Config) ->
 acl_read_write_dir(Config) ->
     {Workers, RootPath, DirMetadataAclReadWrite, DirMetadataAclRead, DirMetadataAclWrite} = acl_dir_base(Config),
     [WorkerP1, WorkerP2] = Workers,
-    Dirname1 = filename:join([RootPath, "acl_test_dir1"]) ++ "/",
+    Dirname1 = filename:join(RootPath, "acl_test_dir1") ++ "/",
     EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
 
     %%--- read write dir test ------
@@ -458,12 +462,12 @@ acl_read_write_dir(Config) ->
     File3 = filename:join(Dirname1, "3"),
     File4 = filename:join(Dirname1, "4"),
 
-    RequestHeaders1 = [user_2_token_header(), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders1 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     % set acl to 'read&write' and test cdmi get request (should succeed)
     RequestHeaders2 = [
-        user_2_token_header(),
+        cdmi_test_utils:user_2_token_header(),
         ?CDMI_VERSION_HEADER,
-        ?CONTAINER_CONTENT_TYPE_HEADER
+        ?CDMI_CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
         WorkerP1, Dirname1, put, RequestHeaders2, DirMetadataAclReadWrite
@@ -476,7 +480,7 @@ acl_read_write_dir(Config) ->
 
     % create files in directory (should succeed)
     {ok, ?HTTP_201_CREATED, _, _} = cdmi_internal:do_request(
-        WorkerP1, File1, put, [user_2_token_header()], []
+        WorkerP1, File1, put, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assert(cdmi_internal:object_exists(File1, Config), ?ATTEMPTS),
 
@@ -490,14 +494,14 @@ acl_read_write_dir(Config) ->
     {ok, ?HTTP_204_NO_CONTENT, _, _} = ?assertMatch(
         {ok, 204, _, _},
         cdmi_internal:do_request(
-            WorkerP1, File1, delete, [user_2_token_header()], []
+            WorkerP1, File1, delete, [cdmi_test_utils:user_2_token_header()], []
         ),
         ?ATTEMPTS
     ),
     ?assert(not cdmi_internal:object_exists(File1, Config)),
 
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
-        WorkerP1, File2, delete, [user_2_token_header()], []
+        WorkerP1, File2, delete, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assert(not cdmi_internal:object_exists(File2, Config)),
 
@@ -525,7 +529,7 @@ acl_read_write_dir(Config) ->
 
     % create files (should return 403 forbidden)
     {ok, Code7, _, Response7} = cdmi_internal:do_request(
-        WorkerP1, File1, put, [user_2_token_header()], []
+        WorkerP1, File1, put, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assertMatch(EaccesError, {Code7, json_utils:decode(Response7)}),
     ?assert(not cdmi_internal:object_exists(File1, Config)),
@@ -540,7 +544,7 @@ acl_read_write_dir(Config) ->
 
     % delete files (should return 403 forbidden)
     {ok, Code9, _, Response9} = cdmi_internal:do_request(
-        WorkerP1, File3, delete, [user_2_token_header()], []
+        WorkerP1, File3, delete, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assertMatch(EaccesError, {Code9, json_utils:decode(Response9)}),
     ?assert(cdmi_internal:object_exists(File3, Config)).

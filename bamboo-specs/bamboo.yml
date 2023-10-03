@@ -106,7 +106,7 @@ stages:
         - atm_workflow_execution
         - atm_workflow_executions_collection
         - autocleaning
-        - cdmi
+        - cdmi_single_provider
         - cdmi_multi_provider
         - ceph_helper
         - cephrados_helper
@@ -849,12 +849,12 @@ autocleaning:
     - <<: *ct_logs
       name: ct_logs_autocleaning.tar.gz
 
-cdmi:
+cdmi_single_provider:
   <<: *ct-onenv-job
   key: CDMI
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_cdmi.tar.gz
+      name: ct_logs_cdmi_single_provider.tar.gz
 
 cdmi_multi_provider:
   <<: *ct-onenv-job
@@ -1872,7 +1872,7 @@ Coverage report:
     - artifact: ct_logs_atm_workflow_execution.tar.gz
     - artifact: ct_logs_atm_workflow_executions_collection.tar.gz
     - artifact: ct_logs_autocleaning.tar.gz
-    - artifact: ct_logs_cdmi.tar.gz
+    - artifact: ct_logs_cdmi_single_provider.tar.gz
     - artifact: ct_logs_cdmi_multi_provider.tar.gz
     - artifact: ct_logs_ceph_helper.tar.gz
     - artifact: ct_logs_cephrados_helper.tar.gz
