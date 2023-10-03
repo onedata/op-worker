@@ -305,7 +305,7 @@ mock_user_logic(Config) ->
     test_utils:mock_expect(Workers, user_logic, get_eff_spaces, fun(_, _) ->
         {ok, [?SPACE_ID]}
     end),
-    [rpc:call(W, file_meta, reconcile_spaces_for_user, [?USER_ID, []]) || W <- Workers].
+    [rpc:call(W, user_root_dir, ensure_docs_exist, [?USER_ID]) || W <- Workers].
 
 
 unmock_user_logic(Config) ->

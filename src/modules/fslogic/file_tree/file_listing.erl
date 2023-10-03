@@ -85,7 +85,7 @@
 -type encoded_pagination_token() :: binary().
 -type entry() :: file_meta_forest:link().
 
--export_type([offset/0, limit/0, index/0, pagination_token/0, options/0]).
+-export_type([offset/0, limit/0, index/0, pagination_token/0, whitelist/0, options/0]).
 
 -define(DEFAULT_LS_BATCH_LIMIT, op_worker:get_env(default_ls_batch_limit, 5000)).
 

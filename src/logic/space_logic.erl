@@ -45,7 +45,6 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
--export([group_spaces_by_name/2, disambiguate_space_name/2]).
 -export([on_space_supported/1, on_space_dir_created/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
@@ -503,23 +502,3 @@ on_space_dir_created(SpaceId) ->
     archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
     file_meta:make_tmp_dir_exist(SpaceId),
     file_meta:make_opened_deleted_files_dir_exist(SpaceId).
-
-
--spec group_spaces_by_name(gs_client_worker:client(), [od_space:id()]) -> #{od_space:name() => [od_space:id()]}.
-group_spaces_by_name(SessId, SpaceIds) ->
-    lists:foldl(fun(SpaceId, Acc) ->
-        % ?MODULE for initializer mocks
-        case ?MODULE:get_name(SessId, SpaceId) of
-            {ok, SpaceName} ->
-                Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]};
-            ?ERROR_NOT_FOUND ->
-                Acc;
-            ?ERROR_FORBIDDEN ->
-                Acc
-        end
-    end, #{}, SpaceIds).
-
-
--spec disambiguate_space_name(od_space:name(), od_space:id()) -> file_meta:name().
-disambiguate_space_name(SpaceName, SpaceId) ->
-    <<SpaceName/binary, (?SPACE_NAME_ID_SEPARATOR)/binary, SpaceId/binary>>.

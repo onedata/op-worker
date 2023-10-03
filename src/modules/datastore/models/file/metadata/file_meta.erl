@@ -131,7 +131,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, doc()} | {error, term()}.
 save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
     % Spaces are handled specially so as to not overwrite file_meta if it already
-    % exists ('make_space_exist' may be called several times for each space)
+    % exists ('ensure_space_docs_exist' may be called several times for each space)
     case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
         ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
         Result -> Result
@@ -305,7 +305,7 @@ get_including_deleted(Uuid, Ctx) ->
                         true ->
                             % Until space doc creation is finally properly handled on space creation
                             % create space document here if it was requested before any user login.
-                            ?debug("make_space_exist called in file_meta:get_including_deleted"),
+                            ?debug("ensure_space_docs_exist called in file_meta:get_including_deleted"),
                             ensure_space_docs_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
                             datastore_model:get(Ctx#{include_deleted => true}, Uuid);
                         false ->

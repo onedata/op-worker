@@ -306,6 +306,7 @@ get_user_root_dir_child(UserCtx, UserRootDirCtx, Name) ->
             fslogic_file_id:spaceid_to_space_dir_guid(SpaceId);
         false ->
             case user_ctx:is_root(UserCtx) of
+                %% @TODO VFS-11416 - Analyze whether listing user root dir as provider root is needed
                 true -> fslogic_file_id:spaceid_to_space_dir_guid(Name);
                 false -> throw(?ENOENT)
             end
@@ -326,44 +327,13 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
     SessId = user_ctx:get_session_id(UserCtx),
-
-    SpacesWithSupport = user_ctx:get_eff_supported_spaces(UserCtx),
-
-    FilteredSpaces = case SpaceWhiteList of
-        undefined ->
-            SpacesWithSupport;
-        _ ->
-            lists:filter(fun(Space) ->
-                lists:member(Space, SpaceWhiteList)
-            end, SpacesWithSupport)
-    end,
-
-    Children = case Offset < length(FilteredSpaces) of
-        true ->
-            SpacesChunk = lists:sublist(
-                resolve_unique_names_for_spaces(space_logic:group_spaces_by_name(SessId, FilteredSpaces)),
-                Offset + 1,
-                Limit
-            ),
-            lists:map(fun({SpaceName, SpaceId}) ->
-                SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-                file_ctx:new_by_uuid(SpaceDirUuid, SpaceId, undefined, SpaceName)
-            end, SpacesChunk);
-        false ->
-            []
-    end,
+    UserId = user_ctx:get_user_id(UserCtx),
+    SpacesChunk = user_root_dir:list_spaces(SessId, UserId, Offset, Limit, SpaceWhiteList),
+    Children = lists:map(fun({SpaceName, SpaceId}) ->
+        SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+        file_ctx:new_by_uuid(SpaceDirUuid, SpaceId, undefined, SpaceName)
+    end, SpacesChunk),
     build_listing_result(UserCtx, Children, Limit, UserRootDirCtx).
-
-
-%% @private
--spec resolve_unique_names_for_spaces(#{od_space:name() => [od_space:id()]}) -> [file_meta:name()].
-resolve_unique_names_for_spaces(GroupedSpaces) ->
-    lists:sort(maps:fold(
-        fun (Name, [SpaceId], Acc) -> [{Name, SpaceId} | Acc];
-            (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
-                {space_logic:disambiguate_space_name(Name, SpaceId), SpaceId}
-            end, Spaces)
-        end, [], GroupedSpaces)).
 
 
 %% @private

@@ -156,8 +156,8 @@ extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid 
             lists:foldl(fun(Session, Acc) ->
                 % file_attr can contain invalid values when fetched with root sess id for space dir. Fill proper values here.
                 case get_space_dir_event_details(SpaceId, Session) of
-                    {ok, Name, ParentGuid} ->
-                        FilledAttr = Attr#file_attr{name = Name, parent_guid = ParentGuid},
+                    {ok, Name, UserRootDirGuid} ->
+                        FilledAttr = Attr#file_attr{name = Name, parent_guid = UserRootDirGuid},
                         FinalEvent = Evt#file_attr_changed_event{file_attr = FilledAttr},
                         Acc#{FinalEvent => [Session | maps:get(FinalEvent, Acc, [])]};
                     not_applicable ->
@@ -184,7 +184,7 @@ get_space_dir_event_details(SpaceId, Session) ->
         {ok, #document{value = #od_space{name = Name, providers = Providers}}} when map_size(Providers) > 0 ->
             case session:get_user_id(Session) of
                 {ok, UserId} ->
-                    {FinalName, _} = file_attr:get_space_name_and_conflicts(user_ctx:new(Session), Name, SpaceId),
+                    {FinalName, _} = user_root_dir:get_space_name_and_conflicts(Session, UserId, Name, SpaceId),
                     {ok, FinalName, fslogic_file_id:user_root_dir_guid(UserId)};
                 {error, not_found} ->
                     not_applicable

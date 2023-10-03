@@ -21,8 +21,7 @@
 %% API
 -export([
     resolve/3, 
-    should_fetch_xattrs/1,
-    get_space_name_and_conflicts/3
+    should_fetch_xattrs/1
 ]).
 
 -type name_conflicts_resolution_policy() ::
@@ -131,22 +130,6 @@ should_fetch_xattrs(OptionalAttrs) ->
     end.
 
 
--spec get_space_name_and_conflicts(user_ctx:ctx(), file_meta:name(), od_space:id()) ->
-    {file_meta:name(), file_meta:conflicts()}.
-get_space_name_and_conflicts(UserCtx, Name, SpaceId) ->
-    SpacesWithSupport = user_ctx:get_eff_supported_spaces(UserCtx),
-    SpacesByName = space_logic:group_spaces_by_name(user_ctx:get_session_id(UserCtx), SpacesWithSupport),
-    [BaseFileName | _] = binary:split(Name, ?SPACE_NAME_ID_SEPARATOR),
-    case maps:get(BaseFileName, SpacesByName, []) of
-        [_] ->
-            {BaseFileName, []};
-        Spaces ->
-            Conflicts = [{BaseFileName, fslogic_file_id:spaceid_to_space_dir_uuid(S)} || S <- Spaces -- [SpaceId]],
-            ExtendedName = space_logic:disambiguate_space_name(BaseFileName, SpaceId),
-            {ExtendedName, Conflicts}
-    end.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -233,8 +216,8 @@ check_name_conflicts(UserCtx, FileDoc, ParentGuid, FileCtx0) ->
     {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
     case fslogic_file_id:is_space_dir_uuid(FileUuid) of
         true ->
-            {Name, Conflicts} = get_space_name_and_conflicts(
-                UserCtx, FileName, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(user_ctx:get_session_id(UserCtx),
+                user_ctx:get_user_id(UserCtx), FileName, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
             {Name, Conflicts, FileCtx1};
         false ->
             ParentUuid = file_id:guid_to_uuid(ParentGuid),
@@ -299,7 +282,7 @@ resolve_link_count(FileCtx, ShareId, OptionalAttrs) ->
 resolve_index(FileCtx, FileDoc) ->
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
-            % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`) 
+            % As provider id in space doc is random (depends on which provider called `file_meta:ensure_space_docs_exist/0`)
             % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
             file_listing:build_index(file_meta:get_name(FileDoc));
         false ->

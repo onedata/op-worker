@@ -947,7 +947,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
 
     lists:foreach(
         fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->
-            [rpc:call(W, file_meta, reconcile_spaces_for_user, [UserId, proplists:get_keys(UserSpaces)]) || W <- AllWorkers]
+            [rpc:call(W, user_root_dir, ensure_docs_exist, [UserId]) || W <- AllWorkers],
+            [[rpc:call(W, file_meta, ensure_space_docs_exist, [S]) || S <- proplists:get_keys(UserSpaces)] || W <- AllWorkers]
         end, Users),
 
     proplists:compact(
