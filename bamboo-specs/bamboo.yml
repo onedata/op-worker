@@ -426,7 +426,7 @@ _Dialyze:
     - script:
         <<: *run-script-working-dir
         scripts:
-          - ./make.py --cpuset-cpus 0 dialyzer
+          - ./make.py dialyzer
         description: Dialyze
   final-tasks:
     - test-parser:
@@ -596,6 +596,16 @@ api_archive: &ct-onenv-job
           - tar -mczf ct_logs_${bamboo.shortJobName}.tar.gz op_worker/test_distributed/logs/
         description: Pack test logs
     - script: *clear-env
+    - script:
+        scripts:
+          - |-
+            echo "No real testing done on build 2 - only unpacking of surefire artifact (see above logs). The job is forced to fail."
+            false
+        conditions:
+          - variable:
+              matches:
+                bamboo.buildNumber: '2'
+        description: Qnthack - always fail on build 2          
   artifacts:
     - &ct_logs
       name: ct_logs_api_archive.tar.gz
