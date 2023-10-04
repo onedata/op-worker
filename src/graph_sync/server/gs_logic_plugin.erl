@@ -52,7 +52,7 @@ verify_handshake_auth({token, AccessToken}, PeerIp, _) ->
         AccessToken, undefined,
         PeerIp, graphsync, disallow_data_access_caveats
     ),
-    case http_auth:authenticate(TokenCredentials) of
+    case http_auth:authenticate_by_token(TokenCredentials) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {ok, ?GUEST} ->

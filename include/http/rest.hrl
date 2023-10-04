@@ -28,6 +28,7 @@
 
 %% Record containing the state of REST request.
 -record(rest_req, {
+    allow_session_cookie = false :: boolean(),
     method = 'GET' :: rest_handler:method(),
     parse_body = ignore :: rest_handler:parse_body(),
     consumes = ['*'] :: ['*'] | [binary()],
