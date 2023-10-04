@@ -130,6 +130,7 @@ gui_config() ->
     DynamicPageRoutes = [
         {?NAGIOS_OZ_CONNECTIVITY_PATH, [<<"GET">>], page_oz_connectivity},
         {?IDENTITY_TOKEN_PATH, [<<"GET">>], page_identity_token},
+        {?GUI_ACQUIRE_SESSION_PATH, [<<"POST">>], page_acquire_session},
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
