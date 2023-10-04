@@ -362,5 +362,12 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
     (Operation == delete andalso As == file_at_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);
+
+route_to_proper_handler(#op_req{operation = get, gri = #gri{
+    type = op_atm_store,
+    aspect = content_dump
+}} = OpReq, Req) ->
+    atm_store_content_download_handler:handle(OpReq, Req);
+
 route_to_proper_handler(OpReq, Req) ->
     middleware_rest_handler:handle_request(OpReq, Req).

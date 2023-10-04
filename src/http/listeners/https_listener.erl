@@ -134,7 +134,6 @@ gui_config() ->
         {?DEPRECATED_PROVIDER_CONFIGURATION_PATH, [<<"GET">>], page_provider_configuration},
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
-        {?ATM_STORE_CONTENT_DOWNLOAD_PATH, [<<"GET">>], page_atm_store_content_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
         {"/", [<<"GET">>], page_redirect_to_onezone}
     ],

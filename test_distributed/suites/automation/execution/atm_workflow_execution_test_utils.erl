@@ -238,19 +238,17 @@ download_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockC
     provider = ProviderSelector,
     session_id = SessionId
 }) ->
-    Endpoint = str_utils:format_bin("https://~s/automation/execution/stores/~s", [
-        oct_background:get_provider_domain(ProviderSelector),
-        get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx)
-    ]),
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+
+    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx),
+    Path = str_utils:format_bin("automation/execution/stores/~s/content_dump", [AtmStoreId]),
 
     {ok, UserId} = ?rpc(ProviderSelector, session:get_user_id(SessionId)),
     Headers = maps:from_list([
         rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId))]
     ),
 
-    Opts = [{recv_timeout, 60000} | rest_test_utils:cacerts_opts(ProviderSelector)],
-
-    case http_client:request(get, Endpoint, Headers, <<>>, Opts) of
+    case rest_test_utils:request(Node, Path, get, Headers, <<>>) of
         {ok, ?HTTP_200_OK, _, Body} ->
             {ok, json_utils:decode(Body)};
         {ok, _, _, Body} ->

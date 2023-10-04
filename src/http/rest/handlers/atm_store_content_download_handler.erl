@@ -6,22 +6,18 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements dynamic_page_behaviour and is called
-%%% when atm store content download page is visited.
+%%% The module handles streaming atm store content via REST API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(page_atm_store_content_download).
+-module(atm_store_content_download_handler).
 -author("Bartosz Walkowicz").
 
--behaviour(dynamic_page_behaviour).
-
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
-
 -export([handle/2]).
-
 
 -record(state, {
     auth :: atm_workflow_execution_auth:record(),
@@ -40,23 +36,20 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link dynamic_page_behaviour} callback handle/2.
-%% @end
-%%--------------------------------------------------------------------
--spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
-handle(<<"GET">>, Req) ->
-    AtmStoreId = cowboy_req:binding(id, Req),
+-spec handle(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
+handle(#op_req{auth = AaiAuth = ?USER, gri = #gri{id = AtmStoreId}}, Req) ->
+    try
+        handle_download(Req, AaiAuth, AtmStoreId)
+    catch Class:Reason:Stacktrace ->
+        Error = case request_error_handler:infer_error(Reason) of
+            {true, KnownError} -> KnownError;
+            false -> ?examine_exception(Class, Reason, Stacktrace)
+        end,
+        http_req:send_error(Error, Req)
+    end;
 
-    case http_auth:authenticate(Req, graphsync, disallow_data_access_caveats) of
-        {ok, ?USER(_UserId) = AaiAuth} ->
-            handle_download(Req, AaiAuth, AtmStoreId);
-        {ok, ?GUEST} ->
-            reply_with_error(?ERROR_UNAUTHORIZED, Req);
-        {error, _} = Error ->
-            reply_with_error(Error, Req)
-    end.
+handle(_OpReq, Req) ->
+    http_req:send_error(?ERROR_UNAUTHORIZED, Req).
 
 
 %%%===================================================================
@@ -221,16 +214,3 @@ send_item(Req, Item, State) ->
     Response = json_utils:encode(Item, [pretty]),
     http_streamer:send_data_chunk(<<",", Response/binary, "\r\n">>, Req),
     State.
-
-
-%% @private
--spec reply_with_error(errors:error(), cowboy_req:req()) -> cowboy_req:req().
-reply_with_error(Error, Req) ->
-    ErrorResp = rest_translator:error_response(Error),
-
-    cowboy_req:reply(
-        ErrorResp#rest_resp.code,
-        maps:merge(ErrorResp#rest_resp.headers, #{?HDR_CONNECTION => <<"close">>}),
-        json_utils:encode(ErrorResp#rest_resp.body),
-        Req
-    ).
