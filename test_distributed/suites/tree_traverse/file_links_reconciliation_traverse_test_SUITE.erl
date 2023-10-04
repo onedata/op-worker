@@ -45,9 +45,10 @@ file_links_reconciliation_traverse_test(Config) ->
         oct_background:get_provider_id(paris),
         #dir_spec{children = lists:duplicate(ChildrenCount, #file_spec{})}
     ),
-    wait_for_dbsynced_docs(file_meta, synced, ChildrenCount + 2), % +2 from space and parent dir docs
+    wait_for_dbsynced_docs(file_meta, synced, ChildrenCount + 1), % +1 from parent dir doc (space doc was synced before test started)
     wait_for_dbsynced_docs(links_forest, synced, 2), % space and parent dir docs
-    LinkNodeIds = get_dbsynced_docs(links_node, ignored, 2), % space and parent dir docs
+    wait_for_dbsynced_docs(links_node, synced, 1), % space dir doc
+    LinkNodeIds = get_dbsynced_docs(links_node, ignored, 1), % parent dir docs
     
     stop_op_worker(Config, paris),
     
@@ -59,15 +60,7 @@ file_links_reconciliation_traverse_test(Config) ->
     ChildrenGuids = [Guid || #object{guid = Guid} <- ChildrenObjects],
     ExpectedChildren = lists:sort(ChildrenGuids),
     
-    ListChildrenFun = fun() ->
-        {ok, Listed, _} = lfm_proxy:get_children(
-            KrakowNode,
-            oct_background:get_user_session_id(user1, krakow),
-            ?FILE_REF(DirGuid),
-            #{limit => 100, offset => 0, tune_for_large_continuous_listing => false}
-        ),
-        lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Listed))
-    end,
+    ?assertEqual({error, ?EAGAIN}, get_children(KrakowNode, DirGuid)),
     
     ?assertEqual(ok, opw_test_rpc:call(KrakowNode, file_links_reconciliation_traverse, start_for_space,
         [oct_background:get_space_id(space1)])),
@@ -82,9 +75,14 @@ file_links_reconciliation_traverse_test(Config) ->
     stop_op_worker(Config, paris),
     
     lists:foreach(fun(LinkNodeId) ->
+        % try ?ATTEMPTS times as document could be not flushed from datastore to db yet
         ?assertMatch({ok, _, _}, get_doc_from_db(KrakowNode, LinkNodeId), ?ATTEMPTS)
     end, LinkNodeIds),
     
+    ListChildrenFun = fun() ->
+        {ok, Listed, _} = get_children(KrakowNode, DirGuid),
+        lists:sort(lists:map(fun({Guid, _Name}) -> Guid end, Listed))
+    end,
     ?assertEqual(ExpectedChildren, ListChildrenFun()),
     ok.
 
@@ -146,6 +144,15 @@ get_number_of_ongoing_traverses(Node) ->
     end).
 
 
+get_children(Node, DirGuid) ->
+    lfm_proxy:get_children(
+        Node,
+        oct_background:get_user_session_id(user1, krakow),
+        ?FILE_REF(DirGuid),
+        #{limit => 100, offset => 0, tune_for_large_continuous_listing => false}
+    ).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -164,8 +171,16 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_new(KrakowNodes, dbsync_changes, [passthrough]),
     TestPid = self(),
     ok = test_utils:mock_expect(KrakowNodes, dbsync_changes, apply,
-        fun (#document{key = Key, value = #links_node{model = file_meta}}) ->
-                TestPid ! {file_links_reconciliation_traverse_test, ignored, links_node, Key},
+        fun (#document{key = Key, value = #links_node{model = file_meta, key = RelatedKey}} = Doc) ->
+                case fslogic_file_id:is_space_dir_uuid(RelatedKey) of
+                    true ->
+                        % do not ignore links_node for space dir as it already exists on this provider (created alongside
+                        % archives root dir on space support), so it will never be fetched from remote provider)
+                        TestPid ! {file_links_reconciliation_traverse_test, synced, links_node, Key},
+                        meck:passthrough([Doc]);
+                    false ->
+                        TestPid ! {file_links_reconciliation_traverse_test, ignored, links_node, Key}
+                end,
                 ok;
             (#document{key = Key, value = Value} = Doc) ->
                 TestPid ! {file_links_reconciliation_traverse_test, synced, element(1, Value), Key},

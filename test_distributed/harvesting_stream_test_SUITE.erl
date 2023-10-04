@@ -1261,8 +1261,13 @@ init_per_testcase(_, Config) ->
     couchbase_changes_stream_mock_registry_start(N),
     ok = mock_harvesting_stream_changes_stream_start_link(Nodes),
     ok = mock_changes_stream(Nodes),
+    % This is needed, because these tests are run on envup and starting dbsync streams may fail (which results in node
+    % termination) when it happens to be executed at the moment between mocks setup (because of unregistered provider error).
+    % As this suite is single provider dbsync is not needed so it can be safely disabled.
+    test_utils:mock_new(Nodes, dbsync_worker, [passthrough]),
+    test_utils:mock_expect(Nodes, dbsync_worker, start_streams, fun(_) -> ok end),
     add_mocked_od_space_synchronization_posthook(Nodes),
-    ?assertEqual(0, count_active_children(Nodes, harvesting_stream_sup)),
+    ?assertEqual(0, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
     initializer:communicator_mock(Nodes),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config).
 
@@ -1438,10 +1443,11 @@ add_mocked_od_space_synchronization_posthook(Nodes) ->
         % end of posthooks list, that will inform as that all posthooks were
         % executed
         meck:passthrough([]) ++ [fun
-            (_F, _A, {ok, #document{key = SpaceId}}) ->
-                Self ! ?OD_SPACE_POSTHOOK_EXECUTED(SpaceId);
-            (_F, _A, _R) ->
-                ok
+            (_F, _A, {ok, #document{key = SpaceId}} = R) ->
+                Self ! ?OD_SPACE_POSTHOOK_EXECUTED(SpaceId),
+                R;
+            (_F, _A, R) ->
+                R
         end]
     end).
 

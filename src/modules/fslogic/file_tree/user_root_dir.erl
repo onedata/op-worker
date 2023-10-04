@@ -113,7 +113,6 @@ get_space_name_and_conflicts(SessId, UserId, Name, SpaceId) ->
 
 -spec report_new_spaces_appeared([od_user:id()], [od_space:id()]) -> ok.
 report_new_spaces_appeared(UserList, NewSpaces) ->
-    lists:foreach(fun file_meta:ensure_space_docs_exist/1, NewSpaces),
     apply_for_user_with_fuse_session_spaces(fun(UserRootDirGuid, SpaceId, SpacesByName) ->
         SpaceName = maps_utils:fold_while(fun(Name, SpacesWithName, _Acc) ->
             case lists:member(SpaceId, SpacesWithName) of

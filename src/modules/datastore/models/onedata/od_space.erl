@@ -185,10 +185,15 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
     PrevSupport = maps:get(oneprovider:get_id(), PrevProviders, 0),
     NewSupport = maps:get(oneprovider:get_id(), NewProviders, 0),
     case {PrevSupport, NewSupport} of
-        {0, 0} -> ok;
-        {0, _} -> user_root_dir:report_new_spaces_appeared(Users, [SpaceId]);
-        {_, 0} -> user_root_dir:report_spaces_removed(Users, [SpaceId]);
-        _ -> ok
+        {0, 0} ->
+            ok;
+        {0, _} ->
+            ok = file_meta:ensure_space_docs_exist(SpaceId),
+            user_root_dir:report_new_spaces_appeared(Users, [SpaceId]);
+        {_, 0} ->
+            user_root_dir:report_spaces_removed(Users, [SpaceId]);
+        _ ->
+            ok
     end.
 
 
