@@ -215,7 +215,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
                 <<"locationsPerStorage">> => #{
                     StorageP1 => StoragePath
                 },
-                <<"logicalSize">> => S,
+                <<"virtualSize">> => S,
                 <<"success">> => true
             }, 
             DomainP2 => #{
@@ -226,7 +226,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
                 <<"locationsPerStorage">> => #{
                     StorageP2 => null
                 },
-                <<"logicalSize">> => S,
+                <<"virtualSize">> => S,
                 <<"success">> => true
             }
         },

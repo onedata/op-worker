@@ -312,7 +312,7 @@ dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
     case ErrorType of
         unexpected ->
             test_utils:mock_assert_num_calls_sum(KrakowNode,
-                dir_stats_collector, update_stats_of_dir, [SpaceDirGuid, dir_size_stats, #{?DIR_ERRORS_COUNT => 1}], 1),
+                dir_stats_collector, update_stats_of_dir, [SpaceDirGuid, dir_size_stats, #{?DIR_ERROR_COUNT => 1}], 1),
             test_utils:mock_assert_num_calls_sum(KrakowNode,
                 dir_stats_collections_initialization_traverse, task_finished, 2, 1, ?ATTEMPTS);
         known ->

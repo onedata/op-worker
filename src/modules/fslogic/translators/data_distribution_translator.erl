@@ -57,14 +57,14 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                 build_error_response(Error, Guid, ProviderId);
 
             (_ProviderId, #provider_dir_distribution_get_result{
-                logical_size = LogicalDirSize,
-                download_size = DownloadSize,
+                virtual_size = VirtualSize,
+                logical_size = LogicalSize,
                 physical_size_per_storage = PhysicalDirSizePerStorage
             }) ->
                 #{
                     <<"success">> => true,
-                    <<"logicalSize">> => utils:undefined_to_null(LogicalDirSize),
-                    <<"downloadSize">> => utils:undefined_to_null(DownloadSize),
+                    <<"virtualSize">> => utils:undefined_to_null(VirtualSize),
+                    <<"logicalSize">> => utils:undefined_to_null(LogicalSize),
                     <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
                         <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
                     }
@@ -80,7 +80,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlin
         <<"type">> => atom_to_binary(?SYMLINK_TYPE),
             <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) -> #{ 
                 <<"success">> => true,
-               <<"logicalSize">> => 0,
+               <<"virtualSize">> => 0,
                <<"distributionPerStorage">> =>
                    lists:foldl(fun(StorageId, Acc) ->   
                        Acc#{StorageId => #{<<"physicalSize">> => 0}}
@@ -96,7 +96,7 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
             build_error_response(Error, Guid, ProviderId);
     
         (_ProviderId, #provider_reg_distribution_get_result{
-            logical_size = LogicalSize,
+            virtual_size = VirtualSize,
             blocks_per_storage = BlocksPerStorage,
             locations_per_storage = LocationsPerStorage
         }) ->
@@ -105,21 +105,21 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
 
                 Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
                     DataAcc#{integer_to_binary(BarNum) => Fill}
-                end, #{}, interpolate_chunks(Blocks, LogicalSize)),
+                end, #{}, interpolate_chunks(Blocks, VirtualSize)),
 
                 Acc#{StorageId => #{
                     <<"physicalSize">> => TotalBlocksSize,
                     <<"chunksBarData">> => Data,
-                    <<"blocksPercentage">> => case LogicalSize of
+                    <<"blocksPercentage">> => case VirtualSize of
                         0 -> 0;
-                        _ -> TotalBlocksSize * 100.0 / LogicalSize
+                        _ -> TotalBlocksSize * 100.0 / VirtualSize
                     end,
                     <<"blockCount">> => length(Blocks)
                 }}
             end, #{}, BlocksPerStorage),
             #{
                 <<"success">> => true,
-                <<"logicalSize">> => LogicalSize,
+                <<"virtualSize">> => VirtualSize,
                 <<"distributionPerStorage">> => DistributionPerStorage,
                 <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
             }
@@ -140,7 +140,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                 build_error_response(Error, Guid, ProviderId);
             
             (_ProviderId, #provider_reg_distribution_get_result{
-                logical_size = LogicalSize,
+                virtual_size = VirtualSize,
                 blocks_per_storage = BlocksPerStorage,
                 locations_per_storage = LocationsPerStorage
             }) ->
@@ -155,7 +155,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                 end, #{}, BlocksPerStorage),
                 #{
                     <<"success">> => true,
-                    <<"logicalSize">> => LogicalSize,
+                    <<"virtualSize">> => VirtualSize,
                     <<"distributionPerStorage">> => DistributionPerStorage,
                     <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
                 }

@@ -18,6 +18,7 @@
 
 -include("http/gui_paths.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -64,6 +65,11 @@
 
 -export_type([function_id/0, record/0]).
 
+
+-define(ANNOTATIONS_OMITTED_WHEN_LOGGING, [
+    <<"oneclient.openfaas.onedata.org/token">>,
+    <<"resultstream.openfaas.onedata.org/secret">>
+]).
 
 -define(FUNCTION_REMOVAL_STRATEGY, op_worker:get_env(
     atm_openfaas_function_removal_strategy, always  %% possible values: always | upon_success | never
@@ -318,13 +324,13 @@ is_function_registered(#initiation_ctx{
 %% @private
 -spec register_function(initiation_ctx()) -> ok | no_return().
 register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = InitiationCtx) ->
-    log_function_registering(InitiationCtx),
-
     Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
-    Payload = json_utils:encode(prepare_function_definition(InitiationCtx)),
+    FunctionDefinition = prepare_function_definition(InitiationCtx),
 
-    case http_client:post(Endpoint, AuthHeaders, Payload) of
+    log_function_registering(InitiationCtx, FunctionDefinition),
+
+    case http_client:post(Endpoint, AuthHeaders, json_utils:encode(FunctionDefinition)) of
         {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
             log_function_registered(InitiationCtx);
         {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
@@ -342,7 +348,7 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
 
 
 %% @private
--spec log_function_registering(initiation_ctx()) -> ok.
+-spec log_function_registering(initiation_ctx(), json_utils:json_map()) -> ok.
 log_function_registering(#initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
@@ -351,11 +357,20 @@ log_function_registering(#initiation_ctx{
         function_name = FunctionName,
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }
-}) ->
+}, FunctionDefinition) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    ?atm_task_debug(Logger, "Registering docker '~ts' as function '~ts' in OpenFaaS...", [
-        DockerImage, FunctionName
-    ]).
+
+    ?atm_task_info(Logger, #{
+        <<"description">> => ?fmt_bin(
+            "Registering docker '~ts' as function '~ts' in OpenFaaS...",
+            [DockerImage, FunctionName]
+        ),
+        <<"details">> => #{
+            <<"functionDefinition">> => maps:update_with(<<"annotations">>, fun(Annotations) ->
+                maps:without(?ANNOTATIONS_OMITTED_WHEN_LOGGING, Annotations)
+            end, FunctionDefinition)
+        }
+    }).
 
 
 %% @private
@@ -517,7 +532,7 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
 ) ->
     FunctionDefinition;
 
-add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
+add_oneclient_annotations_if_required(FunctionDefinition, InitiationCtx = #initiation_ctx{
     openfaas_config = OpenfaasConfig,
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
@@ -526,8 +541,7 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
                 mount_oneclient = true,
-                oneclient_mount_point = MountPoint,
-                oneclient_options = LambdaSpecificOneclientOptions
+                oneclient_mount_point = MountPoint
             }
         }
     }
@@ -538,7 +552,6 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     {ok, OpDomain} = provider_logic:get_domain(),
 
     OneclientImage = atm_openfaas_config:get_oneclient_image(OpenfaasConfig),
-    EnvSpecificOneclientOptions = atm_openfaas_config:get_oneclient_options(OpenfaasConfig),
 
     insert_function_annotations(FunctionDefinition, #{
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
@@ -546,15 +559,53 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
         <<"oneclient.openfaas.onedata.org/input_spaces_ids">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/output_space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
-        <<"oneclient.openfaas.onedata.org/options">> => <<
-            EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary
-        >>,
+        <<"oneclient.openfaas.onedata.org/options">> => build_oneclient_options(InitiationCtx),
         <<"oneclient.openfaas.onedata.org/oneprovider_host">> => OpDomain,
         <<"oneclient.openfaas.onedata.org/token">> => case is_in_readonly_mode(AtmTaskExecutor) of
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end
     }).
+
+
+%% @private
+-spec build_oneclient_options(initiation_ctx()) -> binary().
+build_oneclient_options(#initiation_ctx{
+    openfaas_config = OpenfaasConfig,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
+    executor = #atm_openfaas_task_executor{
+        operation_spec = #atm_openfaas_operation_spec{
+            docker_execution_options = #atm_docker_execution_options{
+                oneclient_options = LambdaSpecificOneclientOptions
+            }
+        }
+    }
+}) ->
+    EnvSpecificOneclientOptions = atm_openfaas_config:get_oneclient_options(OpenfaasConfig),
+    Opts0 = <<EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary>>,
+
+    case re:run(Opts0, <<"--force-(direct|proxy)-io">>) of
+        nomatch ->
+            IoMode = infer_oneclient_io_mode(AtmWorkflowExecutionCtx),
+            <<Opts0/binary, " ", IoMode/binary>>;
+        _ ->
+            Opts0
+    end.
+
+
+%% @private
+-spec infer_oneclient_io_mode(atm_workflow_execution_ctx:record()) -> binary().
+infer_oneclient_io_mode(AtmWorkflowExecutionCtx) ->
+    AtmWorkflowExecutionEnv = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
+    SpaceId = atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
+    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+
+    case storage:get_helper_name(StorageId) of
+        ?POSIX_HELPER_NAME -> <<"--force-proxy-io">>;
+        _ -> <<"--force-direct-io">>
+    end.
 
 
 %% @private

@@ -57,7 +57,7 @@
 }).
 
 -type ctx() :: #file_ctx{}.
--type file_size_summary() :: [{total | storage:id(), non_neg_integer()}].
+-type file_size_summary() :: [{virtual | storage:id(), non_neg_integer()}].
 -export_type([ctx/0, file_size_summary/0]).
 
 %% Functions creating context and filling its data
@@ -1005,11 +1005,6 @@ get_file_size(FileCtx) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns information about file size (logical and size on storage).
-%% @end
-%%--------------------------------------------------------------------
 -spec prepare_file_size_summary(ctx(), create_missing_location | throw_on_missing_location) ->
     {file_size_summary(), ctx()} | no_return().
 prepare_file_size_summary(FileCtx, create_missing_location) ->
@@ -1551,8 +1546,8 @@ prepare_file_size_summary_from_existing_doc(LocationDoc) ->
     case LocationDoc of
         #document{value = #file_location{size = undefined, storage_id = StorageId}} ->
             Blocks = fslogic_location_cache:get_blocks(LocationDoc),
-            TotalSize = fslogic_blocks:upper(Blocks),
-            [{total, TotalSize}, {StorageId, file_location:count_bytes(Blocks)}];
-        #document{value = #file_location{size = TotalSize, storage_id = StorageId}} ->
-            [{total, TotalSize}, {StorageId, file_location:count_bytes(fslogic_location_cache:get_blocks(LocationDoc))}]
+            Size = fslogic_blocks:upper(Blocks),
+            [{virtual, Size}, {StorageId, file_location:count_bytes(Blocks)}];
+        #document{value = #file_location{size = Size, storage_id = StorageId}} ->
+            [{virtual, Size}, {StorageId, file_location:count_bytes(fslogic_location_cache:get_blocks(LocationDoc))}]
     end.

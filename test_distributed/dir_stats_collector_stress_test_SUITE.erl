@@ -157,9 +157,9 @@ get_expected_stats(Config) ->
     #{
         ?REG_FILE_AND_LINK_COUNT => ExpectedFileCount,
         ?DIR_COUNT => ExpectedDirCount,
-        ?TOTAL_SIZE => 0,
-        ?TOTAL_DOWNLOAD_SIZE => 0,
-        ?SIZE_ON_STORAGE(StorageId) => 0,
-        ?FILE_ERRORS_COUNT => 0,
-        ?DIR_ERRORS_COUNT => 0
+        ?VIRTUAL_SIZE => 0,
+        ?LOGICAL_SIZE => 0,
+        ?PHYSICAL_SIZE(StorageId) => 0,
+        ?FILE_ERROR_COUNT => 0,
+        ?DIR_ERROR_COUNT => 0
     }.

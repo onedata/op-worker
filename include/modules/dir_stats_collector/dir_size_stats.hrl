@@ -21,15 +21,17 @@
 %%% Names of statistics.
 %%%===================================================================
 
--define(SIZE_ON_STORAGE_TS_PREFIX_STR, "storage_use_").
+-define(PHYSICAL_SIZE_TS_PREFIX_STR, "physical_size_").
 
 -define(REG_FILE_AND_LINK_COUNT, <<"reg_file_and_link_count">>).
 -define(DIR_COUNT, <<"dir_count">>).
--define(FILE_ERRORS_COUNT, <<"file_errors_count">>).
--define(DIR_ERRORS_COUNT, <<"dir_errors_count">>).
--define(TOTAL_SIZE, <<"total_size">>).
--define(TOTAL_DOWNLOAD_SIZE, <<"total_download_size">>).
--define(SIZE_ON_STORAGE(StorageId), <<?SIZE_ON_STORAGE_TS_PREFIX_STR, StorageId/binary>>).
+-define(FILE_ERROR_COUNT, <<"file_error_count">>). % Count of unexpected errors during initialization of reg files stats
+-define(DIR_ERROR_COUNT, <<"dir_error_count">>). % Count of unexpected errors during initialization of dir stats
+
+% See dir_size_stats.erl doc for different sizes explanation
+-define(LOGICAL_SIZE, <<"logical_size">>).
+-define(VIRTUAL_SIZE, <<"virtual_size">>).
+-define(PHYSICAL_SIZE(StorageId), <<?PHYSICAL_SIZE_TS_PREFIX_STR, StorageId/binary>>).
 
 
 %%%===================================================================
@@ -86,25 +88,31 @@
     },
     #time_series_schema{
         name_generator_type = exact,
-        name_generator = ?FILE_ERRORS_COUNT,
+        name_generator = ?FILE_ERROR_COUNT,
         unit = none,
         metrics = ?DIR_SIZE_STATS_METRICS
     },
     #time_series_schema{
         name_generator_type = exact,
-        name_generator = ?DIR_ERRORS_COUNT,
+        name_generator = ?DIR_ERROR_COUNT,
         unit = none,
         metrics = ?DIR_SIZE_STATS_METRICS
     },
     #time_series_schema{
         name_generator_type = exact,
-        name_generator = ?TOTAL_SIZE,
+        name_generator = ?VIRTUAL_SIZE,
+        unit = bytes,
+        metrics = ?DIR_SIZE_STATS_METRICS
+    },
+    #time_series_schema{
+        name_generator_type = exact,
+        name_generator = ?LOGICAL_SIZE,
         unit = bytes,
         metrics = ?DIR_SIZE_STATS_METRICS
     },
     #time_series_schema{
         name_generator_type = add_prefix,
-        name_generator = <<?SIZE_ON_STORAGE_TS_PREFIX_STR>>,
+        name_generator = <<?PHYSICAL_SIZE_TS_PREFIX_STR>>,
         unit = bytes,
         metrics = ?DIR_SIZE_STATS_METRICS
     }

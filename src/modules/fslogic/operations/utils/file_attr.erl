@@ -436,11 +436,11 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             {StatsToGet, FileCtx2} = case ShouldCalculateRatio of
                 true ->
                     case file_ctx:get_storage_id(FileCtx) of
-                        {undefined, FC2} -> {[?TOTAL_SIZE], FC2};
-                        {StorageId, FC2} -> {[?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)], FC2}
+                        {undefined, FC2} -> {[?VIRTUAL_SIZE], FC2};
+                        {StorageId, FC2} -> {[?VIRTUAL_SIZE, ?PHYSICAL_SIZE(StorageId)], FC2}
                     end;
                 false ->
-                    {[?TOTAL_SIZE], FileCtx}
+                    {[?VIRTUAL_SIZE], FileCtx}
             end,
             StatsResult = case dir_size_stats:get_stats(Guid, StatsToGet) of
                 {ok, StatsMap} -> StatsMap;
@@ -470,12 +470,12 @@ resolve_location_attrs_for_symlink(State) ->
 %% @private
 -spec build_dir_size_attr(map(), boolean(), file_ctx:ctx()) -> file_attr().
 build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx) ->
-    Size = maps:get(?TOTAL_SIZE, StatsResult, 0),
+    Size = maps:get(?VIRTUAL_SIZE, StatsResult, 0),
     OptionalAttr = case ShouldCalculateRatio of
         true ->
             % storage id is already cached in file_ctx
             {StorageId, _} = file_ctx:get_storage_id(FileCtx),
-            StorageSize = maps:get(?SIZE_ON_STORAGE(StorageId), StatsResult, 0),
+            StorageSize = maps:get(?PHYSICAL_SIZE(StorageId), StatsResult, 0),
             #file_attr{local_replication_rate = case Size of
                 0 -> 1.0;
                 _ -> StorageSize/Size
