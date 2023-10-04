@@ -100,7 +100,7 @@ is_special_uuid(_) ->
     false.
 
 
--spec is_archive_dir_uuid(file_meta:uuid()) -> boolean().
+-spec is_archives_root_dir_uuid(file_meta:uuid()) -> boolean().
 is_archives_root_dir_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_archives_root_dir_uuid(_) ->
