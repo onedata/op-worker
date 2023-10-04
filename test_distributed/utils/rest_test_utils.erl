@@ -24,6 +24,7 @@
     request/5, request/6,
     cacerts_opts/1,
     user_token_header/1,
+    user_session_cookie_header/1,
     assert_request_error/2,
     get_rest_error/1
 ]).
@@ -62,6 +63,9 @@ user_token_header(AccessToken) ->
         %% @todo VFS-5554 Deprecated, included for backward compatibility
         3 -> {?HDR_MACAROON, AccessToken}
     end.
+
+user_session_cookie_header(SessionId) ->
+    {<<"cookie">>, <<"SID=", SessionId/binary>>}.
 
 assert_request_error(ExpectedError = {error, _}, RequestParams) ->
     #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(ExpectedError),

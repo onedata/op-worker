@@ -243,10 +243,14 @@ download_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockC
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx),
     Path = str_utils:format_bin("automation/execution/stores/~s/content_dump", [AtmStoreId]),
 
-    {ok, UserId} = ?rpc(ProviderSelector, session:get_user_id(SessionId)),
-    Headers = maps:from_list([
-        rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId))]
-    ),
+    AuthHeader = case rand:uniform(2) of
+        1 ->
+            rest_test_utils:user_session_cookie_header(SessionId);
+        2 ->
+            {ok, UserId} = ?rpc(ProviderSelector, session:get_user_id(SessionId)),
+            rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId))
+    end,
+    Headers = maps:from_list([AuthHeader]),
 
     case rest_test_utils:request(Node, Path, get, Headers, <<>>) of
         {ok, ?HTTP_200_OK, _, Body} ->

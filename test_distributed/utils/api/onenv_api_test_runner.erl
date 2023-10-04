@@ -186,6 +186,7 @@ run_tests(SpecTemplates) ->
 %% @private
 -spec run_suite(suite_spec()) -> HasAllTestsPassed :: boolean().
 run_suite(SuiteSpec) ->
+    %% TODO test valid clients with session cookie?
     run_invalid_clients_test_cases(unauthorized, SuiteSpec)
     and run_invalid_clients_test_cases(forbidden_not_in_space, SuiteSpec)
     and run_invalid_clients_test_cases(forbidden_in_space, SuiteSpec)
