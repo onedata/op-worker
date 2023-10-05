@@ -55,7 +55,8 @@ build_parse_requested_attrs_fun(Key, AttrType, AllowedValues) ->
                     {[TranslatedAttr | AttrAcc], XattrAcc}
                 catch _:_ ->
                     AllowedValuesJson = [file_attr_translator:attr_name_to_json(AttrType, A) || A <- AllowedValues],
-                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, [<<"xattr.*">> | AllowedValuesJson]))
+                    % add xattr.* to end of list, so allowed values are printed in correct order
+                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValuesJson ++ [<<"xattr.*">>]))
                 end
         end, {[], []}, utils:ensure_list(Attributes)),
         {true, case Xattrs of

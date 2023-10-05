@@ -202,8 +202,8 @@ map_file_attr_fields_for_gui(FileAttrJson) ->
 
 %% @private
 -spec map_file_attr_parent_for_gui(json_utils:json_map()) -> json_utils:json_map().
-map_file_attr_parent_for_gui(#{<<"parentId">> := ParentObjectId} = FileAttrJson) ->
-    FileAttrJson#{<<"parentId">> => ensure_guid(ParentObjectId)};
+map_file_attr_parent_for_gui(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
+    FileAttrJson#{<<"parentFileId">> => ensure_guid(ParentObjectId)};
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_parent_for_gui(#{<<"parent_id">> := ParentObjectId} = FileAttrJson) ->
     FileAttrJson#{<<"parent_id">> => ensure_guid(ParentObjectId)};

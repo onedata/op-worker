@@ -200,8 +200,6 @@ to_json(AttrType, #file_attr{
     eff_qos_membership = EffQosMembership,
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
-    is_deleted = IsDeleted,
-    conflicting_files = ConflictingFiles,
     xattrs = Xattrs
 }) ->
     BaseMap = #{
@@ -210,7 +208,7 @@ to_json(AttrType, #file_attr{
         type => translate_type(Type),
         active_permissions_type => ActivePermissionsType,
         mode => translate_mode(Mode),
-        acl => acl:to_json(Acl, gui),
+        acl => translate_acl(Acl),
         name => Name,
         conflicting_name => ConflictingName,
         path => Path,
@@ -234,9 +232,7 @@ to_json(AttrType, #file_attr{
         eff_dataset_membership => translate_membership(EffDatasetMembership),
         eff_qos_membership => translate_membership(EffQosMembership),
         qos_status => translate_qos_status(QosStatus),
-        recall_root_id => RecallRootId,
-        is_deleted => IsDeleted,
-        conflicting_files => ConflictingFiles
+        recall_root_id => RecallRootId
     },
     BaseJson = maps:fold(fun(Key, Value, Acc) ->
         Acc#{attr_name_to_json(AttrType, Key) => utils:undefined_to_null(Value)}
@@ -286,6 +282,12 @@ translate_type(Type) ->
 -spec translate_mode(undefined | file_meta:mode()) -> undefined | binary().
 translate_mode(undefined) -> undefined;
 translate_mode(Mode) -> list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)).
+
+
+%% @private
+-spec translate_acl(undefined | acl:acl()) -> undefined | json_utils:json_term().
+translate_acl(undefined) -> undefined;
+translate_acl(Acl) -> acl:to_json(Acl, gui).
 
 
 %% @private

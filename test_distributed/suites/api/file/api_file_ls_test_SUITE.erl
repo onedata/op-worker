@@ -560,7 +560,7 @@ get_children_data_spec(rest, Scope) ->
             <<"limit">> => [1, 100],
             <<"attributes">> => [
                 lists_utils:random_sublist(AllowedAttrsJson -- [<<"xattr.*">>]),
-                [<<"shares">>, <<"posixPermissions">>, <<"parentId">>],
+                [<<"directShareIds">>, <<"posixPermissions">>, <<"parentFileId">>],
                 [<<"fileId">>, <<"name">>],
                 <<"ctime">>
             ]

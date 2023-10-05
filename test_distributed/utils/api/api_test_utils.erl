@@ -199,6 +199,10 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
+        acl = case HasAcl of
+            true -> acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi);
+            false -> []
+        end,
         eff_qos_membership = case {HasDirectQos, HasParentQos} of
             {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
             {true, _} -> ?DIRECT_MEMBERSHIP;
@@ -395,6 +399,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     acl = Acl,
     name = Name,
     conflicting_name = ConflictingName,
+    path = Path,
     parent_guid = ParentGuid,
     gid = Gid,
     uid = Uid,
@@ -402,7 +407,6 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     mtime = Mtime,
     ctime = Ctime,
     size = Size,
-    local_replication_rate = LocalReplicationRate,
     provider_id = ProviderId,
     shares = Shares,
     owner_id = OwnerId,
@@ -432,6 +436,12 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         false -> null
     end,
     
+    % is_fully_replicated is set only for regular files
+    IsFullyReplicatedLocally = case Type of
+        ?REGULAR_FILE_TYPE -> LocalReplicationRate2 == 1.0;
+        _ -> null
+    end,
+    
     BaseJson = #{
         <<"fileId">> => map_file_id_for_api_type(ApiType, Guid),
         <<"index">> => file_listing:encode_index(Index),
@@ -441,9 +451,13 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
             _ -> atom_to_binary(ActivePermissionsType)
         end,
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"acl">> => acl:to_json(Acl, gui),
+        <<"acl">> => case Acl of
+            undefined -> null;
+            _ -> acl:to_json(Acl, gui)
+        end,
         <<"name">> => Name,
         <<"conflictingName">> => ConflictingName,
+        <<"path">> => utils:undefined_to_null(Path),
         <<"parentFileId">> => map_file_id_for_api_type(ApiType, ParentGuid),
         <<"displayGid">> => Gid,
         <<"displayUid">> => Uid,
@@ -451,7 +465,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"size">> => utils:undefined_to_null(Size),
-        <<"isFullyReplicatedLocally">> => LocalReplicationRate2 == 1.0,
+        <<"isFullyReplicatedLocally">> => IsFullyReplicatedLocally,
         <<"localReplicationRate">> => LocalReplicationRate2,
         <<"originProviderId">> => ProviderId,
         <<"directShareIds">> => Shares,

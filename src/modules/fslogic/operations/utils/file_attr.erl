@@ -91,7 +91,8 @@
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
         undefined -> RequestedAttributes;
-        _ -> lists_utils:intersect(RequestedAttributes, ?PUBLIC_ATTRS)
+        % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_ATTRS
+        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_ATTRS, ?ONECLIENT_ATTRS))
     end,
     InitialState = #state{
         file_ctx = FileCtx,

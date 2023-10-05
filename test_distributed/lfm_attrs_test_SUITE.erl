@@ -964,22 +964,22 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     {ok, _, ListingToken} = ?assertMatch(
         {ok, [
             #file_attr{
-                guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = SpaceGuid,
+                guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             },
             #file_attr{
-                guid = Share1RootDirGuid, name = Share1Id, mode = 8#005, parent_guid = SpaceGuid,
+                guid = Share1RootDirGuid, name = Share1Id, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             },
             #file_attr{
-                guid = Share4RootDirGuid, name = Share4Id, mode = 8#005, parent_guid = SpaceGuid,
+                guid = Share4RootDirGuid, name = Share4Id, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             },
             #file_attr{
-                guid = SpaceShareRootDirGuid, name = SpaceShareId, mode = 8#005, parent_guid = SpaceGuid,
+                guid = SpaceShareRootDirGuid, name = SpaceShareId, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             }

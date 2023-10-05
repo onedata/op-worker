@@ -64,7 +64,7 @@
 -define(TIMES_ATTRS, [atime, mtime, ctime]).
 -define(LOCATION_ATTRS, [size, is_fully_replicated, local_replication_rate]).
 -define(METADATA_ATTRS, [has_custom_metadata]).
--define(DATASET_ATTRS, [eff_dataset_membership, eff_dataset_protection_flags, eff_protection_flags, archive_id]).
+-define(DATASET_ATTRS, [eff_dataset_membership, eff_dataset_protection_flags, eff_protection_flags]).
 -define(QOS_EFF_VALUE_ATTRS, [eff_qos_membership]).
 -define(QOS_STATUS_ATTRS, [qos_status]).
 -define(ARCHIVE_RECALL_ATTRS, [recall_root_id]).
