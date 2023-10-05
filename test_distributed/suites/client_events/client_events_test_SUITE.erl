@@ -201,7 +201,6 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name", SpaceNum/binary>>),
     SpaceDirUuid = file_id:guid_to_uuid(SpaceGuid),
-    ?assertEqual(ok, rpc:call(Worker1, file_meta, delete, [SpaceDirUuid])),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
@@ -215,7 +214,8 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
     ?assertMatch({ok, [_]},
         rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
-
+    
+    ok = rpc:call(Worker1, file_meta, ensure_space_docs_exist, [<<"space_id", SpaceNum/binary>>]),
     ok = rpc:call(Worker1, user_root_dir, report_new_spaces_appeared, [[User], [<<"space_id", SpaceNum/binary>>]]),
     receive_events_and_check(ExpectedAns, SpaceGuid),
 
