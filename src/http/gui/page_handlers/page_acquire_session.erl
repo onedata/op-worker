@@ -15,6 +15,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -49,16 +50,24 @@ get_session_cookie(Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
+handle(<<"OPTIONS">>, Req) ->
+    gui_cors:options_response(
+        oneprovider:get_oz_url(),
+        [<<"POST">>],
+        [?HDR_X_AUTH_TOKEN, ?HDR_CONTENT_TYPE],
+        Req
+    );
 handle(<<"POST">>, Req1) ->
+    OzUrl = oneprovider:get_oz_url(),
+    Req2 = gui_cors:allow_origin(OzUrl, Req1),
+    Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
+
     AuthCtx = #{
         interface => rest,
         data_access_caveats_policy => allow_data_access_caveats
     },
     case http_auth:authenticate(Req1, AuthCtx) of
         {ok, ?USER(_Id, SessionId)} ->
-            OzUrl = oneprovider:get_oz_url(),
-            Req2 = gui_cors:allow_origin(OzUrl, Req1),
-            Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
             Req4 = cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req3, #{
                 path => <<"/">>,
 %%                max_age => TTL,  todo no ttl??
@@ -67,7 +76,7 @@ handle(<<"POST">>, Req1) ->
             }),
             cowboy_req:reply(?HTTP_204_NO_CONTENT, Req4);
         {ok, _} ->
-            throw(?ERROR_UNAUTHORIZED);
+            http_req:send_error(?ERROR_UNAUTHORIZED, Req3);
         {error, _} = Error ->
-            throw(Error)
+            http_req:send_error(Error, Req3)
     end.
