@@ -27,12 +27,14 @@
 %% tests
 -export([
     token_auth_test/1,
+    session_cookie_auth_test/1,
     internal_error_when_handler_crashes_test/1,
     custom_error_when_handler_throws_error_test/1
 ]).
 
 all() -> ?ALL([
     token_auth_test,
+    session_cookie_auth_test,
     internal_error_when_handler_crashes_test,
     custom_error_when_handler_throws_error_test
 ]).
@@ -48,16 +50,16 @@ all() -> ?ALL([
 
 token_auth_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
-    F = fun(Headers) -> rest_test_utils:request(Node, <<"spaces">>, get, Headers, <<>>) end,
+    R = fun(Headers) -> rest_test_utils:request(Node, <<"spaces">>, get, Headers, <<>>) end,
 
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, F(#{?HDR_X_AUTH_TOKEN => <<"invalid">>})),
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, R(#{?HDR_X_AUTH_TOKEN => <<"invalid">>})),
 
     User1AccessToken = oct_background:get_user_access_token(user1),
 
-    ?assertMatch({ok, ?HTTP_200_OK, _, _}, F(#{?HDR_X_AUTH_TOKEN => User1AccessToken})),
-    ?assertMatch({ok, ?HTTP_200_OK, _, _}, F(#{?HDR_AUTHORIZATION => <<"Bearer ", User1AccessToken/binary>>})),
+    ?assertMatch({ok, ?HTTP_200_OK, _, _}, R(#{?HDR_X_AUTH_TOKEN => User1AccessToken})),
+    ?assertMatch({ok, ?HTTP_200_OK, _, _}, R(#{?HDR_AUTHORIZATION => <<"Bearer ", User1AccessToken/binary>>})),
     %% @todo VFS-5554 Deprecated, included for backward compatibility
-    ?assertMatch({ok, ?HTTP_200_OK, _, _}, F(#{?HDR_MACAROON => User1AccessToken})),
+    ?assertMatch({ok, ?HTTP_200_OK, _, _}, R(#{?HDR_MACAROON => User1AccessToken})),
 
     User2Id = oct_background:get_user_id(user2),
     User2IdentityToken = create_temp_identity_token(User2Id),
@@ -71,22 +73,52 @@ token_auth_test(_Config) ->
 
     ?assertMatch(
         {ok, ?HTTP_401_UNAUTHORIZED, _, _},
-        F(#{?HDR_X_AUTH_TOKEN => User1AccessTokenWithConsumerCaveats})
+        R(#{?HDR_X_AUTH_TOKEN => User1AccessTokenWithConsumerCaveats})
     ),
     ?assertMatch(
         {ok, ?HTTP_401_UNAUTHORIZED, _, _},
-        F(#{
+        R(#{
             ?HDR_X_AUTH_TOKEN => User1AccessTokenWithConsumerCaveats,
             ?HDR_X_ONEDATA_CONSUMER_TOKEN => User3IdentityToken
         })
     ),
     ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        F(#{
+        R(#{
             ?HDR_X_AUTH_TOKEN => User1AccessTokenWithConsumerCaveats,
             ?HDR_X_ONEDATA_CONSUMER_TOKEN => User2IdentityToken
         })
     ).
+
+
+session_cookie_auth_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    RequestSpaces = fun(Headers) ->
+        rest_test_utils:request(Node, <<"spaces">>, get, Headers, <<>>)
+    end,
+    RequestAtmStoreContentDump = fun(Headers) ->
+        % Requesting nonexistent store should pass authentication and fails only on actual request processing
+        rest_test_utils:request(Node, <<"automation/execution/stores/dummy_id/content_dump">>, get, Headers, <<>>)
+    end,
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([])),
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreContentDump([])),
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([{<<"cookie">>, <<"SID=dummy_id">>}])),
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreContentDump([{<<"cookie">>, <<"SID=dummy_id">>}])),
+
+    {ok, _, #{<<"set-cookie">> := SetCookieHeaderValue}, _} = ?assertMatch(
+        {ok, ?HTTP_204_NO_CONTENT, #{<<"set-cookie">> := _}, <<>>},
+        http_client:request(
+            post,
+            <<"https://", (opw_test_rpc:get_provider_domain(Node))/binary, "/gui/acquire_session">>,
+            #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(user1)},
+            <<>>,
+            [{recv_timeout, 60000} | rest_test_utils:cacerts_opts(Node)]
+        )
+    ),
+    [SessionCookieValue | _] = string:split(SetCookieHeaderValue, ";", leading),
+    % Valid session cookie is accepted only for specific endpoint
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([{<<"cookie">>, SessionCookieValue}])),
+    ?assertMatch({ok, ?HTTP_404_NOT_FOUND, _, _}, RequestAtmStoreContentDump([{<<"cookie">>, SessionCookieValue}])).
 
 
 internal_error_when_handler_crashes_test(_Config) ->
