@@ -174,8 +174,10 @@ ensure_cache_updated() ->
             case user_logic:get(SessId, UserId) of
                 {ok, #document{value = #od_user{eff_spaces = Spaces}}} ->
                     lists:foreach(fun(SpaceId) -> {ok, _} = space_logic:get(SessId, SpaceId) end, Spaces);
+                {error, ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID)} -> ok;
+                {error, ?ERROR_TOKEN_INVALID} -> ok;
                 {error, _} = Error ->
-                    ?warning("Could not fetch spaces for user ~s due to ~p", [Error])
+                    ?warning("Could not fetch spaces for user ~s due to ~p", [UserId, Error])
             end;
         (_) ->
             ok
@@ -243,8 +245,11 @@ map_fuse_sessions_to_users() ->
 %% @private
 -spec get_user_supported_spaces(session:id(), od_user:id()) -> [od_space:id()].
 get_user_supported_spaces(SessId, UserId) ->
-    {ok, AllUserSpaces} = user_logic:get_eff_spaces(SessId, UserId),
-    filter_spaces_with_support(SessId, lists:usort(AllUserSpaces)).
+    case user_logic:get_eff_spaces(SessId, UserId) of
+        {ok, AllUserSpaces} -> filter_spaces_with_support(SessId, lists:usort(AllUserSpaces));
+        {error, ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID)} -> []; % race with token invalidation
+        {error, ?ERROR_TOKEN_INVALID} -> []
+    end.
 
 
 %% @private
