@@ -22,7 +22,9 @@
 -type ctx() :: #{
     interface := cv_interface:interface(),
     data_access_caveats_policy := data_access_caveats:policy(),
-    % TODO WRITEME
+    % If session cookie is allowed and present the returned auth will be
+    % associated with specified session and its attributes regardless of
+    % 'interface' and 'data_access_caveats_policy'
     allow_session_cookie => boolean()
 }.
 -export_type([ctx/0]).

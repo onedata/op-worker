@@ -1060,14 +1060,14 @@ gs_endpoint(Node) ->
 %% @private
 -spec make_rest_request(node(), aai:auth(), rest_args()) ->
     rest_response() | {error, term()}.
-make_rest_request(Node, Client, #rest_args{
+make_rest_request(Node, Client, Args = #rest_args{
     method = Method,
     path = Path,
     headers = Headers,
     body = Body
 }) ->
     URL = get_rest_endpoint(Node, Path),
-    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
+    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Node, Client, Args)),
     Opts = [
         {ssl_options, [
             {cacerts, get_cert_chain_ders()}
@@ -1090,11 +1090,22 @@ make_rest_request(Node, Client, #rest_args{
 
 
 %% @private
--spec get_rest_auth_headers(aai:auth()) -> AuthHeaders :: map().
-get_rest_auth_headers(?NOBODY) ->
+-spec get_rest_auth_headers(node(), aai:auth(), rest_args()) -> AuthHeaders :: map().
+get_rest_auth_headers(_Node, ?NOBODY, _Args) ->
     #{};
-get_rest_auth_headers(?USER(UserId)) ->
-    #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(UserId)}.
+
+get_rest_auth_headers(_Node, ?USER(UserId), #rest_args{auth_header = token}) ->
+    #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(UserId)};
+
+get_rest_auth_headers(Node, ?USER(UserId), #rest_args{auth_header = session_cookie}) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    SessionId = oct_background:get_user_session_id(UserId, ProviderId),
+    #{?HDR_COOKIE => <<"SID=", SessionId/binary>>};
+
+get_rest_auth_headers(Node, Client, Args = #rest_args{auth_header = any}) ->
+    get_rest_auth_headers(Node, Client, Args#rest_args{
+        auth_header = ?RAND_ELEMENT([token, session_cookie])
+    }).
 
 
 %% @private
