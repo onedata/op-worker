@@ -56,13 +56,16 @@ handle(<<"POST">>, Req1) ->
     },
     case http_auth:authenticate(Req1, AuthCtx) of
         {ok, ?USER(_Id, SessionId)} ->
-            Req2 = cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req1, #{
+            OzUrl = oneprovider:get_oz_url(),
+            Req2 = gui_cors:allow_origin(OzUrl, Req1),
+            Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
+            Req4 = cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req3, #{
                 path => <<"/">>,
 %%                max_age => TTL,  todo no ttl??
                 secure => true,
                 http_only => true
             }),
-            cowboy_req:reply(?HTTP_204_NO_CONTENT, Req2);
+            cowboy_req:reply(?HTTP_204_NO_CONTENT, Req4);
         {ok, _} ->
             throw(?ERROR_UNAUTHORIZED);
         {error, _} = Error ->
