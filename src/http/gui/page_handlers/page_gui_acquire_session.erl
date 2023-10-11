@@ -70,12 +70,15 @@ handle(<<"POST">>, Req1) ->
     },
     case http_auth:authenticate(Req1, AuthCtx) of
         {ok, ?USER(_Id, SessionId)} ->
-            Req4 = cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req3, #{
+            {ok, TokenCredentials} = session:get_credentials(SessionId),
+
+            CookieOpts = maps_utils:remove_undefined(#{
                 path => <<"/">>,
-%%                max_age => TTL,  todo no ttl??
+                max_age => auth_manager:infer_access_token_ttl(TokenCredentials),
                 secure => true,
                 http_only => true
             }),
+            Req4 = cowboy_req:set_resp_cookie(?SESSION_COOKIE_KEY, SessionId, Req3, CookieOpts),
             cowboy_req:reply(?HTTP_204_NO_CONTENT, Req4);
         {ok, ?GUEST} ->
             http_req:send_error(?ERROR_UNAUTHORIZED, Req3);
