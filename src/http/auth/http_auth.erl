@@ -101,10 +101,14 @@ try_authenticate_by_session_cookie(_Req, _AuthCtx) ->
 
 %% @private
 -spec do_authenticate_by_session_cookie(cowboy_req:req(), session:id()) ->
-    {ok, aai:auth()} | errors:unauthorized_error() | no_return().
+    {ok, aai:auth()} | errors:error() | no_return().
 do_authenticate_by_session_cookie(Req, SessionId) ->
     case session:get(SessionId) of
-        {ok, #document{value = #session{identity = Identity, credentials = TokenCredentials}}} ->
+        {ok, #document{value = #session{
+            type = gui,
+            identity = Identity,
+            credentials = TokenCredentials
+        }}} ->
             {PeerIp, _} = cowboy_req:peer(Req),
 
             {ok, #auth{
@@ -113,6 +117,10 @@ do_authenticate_by_session_cookie(Req, SessionId) ->
                 peer_ip = PeerIp,
                 session_id = SessionId
             }};
+
+        {ok, _} ->
+            % Only gui session cookie is accepted
+            ?ERROR_FORBIDDEN;
 
         {error, not_found} ->
             ?ERROR_UNAUTHORIZED
