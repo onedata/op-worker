@@ -96,14 +96,14 @@ session_cookie_auth_test(_Config) ->
     RequestSpaces = fun(Headers) ->
         rest_test_utils:request(Node, <<"spaces">>, get, Headers, <<>>)
     end,
-    RequestAtmStoreContentDump = fun(Headers) ->
+    RequestAtmStoreDump = fun(Headers) ->
         % Requesting nonexistent store should pass authentication and fails only on actual request processing
-        rest_test_utils:request(Node, <<"automation/execution/stores/dummy_id/content_dump">>, get, Headers, <<>>)
+        rest_test_utils:request(Node, <<"automation/execution/stores/dummy_id/dump">>, get, Headers, <<>>)
     end,
     ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([])),
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreContentDump([])),
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreDump([])),
     ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([{<<"cookie">>, <<"SID=dummy_id">>}])),
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreContentDump([{<<"cookie">>, <<"SID=dummy_id">>}])),
+    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreDump([{<<"cookie">>, <<"SID=dummy_id">>}])),
 
     {ok, _, #{<<"set-cookie">> := SetCookieHeaderValue}, _} = ?assertMatch(
         {ok, ?HTTP_204_NO_CONTENT, #{<<"set-cookie">> := _}, <<>>},
@@ -118,7 +118,7 @@ session_cookie_auth_test(_Config) ->
     [SessionCookieValue | _] = string:split(SetCookieHeaderValue, ";", leading),
     % Valid session cookie is accepted only for specific endpoint
     ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([{<<"cookie">>, SessionCookieValue}])),
-    ?assertMatch({ok, ?HTTP_404_NOT_FOUND, _, _}, RequestAtmStoreContentDump([{<<"cookie">>, SessionCookieValue}])).
+    ?assertMatch({ok, ?HTTP_404_NOT_FOUND, _, _}, RequestAtmStoreDump([{<<"cookie">>, SessionCookieValue}])).
 
 
 internal_error_when_handler_crashes_test(_Config) ->

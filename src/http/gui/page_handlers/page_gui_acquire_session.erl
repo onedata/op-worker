@@ -65,8 +65,8 @@ handle(<<"POST">>, Req1) ->
     Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
 
     AuthCtx = #http_auth_ctx{
-        interface = rest,
-        data_access_caveats_policy = allow_data_access_caveats
+        interface = graphsync,
+        data_access_caveats_policy = disallow_data_access_caveats
     },
     case http_auth:authenticate(Req1, AuthCtx) of
         {ok, ?USER(_Id, SessionId)} ->

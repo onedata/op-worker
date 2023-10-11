@@ -24,7 +24,7 @@
     request/5, request/6,
     cacerts_opts/1,
     user_token_header/1,
-    user_session_cookie_header/1,
+    acquire_session_cookie/2,
     assert_request_error/2,
     get_rest_error/1
 ]).
@@ -64,8 +64,19 @@ user_token_header(AccessToken) ->
         3 -> {?HDR_MACAROON, AccessToken}
     end.
 
-user_session_cookie_header(SessionId) ->
-    {<<"cookie">>, <<"SID=", SessionId/binary>>}.
+acquire_session_cookie(Node, UserId) ->
+    {ok, _, #{<<"set-cookie">> := SetCookieHeaderValue}, _} = ?assertMatch(
+        {ok, ?HTTP_204_NO_CONTENT, #{<<"set-cookie">> := _}, <<>>},
+        http_client:request(
+            post,
+            <<"https://", (opw_test_rpc:get_provider_domain(Node))/binary, "/gui/acquire_session">>,
+            #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(UserId)},
+            <<>>,
+            [{recv_timeout, 60000} | rest_test_utils:cacerts_opts(Node)]
+        )
+    ),
+    [SessionCookieValue | _] = string:split(SetCookieHeaderValue, ";", leading),
+    SessionCookieValue.
 
 assert_request_error(ExpectedError = {error, _}, RequestParams) ->
     #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(ExpectedError),
