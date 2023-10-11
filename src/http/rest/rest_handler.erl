@@ -365,7 +365,7 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
 
 route_to_proper_handler(#op_req{operation = get, gri = #gri{
     type = op_atm_store,
-    aspect = content_dump
+    aspect = dump
 }} = OpReq, Req) ->
     atm_store_content_download_handler:handle(OpReq, Req);
 

@@ -32,14 +32,14 @@
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
     %% Download atm store content
-    {<<"/automation/execution/stores/:sid/content_dump">>, rest_handler, #rest_req{
+    {<<"/automation/execution/stores/:sid/dump">>, rest_handler, #rest_req{
         method = 'GET',
         accept_session_cookie_auth = true,
         produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_atm_store,
             id = ?BINDING(sid),
-            aspect = content_dump,
+            aspect = dump,
             scope = private
         }
     }}

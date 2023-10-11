@@ -37,7 +37,7 @@
 -export([
     scan_audit_log/3, scan_audit_log/4,
     browse_store/2, browse_store/3,
-    download_store/2, download_store/3,
+    download_store_dump/2, download_store_dump/3,
     get_exception_store_content/2
 ]).
 -export([
@@ -223,18 +223,18 @@ browse_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCal
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
 
 
--spec download_store(automation:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+-spec download_store_dump(automation:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
     json_utils:json_term().
-download_store(AtmStoreSchemaId, AtmMockCallCtx) ->
-    download_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
+download_store_dump(AtmStoreSchemaId, AtmMockCallCtx) ->
+    download_store_dump(AtmStoreSchemaId, undefined, AtmMockCallCtx).
 
 
--spec download_store
+-spec download_store_dump
     (exception_store, atm_lane_execution:lane_run_selector(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
         {ok, json_utils:json_term()} | errors:error();
     (automation:id(), undefined | atm_task_execution:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
         {ok, json_utils:json_term()} | errors:error().
-download_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx = #atm_mock_call_ctx{
+download_store_dump(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx = #atm_mock_call_ctx{
     provider = ProviderSelector,
     session_id = SessionId
 }) ->
@@ -243,6 +243,7 @@ download_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockC
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx),
     Path = str_utils:format_bin("automation/execution/stores/~s/content_dump", [AtmStoreId]),
 
+    %% TODO
     AuthHeader = case rand:uniform(2) of
         1 ->
             rest_test_utils:user_session_cookie_header(SessionId);

@@ -17,6 +17,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -76,7 +77,7 @@ handle(<<"POST">>, Req1) ->
                 http_only => true
             }),
             cowboy_req:reply(?HTTP_204_NO_CONTENT, Req4);
-        {ok, _} ->
+        {ok, ?GUEST} ->
             http_req:send_error(?ERROR_UNAUTHORIZED, Req3);
         {error, _} = Error ->
             http_req:send_error(Error, Req3)

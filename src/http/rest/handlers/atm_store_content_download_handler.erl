@@ -48,7 +48,7 @@ handle(#op_req{auth = AaiAuth = ?USER, gri = #gri{id = AtmStoreId}}, Req) ->
         http_req:send_error(Error, Req)
     end;
 
-handle(_OpReq, Req) ->
+handle(#op_req{auth = ?GUEST}, Req) ->
     http_req:send_error(?ERROR_UNAUTHORIZED, Req).
 
 

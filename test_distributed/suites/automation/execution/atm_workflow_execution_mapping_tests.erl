@@ -781,12 +781,14 @@ verify_exp_target_store_content(
 
     case TargetStoreType of
         audit_log ->
-            {ok, TargetStoreDownloadContent} = atm_workflow_execution_test_utils:download_store(
-                TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
-            ),
-            ?assertEqual(maps:get(<<"logEntries">>, TargetStoreBrowseContent), TargetStoreDownloadContent);
+            ?assertEqual(
+                {ok, maps:get(<<"logEntries">>, TargetStoreBrowseContent)},
+                atm_workflow_execution_test_utils:download_store_dump(
+                    TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
+                )
+            );
         _ ->
-            ?assertMatch(?ERROR_NOT_SUPPORTED, atm_workflow_execution_test_utils:download_store(
+            ?assertMatch(?ERROR_NOT_SUPPORTED, atm_workflow_execution_test_utils:download_store_dump(
                 TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
             ))
     end.
