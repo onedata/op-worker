@@ -6,21 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for management of session cookie.
+%%% Dynamic page visited by GUI to acquire a session via an HTTP cookie.
+%%% The cookie can be presented as authorization on several Oneprovider
+%%% endpoints (see http_auth.erl).
 %%% @end
 %%%-------------------------------------------------------------------
--module(page_acquire_session).
+-module(page_gui_acquire_session).
 -author("Bartosz Walkowicz").
 
 -behaviour(dynamic_page_behaviour).
 
--include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/http/headers.hrl").
+-include("http/rest.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_session_cookie/1]).
+-export([lookup_session_cookie/1]).
 
 %% dynamic_page_behaviour callbacks
 -export([handle/2]).
@@ -34,8 +35,8 @@
 %%%===================================================================
 
 
--spec get_session_cookie(cowboy_req:req()) -> undefined | session:id().
-get_session_cookie(Req) ->
+-spec lookup_session_cookie(cowboy_req:req()) -> undefined | session:id().
+lookup_session_cookie(Req) ->
     proplists:get_value(?SESSION_COOKIE_KEY, cowboy_req:parse_cookies(Req), undefined).
 
 
@@ -62,9 +63,9 @@ handle(<<"POST">>, Req1) ->
     Req2 = gui_cors:allow_origin(OzUrl, Req1),
     Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
 
-    AuthCtx = #{
-        interface => rest,
-        data_access_caveats_policy => allow_data_access_caveats
+    AuthCtx = #http_auth_ctx{
+        interface = rest,
+        data_access_caveats_policy = allow_data_access_caveats
     },
     case http_auth:authenticate(Req1, AuthCtx) of
         {ok, ?USER(_Id, SessionId)} ->

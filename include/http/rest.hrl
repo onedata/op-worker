@@ -11,6 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-include("http/http_auth.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
@@ -28,12 +29,12 @@
 
 %% Record containing the state of REST request.
 -record(rest_req, {
-    allow_session_cookie = false :: boolean(),
     method = 'GET' :: rest_handler:method(),
     parse_body = ignore :: rest_handler:parse_body(),
     consumes = ['*'] :: ['*'] | [binary()],
     produces = [<<"application/json">>] :: [binary()],
-    b_gri :: rest_handler:bound_gri()
+    b_gri :: rest_handler:bound_gri(),
+    accept_session_cookie_auth = false :: boolean()
 }).
 
 %% Record representing REST response.

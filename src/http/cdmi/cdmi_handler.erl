@@ -82,9 +82,9 @@
     end
 ).
 
--define(AUTH_CTX, #{
-    interface => rest,
-    data_access_caveats_policy => allow_data_access_caveats
+-define(AUTH_CTX, #http_auth_ctx{
+    interface = rest,
+    data_access_caveats_policy = allow_data_access_caveats
 }).
 
 %%%===================================================================

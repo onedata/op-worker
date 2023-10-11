@@ -52,9 +52,9 @@ handle(<<"OPTIONS">>, Req) ->
     );
 handle(<<"POST">>, InitialReq) ->
     Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
-    AuthCtx = #{
-        interface => graphsync,
-        data_access_caveats_policy => disallow_data_access_caveats
+    AuthCtx = #http_auth_ctx{
+        interface = graphsync,
+        data_access_caveats_policy = disallow_data_access_caveats
     },
     case http_auth:authenticate(Req, AuthCtx) of
         {ok, ?USER(UserId) = Auth} ->

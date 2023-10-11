@@ -206,11 +206,11 @@ stream_store_items(Req, State = #state{auth = Auth, iterator = Iterator}) ->
 %% @private
 -spec send_item(cowboy_req:req(), automation:item(), state()) -> state().
 send_item(Req, Item, State = #state{any_item_streamed = false}) ->
-    Response = json_utils:encode(Item, [pretty]),
-    http_streamer:send_data_chunk(<<Response/binary, "\r\n">>, Req),
+    ItemJson = json_utils:encode(Item, [pretty]),
+    http_streamer:send_data_chunk(<<ItemJson/binary, "\r\n">>, Req),
     State#state{any_item_streamed = true};
 
 send_item(Req, Item, State) ->
-    Response = json_utils:encode(Item, [pretty]),
-    http_streamer:send_data_chunk(<<",", Response/binary, "\r\n">>, Req),
+    ItemJson = json_utils:encode(Item, [pretty]),
+    http_streamer:send_data_chunk(<<",", ItemJson/binary, "\r\n">>, Req),
     State.

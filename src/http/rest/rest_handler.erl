@@ -136,12 +136,12 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 -spec is_authorized(cowboy_req:req(), state()) ->
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State = #state{rest_req = RestReq}) ->
-    AuthCtx = #{
-        interface => rest,
+    AuthCtx = #http_auth_ctx{
+        interface = rest,
         % The data access caveats policy depends on requested resource,
         % which is not known yet - it is checked later in specific handler.
-        data_access_caveats_policy => allow_data_access_caveats,
-        allow_session_cookie => RestReq#rest_req.allow_session_cookie
+        data_access_caveats_policy = allow_data_access_caveats,
+        accept_session_cookie_auth = RestReq#rest_req.accept_session_cookie_auth
     },
     case http_auth:authenticate(Req, AuthCtx) of
         {ok, Auth} ->

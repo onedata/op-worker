@@ -14,19 +14,14 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
+-include("http/http_auth.hrl").
 -include("middleware/middleware.hrl").
 
 %% API
 -export([authenticate/2, authenticate_by_token/1]).
 
--type ctx() :: #{
-    interface := cv_interface:interface(),
-    data_access_caveats_policy := data_access_caveats:policy(),
-    % If session cookie is allowed and present the returned auth will be
-    % associated with specified session and its attributes regardless of
-    % 'interface' and 'data_access_caveats_policy'
-    allow_session_cookie => boolean()
-}.
+-type ctx() :: #http_auth_ctx{}.
+
 -export_type([ctx/0]).
 
 
@@ -72,9 +67,9 @@ authenticate_by_token(TokenCredentials) ->
 %% @private
 -spec try_authenticate_by_token(cowboy_req:req(), ctx()) ->
     false | {ok, aai:auth()} | errors:unauthorized_error().
-try_authenticate_by_token(Req, #{
-    interface := Interface,
-    data_access_caveats_policy := DataAccessCaveatsPolicy
+try_authenticate_by_token(Req, #http_auth_ctx{
+    interface = Interface,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
@@ -92,8 +87,8 @@ try_authenticate_by_token(Req, #{
 %% @private
 -spec try_authenticate_by_session_cookie(cowboy_req:req(), ctx()) ->
     false | {ok, aai:auth()} | errors:unauthorized_error().
-try_authenticate_by_session_cookie(Req, #{allow_session_cookie := true}) ->
-    case page_acquire_session:get_session_cookie(Req) of
+try_authenticate_by_session_cookie(Req, #http_auth_ctx{accept_session_cookie_auth = true}) ->
+    case page_gui_acquire_session:lookup_session_cookie(Req) of
         undefined ->
             false;
         SessionId ->

@@ -205,9 +205,9 @@ allowed_methods(Req, State) ->
 -spec is_authorized(cowboy_req:req(), map()) ->
     {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    AuthCtx = #{
-        interface => rest,
-        data_access_caveats_policy => disallow_data_access_caveats
+    AuthCtx = #http_auth_ctx{
+        interface = rest,
+        data_access_caveats_policy = disallow_data_access_caveats
     },
     case http_auth:authenticate(Req, AuthCtx) of
         {ok, ?USER(UserId, SessionId) = Auth} ->
