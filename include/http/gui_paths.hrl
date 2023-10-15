@@ -34,9 +34,6 @@
 %% Endpoint used to get provider's identity token
 -define(IDENTITY_TOKEN_PATH, "/identity_token").
 
-%% Endpoint used to acquire
--define(GUI_ACQUIRE_SESSION_PATH, "/gui/acquire_session").
-
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 

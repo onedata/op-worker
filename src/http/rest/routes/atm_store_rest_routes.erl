@@ -34,7 +34,6 @@ routes() -> [
     %% Download atm store content
     {<<"/automation/execution/stores/:sid/dump">>, rest_handler, #rest_req{
         method = 'GET',
-        accept_session_cookie_auth = true,
         produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_atm_store,

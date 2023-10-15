@@ -134,7 +134,6 @@ gui_config() ->
         {?FILE_UPLOAD_PATH, [<<"OPTIONS">>, <<"POST">>], page_file_upload},
         {?FILE_DOWNLOAD_PATH ++ "/:code", [<<"GET">>], page_file_download},
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
-        {?GUI_ACQUIRE_SESSION_PATH, [<<"OPTIONS">>, <<"POST">>], page_gui_acquire_session},
         {"/", [<<"GET">>], page_redirect_to_onezone}
     ],
 

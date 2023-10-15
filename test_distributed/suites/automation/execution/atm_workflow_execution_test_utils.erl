@@ -244,12 +244,7 @@ download_store_dump(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, Atm
     Path = str_utils:format_bin("automation/execution/stores/~s/dump", [AtmStoreId]),
 
     {ok, UserId} = ?rpc(ProviderSelector, session:get_user_id(SessionId)),
-    AuthHeader = case rand:uniform(2) of
-        1 ->
-            {<<"cookie">>, rest_test_utils:acquire_session_cookie(Node, UserId)};
-        2 ->
-            rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId))
-    end,
+    AuthHeader = rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId)),
     Headers = maps:from_list([AuthHeader]),
 
     case rest_test_utils:request(Node, Path, get, Headers, <<>>) of

@@ -27,14 +27,12 @@
 %% tests
 -export([
     token_auth_test/1,
-    session_cookie_auth_test/1,
     internal_error_when_handler_crashes_test/1,
     custom_error_when_handler_throws_error_test/1
 ]).
 
 all() -> ?ALL([
     token_auth_test,
-    session_cookie_auth_test,
     internal_error_when_handler_crashes_test,
     custom_error_when_handler_throws_error_test
 ]).
@@ -89,36 +87,6 @@ token_auth_test(_Config) ->
             ?HDR_X_ONEDATA_CONSUMER_TOKEN => User2IdentityToken
         })
     ).
-
-
-session_cookie_auth_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    RequestSpaces = fun(Headers) ->
-        rest_test_utils:request(Node, <<"spaces">>, get, Headers, <<>>)
-    end,
-    RequestAtmStoreDump = fun(Headers) ->
-        % Requesting nonexistent store should pass authentication and fails only on actual request processing
-        rest_test_utils:request(Node, <<"automation/execution/stores/dummy_id/dump">>, get, Headers, <<>>)
-    end,
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([])),
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreDump([])),
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([{<<"cookie">>, <<"SID=dummy_id">>}])),
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestAtmStoreDump([{<<"cookie">>, <<"SID=dummy_id">>}])),
-
-    {ok, _, #{<<"set-cookie">> := SetCookieHeaderValue}, _} = ?assertMatch(
-        {ok, ?HTTP_204_NO_CONTENT, #{<<"set-cookie">> := _}, <<>>},
-        http_client:request(
-            post,
-            <<"https://", (opw_test_rpc:get_provider_domain(Node))/binary, "/gui/acquire_session">>,
-            #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(user1)},
-            <<>>,
-            [{recv_timeout, 60000} | rest_test_utils:cacerts_opts(Node)]
-        )
-    ),
-    [SessionCookieValue | _] = string:split(SetCookieHeaderValue, ";", leading),
-    % Valid session cookie is accepted only for specific endpoint
-    ?assertMatch({ok, ?HTTP_401_UNAUTHORIZED, _, _}, RequestSpaces([{<<"cookie">>, SessionCookieValue}])),
-    ?assertMatch({ok, ?HTTP_404_NOT_FOUND, _, _}, RequestAtmStoreDump([{<<"cookie">>, SessionCookieValue}])).
 
 
 internal_error_when_handler_crashes_test(_Config) ->

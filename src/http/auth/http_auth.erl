@@ -42,15 +42,10 @@
 -spec authenticate(cowboy_req:req(), ctx()) ->
     {ok, aai:auth()} | errors:unauthorized_error().
 authenticate(Req, AuthCtx) ->
-    AuthResult = lists_utils:foldl_while(fun(AuthFun, Acc) ->
-        case AuthFun(Req, AuthCtx) of
-            false -> {cont, Acc};
-            AuthResult -> {halt, AuthResult}
-        end
-    end, {ok, ?GUEST}, [
-        fun try_authenticate_by_token/2,
-        fun try_authenticate_by_session_cookie/2
-    ]).
+    case try_authenticate_by_token(Req, AuthCtx) of
+        false -> {ok, ?GUEST};
+        Result -> Result
+    end.
 
 
 -spec authenticate_by_token(auth_manager:token_credentials()) ->
@@ -81,49 +76,6 @@ try_authenticate_by_token(Req, #http_auth_ctx{
                 PeerIp, Interface, DataAccessCaveatsPolicy
             ),
             authenticate_by_token(TokenCredentials)
-    end.
-
-
-%% @private
--spec try_authenticate_by_session_cookie(cowboy_req:req(), ctx()) ->
-    false | {ok, aai:auth()} | errors:unauthorized_error().
-try_authenticate_by_session_cookie(Req, #http_auth_ctx{accept_session_cookie_auth = true}) ->
-    case page_gui_acquire_session:lookup_session_cookie(Req) of
-        undefined ->
-            false;
-        SessionId ->
-            ?catch_auth_exceptions(do_authenticate_by_session_cookie(Req, SessionId))
-    end;
-
-try_authenticate_by_session_cookie(_Req, _AuthCtx) ->
-    false.
-
-
-%% @private
--spec do_authenticate_by_session_cookie(cowboy_req:req(), session:id()) ->
-    {ok, aai:auth()} | errors:error() | no_return().
-do_authenticate_by_session_cookie(Req, SessionId) ->
-    case session:get(SessionId) of
-        {ok, #document{value = #session{
-            type = gui,
-            identity = Identity,
-            credentials = TokenCredentials
-        }}} ->
-            {PeerIp, _} = cowboy_req:peer(Req),
-
-            {ok, #auth{
-                subject = Identity,
-                caveats = ?check(auth_manager:get_caveats(TokenCredentials)),
-                peer_ip = PeerIp,
-                session_id = SessionId
-            }};
-
-        {ok, _} ->
-            % Only gui session cookie is accepted
-            ?ERROR_FORBIDDEN;
-
-        {error, not_found} ->
-            ?ERROR_UNAUTHORIZED
     end.
 
 

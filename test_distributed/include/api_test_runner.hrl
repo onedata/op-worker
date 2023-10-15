@@ -66,7 +66,6 @@
 -record(rest_args, {
     method :: get | patch | post | put | delete,
     path :: binary(),
-    auth_header = token :: token | session_cookie | any,
     headers = #{} :: #{Key :: binary() => Value :: binary()},
     body = <<>> :: binary()
 }).

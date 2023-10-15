@@ -33,8 +33,7 @@
     parse_body = ignore :: rest_handler:parse_body(),
     consumes = ['*'] :: ['*'] | [binary()],
     produces = [<<"application/json">>] :: [binary()],
-    b_gri :: rest_handler:bound_gri(),
-    accept_session_cookie_auth = false :: boolean()
+    b_gri :: rest_handler:bound_gri()
 }).
 
 %% Record representing REST response.
