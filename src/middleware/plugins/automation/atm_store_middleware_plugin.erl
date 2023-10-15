@@ -30,11 +30,6 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 
--record(atm_store_ctx, {
-    store :: atm_store:record(),
-    workflow_execution :: atm_workflow_execution:record()
-}).
-
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_LIST_LIMIT, 1000).
 
@@ -95,22 +90,13 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
 fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
-    case atm_store_api:get(AtmStoreId) of
-        {ok, #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore} ->
+    case atm_store_api:get_ctx(AtmStoreId) of
+        {ok, AtmStoreCtx = #atm_store_ctx{store = AtmStore}} ->
             assert_operation_supported(OpReq, AtmStore),
+            {ok, {AtmStoreCtx, 1}};
 
-            case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
-                {ok, AtmWorkflowExecution} ->
-                    AtmStoreCtx = #atm_store_ctx{
-                        store = AtmStore,
-                        workflow_execution = AtmWorkflowExecution
-                    },
-                    {ok, {AtmStoreCtx, 1}};
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, _} = Error ->
-            Error
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
     end.
 
 

@@ -19,7 +19,7 @@
 -export([
     create/4,
     copy/2,
-    get/1, acquire_iterator/2,
+    get/1, get_ctx/1, acquire_iterator/2,
     freeze/1, unfreeze/1,
     browse_content/3,
     update_content/4,
@@ -90,6 +90,25 @@ get(AtmStoreId) ->
     case atm_store:get(AtmStoreId) of
         {ok, #document{value = AtmStore}} ->
             {ok, AtmStore};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
+    end.
+
+
+-spec get_ctx(atm_store:id()) -> {ok, atm_store:ctx()} | ?ERROR_NOT_FOUND.
+get_ctx(AtmStoreId) ->
+    case get(AtmStoreId) of
+        {ok, #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore} ->
+            case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
+                {ok, AtmWorkflowExecution} ->
+                    {ok, #atm_store_ctx{
+                        id = AtmStoreId,
+                        store = AtmStore,
+                        workflow_execution = AtmWorkflowExecution
+                    }};
+                ?ERROR_NOT_FOUND ->
+                    ?ERROR_NOT_FOUND
+            end;
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
     end.

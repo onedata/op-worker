@@ -140,8 +140,7 @@ is_authorized(Req, State = #state{rest_req = RestReq}) ->
         interface = rest,
         % The data access caveats policy depends on requested resource,
         % which is not known yet - it is checked later in specific handler.
-        data_access_caveats_policy = allow_data_access_caveats,
-        accept_session_cookie_auth = RestReq#rest_req.accept_session_cookie_auth
+        data_access_caveats_policy = allow_data_access_caveats
     },
     case http_auth:authenticate(Req, AuthCtx) of
         {ok, Auth} ->
