@@ -29,7 +29,7 @@
 -define(FILE_UPLOAD_PATH, "/file_upload").
 
 % Endpoint for downloading files
--define(FILE_DOWNLOAD_PATH, "/download").
+-define(GUI_FILE_DOWNLOAD_PATH, "/download").
 
 %% Endpoint used to get provider's identity token
 -define(IDENTITY_TOKEN_PATH, "/identity_token").
@@ -52,6 +52,9 @@
 
 % WebSocket endpoint for reporting activity in OpenFaaS (e.g. pod status changes or 'file_pipe' lambda results)
 -define(OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, "/automation/openfaas/activity_feed/:client_type").
+
+% Endpoint for downloading atm store dump
+-define(GUI_ATM_STORE_DUMP_DOWNLOAD_PATH, "/automation/execution/stores/download").
 
 % TODO VFS-7628 make openfaas respond to https
 %% Endpoint used as callback for Openfaas

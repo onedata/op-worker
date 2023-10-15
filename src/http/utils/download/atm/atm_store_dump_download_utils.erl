@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% The module handles streaming atm store content via REST API.
+%%% The module handles streaming atm store dump.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_store_content_download_handler).
+-module(atm_store_dump_download_utils).
 -author("Bartosz Walkowicz").
 
 -include("http/rest.hrl").
@@ -17,7 +17,10 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--export([handle/2]).
+-export([
+    assert_operation_supported/1,
+    handle_download/3
+]).
 
 -record(state, {
     auth :: atm_workflow_execution_auth:record(),
@@ -36,38 +39,23 @@
 %%%===================================================================
 
 
--spec handle(middleware:req(), cowboy_req:req()) -> cowboy_req:req().
-handle(#op_req{auth = AaiAuth = ?USER, gri = #gri{id = AtmStoreId}}, Req) ->
-    try
-        handle_download(Req, AaiAuth, AtmStoreId)
-    catch Class:Reason:Stacktrace ->
-        Error = case request_error_handler:infer_error(Reason) of
-            {true, KnownError} -> KnownError;
-            false -> ?examine_exception(Class, Reason, Stacktrace)
-        end,
-        http_req:send_error(Error, Req)
-    end;
-
-handle(#op_req{auth = ?GUEST}, Req) ->
-    http_req:send_error(?ERROR_UNAUTHORIZED, Req).
+-spec assert_operation_supported(atm_store:ctx()) -> ok | no_return().
+assert_operation_supported(#atm_store_ctx{store = #atm_store{
+    container = AtmStoreContainer
+}}) ->
+    case atm_store_container:get_store_type(AtmStoreContainer) of
+        audit_log -> ok;
+        _ -> throw(?ERROR_NOT_SUPPORTED)
+    end.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec handle_download(cowboy_req:req(), aai:auth(), atm_store:id()) ->
+-spec handle_download(cowboy_req:req(), session:id(), atm_store:ctx()) ->
     cowboy_req:req() | no_return().
-handle_download(Req, AaiAuth = ?USER(_, SessionId), AtmStoreId) ->
-    AtmStore = ?check(atm_store_api:get(AtmStoreId)),
-    assert_operation_supported(AtmStore),
-
-    AtmWorkflowExecutionId = AtmStore#atm_store.workflow_execution_id,
-    {ok, AtmWorkflowExecution} = atm_workflow_execution_api:get(AtmWorkflowExecutionId),
-    assert_has_access_to_workflow_execution_details(AaiAuth, AtmWorkflowExecution),
-
+handle_download(Req, SessionId, #atm_store_ctx{
+    id = AtmStoreId,
+    store = AtmStore = #atm_store{workflow_execution_id = AtmWorkflowExecutionId},
+    workflow_execution = AtmWorkflowExecution
+}) ->
     SpaceId = AtmWorkflowExecution#atm_workflow_execution.space_id,
 
     State = #state{
@@ -79,22 +67,9 @@ handle_download(Req, AaiAuth = ?USER(_, SessionId), AtmStoreId) ->
     stream_store_content(Req, State).
 
 
-%% @private
--spec assert_operation_supported(atm_store:record()) -> ok | no_return().
-assert_operation_supported(#atm_store{container = AtmStoreContainer}) ->
-    case atm_store_container:get_store_type(AtmStoreContainer) of
-        audit_log -> ok;
-        _ -> throw(?ERROR_NOT_SUPPORTED)
-    end.
-
-
-%% @private
--spec assert_has_access_to_workflow_execution_details(aai:auth(), atm_workflow_execution:record()) ->
-    true | no_return().
-assert_has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution) ->
-    atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
-        Auth, AtmWorkflowExecution
-    ) orelse throw(?ERROR_FORBIDDEN).
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 %% @private

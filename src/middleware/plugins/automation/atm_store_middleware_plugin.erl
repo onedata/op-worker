@@ -48,6 +48,7 @@
     module() | no_return().
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, content, private) -> ?MODULE;
+resolve_handler(get, dump_download_url, private) -> ?MODULE;
 resolve_handler(get, indices_by_trace_ids, private) -> ?MODULE;  %% supported only by exception store
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
@@ -64,7 +65,10 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= instance;
+    As =:= dump_download_url
+->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = content}}) -> #{
@@ -114,6 +118,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = As}}, #atm_s
 }) when
     As =:= instance;
     As =:= content;
+    As =:= dump_download_url;
     As =:= indices_by_trace_ids
 ->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
@@ -133,7 +138,10 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= indices_by_trace_ids
 ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
-    ok.
+    ok;
+
+validate(#op_req{operation = get, gri = #gri{aspect = dump_download_url}}, AtmStoreCtx) ->
+    atm_store_dump_download_utils:assert_operation_supported(AtmStoreCtx).
 
 
 %%--------------------------------------------------------------------
@@ -170,6 +178,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{aspect = content, scope = priva
         SpaceId, AtmWorkflowExecutionId, Auth#auth.session_id
     ),
     {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore)};
+
+get(#op_req{auth = ?USER(_Id, SessionId), gri = #gri{id = AtmStoreId, aspect = dump_download_url}}, _) ->
+    {ok, value, page_atm_store_dump_download:gen_dump_download_url(SessionId, AtmStoreId)};
 
 get(#op_req{data = Data, gri = #gri{aspect = indices_by_trace_ids, scope = private}}, #atm_store_ctx{
     store = #atm_store{container = AtmStoreContainer}

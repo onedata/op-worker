@@ -47,7 +47,7 @@ gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
         Hostname = oneprovider:get_domain(),
         {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowSymlinks),
         URL = str_utils:format_bin("https://~s~s/~s", [
-            Hostname, ?FILE_DOWNLOAD_PATH, Code
+            Hostname, ?GUI_FILE_DOWNLOAD_PATH, Code
         ]),
         {ok, URL}
     catch
