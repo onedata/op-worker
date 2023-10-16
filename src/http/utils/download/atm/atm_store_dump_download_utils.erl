@@ -12,6 +12,7 @@
 -module(atm_store_dump_download_utils).
 -author("Bartosz Walkowicz").
 
+-include("http/http_download.hrl").
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/automation/atm_execution.hrl").
@@ -43,6 +44,7 @@
 assert_operation_supported(#atm_store_ctx{store = #atm_store{
     container = AtmStoreContainer
 }}) ->
+    %% TODO VFS-11424 add store dump iterators for other stores
     case atm_store_container:get_store_type(AtmStoreContainer) of
         audit_log -> ok;
         _ -> throw(?ERROR_NOT_SUPPORTED)
@@ -158,11 +160,8 @@ stream_store_content(Req1, State) ->
 %% @private
 -spec set_response_headers(cowboy_req:req(), binary()) -> cowboy_req:req().
 set_response_headers(Req1, FileName) ->
-    OzUrl = oneprovider:get_oz_url(),
-    Req2 = gui_cors:allow_origin(OzUrl, Req1),
-    Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-
-    file_download_utils:set_content_disposition_header(FileName, Req3).
+    Req2 = http_download_utils:set_cors_headers(Req1),
+    http_download_utils:set_content_disposition_header(Req2, FileName).
 
 
 %% @private
@@ -170,9 +169,12 @@ set_response_headers(Req1, FileName) ->
 stream_store_items(Req, State = #state{auth = Auth, iterator = Iterator}) ->
     case atm_store_container_iterator:get_next_batch(Auth, ?LIST_BATCH_SIZE, Iterator) of
         {ok, Items, NewIterator} ->
-            stream_store_items(Req, lists:foldl(fun(Item, StateAcc) ->
-                send_item(Req, Item, StateAcc)
-            end, State#state{iterator = NewIterator}, Items));
+            NewState = lists:foldl(
+                fun(Item, StateAcc) -> send_item(Req, Item, StateAcc) end,
+                State#state{iterator = NewIterator},
+                Items
+            ),
+            stream_store_items(Req, NewState);
         stop ->
             ok
     end.
@@ -181,11 +183,22 @@ stream_store_items(Req, State = #state{auth = Auth, iterator = Iterator}) ->
 %% @private
 -spec send_item(cowboy_req:req(), automation:item(), state()) -> state().
 send_item(Req, Item, State = #state{any_item_streamed = false}) ->
-    ItemJson = json_utils:encode(Item, [pretty]),
-    http_streamer:send_data_chunk(<<ItemJson/binary, "\r\n">>, Req),
+    send_data_chunk(Req, [encode_item(Item), <<"\r\n">>]),
     State#state{any_item_streamed = true};
 
 send_item(Req, Item, State) ->
-    ItemJson = json_utils:encode(Item, [pretty]),
-    http_streamer:send_data_chunk(<<",", ItemJson/binary, "\r\n">>, Req),
+    send_data_chunk(Req, [<<",">>, encode_item(Item), <<"\r\n">>]),
     State.
+
+
+%% @private
+-spec encode_item(automation:item()) -> binary().
+encode_item(Item) ->
+    json_utils:encode(Item, [pretty]).
+
+
+%% @private
+-spec send_data_chunk(cowboy_req:req(), iodata()) -> ok.
+send_data_chunk(Req, Data) ->
+    http_download_utils:send_data_chunk(Data, Req, ?LIST_BATCH_SIZE, ?MIN_HTTP_SEND_RETRY_DELAY),
+    ok.

@@ -29,7 +29,7 @@
 -define(FILE_UPLOAD_PATH, "/file_upload").
 
 % Endpoint for downloading files
--define(GUI_FILE_DOWNLOAD_PATH, "/download").
+-define(GUI_FILE_CONTENT_DOWNLOAD_PATH, "/download").
 
 %% Endpoint used to get provider's identity token
 -define(IDENTITY_TOKEN_PATH, "/identity_token").
