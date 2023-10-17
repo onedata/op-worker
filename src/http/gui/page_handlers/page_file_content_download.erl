@@ -16,6 +16,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("http/gui_paths.hrl").
+-include("http/http_download.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -42,11 +43,17 @@
 gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
+
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowSymlinks),
+        {ok, Code} = file_download_code:create(#file_content_download_args{
+            session_id = SessionId,
+            file_guids = FileGuids,
+            follow_symlinks = FollowSymlinks
+        }),
         URL = str_utils:format_bin("https://~s~s/~s", [
             Hostname, ?GUI_FILE_CONTENT_DOWNLOAD_PATH, Code
         ]),
+
         {ok, URL}
     catch
         throw:?ERROR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
@@ -65,8 +72,16 @@ gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuids, FollowSymlinks} ->
+        {true, #file_content_download_args{
+            session_id = SessionId,
+            file_guids = FileGuids,
+            follow_symlinks = FollowSymlinks
+        }} ->
             handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req);
+
+        {true, _} ->
+            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req);
+
         false ->
             case bulk_download:can_continue(FileDownloadCode) of
                 true -> 
@@ -115,6 +130,7 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     ok.
 
 
+%% @private
 -spec handle_http_download(
     file_download_code:code(),
     session:id(),

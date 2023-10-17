@@ -16,6 +16,7 @@
 -behaviour(dynamic_page_behaviour).
 
 -include("http/gui_paths.hrl").
+-include("http/http_download.hrl").
 -include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -36,7 +37,10 @@
 %%--------------------------------------------------------------------
 -spec gen_dump_download_url(session:id(), atm_store:id()) -> binary().
 gen_dump_download_url(SessionId, AtmStoreId) ->
-    {ok, Code} = file_download_code:create(SessionId, [AtmStoreId], false),
+    {ok, Code} = file_download_code:create(#atm_store_dump_download_args{
+        session_id = SessionId,
+        store_id = AtmStoreId
+    }),
 
     str_utils:format_bin("https://~s~s/~s", [
         oneprovider:get_domain(),
@@ -60,11 +64,11 @@ handle(<<"GET">>, Req1) ->
     DownloadCode = cowboy_req:binding(code, Req1),
 
     case file_download_code:verify(DownloadCode) of
-        {true, SessionId, [AtmStoreId], _} ->
+        {true, #atm_store_dump_download_args{session_id = SessionId, store_id = AtmStoreId}} ->
             AtmStoreCtx = ?check(atm_store_api:get_ctx(AtmStoreId)),
             Req2 = atm_store_dump_download_utils:handle_download(Req1, SessionId, AtmStoreCtx),
             file_download_code:remove(DownloadCode),
             Req2;
-        false ->
+        _ ->
             http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req1)
     end.

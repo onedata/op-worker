@@ -274,9 +274,7 @@
 
 -record(file_download_code, {
     expires :: time:seconds(),
-    session_id :: session:id(),
-    file_guids :: [fslogic_worker:file_guid()],
-    follow_symlinks :: boolean()
+    download_args :: download_args:record()
 }).
 
 -record(offline_access_credentials, {
