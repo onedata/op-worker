@@ -24,4 +24,16 @@
 -define(MAX_HTTP_SEND_RETRY_DELAY, 1000).
 
 
+-record(file_content_download_args, {
+    session_id :: session:id(),
+    file_guids :: [fslogic_worker:file_guid()],
+    follow_symlinks :: boolean()
+}).
+
+-record(atm_store_dump_download_args, {
+    session_id :: session:id(),
+    store_id :: atm_store:id()
+}).
+
+
 -endif.
