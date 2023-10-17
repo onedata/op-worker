@@ -30,7 +30,7 @@
 -export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1, get_scope/1]).
 -export([
-    get_uuid/1, get_child/2, trim_filename_tree_id/2,
+    get_uuid/1, get_child/2, trim_provider_conflict_disambiguated_name/2,
     get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3
 ]).
 -export([get_name/1, set_name/2]).
@@ -40,11 +40,11 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    ensure_space_docs_exist/1, make_tmp_dir_exist/1, make_opened_deleted_files_dir_exist/1,
+    ensure_space_docs_exist/1, ensure_tmp_dir_exist/1, ensure_opened_deleted_files_dir_exist/1,
     new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
--export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
+-export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
 -export([get_ctx_with_remote_set/2]).
 
 
@@ -58,6 +58,9 @@
 -type path() :: binary().
 -type uuid_based_path() :: binary(). % similar to canonical, but path elements are uuids instead of filenames/dirnames
 -type name() :: binary().
+% disambiguated name in case of name conflicts between providers/space name conflicts;
+% it is name@PROVIDER_ID for conflicts between providers or space_name@SPACE_ID in case of space name conflicts.
+-type disambiguated_name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
 -type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?LINK_TYPE.
@@ -72,8 +75,8 @@
 -type link() :: file_meta_forest:link().
 
 -export_type([
-    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
-    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, disambiguated_name/0,
+    uuid_or_path/0, entry/0, type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     conflicts/0, path_type/0, link/0
 ]).
 
@@ -97,7 +100,7 @@
 -define(ROOT_DIR_SCOPE, <<>>).
 
 
--define(SPACE_DOC(SpaceId), #document{
+-define(SPACE_ROOT_DOC(SpaceId), #document{
     key = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     value = #file_meta{
         name = SpaceId,
@@ -438,19 +441,20 @@ get_child(ParentUuid, Name) ->
     end.
 
 
--spec trim_filename_tree_id(name(), {all, uuid()} | file_meta_forest:tree_id()) -> name().
-trim_filename_tree_id(Name, {all, ParentUuid}) ->
+-spec trim_provider_conflict_disambiguated_name(disambiguated_name() | name(), {all, uuid()} | file_meta_forest:tree_id()) ->
+    name().
+trim_provider_conflict_disambiguated_name(Name, {all, ParentUuid}) ->
     TreeIds = case file_meta_forest:get_trees(ParentUuid) of
         {ok, T} -> T;
         ?ERROR_NOT_FOUND -> []
     end,
     lists_utils:foldl_while(fun(TreeId, NameAcc) ->
-        case trim_filename_tree_id(NameAcc, TreeId) of
+        case trim_provider_conflict_disambiguated_name(NameAcc, TreeId) of
             NameAcc -> {cont, NameAcc};
             TrimmedName -> {halt, TrimmedName}
         end
     end, Name, TreeIds);
-trim_filename_tree_id(Name, TreeId) ->
+trim_provider_conflict_disambiguated_name(Name, TreeId) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [TreeId | NameTokens] -> str_utils:join_binary(NameTokens, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR);
@@ -748,7 +752,7 @@ get_shares(#file_meta{shares = Shares}) ->
 
 -spec ensure_space_docs_exist(SpaceId :: od_space:id()) -> ok | no_return().
 ensure_space_docs_exist(SpaceId) ->
-    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_DOC(SpaceId)) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
         {ok, #document{key = SpaceDirUuid}} ->
             ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false)),
             space_logic:on_space_dir_created(SpaceId);
@@ -757,8 +761,8 @@ ensure_space_docs_exist(SpaceId) ->
     end.
 
 
--spec make_tmp_dir_exist(od_space:id()) -> created | already_exists.
-make_tmp_dir_exist(SpaceId) ->
+-spec ensure_tmp_dir_exist(od_space:id()) -> created | already_exists.
+ensure_tmp_dir_exist(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     TmpDirDoc = new_doc(
@@ -776,8 +780,8 @@ make_tmp_dir_exist(SpaceId) ->
     end.
 
 
--spec make_opened_deleted_files_dir_exist(od_space:id()) -> ok.
-make_opened_deleted_files_dir_exist(SpaceId) ->
+-spec ensure_opened_deleted_files_dir_exist(od_space:id()) -> ok.
+ensure_opened_deleted_files_dir_exist(SpaceId) ->
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     Doc = new_doc(
         ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
@@ -1042,8 +1046,8 @@ check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProvide
 %% Checks if file has suffix. Returns name without suffix if true.
 %% @end
 %%--------------------------------------------------------------------
--spec has_suffix(name()) -> {true, NameWithoutSuffix :: name()} | false.
-has_suffix(Name) ->
+-spec is_disambiguated(name() | disambiguated_name()) -> {true, NameWithoutSuffix :: name()} | false.
+is_disambiguated(Name) ->
     case binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR) of
         [BaseName | _] -> {true, BaseName};
         _ -> false

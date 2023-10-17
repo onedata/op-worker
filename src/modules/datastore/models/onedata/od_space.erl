@@ -182,8 +182,9 @@ handle_name_change(_, _, _, _) ->
 %% @private
 -spec handle_support_change(id(), PrevVal :: record(), NewVal :: record(), [od_user:id()]) -> ok.
 handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{providers = NewProviders}, Users) ->
-    PrevSupport = maps:get(oneprovider:get_id(), PrevProviders, 0),
-    NewSupport = maps:get(oneprovider:get_id(), NewProviders, 0),
+    ProviderId = oneprovider:get_id(),
+    PrevSupport = maps:get(ProviderId, PrevProviders, 0),
+    NewSupport = maps:get(ProviderId, NewProviders, 0),
     case {PrevSupport, NewSupport} of
         {0, 0} ->
             ok;

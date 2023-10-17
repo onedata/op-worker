@@ -500,5 +500,5 @@ on_space_supported(SpaceId) ->
 on_space_dir_created(SpaceId) ->
     trash:create(SpaceId),
     archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
-    file_meta:make_tmp_dir_exist(SpaceId),
-    file_meta:make_opened_deleted_files_dir_exist(SpaceId).
+    file_meta:ensure_tmp_dir_exist(SpaceId),
+    file_meta:ensure_opened_deleted_files_dir_exist(SpaceId).

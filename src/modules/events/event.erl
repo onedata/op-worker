@@ -108,8 +108,8 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
         #event_subscribers{subscribers = SessIds} = EventSubscribers ->
             SubscribedMap = map_sessions_to_managers(SessIds, get_event_managers(ExcludedRef)),
             EventsMap = extend_event_for_space_dir(Evt, maps:keys(SubscribedMap)),
-            maps:fold(fun(FinalEvt, Sessions, _) ->
-                emit(FinalEvt, [maps:get(S, SubscribedMap) || S <- Sessions])
+            maps:fold(fun(FinalEvt, SessionIds, _) ->
+                emit(FinalEvt, [maps:get(S, SubscribedMap) || S <- SessionIds])
             end, ok, EventsMap),
             emit_for_file_links(Evt, EventSubscribers);
         {error, Reason} ->
@@ -118,15 +118,15 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
 
 
 -spec map_sessions_to_managers([session:id()], [pid()]) -> #{session:id() => pid()}.
-map_sessions_to_managers(SessionIds, Excluded) ->
-    lists:foldl(fun(Session, Acc) ->
-        case get_event_manager(Session) of
+map_sessions_to_managers(SessionIds, ExcludedManagers) ->
+    lists:foldl(fun(SessionId, Acc) ->
+        case get_event_manager(SessionId) of
             {ok, Mgr} ->
-                case lists:member(Mgr, Excluded) of
+                case lists:member(Mgr, ExcludedManagers) of
                     true ->
                         Acc;
                     false ->
-                        Acc#{Session => Mgr}
+                        Acc#{SessionId => Mgr}
                 end;
             {error, _} ->
                 Acc
@@ -149,42 +149,42 @@ emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLi
 
 
 -spec extend_event_for_space_dir(base() | aggregated() | type(), [session:id()]) -> #{type() => [session:id()]}.
-extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid = Guid} = Attr} = Evt, Sessions) ->
+extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid = Guid} = Attr} = Evt, SessionIds) ->
     case fslogic_file_id:is_space_dir_guid(Guid) of
         true ->
             SpaceId = file_id:guid_to_space_id(Guid),
-            lists:foldl(fun(Session, Acc) ->
+            lists:foldl(fun(SessionId, Acc) ->
                 % file_attr can contain invalid values when fetched with root sess id for space dir. Fill proper values here.
-                case get_space_dir_event_details(SpaceId, Session) of
+                case get_space_dir_event_details(SpaceId, SessionId) of
                     {ok, Name, UserRootDirGuid} ->
                         FilledAttr = Attr#file_attr{name = Name, parent_guid = UserRootDirGuid},
                         FinalEvent = Evt#file_attr_changed_event{file_attr = FilledAttr},
-                        Acc#{FinalEvent => [Session | maps:get(FinalEvent, Acc, [])]};
+                        Acc#{FinalEvent => [SessionId | maps:get(FinalEvent, Acc, [])]};
                     not_applicable ->
                         Acc
                 end
-            end, #{}, Sessions);
+            end, #{}, SessionIds);
         false ->
-            #{Evt => Sessions}
+            #{Evt => SessionIds}
     end;
-extend_event_for_space_dir(#event{type = Type}, Sessions) ->
-    extend_event_for_space_dir(Type, Sessions);
-extend_event_for_space_dir({aggregated, Evts}, Sessions) ->
+extend_event_for_space_dir(#event{type = Type}, SessionIds) ->
+    extend_event_for_space_dir(Type, SessionIds);
+extend_event_for_space_dir({aggregated, Evts}, SessionIds) ->
     lists:foldl(fun(Evt, Acc) ->
-        maps:merge(Acc, extend_event_for_space_dir(Evt, Sessions))
+        maps:merge(Acc, extend_event_for_space_dir(Evt, SessionIds))
     end, #{}, Evts);
-extend_event_for_space_dir(Evt, Sessions) ->
-    #{Evt => Sessions}.
+extend_event_for_space_dir(Evt, SessionIds) ->
+    #{Evt => SessionIds}.
 
 
 -spec get_space_dir_event_details(od_space:id(), session:id()) ->
     {ok, file_meta:name(), file_id:file_guid()} | not_applicable.
-get_space_dir_event_details(SpaceId, Session) ->
-    case space_logic:get_protected_data(Session, SpaceId) of
+get_space_dir_event_details(SpaceId, SessionId) ->
+    case space_logic:get_protected_data(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name, providers = Providers}}} when map_size(Providers) > 0 ->
-            case session:get_user_id(Session) of
+            case session:get_user_id(SessionId) of
                 {ok, UserId} ->
-                    {FinalName, _} = user_root_dir:get_space_name_and_conflicts(Session, UserId, Name, SpaceId),
+                    {FinalName, _} = user_root_dir:get_space_name_and_conflicts(SessionId, UserId, Name, SpaceId),
                     {ok, FinalName, fslogic_file_id:user_root_dir_guid(UserId)};
                 {error, not_found} ->
                     not_applicable

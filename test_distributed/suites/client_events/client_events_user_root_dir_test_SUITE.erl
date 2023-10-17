@@ -6,9 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module tests events management on user root dir.
-%%% @end
 %%%--------------------------------------------------------------------
--module(client_user_root_dir_events_test_SUITE).
+-module(client_events_user_root_dir_test_SUITE).
 -author("Michal Stanisz").
 
 
@@ -41,16 +40,16 @@
     rename_space_to_existing_name_proxy/1,
     rename_duplicated_space_name/1,
     rename_duplicated_space_name_proxy/1,
-    remove_space_broken_zone_connection/1,
-    remove_space_proxy_broken_zone_connection/1,
-    remove_space_duplicate_name_broken_zone_connection/1,
-    remove_space_duplicate_name_proxy_broken_zone_connection/1,
-    rename_space_broken_zone_connection/1,
-    rename_space_proxy_broken_zone_connection/1,
-    rename_space_to_existing_name_broken_zone_connection/1,
-    rename_space_to_existing_name_proxy_broken_zone_connection/1,
-    rename_duplicated_space_name_broken_zone_connection/1,
-    rename_duplicated_space_name_proxy_broken_zone_connection/1
+    remove_space_during_broken_zone_connection/1,
+    remove_space_proxy_during_broken_zone_connection/1,
+    remove_space_duplicate_name_during_broken_zone_connection/1,
+    remove_space_duplicate_name_proxy_during_broken_zone_connection/1,
+    rename_space_during_broken_zone_connection/1,
+    rename_space_proxy_during_broken_zone_connection/1,
+    rename_space_to_existing_name_during_broken_zone_connection/1,
+    rename_space_to_existing_name_proxy_during_broken_zone_connection/1,
+    rename_duplicated_space_name_during_broken_zone_connection/1,
+    rename_duplicated_space_name_proxy_during_broken_zone_connection/1
 ]).
 
 all() -> ?ALL([
@@ -72,16 +71,16 @@ all() -> ?ALL([
     rename_space_to_existing_name_proxy,
     rename_duplicated_space_name,
     rename_duplicated_space_name_proxy,
-    remove_space_broken_zone_connection,
-    remove_space_proxy_broken_zone_connection,
-    remove_space_duplicate_name_broken_zone_connection,
-    remove_space_duplicate_name_proxy_broken_zone_connection,
-    rename_space_broken_zone_connection,
-    rename_space_proxy_broken_zone_connection,
-    rename_space_to_existing_name_broken_zone_connection,
-    rename_space_to_existing_name_proxy_broken_zone_connection,
-    rename_duplicated_space_name_broken_zone_connection,
-    rename_duplicated_space_name_proxy_broken_zone_connection
+    remove_space_during_broken_zone_connection,
+    remove_space_proxy_during_broken_zone_connection,
+    remove_space_duplicate_name_during_broken_zone_connection,
+    remove_space_duplicate_name_proxy_during_broken_zone_connection,
+    rename_space_during_broken_zone_connection,
+    rename_space_proxy_during_broken_zone_connection,
+    rename_space_to_existing_name_during_broken_zone_connection,
+    rename_space_to_existing_name_proxy_during_broken_zone_connection,
+    rename_duplicated_space_name_during_broken_zone_connection,
+    rename_duplicated_space_name_proxy_during_broken_zone_connection
 ]).
 
 -define(ATTEMPTS, 30).
@@ -164,37 +163,37 @@ rename_duplicated_space_name(_Config) ->
     rename_duplicated_space_name_test_base(krakow, alive).
 
 rename_duplicated_space_name_proxy(_Config) ->
-    remove_space_duplicate_name_test_base(paris, alive).
+    rename_duplicated_space_name_test_base(paris, alive).
 
-remove_space_broken_zone_connection(_Config) ->
+remove_space_during_broken_zone_connection(_Config) ->
     remove_space_test_base(krakow, broken).
 
-remove_space_proxy_broken_zone_connection(_Config) ->
+remove_space_proxy_during_broken_zone_connection(_Config) ->
     remove_space_test_base(paris, broken).
 
-remove_space_duplicate_name_broken_zone_connection(_Config) ->
+remove_space_duplicate_name_during_broken_zone_connection(_Config) ->
     remove_space_duplicate_name_test_base(krakow, broken).
 
-remove_space_duplicate_name_proxy_broken_zone_connection(_Config) ->
+remove_space_duplicate_name_proxy_during_broken_zone_connection(_Config) ->
     remove_space_duplicate_name_test_base(paris, broken).
 
-rename_space_broken_zone_connection(_Config) ->
+rename_space_during_broken_zone_connection(_Config) ->
     rename_space_test_base(krakow, broken).
 
-rename_space_proxy_broken_zone_connection(_Config) ->
+rename_space_proxy_during_broken_zone_connection(_Config) ->
     rename_space_test_base(paris, broken).
 
-rename_space_to_existing_name_broken_zone_connection(_Config) ->
+rename_space_to_existing_name_during_broken_zone_connection(_Config) ->
     rename_space_to_existing_name_test_base(krakow, broken).
 
-rename_space_to_existing_name_proxy_broken_zone_connection(_Config) ->
+rename_space_to_existing_name_proxy_during_broken_zone_connection(_Config) ->
     rename_space_to_existing_name_test_base(paris, broken).
 
-rename_duplicated_space_name_broken_zone_connection(_Config) ->
+rename_duplicated_space_name_during_broken_zone_connection(_Config) ->
     rename_duplicated_space_name_test_base(krakow, broken).
 
-rename_duplicated_space_name_proxy_broken_zone_connection(_Config) ->
-    remove_space_duplicate_name_test_base(paris, broken).
+rename_duplicated_space_name_proxy_during_broken_zone_connection(_Config) ->
+    rename_duplicated_space_name_test_base(paris, broken).
 
 
 %%%===================================================================
@@ -205,7 +204,7 @@ add_space_test_base(ClientProvider) ->
     test_base(ClientProvider, #test_config{
         test_fun = fun(_) ->
             SpaceName = str_utils:rand_hex(8),
-            #space{name = SpaceName, id = add_space(?SUPPORTING_PROVIDER, SpaceName)}
+            #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)}
         end,
         expected_events_fun = fun(Space) ->
             [{file_attr_changed, guid(Space), Space#space.name}]
@@ -217,7 +216,7 @@ add_space_duplicate_name_test_base(ClientProvider) ->
     test_base(ClientProvider, #test_config{
         setup_fun = fun setup_space/0,
         test_fun = fun(PreexistingSpace) ->
-            SpaceId2 = add_space(?SUPPORTING_PROVIDER, PreexistingSpace#space.name),
+            SpaceId2 = create_supported_space(?SUPPORTING_PROVIDER, PreexistingSpace#space.name),
             {PreexistingSpace, #space{name = PreexistingSpace#space.name, id = SpaceId2}}
         end,
         expected_events_fun = fun({PreexistingSpace, AddedSpace}) -> [
@@ -231,7 +230,7 @@ add_user_to_existing_space_test_base(ClientProvider) ->
     test_base(ClientProvider, #test_config{
         setup_fun = fun() ->
             SpaceName = str_utils:rand_hex(8),
-            Space = #space{name = SpaceName, id = add_space(?SUPPORTING_PROVIDER, SpaceName, ?OTHER_USER)},
+            Space = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName, ?OTHER_USER)},
             % ensure that space doc is already created
             ?assertMatch({ok, _}, opw_test_rpc:call(ClientProvider,
                 space_logic, get, [oct_background:get_user_session_id(?OTHER_USER, ClientProvider), Space#space.id])),
@@ -361,9 +360,9 @@ test_base(ClientProvider, #test_config{
 
 setup_client_connection(ClientProvider) ->
     UserId = oct_background:get_user_id(?CLIENT_USER),
-    SessionId = fun(P) -> oct_background:get_user_session_id(?CLIENT_USER, P) end,
+    GetSessionId = fun(P) -> oct_background:get_user_session_id(?CLIENT_USER, P) end,
     {ok, {Sock, ConnSessId}} = fuse_test_utils:connect_via_token(oct_background:get_random_provider_node(ClientProvider),
-        [{active, true}], SessionId(ClientProvider), oct_background:get_user_access_token(?CLIENT_USER)),
+        [{active, true}], GetSessionId(ClientProvider), oct_background:get_user_access_token(?CLIENT_USER)),
     UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
     client_simulation_test_base:create_new_file_subscriptions(Sock, UserRootDirGuid, 0),
     lists:foreach(fun(Sub) ->
@@ -382,7 +381,7 @@ setup_space() ->
 
 
 setup_space(SpaceName) ->
-    Space = #space{name = SpaceName, id = add_space(?SUPPORTING_PROVIDER, SpaceName)},
+    Space = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)},
     assert_event_received({file_attr_changed, guid(Space), Space#space.name}),
     Space.
 
@@ -399,9 +398,9 @@ setup_space_without_support(SpaceName) ->
 
 setup_2_spaces_with_conflicting_names() ->
     SpaceName = str_utils:rand_hex(8),
-    Space1 = #space{name = SpaceName, id = add_space(?SUPPORTING_PROVIDER, SpaceName)},
+    Space1 = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)},
     assert_event_received({file_attr_changed, guid(Space1), SpaceName}),
-    Space2 = #space{name = SpaceName, id = add_space(?SUPPORTING_PROVIDER, SpaceName)},
+    Space2 = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)},
     assert_events_received([
         {file_renamed, guid(Space1), extended_name(Space1)},
         {file_attr_changed, guid(Space2), extended_name(Space2)}
@@ -467,10 +466,10 @@ extract_event_data(#'FileRemovedEvent'{file_uuid = Guid}) ->
     {file_removed, Guid}.
 
 
-add_space(NodeSelector, Name) ->
-    add_space(NodeSelector, Name, ?CLIENT_USER).
+create_supported_space(NodeSelector, Name) ->
+    create_supported_space(NodeSelector, Name, ?CLIENT_USER).
     
-add_space(NodeSelector, Name, UserPlaceholder) ->
+create_supported_space(NodeSelector, Name, UserPlaceholder) ->
     UserId = oct_background:get_user_id(UserPlaceholder),
     SpaceId = ozw_test_rpc:create_space(UserId, Name),
     support_space(NodeSelector, UserId, SpaceId).

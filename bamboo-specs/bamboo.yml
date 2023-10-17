@@ -110,7 +110,7 @@ stages:
         - ceph_helper
         - cephrados_helper
         - client_events
-        - client_user_root_dir_events
+        - client_events_user_root_dir
         - cluster_upgrade
         - connection
         - connection_layer
@@ -889,9 +889,9 @@ client_events:
     - <<: *ct_logs
       name: ct_logs_client_events.tar.gz
 
-client_user_root_dir_events:
+client_events_user_root_dir:
   <<: *ct-onenv-job
-  key: CLIUSROOTDIREVE
+  key: EVENTSUSERDIR
   artifacts:
     - <<: *ct_logs
       name: ct_logs_client_user_root_dir_events.tar.gz

@@ -65,9 +65,9 @@ update_cache(Id, Diff, Default) ->
         end,
         case datastore_model:update(?CTX, Id, Diff, Default) of
             {ok, #document{value = NewVal}} = Res ->
-                handle_new_doc(Id, PrevVal, NewVal),
-                handle_new_spaces(Id, PrevVal, NewVal),
-                handle_spaces_removed(Id, PrevVal, NewVal),
+                ok = handle_new_doc(Id, PrevVal, NewVal),
+                ok = handle_new_spaces(Id, PrevVal, NewVal),
+                ok = handle_spaces_removed(Id, PrevVal, NewVal),
                 Res;
             {error, _} = Error ->
                 Error
