@@ -56,8 +56,8 @@ db_encode(DownloadsArgs, NestedRecordEncoder) ->
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(
-    #{<<"type">> := DownloadArgsRecordTypeBin} = AtmStoreContainerJson,
+    #{<<"type">> := DownloadArgsRecordTypeBin} = DownloadArgsJson,
     NestedRecordDecoder
 ) ->
     RecordType = binary_to_existing_atom(DownloadArgsRecordTypeBin),
-    NestedRecordDecoder(AtmStoreContainerJson, RecordType).
+    NestedRecordDecoder(DownloadArgsJson, RecordType).

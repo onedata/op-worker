@@ -41,10 +41,20 @@
 
 -spec authenticate(cowboy_req:req(), ctx()) ->
     {ok, aai:auth()} | errors:unauthorized_error().
-authenticate(Req, AuthCtx) ->
-    case try_authenticate_by_token(Req, AuthCtx) of
-        false -> {ok, ?GUEST};
-        Result -> Result
+authenticate(Req, #http_auth_ctx{
+    interface = Interface,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
+    case tokens:parse_access_token_header(Req) of
+        undefined ->
+            {ok, ?GUEST};
+        SubjectAccessToken ->
+            {PeerIp, _} = cowboy_req:peer(Req),
+            TokenCredentials = auth_manager:build_token_credentials(
+                SubjectAccessToken, tokens:parse_consumer_token_header(Req),
+                PeerIp, Interface, DataAccessCaveatsPolicy
+            ),
+            authenticate_by_token(TokenCredentials)
     end.
 
 
@@ -57,26 +67,6 @@ authenticate_by_token(TokenCredentials) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec try_authenticate_by_token(cowboy_req:req(), ctx()) ->
-    false | {ok, aai:auth()} | errors:unauthorized_error().
-try_authenticate_by_token(Req, #http_auth_ctx{
-    interface = Interface,
-    data_access_caveats_policy = DataAccessCaveatsPolicy
-}) ->
-    case tokens:parse_access_token_header(Req) of
-        undefined ->
-            false;
-        SubjectAccessToken ->
-            {PeerIp, _} = cowboy_req:peer(Req),
-            TokenCredentials = auth_manager:build_token_credentials(
-                SubjectAccessToken, tokens:parse_consumer_token_header(Req),
-                PeerIp, Interface, DataAccessCaveatsPolicy
-            ),
-            authenticate_by_token(TokenCredentials)
-    end.
 
 
 %% @private

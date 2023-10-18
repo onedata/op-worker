@@ -33,7 +33,7 @@
 routes() ->
     AllRoutes = lists:flatten([
         archive_rest_routes:routes(),
-        % TODO VFS-11254
+        % TODO VFS-11254 add swagger for atm store endpoints
         atm_store_rest_routes:routes(),
         basic_file_operations_rest_routes:routes(),
         custom_file_metadata_rest_routes:routes(),

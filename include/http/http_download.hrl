@@ -16,10 +16,10 @@
 
 % TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
 % Due to lack of backpressure mechanism in cowboy when streaming files it must
-% be additionally implemented. This module implementation checks cowboy process
-% msg queue len to see if next data chunk can be queued. To account for
-% differences in speed between network and storage a simple backoff is
-% implemented with below boundaries.
+% be additionally implemented. http_download_utils:send_data_chunk
+% implementation checks cowboy process msg queue len to see if next data chunk
+% can be queued. To account for differences in speed between network and
+% storage a simple backoff is implemented with below boundaries.
 -define(MIN_HTTP_SEND_RETRY_DELAY, 100).
 -define(MAX_HTTP_SEND_RETRY_DELAY, 1000).
 
