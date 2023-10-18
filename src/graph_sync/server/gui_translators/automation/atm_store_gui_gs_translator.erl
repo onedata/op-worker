@@ -32,7 +32,10 @@ translate_value(#gri{aspect = content}, AtmStoreContentBrowseResult) ->
     atm_store_content_browse_result:to_json(AtmStoreContentBrowseResult);
 
 translate_value(#gri{aspect = indices_by_trace_ids}, IndicesPerTraceId) ->
-    maps_utils:undefined_to_null(IndicesPerTraceId).
+    maps_utils:undefined_to_null(IndicesPerTraceId);
+
+translate_value(#gri{aspect = dump_download_url}, AtmStoreDumpDownloadUrl) ->
+    #{<<"atmStoreDumpDownloadUrl">> => AtmStoreDumpDownloadUrl}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().
