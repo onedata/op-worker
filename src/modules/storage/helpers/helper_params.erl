@@ -224,6 +224,8 @@ expected_custom_helper_args(?POSIX_HELPER_NAME) -> [
 expected_custom_helper_args(?S3_HELPER_NAME) -> [
     <<"hostname">>, <<"bucketName">>, <<"scheme">>,
     {optional, <<"signatureVersion">>},
+    {optional, <<"verifyServerCertificate">>},
+    {optional, <<"region">>},
     {optional, <<"maximumCanonicalObjectSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>},
     {optional, <<"blockSize">>}];
