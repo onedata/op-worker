@@ -202,10 +202,10 @@ acquire_lambda_config() ->
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_hook = fun(AtmMockCallCtx) ->
-                    TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
-                        TargetStoreSchemaId, undefined, AtmMockCallCtx
-                    ),
-                    assert_exp_target_store_content(list, ExpTargetStoreFinalContent, TargetStoreContent)
+                    verify_exp_target_store_content(
+                        list, TargetStoreSchemaId, ExpTargetStoreFinalContent,
+                        undefined, AtmMockCallCtx
+                    )
                 end,
                 after_step_exp_state_diff = [
                     {lane_runs, [{1, 1}], rerunable},
@@ -282,10 +282,10 @@ map_arguments() ->
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_hook = fun(AtmMockCallCtx) ->
-                    TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
-                        TargetStoreSchemaId, undefined, AtmMockCallCtx
-                    ),
-                    assert_exp_target_store_content(list, ExpTargetStoreFinalContent, TargetStoreContent)
+                    verify_exp_target_store_content(
+                        list, TargetStoreSchemaId, ExpTargetStoreFinalContent,
+                        undefined, AtmMockCallCtx
+                    )
                 end,
                 after_step_exp_state_diff = [
                     {lane_runs, [{1, 1}], rerunable},
@@ -490,10 +490,10 @@ map_from_file_list_to_object_list_store() ->
                     after_step_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{
                         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                     }) ->
-                        TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
-                            TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
-                        ),
-                        assert_exp_target_store_content(list, ExpOutputItems, TargetStoreContent)
+                        verify_exp_target_store_content(
+                            list, TargetStoreSchemaId, ExpOutputItems,
+                            AtmTaskExecutionId, AtmMockCallCtx
+                        )
                     end
                 }
             }],
@@ -604,10 +604,10 @@ map_results_to_store_test_base(#map_results_to_store_test_spec{
                     after_step_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{
                         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                     }) ->
-                        TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
-                            TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
-                        ),
-                        assert_exp_target_store_content(TargetStoreType, ExpTargetStoreContent, TargetStoreContent)
+                        verify_exp_target_store_content(
+                            TargetStoreType, TargetStoreSchemaId, ExpTargetStoreContent,
+                            AtmTaskExecutionId, AtmMockCallCtx
+                        )
                     end
                 }
             }],
@@ -676,10 +676,10 @@ map_results_to_multiple_stores() ->
                         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                     }) ->
                         lists:foreach(fun({TargetStoreType, TargetStoreSchemaId}) ->
-                            TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
-                                TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
-                            ),
-                            assert_exp_target_store_content(TargetStoreType, IteratedItems, TargetStoreContent)
+                            verify_exp_target_store_content(
+                                TargetStoreType, TargetStoreSchemaId, IteratedItems,
+                                AtmTaskExecutionId, AtmMockCallCtx
+                            )
                         end, [
                             {list, TargetListStoreSchemaId},
                             {single_value, TargetSVStoreSchemaId},
@@ -762,13 +762,46 @@ gen_random_time_series_measurements() ->
 
 
 %% @private
--spec assert_exp_target_store_content(
+-spec verify_exp_target_store_content(
+    automation:store_type(),
+    automation:id(),
+    [automation:item()],
+    undefined | atm_task_execution:id(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok.
+verify_exp_target_store_content(
+    TargetStoreType, TargetStoreSchemaId, ExpTargetStoreContent,
+    AtmTaskExecutionId, AtmMockCallCtx
+) ->
+    TargetStoreBrowseContent = atm_workflow_execution_test_utils:browse_store(
+        TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
+    ),
+    verify_browsed_exp_target_store_content(TargetStoreType, ExpTargetStoreContent, TargetStoreBrowseContent),
+
+    case TargetStoreType of
+        audit_log ->
+            ?assertEqual(
+                {ok, maps:get(<<"logEntries">>, TargetStoreBrowseContent)},
+                atm_workflow_execution_test_utils:download_store_dump(
+                    TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
+                )
+            );
+        _ ->
+            ?assertMatch(?ERROR_NOT_SUPPORTED, atm_workflow_execution_test_utils:download_store_dump(
+                TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
+            ))
+    end.
+
+
+%% @private
+-spec verify_browsed_exp_target_store_content(
     automation:store_type(),
     [automation:item()],
     json_utils:json_term()
 ) ->
     ok.
-assert_exp_target_store_content(audit_log, SrcListStoreContent, #{
+verify_browsed_exp_target_store_content(audit_log, SrcListStoreContent, #{
     <<"logEntries">> := Logs,
     <<"isLast">> := true
 }) ->
@@ -781,7 +814,7 @@ assert_exp_target_store_content(audit_log, SrcListStoreContent, #{
     end, Logs)),
     ?assertEqual(lists:sort(SrcListStoreContent), LogContents);
 
-assert_exp_target_store_content(list, SrcListStoreContent, #{
+verify_browsed_exp_target_store_content(list, SrcListStoreContent, #{
     <<"items">> := Items,
     <<"isLast">> := true
 }) ->
@@ -790,16 +823,16 @@ assert_exp_target_store_content(list, SrcListStoreContent, #{
         lists:sort(extract_value_from_infinite_log_entry(Items))
     );
 
-assert_exp_target_store_content(range, SrcListStoreContent, Range) ->
+verify_browsed_exp_target_store_content(range, SrcListStoreContent, Range) ->
     ?assert(lists:member(Range, SrcListStoreContent));
 
-assert_exp_target_store_content(single_value, SrcListStoreContent, #{
+verify_browsed_exp_target_store_content(single_value, SrcListStoreContent, #{
     <<"success">> := true,
     <<"value">> := Value
 }) ->
     ?assert(lists:member(Value, SrcListStoreContent));
 
-assert_exp_target_store_content(time_series, SrcListStoreContent, #{<<"slice">> := Slice}) ->
+verify_browsed_exp_target_store_content(time_series, SrcListStoreContent, #{<<"slice">> := Slice}) ->
     ExpSlice = lists:foldl(fun
         (#{
             <<"tsName">> := <<"count_erl">>,
@@ -844,7 +877,7 @@ assert_exp_target_store_content(time_series, SrcListStoreContent, #{<<"slice">> 
 
     ?assertEqual(ExpSlice, Slice);
 
-assert_exp_target_store_content(tree_forest, SrcListStoreContent, #{
+verify_browsed_exp_target_store_content(tree_forest, SrcListStoreContent, #{
     <<"treeRoots">> := TreeRoots,
     <<"isLast">> := true
 }) ->

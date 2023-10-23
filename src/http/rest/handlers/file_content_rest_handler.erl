@@ -288,11 +288,11 @@ process_request(#op_req{
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+            file_content_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+            file_content_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{}} ->
-            case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
+            case page_file_content_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
                 {ok, Url} ->
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
                 {error, _} = Error ->

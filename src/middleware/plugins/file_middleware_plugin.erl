@@ -940,7 +940,7 @@ get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
     FileGuids = maps:get(<<"file_ids">>, Data),
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
-    case page_file_download:gen_file_download_url(SessionId, FileGuids, FollowSymlinks) of
+    case page_file_content_download:gen_file_download_url(SessionId, FileGuids, FollowSymlinks) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->

@@ -196,7 +196,7 @@ stages:
         - replica_migration_transfers_rest
         - replication
         - replication_transfers_rest
-        - rest
+        - rest_handler
         - reverse_luma
         - s3_helper
         - sequencer
@@ -1513,12 +1513,12 @@ replication_transfers_rest:
     - <<: *ct_logs
       name: ct_logs_replication_transfers_rest.tar.gz
 
-rest:
-  <<: *ct-job
+rest_handler:
+  <<: *ct-onenv-job
   key: RES
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_rest.tar.gz
+      name: ct_logs_rest_handler.tar.gz
 
 reverse_luma:
   <<: *ct-job
@@ -1972,7 +1972,7 @@ Coverage report:
     - artifact: ct_logs_replica_migration_transfers_rest.tar.gz
     - artifact: ct_logs_replication.tar.gz
     - artifact: ct_logs_replication_transfers_rest.tar.gz
-    - artifact: ct_logs_rest.tar.gz
+    - artifact: ct_logs_rest_handler.tar.gz
     - artifact: ct_logs_reverse_luma.tar.gz
     - artifact: ct_logs_s3_helper.tar.gz
     - artifact: ct_logs_sequencer.tar.gz

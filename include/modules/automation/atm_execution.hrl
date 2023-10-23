@@ -133,6 +133,12 @@
 
 %% Atm stores related macros
 
+-record(atm_store_ctx, {
+    id :: atm_store:id(),
+    store :: atm_store:record(),
+    workflow_execution :: atm_workflow_execution:record()
+}).
+
 -record(atm_system_store_schema, {
     id :: automation:name(),
     name :: automation:name(),

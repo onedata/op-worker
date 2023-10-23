@@ -52,7 +52,7 @@ stream_cdmi(Req, #cdmi_req{
 
     {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)),
     try
-        ReadBlockSize0 = http_streamer:get_read_block_size(FileHandle),
+        ReadBlockSize0 = file_content_streamer:get_read_block_size(FileHandle),
         ReadBlockSize = case Encoding of
             <<"base64">> ->
                 % Base64 translates every 3 bytes of original data into 4 base64
@@ -69,10 +69,10 @@ stream_cdmi(Req, #cdmi_req{
             ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
-        StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
-        StreamingCtx2 = http_streamer:set_encoding_fun(StreamingCtx, fun(Data) -> cdmi_encoder:encode(Data, Encoding) end),
-        StreamingCtx3 = http_streamer:set_read_block_size(StreamingCtx2, ReadBlockSize),
-        http_streamer:stream_bytes_range(StreamingCtx3, Range1, Req2),
+        StreamingCtx = file_content_streamer:build_ctx(FileHandle, FileSize),
+        StreamingCtx2 = file_content_streamer:set_encoding_fun(StreamingCtx, fun(Data) -> cdmi_encoder:encode(Data, Encoding) end),
+        StreamingCtx3 = file_content_streamer:set_read_block_size(StreamingCtx2, ReadBlockSize),
+        file_content_streamer:stream_bytes_range(StreamingCtx3, Range1, Req2),
         cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
 
         Req2

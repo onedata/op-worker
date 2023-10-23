@@ -11,6 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-include("http/http_auth.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 

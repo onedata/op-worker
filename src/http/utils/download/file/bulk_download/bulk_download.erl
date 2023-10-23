@@ -142,8 +142,8 @@ data_streaming_loop(BulkDownloadId, MainPid, CowboyReq) ->
 %% @private
 -spec send_in_chunks(binary(), cowboy_req:req(), time:millis()) -> time:millis().
 send_in_chunks(Data, CowboyReq, SendRetryDelay) when byte_size(Data) > ?MAX_CHUNK_SIZE ->
-    {NewDelay, _} = http_streamer:send_data_chunk(binary:part(Data, 0, ?MAX_CHUNK_SIZE), CowboyReq, 2, SendRetryDelay),
+    {NewDelay, _} = http_download_utils:send_data_chunk(binary:part(Data, 0, ?MAX_CHUNK_SIZE), CowboyReq, 2, SendRetryDelay),
     send_in_chunks(binary:part(Data, ?MAX_CHUNK_SIZE, byte_size(Data) - ?MAX_CHUNK_SIZE), CowboyReq, NewDelay);
 send_in_chunks(Data, CowboyReq, SendRetryDelay) ->
-    {NewDelay, _} = http_streamer:send_data_chunk(Data, CowboyReq, 2, SendRetryDelay),
+    {NewDelay, _} = http_download_utils:send_data_chunk(Data, CowboyReq, 2, SendRetryDelay),
     NewDelay.

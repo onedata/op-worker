@@ -10,17 +10,16 @@
 %%% when file download page is visited.
 %%% @end
 %%%-------------------------------------------------------------------
--module(page_file_download).
+-module(page_file_content_download).
 -author("Lukasz Opiola").
 
 -behaviour(dynamic_page_behaviour).
 
 -include("http/gui_paths.hrl").
+-include("http/http_download.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/http/headers.hrl").
 
 
 -export([gen_file_download_url/3, handle/2]).
@@ -44,11 +43,17 @@
 gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
+
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowSymlinks),
+        {ok, Code} = file_download_code:create(#file_content_download_args{
+            session_id = SessionId,
+            file_guids = FileGuids,
+            follow_symlinks = FollowSymlinks
+        }),
         URL = str_utils:format_bin("https://~s~s/~s", [
-            Hostname, ?FILE_DOWNLOAD_PATH, Code
+            Hostname, ?GUI_FILE_CONTENT_DOWNLOAD_PATH, Code
         ]),
+
         {ok, URL}
     catch
         throw:?ERROR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
@@ -67,8 +72,16 @@ gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuids, FollowSymlinks} ->
+        {true, #file_content_download_args{
+            session_id = SessionId,
+            file_guids = FileGuids,
+            follow_symlinks = FollowSymlinks
+        }} ->
             handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req);
+
+        {true, _} ->
+            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req);
+
         false ->
             case bulk_download:can_continue(FileDownloadCode) of
                 true -> 
@@ -101,7 +114,7 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
     case ?lfm_check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
             {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, FileRef, read)),
-            ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
+            ReadBlockSize = file_content_streamer:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
                 {error, ?ENOSPC} ->
                     throw(?ERROR_QUOTA_EXCEEDED);
@@ -117,6 +130,7 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     ok.
 
 
+%% @private
 -spec handle_http_download(
     file_download_code:code(),
     session:id(),
@@ -147,21 +161,21 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
                 ArchiveId ->
                     archivisation_tree:get_filename_for_download(ArchiveId)
             end,
-            file_download_utils:download_tarball(
+            file_content_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req3
             );
         {[#file_attr{type = ?REGULAR_FILE_TYPE} = Attr], _} ->
-            file_download_utils:download_single_file(
+            file_content_download_utils:download_single_file(
                 SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
             );
         {[#file_attr{type = ?SYMLINK_TYPE, guid = Guid, name = SymlinkName}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-                    file_download_utils:download_tarball(
+                    file_content_download_utils:download_tarball(
                         FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req3
                     );
                 {ok, #file_attr{} = ResolvedAttr} ->
-                    file_download_utils:download_single_file(
+                    file_content_download_utils:download_single_file(
                         SessionId, ResolvedAttr, SymlinkName,
                         fun() -> file_download_code:remove(FileDownloadCode) end,
                         Req3
@@ -170,13 +184,13 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
                     http_req:send_error(?ERROR_POSIX(Errno), Req3)
             end;
         {[#file_attr{type = ?SYMLINK_TYPE} = Attr], false} ->
-            file_download_utils:download_single_file(
+            file_content_download_utils:download_single_file(
                 SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             TarballName = <<"onedata-download-", Timestamp/binary, ".tar">>,
-            file_download_utils:download_tarball(
+            file_content_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req3
             )
     end.
