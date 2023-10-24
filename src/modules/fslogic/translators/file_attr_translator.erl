@@ -32,9 +32,14 @@
 %%% API
 %%%===================================================================
 
--spec to_json(lfm_attrs:file_attributes(), attr_type(), [file_attr:attribute()]) -> json_utils:json_map().
+-spec to_json(lfm_attrs:file_attributes(), attr_type() | both, [file_attr:attribute()]) -> json_utils:json_map().
+to_json(FileAttrs, both, RequestedAttributes) ->
+    maps:merge(
+        to_json(FileAttrs, current, RequestedAttributes),
+        to_json(FileAttrs, deprecated, maps:with(?DEPRECATED_ALL_ATTRS, RequestedAttributes))
+    );
 to_json(FileAttrs, AttrType, RequestedAttributes) ->
-    select_attrs(to_json(AttrType, FileAttrs), AttrType, RequestedAttributes).
+    to_json_internal(AttrType, FileAttrs, RequestedAttributes).
 
 
 %% @TODO VFS-11377 deprecated, remove when possible
@@ -80,10 +85,10 @@ attr_name_from_json(<<"symlinkValue">>)              -> symlink_value;
 attr_name_from_json(<<"hasCustomMetadata">>)         -> has_custom_metadata;
 attr_name_from_json(<<"effProtectionFlags">>)        -> eff_protection_flags;
 attr_name_from_json(<<"effDatasetProtectionFlags">>) -> eff_dataset_protection_flags;
-attr_name_from_json(<<"effDatasetMembership">>)      -> eff_dataset_membership;
-attr_name_from_json(<<"effQosMembership">>)          -> eff_qos_membership;
-attr_name_from_json(<<"qosStatus">>)                 -> qos_status;
-attr_name_from_json(<<"recallRootId">>)              -> recall_root_id.
+attr_name_from_json(<<"effDatasetInheritancePath">>) -> eff_dataset_membership;
+attr_name_from_json(<<"effQosInheritancePath">>)     -> eff_qos_membership;
+attr_name_from_json(<<"qosStatusAgrregate">>)        -> qos_status;
+attr_name_from_json(<<"archiveRecallRootFileId">>)   -> recall_root_id.
 
 
 -spec attr_name_to_json(file_attr:attribute()) -> binary().
@@ -113,10 +118,10 @@ attr_name_to_json(symlink_value)                -> <<"symlinkValue">>;
 attr_name_to_json(has_custom_metadata)          -> <<"hasCustomMetadata">>;
 attr_name_to_json(eff_protection_flags)         -> <<"effProtectionFlags">>;
 attr_name_to_json(eff_dataset_protection_flags) -> <<"effDatasetProtectionFlags">>;
-attr_name_to_json(eff_dataset_membership)       -> <<"effDatasetMembership">>;
-attr_name_to_json(eff_qos_membership)           -> <<"effQosMembership">>;
-attr_name_to_json(qos_status)                   -> <<"qosStatus">>;
-attr_name_to_json(recall_root_id)               -> <<"recallRootId">>.
+attr_name_to_json(eff_dataset_membership)       -> <<"effDatasetInheritancePath">>;
+attr_name_to_json(eff_qos_membership)           -> <<"effQosInheritancePath">>;
+attr_name_to_json(qos_status)                   -> <<"qosStatusAggregate">>;
+attr_name_to_json(recall_root_id)               -> <<"archiveRecallRootFileId">>.
 
 
 %% @TODO VFS-11377 deprecated, remove when possible
@@ -168,8 +173,8 @@ attr_name_to_json_deprecated(mode)                -> <<"mode">>.
 %%%===================================================================
 
 %% @private
--spec to_json(attr_type(), lfm_attrs:file_attributes()) -> json_utils:json_map().
-to_json(AttrType, #file_attr{
+-spec to_json_internal(attr_type(), file_attr:file_attr(), [file_attr:attribute()]) -> json_utils:json_map().
+to_json_internal(AttrType, #file_attr{
     guid = Guid,
     index = Index,
     type = Type,
@@ -201,7 +206,7 @@ to_json(AttrType, #file_attr{
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
     xattrs = Xattrs
-}) ->
+}, RequestedAttrs) ->
     BaseMap = #{
         guid => translate_guid(Guid),
         index => file_listing:encode_index(Index),
@@ -236,7 +241,7 @@ to_json(AttrType, #file_attr{
     },
     BaseJson = maps:fold(fun(Key, Value, Acc) ->
         Acc#{attr_name_to_json(AttrType, Key) => utils:undefined_to_null(Value)}
-    end, #{}, maps:with(all_attrs(AttrType), BaseMap)),
+    end, #{}, maps:with(lists_utils:intersect(all_attrs(AttrType), RequestedAttrs), BaseMap)),
     maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
     end, BaseJson, utils:ensure_defined(Xattrs, #{})).
@@ -246,19 +251,6 @@ to_json(AttrType, #file_attr{
 -spec all_attrs(attr_type()) -> [file_attr:attribute()].
 all_attrs(deprecated) -> ?DEPRECATED_ALL_ATTRS;
 all_attrs(current) -> ?ALL_ATTRS.
-
-
-%% @private
--spec select_attrs(json_utils:json_term(), attr_type(), [file_attr:attribute()]) -> json_utils:json_term().
-select_attrs(FileAttrsJson, AttrType, RequestedAttributes) ->
-    Xattrs = case file_attr:should_fetch_xattrs(RequestedAttributes) of
-        {true, XattrNames} -> XattrNames;
-        false -> []
-    end,
-    MappedRequestedAttributes = lists:map(fun(Attr) ->
-        attr_name_to_json(AttrType, Attr)
-    end, lists:keydelete(xattrs, 1, RequestedAttributes)),
-    maps:with(MappedRequestedAttributes ++ Xattrs, FileAttrsJson).
 
 
 %% @private

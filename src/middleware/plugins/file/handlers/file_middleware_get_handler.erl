@@ -107,7 +107,7 @@ data_spec(#op_req{gri = #gri{aspect = children, scope = Sc}}) -> #{
         <<"index">> => build_listing_start_point_param_spec(<<"index">>),
         <<"offset">> => {integer, {between, -?MAX_LIST_OFFSET, ?MAX_LIST_OFFSET}},
         <<"inclusive">> => {boolean, any},
-        <<"tune_for_large_continuous_listing">> => {boolean, any},
+        <<"tune_for_large_continuous_listing">> => {boolean, any}, % fixme
         <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, current, <<"attributes">>),
         % deprecated, left for backwards compatibility
@@ -360,7 +360,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
                     error -> undefined
                 end,
                 inclusive => maps:get(<<"inclusive">>, Data, true),
-                tune_for_large_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false)
+                tune_for_large_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false) % fixme
             };
         EncodedPaginationToken ->
             BaseOpts#{
@@ -585,7 +585,12 @@ build_listing_start_point_param_spec(Key) ->
 infer_requested_attributes(Data, Default) ->
     case maps:get(<<"attributes">>, Data, undefined) of
         undefined ->
-            {deprecated, maps:get(<<"attribute">>, Data, Default)};
+            case maps:get(<<"attribute">>, Data, undefined) of
+                undefined ->
+                    {both, Default};
+                DeprecatedAttrs ->
+                    {deprecated, DeprecatedAttrs}
+            end;
         Attrs ->
             {current, utils:ensure_list(Attrs)}
     end.
