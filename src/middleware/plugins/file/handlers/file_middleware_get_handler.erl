@@ -159,8 +159,10 @@ data_spec(#op_req{gri = #gri{aspect = rdf_metadata}}) -> #{
 
 data_spec(#op_req{gri = #gri{aspect = symlink_target, scope = Sc}}) -> #{
     required => #{id => {binary, guid}},
-    <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
-        Sc, current, <<"attributes">>)
+    optional => #{
+        <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
+            Sc, current, <<"attributes">>)
+    }
 };
 
 data_spec(#op_req{gri = #gri{aspect = As}}) when

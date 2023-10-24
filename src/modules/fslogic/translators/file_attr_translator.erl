@@ -36,10 +36,10 @@
 to_json(FileAttrs, both, RequestedAttributes) ->
     maps:merge(
         to_json(FileAttrs, current, RequestedAttributes),
-        to_json(FileAttrs, deprecated, maps:with(?DEPRECATED_ALL_ATTRS, RequestedAttributes))
+        to_json(FileAttrs, deprecated, RequestedAttributes)
     );
 to_json(FileAttrs, AttrType, RequestedAttributes) ->
-    to_json_internal(AttrType, FileAttrs, RequestedAttributes).
+    to_json_internal(AttrType, FileAttrs, lists_utils:intersect(all_attrs(AttrType), RequestedAttributes)).
 
 
 %% @TODO VFS-11377 deprecated, remove when possible
@@ -241,7 +241,7 @@ to_json_internal(AttrType, #file_attr{
     },
     BaseJson = maps:fold(fun(Key, Value, Acc) ->
         Acc#{attr_name_to_json(AttrType, Key) => utils:undefined_to_null(Value)}
-    end, #{}, maps:with(lists_utils:intersect(all_attrs(AttrType), RequestedAttrs), BaseMap)),
+    end, #{}, maps:with(RequestedAttrs, BaseMap)),
     maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
     end, BaseJson, utils:ensure_defined(Xattrs, #{})).
