@@ -25,7 +25,8 @@
 %% API
 -export([
     resolve/3,
-    should_fetch_xattrs/1
+    should_fetch_xattrs/1,
+    contains_metadata_attrs/1
 ]).
 
 -type attribute() :: guid | index | type | active_permissions_type | mode | acl | name | conflicting_name | path |
@@ -122,6 +123,13 @@ should_fetch_xattrs(AttributesList) ->
     end.
 
 
+-spec contains_metadata_attrs([attribute()] | resolve_opts()) -> boolean().
+contains_metadata_attrs(#{attributes := AttributesList}) ->
+    contains_metadata_attrs(AttributesList);
+contains_metadata_attrs(AttributesList) ->
+    lists:member(acl, AttributesList) orelse should_fetch_xattrs(AttributesList) =/= false.
+
+
 %%%===================================================================
 %%% Stage functions
 %%%===================================================================
@@ -129,24 +137,24 @@ should_fetch_xattrs(AttributesList) ->
 %% @private
 -spec resolve_file_meta_attrs(state()) -> {state(), file_attr()}.
 resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} = State) ->
-    {FileDoc, #state{file_ctx = FileCtx} = UpdatedState} = get_file_doc(State),
+    {FileDoc, State2} = get_file_doc(State),
+    {ParentGuid, #state{file_ctx = FileCtx} = State3} = resolve_parent_guid(State2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
     ShareId = file_ctx:get_share_id_const(FileCtx),
     BaseAttrs = case ShareId of
         undefined -> resolve_private_base_attrs(UserCtx, file_ctx:get_space_id_const(FileCtx), FileDoc);
         _ -> get_masked_private_base_attrs(ShareId, FileDoc)
     end,
-    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
-    {Acl, FileCtx3} = file_ctx:get_acl(FileCtx2),
+    {Acl, FileCtx2} = file_ctx:get_acl(FileCtx),
     
-    {UpdatedState#state{file_ctx = FileCtx3}, BaseAttrs#file_attr{
+    {State3#state{file_ctx = FileCtx2}, BaseAttrs#file_attr{
         active_permissions_type = ActivePermissionsType,
         index = build_index(FileCtx, FileDoc),
         parent_guid = ParentGuid,
         acl = Acl,
         symlink_value = resolve_symlink_value(FileDoc),
         type = file_meta:get_effective_type(FileDoc),
-        hardlink_count = resolve_link_count(FileCtx3, ShareId, Attrs),
+        hardlink_count = resolve_link_count(FileCtx2, ShareId, Attrs),
         is_deleted = file_meta:is_deleted(FileDoc)
     }}.
 
@@ -386,10 +394,23 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 
 
 %% @private
+-spec resolve_parent_guid(state()) ->
+    {file_id:file_guid() | undefined, state()}.
+resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs, user_ctx = UserCtx} = State) ->
+    case lists:member(parent_guid, RequestedAttrs) of
+        true ->
+            {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+            {ParentGuid, State#state{file_ctx = FileCtx2}};
+        _ ->
+            {undefined, State}
+    end.
+
+
+%% @private
 -spec resolve_link_count(file_ctx:ctx(), od_share:id(), [attribute()]) ->
     non_neg_integer() | undefined.
-resolve_link_count(FileCtx, ShareId, Attrs) ->
-    case {ShareId, lists:member(hardlink_count, Attrs)} of
+resolve_link_count(FileCtx, ShareId, RequestedAttrs) ->
+    case {ShareId, lists:member(hardlink_count, RequestedAttrs)} of
         {undefined, true} ->
             {ok, LinkCount} = file_ctx:count_references_const(FileCtx),
             LinkCount;

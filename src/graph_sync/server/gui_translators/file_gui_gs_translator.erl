@@ -192,7 +192,10 @@ translate_archive_recall_details(#archive_recall_details{
 %% @private
 -spec map_file_attr_fields_for_gui(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_fields_for_gui(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
-    map_file_attr_parent_for_gui(FileAttrJson#{<<"fileId">> => ensure_guid(ObjectId)});
+    map_file_attr_parent_for_gui(maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+        <<"fileId">> => ensure_guid(ObjectId),
+        <<"file_id">> => ensure_guid(ObjectId)
+    }));
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_fields_for_gui(#{<<"file_id">> := ObjectId} = FileAttrJson) ->
     map_file_attr_parent_for_gui(FileAttrJson#{<<"file_id">> => ensure_guid(ObjectId)});
@@ -203,7 +206,11 @@ map_file_attr_fields_for_gui(FileAttrJson) ->
 %% @private
 -spec map_file_attr_parent_for_gui(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_parent_for_gui(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
-    FileAttrJson#{<<"parentFileId">> => ensure_guid(ParentObjectId)};
+    % both values are returned as default
+    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+        <<"parentFileId">> => ensure_guid(ParentObjectId),
+        <<"parent_id">> => ensure_guid(ParentObjectId)
+    });
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_parent_for_gui(#{<<"parent_id">> := ParentObjectId} = FileAttrJson) ->
     FileAttrJson#{<<"parent_id">> => ensure_guid(ParentObjectId)};

@@ -116,8 +116,8 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
             ),
 
         {Attrs, FullyReplicated} = case {CheckReplicationStatus, Type} of
-            {true, ?REGULAR_FILE_TYPE} -> {?ONECLIENT_ATTRS ++ [is_fully_replicated], true};
-            {true, _} -> {?ONECLIENT_ATTRS ++ [is_fully_replicated], undefined};
+            {true, ?REGULAR_FILE_TYPE} -> {[is_fully_replicated | ?ONECLIENT_ATTRS] , true};
+            {true, _} -> {[is_fully_replicated | ?ONECLIENT_ATTRS], undefined};
             _ -> {?ONECLIENT_ATTRS, undefined}
         end,
 

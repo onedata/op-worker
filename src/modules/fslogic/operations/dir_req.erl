@@ -116,9 +116,10 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
 -spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()]) ->
     fslogic_worker:fuse_response().
 list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
-    DirOperationsRequirements = case Attributes -- [guid, name] of
-        [] -> ?OPERATIONS(?list_container_mask);
-        _ -> ?OPERATIONS(?traverse_container_mask, ?list_container_mask)
+    DirOperationsRequirements = case {Attributes -- [guid, name], file_attr:contains_metadata_attrs(Attributes)} of
+        {[], _} -> ?OPERATIONS(?list_container_mask);
+        {_, false} -> ?OPERATIONS(?traverse_container_mask, ?list_container_mask);
+        {_, true} -> ?OPERATIONS(?traverse_container_mask, ?list_container_mask, ?read_metadata_mask)
     end,
     {Whitelist, FileCtx2} = check_listing_permissions(UserCtx, FileCtx, DirOperationsRequirements),
     {ChildrenAttrs, PaginationToken, FileCtx3} = list_children_attrs_internal(
@@ -147,9 +148,11 @@ list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
     fslogic_worker:fuse_response().
 list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
-        false -> [?TRAVERSE_ANCESTORS]
+    AccessRequirements = case {IsDir, file_attr:contains_metadata_attrs(Attributes)} of
+        {true, false} -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
+        {false, false} -> [?TRAVERSE_ANCESTORS];
+        {true, true} -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask, ?read_metadata_mask)];
+        {false, true} -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     end,
     {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
@@ -325,14 +328,9 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
 ) ->
     [Attributes].
 gather_attributes(MapperFun, Entries, Opts) ->
-    GetAttrFun = case file_attr:should_fetch_xattrs(Opts) of
-        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
-        {true, _} -> fun attr_req:get_file_attr/3;
-        false -> fun attr_req:get_file_attr_insecure/3
-    end,
     FilterMapFun = fun(Entry) ->
         ?catch_not_found(begin
-            {true, MapperFun(Entry, GetAttrFun, Opts)}
+            {true, MapperFun(Entry, fun attr_req:get_file_attr_insecure/3, Opts)}
         end, false)
     end,
     lists_utils:pfiltermap(FilterMapFun, Entries, ?MAX_MAP_CHILDREN_PROCESSES).

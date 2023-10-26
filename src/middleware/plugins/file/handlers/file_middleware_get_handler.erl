@@ -93,7 +93,7 @@ data_spec(#op_req{gri = #gri{aspect = instance, scope = Sc}}) -> #{
     optional => #{
         <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, current, <<"attributes">>),
-        % deprecated, left for backwards compatibility
+        % @TODO VFS-11377 deprecated, left for backwards compatibility
         <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, deprecated, <<"attribute">>)
     }
@@ -107,10 +107,11 @@ data_spec(#op_req{gri = #gri{aspect = children, scope = Sc}}) -> #{
         <<"index">> => build_listing_start_point_param_spec(<<"index">>),
         <<"offset">> => {integer, {between, -?MAX_LIST_OFFSET, ?MAX_LIST_OFFSET}},
         <<"inclusive">> => {boolean, any},
-        <<"tune_for_large_continuous_listing">> => {boolean, any}, % fixme
+        <<"tune_for_large_continuous_listing">> => {boolean, any},
+        <<"tuneForLargeContinuousListing">> => {boolean, any},
         <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, current, <<"attributes">>),
-        % deprecated, left for backwards compatibility
+        % @TODO VFS-11377 deprecated, left for backwards compatibility
         <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, deprecated, <<"attribute">>)
     }
@@ -126,7 +127,7 @@ data_spec(#op_req{gri = #gri{aspect = files, scope = Sc}}) -> #{
         <<"include_directories">> => {boolean, any},
         <<"attributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, current, <<"attributes">>),
-        % deprecated, left for backwards compatibility
+        % @TODO VFS-11377 deprecated, left for backwards compatibility
         <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
             Sc, deprecated, <<"attribute">>)
     }
@@ -362,7 +363,8 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
                     error -> undefined
                 end,
                 inclusive => maps:get(<<"inclusive">>, Data, true),
-                tune_for_large_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false) % fixme
+                tune_for_large_continuous_listing => maps:get(<<"tuneForLargeContinuousListing">>, Data,
+                    maps:get(<<"tune_for_large_continuous_listing">>, Data, false))
             };
         EncodedPaginationToken ->
             BaseOpts#{

@@ -43,24 +43,9 @@ build_attributes_param_spec(private, deprecated = AttrType, Key) ->
 -spec build_parse_requested_attrs_fun(binary(), file_attr_translator:attr_type(), [file_attr:attribute()]) ->
     fun((binary() | [binary()]) -> {true, [atom()]} | no_return()).
 build_parse_requested_attrs_fun(Key, AttrType, AllowedValues) ->
-    % fixme call helper from file_attr level
     fun(Attributes) ->
-        {TranslatedAttrs, Xattrs} = lists:foldl(fun
-            (<<"xattr.", _/binary>> = Xattr, {AttrAcc, XattrAcc}) ->
-                {AttrAcc, [Xattr | XattrAcc]};
-            (Attr, {AttrAcc, XattrAcc}) ->
-                try
-                    TranslatedAttr = file_attr_translator:attr_name_from_json(AttrType, Attr),
-                    true = lists:member(TranslatedAttr, AllowedValues),
-                    {[TranslatedAttr | AttrAcc], XattrAcc}
-                catch _:_ ->
-                    AllowedValuesJson = [file_attr_translator:attr_name_to_json(AttrType, A) || A <- AllowedValues],
-                    % add xattr.* to end of list, so allowed values are printed in correct order
-                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValuesJson ++ [<<"xattr.*">>]))
-                end
-        end, {[], []}, utils:ensure_list(Attributes)),
-        {true, case Xattrs of
-            [] -> TranslatedAttrs;
-            _ -> [{xattrs, Xattrs} | TranslatedAttrs]
-        end}
+        case file_attr_translator:sanitize_requested_attrs(Attributes, AttrType, AllowedValues) of
+            {ok, FinalAttrs} -> {true, FinalAttrs};
+            {error, AllowedValuesJson} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValuesJson))
+        end
     end.

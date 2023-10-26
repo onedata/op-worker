@@ -45,8 +45,8 @@
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts() | [attribute()]) ->
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx0, Options) when is_map(Options) ->
-    RequiredPrivs = case file_attr:should_fetch_xattrs(maps:get(attributes, Options, [])) of
-        {true, _} -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)];
+    RequiredPrivs = case file_attr:contains_metadata_attrs(Options) of
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
     FileCtx1 = fslogic_authz:ensure_authorized(

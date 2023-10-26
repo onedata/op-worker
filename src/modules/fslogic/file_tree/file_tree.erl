@@ -8,7 +8,6 @@
 %%% @doc
 %%% This module provides basic functionality for navigating through Oneprovider's
 %%% files tree. The structure of it is presented and described below.
-%%%o% fixme opisać te wirtualne katalogi (archive_root, trash etc)
 %%%                       +----------+
 %%%                       |  !ROOT   |_______________________
 %%%                       +----------+                \      \
@@ -31,29 +30,29 @@
 %%%  ===============================================================|  | ^share1  |   |       \
 %%%         |                  |            |    |     \            |  +----------+   |        |
 %%%        ...                ...           |    |      \___________|_______/         |        |
-%%%                                         |    |                  |                 |        |
-%%%            _____________________________/    |                  |                 |        |
-%%%           /                                  |                  |           +----------+   |
-%%%          /                                   |                  |           | ^share2  |   |
-%%%    +----------+                        +----------+             |           +----------+   |
-%%%    |   file1  |                        |  *dir1   |_____________|_________________/        |
-%%%    +----------+                        +----------+             |                          |
+%%%    +---------------+                    |    |                  |                 |        |
+%%%    | &trash_space1 |            _______/     |                  |                 |        |
+%%%    +---------------+           /             |                  |           +----------+   |
+%%%                               /              |                  |           | ^share2  |   |
+%%%  +------------------+    +----------+   +----------+            |           +----------+   |
+%%%  | &archives_space1 |    |   file1  |   |  *dir1   |____________|_________________/        |
+%%%  +------------------+    +----------+   +----------+            |                          |
 %%%                                          /       \              |                    +----------+
-%%%                                         /         \             |                    | ^share3  |
-%%%                             +----------+          +----------+  |                    +----------+
-%%%                             |   dir2   |          |  *file2  |__|__________________________/
+%%%    +-------------+                      /         \             |                    | ^share3  |
+%%%    | &tmp_space1 |          +----------+          +----------+  |                    +----------+
+%%%    +-------------+          |   dir2   |          |  *file2  |__|__________________________/
 %%%                             +----------+          +----------+  |
 %%%                             /    |    \                         |
 %%%                            ...  ...   ...                       |
 %%%                                                                 |
 %%%
 %%% Description:
-%%% 1) !ROOT - directory marked as parent for all user_root and space directories.
-%%%            It is used internally by Oneprovider (it is local for each provider)
-%%%            and as such cannot be modified nor listed.
-%%% 2) @user - user root directory (mount root after mounting Oneclient).
-%%%            Listing it returns all spaces that user belongs to.
-%%%            Similarly to !ROOT it is local to each provider and cannot be modified.
+%%% 1) !ROOT -  directory marked as parent for all user_root and space directories.
+%%%             It is used internally by Oneprovider (it is local for each provider)
+%%%             and as such cannot be modified nor listed.
+%%% 2) @user -  user root directory (mount root after mounting Oneclient).
+%%%             Listing it returns all spaces that user belongs to.
+%%%             Similarly to !ROOT it is local to each provider and cannot be modified.
 %%% 3) #space - space directory. It is treated as normal directory and as such it's
 %%%             modification is controlled by access rights.
 %%%             All documents associated with it (and files/dirs inside of it)
@@ -66,9 +65,16 @@
 %%%             In the future it will be used as mount root when mounting Oneclient
 %%%             for share with open handle (in such case it will be treated as root
 %%%             dir with no parent).
-%%% 5) *file - share root file. It is directly shared file or directory or space and
-%%%            the only child of share root dir (in 'open_handle' mode)
-%%% 6) file/dir - regular file/directory.
+%%% 5) *file -  share root file. It is directly shared file or directory or space and
+%%%             the only child of share root dir (in 'open_handle' mode)
+%%% 6) &special_space_directory - special directory that is created for each space, however
+%%%             is not part of this space file_tree. There are 3 types of special directories:
+%%%                 * trash - space trash directory, to which deleted files are temporarily moved
+%%%                   for deletion in the background. For more details consult trash.erl;
+%%%                 * archives_root - space archives root directory, which contains all archives
+%%%                   created in the space. For more details consult archives_tree.erl;
+%%%                 * tmp - directory which content is NOT synchronized between providers.
+%%% 7) file/dir - regular file/directory.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_tree).

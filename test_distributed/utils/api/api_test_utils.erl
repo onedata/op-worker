@@ -481,10 +481,10 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffDatasetProtectionFlags)
         end,
-        <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
-        <<"effQosMembership">> => translate_membership(EffQosMembership),
-        <<"qosStatus">> => translate_qos_status(QosStatus),
-        <<"recallRootId">> => RecallRootId
+        <<"effDatasetInheritancePath">> => translate_membership(EffDatasetMembership),
+        <<"effQosInheritancePath">> => translate_membership(EffQosMembership),
+        <<"qosStatusAggregate">> => translate_qos_status(QosStatus),
+        <<"archiveRecallRootFileId">> => RecallRootId
     },
     FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
@@ -516,15 +516,18 @@ file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
 
 -spec replace_attrs_with_deprecated(json_utils:json_map()) -> json_utils:json_map().
 replace_attrs_with_deprecated(JsonAttrs) ->
-    maps:fold(fun(K, V, Acc) ->
-        A = file_attr_translator:attr_name_from_json(K),
-        case lists:member(A, ?DEPRECATED_ALL_ATTRS) of
-            true ->
-                DeprecatedKey = file_attr_translator:attr_name_to_json(deprecated, A),
-                Acc#{DeprecatedKey => V};
-            false ->
-                Acc
-        end
+    maps:fold(fun
+        (<<"xattr.", _/binary>> = K, V, Acc) ->
+            Acc#{K => V};
+        (K, V, Acc) ->
+            A = file_attr_translator:attr_name_from_json(K),
+            case lists:member(A, ?DEPRECATED_ALL_ATTRS) of
+                true ->
+                    DeprecatedKey = file_attr_translator:attr_name_to_json(deprecated, A),
+                    Acc#{DeprecatedKey => V};
+                false ->
+                    Acc
+            end
     end, #{}, JsonAttrs).
 
 

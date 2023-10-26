@@ -83,7 +83,7 @@ get_attrs(Node, SessId, FileGuid, RequestedXattrs) ->
         [] -> [];
         _ -> [{xattrs, RequestedXattrs}]
     end,
-    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), ?API_ATTRS ++ XattrsOpt) of
+    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), [XattrsOpt | ?API_ATTRS]) of
         % File attrs are constructed from several records so it is possible that
         % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
         {ok, #file_attr{mtime = 0}} ->
