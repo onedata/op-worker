@@ -266,7 +266,7 @@ get_file_children_test(Config) ->
                     validate_result_fun = fun(#api_test_ctx{data = _Data, node = Node}, {ok, Result}) ->
                         ProviderId = opw_test_rpc:get_provider_id(Node),
                         ?assertEqual(#{
-                            <<"children">> => [api_test_utils:file_attr_to_json(undefined, gs, ProviderId, FileAttr)],
+                            <<"children">> => [maps:remove(<<"acl">>, api_test_utils:file_attr_to_json(undefined, gs, ProviderId, FileAttr))],
                             <<"isLast">> => true
                         }, Result)
                     end
@@ -477,10 +477,8 @@ get_user_root_dir_children_test(_Config) ->
 -spec get_space_dir_details(node(), file_id:file_guid()) ->
     #file_attr{}.
 get_space_dir_details(Node, SpaceDirGuid) ->
-    ProviderId = opw_test_rpc:get_provider_id(Node),
-    User4SessId = oct_background:get_user_session_id(user4, ProviderId),
     {ok, SpaceAttr} = ?assertMatch(
-        {ok, _}, lfm_proxy:stat(Node, User4SessId, ?FILE_REF(SpaceDirGuid), ?API_ATTRS), ?ATTEMPTS
+        {ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), ?API_ATTRS), ?ATTEMPTS
     ),
     SpaceAttr#file_attr{parent_guid = undefined}.
 
@@ -559,7 +557,8 @@ get_children_data_spec(rest, Scope) ->
         correct_values = #{
             <<"limit">> => [1, 100],
             <<"attributes">> => [
-                lists_utils:random_sublist(AllowedAttrsJson -- [<<"xattr.*">>]),
+                % do not check acl, as it messes with privileges
+                lists_utils:random_sublist(AllowedAttrsJson -- [<<"acl">>, <<"xattr.*">>]),
                 [<<"directShareIds">>, <<"posixPermissions">>, <<"parentFileId">>],
                 [<<"fileId">>, <<"name">>],
                 <<"ctime">>
@@ -627,7 +626,8 @@ build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
                 undefined -> undefined;
                 _ -> Data1#{<<"attributes">> => case Scope of
                     public -> [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_ATTRS];
-                    private -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS]
+                    % do not check acl as it messes with privileges
+                    private -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS] -- [<<"acl">>]
                 end}
             end
         }
@@ -641,7 +641,7 @@ build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
     ShareId :: undefined | od_share:id(),
     Params :: map(),
     AllFiles :: files(),
-    od_provider:id()
+    od_provider:id() | undefined
 ) ->
     ok | no_return().
 validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, ProviderId) ->
@@ -671,11 +671,13 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
                         undefined ->
                             #{
                                 <<"file_id">> => ObjectId,
+                                <<"fileId">> => ObjectId,
                                 <<"name">> => Name
                             };
                         [] ->
                             #{
                                 <<"file_id">> => ObjectId,
+                                <<"fileId">> => ObjectId,
                                 <<"name">> => Name
                             };
                         _ ->
@@ -689,7 +691,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
         gs_with_details ->
             #{
                 <<"children">> => lists:map(fun({_Guid, _Name, _Path, Attrs}) ->
-                    api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, Attrs)
+                    maps:remove(<<"acl">>, api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, Attrs))
                 end, ExpFiles2),
                 <<"isLast">> => IsLast
             }

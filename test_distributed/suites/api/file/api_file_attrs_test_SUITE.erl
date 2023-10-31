@@ -65,7 +65,7 @@
 groups() -> [
     {parallel_tests, [parallel], [
         get_file_attrs_test,
-        get_file_attrs_with_xattrs_test
+        get_file_attrs_with_xattrs_test,
         get_shared_file_attrs_test,
         get_attrs_on_provider_not_supporting_space_test,
 

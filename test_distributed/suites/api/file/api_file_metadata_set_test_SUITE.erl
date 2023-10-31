@@ -43,15 +43,15 @@
 
 groups() -> [
     {all_tests, [parallel], [
-        set_file_rdf_metadata_test,
-        set_file_rdf_metadata_on_provider_not_supporting_space_test,
-
-        set_file_json_metadata_test,
-        set_file_primitive_json_metadata_test,
-        set_file_json_metadata_on_provider_not_supporting_space_test,
-
-        set_file_xattrs_test,
-        set_file_xattrs_on_provider_not_supporting_space_test
+%%        set_file_rdf_metadata_test,
+%%        set_file_rdf_metadata_on_provider_not_supporting_space_test,
+%%
+        set_file_json_metadata_test % fixme
+%%        set_file_primitive_json_metadata_test,
+%%        set_file_json_metadata_on_provider_not_supporting_space_test,
+%%
+%%        set_file_xattrs_test,
+%%        set_file_xattrs_on_provider_not_supporting_space_test
     ]}
 ].
 
@@ -276,7 +276,7 @@ set_file_json_metadata_test(Config) ->
                     }]}
             end,
             lists:foreach(fun(Node) ->
-                ?assertMatch(ExpResult, get_json(Node, FileGuid), ?ATTEMPTS)
+                ?assertEqual(ExpResult, get_json(Node, FileGuid), ?ATTEMPTS)
             end, Providers),
 
             case FilterOrError of

@@ -237,12 +237,15 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 -spec file_attrs_to_gs_json(node(), undefined | od_share:id(), #file_attr{}) -> map().
-file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttrs) ->
+file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttr) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
-    
-    JsonFileDetails = api_test_utils:replace_attrs_with_deprecated(
-        api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttrs)),
-    JsonFileDetails#{
+    CurrentJson = api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr),
+    DeprecatedFileAttr = api_test_utils:replace_attrs_with_deprecated(CurrentJson),
+    JsonFileAttr = maps:with(
+        [file_attr_translator:attr_name_to_json(A) || A <- ?DEPRECATED_ALL_ATTRS] ++
+        [file_attr_translator:attr_name_to_json(deprecated, A) || A <- ?DEPRECATED_ALL_ATTRS],
+    maps:merge(CurrentJson, DeprecatedFileAttr)),
+    JsonFileAttr#{
         <<"gri">> => gri:serialize(#gri{
             type = op_file,
             id = file_id:guid_to_share_guid(FileGuid, ShareId),

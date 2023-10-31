@@ -25,8 +25,7 @@
 %% API
 -export([
     resolve/3,
-    should_fetch_xattrs/1,
-    contains_metadata_attrs/1
+    should_fetch_xattrs/1
 ]).
 
 -type attribute() :: guid | index | type | active_permissions_type | mode | acl | name | conflicting_name | path |
@@ -121,13 +120,6 @@ should_fetch_xattrs(AttributesList) ->
         {xattrs, XattrNames} -> {true, XattrNames};
         false -> false
     end.
-
-
--spec contains_metadata_attrs([attribute()] | resolve_opts()) -> boolean().
-contains_metadata_attrs(#{attributes := AttributesList}) ->
-    contains_metadata_attrs(AttributesList);
-contains_metadata_attrs(AttributesList) ->
-    lists:member(acl, AttributesList) orelse should_fetch_xattrs(AttributesList) =/= false.
 
 
 %%%===================================================================
@@ -472,6 +464,7 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             end,
             case StatsResult of
                 error ->
+                    %% TODO VFS-7208 return error after introducing API errors to fslogic
                     {State#state{file_ctx = FileCtx2}, #file_attr{}};
                 _ ->
                     {State#state{file_ctx = FileCtx2}, build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx2)}
