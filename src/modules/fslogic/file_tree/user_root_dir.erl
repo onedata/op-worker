@@ -95,13 +95,13 @@ list_spaces(SessId, UserId, Offset, Limit, WhiteList) ->
     od_space:id()) -> {file_meta:name(), file_meta:conflicts()}.
 get_space_name_and_conflicts(SessId, UserId, Name, SpaceId) ->
     SpaceIdsWithSupport = get_user_supported_spaces(SessId, UserId),
-    SpacesByName = group_spaces_by_name(SessId, SpaceIdsWithSupport),
+    SpaceIdsByName = group_spaces_by_name(SessId, SpaceIdsWithSupport),
     [BaseFileName | _] = binary:split(Name, ?SPACE_NAME_ID_SEPARATOR),
-    case maps:get(BaseFileName, SpacesByName, []) of
+    case maps:get(BaseFileName, SpaceIdsByName, []) of
         [_] ->
             {BaseFileName, []};
         SpaceIds ->
-            Conflicts = [{BaseFileName, fslogic_file_id:spaceid_to_space_dir_uuid(S)} || S <- SpaceIds -- [SpaceId]],
+            Conflicts = [{BaseFileName, fslogic_file_id:spaceid_to_space_dir_uuid(Sid)} || Sid <- SpaceIds, Sid /= SpaceId],
             ExtendedName = disambiguate_conflicted_space_name(BaseFileName, SpaceId),
             {ExtendedName, Conflicts}
     end.
@@ -109,14 +109,14 @@ get_space_name_and_conflicts(SessId, UserId, Name, SpaceId) ->
 
 -spec report_new_spaces_appeared([od_user:id()], [od_space:id()]) -> ok.
 report_new_spaces_appeared(UserIds, NewSpaceIds) ->
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, SpaceId, SpacesByName) ->
+    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, SpaceId, SpaceIdsByName) ->
         SpaceName = maps_utils:fold_while(fun(Name, SpacesWithName, _Acc) ->
             case lists:member(SpaceId, SpacesWithName) of
                 true -> {halt, Name};
                 false -> {cont, undefined}
             end
-        end, undefined, SpacesByName),
-        handle_space_name_appeared_events(SpaceId, SpaceName, UserRootDirGuid, maps:get(SpaceName, SpacesByName), create)
+        end, undefined, SpaceIdsByName),
+        handle_space_name_appeared_events(SpaceId, SpaceName, UserRootDirGuid, maps:get(SpaceName, SpaceIdsByName), create)
     end, UserIds, NewSpaceIds).
 
 
@@ -135,19 +135,19 @@ report_spaces_removed(UserIds, RemovedSpaceIds) ->
     NewName :: od_space:name() | undefined) -> ok.
 report_space_name_change(UserIds, SpaceId, undefined, NewName) ->
     % first appearance of this space in provider
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpacesByName) ->
-        handle_space_name_appeared_events(SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpacesByName), create)
+    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
+        handle_space_name_appeared_events(SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), create)
     end, UserIds, [SpaceId]);
 report_space_name_change(UserIds, SpaceId, PrevName, undefined) ->
     % space was deleted
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpacesByName) ->
-        handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpacesByName, []))
+    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
+        handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpaceIdsByName, []))
     end, UserIds, [SpaceId]);
 report_space_name_change(UserIds, SpaceId, PrevName, NewName) ->
     % space was renamed
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpacesByName) ->
-        handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpacesByName, [])),
-        handle_space_name_appeared_events(SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpacesByName), {rename, PrevName})
+    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
+        handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpaceIdsByName, [])),
+        handle_space_name_appeared_events(SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), {rename, PrevName})
     end, UserIds, [SpaceId]).
 
 
@@ -211,17 +211,17 @@ handle_space_name_disappeared_events(_SpaceName, _UserRootDirGuid, _SpaceIdsWith
 
 
 %% @private
--spec apply_for_users_with_fuse_session_spaces(fun((file_id:file_guid(), od_space:id(), #{od_space:name() => [od_space:id()]}) -> ok),
+-spec apply_for_users_with_fuse_session_spaces(fun((file_id:file_guid(), od_space:id(), [od_space:id()]) -> ok),
     [od_user:id()], [od_space:id()]) -> ok.
-apply_for_users_with_fuse_session_spaces(Fun, UsersList, SpacesByName) ->
+apply_for_users_with_fuse_session_spaces(Fun, UserIds, SpaceIds) ->
     % user to session mapping is done only to fetch space name in user context (as provider may not have access to such space)
     maps:foreach(fun(UserId, [SessId | _]) ->
         UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
-        SpacesByName = group_spaces_by_name(SessId, get_user_supported_spaces(SessId, UserId)),
+        SpaceIdsByName = group_spaces_by_name(SessId, get_user_supported_spaces(SessId, UserId)),
         lists:foreach(fun(SpaceId) ->
-            Fun(UserRootDirGuid, SpaceId, SpacesByName)
-        end, lists_utils:intersect(lists:merge(maps:values(SpacesByName)), SpacesByName))
-    end, maps:with(UsersList, find_fuse_sessions_of_all_users())).
+            Fun(UserRootDirGuid, SpaceId, SpaceIdsByName)
+        end, lists_utils:intersect(lists:merge(maps:values(SpaceIdsByName)), SpaceIds))
+    end, maps:with(UserIds, find_fuse_sessions_of_all_users())).
 
 
 %% @private
@@ -281,15 +281,15 @@ group_spaces_by_name(SessId, SpaceIds) ->
 
 %% @private
 -spec resolve_unambiguous_names_for_spaces(#{od_space:name() => [od_space:id()]}) -> [{file_meta:name(), od_space:id()}].
-resolve_unambiguous_names_for_spaces(SpacesByName) ->
-    lists:sort(maps:fold(
+resolve_unambiguous_names_for_spaces(SpaceIdsByName) ->
+    lists:sort(lists:flatmap(
         fun
-            (Name, [SpaceId], Acc) ->
-                [{Name, SpaceId} | Acc];
-            (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
+            ({Name, [SpaceId]}) ->
+                [{Name, SpaceId}];
+            ({Name, Spaces}) -> lists:map(fun(SpaceId) ->
                 {disambiguate_conflicted_space_name(Name, SpaceId), SpaceId}
             end, Spaces)
-        end, [], SpacesByName)).
+        end, maps:to_list(SpaceIdsByName))).
 
 
 %% @private

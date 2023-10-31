@@ -158,6 +158,7 @@ on_entity_deleted(#gri{type = od_provider, id = ProviderId, aspect = instance}) 
     end;
 on_entity_deleted(#gri{type = od_space, id = SpaceId, aspect = instance}) ->
     ok = main_harvesting_stream:space_removed(SpaceId),
+    ok = od_space:handle_space_deleted(SpaceId),
     ok = auto_storage_import_worker:notify_space_deleted(SpaceId);
 on_entity_deleted(#gri{type = od_token, id = TokenId, aspect = instance}) ->
     ok = auth_cache:report_token_deletion(TokenId);

@@ -40,7 +40,7 @@
 }).
 
 %% API
--export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3, handle_space_deleted/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -76,19 +76,25 @@ get_from_cache(Id) ->
 -spec invalidate_cache(id()) -> ok | {error, term()}.
 invalidate_cache(Id) ->
     run_in_critical_section(Id, fun() ->
-        case get_from_cache(Id) of
-            {ok, #document{value = #od_space{eff_users = UsersMap} = Space}} ->
-                handle_name_change(Id, Space, #od_space{}, maps:keys(UsersMap)),
-                datastore_model:delete(?CTX, Id);
-            {error, not_found} ->
-                ok
-        end
+        datastore_model:delete(?CTX, Id)
     end).
 
 
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Id, Acc) -> {ok, [Id | Acc]} end, []).
+
+
+-spec handle_space_deleted(id()) -> ok.
+handle_space_deleted(Id) ->
+    run_in_critical_section(Id, fun() ->
+        case get_from_cache(Id) of
+            {ok, #document{value = #od_space{eff_users = UsersMap} = Space}} ->
+                handle_name_change(Id, Space, #od_space{}, maps:keys(UsersMap));
+            {error, not_found} ->
+                ok
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -174,6 +180,7 @@ run_in_critical_section(SpaceId, Fun) ->
 %% @private
 -spec handle_name_change(id(), PrevVal :: record(), NewVal :: record(), [od_user:id()]) -> ok.
 handle_name_change(SpaceId, #od_space{name = PrevName}, #od_space{name = NewName}, Users) when PrevName =/= NewName ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
     user_root_dir:report_space_name_change(Users, SpaceId, PrevName, NewName);
 handle_name_change(_, _, _, _) ->
     ok.
@@ -182,6 +189,7 @@ handle_name_change(_, _, _, _) ->
 %% @private
 -spec handle_support_change(id(), PrevVal :: record(), NewVal :: record(), [od_user:id()]) -> ok.
 handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{providers = NewProviders}, Users) ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
     ProviderId = oneprovider:get_id(),
     PrevSupport = maps:get(ProviderId, PrevProviders, 0),
     NewSupport = maps:get(ProviderId, NewProviders, 0),
