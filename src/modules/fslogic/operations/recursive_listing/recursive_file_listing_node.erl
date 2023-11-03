@@ -112,10 +112,10 @@ init_node_iterator(FileCtx, StartFileName, Limit) ->
         {ok, _, TreeId} ->
             %% @TODO VFS-11436 secure for space name conflicts
             StartingIndex = file_listing:build_index(
-                file_meta:trim_provider_conflict_disambiguated_name(StartFileName, TreeId), TreeId),
+                file_meta:trim_disambiguated_name_provider_suffix(StartFileName, TreeId), TreeId),
             #{index => StartingIndex, inclusive => true};
         _ ->
-            StartingIndex = file_listing:build_index(file_meta:trim_provider_conflict_disambiguated_name(
+            StartingIndex = file_listing:build_index(file_meta:trim_disambiguated_name_provider_suffix(
                 StartFileName, {all, Uuid})),
             #{index => StartingIndex}
     end,

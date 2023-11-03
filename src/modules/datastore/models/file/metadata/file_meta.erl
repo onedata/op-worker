@@ -30,7 +30,7 @@
 -export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1, get_scope/1]).
 -export([
-    get_uuid/1, get_child/2, trim_provider_conflict_disambiguated_name/2,
+    get_uuid/1, get_child/2, trim_disambiguated_name_provider_suffix/2,
     get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3
 ]).
 -export([get_name/1, set_name/2]).
@@ -441,20 +441,20 @@ get_child(ParentUuid, Name) ->
     end.
 
 
--spec trim_provider_conflict_disambiguated_name(disambiguated_name() | name(), {all, uuid()} | file_meta_forest:tree_id()) ->
+-spec trim_disambiguated_name_provider_suffix(disambiguated_name() | name(), {all, uuid()} | file_meta_forest:tree_id()) ->
     name().
-trim_provider_conflict_disambiguated_name(Name, {all, ParentUuid}) ->
+trim_disambiguated_name_provider_suffix(Name, {all, ParentUuid}) ->
     TreeIds = case file_meta_forest:get_trees(ParentUuid) of
         {ok, T} -> T;
         ?ERROR_NOT_FOUND -> []
     end,
     lists_utils:foldl_while(fun(TreeId, NameAcc) ->
-        case trim_provider_conflict_disambiguated_name(NameAcc, TreeId) of
+        case trim_disambiguated_name_provider_suffix(NameAcc, TreeId) of
             NameAcc -> {cont, NameAcc};
             TrimmedName -> {halt, TrimmedName}
         end
     end, Name, TreeIds);
-trim_provider_conflict_disambiguated_name(Name, TreeId) ->
+trim_disambiguated_name_provider_suffix(Name, TreeId) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [TreeId | NameTokens] -> str_utils:join_binary(NameTokens, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR);
@@ -1044,6 +1044,7 @@ check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProvide
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if file has suffix. Returns name without suffix if true.
+%% @TODO VFS-11506 properly handle names containing `@`
 %% @end
 %%--------------------------------------------------------------------
 -spec is_disambiguated(name() | disambiguated_name()) -> {true, NameWithoutSuffix :: name()} | false.
