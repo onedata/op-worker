@@ -76,7 +76,7 @@ translate_space(SpaceId, #od_space{
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
     {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
     {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
-    
+
     Providers = lists:map(fun(ProviderId) ->
         {ok, ProviderName} = provider_logic:get_name(ProviderId),
         #{
@@ -84,7 +84,7 @@ translate_space(SpaceId, #od_space{
             <<"providerName">> => ProviderName
         }
     end, maps:keys(ProvidersIds)),
-    
+
     #{
         <<"name">> => Name,
         <<"spaceId">> => SpaceId,
@@ -92,5 +92,6 @@ translate_space(SpaceId, #od_space{
         <<"dirId">> => SpaceDirObjectId,
         <<"trashDirId">> => TrashRootDirObjectId,
         <<"archivesDirId">> => ArchivesRootDirObjectId,
-        <<"providers">> => Providers
+        <<"providers">> => Providers  %@fixme miejsce 1
+        %@fixme testy na oba miejsca lolol
     }.

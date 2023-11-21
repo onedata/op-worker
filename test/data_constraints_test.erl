@@ -15,8 +15,12 @@
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/aai/caveats.hrl").
 
+
+-define(SPACE_ALPHA, <<"0409171e7ba30b60d332d45c857745d4">>).
+-define(SPACE_GAMMA, <<"bdee07d32260a56d159a980ca0d64357">>).
 
 -define(CV_READONLY, #cv_data_readonly{}).
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
@@ -24,15 +28,15 @@
 
 
 get_test_() ->
-    Guid1 = <<"Z3VpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
-    {ok, ObjectId1} = file_id:guid_to_objectid(Guid1),
+    GuidAlpha = file_id:pack_guid(<<"ee07d32260a56d12260a56d159a980ca0">>, ?SPACE_ALPHA),
+    {ok, ObjectIdAlpha} = file_id:guid_to_objectid(GuidAlpha),
 
-    Guid2 = <<"V3ZpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
-    {ok, ObjectId2} = file_id:guid_to_objectid(Guid2),
+    GuidGamma = file_id:pack_guid(<<"0d332d45c857745d430b656d159a980ca">>, ?SPACE_GAMMA),
+    {ok, ObjectIdGamma} = file_id:guid_to_objectid(GuidGamma),
 
     [
         ?_assertEqual(
-            {ok, {constraints, any, any, false}},
+            {ok, {constraints, any, any, any, false}},
             data_constraints:get([])
         ),
         ?_assertEqual(
@@ -44,20 +48,20 @@ get_test_() ->
             data_constraints:get([?CV_OBJECTID([])])
         ),
         ?_assertEqual(
-            {ok, {constraints, any, [[Guid1, Guid2]], false}},
-            data_constraints:get([?CV_OBJECTID([ObjectId1, ObjectId2])])
+            {ok, {constraints, [?SPACE_ALPHA, ?SPACE_GAMMA], any, [[GuidAlpha, GuidGamma]], false}},
+            data_constraints:get([?CV_OBJECTID([ObjectIdAlpha, ObjectIdGamma])])
         ),
         ?_assertEqual(
-            {ok, {constraints, [<<"/z/x/c/d/e">>], [[Guid2], [Guid1]], false}},
+            {ok, {constraints, [], [<<"/z/x/c/d/e">>], [[GuidGamma], [GuidAlpha]], false}},
             data_constraints:get([
                 ?CV_PATH([<<"/q/w/e">>, <<"/z/x/c">>]),
-                ?CV_OBJECTID([ObjectId1]),
+                ?CV_OBJECTID([ObjectIdAlpha]),
                 ?CV_PATH([<<"/a/s/d">>, <<"/z/x/c/d/e">>]),
-                ?CV_OBJECTID([ObjectId2])
+                ?CV_OBJECTID([ObjectIdGamma])
             ])
         ),
         ?_assertEqual(
-            {ok, {constraints, any, any, true}},
+            {ok, {constraints, any, any, any, true}},
             data_constraints:get([?CV_READONLY])
         )
     ].
