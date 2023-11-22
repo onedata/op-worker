@@ -185,10 +185,11 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     case DataConstraints of
         #constraints{paths = any, guids = any} ->
             {undefined, FileCtx0};
-        #constraints{spaces = []} ->
-            % no available spaces means that the caveats are cancelling each other out
-            % and no data can effectively be accessed with the constraints; save some calculations
-            {[], FileCtx0};
+        % fixme this code causes a lot of permission CT tests to fail - why?
+%%        #constraints{spaces = []} ->
+%%            % no available spaces means that the caveats are cancelling each other out
+%%            % and no data can effectively be accessed with the constraints; save some calculations
+%%            {[], FileCtx0};
         _ ->
             CheckResult = check_and_cache_data_constraints(
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy

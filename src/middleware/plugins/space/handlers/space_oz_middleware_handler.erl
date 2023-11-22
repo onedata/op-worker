@@ -141,7 +141,7 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
             {ok, lists:map(fun(SpaceId) ->
                 {ok, #document{value = Space}} = space_logic:get_protected_data(SessionId, SpaceId),
                 {SpaceId, Space}
-            end, AvailableSpaces)}; %@fixme dodac te 2 miejsca do allowed api jak masz ograniczenia data access
+            end, AvailableSpaces)};
         {error, _} = Error ->
             Error
     end;

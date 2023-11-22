@@ -92,6 +92,5 @@ translate_space(SpaceId, #od_space{
         <<"dirId">> => SpaceDirObjectId,
         <<"trashDirId">> => TrashRootDirObjectId,
         <<"archivesDirId">> => ArchivesRootDirObjectId,
-        <<"providers">> => Providers  %@fixme miejsce 1
-        %@fixme testy na oba miejsca lolol
+        <<"providers">> => Providers
     }.
