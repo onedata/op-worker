@@ -44,7 +44,7 @@
 -export([get_allow_all_constraints/0, get/1]).
 -export([has_no_constraints/1]).
 -export([assert_not_readonly_mode/1, inspect/4]).
--export([match_available_spaces/2]).
+-export([filter_available_spaces/2]).
 
 
 % Specific file relation to files specified in constraints set by token caveats
@@ -69,6 +69,7 @@
 -export_type([constraints/0, ancestor_policy/0]).
 
 
+-define(CV_INTERFACE_ONECLIENT, #cv_interface{interface = oneclient}).
 -define(CV_READONLY, #cv_data_readonly{}).
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
@@ -120,7 +121,7 @@ get(Caveats) ->
                     GuidWhiteList -> [GuidWhiteList | GuidConstraints]
                 end
             };
-        (_, Acc) ->
+        (?CV_INTERFACE_ONECLIENT, Acc) ->
             Acc
     end, get_allow_all_constraints(), DataAccessCaveats),
 
@@ -185,11 +186,10 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     case DataConstraints of
         #constraints{paths = any, guids = any} ->
             {undefined, FileCtx0};
-        % fixme this code causes a lot of permission CT tests to fail - why?
-%%        #constraints{spaces = []} ->
-%%            % no available spaces means that the caveats are cancelling each other out
-%%            % and no data can effectively be accessed with the constraints; save some calculations
-%%            {[], FileCtx0};
+        #constraints{spaces = []} ->
+            % no available spaces means that the caveats are cancelling each other out
+            % and no data can effectively be accessed with the constraints; save some calculations
+            throw(?EACCES);
         _ ->
             CheckResult = check_and_cache_data_constraints(
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy
@@ -206,10 +206,10 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     end.
 
 
--spec match_available_spaces(constraints(), [od_space:id()]) -> [od_space:id()].
-match_available_spaces(#constraints{spaces = any}, AllSpaceIds) ->
+-spec filter_available_spaces(constraints(), [od_space:id()]) -> [od_space:id()].
+filter_available_spaces(#constraints{spaces = any}, AllSpaceIds) ->
     AllSpaceIds;
-match_available_spaces(#constraints{spaces = Whitelist}, AllSpaceIds) ->
+filter_available_spaces(#constraints{spaces = Whitelist}, AllSpaceIds) ->
     lists_utils:intersect(Whitelist, AllSpaceIds).
 
 

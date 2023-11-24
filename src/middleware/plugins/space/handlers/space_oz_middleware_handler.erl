@@ -137,7 +137,7 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
             % data access caveats may have been included in the auth, limiting the pool of
             % available spaces; only those should be returned
             DataConstraints = session:get_data_constraints(?check(session:get(SessionId))),
-            AvailableSpaces = data_constraints:match_available_spaces(DataConstraints, EffSpaces),
+            AvailableSpaces = data_constraints:filter_available_spaces(DataConstraints, EffSpaces),
             {ok, lists:map(fun(SpaceId) ->
                 {ok, #document{value = Space}} = space_logic:get_protected_data(SessionId, SpaceId),
                 {SpaceId, Space}
