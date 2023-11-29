@@ -49,7 +49,7 @@ else
     -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -Wno-pessimizing-move \
     $(shell pkg-config --cflags botan-1.10 tbb fuse3) \
     -isystem $(HELPERS_DIR)/priv/include -isystem $(HELPERS_DIR)/src -isystem $(HELPERS_DIR)/deps/cppmetrics \
-    -isystem $(HELPERS_DIR)/deps/spdlog -isystem $(ERTS_INCLUDE_DIR) -system /opt/onedata/$(ONEDATA_SCL)/root/usr/include/xrootd
+    -isystem $(HELPERS_DIR)/deps/spdlog -isystem $(ERTS_INCLUDE_DIR) -isystem /usr/include/xrootd
 endif
 
 all: ../priv/helpers_nif.so
