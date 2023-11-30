@@ -167,18 +167,18 @@ upgrade_cluster(4) ->
     {ok, 5};
 upgrade_cluster(5) ->
     await_zone_connection_and_run(fun() ->
-        {ok, SpaceIds} = provider_logic:get_spaces(),
-        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
-        lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
         % @TODO VFS-11574 Rework the upgrade procedure regarding opened deleted files dir
         spawn(fun() ->
             timer:sleep(timer:minutes(2)),
+            {ok, SpaceIds} = provider_logic:get_spaces(),
+            lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+            lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
             lists:foreach(fun(SpaceId) ->
                 ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
                 file_meta:make_opened_deleted_files_dir_exist(SpaceId)
-            end, SpaceIds)
-        end),
-        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+            end, SpaceIds),
+            lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+        end)
     end),
     {ok, 6}.
 
