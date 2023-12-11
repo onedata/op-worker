@@ -20,11 +20,11 @@
 
 %% API
 -export([
-    write_acl_metadata/1,
-    acl_read_file/1,
-    acl_write_file/1,
-    acl_delete_file/1,
-    acl_read_write_dir/1
+    write_acl_metadata_test/1,
+    acl_read_file_test/1,
+    acl_write_file_test/1,
+    acl_delete_file_test/1,
+    acl_read_write_dir_test/1
 ]).
 
 
@@ -32,12 +32,8 @@
 %%% Test functions
 %%%===================================================================
 
-write_acl_metadata(Config) ->
+write_acl_metadata_test(Config) ->
     UserName2 = <<"Unnamed User">>,
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     UserId2 = oct_background:get_user_id(user2),
     DirName = filename:join([RootPath, "metadataTestDir2"]) ++ "/",
@@ -47,7 +43,7 @@ write_acl_metadata(Config) ->
     RequestBody11 = #{<<"metadata">> => #{<<"my_metadata">> => <<"my_dir_value">>}},
     RawRequestBody11 = json_utils:encode(RequestBody11),
     {ok, ?HTTP_201_CREATED, _Headers11, _Response11} = cdmi_internal:do_request(
-        Workers, DirName, put, RequestHeaders2, RawRequestBody11
+        ?WORKERS, DirName, put, RequestHeaders2, RawRequestBody11
     ),
     %%------ write acl metadata ----------
     FileName2 = filename:join([RootPath, "acl_test_file.txt"]),
@@ -89,14 +85,14 @@ write_acl_metadata(Config) ->
     RequestHeaders15 = [?CDMI_OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
 
     {ok, Code15, _Headers15, Response15} = cdmi_internal:do_request(
-        Workers, FileName2 ++ "?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15
+        ?WORKERS, FileName2 ++ "?metadata:cdmi_acl", put, RequestHeaders15, RawRequestBody15
     ),
     ?assertMatch({?HTTP_204_NO_CONTENT, _}, {Code15, Response15}),
 
     Fun = fun() ->
         {ok, _Code16, _Headers16, Response16} =
             cdmi_internal:do_request(
-            Workers, FileName2 ++ "?metadata", get, RequestHeaders1, []
+                ?WORKERS, FileName2 ++ "?metadata", get, RequestHeaders1, []
         ),
         Response16
     end,
@@ -104,7 +100,7 @@ write_acl_metadata(Config) ->
     ?assertEqual(6, maps:size(maps:get(<<"metadata">>, json_utils:decode(Fun()))), ?ATTEMPTS),
     {ok, Code16, _Headers16, Response16} =
         cdmi_internal:do_request(
-            Workers, FileName2 ++ "?metadata", get, RequestHeaders1, []
+            ?WORKERS, FileName2 ++ "?metadata", get, RequestHeaders1, []
         ),
     CdmiResponse16 = (json_utils:decode(Response16)),
     Metadata16 = maps:get(<<"metadata">>, CdmiResponse16),
@@ -114,7 +110,7 @@ write_acl_metadata(Config) ->
     ?assertMatch(#{<<"cdmi_acl">> := [Ace1, Ace2]}, Metadata16),
 
     {ok, Code17, _Headers17, Response17} = cdmi_internal:do_request(
-        Workers, FileName2, get, [cdmi_test_utils:user_2_token_header()], []
+        ?WORKERS, FileName2, get, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assertEqual(?HTTP_200_OK, Code17),
     ?assertEqual(<<"data">>, Response17),
@@ -142,7 +138,7 @@ write_acl_metadata(Config) ->
     {ok, Code18, _Headers18, _Response18} = ?assertMatch(
         {ok, 204, _, _},
         cdmi_internal:do_request(
-            Workers, filename:join([DirName, "?metadata:cdmi_acl"]), put, RequestHeaders18, RawRequestBody18
+            ?WORKERS, filename:join([DirName, "?metadata:cdmi_acl"]), put, RequestHeaders18, RawRequestBody18
         ),
         ?ATTEMPTS
     ),
@@ -150,97 +146,16 @@ write_acl_metadata(Config) ->
 
     Fun2 = fun() ->
         {ok, Code19, _Headers19, Response19} = cdmi_internal:do_request(
-            Workers, filename:join(DirName, "some_file"), put, [cdmi_test_utils:user_2_token_header()], []
+            ?WORKERS, filename:join(DirName, "some_file"), put, [cdmi_test_utils:user_2_token_header()], []
         ),
         {Code19, json_utils:decode(Response19)}
     end,
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
     ?assertMatch(ExpRestError, Fun2(), ?ATTEMPTS).
 
-% tests access control lists
-acl_file_base(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = filename:join(SpaceName, RootName),
 
-    UserId2 = oct_background:get_user_id(user2),
-    UserName2 = <<"Unnamed User">>,
-    Identifier1 = <<UserName2/binary, "#", UserId2/binary>>,
-
-    Read = ace:to_json(#access_control_entity{
-        acetype = ?allow_mask,
-        identifier = UserId2,
-        name = UserName2,
-        aceflags = ?no_flags_mask,
-        acemask = ?read_all_object_mask
-    }, cdmi),
-    ReadFull = #{
-        <<"acetype">> => ?allow,
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => ?no_flags,
-        <<"acemask">> => <<
-            ?read_object/binary, ",",
-            ?read_metadata/binary, ",",
-            ?read_attributes/binary, ",",
-            ?read_acl/binary
-        >>
-    },
-    Write = ace:to_json(#access_control_entity{
-        acetype = ?allow_mask,
-        identifier = UserId2,
-        name = UserName2,
-        aceflags = ?no_flags_mask,
-        acemask = ?write_all_object_mask
-    }, cdmi),
-    ReadWriteVerbose = #{
-        <<"acetype">> => ?allow,
-        <<"identifier">> => Identifier1,
-        <<"aceflags">> => ?no_flags,
-        <<"acemask">> => <<
-            ?read_object/binary, ",",
-            ?read_metadata/binary, ",",
-            ?read_attributes/binary, ",",
-            ?read_acl/binary, ",",
-            ?write_object/binary, ",",
-            ?write_metadata/binary, ",",
-            ?write_attributes/binary, ",",
-            ?delete/binary, ",",
-            ?write_acl/binary
-        >>
-    },
-    WriteAcl = ace:to_json(#access_control_entity{
-        acetype = ?allow_mask,
-        identifier = UserId2,
-        name = UserName2,
-        aceflags = ?no_flags_mask,
-        acemask = ?write_acl_mask
-    }, cdmi),
-    Delete = ace:to_json(#access_control_entity{
-        acetype = ?allow_mask,
-        identifier = UserId2,
-        name = UserName2,
-        aceflags = ?no_flags_mask,
-        acemask = ?delete_mask
-    }, cdmi),
-
-    MetadataAclReadFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadFull, WriteAcl]}}),
-    MetadataAclDelete = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Delete]}}),
-    MetadataAclWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write]}}),
-    MetadataAclReadWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write, Read]}}),
-    MetadataAclReadWriteFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadWriteVerbose]}}),
-    {
-        Workers, RootPath, MetadataAclReadFull, MetadataAclDelete,
-        MetadataAclWrite, MetadataAclReadWrite, MetadataAclReadWriteFull
-    }.
-
-
-acl_read_file(Config) ->
-    {Workers, RootPath, _, _, MetadataAclWrite, _, MetadataAclReadWriteFull} = acl_file_base(Config),
-
+acl_read_file_test(Config) ->
+    {RootPath, _, _, MetadataAclWrite, _, MetadataAclReadWriteFull} = acl_file_test_base(Config),
     Filename1 = filename:join(RootPath, "acl_test_file1"),
     %%----- read file test ---------
     % create test file with dummy data
@@ -258,18 +173,18 @@ acl_read_file(Config) ->
     % set acl to 'write' and test cdmi/non-cdmi get request (should return 403 forbidden)
     RequestHeaders1 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
-        Workers, Filename1, put, RequestHeaders1, MetadataAclWrite
+        ?WORKERS, Filename1, put, RequestHeaders1, MetadataAclWrite
     ),
     {ok, Code1, _, Response1} = ?assertMatch(
         {ok, 400, _, _},
-        cdmi_internal:do_request(Workers, Filename1, get, RequestHeaders1, []),
+        cdmi_internal:do_request(?WORKERS, Filename1, get, RequestHeaders1, []),
         ?ATTEMPTS
     ),
     ?assertMatch(EaccesError, {Code1, json_utils:decode(Response1)}),
 
     {ok, Code2, _, Response2} = ?assertMatch(
         {ok, 400, _, _},
-        cdmi_internal:do_request(Workers, Filename1, get, [cdmi_test_utils:user_2_token_header()], []),
+        cdmi_internal:do_request(?WORKERS, Filename1, get, [cdmi_test_utils:user_2_token_header()], []),
         ?ATTEMPTS
     ),
     ?assertMatch(EaccesError, {Code2, json_utils:decode(Response2)}),
@@ -281,24 +196,25 @@ acl_read_file(Config) ->
     {ok, ?HTTP_204_NO_CONTENT, _, _} = ?assertMatch(
         {ok, 204, _, _},
         cdmi_internal:do_request(
-            Workers, Filename1, put, RequestHeaders1, MetadataAclReadWriteFull
+            ?WORKERS, Filename1, put, RequestHeaders1, MetadataAclReadWriteFull
         ),
         ?ATTEMPTS
     ),
     {ok, ?HTTP_200_OK, _, _} = ?assertMatch(
         {ok, 200, _, _},
-        cdmi_internal:do_request(Workers, Filename1, get, RequestHeaders1, []),
+        cdmi_internal:do_request(?WORKERS, Filename1, get, RequestHeaders1, []),
         ?ATTEMPTS
     ),
     {ok, ?HTTP_200_OK, _, _} = ?assertMatch(
         {ok, 200, _, _},
-        cdmi_internal:do_request(Workers, Filename1, get, [cdmi_test_utils:user_2_token_header()], []),
+        cdmi_internal:do_request(?WORKERS, Filename1, get, [cdmi_test_utils:user_2_token_header()], []),
         ?ATTEMPTS
     ).
 
 
-acl_write_file(Config) ->
-    {[WorkerP1, _WorkerP2], RootPath, MetadataAclReadFull, _, _, MetadataAclReadWrite, _} = acl_file_base(Config),
+acl_write_file_test(Config) ->
+    {RootPath, MetadataAclReadFull, _, _, MetadataAclReadWrite, _} = acl_file_test_base(Config),
+    [WorkerP1, _WorkerP2] = ?WORKERS,
     Filename1 = filename:join([RootPath, "acl_test_file2"]),
     % create test file with dummy data
     ?assert(not cdmi_internal:object_exists(Filename1, Config)),
@@ -365,11 +281,10 @@ acl_write_file(Config) ->
         ?ATTEMPTS
     ),
     ?assertEqual(<<"new_data2">>, cdmi_internal:get_file_content(Filename1, Config), ?ATTEMPTS).
-%%------------------------------
 
 
-acl_delete_file(Config) ->
-    {Workers, RootPath, _, MetadataAclDelete, _, _, _} = acl_file_base(Config),
+acl_delete_file_test(Config) ->
+    {RootPath, _, MetadataAclDelete, _, _, _} = acl_file_test_base(Config),
     Filename3 = filename:join([RootPath, "acl_test_file3"]),
     % create test file with dummy data
     ?assert(not cdmi_internal:object_exists(Filename3, Config)),
@@ -384,23 +299,21 @@ acl_delete_file(Config) ->
     %%------ delete file test ------
     % set acl to 'delete'
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
-        Workers, Filename3, put, RequestHeaders1, MetadataAclDelete
+        ?WORKERS, Filename3, put, RequestHeaders1, MetadataAclDelete
     ),
 
     % delete file
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
-        Workers, Filename3, delete, [cdmi_test_utils:user_2_token_header()], []
+        ?WORKERS, Filename3, delete, [cdmi_test_utils:user_2_token_header()], []
     ),
     ?assert(not cdmi_internal:object_exists(Filename3, Config), ?ATTEMPTS).
-%%------------------------------
 
-%% @private
-acl_dir_base(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)) ++ "/",
+
+acl_read_write_dir_test(Config) ->
+    [WorkerP1, WorkerP2] = ?WORKERS,
+    SpaceName = binary_to_list(oct_background:get_space_name(
+        Config#cdmi_test_config.space_selector
+    )) ++ "/",
     RootName = node_cache:get(root_dir_name) ++ "/",
     RootPath = filename:join([SpaceName, RootName]),
 
@@ -436,12 +349,6 @@ acl_dir_base(Config) ->
     DirMetadataAclWrite = json_utils:encode(#{
         <<"metadata">> => #{<<"cdmi_acl">> => [DirWrite]}
     }),
-    {Workers, RootPath, DirMetadataAclReadWrite, DirMetadataAclRead, DirMetadataAclWrite}.
-
-
-acl_read_write_dir(Config) ->
-    {Workers, RootPath, DirMetadataAclReadWrite, DirMetadataAclRead, DirMetadataAclWrite} = acl_dir_base(Config),
-    [WorkerP1, WorkerP2] = Workers,
     Dirname1 = filename:join(RootPath, "acl_test_dir1") ++ "/",
     EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
 
@@ -520,7 +427,7 @@ acl_read_write_dir(Config) ->
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_internal:do_request(
         WorkerP1, Dirname1, put, RequestHeaders2, DirMetadataAclRead
     ),
-    {ok, ?HTTP_200_OK, _, _} = cdmi_internal:do_request(Workers, Dirname1, get, RequestHeaders2, []),
+    {ok, ?HTTP_200_OK, _, _} = cdmi_internal:do_request(?WORKERS, Dirname1, get, RequestHeaders2, []),
     {ok, Code6, _, Response6} = cdmi_internal:do_request(
         WorkerP1, Dirname1, put, RequestHeaders2,
         json_utils:encode(#{<<"metadata">> => #{<<"my_meta">> => <<"value">>}})
@@ -548,3 +455,80 @@ acl_read_write_dir(Config) ->
     ),
     ?assertMatch(EaccesError, {Code9, json_utils:decode(Response9)}),
     ?assert(cdmi_internal:object_exists(File3, Config)).
+
+
+%% @private
+acl_file_test_base(Config) ->
+    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
+    RootName = node_cache:get(root_dir_name) ++ "/",
+    RootPath = filename:join(SpaceName, RootName),
+
+    UserId2 = oct_background:get_user_id(user2),
+    UserName2 = <<"Unnamed User">>,
+    Identifier1 = <<UserName2/binary, "#", UserId2/binary>>,
+
+    Read = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId2,
+        name = UserName2,
+        aceflags = ?no_flags_mask,
+        acemask = ?read_all_object_mask
+    }, cdmi),
+    ReadFull = #{
+        <<"acetype">> => ?allow,
+        <<"identifier">> => Identifier1,
+        <<"aceflags">> => ?no_flags,
+        <<"acemask">> => <<
+            ?read_object/binary, ",",
+            ?read_metadata/binary, ",",
+            ?read_attributes/binary, ",",
+            ?read_acl/binary
+        >>
+    },
+    Write = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId2,
+        name = UserName2,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_all_object_mask
+    }, cdmi),
+    ReadWriteVerbose = #{
+        <<"acetype">> => ?allow,
+        <<"identifier">> => Identifier1,
+        <<"aceflags">> => ?no_flags,
+        <<"acemask">> => <<
+            ?read_object/binary, ",",
+            ?read_metadata/binary, ",",
+            ?read_attributes/binary, ",",
+            ?read_acl/binary, ",",
+            ?write_object/binary, ",",
+            ?write_metadata/binary, ",",
+            ?write_attributes/binary, ",",
+            ?delete/binary, ",",
+            ?write_acl/binary
+        >>
+    },
+    WriteAcl = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId2,
+        name = UserName2,
+        aceflags = ?no_flags_mask,
+        acemask = ?write_acl_mask
+    }, cdmi),
+    Delete = ace:to_json(#access_control_entity{
+        acetype = ?allow_mask,
+        identifier = UserId2,
+        name = UserName2,
+        aceflags = ?no_flags_mask,
+        acemask = ?delete_mask
+    }, cdmi),
+
+    MetadataAclReadFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadFull, WriteAcl]}}),
+    MetadataAclDelete = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Delete]}}),
+    MetadataAclWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write]}}),
+    MetadataAclReadWrite = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [Write, Read]}}),
+    MetadataAclReadWriteFull = json_utils:encode(#{<<"metadata">> => #{<<"cdmi_acl">> => [ReadWriteVerbose]}}),
+    {
+        RootPath, MetadataAclReadFull, MetadataAclDelete,
+        MetadataAclWrite, MetadataAclReadWrite, MetadataAclReadWriteFull
+    }.

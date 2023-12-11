@@ -15,30 +15,25 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include("cdmi_test.hrl").
 
--define(
-build_test_root_path(__CONFIG),
-    cdmi_test_utils:build_test_root_path(Config, ?FUNCTION_NAME)
-).
-
 %% API
 -export([
-    basic_create_file/1,
-    base64_create_file/1,
-    create_empty_file/1,
-    create_noncdmi_file/1,
-    create_raw_file_with_cdmi_version_header_should_succeed/1,
-    create_cdmi_file_without_cdmi_version_header_should_fail/1,
-    basic_create_dir/1,
-    create_noncdmi_dir_and_update/1,
-    missing_parent_create_dir/1,
-    create_raw_dir_with_cdmi_version_header_should_succeed/1,
-    create_cdmi_dir_without_cdmi_version_header_should_fail/1,
+    basic_create_file_test/1,
+    base64_create_file_test/1,
+    create_empty_file_test/1,
+    create_noncdmi_file_test/1,
+    create_raw_file_with_cdmi_version_header_should_succeed_test/1,
+    create_cdmi_file_without_cdmi_version_header_should_fail_test/1,
+    basic_create_dir_test/1,
+    create_noncdmi_dir_and_update_test/1,
+    missing_parent_create_dir_test/1,
+    create_raw_dir_with_cdmi_version_header_should_succeed_test/1,
+    create_cdmi_dir_without_cdmi_version_header_should_fail_test/1,
 
-    create_file_with_metadata/1,
-    create_and_update_dir_with_user_metadata/1,
-    mimetype_and_encoding_create_file/1,
-    mimetype_and_encoding_create_file_non_cdmi_request/1,
-    wrong_create_path_error/1
+    create_file_with_metadata_test/1,
+    create_and_update_dir_with_user_metadata_test/1,
+    mimetype_and_encoding_create_file_test/1,
+    mimetype_and_encoding_create_file_non_cdmi_request_test/1,
+    wrong_create_path_error_test/1
 ]).
 
 %%%===================================================================
@@ -47,11 +42,7 @@ build_test_root_path(__CONFIG),
 
 % Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
 % json string), or without (when we treat request body as new file content)
-basic_create_file(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+basic_create_file_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     ToCreate = ?build_test_root_path(Config),
     RootDirPath = list_to_binary("/" ++ RootPath),
@@ -63,14 +54,14 @@ basic_create_file(Config) ->
     RequestBody1 = #{<<"value">> => ?FILE_CONTENT},
     RawRequestBody1 = json_utils:encode((RequestBody1)),
     {ok, Code1, _Headers1, Response1} = cdmi_internal:do_request(
-        Workers, ToCreate, put, RequestHeaders1, RawRequestBody1
+        ?WORKERS, ToCreate, put, RequestHeaders1, RawRequestBody1
     ),
 
     ?assertEqual(?HTTP_201_CREATED, Code1),
     CdmiResponse1 = (json_utils:decode(Response1)),
     Metadata1 = maps:get(<<"metadata">>, CdmiResponse1),
     ?assertMatch(#{<<"objectType">> := <<"application/cdmi-object">>}, CdmiResponse1),
-    ?assertMatch(#{<<"objectName">> := <<"basic_create_file">>}, CdmiResponse1),
+    ?assertMatch(#{<<"objectName">> := <<"basic_create_file_test">>}, CdmiResponse1),
     ?assertMatch(#{<<"parentURI">> := RootDirPath}, CdmiResponse1),
     ?assertMatch(#{<<"completionStatus">> := <<"Complete">>}, CdmiResponse1),
     ?assertNotEqual([], Metadata1),
@@ -80,11 +71,7 @@ basic_create_file(Config) ->
     %%------------------------------
 
 
-base64_create_file(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+base64_create_file_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     ToCreate2 = ?build_test_root_path(Config),
     RootDirPath = list_to_binary("/" ++ RootPath),
@@ -97,12 +84,12 @@ base64_create_file(Config) ->
         <<"value">> => base64:encode(?FILE_CONTENT)},
     RawRequestBody2 = json_utils:encode((RequestBody2)),
     {ok, Code2, _Headers2, Response2} =
-        cdmi_internal:do_request(Workers, ToCreate2, put, RequestHeaders2, RawRequestBody2),
+        cdmi_internal:do_request(?WORKERS, ToCreate2, put, RequestHeaders2, RawRequestBody2),
     ?assertEqual(?HTTP_201_CREATED, Code2),
     CdmiResponse2 = (json_utils:decode(Response2)),
 
     ?assertMatch(#{<<"objectType">> := <<"application/cdmi-object">>}, CdmiResponse2),
-    ?assertMatch(#{<<"objectName">> := <<"base64_create_file">>}, CdmiResponse2),
+    ?assertMatch(#{<<"objectName">> := <<"base64_create_file_test">>}, CdmiResponse2),
     ?assertMatch(#{<<"parentURI">> := RootDirPath}, CdmiResponse2),
     ?assertMatch(#{<<"completionStatus">> := <<"Complete">>}, CdmiResponse2),
     ?assert(maps:get(<<"metadata">>, CdmiResponse2) =/= <<>>),
@@ -112,19 +99,14 @@ base64_create_file(Config) ->
     %%------------------------------
 
 
-create_empty_file(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+create_empty_file_test(Config) ->
     ToCreate3 = ?build_test_root_path(Config),
     %%------- create empty ---------
     ?assert(not cdmi_internal:object_exists(ToCreate3, Config), ?ATTEMPTS),
 
     RequestHeaders4 = [?CDMI_OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code4, _Headers4, _Response4} = cdmi_internal:do_request(
-        Workers, ToCreate3, put, RequestHeaders4, []
+        ?WORKERS, ToCreate3, put, RequestHeaders4, []
     ),
     ?assertEqual(?HTTP_201_CREATED, Code4),
 
@@ -132,18 +114,14 @@ create_empty_file(Config) ->
     ?assertEqual(<<>>, cdmi_internal:get_file_content(ToCreate3, Config), ?ATTEMPTS).
 
 
-create_noncdmi_file(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+create_noncdmi_file_test(Config) ->
     ToCreate4 = ?build_test_root_path(Config),
     %%------ create noncdmi --------
     ?assert(not cdmi_internal:object_exists(ToCreate4, Config)),
 
     RequestHeaders5 = [{?HDR_CONTENT_TYPE, <<"application/binary">>}],
     {ok, Code5, _Headers5, _Response5} =cdmi_internal:do_request(
-        Workers, ToCreate4, put, [cdmi_test_utils:user_2_token_header() | RequestHeaders5], ?FILE_CONTENT
+        ?WORKERS, ToCreate4, put, [cdmi_test_utils:user_2_token_header() | RequestHeaders5], ?FILE_CONTENT
     ),
 
     ?assertEqual(?HTTP_201_CREATED, Code5),
@@ -152,18 +130,12 @@ create_noncdmi_file(Config) ->
     ?assertEqual(?FILE_CONTENT, cdmi_internal:get_file_content(ToCreate4, Config), ?ATTEMPTS).
 
 
-create_raw_file_with_cdmi_version_header_should_succeed(Config) ->
-    % given
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-
+create_raw_file_with_cdmi_version_header_should_succeed_test(Config) ->
     % when
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _ResponseHeaders, _Response},
         cdmi_internal:do_request(
-            Workers,
+            ?WORKERS,
             ?build_test_root_path(Config),
             put,
             [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()], <<"data">>
@@ -172,8 +144,8 @@ create_raw_file_with_cdmi_version_header_should_succeed(Config) ->
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _ResponseHeaders2, _Response2},
         cdmi_internal:do_request(
-            Workers,
-            cdmi_test_utils:build_test_root_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
+            ?WORKERS,
+            ?build_test_root_specified_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
             put,
             [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header(), {?HDR_CONTENT_TYPE, <<"text/plain">>}],
             <<"data2">>
@@ -181,27 +153,17 @@ create_raw_file_with_cdmi_version_header_should_succeed(Config) ->
     ).
 
 
-create_cdmi_file_without_cdmi_version_header_should_fail(Config) ->
-    % given
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-
+create_cdmi_file_without_cdmi_version_header_should_fail_test(Config) ->
     % when
     {ok, Code, _ResponseHeaders, Response} = cdmi_internal:do_request(
-        Workers, ?build_test_root_path(Config), put,
+        ?WORKERS, ?build_test_root_path(Config), put,
         [cdmi_test_utils:user_2_token_header(), ?CDMI_OBJECT_CONTENT_TYPE_HEADER], <<"{}">>
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
-basic_create_dir(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+basic_create_dir_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     DirName2 = ?build_test_root_path(Config) ++ "/",
     RootDirPath = list_to_binary("/" ++ RootPath),
@@ -212,14 +174,14 @@ basic_create_dir(Config) ->
         cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code2, _Headers2, Response2} = cdmi_internal:do_request(
-        Workers, DirName2, put, RequestHeaders2, []
+        ?WORKERS, DirName2, put, RequestHeaders2, []
     ),
 
     ?assertEqual(?HTTP_201_CREATED, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
 
     ?assertMatch(#{<<"objectType">> := <<"application/cdmi-container">>}, CdmiResponse2),
-    ?assertMatch(#{<<"objectName">> := <<"basic_create_dir/">>}, CdmiResponse2),
+    ?assertMatch(#{<<"objectName">> := <<"basic_create_dir_test/">>}, CdmiResponse2),
     ?assertMatch(#{<<"parentURI">> := RootDirPath}, CdmiResponse2),
     ?assertMatch(#{<<"completionStatus">> := <<"Complete">>}, CdmiResponse2),
     ?assertMatch(#{<<"children">> := []}, CdmiResponse2),
@@ -228,17 +190,13 @@ basic_create_dir(Config) ->
     ?assert(cdmi_internal:object_exists(DirName2, Config), ?ATTEMPTS).
 
 
-create_noncdmi_dir_and_update(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+create_noncdmi_dir_and_update_test(Config) ->
     DirName = ?build_test_root_path(Config) ++ "/",
     %%------ non-cdmi create -------
     ?assert(not cdmi_internal:object_exists(DirName, Config)),
 
     {ok, Code1, _Headers1, _Response1} =
-        cdmi_internal:do_request(Workers, DirName, put, [cdmi_test_utils:user_2_token_header()]),
+        cdmi_internal:do_request(?WORKERS, DirName, put, [cdmi_test_utils:user_2_token_header()]),
     ?assertEqual(?HTTP_201_CREATED, Code1),
 
     ?assert(cdmi_internal:object_exists(DirName, Config), ?ATTEMPTS),
@@ -251,7 +209,7 @@ create_noncdmi_dir_and_update(Config) ->
     {ok, ?HTTP_204_NO_CONTENT, _Headers3, _Response3} =  ?assertMatch(
         {ok, 204, _, _},
         cdmi_internal:do_request(
-            Workers, DirName, put, RequestHeaders3, []
+            ?WORKERS, DirName, put, RequestHeaders3, []
         ),
         ?ATTEMPTS
     ),
@@ -259,13 +217,10 @@ create_noncdmi_dir_and_update(Config) ->
     ?assert(cdmi_internal:object_exists(DirName, Config)).
 
 
-missing_parent_create_dir(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    MissingParentName = cdmi_test_utils:build_test_root_path(
-        Config, filename:join(?FUNCTION_NAME, "unknown")) ++ "/",
+missing_parent_create_dir_test(Config) ->
+    MissingParentName = ?build_test_root_specified_path(
+        Config, atom_to_list(?FUNCTION_NAME) ++"unknown"
+    ) ++ "/",
     DirWithoutParentName = filename:join(MissingParentName, "dir") ++ "/",
     %%----- missing parent ---------
     ?assert(not cdmi_internal:object_exists(MissingParentName, Config)),
@@ -276,24 +231,18 @@ missing_parent_create_dir(Config) ->
         ?CDMI_CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code4, _Headers4, Response4} = cdmi_internal:do_request(
-        Workers, DirWithoutParentName, put, RequestHeaders4, []
+        ?WORKERS, DirWithoutParentName, put, RequestHeaders4, []
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?ENOENT)),
     ?assertMatch(ExpRestError, {Code4, json_utils:decode(Response4)}).
 
 
-create_raw_dir_with_cdmi_version_header_should_succeed(Config) ->
-    % given
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-
+create_raw_dir_with_cdmi_version_header_should_succeed_test(Config) ->
     % when
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _ResponseHeaders, _Response},
         cdmi_internal:do_request(
-            Workers,
+            ?WORKERS,
             ?build_test_root_path(Config) ++ "/",
             put,
             [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()]
@@ -301,37 +250,25 @@ create_raw_dir_with_cdmi_version_header_should_succeed(Config) ->
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _ResponseHeaders2, _Response2},
         cdmi_internal:do_request(
-            Workers,
-            cdmi_test_utils:build_test_root_path(Config, filename:join(?FUNCTION_NAME, "1")),
+            ?WORKERS,
+            ?build_test_root_specified_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
             put,
             [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header(), {?HDR_CONTENT_TYPE, <<"application/json">>}],
             <<"{}">>
         )).
 
 
-create_cdmi_dir_without_cdmi_version_header_should_fail(Config) ->
-    % given
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
-
+create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
     % when
     {ok, Code, _ResponseHeaders, Response} = cdmi_internal:do_request(
-        Workers, ?build_test_root_path(Config) ++ "/", put,
+        ?WORKERS, ?build_test_root_path(Config) ++ "/", put,
         [cdmi_test_utils:user_2_token_header(), ?CDMI_CONTAINER_CONTENT_TYPE_HEADER]
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
-create_file_with_metadata(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+create_file_with_metadata_test(Config) ->
     UserId2 = oct_background:get_user_id(user2),
     FileName = ?build_test_root_path(Config),
     %%-------- create file with user metadata --------
@@ -347,7 +284,7 @@ create_file_with_metadata(Config) ->
     RawRequestBody1 = json_utils:encode(RequestBody1),
     Before = time:seconds_to_datetime(global_clock:timestamp_seconds()),
     {ok, Code1, _Headers1, Response1} = cdmi_internal:do_request(
-        Workers, FileName, put, RequestHeaders1, RawRequestBody1
+        ?WORKERS, FileName, put, RequestHeaders1, RawRequestBody1
     ),
     After = time:seconds_to_datetime(global_clock:timestamp_seconds()),
 
@@ -372,10 +309,10 @@ create_file_with_metadata(Config) ->
     ?assertEqual(6, maps:size(Metadata1)).
 
 
-create_and_update_dir_with_user_metadata(Config) ->
+create_and_update_dir_with_user_metadata_test(Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
-    RequestHeaders1 = [?CDMI_OBJECT_CONTENT_TYPE_HEADER, ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
+    RequestHeaders1 = [?CDMI_OBJECT_CONTENT_TYPE_HEADER,
+        ?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     DirName = ?build_test_root_path(Config) ++ "/",
 
     %%------ create directory with user metadata  ----------
@@ -410,11 +347,8 @@ create_and_update_dir_with_user_metadata(Config) ->
     ?assertEqual(1, maps:size(Metadata13)).
 
 
-mimetype_and_encoding_create_file(Config) ->
-    [WorkerP1, WorkerP2] = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+mimetype_and_encoding_create_file_test(Config) ->
+    [WorkerP1, WorkerP2] = ?WORKERS,
     FileName4 = ?build_test_root_path(Config),
     RequestHeaders4 = [?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER, cdmi_test_utils:user_2_token_header()],
     RawBody4 = json_utils:encode(#{
@@ -445,18 +379,14 @@ mimetype_and_encoding_create_file(Config) ->
     ?assertMatch(#{<<"value">> := ?FILE_CONTENT}, CdmiResponse5).
 
 
-mimetype_and_encoding_create_file_non_cdmi_request(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+mimetype_and_encoding_create_file_non_cdmi_request_test(Config) ->
     %% create file with given mime and encoding using non-cdmi request
     FileName6 = ?build_test_root_path(Config),
     RequestHeaders6 = [{?HDR_CONTENT_TYPE, <<"text/plain; charset=utf-8">>}, cdmi_test_utils:user_2_token_header()],
     {ok, ?HTTP_201_CREATED, _Headers6, _Response6} = ?assertMatch(
         {ok, 201, _, _},
         cdmi_internal:do_request(
-            Workers, FileName6, put, RequestHeaders6, ?FILE_CONTENT
+            ?WORKERS, FileName6, put, RequestHeaders6, ?FILE_CONTENT
         ),
         ?ATTEMPTS
     ),
@@ -465,7 +395,7 @@ mimetype_and_encoding_create_file_non_cdmi_request(Config) ->
     {ok, ?HTTP_200_OK, _Headers7, Response7} = ?assertMatch(
         {ok, 200, _, _},
         cdmi_internal:do_request(
-            Workers, FileName6 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders7, []
+            ?WORKERS, FileName6 ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders7, []
         ),
         ?ATTEMPTS
     ),
@@ -475,8 +405,7 @@ mimetype_and_encoding_create_file_non_cdmi_request(Config) ->
     ?assertMatch(#{<<"value">> := ?FILE_CONTENT}, CdmiResponse7).
 
 
-wrong_create_path_error(Config) ->
-    {Workers, RootPath, _} = cdmi_test_base:errors_base(Config),
+wrong_create_path_error_test(Config) ->
     %%----- wrong create path ------
     RequestHeaders2 = [
         cdmi_test_utils:user_2_token_header(),
@@ -484,7 +413,7 @@ wrong_create_path_error(Config) ->
         ?CDMI_CONTAINER_CONTENT_TYPE_HEADER
     ],
     {ok, Code2, _Headers2, Response2} =
-        cdmi_internal:do_request(Workers, ?build_test_root_path(Config), put, RequestHeaders2, []),
+        cdmi_internal:do_request(?WORKERS, ?build_test_root_path(Config), put, RequestHeaders2, []),
     ExpRestError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)),
     ?assertMatch(ExpRestError2, {Code2, json_utils:decode(Response2)}),
     %%------------------------------
@@ -496,6 +425,6 @@ wrong_create_path_error(Config) ->
         ?CDMI_OBJECT_CONTENT_TYPE_HEADER
     ],
     {ok, Code3, _Headers3, Response3} =
-        cdmi_internal:do_request(Workers, ?build_test_root_path(Config) ++ "/", put, RequestHeaders3, []),
+        cdmi_internal:do_request(?WORKERS, ?build_test_root_path(Config) ++ "/", put, RequestHeaders3, []),
     ExpRestError3 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)),
     ?assertMatch(ExpRestError3, {Code3, json_utils:decode(Response3)}).

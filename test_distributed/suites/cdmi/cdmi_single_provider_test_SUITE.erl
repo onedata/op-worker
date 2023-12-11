@@ -27,154 +27,154 @@
 ]).
 
 -export([
-    list_basic_dir/1,
-    list_root_space_dir/1,
-    list_nonexisting_dir/1,
-    selective_params_list/1,
-    childrenrange_list/1,
-    get_root_with_objectid_endpoint/1,
-    get_dir_with_objectid_endpoint/1,
-    get_file_with_objectid_endpoint/1,
-    unauthorized_access_by_object_id/1,
-    unauthorized_access_error/1,
-    wrong_create_path_error/1,
-    wrong_base_error/1,
-    non_existing_file_error/1,
-    open_binary_file_without_permission/1,
-    open_cdmi_file_without_permission/1,
-    download_file_in_blocks/1,
+    list_basic_dir_test/1,
+    list_root_space_dir_test/1,
+    list_nonexisting_dir_test/1,
+    selective_params_list_test/1,
+    childrenrange_list_test/1,
+    get_root_with_objectid_endpoint_test/1,
+    get_dir_with_objectid_endpoint_test/1,
+    get_file_with_objectid_endpoint_test/1,
+    unauthorized_access_by_object_id_test/1,
+    unauthorized_access_error_test/1,
+    wrong_create_path_error_test/1,
+    wrong_base_error_test/1,
+    non_existing_file_error_test/1,
+    open_binary_file_without_permission_test/1,
+    open_cdmi_file_without_permission_test/1,
+    download_file_in_blocks_test/1,
 
-    basic_read/1,
-    get_file_cdmi/1,
-    get_file_non_cdmi/1,
-    create_file_with_metadata/1,
-    selective_metadata_read/1,
-    update_user_metadata_file/1,
-    create_and_update_dir_with_user_metadata/1,
-    write_acl_metadata/1,
-    delete_file/1,
-    delete_dir/1,
-    basic_create_file/1,
-    base64_create_file/1,
-    create_empty_file/1,
-    create_noncdmi_file/1,
-    create_raw_file_with_cdmi_version_header_should_succeed/1,
-    create_cdmi_file_without_cdmi_version_header_should_fail/1,
-    basic_create_dir/1,
-    create_noncdmi_dir_and_update/1,
-    missing_parent_create_dir/1,
-    create_raw_dir_with_cdmi_version_header_should_succeed/1,
-    create_cdmi_dir_without_cdmi_version_header_should_fail/1,
+    basic_read_test/1,
+    get_file_cdmi_test/1,
+    get_file_non_cdmi_test/1,
+    create_file_with_metadata_test/1,
+    selective_metadata_read_test/1,
+    update_user_metadata_file_test/1,
+    create_and_update_dir_with_user_metadata_test/1,
+    write_acl_metadata_test/1,
+    delete_file_test/1,
+    delete_dir_test/1,
+    basic_create_file_test/1,
+    base64_create_file_test/1,
+    create_empty_file_test/1,
+    create_noncdmi_file_test/1,
+    create_raw_file_with_cdmi_version_header_should_succeed_test/1,
+    create_cdmi_file_without_cdmi_version_header_should_fail_test/1,
+    basic_create_dir_test/1,
+    create_noncdmi_dir_and_update_test/1,
+    missing_parent_create_dir_test/1,
+    create_raw_dir_with_cdmi_version_header_should_succeed_test/1,
+    create_cdmi_dir_without_cdmi_version_header_should_fail_test/1,
 
-    update_file_cdmi/1,
-    update_file_http/1,
-    get_system_capabilities/1,
-    get_container_capabilities/1,
-    get_dataobject_capabilities/1,
-    use_supported_cdmi_version/1,
-    use_unsupported_cdmi_version/1,
-    copy_file/1,
-    copy_dir/1,
-    move_file/1,
-    move_dir/1,
-    moved_file_permanently/1,
-    moved_dir_permanently/1,
-    moved_dir_with_QS_permanently/1,
-    move_copy_conflict/1,
-    request_format_check/1,
-    mimetype_and_encoding_non_cdmi_file/1,
-    update_mimetype_and_encoding/1,
-    mimetype_and_encoding_create_file/1,
-    mimetype_and_encoding_create_file_non_cdmi_request/1,
-    out_of_range/1,
-    partial_upload_cdmi/1,
-    partial_upload_non_cdmi/1,
-    acl_read_file/1,
-    acl_write_file/1,
-    acl_delete_file/1,
-    acl_read_write_dir/1,
-    accept_header/1,
-    download_empty_file/1
+    update_file_cdmi_test/1,
+    update_file_http_test/1,
+    get_system_capabilities_test/1,
+    get_container_capabilities_test/1,
+    get_dataobject_capabilities_test/1,
+    use_supported_cdmi_version_test/1,
+    use_unsupported_cdmi_version_test/1,
+    copy_file_test/1,
+    copy_dir_test/1,
+    move_file_test/1,
+    move_dir_test/1,
+    moved_file_permanently_test/1,
+    moved_dir_permanently_test/1,
+    moved_dir_with_QS_permanently_test/1,
+    move_copy_conflict_test/1,
+    request_format_check_test/1,
+    mimetype_and_encoding_non_cdmi_file_test/1,
+    update_mimetype_and_encoding_test/1,
+    mimetype_and_encoding_create_file_test/1,
+    mimetype_and_encoding_create_file_non_cdmi_request_test/1,
+    out_of_range_test/1,
+    partial_upload_cdmi_test/1,
+    partial_upload_non_cdmi_test/1,
+    acl_read_file_test/1,
+    acl_write_file_test/1,
+    acl_delete_file_test/1,
+    acl_read_write_dir_test/1,
+    accept_header_test/1,
+    download_empty_file_test/1
 ]).
 
 
 groups() -> [
     {sequential_tests, [sequential], [
-        %% list_root_space_dir needs to start first as it lists the main directory
-%%        list_root_space_dir,
-%%        list_basic_dir,
-%%        list_nonexisting_dir,
-%%        selective_params_list,
-%%        childrenrange_list,
-%%        get_root_with_objectid_endpoint,
-%%        get_dir_with_objectid_endpoint,
-%%        get_file_with_objectid_endpoint,
-%%        unauthorized_access_by_object_id,
-%%        unauthorized_access_error,
-        wrong_create_path_error
-%%        wrong_base_error,
-%%        non_existing_file_error,
-%%        open_binary_file_without_permission,
-%%        open_cdmi_file_without_permission,
-%%        download_file_in_blocks
+        %% list_root_space_dir_test needs to start first as it lists the main directory
+        list_root_space_dir_test,
+        list_basic_dir_test,
+        list_nonexisting_dir_test,
+        selective_params_list_test,
+        childrenrange_list_test,
+        get_root_with_objectid_endpoint_test,
+        get_dir_with_objectid_endpoint_test,
+        get_file_with_objectid_endpoint_test,
+        unauthorized_access_by_object_id_test,
+        unauthorized_access_error_test,
+        wrong_create_path_error_test,
+        wrong_base_error_test,
+        non_existing_file_error_test,
+        mimetype_and_encoding_create_file_test,
+        open_binary_file_without_permission_test,
+        open_cdmi_file_without_permission_test
+%%        download_file_in_blocks_test
     ]},
     {parallel_tests, [parallel], [
-%%        basic_read,
-%%        get_file_cdmi,
-%%        get_file_non_cdmi,
-%%        create_file_with_metadata,
-%%        selective_metadata_read,
-%%        update_user_metadata_file,
-%%        create_and_update_dir_with_user_metadata,
-%%        write_acl_metadata,
-%%        delete_file,
-%%        delete_dir,
-%%        basic_create_file,
-%%        base64_create_file,
-%%        create_empty_file,
-%%        create_noncdmi_file,
-%%        create_raw_file_with_cdmi_version_header_should_succeed,
-%%        create_cdmi_file_without_cdmi_version_header_should_fail,
-%%        basic_create_dir,
-%%        create_noncdmi_dir_and_update,
-%%        missing_parent_create_dir,
-%%        create_raw_dir_with_cdmi_version_header_should_succeed,
-%%        create_cdmi_dir_without_cdmi_version_header_should_fail,
-%%        update_file_cdmi,
-%%        update_file_http,
-%%        get_system_capabilities,
-%%        get_container_capabilities,
-%%        get_dataobject_capabilities,
-%%        use_supported_cdmi_version,
-%%        use_unsupported_cdmi_version,
-        copy_file
-%%        copy_dir,
-%%        move_file,
-%%        move_dir,
-%%        moved_file_permanently,
-%%        moved_dir_permanently,
-%%        moved_dir_with_QS_permanently,
-%%        move_copy_conflict,
-%%        request_format_check,
-%%        mimetype_and_encoding_non_cdmi_file,
-%%        update_mimetype_and_encoding,
-%%        mimetype_and_encoding_create_file,
-%%        mimetype_and_encoding_create_file_non_cdmi_request,
-%%        out_of_range,
-%%        partial_upload_cdmi,
-%%        partial_upload_non_cdmi,
-%%        acl_read_file,
-%%        acl_write_file,
-%%        acl_delete_file,
-%%        acl_read_write_dir,
-%%        accept_header,
-%%        download_empty_file
+        basic_read_test,
+        get_file_cdmi_test,
+        get_file_non_cdmi_test,
+        create_file_with_metadata_test,
+        selective_metadata_read_test,
+        update_user_metadata_file_test,
+        create_and_update_dir_with_user_metadata_test,
+        write_acl_metadata_test,
+        delete_file_test,
+        delete_dir_test,
+        basic_create_file_test,
+        base64_create_file_test,
+        create_empty_file_test,
+        create_noncdmi_file_test,
+        create_raw_file_with_cdmi_version_header_should_succeed_test,
+        create_cdmi_file_without_cdmi_version_header_should_fail_test,
+        basic_create_dir_test,
+        create_noncdmi_dir_and_update_test,
+        missing_parent_create_dir_test,
+        create_raw_dir_with_cdmi_version_header_should_succeed_test,
+        create_cdmi_dir_without_cdmi_version_header_should_fail_test,
+        update_file_cdmi_test,
+        update_file_http_test,
+        get_system_capabilities_test,
+        get_container_capabilities_test,
+        get_dataobject_capabilities_test,
+        use_supported_cdmi_version_test,
+        use_unsupported_cdmi_version_test,
+        copy_file_test,
+        copy_dir_test,
+        move_file_test,
+        move_dir_test,
+        moved_file_permanently_test,
+        moved_dir_permanently_test,
+        moved_dir_with_QS_permanently_test,
+        move_copy_conflict_test,
+        request_format_check_test,
+        mimetype_and_encoding_non_cdmi_file_test,
+        update_mimetype_and_encoding_test,
+        mimetype_and_encoding_create_file_non_cdmi_request_test,
+        out_of_range_test,
+        partial_upload_cdmi_test,
+        partial_upload_non_cdmi_test,
+        acl_read_file_test,
+        acl_write_file_test,
+        acl_delete_file_test,
+        acl_read_write_dir_test,
+        accept_header_test,
+        download_empty_file_test
     ]}
 
 ].
 
 all() -> [
-%%    {group, sequential_tests},
+    {group, sequential_tests},
     {group, parallel_tests}
 ].
 
@@ -205,53 +205,53 @@ all() -> [
 %%% Sequential tests
 %%%===================================================================
 
-list_basic_dir(_Config) ->
+list_basic_dir_test(_Config) ->
     ?RUN_GET_TEST().
 
-list_root_space_dir(_Config) ->
+list_root_space_dir_test(_Config) ->
     ?RUN_GET_TEST().
 
-list_nonexisting_dir(_Config) ->
+list_nonexisting_dir_test(_Config) ->
     ?RUN_GET_TEST().
 
-selective_params_list(_Config) ->
+selective_params_list_test(_Config) ->
     ?RUN_GET_TEST().
 
-childrenrange_list(_Config) ->
+childrenrange_list_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_root_with_objectid_endpoint(_Config) ->
+get_root_with_objectid_endpoint_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_dir_with_objectid_endpoint(_Config) ->
+get_dir_with_objectid_endpoint_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_file_with_objectid_endpoint(_Config) ->
+get_file_with_objectid_endpoint_test(_Config) ->
     ?RUN_GET_TEST().
 
-unauthorized_access_by_object_id(_Config) ->
+unauthorized_access_by_object_id_test(_Config) ->
     ?RUN_GET_TEST().
 
-unauthorized_access_error(_Config) ->
+unauthorized_access_error_test(_Config) ->
     ?RUN_BASE_TEST().
 
-wrong_create_path_error(_Config) ->
+wrong_create_path_error_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-wrong_base_error(_Config) ->
+wrong_base_error_test(_Config) ->
     ?RUN_BASE_TEST().
 
-non_existing_file_error(_Config) ->
+non_existing_file_error_test(_Config) ->
     ?RUN_BASE_TEST().
 
-open_binary_file_without_permission(_Config) ->
+open_binary_file_without_permission_test(_Config) ->
     ?RUN_BASE_TEST().
 
-open_cdmi_file_without_permission(_Config) ->
+open_cdmi_file_without_permission_test(_Config) ->
     ?RUN_BASE_TEST().
 
-%% TODO VFS-11357 add download_file_in_blocks test to cdmi_multi_provider
-download_file_in_blocks(_Config) ->
+%% TODO VFS-11357 add download_file_in_blocks_test test to cdmi_multi_provider
+download_file_in_blocks_test(_Config) ->
     [_WorkerP1, WorkerP2] = Workers = oct_background:get_provider_nodes(krakow),
     SpaceName = binary_to_list(oct_background:get_space_name(space_krk)),
     RootName = node_cache:get(root_dir_name) ++ "/",
@@ -314,154 +314,154 @@ download_file_in_blocks(_Config) ->
 %%% Parallel tests
 %%%===================================================================
 
-basic_read(_Config) ->
+basic_read_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_file_cdmi(_Config) ->
+get_file_cdmi_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_file_non_cdmi(_Config) ->
+get_file_non_cdmi_test(_Config) ->
     ?RUN_GET_TEST().
 
-create_file_with_metadata(_Config) ->
+create_file_with_metadata_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-selective_metadata_read(_Config) ->
+selective_metadata_read_test(_Config) ->
     ?RUN_BASE_TEST().
 
-update_user_metadata_file(_Config) ->
+update_user_metadata_file_test(_Config) ->
     ?RUN_BASE_TEST().
 
-create_and_update_dir_with_user_metadata(_Config) ->
+create_and_update_dir_with_user_metadata_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-write_acl_metadata(_Config) ->
+write_acl_metadata_test(_Config) ->
     ?RUN_ACL_TEST().
 
-delete_file(_Config) ->
+delete_file_test(_Config) ->
     ?RUN_BASE_TEST().
 
-delete_dir(_Config) ->
+delete_dir_test(_Config) ->
     ?RUN_BASE_TEST().
 
-basic_create_file(_Config) ->
+basic_create_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-base64_create_file(_Config) ->
+base64_create_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_empty_file(_Config) ->
+create_empty_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_noncdmi_file(_Config) ->
+create_noncdmi_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_raw_file_with_cdmi_version_header_should_succeed(_Config) ->
+create_raw_file_with_cdmi_version_header_should_succeed_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_file_without_cdmi_version_header_should_fail(_Config) ->
+create_cdmi_file_without_cdmi_version_header_should_fail_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-basic_create_dir(_Config) ->
+basic_create_dir_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_noncdmi_dir_and_update(_Config) ->
+create_noncdmi_dir_and_update_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-missing_parent_create_dir(_Config) ->
+missing_parent_create_dir_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_raw_dir_with_cdmi_version_header_should_succeed(_Config) ->
+create_raw_dir_with_cdmi_version_header_should_succeed_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_dir_without_cdmi_version_header_should_fail(_Config) ->
+create_cdmi_dir_without_cdmi_version_header_should_fail_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-update_file_cdmi(_Config) ->
+update_file_cdmi_test(_Config) ->
     ?RUN_BASE_TEST().
 
-update_file_http(_Config) ->
+update_file_http_test(_Config) ->
     ?RUN_BASE_TEST().
 
-get_system_capabilities(_Config) ->
+get_system_capabilities_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_container_capabilities(_Config) ->
+get_container_capabilities_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_dataobject_capabilities(_Config) ->
+get_dataobject_capabilities_test(_Config) ->
     ?RUN_GET_TEST().
 
-use_supported_cdmi_version(_Config) ->
+use_supported_cdmi_version_test(_Config) ->
     ?RUN_BASE_TEST().
 
-use_unsupported_cdmi_version(_Config) ->
+use_unsupported_cdmi_version_test(_Config) ->
     ?RUN_BASE_TEST().
 
-copy_file(_Config) ->
+copy_file_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-copy_dir(_Config) ->
+copy_dir_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-move_file(_Config) ->
+move_file_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-move_dir(_Config) ->
+move_dir_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-moved_file_permanently(_Config) ->
+moved_file_permanently_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-moved_dir_permanently(_Config) ->
+moved_dir_permanently_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-moved_dir_with_QS_permanently(_Config) ->
+moved_dir_with_QS_permanently_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-move_copy_conflict(_Config) ->
+move_copy_conflict_test(_Config) ->
     ?RUN_MOVE_COPY_TEST().
 
-request_format_check(_Config) ->
+request_format_check_test(_Config) ->
     ?RUN_BASE_TEST().
 
-mimetype_and_encoding_non_cdmi_file(_Config) ->
+mimetype_and_encoding_non_cdmi_file_test(_Config) ->
     ?RUN_BASE_TEST().
 
-update_mimetype_and_encoding(_Config) ->
+update_mimetype_and_encoding_test(_Config) ->
     ?RUN_BASE_TEST().
 
-mimetype_and_encoding_create_file(_Config) ->
+mimetype_and_encoding_create_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-mimetype_and_encoding_create_file_non_cdmi_request(_Config) ->
+mimetype_and_encoding_create_file_non_cdmi_request_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-out_of_range(_Config) ->
+out_of_range_test(_Config) ->
     ?RUN_BASE_TEST().
 
-partial_upload_cdmi(_Config) ->
+partial_upload_cdmi_test(_Config) ->
     ?RUN_BASE_TEST().
 
-partial_upload_non_cdmi(_Config) ->
+partial_upload_non_cdmi_test(_Config) ->
     ?RUN_BASE_TEST().
 
-acl_read_file(_Config) ->
+acl_read_file_test(_Config) ->
     ?RUN_ACL_TEST().
 
-acl_write_file(_Config) ->
+acl_write_file_test(_Config) ->
     ?RUN_ACL_TEST().
 
-acl_delete_file(_Config) ->
+acl_delete_file_test(_Config) ->
     ?RUN_ACL_TEST().
 
-acl_read_write_dir(_Config) ->
+acl_read_write_dir_test(_Config) ->
     ?RUN_ACL_TEST().
 
-accept_header(_Config) ->
+accept_header_test(_Config) ->
     ?RUN_BASE_TEST().
 
-download_empty_file(_Config) ->
+download_empty_file_test(_Config) ->
     ?RUN_BASE_TEST().
 
 
@@ -504,7 +504,7 @@ end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
 
 
-init_per_testcase(download_file_in_blocks = Case, Config) ->
+init_per_testcase(download_file_in_blocks_test = Case, Config) ->
     Self = self(),
     Workers = oct_background:get_provider_nodes(krakow),
 
@@ -521,7 +521,7 @@ init_per_testcase(_Case, Config) ->
     Config.
 
 
-end_per_testcase(download_file_in_blocks = Case) ->
+end_per_testcase(download_file_in_blocks_test = Case) ->
     Workers = oct_background:get_provider_nodes(krakow),
     unmock_storage_get_block_size(Workers),
     ok = test_utils:mock_unload(Workers, [lfm]),
@@ -564,4 +564,3 @@ mock_storage_get_block_size(Workers) ->
 
 unmock_storage_get_block_size(Workers) ->
     ok = test_utils:mock_unload(Workers, [storage]).
-

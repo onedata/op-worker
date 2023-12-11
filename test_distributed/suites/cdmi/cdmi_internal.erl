@@ -24,7 +24,6 @@
     create_new_file/2, write_to_file/4, open_file/3,
     mock_opening_file_without_perms/1, unmock_opening_file_without_perms/1,
     get_json_metadata/2, get_xattrs/2, get_acl/2, set_acl/3, get_random_string/0
-%%    create_test_dir_and_file/1,
 ]).
 
 
@@ -132,27 +131,6 @@ remove_times_metadata(ResponseJSON) ->
     end.
 
 
-%%create_test_dir_and_file(Config) ->
-%%    SpaceName = oct_background:get_space_name(Config#cdmi_test_config.space_selector),
-%%    TestFileName = get_random_string(),
-%%    FullTestDirName = ?build_test_root_path(Config),
-%%    FullTestFileName = cdmi_test_utils:build_test_root_path(Config, filename:join(?FUNCTION_NAME, "1")),
-%%
-%%    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
-%%        #dir_spec{
-%%            name = atom_to_binary(?FUNCTION_NAME),
-%%            children = [
-%%                #file_spec{
-%%                    name = list_to_binary(TestFileName),
-%%                    content = ?FILE_CONTENT
-%%                }
-%%            ]
-%%        }, Config#cdmi_test_config.p1_selector
-%%    ),
-%%
-%%    {binary_to_list(SpaceName), TestDirName, FullTestDirName, TestFileName, FullTestFileName}.
-
-
 object_exists(Path, Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
     SessionId = oct_background:get_user_session_id(user2, Config#cdmi_test_config.p1_selector),
@@ -212,10 +190,10 @@ ensure_begins_with_slash(Path) ->
 
 
 mock_opening_file_without_perms(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+    Workers = lists:usort(
+        oct_background:get_provider_nodes(Config#cdmi_test_config.p1_selector) ++
+        oct_background:get_provider_nodes(Config#cdmi_test_config.p2_selector)
+    ),
     test_node_starter:load_modules(Workers, [?MODULE]),
     test_utils:mock_new(Workers, lfm),
     test_utils:mock_expect(

@@ -18,21 +18,16 @@
 -include("onenv_test_utils.hrl").
 -include("cdmi_test.hrl").
 
--define(
-build_test_root_path(__CONFIG),
-    cdmi_test_utils:build_test_root_path(Config, ?FUNCTION_NAME)
-).
-
 %% API
 -export([
-    copy_file/1,
-    copy_dir/1,
-    move_file/1,
-    move_dir/1,
-    moved_file_permanently/1,
-    moved_dir_permanently/1,
-    moved_dir_with_QS_permanently/1,
-    move_copy_conflict/1
+    copy_file_test/1,
+    copy_dir_test/1,
+    move_file_test/1,
+    move_dir_test/1,
+    moved_file_permanently_test/1,
+    moved_dir_permanently_test/1,
+    moved_dir_with_QS_permanently_test/1,
+    move_copy_conflict_test/1
 ]).
 
 
@@ -40,24 +35,11 @@ build_test_root_path(__CONFIG),
 %%% Test functions
 %%%===================================================================
 
-%% @private
-copy_base(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = filename:join(SpaceName, RootName) ++ "/",
+
+copy_file_test(Config) ->
     Xattrs = #{<<"key1">> => <<"value1">>, <<"key2">> => <<"value2">>},
     UserId2 = oct_background:get_user_id(user2),
     UserName2 = <<"Unnamed User">>,
-
-    {Workers, RootPath, UserId2, UserName2, Xattrs}.
-
-
-copy_file(Config) ->
-    {Workers, RootPath, UserId2, UserName2, Xattrs} = copy_base(Config),
     FileData2 = <<"data">>,
     JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
 
@@ -67,7 +49,7 @@ copy_file(Config) ->
         user2,
         node_cache:get(root_dir_guid),
         #file_spec{
-            name = <<"copy_test_file.txt">>,
+            name = atom_to_binary(?FUNCTION_NAME),
             content = FileData2,
             metadata = #metadata_spec{
                 json = JsonMetadata,
@@ -76,10 +58,6 @@ copy_file(Config) ->
         }, Config#cdmi_test_config.p1_selector
     ),
     FileName2 = ?build_test_root_path(Config),
-    FileName22 = filename:join([RootPath, "copy_test_file.txt"]),
-    ct:pal("AAAAAAAAAAAA ~p~n AAAAAAA ~p ~n ", [FileName2, FileName22]),
-    FileData2 = <<"data">>,
-    JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
     FileAcl = [#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId2,
@@ -87,8 +65,7 @@ copy_file(Config) ->
         aceflags = ?no_flags_mask,
         acemask = ?all_object_perms_mask
     }],
-    NewFileName2 = cdmi_test_utils:build_test_root_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
-    ct:pal("~p~n", []),
+    NewFileName2 = ?build_test_root_specified_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
     ok = cdmi_internal:set_acl(FileName2, FileAcl, Config),
 
     % assert source file is created and destination does not exist
@@ -101,7 +78,7 @@ copy_file(Config) ->
     RequestHeaders4 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody4 = json_utils:encode(#{<<"copy">> => build_random_src_uri(FileName2, FileGuid)}),
     {ok, Code4, _Headers4, _Response4} = cdmi_internal:do_request(
-        Workers, NewFileName2, put, RequestHeaders4, RequestBody4
+        ?WORKERS, NewFileName2, put, RequestHeaders4, RequestBody4
     ),
     ?assertEqual(?HTTP_201_CREATED, Code4),
 
@@ -119,14 +96,16 @@ copy_file(Config) ->
     ?assertEqual({ok, FileAcl}, cdmi_internal:get_acl(NewFileName2, Config), ?ATTEMPTS).
 
 
-copy_dir(Config) ->
-    {Workers, RootPath, UserId2, UserName2, Xattrs} = copy_base(Config),
-    [WorkerP1, _WorkerP2] = Workers,
+copy_dir_test(Config) ->
+    Xattrs = #{<<"key1">> => <<"value1">>, <<"key2">> => <<"value2">>},
+    UserId2 = oct_background:get_user_id(user2),
+    UserName2 = <<"Unnamed User">>,
+    [WorkerP1, _WorkerP2] = ?WORKERS,
     #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
         #dir_spec{
-            name = <<"copy_dir">>,
+            name = atom_to_binary(?FUNCTION_NAME),
             metadata = #metadata_spec{
                 xattrs = Xattrs
             },
@@ -151,8 +130,10 @@ copy_dir(Config) ->
             ]
         }, Config#cdmi_test_config.p1_selector
     ),
-    DirName2 = filename:join([RootPath, "copy_dir"]) ++ "/",
-    NewDirName2 = filename:join([RootPath, "new_copy_dir"]) ++ "/",
+    DirName2 = ?build_test_root_path(Config) ++ "/",
+    NewDirName2 = ?build_test_root_specified_path(
+        Config, "new" ++ atom_to_list(?FUNCTION_NAME)
+    ) ++ "/",
     DirAcl = [#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId2,
@@ -212,85 +193,73 @@ copy_dir(Config) ->
 
 
 % tests copy and move operations on dataobjects and containers
-move_file(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+move_file_test(Config) ->
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user2, node_cache:get(root_dir_guid),
         #file_spec{
-            name = <<"move_test_file.txt">>,
+            name = atom_to_binary(?FUNCTION_NAME),
             content = <<"data">>
         }, Config#cdmi_test_config.p1_selector
     ),
-    FileName = filename:join([RootPath, "move_test_file.txt"]),
+    FileName = ?build_test_root_path(Config),
     FileData = <<"data">>,
-    NewMoveFileName = filename:join([RootPath, "new_move_test_file"]),
+    NewMoveFileName = ?build_test_root_specified_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
     %%---------- file mv -----------
     ?assert(cdmi_internal:object_exists(FileName, Config)),
     ?assert(not cdmi_internal:object_exists(NewMoveFileName, Config)),
     ?assertEqual(FileData, cdmi_internal:get_file_content(FileName, Config), ?ATTEMPTS),
 
-    RequestHeaders3 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
+    RequestHeaders3 = [cdmi_test_utils:user_2_token_header(),
+        ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody3 = json_utils:encode(#{<<"move">> => build_random_src_uri(FileName, FileGuid)}),
     ?assertMatch(
         {ok, _Code3, _Headers3, _Response3},
-        cdmi_internal:do_request(Workers, NewMoveFileName, put, RequestHeaders3, RequestBody3)
+        cdmi_internal:do_request(?WORKERS, NewMoveFileName, put, RequestHeaders3, RequestBody3)
     ),
     ?assert(not cdmi_internal:object_exists(FileName, Config), ?ATTEMPTS),
-    ?assert(cdmi_internal:object_exists(NewMoveFileName, Config)),
+    ?assert(cdmi_internal:object_exists(NewMoveFileName, Config), ?ATTEMPTS),
     ?assertEqual(FileData, cdmi_internal:get_file_content(NewMoveFileName, Config), ?ATTEMPTS).
 
 
-move_dir(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+move_dir_test(Config) ->
     #object{guid = DirGuid}  = onenv_file_test_utils:create_and_sync_file_tree(
         user2, node_cache:get(root_dir_guid),
         #dir_spec{
-            name = <<"move_test_dir">>
+            name = atom_to_binary(?FUNCTION_NAME)
         }, Config#cdmi_test_config.p1_selector
     ),
-    DirName = filename:join([RootPath, "move_test_dir"]) ++ "/",
-    NewMoveDirName = filename:join([RootPath, "new_move_test_dir"]) ++ "/",
+    DirName = ?build_test_root_path(Config) ++ "/",
+    NewMoveDirName = ?build_test_root_specified_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)) ++ "/",
 
     %%----------- dir mv -----------
     ?assert(cdmi_internal:object_exists(DirName, Config)),
     ?assert(not cdmi_internal:object_exists(NewMoveDirName, Config)),
 
-    RequestHeaders2 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_CONTAINER_CONTENT_TYPE_HEADER],
+    RequestHeaders2 = [cdmi_test_utils:user_2_token_header(),
+        ?CDMI_VERSION_HEADER, ?CDMI_CONTAINER_CONTENT_TYPE_HEADER
+    ],
     RequestBody2 = json_utils:encode(#{<<"move">> => build_random_src_uri(DirName, DirGuid)}),
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _Headers2, _Response2},
-        cdmi_internal:do_request(Workers, NewMoveDirName, put, RequestHeaders2, RequestBody2)
+        cdmi_internal:do_request(?WORKERS, NewMoveDirName, put, RequestHeaders2, RequestBody2)
     ),
 
     ?assert(not cdmi_internal:object_exists(DirName, Config), ?ATTEMPTS),
-    ?assert(cdmi_internal:object_exists(NewMoveDirName, Config)).
+    ?assert(cdmi_internal:object_exists(NewMoveDirName, Config), ?ATTEMPTS).
 
 
 %% tests if cdmi returns 'moved permanently' code when we forget about '/' in path
-moved_file_permanently(Config) ->
+moved_file_permanently_test(Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
     CDMIEndpoint = cdmi_test_utils:get_cdmi_endpoint(Config),
-    FileName = filename:join([RootPath, "somedir1", "somefile.txt"]),
+    FileName = ?build_test_root_path(Config),
     FileNameWithSlash = FileName ++ "/",
+
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
-        #dir_spec{
-            name = <<"somedir1">>,
-            children = [
-                #file_spec{
-                    name = <<"somefile.txt">>
-                }
-            ]
-        }
-        , Config#cdmi_test_config.p1_selector
+        #file_spec{
+            name = atom_to_binary(?FUNCTION_NAME)
+        },
+        Config#cdmi_test_config.p1_selector
     ),
     %%--------- file test ----------
     RequestHeaders3 = [
@@ -302,19 +271,17 @@ moved_file_permanently(Config) ->
     {ok, Code3, Headers3, _Response3} =
         cdmi_internal:do_request(WorkerP1, FileNameWithSlash, get, RequestHeaders3, []),
     ?assertEqual(?HTTP_302_FOUND, Code3),
-
     ?assertMatch(#{?HDR_LOCATION := Location3}, Headers3).
 
 
-moved_dir_permanently(Config) ->
+moved_dir_permanently_test(Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
     CDMIEndpoint = cdmi_test_utils:get_cdmi_endpoint(Config),
-    DirNameWithoutSlash = filename:join([RootPath, "somedir2"]),
+    DirNameWithoutSlash = ?build_test_root_path(Config),
     DirName = DirNameWithoutSlash ++ "/",
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
-            name = <<"somedir2">>,
+            name = atom_to_binary(?FUNCTION_NAME),
             children = [
                 #file_spec{
                     name = <<"somefile.txt">>
@@ -336,15 +303,14 @@ moved_dir_permanently(Config) ->
     ?assertMatch(#{?HDR_LOCATION := Location1}, Headers1).
 
 
-moved_dir_with_QS_permanently(Config) ->
+moved_dir_with_QS_permanently_test(Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    RootPath = cdmi_test_utils:get_tests_root_path(Config),
     CDMIEndpoint = cdmi_test_utils:get_cdmi_endpoint(Config),
-    DirNameWithoutSlash = filename:join([RootPath, "somedir3"]),
+    DirNameWithoutSlash = ?build_test_root_path(Config),
     DirName = DirNameWithoutSlash ++ "/",
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #dir_spec{
-            name = <<"somedir3">>,
+            name = atom_to_binary(?FUNCTION_NAME),
             children = [
                 #file_spec{
                     name = <<"somefile.txt">>
@@ -366,25 +332,16 @@ moved_dir_with_QS_permanently(Config) ->
         ),
     ?assertEqual(?HTTP_302_FOUND, Code2),
     ?assertMatch(#{?HDR_LOCATION := Location2}, Headers2).
-    %%------------------------------
 
 
-move_copy_conflict(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = filename:join([SpaceName, RootName]),
-
-    FileName = filename:join([RootPath, "move_copy_conflict.txt"]),
+move_copy_conflict_test(Config) ->
+    FileName = ?build_test_root_path(Config),
     FileUri = list_to_binary(filename:join("/", FileName)),
     FileData = <<"data">>,
-    NewMoveFileName = "new_move_copy_conflict",
+    NewMoveFileName = ?build_test_root_specified_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
-            name = <<"move_copy_conflict.txt">>,
+            name = atom_to_binary(?FUNCTION_NAME),
             content = <<"data">>
         }, Config#cdmi_test_config.p1_selector
     ),
@@ -395,7 +352,7 @@ move_copy_conflict(Config) ->
     RequestHeaders1 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody1 = json_utils:encode(#{<<"move">> => FileUri, <<"copy">> => FileUri}),
     {ok, Code1, _Headers1, Response1} = cdmi_internal:do_request(
-        Workers, NewMoveFileName, put, RequestHeaders1, RequestBody1
+        ?WORKERS, NewMoveFileName, put, RequestHeaders1, RequestBody1
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_MALFORMED_DATA),
     ?assertMatch(ExpRestError, {Code1, json_utils:decode(Response1)}),

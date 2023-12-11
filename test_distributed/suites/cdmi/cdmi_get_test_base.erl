@@ -19,24 +19,24 @@
 
 %% API
 -export([
-    get_system_capabilities/1,
-    get_container_capabilities/1,
-    get_dataobject_capabilities/1,
+    get_system_capabilities_test/1,
+    get_container_capabilities_test/1,
+    get_dataobject_capabilities_test/1,
 
-    basic_read/1,
-    get_file_cdmi/1,
-    get_file_non_cdmi/1,
+    basic_read_test/1,
+    get_file_cdmi_test/1,
+    get_file_non_cdmi_test/1,
 
-    get_root_with_objectid_endpoint/1,
-    get_dir_with_objectid_endpoint/1,
-    get_file_with_objectid_endpoint/1,
-    unauthorized_access_by_object_id/1,
+    get_root_with_objectid_endpoint_test/1,
+    get_dir_with_objectid_endpoint_test/1,
+    get_file_with_objectid_endpoint_test/1,
+    unauthorized_access_by_object_id_test/1,
 
-    list_basic_dir/1,
-    list_root_space_dir/1,
-    list_nonexisting_dir/1,
-    selective_params_list/1,
-    childrenrange_list/1
+    list_basic_dir_test/1,
+    list_root_space_dir_test/1,
+    list_nonexisting_dir_test/1,
+    selective_params_list_test/1,
+    childrenrange_list_test/1
     ]).
 
 
@@ -45,16 +45,12 @@
 %%%===================================================================
 
 % tests if capabilities of objects, containers, and whole storage system are set properly
-get_system_capabilities(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+get_system_capabilities_test(Config) ->
 
     %%--- system capabilities ------
     RequestHeaders8 = [?CDMI_VERSION_HEADER],
     {ok, Code8, Headers8, Response8} =
-        cdmi_internal:do_request(Workers, "cdmi_capabilities/", get, RequestHeaders8, []),
+        cdmi_internal:do_request(?WORKERS, "cdmi_capabilities/", get, RequestHeaders8, []),
 
     ?assertEqual(?HTTP_200_OK, Code8),
     CdmiResponse8 = (json_utils:decode(Response8)),
@@ -67,20 +63,16 @@ get_system_capabilities(Config) ->
     ?assertEqual(?ROOT_CAPABILITY_MAP, Capabilities).
 
 
-get_container_capabilities(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
+get_container_capabilities_test(Config) ->
     %%-- container capabilities ----
     RequestHeaders9 = [?CDMI_VERSION_HEADER],
     {ok, Code9, _Headers9, Response9} =
-        cdmi_internal:do_request(Workers, "cdmi_capabilities/container/", get, RequestHeaders9, []),
+        cdmi_internal:do_request(?WORKERS, "cdmi_capabilities/container/", get, RequestHeaders9, []),
     ?assertEqual(?HTTP_200_OK, Code9),
     ?assertMatch(
         {ok, Code9, _, Response9},
         cdmi_internal:do_request(
-            Workers, filename:join("cdmi_objectid/", binary_to_list(?CONTAINER_CAPABILITY_ID)) ++ "/", get, RequestHeaders9, []
+            ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(?CONTAINER_CAPABILITY_ID)) ++ "/", get, RequestHeaders9, []
         )
     ),
 
@@ -94,21 +86,18 @@ get_container_capabilities(Config) ->
     ?assertEqual(?CONTAINER_CAPABILITY_MAP, Capabilities2).
 
 
-get_dataobject_capabilities(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-
+get_dataobject_capabilities_test(Config) ->
     %%-- dataobject capabilities ---
     RequestHeaders10 = [?CDMI_VERSION_HEADER],
     {ok, Code10, _Headers10, Response10} =
-        cdmi_internal:do_request(Workers, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
+        cdmi_internal:do_request(?WORKERS, "cdmi_capabilities/dataobject/", get, RequestHeaders10, []),
     ?assertEqual(?HTTP_200_OK, Code10),
     ?assertMatch(
         {ok, Code10, _, Response10},
         cdmi_internal:do_request(
-            Workers, filename:join("cdmi_objectid/", binary_to_list(?DATAOBJECT_CAPABILITY_ID)) ++ "/", get, RequestHeaders10, []
+            ?WORKERS, filename:join(
+                "cdmi_objectid/", binary_to_list(?DATAOBJECT_CAPABILITY_ID)) ++ "/",
+            get, RequestHeaders10, []
         )
     ),
 
@@ -126,14 +115,27 @@ get_dataobject_capabilities(Config) ->
 %%  file conent is returned as response body), or with cdmi header (the response
 %%  contains json string of type: application/cdmi-object, and we can specify what
 %%  parameters we need by listing then as ';' separated list after '?' in URL )
-basic_read(Config) ->
-    {Workers, RootPath, FilledFileName, FileContent, FileNameBin, _} = get_file_base(Config),
+basic_read_test(Config) ->
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    FilledFileName = ?build_test_root_path(Config),
+    FileNameBin = atom_to_binary(?FUNCTION_NAME),
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
+        #file_spec{
+            name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")
+        },
+        #file_spec{
+            name = FileNameBin,
+            content = ?FILE_CONTENT
+        }
+    ], Config#cdmi_test_config.p1_selector),
     %%-------- basic read ----------
     RequestHeaders1 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
-    {ok, Code1, _Headers1, Response1} = cdmi_internal:do_request(Workers, FilledFileName, get, RequestHeaders1, []),
+    {ok, Code1, _Headers1, Response1} = cdmi_internal:do_request(
+        ?WORKERS, FilledFileName, get, RequestHeaders1, []
+    ),
     ?assertEqual(?HTTP_200_OK, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
-    FileContent1 = base64:encode(FileContent),
+    FileContent1 = base64:encode(?FILE_CONTENT),
     RootDirPath = list_to_binary("/" ++ RootPath),
     ?assertMatch(#{<<"objectType">> := <<"application/cdmi-object">>}, CdmiResponse1),
     ?assertMatch(#{<<"objectName">> := FileNameBin}, CdmiResponse1),
@@ -147,13 +149,23 @@ basic_read(Config) ->
     ?assert(maps:get(<<"metadata">>, CdmiResponse1) =/= <<>>).
 
 
-get_file_cdmi(Config) ->
-    {Workers, RootPath, FilledFileName, FileContent,_, _} = get_file_base(Config),
+get_file_cdmi_test(Config) ->
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    FilledFileName = ?build_test_root_path(Config),
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
+        #file_spec{
+            name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")
+            },
+        #file_spec{
+            name = atom_to_binary(?FUNCTION_NAME),
+            content = ?FILE_CONTENT
+        }
+    ], Config#cdmi_test_config.p1_selector),
     RootDirPath = list_to_binary("/" ++ RootPath),
     %%-- selective params read -----
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code2, _Headers2, Response2} = cdmi_internal:do_request(
-        Workers, FilledFileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []
+        ?WORKERS, FilledFileName ++ "?parentURI;completionStatus", get, RequestHeaders2, []
     ),
     ?assertEqual(?HTTP_200_OK, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
@@ -166,7 +178,7 @@ get_file_cdmi(Config) ->
     %%--- selective value read -----
     RequestHeaders3 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code3, _Headers3, Response3} = cdmi_internal:do_request(
-        Workers, FilledFileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []
+        ?WORKERS, FilledFileName ++ "?value:1-3;valuerange", get, RequestHeaders3, []
     ),
     ?assertEqual(?HTTP_200_OK, Code3),
     CdmiResponse3 = json_utils:decode(Response3),
@@ -177,7 +189,7 @@ get_file_cdmi(Config) ->
     %%------- objectid read --------
     RequestHeaders5 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code5, _Headers5, Response5} = cdmi_internal:do_request(
-        Workers, FilledFileName ++ "?objectID", get, RequestHeaders5, []
+        ?WORKERS, FilledFileName ++ "?objectID", get, RequestHeaders5, []
     ),
     ?assertEqual(?HTTP_200_OK, Code5),
     CdmiResponse5 = (json_utils:decode(Response5)),
@@ -188,27 +200,37 @@ get_file_cdmi(Config) ->
     %%-------- read by id ----------
     RequestHeaders6 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code6, _Headers6, Response6} = cdmi_internal:do_request(
-        Workers, filename:join("cdmi_objectid/", binary_to_list(ObjectID)), get, RequestHeaders6, []
+        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(ObjectID)), get, RequestHeaders6, []
     ),
     ?assertEqual(?HTTP_200_OK, Code6),
     CdmiResponse6 = (json_utils:decode(Response6)),
 
-    ?assertEqual(FileContent, base64:decode(maps:get(<<"value">>, CdmiResponse6))).
+    ?assertEqual(?FILE_CONTENT, base64:decode(maps:get(<<"value">>, CdmiResponse6))).
 
 
-get_file_non_cdmi(Config) ->
-    {Workers, _, FilledFileName, FileContent, _, EmptyFileName} = get_file_base(Config),
+get_file_non_cdmi_test(Config) ->
+    FilledFileName = ?build_test_root_path(Config),
+    EmptyFileName = ?build_test_root_specified_path(Config, atom_to_list(?FUNCTION_NAME) ++ "empty"),
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
+        #file_spec{
+            name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")
+        },
+        #file_spec{
+            name = atom_to_binary(?FUNCTION_NAME),
+            content = ?FILE_CONTENT
+        }
+    ], Config#cdmi_test_config.p1_selector),
     %%------- noncdmi read --------
     {ok, Code4, Headers4, Response4} =
-        cdmi_internal:do_request(Workers, FilledFileName, get, [cdmi_test_utils:user_2_token_header()]),
+        cdmi_internal:do_request(?WORKERS, FilledFileName, get, [cdmi_test_utils:user_2_token_header()]),
     ?assertEqual(?HTTP_200_OK, Code4),
     ?assertMatch(#{?HDR_CONTENT_TYPE := <<"application/octet-stream">>}, Headers4),
-    ?assertEqual(FileContent, Response4),
+    ?assertEqual(?FILE_CONTENT, Response4),
 
     %% selective value single range read non-cdmi
     ?assertMatch(
         {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_RANGE := <<"bytes 5-8/13">>}, <<"cont">>},
-        cdmi_internal:do_request(Workers, FilledFileName, get, [
+        cdmi_internal:do_request(?WORKERS, FilledFileName, get, [
             {?HDR_RANGE, <<"bytes=5-8">>}, cdmi_test_utils:user_2_token_header()
         ])
     ),
@@ -218,7 +240,7 @@ get_file_non_cdmi(Config) ->
         ?HDR_CONTENT_TYPE := <<"multipart/byteranges; boundary=", Boundary/binary>>
     }, Response8} = ?assertMatch(
         {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges", _/binary>>}, _},
-        cdmi_internal:do_request(Workers, FilledFileName, get, [
+        cdmi_internal:do_request(?WORKERS, FilledFileName, get, [
             {?HDR_RANGE, <<"bytes=1-3,5-5,-3">>}, cdmi_test_utils:user_2_token_header()
         ])
     ),
@@ -240,7 +262,7 @@ get_file_non_cdmi(Config) ->
     lists:foreach(fun(InvalidRange) ->
         ?assertMatch(
             {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE := <<"bytes */13">>}, <<>>},
-            cdmi_internal:do_request(Workers, FilledFileName, get, [
+            cdmi_internal:do_request(?WORKERS, FilledFileName, get, [
                 {?HDR_RANGE, InvalidRange}, cdmi_test_utils:user_2_token_header()
             ])
         )
@@ -259,25 +281,25 @@ get_file_non_cdmi(Config) ->
     %% read empty file non-cdmi without Range
     ?assertMatch(
         {ok, ?HTTP_200_OK, _, <<>>},
-        cdmi_internal:do_request(Workers, EmptyFileName, get, [cdmi_test_utils:user_2_token_header()])
+        cdmi_internal:do_request(?WORKERS, EmptyFileName, get, [cdmi_test_utils:user_2_token_header()])
     ),
     %%------------------------------
 
     %% read empty file non-cdmi with Range should return 416
     ?assertMatch(
         {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE := <<"bytes */0">>}, <<>>},
-        cdmi_internal:do_request(Workers, EmptyFileName, get, [
+        cdmi_internal:do_request(?WORKERS, EmptyFileName, get, [
             {?HDR_RANGE, <<"bytes=10-15">>}, cdmi_test_utils:user_2_token_header()
         ])
     ).
 
 
-get_root_with_objectid_endpoint(Config) ->
-    {Workers, RootPath, _, _} = objectid_base(Config),
-    [WorkerP1, _WorkerP2] = Workers,
+get_root_with_objectid_endpoint_test(Config) ->
+    [WorkerP1, _WorkerP2] = ?WORKERS,
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
     %%-------- / objectid ----------
     RequestHeaders1 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
-    {ok, Code1, Headers1, Response1} = cdmi_internal:do_request(Workers, "", get, RequestHeaders1, []),
+    {ok, Code1, Headers1, Response1} = cdmi_internal:do_request(?WORKERS, "", get, RequestHeaders1, []),
     ?assertEqual(?HTTP_200_OK, Code1),
 
     RequestHeaders0 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
@@ -300,7 +322,7 @@ get_root_with_objectid_endpoint(Config) ->
     %%---- get / by objectid -------
     RequestHeaders4 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code4, _Headers4, Response4} = cdmi_internal:do_request(
-        Workers, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/", get, RequestHeaders4, []
+        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/", get, RequestHeaders4, []
     ),
     ?assertEqual(?HTTP_200_OK, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
@@ -312,12 +334,27 @@ get_root_with_objectid_endpoint(Config) ->
     ?assertEqual(CdmiResponse1WithoutAtime, CdmiResponse4WithoutAtime). % should be the same as in 1 (except access time)
 
 
-get_dir_with_objectid_endpoint(Config) ->
-    {Workers, RootPath, TestDirName, ShortTestDirName} = objectid_base(Config),
-    TestDirNameCheck = list_to_binary(ShortTestDirName ++ "/"),
+get_dir_with_objectid_endpoint_test(Config) ->
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    TestDirName = ?build_test_root_path(Config),
+    TestDirNameCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+        #dir_spec{
+            name = atom_to_binary(?FUNCTION_NAME),
+            children = [
+                #file_spec{
+                    name = <<"1">>,
+                    content = ?FILE_CONTENT
+                }
+            ]
+        }, Config#cdmi_test_config.p1_selector
+    ),
+
     %%------ /dir objectid ---------
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
-    {ok, Code2, _Headers2, Response2} = cdmi_internal:do_request(Workers, TestDirName ++ "/", get, RequestHeaders2, []),
+    {ok, Code2, _Headers2, Response2} = cdmi_internal:do_request(
+        ?WORKERS, TestDirName ++ "/", get, RequestHeaders2, []
+    ),
     ?assertEqual(?HTTP_200_OK, Code2),
     CdmiResponse2 = (json_utils:decode(Response2)),
     DirId = maps:get(<<"objectID">>, CdmiResponse2, undefined),
@@ -332,7 +369,9 @@ get_dir_with_objectid_endpoint(Config) ->
     ?assertMatch(#{<<"capabilitiesURI">> := <<"cdmi_capabilities/container/">>}, CdmiResponse2),
     RequestHeaders5 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code5, _Headers5, Response5} = cdmi_internal:do_request(
-        Workers, filename:join("cdmi_objectid/", binary_to_list(DirId)) ++ "/", get, RequestHeaders5, []
+        ?WORKERS, filename:join(
+            "cdmi_objectid/", binary_to_list(DirId)
+        ) ++ "/", get, RequestHeaders5, []
     ),
     ?assertEqual(?HTTP_200_OK, Code5),
     CdmiResponse5 = json_utils:decode(Response5),
@@ -347,10 +386,10 @@ get_dir_with_objectid_endpoint(Config) ->
     ).
 
 
-get_file_with_objectid_endpoint(Config) ->
-    {Workers, RootPath, _, _} = objectid_base(Config),
-    TestFileName = filename:join(RootPath, "new_file"),
-    TestFileNameBin = list_to_binary("new_file"),
+get_file_with_objectid_endpoint_test(Config) ->
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    TestFileName = ?build_test_root_path(Config),
+    TestFileNameBin = atom_to_binary(?FUNCTION_NAME),
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = TestFileNameBin
@@ -358,7 +397,7 @@ get_file_with_objectid_endpoint(Config) ->
     ),
     RequestHeaders3 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code3, _Headers3, Response3} = cdmi_internal:do_request(
-        Workers, TestFileName, get, RequestHeaders3, []
+        ?WORKERS, TestFileName, get, RequestHeaders3, []
     ),
     ?assertEqual(?HTTP_200_OK, Code3),
     CdmiResponse3 = json_utils:decode(Response3),
@@ -375,7 +414,9 @@ get_file_with_objectid_endpoint(Config) ->
 
     RequestHeaders6 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, Code6, _Headers6, Response6} = cdmi_internal:do_request(
-        Workers, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/new_file", get, RequestHeaders6, []
+        ?WORKERS, filename:join(
+            "cdmi_objectid/", binary_to_list(RootId)
+        ) ++ "/" ++ TestFileNameBin, get, RequestHeaders6, []
     ),
     ?assertEqual(?HTTP_200_OK, Code6),
     CdmiResponse6 = (json_utils:decode(Response6)),
@@ -390,12 +431,14 @@ get_file_with_objectid_endpoint(Config) ->
     ),
 
     {ok, Code7, _Headers7, Response7} = cdmi_internal:do_request(
-        Workers, filename:join("cdmi_objectid/", binary_to_list(FileId)), get, RequestHeaders6, []
+        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(FileId)), get, RequestHeaders6, []
     ),
     ?assertEqual(?HTTP_200_OK, Code7),
     CdmiResponse7 = (json_utils:decode(Response7)),
     Meta7 = maps:remove(<<"cdmi_atime">>, (maps:get(<<"metadata">>, CdmiResponse7))),
-    CdmiResponse7WithoutAtime = maps:merge(#{<<"metadata">> => Meta7},maps:remove(<<"metadata">>, CdmiResponse7)),
+    CdmiResponse7WithoutAtime = maps:merge(
+        #{<<"metadata">> => Meta7},maps:remove(<<"metadata">>, CdmiResponse7)
+    ),
 
     ?assertEqual( % should be the same as in 6 (except parent and access time)
         maps:remove(<<"parentURI">>, maps:remove(<<"parentID">>, CdmiResponse6WithoutAtime)),
@@ -403,23 +446,38 @@ get_file_with_objectid_endpoint(Config) ->
     ).
 
 
-unauthorized_access_by_object_id(Config) ->
-    {Workers, _, _, _} = objectid_base(Config),
+unauthorized_access_by_object_id_test(Config) ->
     {ok, RootId} = file_id:guid_to_objectid(node_cache:get(root_dir_guid)),
     %%---- unauthorized access to / by objectid -------
     RequestHeaders8 = [?CDMI_VERSION_HEADER],
     {ok, Code8, _, Response8} = cdmi_internal:do_request(
-        Workers, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/", get, RequestHeaders8, []
+        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/",
+        get, RequestHeaders8, []
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_UNAUTHORIZED),
     ?assertMatch(ExpRestError, {Code8, json_utils:decode(Response8)}).
 
 
-list_basic_dir(Config) ->
-    {Workers, _, _, TestDirName, TestDirNameCheck, TestFileNameBin} = list_dir_base(Config),
+list_basic_dir_test(Config) ->
+    TestDirName = ?build_test_root_path(Config),
+    TestDirNameCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
+    TestFileNameBin = <<"some_file.txt">>,
+
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+        #dir_spec{
+            name = atom_to_binary(?FUNCTION_NAME),
+            children = [
+                #file_spec{
+                    name = TestFileNameBin,
+                    content = ?FILE_CONTENT
+                }
+            ]
+        }, Config#cdmi_test_config.p1_selector
+    ),
+
     %%------ list basic dir --------
     {ok, Code1, Headers1, Response1} =
-        cdmi_internal:do_request(Workers, TestDirName ++ "/", get,
+        cdmi_internal:do_request(?WORKERS, TestDirName ++ "/", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(?HTTP_200_OK, Code1),
     CdmiResponse1 = json_utils:decode(Response1),
@@ -434,36 +492,56 @@ list_basic_dir(Config) ->
     ?assert(maps:get(<<"metadata">>, CdmiResponse1) =/= <<>>).
 
 
-list_root_space_dir(Config) ->
-    {Workers, RootName, RootPath, _, TestDirNameCheck, _} = list_dir_base(Config),
+list_root_space_dir_test(Config) ->
+    TestDirNameCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+        #dir_spec{
+            name = atom_to_binary(?FUNCTION_NAME)
+        }, Config#cdmi_test_config.p1_selector
+    ),
 
     % TODO VFS-7288 clarify what should be written to cdmi_size for directories
-    [WorkerP1, _WorkerP2] = Workers,
+    [WorkerP1, _WorkerP2] = ?WORKERS,
     %%------ list root space dir ---------
     {ok, Code2, _Headers2, Response2} =
         cdmi_internal:do_request(WorkerP1, RootPath, get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(?HTTP_200_OK, Code2),
     CdmiResponse2 = json_utils:decode(Response2),
-    RootNameBin = list_to_binary(RootName),
+    RootNameBin = list_to_binary(node_cache:get(root_dir_name) ++ "/"),
     ?assertMatch(#{<<"objectName">> := RootNameBin}, CdmiResponse2),
     ?assertMatch(#{<<"children">> := [TestDirNameCheck]}, CdmiResponse2).
 
 
-list_nonexisting_dir(Config) ->
-    {Workers, _, _, _, _, _} = list_dir_base(Config),
+list_nonexisting_dir_test(Config) ->
     %%--- list nonexisting dir -----
     {ok, Code3, _Headers3, _Response3} =
-        cdmi_internal:do_request(Workers, "nonexisting_dir/",
+        cdmi_internal:do_request(?WORKERS, "nonexisting_dir/",
             get, [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(?HTTP_404_NOT_FOUND, Code3).
 
 
-selective_params_list(Config) ->
-    {Workers, _, _, TestDirName, TestDirNameCheck, TestFileNameBin} = list_dir_base(Config),
+selective_params_list_test(Config) ->
+    TestDirName = ?build_test_root_path(Config),
+    TestDirNameCheck = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "/"),
+    TestFileNameBin = <<"some_file.txt">>,
+
+    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
+        #dir_spec{
+            name = atom_to_binary(?FUNCTION_NAME),
+            children = [
+                #file_spec{
+                    name = TestFileNameBin,
+                    content = ?FILE_CONTENT
+                }
+            ]
+        }, Config#cdmi_test_config.p1_selector
+    ),
     %%-- selective params list -----
     {ok, Code4, _Headers4, Response4} =
-        cdmi_internal:do_request(Workers, filename:join(TestDirName, "?children;objectName"),
+        cdmi_internal:do_request(?WORKERS, filename:join(TestDirName, "?children;objectName"),
             get, [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(?HTTP_200_OK, Code4),
     CdmiResponse4 = json_utils:decode(Response4),
@@ -472,22 +550,21 @@ selective_params_list(Config) ->
     ?assertEqual(2, maps:size(CdmiResponse4)).
 
 
-childrenrange_list(Config) ->
-    {Workers, _, RootPath, _, _, _} = list_dir_base(Config),
+childrenrange_list_test(Config) ->
     %%---- childrenrange list ------
     Children = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
         "12", "13", "14"],
     ChildrenNameBinaries = lists:map(fun(X) -> list_to_binary(X) end, Children),
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), #dir_spec{
-        name = <<"childrange">>,
+        name = atom_to_binary(?FUNCTION_NAME),
         children = lists:map(
             fun(ChildName) ->
                 #file_spec{name = ChildName} end, ChildrenNameBinaries
         )
     }, Config#cdmi_test_config.p1_selector),
-    ChildrangeDir = filename:join(RootPath, "childrange") ++ "/",
+    ChildrangeDir = ?build_test_root_path(Config) ++ "/",
     {ok, Code5, _Headers5, Response5} =
-        cdmi_internal:do_request(Workers, ChildrangeDir ++ "?children;childrenrange",
+        cdmi_internal:do_request(?WORKERS, ChildrangeDir ++ "?children;childrenrange",
             get, [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     ?assertEqual(?HTTP_200_OK, Code5),
     CdmiResponse5 = (json_utils:decode(Response5)),
@@ -499,13 +576,13 @@ childrenrange_list(Config) ->
     ?assertMatch(#{<<"childrenrange">> := <<"0-14">>}, CdmiResponse5),
 
     {ok, Code6, _, Response6} =
-        cdmi_internal:do_request(Workers, ChildrangeDir ++ "?children:2-13;childrenrange", get,
+        cdmi_internal:do_request(?WORKERS, ChildrangeDir ++ "?children:2-13;childrenrange", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     {ok, Code7, _, Response7} =
-        cdmi_internal:do_request(Workers, ChildrangeDir ++ "?children:0-1;childrenrange", get,
+        cdmi_internal:do_request(?WORKERS, ChildrangeDir ++ "?children:0-1;childrenrange", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
     {ok, Code8, _, Response8} =
-        cdmi_internal:do_request(Workers, ChildrangeDir ++ "?children:14-14;childrenrange", get,
+        cdmi_internal:do_request(?WORKERS, ChildrangeDir ++ "?children:14-14;childrenrange", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], []),
 
     ?assertEqual(?HTTP_200_OK, Code6),
@@ -532,59 +609,3 @@ childrenrange_list(Config) ->
             ?assert(lists:member(Name,
                 ChildrenResponse6 ++ ChildrenResponse7 ++ ChildrenResponse8))
         end, ChildrenNameBinaries).
-
-
-%% @private
-objectid_base(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    {SpaceName, ShortTestDirName, TestDirName, _, _} =
-        cdmi_internal:create_test_dir_and_file(Config),
-
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = filename:join(SpaceName, RootName) ++ "/",
-    {Workers, RootPath, TestDirName, ShortTestDirName}.
-
-
-%% @private
-list_dir_base(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    {SpaceName, ShortTestDirName, TestDirName, TestFileName, _FullTestFileName} =
-        cdmi_internal:create_test_dir_and_file(Config),
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = filename:join(SpaceName, RootName) ++ "/",
-
-    TestDirNameCheck = list_to_binary(ShortTestDirName ++ "/"),
-    TestFileNameBin = list_to_binary(TestFileName),
-    {Workers, RootName, RootPath, TestDirName, TestDirNameCheck, TestFileNameBin}.
-
-
-%% @private
-get_file_base(Config) ->
-    Workers = [
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-        oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
-    ],
-    SpaceName = binary_to_list(oct_background:get_space_name(Config#cdmi_test_config.space_selector)),
-    RootName = node_cache:get(root_dir_name) ++ "/",
-    RootPath = filename:join(SpaceName, RootName) ++ "/",
-    EmptyFile = cdmi_internal:get_random_string(),
-    EmptyFileName = filename:join([RootPath, EmptyFile]),
-    FileName = cdmi_internal:get_random_string(),
-    FilledFileName = filename:join([RootPath, FileName]),
-    FileNameBin = list_to_binary(FileName),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
-        #file_spec{
-            name = list_to_binary(EmptyFile)
-        },
-        #file_spec{
-            name = FileNameBin,
-            content = ?FILE_CONTENT
-        }
-    ], Config#cdmi_test_config.p1_selector),
-    {Workers, RootPath, FilledFileName, ?FILE_CONTENT, FileNameBin, EmptyFileName}.
