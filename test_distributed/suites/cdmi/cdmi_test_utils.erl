@@ -1,17 +1,18 @@
-%%%-------------------------------------------------------------------
-%%% @author Katarzyna Such
-%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%%-------------------------------------
+%%% @author Tomasz Lichon
+%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-------------------------------------
 %%% @doc
-%%% CDMI internal functions
+%%% CDMI tests utils.
 %%% @end
-%%%-------------------------------------------------------------------
--module(cdmi_internal).
--author("Katarzyna Such").
+%%%-------------------------------------
+-module(cdmi_test_utils).
+-author("Tomasz Lichon").
 
+-include("global_definitions.hrl").
 -include("http/cdmi.hrl").
 -include("cdmi_test.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -20,11 +21,47 @@
 
 %% API
 -export([
-    get_file_content/2, object_exists/2, do_request/4, do_request/5,
-    create_new_file/2, write_to_file/4, open_file/3,
+    cdmi_endpoint/2, user_2_token_header/0,
+    get_tests_root_path/1, build_test_root_path/2, get_cdmi_endpoint/1,
+    do_request/4, do_request/5, object_exists/2, create_new_file/2,
+    open_file/3, write_to_file/4, get_file_content/2,
     mock_opening_file_without_perms/1, unmock_opening_file_without_perms/1,
-    get_json_metadata/2, get_xattrs/2, get_acl/2, set_acl/3, get_random_string/0
+    set_acl/3, get_acl/2, get_xattrs/2, get_json_metadata/2, get_random_string/0,
+    do_request_base/5
 ]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+cdmi_endpoint(Node, Domain) ->
+    Port = get_https_server_port_str(Node),
+    str_utils:format("https://~s~s/cdmi/", [Domain, Port]).
+
+
+user_2_token_header() ->
+    rest_test_utils:user_token_header(oct_background:get_user_access_token(user2)).
+
+
+get_tests_root_path(Config) ->
+    SpaceName = binary_to_list(oct_background:get_space_name(
+        Config#cdmi_test_config.space_selector)
+    ),
+    RootName = node_cache:get(root_dir_name),
+    RootPath = filename:join(SpaceName, RootName) ++ "/",
+    RootPath.
+
+
+build_test_root_path(Config, TestName) ->
+    filename:join([get_tests_root_path(Config), TestName]).
+
+
+get_cdmi_endpoint(Config) ->
+    WorkerP1= oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
+    Domain = opw_test_rpc:get_provider_domain(WorkerP1),
+    cdmi_test_utils:cdmi_endpoint(WorkerP1, Domain).
 
 
 do_request(Node, RestSubpath, Method, Headers) ->
@@ -49,86 +86,6 @@ do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
 
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
     make_request(Node, RestSubpath, Method, Headers, Body).
-
-
-%% @private
-make_request(Node, RestSubpath, Method, Headers, Body) ->
-    case cdmi_test_utils:do_request(Node, RestSubpath, Method, Headers, Body) of
-        {ok, RespCode, _RespHeaders, RespBody} = Result ->
-            case is_space_supported(Node, RestSubpath) of
-                true ->
-                    Result;
-                false ->
-                    % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_, _)
-                    % as some errors may be thrown even before file path resolution attempt
-                    % (and such errors are explicitly checked by some tests),
-                    % but it should never be any successful response
-                    ?assert(RespCode >= 300),
-                    case {RespCode, try_to_decode(RespBody)} of
-                        {?HTTP_400_BAD_REQUEST, #{<<"error">> :=  #{
-                            <<"id">> := <<"spaceNotSupportedBy">>
-                        }}}->
-                            space_not_supported;
-                        _ ->
-                            Result
-                    end
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
-
-%% @private
-is_space_supported(_Node, "") ->
-    true;
-is_space_supported(_Node, "/") ->
-    true;
-is_space_supported(Node, CdmiPath) ->
-    {ok, SuppSpaces} = rpc:call(Node, provider_logic, get_spaces, []),
-    SpecialObjectIds = [?ROOT_CAPABILITY_ID, ?CONTAINER_CAPABILITY_ID, ?DATAOBJECT_CAPABILITY_ID],
-
-    case binary:split(list_to_binary(CdmiPath), <<"/">>, [global, trim_all]) of
-        [<<"cdmi_capabilities">> | _] ->
-            true;
-        [<<"cdmi_objectid">>, ObjectId | _] ->
-            case lists:member(ObjectId, SpecialObjectIds) of
-                true ->
-                    true;
-                false ->
-                    {ok, FileGuid} = file_id:objectid_to_guid(ObjectId),
-                    SpaceId = file_id:guid_to_space_id(FileGuid),
-                    SpaceId == <<"rootDirVirtualSpaceId">> orelse lists:member(SpaceId, SuppSpaces)
-            end;
-        [SpaceName | _] ->
-            lists:any(fun(SpaceId) -> get_space_name(Node, SpaceId) == SpaceName end, SuppSpaces)
-    end.
-
-
-%% @private
-get_space_name(Node, SpaceId) ->
-    {ok, SpaceName} = rpc:call(Node, space_logic, get_name, [<<"0">>, SpaceId]),
-    SpaceName.
-
-
-%% @private
-try_to_decode(Body) ->
-    try
-        remove_times_metadata(json_utils:decode(Body))
-    catch _:invalid_json ->
-        Body
-    end.
-
-
-%% @private
-remove_times_metadata(ResponseJSON) ->
-    Metadata = maps:get(<<"metadata">>, ResponseJSON, undefined),
-    case Metadata of
-        undefined -> ResponseJSON;
-        _ -> Metadata1 = maps:without( [<<"cdmi_ctime">>,
-            <<"cdmi_atime">>,
-            <<"cdmi_mtime">>], Metadata),
-            maps:put(<<"metadata">>, Metadata1, ResponseJSON)
-    end.
 
 
 object_exists(Path, Config) ->
@@ -176,17 +133,6 @@ get_file_content(Path, Config) ->
             Result;
         {error, Error} -> {error, Error}
     end.
-
-
-%% @private
-absolute_binary_path(Path) ->
-    list_to_binary(ensure_begins_with_slash(Path)).
-
-
-%% @private
-ensure_begins_with_slash(Path) ->
-    ReversedBinary = list_to_binary(lists:reverse(Path)),
-    lists:reverse(binary_to_list(filepath_utils:ensure_ends_with_slash(ReversedBinary))).
 
 
 mock_opening_file_without_perms(Config) ->
@@ -255,3 +201,134 @@ get_random_string(Length, AllowedChars) ->
             AllowedChars)]
         ++ Acc
     end, [], lists:seq(1, Length)).
+
+
+%% @private
+-spec get_https_server_port_str(node()) -> PortStr :: string().
+get_https_server_port_str(Node) ->
+    case get(port) of
+        undefined ->
+            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+            PortStr = case Port of
+                443 -> "";
+                _ -> ":" ++ integer_to_list(Port)
+            end,
+            put(port, PortStr),
+            PortStr;
+        Port ->
+            Port
+    end.
+
+
+% Performs a single request using http_client
+do_request_base(Node, CdmiSubPath, Method, Headers, Body) ->
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),
+    Domain = opw_test_rpc:get_provider_domain(Node),
+    Result = http_client:request(
+        Method,
+        cdmi_endpoint(Node, Domain) ++ CdmiSubPath,
+        maps:from_list(Headers),
+        Body,
+        [
+            {ssl_options, [{cacerts, CaCerts}, {hostname, Domain}]},
+            {connect_timeout, timer:minutes(1)},
+            {recv_timeout, timer:minutes(1)}
+        ]
+    ),
+    case Result of
+        {ok, RespCode, RespHeaders, RespBody} ->
+            {ok, RespCode, (RespHeaders), RespBody};
+        Other ->
+            Other
+    end.
+
+
+%% @private
+make_request(Node, RestSubpath, Method, Headers, Body) ->
+    case do_request_base(Node, RestSubpath, Method, Headers, Body) of
+        {ok, RespCode, _RespHeaders, RespBody} = Result ->
+            case is_space_supported(Node, RestSubpath) of
+                true ->
+                    Result;
+                false ->
+                    % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_, _)
+                    % as some errors may be thrown even before file path resolution attempt
+                    % (and such errors are explicitly checked by some tests),
+                    % but it should never be any successful response
+                    ?assert(RespCode >= 300),
+                    case {RespCode, try_to_decode(RespBody)} of
+                        {?HTTP_400_BAD_REQUEST, #{<<"error">> :=  #{
+                            <<"id">> := <<"spaceNotSupportedBy">>
+                        }}}->
+                            space_not_supported;
+                        _ ->
+                            Result
+                    end
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
+get_space_name(Node, SpaceId) ->
+    {ok, SpaceName} = rpc:call(Node, space_logic, get_name, [<<"0">>, SpaceId]),
+    SpaceName.
+
+
+%% @private
+try_to_decode(Body) ->
+    try
+        remove_times_metadata(json_utils:decode(Body))
+    catch _:invalid_json ->
+        Body
+    end.
+
+
+%% @private
+remove_times_metadata(ResponseJSON) ->
+    Metadata = maps:get(<<"metadata">>, ResponseJSON, undefined),
+    case Metadata of
+        undefined -> ResponseJSON;
+        _ -> Metadata1 = maps:without( [<<"cdmi_ctime">>,
+            <<"cdmi_atime">>,
+            <<"cdmi_mtime">>], Metadata),
+            maps:put(<<"metadata">>, Metadata1, ResponseJSON)
+    end.
+
+
+%% @private
+is_space_supported(_Node, "") ->
+    true;
+is_space_supported(_Node, "/") ->
+    true;
+is_space_supported(Node, CdmiPath) ->
+    {ok, SuppSpaces} = rpc:call(Node, provider_logic, get_spaces, []),
+    SpecialObjectIds = [?ROOT_CAPABILITY_ID, ?CONTAINER_CAPABILITY_ID, ?DATAOBJECT_CAPABILITY_ID],
+
+    case binary:split(list_to_binary(CdmiPath), <<"/">>, [global, trim_all]) of
+        [<<"cdmi_capabilities">> | _] ->
+            true;
+        [<<"cdmi_objectid">>, ObjectId | _] ->
+            case lists:member(ObjectId, SpecialObjectIds) of
+                true ->
+                    true;
+                false ->
+                    {ok, FileGuid} = file_id:objectid_to_guid(ObjectId),
+                    SpaceId = file_id:guid_to_space_id(FileGuid),
+                    SpaceId == <<"rootDirVirtualSpaceId">> orelse lists:member(SpaceId, SuppSpaces)
+            end;
+        [SpaceName | _] ->
+            lists:any(fun(SpaceId) -> get_space_name(Node, SpaceId) == SpaceName end, SuppSpaces)
+    end.
+
+
+%% @private
+absolute_binary_path(Path) ->
+    list_to_binary(ensure_begins_with_slash(Path)).
+
+
+%% @private
+ensure_begins_with_slash(Path) ->
+    ReversedBinary = list_to_binary(lists:reverse(Path)),
+    lists:reverse(binary_to_list(filepath_utils:ensure_ends_with_slash(ReversedBinary))).

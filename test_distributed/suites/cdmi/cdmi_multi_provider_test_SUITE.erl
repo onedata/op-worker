@@ -35,17 +35,12 @@
     get_root_with_objectid_endpoint_test/1,
     get_dir_with_objectid_endpoint_test/1,
     get_file_with_objectid_endpoint_test/1,
-    unauthorized_access_by_object_id_test/1,
-    unauthorized_access_error_test/1,
-    wrong_create_path_error_test/1,
-    wrong_base_error_test/1,
-    non_existing_file_error_test/1,
     open_binary_file_without_permission_test/1,
     open_cdmi_file_without_permission_test/1,
 
     basic_read_test/1,
     get_file_cdmi_test/1,
-    get_file_non_cdmi_test/1,
+    get_file_noncdmi_test/1,
     create_file_with_metadata_test/1,
     selective_metadata_read_test/1,
     update_user_metadata_file_test/1,
@@ -57,13 +52,13 @@
     base64_create_file_test/1,
     create_empty_file_test/1,
     create_noncdmi_file_test/1,
-    create_raw_file_with_cdmi_version_header_should_succeed_test/1,
-    create_cdmi_file_without_cdmi_version_header_should_fail_test/1,
+    create_cdmi_file_version_header_test/1,
+    create_noncdmi_file_version_header_failure_test/1,
     basic_create_dir_test/1,
     create_noncdmi_dir_and_update_test/1,
     missing_parent_create_dir_test/1,
-    create_raw_dir_with_cdmi_version_header_should_succeed_test/1,
-    create_cdmi_dir_without_cdmi_version_header_should_fail_test/1,
+    create_cdmi_dir_version_header_test/1,
+    create_noncdmi_dir_version_header_failure_test/1,
 
     update_file_cdmi_test/1,
     update_file_http_test/1,
@@ -82,19 +77,24 @@
     moved_dir_with_QS_permanently_test/1,
     move_copy_conflict_test/1,
     request_format_check_test/1,
-    mimetype_and_encoding_non_cdmi_file_test/1,
+    mimetype_and_encoding_noncdmi_file_test/1,
     update_mimetype_and_encoding_test/1,
+    mimetype_and_encoding_create_file_noncdmi_request_test/1,
     mimetype_and_encoding_create_file_test/1,
-    mimetype_and_encoding_create_file_non_cdmi_request_test/1,
     out_of_range_test/1,
     partial_upload_cdmi_test/1,
-    partial_upload_non_cdmi_test/1,
+    partial_upload_noncdmi_test/1,
     acl_read_file_test/1,
     acl_write_file_test/1,
     acl_delete_file_test/1,
     acl_read_write_dir_test/1,
     accept_header_test/1,
-    download_empty_file_test/1
+    download_empty_file_test/1,
+    unauthorized_access_by_object_id_test/1,
+    unauthorized_access_error_test/1,
+    wrong_create_path_error_test/1,
+    wrong_base_error_test/1,
+    non_existing_file_error_test/1
 ]).
 
 groups() -> [
@@ -108,19 +108,13 @@ groups() -> [
         get_root_with_objectid_endpoint_test,
         get_dir_with_objectid_endpoint_test,
         get_file_with_objectid_endpoint_test,
-        unauthorized_access_by_object_id_test,
-        unauthorized_access_error_test,
-        wrong_create_path_error_test,
-        wrong_base_error_test,
-        non_existing_file_error_test,
-        mimetype_and_encoding_create_file_test,
         open_binary_file_without_permission_test,
         open_cdmi_file_without_permission_test
     ]},
     {parallel_tests, [parallel], [
         basic_read_test,
         get_file_cdmi_test,
-        get_file_non_cdmi_test,
+        get_file_noncdmi_test,
         create_file_with_metadata_test,
         selective_metadata_read_test,
         update_user_metadata_file_test,
@@ -132,13 +126,13 @@ groups() -> [
         base64_create_file_test,
         create_empty_file_test,
         create_noncdmi_file_test,
-        create_raw_file_with_cdmi_version_header_should_succeed_test,
-        create_cdmi_file_without_cdmi_version_header_should_fail_test,
+        create_cdmi_file_version_header_test,
+        create_noncdmi_file_version_header_failure_test,
         basic_create_dir_test,
         create_noncdmi_dir_and_update_test,
         missing_parent_create_dir_test,
-        create_raw_dir_with_cdmi_version_header_should_succeed_test,
-        create_cdmi_dir_without_cdmi_version_header_should_fail_test,
+        create_cdmi_dir_version_header_test,
+        create_noncdmi_dir_version_header_failure_test,
         update_file_cdmi_test,
         update_file_http_test,
         get_system_capabilities_test,
@@ -155,18 +149,24 @@ groups() -> [
         moved_dir_with_QS_permanently_test,
         move_copy_conflict_test,
         request_format_check_test,
-        mimetype_and_encoding_non_cdmi_file_test,
+        mimetype_and_encoding_noncdmi_file_test,
         update_mimetype_and_encoding_test,
-        mimetype_and_encoding_create_file_non_cdmi_request_test,
+        mimetype_and_encoding_create_file_noncdmi_request_test,
+        mimetype_and_encoding_create_file_test,
         out_of_range_test,
         partial_upload_cdmi_test,
-        partial_upload_non_cdmi_test,
+        partial_upload_noncdmi_test,
         acl_read_file_test,
         acl_write_file_test,
         acl_delete_file_test,
         acl_read_write_dir_test,
         accept_header_test,
-        download_empty_file_test
+        download_empty_file_test,
+        unauthorized_access_by_object_id_test,
+        unauthorized_access_error_test,
+        wrong_create_path_error_test,
+        wrong_base_error_test,
+        non_existing_file_error_test
     ]}
 
 ].
@@ -226,21 +226,6 @@ get_dir_with_objectid_endpoint_test(_Config) ->
 get_file_with_objectid_endpoint_test(_Config) ->
     ?RUN_GET_TEST().
 
-unauthorized_access_by_object_id_test(_Config) ->
-    ?RUN_GET_TEST().
-
-unauthorized_access_error_test(_Config) ->
-    ?RUN_BASE_TEST().
-
-wrong_create_path_error_test(_Config) ->
-    ?RUN_CREATE_TEST().
-
-wrong_base_error_test(_Config) ->
-    ?RUN_BASE_TEST().
-
-non_existing_file_error_test(_Config) ->
-    ?RUN_BASE_TEST().
-
 open_binary_file_without_permission_test(_Config) ->
     ?RUN_BASE_TEST().
 
@@ -257,7 +242,7 @@ basic_read_test(_Config) ->
 get_file_cdmi_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_file_non_cdmi_test(_Config) ->
+get_file_noncdmi_test(_Config) ->
     ?RUN_GET_TEST().
 
 create_file_with_metadata_test(_Config) ->
@@ -293,10 +278,10 @@ create_empty_file_test(_Config) ->
 create_noncdmi_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_raw_file_with_cdmi_version_header_should_succeed_test(_Config) ->
+create_cdmi_file_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_file_without_cdmi_version_header_should_fail_test(_Config) ->
+create_noncdmi_file_version_header_failure_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 basic_create_dir_test(_Config) ->
@@ -308,10 +293,10 @@ create_noncdmi_dir_and_update_test(_Config) ->
 missing_parent_create_dir_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_raw_dir_with_cdmi_version_header_should_succeed_test(_Config) ->
+create_cdmi_dir_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_dir_without_cdmi_version_header_should_fail_test(_Config) ->
+create_noncdmi_dir_version_header_failure_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 update_file_cdmi_test(_Config) ->
@@ -362,16 +347,16 @@ move_copy_conflict_test(_Config) ->
 request_format_check_test(_Config) ->
     ?RUN_BASE_TEST().
 
-mimetype_and_encoding_non_cdmi_file_test(_Config) ->
+mimetype_and_encoding_noncdmi_file_test(_Config) ->
     ?RUN_BASE_TEST().
 
 update_mimetype_and_encoding_test(_Config) ->
     ?RUN_BASE_TEST().
 
-mimetype_and_encoding_create_file_test(_Config) ->
+mimetype_and_encoding_create_file_noncdmi_request_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-mimetype_and_encoding_create_file_non_cdmi_request_test(_Config) ->
+mimetype_and_encoding_create_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 out_of_range_test(_Config) ->
@@ -380,7 +365,7 @@ out_of_range_test(_Config) ->
 partial_upload_cdmi_test(_Config) ->
     ?RUN_BASE_TEST().
 
-partial_upload_non_cdmi_test(_Config) ->
+partial_upload_noncdmi_test(_Config) ->
     ?RUN_BASE_TEST().
 
 acl_read_file_test(_Config) ->
@@ -399,6 +384,21 @@ accept_header_test(_Config) ->
     ?RUN_BASE_TEST().
 
 download_empty_file_test(_Config) ->
+    ?RUN_BASE_TEST().
+
+unauthorized_access_by_object_id_test(_Config) ->
+    ?RUN_GET_TEST().
+
+unauthorized_access_error_test(_Config) ->
+    ?RUN_BASE_TEST().
+
+wrong_create_path_error_test(_Config) ->
+    ?RUN_CREATE_TEST().
+
+wrong_base_error_test(_Config) ->
+    ?RUN_BASE_TEST().
+
+non_existing_file_error_test(_Config) ->
     ?RUN_BASE_TEST().
 
 
