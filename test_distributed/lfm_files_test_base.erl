@@ -1998,8 +1998,8 @@ share_getattr(Config) ->
                 uid = ?SHARE_UID,
                 gid = ?SHARE_GID,
                 parent_guid = undefined,      % share root should not point to any parent
-                owner_id = <<"unknown">>,
-                provider_id = <<"unknown">>,
+                owner_id = undefined,
+                provider_id = undefined,
                 shares = [ShareId1]}          % other shares shouldn't be shown
             },
             lfm_proxy:stat(W, SessId, ?FILE_REF(ShareGuid))

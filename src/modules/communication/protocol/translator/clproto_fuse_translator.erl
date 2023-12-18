@@ -112,9 +112,10 @@ from_protobuf(#'FileAttr'{} = FileAttr) ->
         ctime = FileAttr#'FileAttr'.ctime,
         type = FileAttr#'FileAttr'.type,
         size = FileAttr#'FileAttr'.size,
-        provider_id = FileAttr#'FileAttr'.provider_id,
+        %% @TODO VFS-11722 - send undefined to oneclient
+        provider_id = utils:ensure_defined(FileAttr#'FileAttr'.provider_id, <<"unknown">>, undefined),
         shares = FileAttr#'FileAttr'.shares,
-        owner_id = FileAttr#'FileAttr'.owner_id,
+        owner_id = utils:ensure_defined(FileAttr#'FileAttr'.owner_id, <<"unknown">>, undefined),
         is_fully_replicated = FileAttr#'FileAttr'.fully_replicated,
         hardlink_count = FileAttr#'FileAttr'.nlink,
         index = file_listing:decode_index(FileAttr#'FileAttr'.index),
@@ -374,9 +375,10 @@ to_protobuf(#file_attr{} = FileAttr) ->
             ?DIRECTORY_TYPE -> utils:ensure_defined(FileAttr#file_attr.size, 0);
             _ -> FileAttr#file_attr.size
         end,
-        provider_id = FileAttr#file_attr.provider_id,
+        %% @TODO VFS-11722 - send undefined to oneclient
+        provider_id = utils:ensure_defined(FileAttr#file_attr.provider_id, <<"unknown">>),
         shares = utils:ensure_defined(FileAttr#file_attr.shares, []),
-        owner_id = FileAttr#file_attr.owner_id,
+        owner_id = utils:ensure_defined(FileAttr#file_attr.owner_id, <<"unknown">>),
         fully_replicated = FileAttr#file_attr.is_fully_replicated,
         nlink = FileAttr#file_attr.hardlink_count,
         index = file_listing:encode_index(FileAttr#file_attr.index),

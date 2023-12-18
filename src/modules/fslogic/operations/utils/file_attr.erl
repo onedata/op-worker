@@ -376,8 +376,8 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 }}) ->
     #file_attr{
         mode = RealMode band 2#111,
-        provider_id = <<"unknown">>,
-        owner_id = <<"unknown">>,
+        provider_id = undefined,
+        owner_id = undefined,
         shares = case lists:member(ShareId, AllShares) of
             true -> [ShareId];
             false -> []
@@ -450,8 +450,8 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             {StatsToGet, FileCtx2} = case ShouldCalculateRatio of
                 true ->
                     case file_ctx:get_storage_id(FileCtx) of
-                        {undefined, FC2} -> {[?VIRTUAL_SIZE], FC2};
-                        {StorageId, FC2} -> {[?VIRTUAL_SIZE, ?PHYSICAL_SIZE(StorageId)], FC2}
+                        {undefined, FC2} -> {[?LOGICAL_SIZE], FC2};
+                        {StorageId, FC2} -> {[?LOGICAL_SIZE, ?VIRTUAL_SIZE, ?PHYSICAL_SIZE(StorageId)], FC2}
                     end;
                 false ->
                     {[?VIRTUAL_SIZE], FileCtx}
@@ -485,20 +485,20 @@ resolve_location_attrs_for_symlink(State) ->
 %% @private
 -spec build_dir_size_attr(map(), boolean(), file_ctx:ctx()) -> file_attr().
 build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx) ->
-    Size = maps:get(?VIRTUAL_SIZE, StatsResult, 0),
+    VirtualSize = maps:get(?VIRTUAL_SIZE, StatsResult, 0),
     OptionalAttr = case ShouldCalculateRatio of
         true ->
             % storage id is already cached in file_ctx
             {StorageId, _} = file_ctx:get_storage_id(FileCtx),
             StorageSize = maps:get(?PHYSICAL_SIZE(StorageId), StatsResult, 0),
-            #file_attr{local_replication_rate = case Size of
+            #file_attr{local_replication_rate = case VirtualSize of
                 0 -> 1.0;
-                _ -> StorageSize/Size
+                _ -> StorageSize/VirtualSize
             end};
         false ->
             #file_attr{}
     end,
-    OptionalAttr#file_attr{size = Size}.
+    OptionalAttr#file_attr{size = maps:get(?LOGICAL_SIZE, StatsResult, 0)}.
 
 
 %% @private

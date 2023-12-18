@@ -87,7 +87,7 @@ get_file_instance_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    SpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
+    SpaceDetails = get_space_dir_attrs(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonSpaceDetails = fun(Node) -> file_attrs_to_gs_json(Node, undefined, SpaceDetails) end,
 
     ClientSpec = #client_spec{
@@ -161,7 +161,7 @@ get_shared_file_instance_test(_Config) ->
     SpaceShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, SpaceGuid),
     ShareSpaceGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
 
-    ShareSpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
+    ShareSpaceDetails = get_space_dir_attrs(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonShareSpaceDetails = fun(Node) -> file_attrs_to_gs_json(Node, SpaceShareId, ShareSpaceDetails) end,
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
@@ -286,8 +286,8 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
 
 
 %% @private
--spec get_space_dir_details(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_attr{}.
-get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
+-spec get_space_dir_attrs(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_attr{}.
+get_space_dir_attrs(ProviderSelector, SpaceDirGuid, SpaceName) ->
     {ok, SpaceAttrs} = ?assertMatch(
         {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
     ),

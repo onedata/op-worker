@@ -422,7 +422,7 @@ get_user_root_dir_children_test(_Config) ->
         SpaceId = oct_background:get_space_id(SpacePlaceholder),
         SpaceName = atom_to_binary(SpacePlaceholder, utf8),
         SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-        {SpaceGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_details(Node, SpaceGuid)}
+        {SpaceGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_attrs(Node, SpaceGuid)}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
         [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node), GetSpaceInfoFun(space_s3, Node)]
@@ -474,9 +474,9 @@ get_user_root_dir_children_test(_Config) ->
 
 
 %% @private
--spec get_space_dir_details(node(), file_id:file_guid()) ->
+-spec get_space_dir_attrs(node(), file_id:file_guid()) ->
     #file_attr{}.
-get_space_dir_details(Node, SpaceDirGuid) ->
+get_space_dir_attrs(Node, SpaceDirGuid) ->
     {ok, SpaceAttr} = ?assertMatch(
         {ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), ?API_ATTRS), ?ATTEMPTS
     ),

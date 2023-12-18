@@ -966,22 +966,22 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
             #file_attr{
                 guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+                shares = [], provider_id = undefined, owner_id = undefined
             },
             #file_attr{
                 guid = Share1RootDirGuid, name = Share1Id, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+                shares = [], provider_id = undefined, owner_id = undefined
             },
             #file_attr{
                 guid = Share4RootDirGuid, name = Share4Id, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+                shares = [], provider_id = undefined, owner_id = undefined
             },
             #file_attr{
                 guid = SpaceShareRootDirGuid, name = SpaceShareId, mode = 8#005, parent_guid = undefined,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
+                shares = [], provider_id = undefined, owner_id = undefined
             }
         ], _},
         lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})

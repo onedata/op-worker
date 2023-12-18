@@ -38,7 +38,7 @@
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = children}, {ChildrenAttrsJson, IsLast, _PaginationToken}) ->
     #{
-        <<"children">> => lists:map(fun map_file_attr_fields_for_gui/1, ChildrenAttrsJson),
+        <<"children">> => lists:map(fun map_file_attr_fields/1, ChildrenAttrsJson),
         <<"isLast">> => IsLast
     };
 
@@ -70,7 +70,7 @@ translate_value(#gri{aspect = {dir_size_stats_collection, _}}, TSBrowseResult) -
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance}, FileAttrsJson) ->
-    map_file_attr_fields_for_gui(FileAttrsJson);
+    map_file_attr_fields(FileAttrsJson);
 
 translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
     data_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
@@ -101,7 +101,7 @@ translate_resource(#gri{aspect = {hardlinks, _}, scope = private}, Result) ->
     Result;
 
 translate_resource(#gri{aspect = symlink_target}, FileAttrsJson) ->
-    map_file_attr_fields_for_gui(FileAttrsJson);
+    map_file_attr_fields(FileAttrsJson);
 
 translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
     #{
@@ -190,32 +190,43 @@ translate_archive_recall_details(#archive_recall_details{
 
 
 %% @private
--spec map_file_attr_fields_for_gui(json_utils:json_map()) -> json_utils:json_map().
-map_file_attr_fields_for_gui(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
-    map_file_attr_parent_for_gui(maps:with(maps:keys(FileAttrJson), FileAttrJson#{
-        <<"fileId">> => ensure_guid(ObjectId),
-        <<"file_id">> => ensure_guid(ObjectId)
-    }));
-%% @TODO VFS-11377 deprecated, remove when possible
-map_file_attr_fields_for_gui(#{<<"file_id">> := ObjectId} = FileAttrJson) ->
-    map_file_attr_parent_for_gui(FileAttrJson#{<<"file_id">> => ensure_guid(ObjectId)});
-map_file_attr_fields_for_gui(FileAttrJson) ->
-    map_file_attr_parent_for_gui(FileAttrJson).
+-spec map_file_attr_fields(json_utils:json_map()) -> json_utils:json_map().
+map_file_attr_fields(FileAttrJson) ->
+    lists:foldl(fun(F, MappedAttrs) ->
+        F(MappedAttrs)
+    end, FileAttrJson, [
+        fun map_file_attr_file_id/1,
+        fun map_file_attr_parent/1,
+        fun map_file_attr_owner/1
+    ]).
 
 
 %% @private
--spec map_file_attr_parent_for_gui(json_utils:json_map()) -> json_utils:json_map().
-map_file_attr_parent_for_gui(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
-    % both values are returned as default
+-spec map_file_attr_file_id(json_utils:json_map()) -> json_utils:json_map().
+map_file_attr_file_id(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
     maps:with(maps:keys(FileAttrJson), FileAttrJson#{
-        <<"parentFileId">> => ensure_guid(ParentObjectId),
-        <<"parent_id">> => ensure_guid(ParentObjectId)
+        <<"fileId">> => ensure_guid(ObjectId)
     });
-%% @TODO VFS-11377 deprecated, remove when possible
-map_file_attr_parent_for_gui(#{<<"parent_id">> := ParentObjectId} = FileAttrJson) ->
-    FileAttrJson#{<<"parent_id">> => ensure_guid(ParentObjectId)};
-map_file_attr_parent_for_gui(FileAttrJson) ->
+map_file_attr_file_id(FileAttrJson) ->
     FileAttrJson.
+
+
+%% @private
+-spec map_file_attr_parent(json_utils:json_map()) -> json_utils:json_map().
+map_file_attr_parent(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
+    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+        <<"parentFileId">> => ensure_guid(ParentObjectId)
+    });
+map_file_attr_parent(FileAttrJson) ->
+    FileAttrJson.
+
+
+%% @private
+-spec map_file_attr_owner(json_utils:json_map()) -> json_utils:json_map().
+map_file_attr_owner(#{<<"ownerUserId">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) ->
+    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+        <<"ownerUserId">> => null
+    }).
 
 
 %% @private

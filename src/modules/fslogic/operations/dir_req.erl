@@ -119,7 +119,7 @@ list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
     DirOperationsRequirements = case Attributes -- [guid, name] of
         [] ->
             ?OPERATIONS(?list_container_mask);
-        false ->
+        _ ->
             ?OPERATIONS(?traverse_container_mask, ?list_container_mask, attr_req:optional_attrs_privs_mask(Attributes))
     end,
     {Whitelist, FileCtx2} = check_listing_permissions(UserCtx, FileCtx, DirOperationsRequirements),
