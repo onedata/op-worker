@@ -12,11 +12,12 @@
 -module(cdmi_single_provider_test_SUITE).
 -author("Tomasz Lichon").
 
+-include("cdmi_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("onenv_test_utils.hrl").
+
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
--include("onenv_test_utils.hrl").
--include("cdmi_test.hrl").
 
 %% API
 -export([
@@ -39,8 +40,8 @@
     open_cdmi_file_without_permission_test/1,
     download_file_in_blocks_test/1,
 
-    basic_read_test/1,
     get_file_cdmi_test/1,
+    get_file_cdmi_attributes_test/1,
     get_file_noncdmi_test/1,
     create_file_with_metadata_test/1,
     selective_metadata_read_test/1,
@@ -53,13 +54,13 @@
     base64_create_file_test/1,
     create_empty_file_test/1,
     create_noncdmi_file_test/1,
+    create_noncdmi_file_version_header_test/1,
     create_cdmi_file_version_header_test/1,
-    create_noncdmi_file_version_header_failure_test/1,
     basic_create_dir_test/1,
     create_noncdmi_dir_and_update_test/1,
     missing_parent_create_dir_test/1,
-    create_cdmi_dir_version_header_test/1,
-    create_noncdmi_dir_version_header_failure_test/1,
+    create_noncdmi_dir_version_header_test/1,
+    create_cdmi_dir_version_header_failure_test/1,
 
     update_file_cdmi_test/1,
     update_file_http_test/1,
@@ -94,13 +95,14 @@
     unauthorized_access_error_test/1,
     wrong_create_path_error_test/1,
     wrong_base_error_test/1,
-    non_existing_file_error_test/1
+    get_non_existing_file_error_test/1,
+    list_non_existing_dir_error_test/1
 ]).
 
 
 groups() -> [
     {sequential_tests, [sequential], [
-%%         list_root_space_dir_test needs to start first as it lists the main directory
+%%      list_root_space_dir_test needs to start first as it lists the main directory
         list_root_space_dir_test,
         list_basic_dir_test,
         list_nonexisting_dir_test,
@@ -114,8 +116,8 @@ groups() -> [
         download_file_in_blocks_test
     ]},
     {parallel_tests, [parallel], [
-        basic_read_test,
         get_file_cdmi_test,
+        get_file_cdmi_attributes_test,
         get_file_noncdmi_test,
         create_file_with_metadata_test,
         selective_metadata_read_test,
@@ -128,13 +130,13 @@ groups() -> [
         base64_create_file_test,
         create_empty_file_test,
         create_noncdmi_file_test,
+        create_noncdmi_file_version_header_test,
         create_cdmi_file_version_header_test,
-        create_noncdmi_file_version_header_failure_test,
         basic_create_dir_test,
         create_noncdmi_dir_and_update_test,
         missing_parent_create_dir_test,
-        create_cdmi_dir_version_header_test,
-        create_noncdmi_dir_version_header_failure_test,
+        create_noncdmi_dir_version_header_test,
+        create_cdmi_dir_version_header_failure_test,
         update_file_cdmi_test,
         update_file_http_test,
         get_system_capabilities_test,
@@ -168,7 +170,8 @@ groups() -> [
         unauthorized_access_error_test,
         wrong_create_path_error_test,
         wrong_base_error_test,
-        non_existing_file_error_test
+        get_non_existing_file_error_test,
+        list_non_existing_dir_error_test
     ]}
 ].
 
@@ -189,7 +192,7 @@ all() -> [
     end
 ).
 
--define(RUN_BASE_TEST(), ?RUN_TEST(cdmi_test_base)).
+-define(RUN_BASE_TEST(), ?RUN_TEST(cdmi_misc_test_base)).
 -define(RUN_CREATE_TEST(), ?RUN_TEST(cdmi_create_test_base)).
 -define(RUN_MOVE_COPY_TEST(), ?RUN_TEST(cdmi_move_copy_test_base)).
 -define(RUN_GET_TEST(), ?RUN_TEST(cdmi_get_test_base)).
@@ -259,7 +262,7 @@ download_file_in_blocks_test(_Config) ->
 
     % Reading file with ?DEFAULT_STORAGE_BLOCK_SIZE should result in 2 full reads
     {ok, _, _, Response1} = ?assertMatch(
-        {ok, 200, _Headers, _Response},
+        {ok, ?HTTP_200_OK, _Headers, _Response},
         cdmi_test_utils:do_request_base(WorkerP2, FilePath, get, AuthHeaders, <<>>)
     ),
     ?assertEqual(Data, Response1),
@@ -280,7 +283,7 @@ download_file_in_blocks_test(_Config) ->
     DataPart = binary:part(Data, {33, 100}),
     RangeHeader = {?HDR_RANGE, <<"bytes=33-132">>},    % 33-132 inclusive
     {ok, _, _, Response2} = ?assertMatch(
-        {ok, 206, _Headers, _Response},
+        {ok, ?HTTP_206_PARTIAL_CONTENT, _Headers, _Response},
         cdmi_test_utils:do_request_base(WorkerP2, FilePath, get, [RangeHeader | AuthHeaders], <<>>)
     ),
     ?assertEqual(DataPart, Response2),
@@ -298,10 +301,10 @@ download_file_in_blocks_test(_Config) ->
 %%% Parallel tests
 %%%===================================================================
 
-basic_read_test(_Config) ->
+get_file_cdmi_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_file_cdmi_test(_Config) ->
+get_file_cdmi_attributes_test(_Config) ->
     ?RUN_GET_TEST().
 
 get_file_noncdmi_test(_Config) ->
@@ -340,10 +343,10 @@ create_empty_file_test(_Config) ->
 create_noncdmi_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_file_version_header_test(_Config) ->
+create_noncdmi_file_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_noncdmi_file_version_header_failure_test(_Config) ->
+create_cdmi_file_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 basic_create_dir_test(_Config) ->
@@ -355,10 +358,10 @@ create_noncdmi_dir_and_update_test(_Config) ->
 missing_parent_create_dir_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_dir_version_header_test(_Config) ->
+create_noncdmi_dir_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_noncdmi_dir_version_header_failure_test(_Config) ->
+create_cdmi_dir_version_header_failure_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 update_file_cdmi_test(_Config) ->
@@ -425,10 +428,10 @@ out_of_range_test(_Config) ->
     ?RUN_BASE_TEST().
 
 partial_upload_cdmi_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 partial_upload_noncdmi_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 acl_read_file_test(_Config) ->
     ?RUN_ACL_TEST().
@@ -446,7 +449,7 @@ accept_header_test(_Config) ->
     ?RUN_BASE_TEST().
 
 download_empty_file_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 unauthorized_access_by_object_id_test(_Config) ->
     ?RUN_GET_TEST().
@@ -458,10 +461,13 @@ wrong_create_path_error_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 wrong_base_error_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
-non_existing_file_error_test(_Config) ->
-    ?RUN_BASE_TEST().
+get_non_existing_file_error_test(_Config) ->
+    ?RUN_GET_TEST().
+
+list_non_existing_dir_error_test(_Config) ->
+    ?RUN_GET_TEST().
 
 
 %%%===================================================================

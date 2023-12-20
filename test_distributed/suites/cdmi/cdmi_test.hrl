@@ -25,18 +25,13 @@
 -define(FILE_SIZE_INFINITY, 9999).
 -define(FILE_CONTENT, <<"File content!">>).
 
--define(WORKERS, [
-    oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
-    oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector)
+-define(WORKERS(__CONFIG), [
+    oct_background:get_random_provider_node(__CONFIG#cdmi_test_config.p1_selector),
+    oct_background:get_random_provider_node(__CONFIG#cdmi_test_config.p2_selector)
 ]).
 
 -define(build_test_root_path(__CONFIG),
-    cdmi_test_utils:build_test_root_path(Config, ?FUNCTION_NAME)
-).
-
--define(
-build_test_root_specified_path(__CONFIG, Name),
-    cdmi_test_utils:build_test_root_path(Config, Name)
+    cdmi_test_utils:build_test_root_path(__CONFIG, ?FUNCTION_NAME)
 ).
 
 -record(cdmi_test_config, {

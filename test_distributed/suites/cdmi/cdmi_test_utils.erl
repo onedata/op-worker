@@ -12,12 +12,13 @@
 -module(cdmi_test_utils).
 -author("Tomasz Lichon").
 
+-include("cdmi_test.hrl").
 -include("global_definitions.hrl").
 -include("http/cdmi.hrl").
--include("cdmi_test.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
 -export([

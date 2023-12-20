@@ -12,11 +12,12 @@
 -module(cdmi_multi_provider_test_SUITE).
 -author("Tomasz Lichon").
 
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/http/headers.hrl").
--include_lib("onenv_ct/include/oct_background.hrl").
--include("onenv_test_utils.hrl").
 -include("cdmi_test.hrl").
+-include("onenv_test_utils.hrl").
+
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 
 %% API
 -export([
@@ -38,8 +39,8 @@
     open_binary_file_without_permission_test/1,
     open_cdmi_file_without_permission_test/1,
 
-    basic_read_test/1,
     get_file_cdmi_test/1,
+    get_file_cdmi_attributes_test/1,
     get_file_noncdmi_test/1,
     create_file_with_metadata_test/1,
     selective_metadata_read_test/1,
@@ -52,13 +53,13 @@
     base64_create_file_test/1,
     create_empty_file_test/1,
     create_noncdmi_file_test/1,
+    create_noncdmi_file_version_header_test/1,
     create_cdmi_file_version_header_test/1,
-    create_noncdmi_file_version_header_failure_test/1,
     basic_create_dir_test/1,
     create_noncdmi_dir_and_update_test/1,
     missing_parent_create_dir_test/1,
-    create_cdmi_dir_version_header_test/1,
-    create_noncdmi_dir_version_header_failure_test/1,
+    create_noncdmi_dir_version_header_test/1,
+    create_cdmi_dir_version_header_failure_test/1,
 
     update_file_cdmi_test/1,
     update_file_http_test/1,
@@ -94,7 +95,8 @@
     unauthorized_access_error_test/1,
     wrong_create_path_error_test/1,
     wrong_base_error_test/1,
-    non_existing_file_error_test/1
+    get_non_existing_file_error_test/1,
+    list_non_existing_dir_error_test/1
 ]).
 
 groups() -> [
@@ -109,11 +111,12 @@ groups() -> [
         get_dir_with_objectid_endpoint_test,
         get_file_with_objectid_endpoint_test,
         open_binary_file_without_permission_test,
-        open_cdmi_file_without_permission_test
+        open_cdmi_file_without_permission_test,
+        mimetype_and_encoding_create_file_test
     ]},
     {parallel_tests, [parallel], [
-        basic_read_test,
         get_file_cdmi_test,
+        get_file_cdmi_attributes_test,
         get_file_noncdmi_test,
         create_file_with_metadata_test,
         selective_metadata_read_test,
@@ -126,13 +129,13 @@ groups() -> [
         base64_create_file_test,
         create_empty_file_test,
         create_noncdmi_file_test,
+        create_noncdmi_file_version_header_test,
         create_cdmi_file_version_header_test,
-        create_noncdmi_file_version_header_failure_test,
         basic_create_dir_test,
         create_noncdmi_dir_and_update_test,
         missing_parent_create_dir_test,
-        create_cdmi_dir_version_header_test,
-        create_noncdmi_dir_version_header_failure_test,
+        create_noncdmi_dir_version_header_test,
+        create_cdmi_dir_version_header_failure_test,
         update_file_cdmi_test,
         update_file_http_test,
         get_system_capabilities_test,
@@ -152,12 +155,13 @@ groups() -> [
         mimetype_and_encoding_noncdmi_file_test,
         update_mimetype_and_encoding_test,
         mimetype_and_encoding_create_file_noncdmi_request_test,
-        mimetype_and_encoding_create_file_test,
+
         out_of_range_test,
         partial_upload_cdmi_test,
         partial_upload_noncdmi_test,
         acl_read_file_test,
         acl_write_file_test,
+
         acl_delete_file_test,
         acl_read_write_dir_test,
         accept_header_test,
@@ -166,7 +170,8 @@ groups() -> [
         unauthorized_access_error_test,
         wrong_create_path_error_test,
         wrong_base_error_test,
-        non_existing_file_error_test
+        get_non_existing_file_error_test,
+        list_non_existing_dir_error_test
     ]}
 
 ].
@@ -188,7 +193,7 @@ all() -> [
     end
 ).
 
--define(RUN_BASE_TEST(), ?RUN_TEST(cdmi_test_base)).
+-define(RUN_BASE_TEST(), ?RUN_TEST(cdmi_misc_test_base)).
 -define(RUN_CREATE_TEST(), ?RUN_TEST(cdmi_create_test_base)).
 -define(RUN_MOVE_COPY_TEST(), ?RUN_TEST(cdmi_move_copy_test_base)).
 -define(RUN_GET_TEST(), ?RUN_TEST(cdmi_get_test_base)).
@@ -236,10 +241,10 @@ open_cdmi_file_without_permission_test(_Config) ->
 %%% Parallel tests
 %%%===================================================================
 
-basic_read_test(_Config) ->
+get_file_cdmi_test(_Config) ->
     ?RUN_GET_TEST().
 
-get_file_cdmi_test(_Config) ->
+get_file_cdmi_attributes_test(_Config) ->
     ?RUN_GET_TEST().
 
 get_file_noncdmi_test(_Config) ->
@@ -278,10 +283,10 @@ create_empty_file_test(_Config) ->
 create_noncdmi_file_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_file_version_header_test(_Config) ->
+create_noncdmi_file_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_noncdmi_file_version_header_failure_test(_Config) ->
+create_cdmi_file_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 basic_create_dir_test(_Config) ->
@@ -293,10 +298,10 @@ create_noncdmi_dir_and_update_test(_Config) ->
 missing_parent_create_dir_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_cdmi_dir_version_header_test(_Config) ->
+create_noncdmi_dir_version_header_test(_Config) ->
     ?RUN_CREATE_TEST().
 
-create_noncdmi_dir_version_header_failure_test(_Config) ->
+create_cdmi_dir_version_header_failure_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 update_file_cdmi_test(_Config) ->
@@ -363,10 +368,10 @@ out_of_range_test(_Config) ->
     ?RUN_BASE_TEST().
 
 partial_upload_cdmi_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 partial_upload_noncdmi_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 acl_read_file_test(_Config) ->
     ?RUN_ACL_TEST().
@@ -384,7 +389,7 @@ accept_header_test(_Config) ->
     ?RUN_BASE_TEST().
 
 download_empty_file_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_GET_TEST().
 
 unauthorized_access_by_object_id_test(_Config) ->
     ?RUN_GET_TEST().
@@ -396,11 +401,13 @@ wrong_create_path_error_test(_Config) ->
     ?RUN_CREATE_TEST().
 
 wrong_base_error_test(_Config) ->
-    ?RUN_BASE_TEST().
+    ?RUN_CREATE_TEST().
 
-non_existing_file_error_test(_Config) ->
-    ?RUN_BASE_TEST().
+get_non_existing_file_error_test(_Config) ->
+    ?RUN_GET_TEST().
 
+list_non_existing_dir_error_test(_Config) ->
+    ?RUN_GET_TEST().
 
 %%%===================================================================
 %%% SetUp and TearDown functions

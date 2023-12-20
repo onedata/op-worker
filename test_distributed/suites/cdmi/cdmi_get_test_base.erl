@@ -12,19 +12,21 @@
 -module(cdmi_get_test_base).
 -author("Katarzyna Such").
 
--include("http/cdmi.hrl").
--include("onenv_test_utils.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include("cdmi_test.hrl").
+-include("http/cdmi.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("onenv_test_utils.hrl").
 
-%% API
+-include_lib("ctool/include/test/test_utils.hrl").
+
+%% Tests
 -export([
     get_system_capabilities_test/1,
     get_container_capabilities_test/1,
     get_dataobject_capabilities_test/1,
 
-    basic_read_test/1,
     get_file_cdmi_test/1,
+    get_file_cdmi_attributes_test/1,
     get_file_noncdmi_test/1,
 
     get_root_with_objectid_endpoint_test/1,
@@ -36,8 +38,15 @@
     list_root_space_dir_test/1,
     list_nonexisting_dir_test/1,
     selective_params_list_test/1,
-    childrenrange_list_test/1
-    ]).
+    childrenrange_list_test/1,
+
+    get_non_existing_file_error_test/1,
+    list_non_existing_dir_error_test/1,
+    download_empty_file_test/1,
+
+    partial_upload_cdmi_test/1,
+    partial_upload_noncdmi_test/1
+]).
 
 
 %%%===================================================================
@@ -49,7 +58,7 @@ get_system_capabilities_test(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER],
     {ok, _Code, Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, "cdmi_capabilities/", get, RequestHeaders, [])
+        cdmi_test_utils:do_request(?WORKERS(Config), "cdmi_capabilities/", get, RequestHeaders, [])
     ),
 
     CdmiResponse = json_utils:decode(Response),
@@ -66,12 +75,12 @@ get_container_capabilities_test(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER],
     {ok, Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, "cdmi_capabilities/container/", get, RequestHeaders, [])
+        cdmi_test_utils:do_request(?WORKERS(Config), "cdmi_capabilities/container/", get, RequestHeaders, [])
     ),
     ?assertMatch(
         {ok, Code, _, Response},
         cdmi_test_utils:do_request(
-            ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(?CONTAINER_CAPABILITY_ID))
+            ?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(?CONTAINER_CAPABILITY_ID))
             ++ "/", get, RequestHeaders, []
         )
     ),
@@ -90,13 +99,13 @@ get_dataobject_capabilities_test(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER],
     {ok, Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, "cdmi_capabilities/dataobject/", get, RequestHeaders, [])
+        cdmi_test_utils:do_request(?WORKERS(Config), "cdmi_capabilities/dataobject/", get, RequestHeaders, [])
     ),
 
     ?assertMatch(
         {ok, Code, _, Response},
         cdmi_test_utils:do_request(
-            ?WORKERS, filename:join(
+            ?WORKERS(Config), filename:join(
                 "cdmi_objectid/", binary_to_list(?DATAOBJECT_CAPABILITY_ID)) ++ "/",
             get, RequestHeaders, []
         )
@@ -112,11 +121,7 @@ get_dataobject_capabilities_test(Config) ->
     ?assertEqual(?DATAOBJECT_CAPABILITY_MAP, Capabilities).
 
 
-%%  Tests cdmi object GET request. Request can be done without cdmi header (in that case
-%%  file conent is returned as response body), or with cdmi header (the response
-%%  contains json string of type: application/cdmi-object, and we can specify what
-%%  parameters we need by listing then as ';' separated list after '?' in URL )
-basic_read_test(Config) ->
+get_file_cdmi_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     FilledFilePath = ?build_test_root_path(Config),
     FilePathBin = atom_to_binary(?FUNCTION_NAME),
@@ -131,7 +136,7 @@ basic_read_test(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, FilledFilePath, get, RequestHeaders, [])
+        cdmi_test_utils:do_request(?WORKERS(Config), FilledFilePath, get, RequestHeaders, [])
     ),
 
     CdmiResponse = json_utils:decode(Response),
@@ -149,7 +154,7 @@ basic_read_test(Config) ->
     ?assert(maps:get(<<"metadata">>, CdmiResponse) =/= <<>>).
 
 
-get_file_cdmi_test(Config) ->
+get_file_cdmi_attributes_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     FilledFilePath = ?build_test_root_path(Config),
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
@@ -165,7 +170,7 @@ get_file_cdmi_test(Config) ->
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, FilledFilePath ++ "?parentURI;completionStatus", get, RequestHeaders, []
+        ?WORKERS(Config), FilledFilePath ++ "?parentURI;completionStatus", get, RequestHeaders, []
     )),
     CdmiResponse = json_utils:decode(Response),
 
@@ -178,7 +183,7 @@ get_file_cdmi_test(Config) ->
     {ok, _Code2, _Headers2, Response2} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, FilledFilePath ++ "?value:1-3;valuerange", get, RequestHeaders2, []
+        ?WORKERS(Config), FilledFilePath ++ "?value:1-3;valuerange", get, RequestHeaders2, []
     )),
     CdmiResponse2 = json_utils:decode(Response2),
     ?assertMatch(#{<<"valuerange">> := <<"1-3">>}, CdmiResponse2),
@@ -190,7 +195,7 @@ get_file_cdmi_test(Config) ->
     {ok, _Code3, _Headers3, Response3} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, FilledFilePath ++ "?objectID", get, RequestHeaders3, []
+        ?WORKERS(Config), FilledFilePath ++ "?objectID", get, RequestHeaders3, []
     )),
     CdmiResponse3 = json_utils:decode(Response3),
     ObjectID = maps:get(<<"objectID">>, CdmiResponse3),
@@ -202,7 +207,7 @@ get_file_cdmi_test(Config) ->
     {ok, _Code4, _Headers4, Response4} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(ObjectID)), get, RequestHeaders4, []
+        ?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(ObjectID)), get, RequestHeaders4, []
     )),
     CdmiResponse4 = json_utils:decode(Response4),
 
@@ -211,7 +216,7 @@ get_file_cdmi_test(Config) ->
 
 get_file_noncdmi_test(Config) ->
     FilledFilePath = ?build_test_root_path(Config),
-    EmptyFilePath = ?build_test_root_specified_path(Config, atom_to_list(?FUNCTION_NAME) ++ "empty"),
+    EmptyFilePath = cdmi_test_utils:build_test_root_path(Config, atom_to_list(?FUNCTION_NAME) ++ "empty"),
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid), [
         #file_spec{name = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "empty")},
         #file_spec{
@@ -222,7 +227,7 @@ get_file_noncdmi_test(Config) ->
 
     {ok, _Code, Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, FilledFilePath, get, [cdmi_test_utils:user_2_token_header()])
+        cdmi_test_utils:do_request(?WORKERS(Config), FilledFilePath, get, [cdmi_test_utils:user_2_token_header()])
     ),
     ?assertMatch(#{?HDR_CONTENT_TYPE := <<"application/octet-stream">>}, Headers),
     ?assertEqual(?FILE_CONTENT, Response),
@@ -230,20 +235,17 @@ get_file_noncdmi_test(Config) ->
     %% selective value single range read non-cdmi
     ?assertMatch(
         {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_RANGE := <<"bytes 5-8/13">>}, <<"cont">>},
-        cdmi_test_utils:do_request(?WORKERS, FilledFilePath, get, [
+        cdmi_test_utils:do_request(?WORKERS(Config), FilledFilePath, get, [
             {?HDR_RANGE, <<"bytes=5-8">>}, cdmi_test_utils:user_2_token_header()
         ])
     ),
 
     %% selective value multi range read non-cdmi
-    {ok, _, #{
-        ?HDR_CONTENT_TYPE := <<"multipart/byteranges; boundary=", Boundary/binary>>
-    }, Response2} = ?assertMatch(
-        {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges", _/binary>>}, _},
-        cdmi_test_utils:do_request(?WORKERS, FilledFilePath, get, [
-            {?HDR_RANGE, <<"bytes=1-3,5-5,-3">>}, cdmi_test_utils:user_2_token_header()
-        ])
-    ),
+    {ok, _, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges; boundary=", Boundary/binary>>},
+        Response2} = ?assertMatch( {ok, ?HTTP_206_PARTIAL_CONTENT, _, _},
+        cdmi_test_utils:do_request(?WORKERS(Config), FilledFilePath, get, [
+            {?HDR_RANGE, <<"bytes=1-3,5-5,-3">>}, cdmi_test_utils:user_2_token_header()]
+        )),
     ExpResponse2 = <<
         "--", Boundary/binary,
         "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 1-3/13",
@@ -262,7 +264,7 @@ get_file_noncdmi_test(Config) ->
     lists:foreach(fun(InvalidRange) ->
         ?assertMatch(
             {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE := <<"bytes */13">>}, <<>>},
-            cdmi_test_utils:do_request(?WORKERS, FilledFilePath, get, [
+            cdmi_test_utils:do_request(?WORKERS(Config), FilledFilePath, get, [
                 {?HDR_RANGE, InvalidRange}, cdmi_test_utils:user_2_token_header()
             ])
         )
@@ -281,33 +283,32 @@ get_file_noncdmi_test(Config) ->
     %% read empty file non-cdmi without Range
     ?assertMatch(
         {ok, ?HTTP_200_OK, _, <<>>},
-        cdmi_test_utils:do_request(?WORKERS, EmptyFilePath, get, [cdmi_test_utils:user_2_token_header()])
+        cdmi_test_utils:do_request(?WORKERS(Config), EmptyFilePath, get, [cdmi_test_utils:user_2_token_header()])
     ),
 
     %% read empty file non-cdmi with Range should return 416
     ?assertMatch(
         {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE := <<"bytes */0">>}, <<>>},
-        cdmi_test_utils:do_request(?WORKERS, EmptyFilePath, get, [
+        cdmi_test_utils:do_request(?WORKERS(Config), EmptyFilePath, get, [
             {?HDR_RANGE, <<"bytes=10-15">>}, cdmi_test_utils:user_2_token_header()
         ])
     ).
 
 
 get_root_with_objectid_endpoint_test(Config) ->
-    [WorkerP1, _WorkerP2] = ?WORKERS,
+    [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     RequestHeaders = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, _Code, Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, "", get, RequestHeaders, [])
+        cdmi_test_utils:do_request(?WORKERS(Config), "", get, RequestHeaders, [])
     ),
 
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
 
     % TODO VFS-7288 clarify what should be written to cdmi_size for directories
-    {ok, _Code2, _Headers2, _Response2} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(WorkerP1, RootPath, get, RequestHeaders2, [])
+    ?assertMatch({ok, ?HTTP_200_OK, _, _}, cdmi_test_utils:do_request(
+        WorkerP1, RootPath, get, RequestHeaders2, [])
     ),
     CdmiResponse = json_utils:decode(Response),
     RootId = maps:get(<<"objectID">>, CdmiResponse, undefined),
@@ -322,9 +323,8 @@ get_root_with_objectid_endpoint_test(Config) ->
 
     RequestHeaders3 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, _Code3, _Headers3, Response3} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(
-        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/", get, RequestHeaders3, []
+        {ok, ?HTTP_200_OK, _, _}, cdmi_test_utils:do_request(
+            ?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/", get, RequestHeaders3, []
     )),
     CdmiResponse3 = json_utils:decode(Response3),
     Meta = maps:remove(<<"cdmi_atime">>, maps:get(<<"metadata">>, CdmiResponse)),
@@ -355,7 +355,7 @@ get_dir_with_objectid_endpoint_test(Config) ->
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, TestDirPath ++ "/", get, RequestHeaders, []
+        ?WORKERS(Config), TestDirPath ++ "/", get, RequestHeaders, []
     )),
 
     CdmiResponse = json_utils:decode(Response),
@@ -372,7 +372,7 @@ get_dir_with_objectid_endpoint_test(Config) ->
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, _Code2, _Headers2, Response2} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, filename:join(
+        cdmi_test_utils:do_request(?WORKERS(Config), filename:join(
             "cdmi_objectid/", binary_to_list(DirId)) ++ "/", get, RequestHeaders2, []
     )),
     CdmiResponse2 = json_utils:decode(Response2),
@@ -397,7 +397,7 @@ get_file_with_objectid_endpoint_test(Config) ->
     RequestHeaders = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, TestFilePath, get, RequestHeaders, [])
+        cdmi_test_utils:do_request(?WORKERS(Config), TestFilePath, get, RequestHeaders, [])
     ),
     CdmiResponse = json_utils:decode(Response),
     FileId = maps:get(<<"objectID">>, CdmiResponse, undefined),
@@ -414,7 +414,7 @@ get_file_with_objectid_endpoint_test(Config) ->
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
     {ok, _Code2, _Headers2, Response2} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, filename:join("cdmi_objectid/", binary_to_list(RootId))
+        cdmi_test_utils:do_request(?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(RootId))
         ++ "/" ++ TestFilePathBin, get, RequestHeaders2, []
     )),
     CdmiResponse2 = json_utils:decode(Response2),
@@ -431,7 +431,7 @@ get_file_with_objectid_endpoint_test(Config) ->
     {ok, _Code3, _Headers3, Response3} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(FileId)), get, RequestHeaders2, [])
+        ?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(FileId)), get, RequestHeaders2, [])
     ),
     CdmiResponse3 = json_utils:decode(Response3),
     Meta3 = maps:remove(<<"cdmi_atime">>, (maps:get(<<"metadata">>, CdmiResponse3))),
@@ -449,7 +449,7 @@ unauthorized_access_by_object_id_test(Config) ->
     {ok, RootId} = file_id:guid_to_objectid(node_cache:get(root_dir_guid)),
     RequestHeaders = [?CDMI_VERSION_HEADER],
     {ok, Code, _, Response} = cdmi_test_utils:do_request(
-        ?WORKERS, filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/",
+        ?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/",
         get, RequestHeaders, []
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_UNAUTHORIZED),
@@ -475,7 +475,7 @@ list_basic_dir_test(Config) ->
 
     {ok, _Code, Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, TestDirPath ++ "/", get,
+        cdmi_test_utils:do_request(?WORKERS(Config), TestDirPath ++ "/", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ),
 
@@ -500,7 +500,7 @@ list_root_space_dir_test(Config) ->
     Config#cdmi_test_config.p1_selector),
 
     % TODO VFS-7288 clarify what should be written to cdmi_size for directories
-    [WorkerP1, _WorkerP2] = ?WORKERS,
+    [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(WorkerP1, RootPath, get,
@@ -515,7 +515,7 @@ list_root_space_dir_test(Config) ->
 list_nonexisting_dir_test(Config) ->
     {ok, _Code, _Headers, _Response} = ?assertMatch(
         {ok, ?HTTP_404_NOT_FOUND, _, _},
-        cdmi_test_utils:do_request(?WORKERS, "nonexisting_dir/",
+        cdmi_test_utils:do_request(?WORKERS(Config), "nonexisting_dir/",
             get, [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ).
 
@@ -538,7 +538,7 @@ selective_params_list_test(Config) ->
     ),
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, filename:join(TestDirPath, "?children;objectName"),
+        cdmi_test_utils:do_request(?WORKERS(Config), filename:join(TestDirPath, "?children;objectName"),
             get, [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ),
     CdmiResponse = json_utils:decode(Response),
@@ -561,7 +561,7 @@ childrenrange_list_test(Config) ->
     ChildrangeDir = ?build_test_root_path(Config) ++ "/",
     {ok, _Code, _Headers, Response} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, ChildrangeDir ++ "?children;childrenrange",
+        cdmi_test_utils:do_request(?WORKERS(Config), ChildrangeDir ++ "?children;childrenrange",
             get, [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ),
     CdmiResponse = json_utils:decode(Response),
@@ -574,17 +574,17 @@ childrenrange_list_test(Config) ->
 
     {ok, _Code2, _, Response2} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, ChildrangeDir ++ "?children:2-13;childrenrange", get,
+        cdmi_test_utils:do_request(?WORKERS(Config), ChildrangeDir ++ "?children:2-13;childrenrange", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ),
     {ok, _Code3, _, Response3} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, ChildrangeDir ++ "?children:0-1;childrenrange", get,
+        cdmi_test_utils:do_request(?WORKERS(Config), ChildrangeDir ++ "?children:0-1;childrenrange", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ),
     {ok, _Code4, _, Response4} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(?WORKERS, ChildrangeDir ++ "?children:14-14;childrenrange", get,
+        cdmi_test_utils:do_request(?WORKERS(Config), ChildrangeDir ++ "?children:14-14;childrenrange", get,
             [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER], [])
     ),
 
@@ -604,8 +604,219 @@ childrenrange_list_test(Config) ->
     ?assertMatch(#{<<"childrenrange">> := <<"2-13">>}, CdmiResponse2),
     ?assertMatch(#{<<"childrenrange">> := <<"0-1">>}, CdmiResponse3),
     ?assertMatch(#{<<"childrenrange">> := <<"14-14">>}, CdmiResponse4),
-    lists:foreach(
-        fun(Name) ->
-            ?assert(lists:member(Name,
-                ChildrenResponse2 ++ ChildrenResponse3 ++ ChildrenResponse4))
-        end, ChildrenNameBinaries).
+
+    ?assertEqual([<<"10">>,<<"11">>,<<"12">>,<<"13">>,<<"14">>,<<"2">>,<<"3">>,
+        <<"4">>,<<"5">>,<<"6">>,<<"7">>,<<"8">>], ChildrenResponse2),
+    ?assertEqual([<<"0">>,<<"1">>], ChildrenResponse3),
+    ?assertEqual([<<"9">>], ChildrenResponse4).
+
+
+get_non_existing_file_error_test(Config) ->
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    RequestHeaders = [
+        cdmi_test_utils:user_2_token_header(),
+        ?CDMI_VERSION_HEADER,
+        ?CDMI_OBJECT_CONTENT_TYPE_HEADER
+    ],
+    ?assertMatch(
+        {ok, ?HTTP_404_NOT_FOUND, _, _},
+        cdmi_test_utils:do_request(
+            ?WORKERS(Config), filename:join(RootPath, "nonexistent_file"), get, RequestHeaders
+        )).
+
+
+list_non_existing_dir_error_test(Config) ->
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+    RequestHeaders2 = [
+        cdmi_test_utils:user_2_token_header(),
+        ?CDMI_VERSION_HEADER,
+        ?CDMI_CONTAINER_CONTENT_TYPE_HEADER
+    ],
+    ?assertMatch(
+        {ok, ?HTTP_404_NOT_FOUND, _, _},
+        cdmi_test_utils:do_request(
+            ?WORKERS(Config), filename:join(RootPath, "/nonexisting_dir") ++ "/", get, RequestHeaders2
+        )).
+
+
+download_empty_file_test(Config) ->
+    [_WorkerP1, WorkerP2] = ?WORKERS(Config),
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+
+    AuthHeaders = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
+    SessionId = oct_background:get_user_session_id(user2, Config#cdmi_test_config.p2_selector),
+    UserId = oct_background:get_user_id(user2),
+
+    % Create file
+    FileName = <<"download_empty_file_test">>,
+    FilePath = filename:join(["/", RootPath, FileName]),
+    {ok, FileGuid} = cdmi_test_utils:create_new_file(binary_to_list(FilePath), Config),
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, ?FILE_REF(FileGuid), 0), ?ATTEMPTS),
+
+    {ok, _, _, Response} = ?assertMatch(
+        {ok, ?HTTP_200_OK, _Headers, _Response},
+        cdmi_test_utils:do_request_base(
+            WorkerP2, FilePath, get, [?CDMI_VERSION_HEADER | AuthHeaders], <<>>
+        ),
+        ?ATTEMPTS
+    ),
+    ?assertMatch(
+        #{
+            <<"completionStatus">> := <<"Complete">>,
+            <<"metadata">> := #{
+                <<"cdmi_owner">> := UserId,
+                <<"cdmi_size">> := <<"0">>
+            },
+            <<"objectID">> := ObjectId,
+            <<"objectName">> := FileName,
+            <<"objectType">> := <<"application/cdmi-object">>,
+            <<"value">> := <<>>,
+            <<"valuerange">> := <<"0--1">>,
+            <<"valuetransferencoding">> := <<"base64">>
+        },
+        json_utils:decode(Response)
+    ).
+
+
+% tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
+partial_upload_cdmi_test(Config) ->
+    [WorkerP1, WorkerP2] = ?WORKERS(Config),
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+
+    FilePath = filename:join([RootPath, "partial.txt"]),
+    Chunk1 = <<"some">>,
+    Chunk2 = <<"_">>,
+    Chunk3 = <<"value">>,
+
+    %%------ cdmi request partial upload ------
+    ?assertNot(cdmi_test_utils:object_exists(FilePath, Config)),
+
+    % upload first chunk of file
+    RequestHeaders = [
+        cdmi_test_utils:user_2_token_header(),
+        ?CDMI_VERSION_HEADER,
+        ?CDMI_OBJECT_CONTENT_TYPE_HEADER,
+        {"X-CDMI-Partial", "true"}
+    ],
+    RequestBody = json_utils:encode(#{<<"value">> => Chunk1}),
+    {ok, ?HTTP_201_CREATED, _Headers1, Response1} = ?assertMatch(
+        {ok, ?HTTP_201_CREATED, _, _},
+        cdmi_test_utils:do_request(WorkerP2, FilePath, put, RequestHeaders, RequestBody
+        ), ?ATTEMPTS),
+    CdmiResponse = json_utils:decode(Response1),
+    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, CdmiResponse),
+
+    % upload second chunk of file
+    RequestBody2 = json_utils:encode(#{<<"value">> => base64:encode(Chunk2)}),
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath ++ "?value:4-4", put, RequestHeaders, RequestBody2
+    ), ?ATTEMPTS),
+    % upload third chunk of file
+    RequestHeaders3 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
+    RequestBody3 = json_utils:encode(#{<<"value">> => base64:encode(Chunk3)}),
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath ++ "?value:5-9", put, RequestHeaders3, RequestBody3
+    ),?ATTEMPTS),
+    timer:sleep(2000),
+    % get created file and check its consistency
+    RequestHeaders4 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
+    % TODO Verify once after VFS-2023
+    CheckAllChunks = fun() ->
+        ?assertMatch(#{<<"completionStatus">> := <<"Complete">>},
+            get_cdmi_response_from_request(FilePath, WorkerP1, RequestHeaders4),
+            ?ATTEMPTS
+        ),
+        ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>},
+            get_cdmi_response_from_request(FilePath, WorkerP1, RequestHeaders4),
+            ?ATTEMPTS
+        ),
+        {ok, ?HTTP_200_OK, _Headers4, Response4} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(WorkerP2, FilePath, get, RequestHeaders4, []),
+            ?ATTEMPTS
+        ),
+        CdmiResponse4 = json_utils:decode(Response4),
+        maps:get(<<"value">>, CdmiResponse4)
+    end,
+    % File size event change is async
+    Chunks123 = <<Chunk1/binary, Chunk2/binary, Chunk3/binary>>,
+    ?assertMatch(Chunks123, CheckAllChunks(), ?ATTEMPTS).
+
+
+partial_upload_noncdmi_test(Config) ->
+    [WorkerP1, WorkerP2] = ?WORKERS(Config),
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+
+    FilePath = filename:join([RootPath, "partial2.txt"]),
+    Chunk1 = <<"some">>,
+    Chunk2 = <<"_">>,
+    Chunk3 = <<"value">>,
+    %%----- non-cdmi request partial upload -------
+    ?assertNot(cdmi_test_utils:object_exists(FilePath, Config)),
+
+    % upload first chunk of file
+    RequestHeaders = [cdmi_test_utils:user_2_token_header(), {<<"X-CDMI-Partial">>, <<"true">>}],
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath, put, RequestHeaders, Chunk1
+    ),?ATTEMPTS),
+    RequestHeaders2 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
+    % check "completionStatus", should be set to "Processing"
+    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+        {ok, ?HTTP_200_OK, _, _},
+        cdmi_test_utils:do_request(
+            WorkerP1, FilePath ++ "?completionStatus", get, RequestHeaders2, Chunk1
+        ),
+        ?ATTEMPTS
+    ),
+    CdmiResponse2 = json_utils:decode(Response2),
+    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, CdmiResponse2),
+
+    % upload second chunk of file
+    RequestHeaders3 = [
+        cdmi_test_utils:user_2_token_header(),
+        {?HDR_CONTENT_RANGE, <<"bytes 4-4/10">>}, {<<"X-CDMI-Partial">>, <<"true">>}
+    ],
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath, put, RequestHeaders3, Chunk2
+    ), ?ATTEMPTS),
+
+    % upload third chunk of file
+    RequestHeaders4 = [
+        cdmi_test_utils:user_2_token_header(),
+        {?HDR_CONTENT_RANGE, <<"bytes 5-9/10">>},
+        {<<"X-CDMI-Partial">>, <<"false">>}
+    ],
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath, put, RequestHeaders4, Chunk3
+    ), ?ATTEMPTS),
+    timer:sleep(5000),
+    % get created file and check its consistency
+    RequestHeaders5 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
+    % TODO Verify once after VFS-2023
+    CheckAllChunks2 = fun() ->
+        ?assertMatch(#{<<"completionStatus">> := <<"Complete">>},
+            get_cdmi_response_from_request(FilePath, WorkerP2, RequestHeaders5), ?ATTEMPTS),
+        {ok, ?HTTP_200_OK, _Headers5, Response5} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(WorkerP1, FilePath, get, RequestHeaders5, []),
+            ?ATTEMPTS
+        ),
+        CdmiResponse5 = json_utils:decode(Response5),
+        base64:decode(maps:get(<<"value">>, CdmiResponse5))
+    end,
+    % File size event change is async
+    Chunks123 = <<Chunk1/binary, Chunk2/binary, Chunk3/binary>>,
+    ?assertMatch(Chunks123, CheckAllChunks2(), ?ATTEMPTS).
+
+
+get_cdmi_response_from_request(FileName, Workers, RequestHeaders1) ->
+    {ok, ?HTTP_200_OK, _Headers, Response} = ?assertMatch(
+        {ok, ?HTTP_200_OK, _, _},
+        cdmi_test_utils:do_request(
+            Workers, FileName, get, RequestHeaders1, []
+        ),
+        ?ATTEMPTS
+    ),
+    json_utils:decode(Response).

@@ -12,13 +12,13 @@
 -module(cdmi_move_copy_test_base).
 -author("Katarzyna Such").
 
+-include("cdmi_test.hrl").
 -include("http/cdmi.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include("onenv_test_utils.hrl").
--include("cdmi_test.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
-%% API
+%% Tests
 -export([
     copy_file_test/1,
     copy_dir_test/1,
@@ -64,7 +64,7 @@ copy_file_test(Config) ->
         aceflags = ?no_flags_mask,
         acemask = ?all_object_perms_mask
     }],
-    NewFilePath = ?build_test_root_specified_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
+    NewFilePath = cdmi_test_utils:build_test_root_path(Config, atom_to_list(?FUNCTION_NAME) ++"1"),
     ok = cdmi_test_utils:set_acl(FilePath, FileAcl, Config),
 
     % assert source file is created and destination does not exist
@@ -76,10 +76,10 @@ copy_file_test(Config) ->
     % copy file using cdmi
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody = json_utils:encode(#{<<"copy">> => build_random_src_uri(FilePath, FileGuid)}),
-    {ok, _Code, _Headers, _Response} = ?assertMatch(
+    ?assertMatch(
         {ok, ?HTTP_201_CREATED, _, _},
         cdmi_test_utils:do_request(
-        ?WORKERS, NewFilePath, put, RequestHeaders, RequestBody
+        ?WORKERS(Config), NewFilePath, put, RequestHeaders, RequestBody
     )),
 
     % assert new file is created
@@ -100,7 +100,7 @@ copy_dir_test(Config) ->
     Xattrs = #{<<"key1">> => <<"value1">>, <<"key2">> => <<"value2">>},
     UserId = oct_background:get_user_id(user2),
     UserName = <<"Unnamed User">>,
-    [WorkerP1, _WorkerP2] = ?WORKERS,
+    [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user2,
         node_cache:get(root_dir_guid),
@@ -122,7 +122,7 @@ copy_dir_test(Config) ->
         }, Config#cdmi_test_config.p1_selector
     ),
     DirPath = ?build_test_root_path(Config) ++ "/",
-    NewDirPath = ?build_test_root_specified_path(
+    NewDirPath = cdmi_test_utils:build_test_root_path(
         Config, "new" ++ atom_to_list(?FUNCTION_NAME)
     ) ++ "/",
     DirAcl = [#access_control_entity{
@@ -152,8 +152,8 @@ copy_dir_test(Config) ->
         <<"copy">> => build_random_src_uri(DirPath, DirGuid)
     }),
 
-    {ok, ?HTTP_201_CREATED, _Headers, _Response} = ?assertMatch(
-        {ok, 201, _, _},
+    ?assertMatch(
+        {ok, ?HTTP_201_CREATED, _, _},
         cdmi_test_utils:do_request(
             WorkerP1, NewDirPath, put, RequestHeaders, RequestBody
         ),
@@ -193,7 +193,7 @@ move_file_test(Config) ->
     ),
     FilePath = ?build_test_root_path(Config),
     FileData = <<"data">>,
-    NewMoveFilePath = ?build_test_root_specified_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
+    NewMoveFilePath = cdmi_test_utils:build_test_root_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
 
     ?assert(cdmi_test_utils:object_exists(FilePath, Config)),
     ?assertNot(cdmi_test_utils:object_exists(NewMoveFilePath, Config)),
@@ -204,7 +204,7 @@ move_file_test(Config) ->
     RequestBody = json_utils:encode(#{<<"move">> => build_random_src_uri(FilePath, FileGuid)}),
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _Headers3, _Response3},
-        cdmi_test_utils:do_request(?WORKERS, NewMoveFilePath, put, RequestHeaders, RequestBody)
+        cdmi_test_utils:do_request(?WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody)
     ),
     ?assertNot(cdmi_test_utils:object_exists(FilePath, Config), ?ATTEMPTS),
     ?assert(cdmi_test_utils:object_exists(NewMoveFilePath, Config), ?ATTEMPTS),
@@ -219,7 +219,7 @@ move_dir_test(Config) ->
         }, Config#cdmi_test_config.p1_selector
     ),
     DirPath = ?build_test_root_path(Config) ++ "/",
-    NewMoveDirPath = ?build_test_root_specified_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)) ++ "/",
+    NewMoveDirPath = cdmi_test_utils:build_test_root_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)) ++ "/",
 
     ?assert(cdmi_test_utils:object_exists(DirPath, Config)),
     ?assertNot(cdmi_test_utils:object_exists(NewMoveDirPath, Config)),
@@ -230,7 +230,7 @@ move_dir_test(Config) ->
     RequestBody = json_utils:encode(#{<<"move">> => build_random_src_uri(DirPath, DirGuid)}),
     ?assertMatch(
         {ok, ?HTTP_201_CREATED, _Headers2, _Response2},
-        cdmi_test_utils:do_request(?WORKERS, NewMoveDirPath, put, RequestHeaders, RequestBody)
+        cdmi_test_utils:do_request(?WORKERS(Config), NewMoveDirPath, put, RequestHeaders, RequestBody)
     ),
 
     ?assertNot(cdmi_test_utils:object_exists(DirPath, Config), ?ATTEMPTS),
@@ -320,7 +320,7 @@ move_copy_conflict_test(Config) ->
     FilePath = ?build_test_root_path(Config),
     FileUri = list_to_binary(filename:join("/", FilePath)),
     FileData = <<"data">>,
-    NewMoveFilePath = ?build_test_root_specified_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
+    NewMoveFilePath = cdmi_test_utils:build_test_root_path(Config, "new" ++ atom_to_list(?FUNCTION_NAME)),
     onenv_file_test_utils:create_and_sync_file_tree(user2, node_cache:get(root_dir_guid),
         #file_spec{
             name = atom_to_binary(?FUNCTION_NAME),
@@ -333,7 +333,7 @@ move_copy_conflict_test(Config) ->
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody = json_utils:encode(#{<<"move">> => FileUri, <<"copy">> => FileUri}),
     {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
-        ?WORKERS, NewMoveFilePath, put, RequestHeaders, RequestBody
+        ?WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_MALFORMED_DATA),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}),
