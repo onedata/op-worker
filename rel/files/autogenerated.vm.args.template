@@ -1,0 +1,8 @@
+## Name of the node
+-name nonode@nohost
+
+## Cookie for distributed erlang
+-setcookie cluster_node
+
+## non persistable vm.args
+-args_file {{runner_data_dir}}/vm.args
