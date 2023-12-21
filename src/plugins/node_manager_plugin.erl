@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
+-include("modules/dataset/dataset.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -24,7 +25,6 @@
 -export([oldest_upgradable_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
--export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([custom_workers/0]).
 -export([before_listeners_start/0, after_listeners_stop/0]).
@@ -133,16 +133,6 @@ before_init() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback executed before cluster upgrade so that any required preparation
-%% can be done.
-%% @end
-%%--------------------------------------------------------------------
--spec before_cluster_upgrade() -> ok.
-before_cluster_upgrade() ->
-    gs_channel_service:setup_internal_service().
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
 %% This callback is executed only on one cluster node.
 %% @end
@@ -167,18 +157,29 @@ upgrade_cluster(4) ->
     {ok, 5};
 upgrade_cluster(5) ->
     await_zone_connection_and_run(fun() ->
-        % @TODO VFS-11574 Rework the upgrade procedure regarding opened deleted files dir
-        spawn(fun() ->
-            timer:sleep(timer:minutes(2)),
-            {ok, SpaceIds} = provider_logic:get_spaces(),
-            lists:foreach(fun trash:ensure_exists/1, SpaceIds),
-            lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
-            lists:foreach(fun(SpaceId) ->
-                ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
-                file_meta:make_opened_deleted_files_dir_exist(SpaceId)
-            end, SpaceIds),
-            lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
-        end)
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        ?info("Upgrading tmp directory links..."),
+        lists:foreach(fun file_meta:ensure_tmp_dir_link_exists/1, SpaceIds),
+        % NOTE: there is no link for trash dir, so there is no need to ensure it existence.
+        ?info("Upgrading trash directories..."),
+        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+        ?info("Upgrading archive root directories..."),
+        lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
+        ?info("Upgrading archive root directory links..."),
+        lists:foreach(fun archivisation_tree:ensure_archives_root_link_exists/1, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            ?info("Upgrading dataset directory links for space '~s'...", [SpaceId]),
+            ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
+                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end),
+            ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
+                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end)
+        end, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
+            ?info("Creating directory for opened deleted files for space '~s'...", [SpaceId]),
+            file_meta:make_opened_deleted_files_dir_exist(SpaceId)
+        end, SpaceIds),
+        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
     end),
     {ok, 6}.
 

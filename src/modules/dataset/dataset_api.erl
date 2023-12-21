@@ -27,6 +27,7 @@
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 -export([handle_file_deleted/1]).
+-export([handle_remote_change/2]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -248,6 +249,15 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
             {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
 
+
+-spec handle_remote_change(od_space:id(), dataset:doc()) -> ok.
+handle_remote_change(_SpaceId, #document{deleted = true, key = DatasetId}) ->
+    cleanup_file_meta(DatasetId);
+handle_remote_change(SpaceId, #document{deleted = false, key = DatasetId}) ->
+    archivisation_tree:ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
+    ok.
+
+
 %%%===================================================================
 %%% Util functions
 %%%===================================================================
@@ -281,9 +291,14 @@ remove_unsafe(#document{key = DatasetId} = Doc, DatasetType) ->
         _ ->
             false
     end,
-    ok = file_meta_dataset:remove(Uuid),
-    ok = file_meta:delete(?DATASET_ARCHIVES_DIR_NAME(DatasetId)),
+    cleanup_file_meta(DatasetId),
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
+
+
+-spec cleanup_file_meta(dataset:id()) -> ok.
+cleanup_file_meta(DatasetId) ->
+    ok = file_meta_dataset:remove(DatasetId),
+    ok = file_meta:delete(?DATASET_ARCHIVES_DIR_NAME(DatasetId)).
 
 
 -spec reattach(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok | error().

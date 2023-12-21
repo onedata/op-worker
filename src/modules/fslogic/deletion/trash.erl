@@ -121,9 +121,9 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
 -spec prepare_doc(od_space:id()) -> file_meta:doc().
 prepare_doc(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    file_meta:new_doc(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
-        ?TRASH_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId),
-        SpaceUuid, SpaceId
+    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+    file_meta:new_special_dir_doc(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
+        ?TRASH_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId
     ).
 
 

@@ -40,8 +40,8 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    make_space_exist/1, make_tmp_dir_exist/1, make_opened_deleted_files_dir_exist/1,
-    new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
+    make_space_exist/1, make_tmp_dir_exist/1, ensure_tmp_dir_link_exists/1, make_opened_deleted_files_dir_exist/1,
+    new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
@@ -824,29 +824,35 @@ make_space_exist(SpaceId) ->
 make_tmp_dir_exist(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    TmpDirDoc = new_doc(
-        TmpDirUuid, ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
-        ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId, true
+    TmpDirDoc = new_special_dir_doc(
+        TmpDirUuid, ?TMP_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId
     ),
-    case datastore_model:create(?CTX, TmpDirDoc) of
+    case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
         {ok, _} ->
             case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
                 {ok, _} -> created;
                 {error, already_exists} -> created
             end;
         {error, already_exists} ->
+            ensure_tmp_dir_link_exists(SpaceId),
             already_exists
     end.
+
+
+-spec ensure_tmp_dir_link_exists(od_space:id()) -> ok.
+ensure_tmp_dir_link_exists(SpaceId) ->
+    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
+        ?TMP_DIR_NAME, fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId)))).
 
 
 -spec make_opened_deleted_files_dir_exist(od_space:id()) -> ok.
 make_opened_deleted_files_dir_exist(SpaceId) ->
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    Doc = new_doc(
-        ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
-        ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId, true
+    Doc = new_special_dir_doc(
+        ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DEFAULT_DIR_MODE,
+        ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId
     ),
-    case file_meta:create({uuid, TmpDirUuid}, Doc) of
+    case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
         {ok, _} ->
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
             case times:save_with_current_times(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId, true) of
@@ -860,13 +866,13 @@ make_opened_deleted_files_dir_exist(SpaceId) ->
 
 -spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
-    new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, false).
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope) ->
+    new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, false).
 
 
 -spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id(), boolean()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, IgnoreInChanges) ->
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -877,9 +883,15 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, IgnoreIn
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
         },
-        scope = SpaceId,
+        scope = Scope,
         ignore_in_changes = IgnoreInChanges
     }.
+
+
+-spec new_special_dir_doc(uuid(), name(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
+new_special_dir_doc(FileUuid, FileName, Mode, Owner, ParentUuid, Scope) ->
+    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+    new_doc(FileUuid, FileName, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, Scope).
 
 
 -spec new_share_root_dir_doc(uuid(), od_space:id()) -> doc().
