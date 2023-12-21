@@ -34,7 +34,10 @@
     mimetype_and_encoding_create_file_test/1,
     mimetype_and_encoding_create_file_noncdmi_request_test/1,
     wrong_create_path_error_test/1,
-    wrong_base_error_test/1
+    wrong_base_error_test/1,
+
+    partial_upload_cdmi_test/1,
+    partial_upload_noncdmi_test/1
 ]).
 
 %%%===================================================================
@@ -426,3 +429,145 @@ wrong_base_error_test(Config) ->
     ),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"base64">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
+
+
+% tests cdmi and non-cdmi partial upload feature (requests with x-cdmi-partial flag set to true)
+partial_upload_cdmi_test(Config) ->
+    [WorkerP1, WorkerP2] = ?WORKERS(Config),
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+
+    FilePath = filename:join([RootPath, "partial.txt"]),
+    Chunk1 = <<"some">>,
+    Chunk2 = <<"_">>,
+    Chunk3 = <<"value">>,
+
+    %%------ cdmi request partial upload ------
+    ?assertNot(cdmi_test_utils:object_exists(FilePath, Config)),
+
+    % upload first chunk of file
+    RequestHeaders = [
+        cdmi_test_utils:user_2_token_header(),
+        ?CDMI_VERSION_HEADER,
+        ?CDMI_OBJECT_CONTENT_TYPE_HEADER,
+        {"X-CDMI-Partial", "true"}
+    ],
+    RequestBody = json_utils:encode(#{<<"value">> => Chunk1}),
+    {ok, ?HTTP_201_CREATED, _Headers1, Response1} = ?assertMatch(
+        {ok, ?HTTP_201_CREATED, _, _},
+        cdmi_test_utils:do_request(WorkerP2, FilePath, put, RequestHeaders, RequestBody
+        ), ?ATTEMPTS),
+    CdmiResponse = json_utils:decode(Response1),
+    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, CdmiResponse),
+
+    % upload second chunk of file
+    RequestBody2 = json_utils:encode(#{<<"value">> => base64:encode(Chunk2)}),
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath ++ "?value:4-4", put, RequestHeaders, RequestBody2
+    ), ?ATTEMPTS),
+    % upload third chunk of file
+    RequestHeaders3 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
+    RequestBody3 = json_utils:encode(#{<<"value">> => base64:encode(Chunk3)}),
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath ++ "?value:5-9", put, RequestHeaders3, RequestBody3
+    ),?ATTEMPTS),
+    timer:sleep(2000),
+    % get created file and check its consistency
+    RequestHeaders4 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
+    % TODO Verify once after VFS-2023
+    CheckAllChunks = fun() ->
+        ?assertMatch(#{<<"completionStatus">> := <<"Complete">>},
+            get_cdmi_response_from_request(FilePath, WorkerP1, RequestHeaders4),
+            ?ATTEMPTS
+        ),
+        ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>},
+            get_cdmi_response_from_request(FilePath, WorkerP1, RequestHeaders4),
+            ?ATTEMPTS
+        ),
+        {ok, ?HTTP_200_OK, _Headers4, Response4} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(WorkerP2, FilePath, get, RequestHeaders4, []),
+            ?ATTEMPTS
+        ),
+        CdmiResponse4 = json_utils:decode(Response4),
+        maps:get(<<"value">>, CdmiResponse4)
+    end,
+    % File size event change is async
+    Chunks123 = <<Chunk1/binary, Chunk2/binary, Chunk3/binary>>,
+    ?assertMatch(Chunks123, CheckAllChunks(), ?ATTEMPTS).
+
+
+partial_upload_noncdmi_test(Config) ->
+    [WorkerP1, WorkerP2] = ?WORKERS(Config),
+    RootPath = cdmi_test_utils:get_tests_root_path(Config),
+
+    FilePath = filename:join([RootPath, "partial2.txt"]),
+    Chunk1 = <<"some">>,
+    Chunk2 = <<"_">>,
+    Chunk3 = <<"value">>,
+    %%----- non-cdmi request partial upload -------
+    ?assertNot(cdmi_test_utils:object_exists(FilePath, Config)),
+
+    % upload first chunk of file
+    RequestHeaders = [cdmi_test_utils:user_2_token_header(), {<<"X-CDMI-Partial">>, <<"true">>}],
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath, put, RequestHeaders, Chunk1
+    ),?ATTEMPTS),
+    RequestHeaders2 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
+    % check "completionStatus", should be set to "Processing"
+    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+        {ok, ?HTTP_200_OK, _, _},
+        cdmi_test_utils:do_request(
+            WorkerP1, FilePath ++ "?completionStatus", get, RequestHeaders2, Chunk1
+        ),
+        ?ATTEMPTS
+    ),
+    CdmiResponse2 = json_utils:decode(Response2),
+    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, CdmiResponse2),
+
+    % upload second chunk of file
+    RequestHeaders3 = [
+        cdmi_test_utils:user_2_token_header(),
+        {?HDR_CONTENT_RANGE, <<"bytes 4-4/10">>}, {<<"X-CDMI-Partial">>, <<"true">>}
+    ],
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath, put, RequestHeaders3, Chunk2
+    ), ?ATTEMPTS),
+
+    % upload third chunk of file
+    RequestHeaders4 = [
+        cdmi_test_utils:user_2_token_header(),
+        {?HDR_CONTENT_RANGE, <<"bytes 5-9/10">>},
+        {<<"X-CDMI-Partial">>, <<"false">>}
+    ],
+    ?assertMatch({ok, ?HTTP_204_NO_CONTENT, _, _}, cdmi_test_utils:do_request(
+        WorkerP2, FilePath, put, RequestHeaders4, Chunk3
+    ), ?ATTEMPTS),
+    timer:sleep(5000),
+    % get created file and check its consistency
+    RequestHeaders5 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
+    % TODO Verify once after VFS-2023
+    CheckAllChunks2 = fun() ->
+        ?assertMatch(#{<<"completionStatus">> := <<"Complete">>},
+            get_cdmi_response_from_request(FilePath, WorkerP2, RequestHeaders5), ?ATTEMPTS),
+        {ok, ?HTTP_200_OK, _Headers5, Response5} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(WorkerP1, FilePath, get, RequestHeaders5, []),
+            ?ATTEMPTS
+        ),
+        CdmiResponse5 = json_utils:decode(Response5),
+        base64:decode(maps:get(<<"value">>, CdmiResponse5))
+    end,
+    % File size event change is async
+    Chunks123 = <<Chunk1/binary, Chunk2/binary, Chunk3/binary>>,
+    ?assertMatch(Chunks123, CheckAllChunks2(), ?ATTEMPTS).
+
+
+get_cdmi_response_from_request(FileName, Workers, RequestHeaders1) ->
+    {ok, ?HTTP_200_OK, _Headers, Response} = ?assertMatch(
+        {ok, ?HTTP_200_OK, _, _},
+        cdmi_test_utils:do_request(
+            Workers, FileName, get, RequestHeaders1, []
+        ),
+        ?ATTEMPTS
+    ),
+    json_utils:decode(Response).

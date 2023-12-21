@@ -368,10 +368,10 @@ out_of_range_test(_Config) ->
     ?RUN_BASE_TEST().
 
 partial_upload_cdmi_test(_Config) ->
-    ?RUN_GET_TEST().
+    ?RUN_CREATE_TEST().
 
 partial_upload_noncdmi_test(_Config) ->
-    ?RUN_GET_TEST().
+    ?RUN_CREATE_TEST().
 
 acl_read_file_test(_Config) ->
     ?RUN_ACL_TEST().

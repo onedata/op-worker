@@ -39,7 +39,7 @@
 copy_file_test(Config) ->
     Xattrs = #{<<"key1">> => <<"value1">>, <<"key2">> => <<"value2">>},
     UserId = oct_background:get_user_id(user2),
-    UserName = <<"Unnamed User">>,
+    UserName = oct_background:get_user_fullname(user2),
     FileData = <<"data">>,
     JsonMetadata = #{<<"a">> => <<"b">>, <<"c">> => 2, <<"d">> => []},
 
@@ -99,7 +99,7 @@ copy_file_test(Config) ->
 copy_dir_test(Config) ->
     Xattrs = #{<<"key1">> => <<"value1">>, <<"key2">> => <<"value2">>},
     UserId = oct_background:get_user_id(user2),
-    UserName = <<"Unnamed User">>,
+    UserName = oct_background:get_user_fullname(user2),
     [WorkerP1, _WorkerP2] = ?WORKERS(Config),
     #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user2,

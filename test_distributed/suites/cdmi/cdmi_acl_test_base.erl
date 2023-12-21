@@ -34,7 +34,7 @@
 %%%===================================================================
 
 write_acl_metadata_test(Config) ->
-    UserName = <<"Unnamed User">>,
+    UserName = oct_background:get_user_fullname(user2),
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     UserId = oct_background:get_user_id(user2),
     DirPath = filename:join([RootPath, "metadataTestDir"]) ++ "/",
@@ -309,7 +309,7 @@ acl_read_write_dir_test(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
 
     UserId = oct_background:get_user_id(user2),
-    UserName = <<"Unnamed User">>,
+    UserName = oct_background:get_user_fullname(user2),
     DirRead = ace:to_json(#access_control_entity{
         acetype = ?allow_mask,
         identifier = UserId,
@@ -444,7 +444,7 @@ acl_read_write_dir_test(Config) ->
 acl_file_test_base(Config) ->
     RootPath = cdmi_test_utils:get_tests_root_path(Config),
     UserId = oct_background:get_user_id(user2),
-    UserName = <<"Unnamed User">>,
+    UserName = oct_background:get_user_fullname(user2),
     Identifier = <<UserName/binary, "#", UserId/binary>>,
 
     Read = ace:to_json(#access_control_entity{
