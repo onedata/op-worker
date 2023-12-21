@@ -29,6 +29,7 @@
 
 -export([
     dir_stats_collector_test/1,
+    dir_stats_collector_hardlinks_test/1,
     dir_stats_collector_trash_test/1,
     transfer_after_enabling_stats_test/1,
     dir_stats_collector_parallel_write_test/1,
@@ -75,6 +76,7 @@
 
 -define(TEST_CASES, [
     dir_stats_collector_test,
+    dir_stats_collector_hardlinks_test,
     dir_stats_collector_trash_test,
     transfer_after_enabling_stats_test,
     dir_stats_collector_parallel_write_test,
@@ -1503,7 +1505,7 @@ tmp_files_test_base(Config0, User, SpaceId) ->
 
     wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 
-    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+    ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
     lists:foreach(fun(G) ->
@@ -1561,7 +1563,7 @@ tmp_files_delete_test(Config0) ->
 
     wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 
-    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+    ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
     lists:foreach(fun(G) ->
@@ -1584,6 +1586,12 @@ dir_stats_collector_test(Config0) ->
     UserId = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
     dir_stats_collector_test_base:multiprovider_test(Config).
+
+
+dir_stats_collector_hardlinks_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:multiprovider_hardlinks_test(Config).
 
 
 dir_stats_collector_trash_test(Config0) ->
@@ -1648,7 +1656,7 @@ create_tmp_files(Config, SpaceId) ->
         ?assertEqual(ok, lfm_proxy:close(Worker1, Handle))
     end, [Handle1, Handle2, Handle3]),
 
-    ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+    ?assertMatch({ok, [_, _, _], _}, lfm_proxy:get_children(
         Worker1, SessId(Worker1), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
 
@@ -1864,6 +1872,12 @@ init_per_testcase(Case, Config) when
     dir_stats_collector_test_base:init_and_enable_for_new_space(init_per_testcase(
         ?DEFAULT_CASE(Case), Config
     ));
+init_per_testcase(dir_stats_collector_hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 1000),
+    dir_stats_collector_test_base:init_and_enable_for_new_space(init_per_testcase(
+        ?DEFAULT_CASE(Case), Config
+    ));
 init_per_testcase(transfer_after_enabling_stats_test = Case, Config) ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 init_per_testcase(detect_stale_replica_synchronizer_jobs_test = Case, Config) ->
@@ -1950,7 +1964,13 @@ end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
-    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test
+->
+    dir_stats_collector_test_base:teardown(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(dir_stats_collector_hardlinks_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, dir_stats_collector_race_preventing_time, 30000),
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->

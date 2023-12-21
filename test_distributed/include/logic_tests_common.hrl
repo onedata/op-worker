@@ -456,24 +456,26 @@ end).
 -define(MOCK_IDP_ACCESS_TOKEN, <<"mockIdPAccessToken">>).
 -define(MOCK_IDP, <<"mockIdP">>).
 
--define(USER_PRIVATE_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
+-define(USER_PRIVATE_DATA_MATCHER(__User), ?USER_PRIVATE_DATA_MATCHER(__User, {false, unchanged})).
+-define(USER_PRIVATE_DATA_MATCHER(__User, __BlockedValue), #document{key = __User, value = #od_user{
     full_name = ?USER_FULL_NAME(__User),
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
     space_aliases = ?USER_SPACE_ALIASES(__User),
-    blocked = {false, unchanged},
+    blocked = __BlockedValue,
     eff_groups = ?USER_EFF_GROUPS(__User),
     eff_spaces = ?USER_EFF_SPACES(__User),
     eff_handle_services = ?USER_EFF_HANDLE_SERVICES(__User),
     eff_atm_inventories = ?USER_EFF_ATM_INVENTORIES(__User)
 }}).
--define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
+-define(USER_PROTECTED_DATA_MATCHER(__User), ?USER_PROTECTED_DATA_MATCHER(__User, {false, unchanged})).
+-define(USER_PROTECTED_DATA_MATCHER(__User, __BlockedValue), #document{key = __User, value = #od_user{
     full_name = ?USER_FULL_NAME(__User),
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
-    blocked = {false, unchanged},
+    blocked = __BlockedValue,
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],

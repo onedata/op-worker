@@ -46,7 +46,8 @@
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
     {4, ?LINE_21_02(<<"2">>)},
-    {5, op_worker:get_release_version()}
+    {5, ?LINE_21_02(<<"3">>)},
+    {6, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -125,7 +126,7 @@ before_init() ->
         op_worker_sup:start_link(),
         ok = helpers_nif:init()
     catch
-        _:Error:Stacktrace   ->
+        _:Error:Stacktrace ->
             ?error_stacktrace("Error in node_manager_plugin:before_init: ~p", [Error], Stacktrace),
             {error, cannot_start_node_manager_plugin}
     end.
@@ -163,7 +164,23 @@ upgrade_cluster(4) ->
             end
         end, SpaceIds)
     end),
-    {ok, 5}.
+    {ok, 5};
+upgrade_cluster(5) ->
+    await_zone_connection_and_run(fun() ->
+        % @TODO VFS-11574 Rework the upgrade procedure regarding opened deleted files dir
+        spawn(fun() ->
+            timer:sleep(timer:minutes(2)),
+            {ok, SpaceIds} = provider_logic:get_spaces(),
+            lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+            lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
+            lists:foreach(fun(SpaceId) ->
+                ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
+                file_meta:make_opened_deleted_files_dir_exist(SpaceId)
+            end, SpaceIds),
+            lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+        end)
+    end),
+    {ok, 6}.
 
 %%--------------------------------------------------------------------
 %% @doc

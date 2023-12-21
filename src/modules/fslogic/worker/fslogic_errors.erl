@@ -51,7 +51,7 @@ is_access_error(_) -> false.
 %% Handle error caught during processing of fslogic request.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_error(fslogic_worker:request(), Type :: atom(), Reason :: term(), Stacktrace :: list()) ->
+-spec handle_error(fslogic_worker:request(), Type :: atom(), Reason :: term(), stacktrace()) ->
     fslogic_worker:response().
 handle_error(Request, Type, Error, Stacktrace) ->
     Status = #status{code = Code} =
@@ -111,14 +111,13 @@ gen_status_message(<<"quota exceeded">>) ->
 gen_status_message({403, <<>>, <<>>}) ->
     #status{code = ?EACCES, description = describe_error(?EACCES)};
 gen_status_message(Error) when is_atom(Error) ->
-    case ordsets:is_element(Error, ?ERROR_CODES) of
+    case errors:is_posix_code(Error) of
         true -> #status{code = Error};
-        false ->
-            #status{code = ?EAGAIN, description = describe_error(Error)}
+        false -> #status{code = ?EAGAIN, description = describe_error(Error)}
     end;
 gen_status_message({ErrorCode, ErrorDescription}) when
     is_atom(ErrorCode) and is_binary(ErrorDescription) ->
-    case ordsets:is_element(ErrorCode, ?ERROR_CODES) of
+    case errors:is_posix_code(ErrorCode) of
         true -> #status{code = ErrorCode, description = ErrorDescription};
         false -> #status{code = ?EAGAIN, description = ErrorDescription}
     end;

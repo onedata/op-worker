@@ -662,6 +662,9 @@ unmock_provider_ids(Workers) ->
 -spec testmaster_mock_space_user_privileges([node()], od_space:id(), od_user:id(),
     [privileges:space_privilege()]) -> ok.
 testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
+    % Manually invalidate permissions cache as it is not done automatically
+    % due to initializer mocks
+    lists:foreach(fun(Node) -> rpc:call(Node, permissions_cache, invalidate, []) end, Workers),
     utils:rpc_multicall(Workers, node_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
     ok.
 
@@ -1190,6 +1193,18 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     end,
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),
+    test_utils:mock_expect(Workers, space_logic, get_protected_data, fun(SessId, SpaceId) ->
+       {ok, #document{value = Space} = Doc} = GetSpaceFun(SessId, SpaceId),
+        {ok, Doc#document{value = Space#od_space{
+            owners = [],
+            direct_users = #{},
+            eff_users = #{},
+            direct_groups = #{},
+            eff_groups = #{},
+            shares = [],
+            harvesters = []
+        }}}
+    end),
 
     test_utils:mock_expect(Workers, space_logic, get_name, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{name = Name}}} = GetSpaceFun(Client, SpaceId),

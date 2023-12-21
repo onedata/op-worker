@@ -31,6 +31,8 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
+-type ctx() :: #atm_store_ctx{}.
+
 -type type() ::
     automation:store_type() |
     % types specific to op and as such not available in schema
@@ -49,7 +51,7 @@
 % automation:item converted (if needed) to a format for persisting in a store
 -type item() :: json_utils:json_term().
 
--export_type([id/0, record/0, doc/0, diff/0]).
+-export_type([id/0, record/0, doc/0, diff/0, ctx/0]).
 -export_type([type/0, config/0, content_update_options/0, item/0]).
 
 -define(CTX, #{model => ?MODULE}).

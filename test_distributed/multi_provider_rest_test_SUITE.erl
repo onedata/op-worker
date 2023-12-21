@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("http/rest.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -214,9 +215,9 @@ transfers_should_be_ordered_by_timestamps(Config) ->
                 <<"locationsPerStorage">> => #{
                     StorageP1 => StoragePath
                 },
-                <<"logicalSize">> => S,
+                <<"virtualSize">> => S,
                 <<"success">> => true
-            }, 
+            },
             DomainP2 => #{
                 <<"distributionPerStorage">> => #{
                     StorageP2 =>
@@ -225,7 +226,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
                 <<"locationsPerStorage">> => #{
                     StorageP2 => null
                 },
-                <<"logicalSize">> => S,
+                <<"virtualSize">> => S,
                 <<"success">> => true
             }
         },
@@ -345,34 +346,57 @@ metric_get(Config) ->
 
 
 list_spaces(Config) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
-
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    P1 = ?GET_DOMAIN_BIN(WorkerP1),
+    P2 = ?GET_DOMAIN_BIN(WorkerP2),
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"spaces">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     % then
-    ExpSpaces = lists:sort(lists:map(fun(SpaceId) ->
+    ExpSpaces = lists:sort(lists:map(fun({SpaceId, Providers}) ->
         SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
         {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
+        {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
+        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
 
         #{
             <<"name">> => SpaceId,
             <<"spaceId">> => SpaceId,
-            <<"fileId">> => SpaceDirObjectId
+            <<"fileId">> => SpaceDirObjectId,
+            <<"dirId">> => SpaceDirObjectId,
+            <<"trashDirId">> => TrashRootDirObjectId,
+            <<"archivesDirId">> => ArchivesRootDirObjectId,
+            <<"providers">> => lists:map(fun(P) ->
+                #{
+                    <<"providerId">> => P,
+                    <<"providerName">> => P
+                }
+            end, Providers)
         }
-    end, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space4">>])),
+    end, [{<<"space1">>, [P1]}, {<<"space2">>, [P1, P2]}, {<<"space3">>, [P1, P2]}, {<<"space4">>, [P1, P2]}])),
 
-    ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))).
+    ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))),
+
+    % data access caveats can limit the pool of available spaces
+    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(WorkerP1, <<"spaces">>, get,
+        [rest_test_utils:user_token_header(user1_token_with_access_limited_to_space3(Config))], [])),
+    ?assertEqual(
+        lists:filter(fun(SpaceData) -> maps:get(<<"spaceId">>, SpaceData) == <<"space3">> end, ExpSpaces),
+        json_utils:decode(Body2)
+    ).
+
 
 get_space(Config) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
 
-    % when
-    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"spaces/space2">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
+    % the token used in both requests allows access only to space3
+    AuthHeaders = [rest_test_utils:user_token_header(user1_token_with_access_limited_to_space3(Config))],
+    SpaceId = <<"space3">>,
 
-    SpaceId = <<"space2">>,
+    {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
+        rest_test_utils:request(WorkerP1, <<"spaces/", SpaceId/binary>>, get, AuthHeaders, [])),
+
     SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
@@ -395,7 +419,13 @@ get_space(Config) ->
             <<"fileId">> := SpaceDirObjectId
         },
         DecodedBody
-    ).
+    ),
+
+    % space2 should not be available
+    {_, _, _, Body2} = ?assertMatch({ok, 401, _, _}, rest_test_utils:request(
+        WorkerP1, <<"spaces/space2">>, get, AuthHeaders, [])),
+    #{<<"error">> := ErrorJson} = ?assertMatch(#{<<"error">> := _}, json_utils:decode(Body2)),
+    ?assertMatch(?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(_)), errors:from_json(ErrorJson)).
 
 
 list_transfers(Config) ->
@@ -871,3 +901,13 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
     end.
+
+
+user1_token_with_access_limited_to_space3(Config) ->
+    OriginalAccessTokenBin = ?config({access_token, <<"user1">>}, Config),
+    LimitedAccessToken = tokens:confine(?check(tokens:deserialize(OriginalAccessTokenBin)), [
+        #cv_data_readonly{},
+        #cv_data_objectid{whitelist = [?RAND_OBJECTID(<<"space3">>), ?RAND_OBJECTID(<<"space2">>)]},
+        #cv_data_path{whitelist = [?RAND_CANONICAL_PATH(<<"space1">>), ?RAND_CANONICAL_PATH(<<"space3">>), ?RAND_CANONICAL_PATH(<<"space4">>)]}
+    ]),
+    ?check(tokens:serialize(LimitedAccessToken)).

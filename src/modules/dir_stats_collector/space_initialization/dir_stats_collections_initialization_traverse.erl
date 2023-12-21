@@ -112,7 +112,9 @@ do_master_job(#tree_traverse{
                 file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
             ArchiveJob = tree_traverse:get_child_master_job(Job,
                 file_ctx:new_by_uuid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId), ?ARCHIVES_ROOT_DIR_NAME),
-            {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob | maps:get(master_jobs, MasterJobMap, [])]}};
+            TmpDirJob = tree_traverse:get_child_master_job(Job,
+                file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId), SpaceId), ?TMP_DIR_NAME),
+            {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob, TmpDirJob | maps:get(master_jobs, MasterJobMap, [])]}};
         false ->
             Ans
     end;
@@ -174,11 +176,12 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
     case tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor) of
         {ok, _} = Res ->
             Res;
-        {error, _} = Error ->
+        {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error("Error when listing directory during stats initialization: ~s", [?autoformat([Error, FileUuid])]),
+            ?error_exception("Error when listing directory during stats initialization: ~s",
+                [?autoformat([FileUuid])], error, Reason, Stacktrace),
             ok = dir_stats_collector:update_stats_of_dir(
-                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERRORS_COUNT => 1}),
+                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1}),
             {ok, #{}}
     end.

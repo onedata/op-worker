@@ -230,8 +230,8 @@ resolve_replication_status_and_size(FileCtx, FileDoc, Type, OptionalAttrs) ->
             {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx),
             {RS, undefined, Ctx};
         {?DIRECTORY_TYPE, _, true} ->
-            case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), [?TOTAL_SIZE]) of
-                {ok, #{?TOTAL_SIZE := S}} ->
+            case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), [?VIRTUAL_SIZE]) of
+                {ok, #{?VIRTUAL_SIZE := S}} ->
                     {undefined, S, FileCtx};
                 ?ERROR_NOT_FOUND ->
                     {undefined, 0, FileCtx};

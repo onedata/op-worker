@@ -50,9 +50,30 @@ change_replicated(SpaceId, Change) ->
 -spec change_replicated_internal(od_space:id(), datastore:doc()) ->
     any() | no_return().
 change_replicated_internal(SpaceId, #document{
-    value = #file_meta{}
+    key = FileUuid,
+    value = #file_meta{type = ?LINK_TYPE}
+} = LinkDoc) ->
+    ?debug("hardlink replicated ~p", [FileUuid]),
+    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
+        {ok, ReferencedDoc} ->
+            {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
+            FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
+            hardlink_replicated(LinkDoc, FileCtx);
+        Error ->
+            % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
+            ?warning("hardlink eplicated ~p - posthook failed with error ~p",
+                [FileUuid, Error])
+    end,
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
+change_replicated_internal(SpaceId, #document{
+    key = FileUuid,
+    value = #file_meta{mode = CurrentMode}
 } = FileDoc) ->
-    file_meta_change_replicated(SpaceId, FileDoc);
+    ?debug("file_meta_change_replicated: ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
+    {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
+    file_meta_change_replicated(FileDoc, FileCtx2),
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}
@@ -137,71 +158,27 @@ change_replicated_internal(_SpaceId, _Change) ->
 
 
 %% @private
--spec file_meta_change_replicated(od_space:id(), datastore:doc()) ->
-    any() | no_return().
-file_meta_change_replicated(SpaceId, #document{
-    key = FileUuid,
-    value = #file_meta{deleted = Del1, type = ?LINK_TYPE},
+-spec hardlink_replicated(datastore:doc(), file_ctx:ctx()) -> ok | no_return().
+hardlink_replicated(#document{
+    value = #file_meta{deleted = Del1},
     deleted = Del2
-} = LinkDoc) when Del1 or Del2 ->
-    ?debug("file_meta_change_replicated: deleted hardlink file_meta ~p", [FileUuid]),
-    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
-        {ok, ReferencedDoc} ->
-            {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
-            FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
-            fslogic_delete:handle_remotely_deleted_file(FileCtx);
-        Error ->
-            % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
-            ?warning("file_meta_change_replicated: deleted hardlink file_meta ~p - posthook failed with error ~p",
-                [FileUuid, Error])
-    end;
-file_meta_change_replicated(SpaceId, #document{
-    key = FileUuid,
-    value = #file_meta{mode = CurrentMode, deleted = Del1},
+}, FileCtx) when Del1 or Del2 ->
+    fslogic_delete:handle_remotely_deleted_file(FileCtx);
+hardlink_replicated(_, FileCtx) ->
+    % TODO VFS-7914 - Do not invalidate cache, when it is not needed
+    ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).
+
+
+%% @private
+-spec file_meta_change_replicated(datastore:doc(), file_ctx:ctx()) -> ok | no_return().
+file_meta_change_replicated(#document{
+    value = #file_meta{deleted = Del1},
     deleted = Del2
-} = FileDoc) when Del1 or Del2 ->
-    ?debug("file_meta_change_replicated: deleted file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
-    fslogic_delete:handle_remotely_deleted_file(FileCtx2),
-    ok;
-file_meta_change_replicated(SpaceId, #document{
-    key = FileUuid,
-    value = #file_meta{mode = CurrentMode, type = ?REGULAR_FILE_TYPE}
-} = FileDoc) ->
-    ?debug("file_meta_change_replicated: changed file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
-file_meta_change_replicated(SpaceId, #document{
-    key = FileUuid,
-    deleted = false,
-    value = #file_meta{type = ?LINK_TYPE}
-} = LinkDoc) ->
-    ?debug("file_meta_change_replicated: changed hardlink file_meta ~p", [FileUuid]),
-    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
-        {ok, ReferencedDoc} ->
-            {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
-            FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
-            % TODO VFS-7914 - Do not invalidate cache, when it is not needed
-            ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
-            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
-        Error ->
-            % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
-            ?warning("file_meta_change_replicated: deleted hardlink file_meta ~p - posthook failed with error ~p",
-                [FileUuid, Error])
-    end;
-file_meta_change_replicated(SpaceId, #document{
-    key = FileUuid,
-    deleted = false,
-    value = #file_meta{mode = CurrentMode}
-} = FileDoc) ->
-    ?debug("file_meta_change_replicated: changed file_meta ~p", [FileUuid]),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-    ok = file_meta_posthooks:execute_hooks(FileUuid, doc).
+}, FileCtx) when Del1 or Del2 ->
+    fslogic_delete:handle_remotely_deleted_file(FileCtx);
+file_meta_change_replicated(_, FileCtx) ->
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []).
 
 
 %% @private

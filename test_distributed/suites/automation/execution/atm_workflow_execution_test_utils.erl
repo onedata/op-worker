@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
+-include("http/rest.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
@@ -36,6 +37,7 @@
 -export([
     scan_audit_log/3, scan_audit_log/4,
     browse_store/2, browse_store/3,
+    download_store_dump/2, download_store_dump/3,
     get_exception_store_content/2
 ]).
 -export([
@@ -219,6 +221,39 @@ browse_store(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCal
     SpaceId = oct_background:get_space_id(SpaceSelector),
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
+
+
+-spec download_store_dump(automation:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    json_utils:json_term().
+download_store_dump(AtmStoreSchemaId, AtmMockCallCtx) ->
+    download_store_dump(AtmStoreSchemaId, undefined, AtmMockCallCtx).
+
+
+-spec download_store_dump
+    (exception_store, atm_lane_execution:lane_run_selector(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+        {ok, json_utils:json_term()} | errors:error();
+    (automation:id(), undefined | atm_task_execution:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
+        {ok, json_utils:json_term()} | errors:error().
+download_store_dump(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx = #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId
+}) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+
+    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionComponentSelector, AtmMockCallCtx),
+    Path = str_utils:format_bin("automation/execution/stores/~s/dump", [AtmStoreId]),
+
+    {ok, UserId} = ?rpc(ProviderSelector, session:get_user_id(SessionId)),
+    AuthHeader = rest_test_utils:user_token_header(oct_background:get_user_access_token(UserId)),
+    Headers = maps:from_list([AuthHeader]),
+
+    case rest_test_utils:request(Node, Path, get, Headers, <<>>) of
+        {ok, ?HTTP_200_OK, _, Body} ->
+            {ok, json_utils:decode(Body)};
+        {ok, _, _, Body} ->
+            #{<<"error">> := ErrorJson} = json_utils:decode(Body),
+            errors:from_json(ErrorJson)
+    end.
 
 
 -spec get_exception_store_content(

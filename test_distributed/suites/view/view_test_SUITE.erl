@@ -11,7 +11,9 @@
 -module(view_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("modules/dataset/archivisation_tree.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -137,10 +139,18 @@ query_view_using_file_meta(_Config) ->
     {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
 
     TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    TmpUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
+
+    OpenedDeletedGuid = file_id:pack_guid(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId),
+    {ok, OpenedDeletedObjectId} = file_id:guid_to_objectid(OpenedDeletedGuid),
 
     TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
+    
+    ArchivesRootDirGuid = file_id:pack_guid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId),
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(ArchivesRootDirGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -193,6 +203,34 @@ query_view_using_file_meta(_Config) ->
                 <<"deleted">> := false,
                 <<"parent_uuid">> := <<"">>
             }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := ArchivesRootDirObjectId,
+            <<"value">> := #{
+                <<"name">> := ArchivesRootDirName,
+                <<"type">> := <<"DIR">>,
+                <<"mode">> := ?ARCHIVES_ROOT_DIR_PERMS,
+                <<"owner">> := SpaceOwnerId,
+                <<"provider_id">> := ProviderId,
+                <<"shares">> := [],
+                <<"deleted">> := false,
+                <<"parent_uuid">> := SpaceUuid
+            }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := OpenedDeletedObjectId,
+            <<"value">> := #{
+                <<"name">> := ?OPENED_DELETED_FILES_DIR_DIR_NAME,
+                <<"type">> := <<"DIR">>,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
+                <<"owner">> := SpaceOwnerId,
+                <<"provider_id">> := ProviderId,
+                <<"shares">> := [],
+                <<"deleted">> := false,
+                <<"parent_uuid">> := TmpUuid
+            }
         }
     ], ViewName, [{stale, false}]).
 
@@ -204,6 +242,9 @@ query_view_using_times(_Config) ->
 
     TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
     {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
+
+    OpenedDeletedGuid = file_id:pack_guid(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId),
+    {ok, OpenedDeletedObjectId} = file_id:guid_to_objectid(OpenedDeletedGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -228,6 +269,16 @@ query_view_using_times(_Config) ->
         #{
             <<"id">> := _,
             <<"key">> := SpaceObjectId,
+            <<"value">> := #{
+                <<"atime">> := _,
+                <<"mtime">> := _,
+                <<"ctime">> := _
+
+            }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := OpenedDeletedObjectId,
             <<"value">> := #{
                 <<"atime">> := _,
                 <<"mtime">> := _,

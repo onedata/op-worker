@@ -196,9 +196,9 @@ stream_file(State, SessionId, FileAttrs, FileRelativePath) ->
             {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, FileRelativePath),
             UpdatedState1 = send_data(Bytes, UpdatedState),
             Range = {0, FileSize - 1},
-            StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
-            StreamingCtx2 = http_streamer:set_range_policy(StreamingCtx, strict),
-            StreamingCtx3 = http_streamer:set_send_fun(StreamingCtx2, fun(Data, InFunState, _MaxReadBlocksCount, SendRetryDelay) -> 
+            StreamingCtx = file_content_streamer:build_ctx(FileHandle, FileSize),
+            StreamingCtx2 = file_content_streamer:set_range_policy(StreamingCtx, strict),
+            StreamingCtx3 = file_content_streamer:set_send_fun(StreamingCtx2, fun(Data, InFunState, _MaxReadBlocksCount, SendRetryDelay) ->
                 DataSize = byte_size(Data),
                 #state{tar_stream = TarStream} = InFunState,
                 TarStream2 = tar_utils:append_to_file_content(TarStream, Data, DataSize),
@@ -207,7 +207,7 @@ stream_file(State, SessionId, FileAttrs, FileRelativePath) ->
                     send_data(BytesToSend, InFunState#state{tar_stream = FinalTarStream, send_retry_delay = SendRetryDelay}),
                 {NewDelay, UpdatedInFunState}
             end),
-            FinalState = http_streamer:stream_bytes_range(StreamingCtx3, Range, UpdatedState1),
+            FinalState = file_content_streamer:stream_bytes_range(StreamingCtx3, Range, UpdatedState1),
             lfm:monitored_release(FileHandle),
             FinalState;
         ignored ->

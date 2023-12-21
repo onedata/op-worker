@@ -25,14 +25,14 @@
 -export([execute_unsafe_job/5]).
 -export([is_cancelling/1]).
 
--type error_handler(T) :: fun((tree_traverse:job(), Error :: any(), Stacktrace :: list() | undefined) -> T).
+-type error_handler(T) :: fun((tree_traverse:job(), Error :: any(), stacktrace() | undefined) -> T).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 -spec do_master_job(module(), tree_traverse:master_job(), traverse:master_job_extended_args(), 
-    error_handler({ok, traverse:master_job_map()})) -> {ok, traverse:master_job_map()} | {error, term()}.
+    error_handler({ok, traverse:master_job_map()})) -> {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job(
     TraverseModule, 
     Job = #tree_traverse{file_ctx = FileCtx}, 
