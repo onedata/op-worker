@@ -251,8 +251,9 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 
 
 -spec handle_remote_change(od_space:id(), dataset:doc()) -> ok.
-handle_remote_change(_SpaceId, #document{deleted = true, key = DatasetId}) ->
-    cleanup_file_meta(DatasetId);
+handle_remote_change(SpaceId, #document{deleted = true, key = DatasetId}) ->
+    ok = file_meta_forest:delete(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
+        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId));
 handle_remote_change(SpaceId, #document{deleted = false, key = DatasetId}) ->
     archivisation_tree:ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
     ok.
@@ -291,14 +292,9 @@ remove_unsafe(#document{key = DatasetId} = Doc, DatasetType) ->
         _ ->
             false
     end,
-    cleanup_file_meta(DatasetId),
+    ok = file_meta_dataset:remove(Uuid),
+    ok = file_meta:delete(?DATASET_ARCHIVES_DIR_NAME(DatasetId)),
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
-
-
--spec cleanup_file_meta(dataset:id()) -> ok.
-cleanup_file_meta(DatasetId) ->
-    ok = file_meta_dataset:remove(DatasetId),
-    ok = file_meta:delete(?DATASET_ARCHIVES_DIR_NAME(DatasetId)).
 
 
 -spec reattach(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok | error().

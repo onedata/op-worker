@@ -25,6 +25,7 @@
 -export([oldest_upgradable_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
+-export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([custom_workers/0]).
 -export([before_listeners_start/0, after_listeners_stop/0]).
@@ -131,6 +132,18 @@ before_init() ->
             {error, cannot_start_node_manager_plugin}
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback executed before cluster upgrade so that any required preparation
+%% can be done.
+%% @end
+%%--------------------------------------------------------------------
+-spec before_cluster_upgrade() -> ok.
+before_cluster_upgrade() ->
+    gs_channel_service:setup_internal_service().
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
@@ -156,6 +169,7 @@ upgrade_cluster(4) ->
     end),
     {ok, 5};
 upgrade_cluster(5) ->
+    save_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         ?info("Upgrading tmp directory links..."),
@@ -164,9 +178,10 @@ upgrade_cluster(5) ->
         ?info("Upgrading trash directories..."),
         lists:foreach(fun trash:ensure_exists/1, SpaceIds),
         ?info("Upgrading archive root directories..."),
+        % NOTE: below function also ensures existence of archives root link.
         lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
-        ?info("Upgrading archive root directory links..."),
-        lists:foreach(fun archivisation_tree:ensure_archives_root_link_exists/1, SpaceIds),
+        % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
+        % it will create it if it is not yet synced.
         lists:foreach(fun(SpaceId) ->
             ?info("Upgrading dataset directory links for space '~s'...", [SpaceId]),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
@@ -239,6 +254,7 @@ custom_workers() -> filter_disabled_workers([
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
+    save_mode:disable_if_not_set(),
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),

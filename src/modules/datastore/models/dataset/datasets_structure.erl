@@ -390,7 +390,7 @@ is_prefix(Prefix, String) ->
     ok.
 apply_to_all_datasets(SpaceId, ForestType, Fun, Opts) ->
     {NextBatch, NextBatchOpts, IsFinished} = list_next_batch(SpaceId, ForestType, Opts),
-    lists:map(Fun, NextBatch),
+    lists:foreach(Fun, NextBatch),
     case IsFinished of
         true -> ok;
         false -> apply_to_all_datasets(SpaceId, ForestType, Fun, NextBatchOpts)
@@ -400,22 +400,23 @@ apply_to_all_datasets(SpaceId, ForestType, Fun, Opts) ->
 -spec list_next_batch(od_space:id(), forest_type(), datastore_model:fold_opts()) ->
     {[dataset:id()], datastore_model:fold_opts(), boolean()}.
 list_next_batch(SpaceId, ForestType, Opts) ->
-    Opts1 = case maps:is_key(token, Opts) of
-        true -> Opts;
-        false -> Opts#{token => #link_token{}}
-    end,
-    {{ok, Res}, Token} = fold(SpaceId, ForestType,
-        fun(#link{name = DatasetPath}, Acc) -> {ok, [filename:basename(DatasetPath) | Acc]} end, [],
-        Opts1#{size => ?FOLD_LINKS_BATCH_SIZE}),
+    Token = maps:get(token, Opts, #link_token{}),
+    {{ok, Res}, NextBatchToken} = fold(
+        SpaceId,
+        ForestType,
+        fun(#link{name = DatasetPath}, Acc) -> {ok, [filename:basename(DatasetPath) | Acc]} end,
+        [],
+        Opts#{size => ?FOLD_LINKS_BATCH_SIZE, token => Token}
+    ),
     NextBatchOpts = case Res of
-        [] -> #{token => Token};
-        _ -> #{token => Token, prev_link_name => lists:last(Res)}
+        [] -> #{token => NextBatchToken};
+        _ -> #{token => NextBatchToken, prev_link_name => lists:last(Res)}
     end,
-    {Res, NextBatchOpts, Token#link_token.is_last}.
+    {Res, NextBatchOpts, NextBatchToken#link_token.is_last}.
 
 
 -spec fold(od_space:id(), forest_type(), fold_fun(), fold_acc(), datastore_model:fold_opts()) ->
-    {ok, fold_acc()} | {error, term()}.
+    {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold(SpaceId, ForestType, Fun, AccIn, Opts) ->
     datastore_model:fold_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, Fun, AccIn, Opts).
 
