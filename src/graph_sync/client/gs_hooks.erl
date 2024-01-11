@@ -119,9 +119,10 @@ on_connect_to_oz() ->
     ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
-    ok = fslogic_worker:init_effective_caches(all),
     ok = main_harvesting_stream:revise_all_spaces(),
-    ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
+    % TODO: VFS-5744 potential race condition:
+    % provider may perform operations associated with QoS (or any other effective cache) before cache initialization
+    ok = node_manager_plugin:init_etses_for_space_on_all_nodes(all),
     ok = rtransfer_config:add_storages(),
     ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),

@@ -78,7 +78,7 @@ move_to_trash(FileCtx, UserCtx) ->
     TrashUuid = fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:cleanup_reference_related_documents(FileCtx5),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId),
     NameInTrash = ?NAME_IN_TRASH(Name, Uuid),
     file_meta:rename(FileDoc, ParentUuid, TrashUuid, NameInTrash),
     ok = dataset_eff_cache:invalidate_on_all_nodes(SpaceId),

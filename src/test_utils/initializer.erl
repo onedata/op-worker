@@ -916,13 +916,12 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, fslogic_worker, init_effective_caches, [all])
+        rpc:call(DomainWorker, node_manager_plugin, init_etses_for_space, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
     storage_logic_mock_setup(AllWorkers, StoragesSetupMap, SpacesSupports),
-    ok = init_qos_bounded_cache(Config),
 
     set_luma_feed(StoragesSetupMap, Config),
     setup_luma(LumaConfigs2, Config),
@@ -1873,15 +1872,6 @@ index_of(Value, List) ->
         {Value, Index} -> Index;
         false -> not_found
     end.
-
--spec init_qos_bounded_cache(list()) -> ok.
-init_qos_bounded_cache(Config) ->
-    DifferentProvidersWorkers = get_different_domain_workers(Config),
-    {Results, BadNodes} = utils:rpc_multicall(
-        DifferentProvidersWorkers, qos_bounded_cache, ensure_exists_for_all_spaces, []
-    ),
-    ?assertMatch([], BadNodes),
-    lists:foreach(fun(Result) -> ?assertMatch(ok, Result) end, Results).
 
 
 local_ip_v4() ->
