@@ -131,48 +131,56 @@ selective_metadata_read_test(Config) ->
     ),
 
     %%-- selective metadata read -----
-    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _}, cdmi_test_utils:do_request(
-            ?WORKERS(Config), FilePath ++ "?metadata", get, RequestHeaders, []
-    ), ?ATTEMPTS),
-    CdmiResponse2 = json_utils:decode(Response2),
-    Metadata2 = maps:get(<<"metadata">>, CdmiResponse2),
-    ?assertEqual(1, maps:size(CdmiResponse2)),
-    ?assertEqual(6, maps:size(Metadata2)),
+    GetResponseFun2 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _}, cdmi_test_utils:do_request(
+                ?WORKERS(Config), FilePath ++ "?metadata", get, RequestHeaders, []
+        ), ?ATTEMPTS),
+        CdmiResponse2 = json_utils:decode(Response2),
+        Metadata2 = maps:get(<<"metadata">>, CdmiResponse2),
+        {maps:size(CdmiResponse2), maps:size(Metadata2)}
+    end,
+    ?assertEqual({1, 6}, GetResponseFun2(), ?ATTEMPTS),
 
     %%-- selective metadata read with prefix -----
-    {ok, ?HTTP_200_OK, _Headers3, Response3} = cdmi_test_utils:do_request(
-        ?WORKERS(Config), FilePath ++ "?metadata:cdmi_", get, RequestHeaders, []
-    ),
-    CdmiResponse3 = json_utils:decode(Response3),
-    Metadata3 = maps:get(<<"metadata">>, CdmiResponse3),
-    ?assertEqual(1, maps:size(CdmiResponse3)),
-    ?assertEqual(5, maps:size(Metadata3)),
+    GetResponseFun3 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers3, Response3} = cdmi_test_utils:do_request(
+            ?WORKERS(Config), FilePath ++ "?metadata:cdmi_", get, RequestHeaders, []
+        ),
+        CdmiResponse3 = json_utils:decode(Response3),
+        Metadata3 = maps:get(<<"metadata">>, CdmiResponse3),
+        {maps:size(CdmiResponse3), maps:size(Metadata3)}
+    end,
+    ?assertEqual({1, 5}, GetResponseFun3(), ?ATTEMPTS),
 
-    {ok, ?HTTP_200_OK, _Headers4, Response4} = cdmi_test_utils:do_request(
-        ?WORKERS(Config), FilePath ++ "?metadata:cdmi_o", get, RequestHeaders, []
-    ),
-    CdmiResponse4 = json_utils:decode(Response4),
-    Metadata4 = maps:get(<<"metadata">>, CdmiResponse4),
-    ?assertEqual(1, maps:size(CdmiResponse4)),
-    ?assertMatch(UserId, maps:get(<<"cdmi_owner">>, Metadata4)),
-    ?assertEqual(1, maps:size(Metadata4)),
+    GetResponseFun4 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers4, Response4} = cdmi_test_utils:do_request(
+            ?WORKERS(Config), FilePath ++ "?metadata:cdmi_o", get, RequestHeaders, []
+        ),
+        CdmiResponse4 = json_utils:decode(Response4),
+        Metadata4 = maps:get(<<"metadata">>, CdmiResponse4),
+        {maps:size(CdmiResponse4), maps:get(<<"cdmi_owner">>, Metadata4), maps:size(Metadata4)}
+    end,
+    ?assertEqual({1, UserId, 1}, GetResponseFun4(), ?ATTEMPTS),
 
-    {ok, ?HTTP_200_OK, _Headers5, Response5} = cdmi_test_utils:do_request(
-        ?WORKERS(Config), FilePath ++ "?metadata:cdmi_size", get, RequestHeaders, []
-    ),
-    CdmiResponse5 = json_utils:decode(Response5),
-    Metadata5 = maps:get(<<"metadata">>, CdmiResponse5),
-    ?assertEqual(1, maps:size(CdmiResponse5)),
-    ?assertMatch(#{<<"cdmi_size">> := <<"13">>}, Metadata5),
-    ?assertEqual(1, maps:size(Metadata5)),
+    GetResponseFun5 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers5, Response5} = cdmi_test_utils:do_request(
+            ?WORKERS(Config), FilePath ++ "?metadata:cdmi_size", get, RequestHeaders, []
+        ),
+        CdmiResponse5 = json_utils:decode(Response5),
+        Metadata5 = maps:get(<<"metadata">>, CdmiResponse5),
+        {maps:size(CdmiResponse5), Metadata5, maps:size(Metadata5)}
+    end,
+    ?assertEqual({1, #{<<"cdmi_size">> => <<"13">>}, 1}, GetResponseFun5(), ?ATTEMPTS),
 
-    {ok, ?HTTP_200_OK, _Headers6, Response6} = cdmi_test_utils:do_request(
-        ?WORKERS(Config), FilePath ++ "?metadata:cdmi_no_such_metadata", get, RequestHeaders, []
-    ),
-    CdmiResponse6 = json_utils:decode(Response6),
-    ?assertEqual(1, maps:size(CdmiResponse6)),
-    ?assertMatch(#{<<"metadata">> := #{}}, CdmiResponse6).
+    GetResponseFun6 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers6, Response6} = cdmi_test_utils:do_request(
+            ?WORKERS(Config), FilePath ++ "?metadata:cdmi_no_such_metadata", get, RequestHeaders, []
+        ),
+        CdmiResponse6 = json_utils:decode(Response6),
+        {maps:size(CdmiResponse6), CdmiResponse6}
+    end,
+    ?assertEqual({1, #{<<"metadata">> => #{}}}, GetResponseFun6(), ?ATTEMPTS).
 
 
 update_user_metadata_file_test(Config) ->
@@ -206,18 +214,19 @@ update_user_metadata_file_test(Config) ->
         ?ATTEMPTS
     ),
 
-    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(
-            ?WORKERS(Config), FilePath ++ "?metadata:my", get, RequestHeaders, []
+    GetResponseFun2 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(
+                ?WORKERS(Config), FilePath ++ "?metadata:my", get, RequestHeaders, []
+            ),
+            ?ATTEMPTS
         ),
-        ?ATTEMPTS
-    ),
-    CdmiResponse2 = json_utils:decode(Response2),
-    Metadata2 = maps:get(<<"metadata">>, CdmiResponse2),
-    ?assertEqual(1, maps:size(CdmiResponse2)),
-    ?assertMatch(#{<<"my_new_metadata">> := <<"my_new_value">>}, Metadata2),
-    ?assertEqual(1, maps:size(Metadata2)),
+        CdmiResponse2 = json_utils:decode(Response2),
+        Metadata2 = maps:get(<<"metadata">>, CdmiResponse2),
+        {maps:size(CdmiResponse2), Metadata2, maps:size(Metadata2)}
+    end,
+    ?assertEqual({1, #{<<"my_new_metadata">> => <<"my_new_value">>}, 1}, GetResponseFun2(), ?ATTEMPTS),
 
     RequestBody3 = #{<<"metadata">> =>
     #{<<"my_new_metadata_add">> => <<"my_new_value_add">>,
@@ -232,27 +241,32 @@ update_user_metadata_file_test(Config) ->
         RawRequestBody3
     ), ?ATTEMPTS),
 
-    {ok, ?HTTP_200_OK, _Headers3, Response3} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(WorkerP1, FilePath ++ "?metadata:my", get, RequestHeaders, []),
-        ?ATTEMPTS
-    ),
-    CdmiResponse3 = json_utils:decode(Response3),
-    Metadata3 = maps:get(<<"metadata">>, CdmiResponse3),
-    ?assertEqual(1, maps:size(CdmiResponse3)),
-    ?assertMatch(#{<<"my_new_metadata_add">> := <<"my_new_value_add">>}, Metadata3),
-    ?assertMatch(#{<<"my_new_metadata">> := <<"my_new_value_update">>}, Metadata3),
-    ?assertEqual(2, maps:size(Metadata3)),
+    GetResponseFun3 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers3, Response3} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(WorkerP1, FilePath ++ "?metadata:my", get, RequestHeaders, []),
+            ?ATTEMPTS
+        ),
+        CdmiResponse3 = json_utils:decode(Response3),
+        Metadata3 = maps:get(<<"metadata">>, CdmiResponse3),
+        {maps:size(CdmiResponse3), Metadata3, maps:size(Metadata3)}
+    end,
+    ?assertEqual({1, #{
+        <<"my_new_metadata_add">> => <<"my_new_value_add">>,
+        <<"my_new_metadata">> => <<"my_new_value_update">>
+    }, 2}, GetResponseFun3(), ?ATTEMPTS),
 
-    {ok, ?HTTP_200_OK, _Headers4, Response4} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(WorkerP1, FilePath ++ "?metadata:cdmi_", get, RequestHeaders, []),
-        ?ATTEMPTS
-    ),
-    CdmiResponse4 = json_utils:decode(Response4),
-    Metadata4 = maps:get(<<"metadata">>, CdmiResponse4),
-    ?assertEqual(1, maps:size(CdmiResponse4)),
-    ?assertEqual(5, maps:size(Metadata4)),
+    GetResponseFun4 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers4, Response4} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(WorkerP1, FilePath ++ "?metadata:cdmi_", get, RequestHeaders, []),
+            ?ATTEMPTS
+        ),
+        CdmiResponse4 = json_utils:decode(Response4),
+        Metadata4 = maps:get(<<"metadata">>, CdmiResponse4),
+        {maps:size(CdmiResponse4), maps:size(Metadata4)}
+    end,
+    ?assertEqual({1, 5}, GetResponseFun4(), ?ATTEMPTS),
 
     RequestBody5 = #{<<"metadata">> => #{<<"my_new_metadata">> => <<"my_new_value_ignore">>}},
     RawRequestBody5 = json_utils:encode(RequestBody5),
@@ -351,11 +365,14 @@ delete_dir_test(Config) ->
     RequestHeaders3 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
     ?assert(cdmi_test_utils:object_exists("/", Config)),
 
-    {ok, Code3, _Headers3, Response3} = cdmi_test_utils:do_request(
+    GetResponseFun = fun() ->
+        {ok, Code3, _Headers3, Response3} = cdmi_test_utils:do_request(
         ?WORKERS(Config), "/", delete, RequestHeaders3, []
-    ),
+        ),
+        {Code3, json_utils:decode(Response3)}
+    end,
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EPERM)),
-    ?assertMatch(ExpRestError, {Code3, json_utils:decode(Response3)}),
+    ?assertMatch(ExpRestError, GetResponseFun(), ?ATTEMPTS),
     ?assert(cdmi_test_utils:object_exists("/", Config)).
 
 
@@ -523,14 +540,18 @@ mimetype_and_encoding_noncdmi_file_test(Config) ->
     ),
     %% get mimetype and valuetransferencoding of non-cdmi file
     RequestHeaders = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
-    {ok, _Code, _Headers, Response} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request( ?WORKERS(Config), FilePath ++ "?mimetype;valuetransferencoding",
-        get, RequestHeaders, [])
-    ),
-    CdmiResponse = json_utils:decode(Response),
-    ?assertMatch(#{<<"mimetype">> := <<"application/octet-stream">>}, CdmiResponse),
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"base64">>}, CdmiResponse).
+    GetCdmiMetadataFun =  fun() ->
+        {ok, _Code, _Headers, Response} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request( ?WORKERS(Config), FilePath ++ "?mimetype;valuetransferencoding",
+            get, RequestHeaders, [])
+        ),
+        json_utils:decode(Response)
+    end,
+    ?assertMatch(#{
+        <<"mimetype">> := <<"application/octet-stream">>,
+        <<"valuetransferencoding">> := <<"base64">>
+    }, GetCdmiMetadataFun(), ?ATTEMPTS).
 
 
 update_mimetype_and_encoding_test(Config) ->
@@ -558,14 +579,16 @@ update_mimetype_and_encoding_test(Config) ->
         WorkerP1, FilePath, put, RequestHeaders, RawBody
     )),
 
-    {ok, _Code2, _Headers2, Response2} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(
-        WorkerP1, FilePath ++ "?mimetype;valuetransferencoding", get, RequestHeaders, []
-    )),
-    CdmiResponse = json_utils:decode(Response2),
-    ?assertMatch(#{<<"mimetype">> := <<"application/binary">>}, CdmiResponse),
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse).
+    GetResponseFun =  fun() ->
+        {ok, _Code2, _Headers2, Response2} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(
+            WorkerP1, FilePath ++ "?mimetype;valuetransferencoding", get, RequestHeaders, []
+        )),
+        json_utils:decode(Response2)
+    end,
+    ?assertMatch(#{<<"mimetype">> := <<"application/binary">>,
+        <<"valuetransferencoding">> := <<"utf-8">>}, GetResponseFun(), ?ATTEMPTS).
 
 
 % tests reading&writing file at random ranges
@@ -590,13 +613,15 @@ out_of_range_test(Config) ->
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
     RequestBody = json_utils:encode(#{<<"value">> => <<"data">>}),
 
-    {ok, _Code, _Headers, Response} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(
-        Workers, FilePath ++ "?value:0-3", get, RequestHeaders, RequestBody
-    )),
-    CdmiResponse = json_utils:decode(Response),
-    ?assertMatch(#{<<"value">> := <<>>}, CdmiResponse),
+    GetResponseFun = fun() ->
+        {ok, _Code, _Headers, Response} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(
+            Workers, FilePath ++ "?value:0-3", get, RequestHeaders, RequestBody
+        )),
+        json_utils:decode(Response)
+    end,
+    ?assertMatch(#{<<"value">> := <<>>}, GetResponseFun(), ?ATTEMPTS),
 
     %%------ writing at end -------- (should extend file)
     ?assertEqual(<<>>, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS),
@@ -622,12 +647,15 @@ out_of_range_test(Config) ->
      ),
 
     %%----- random childrange ------ (shuld fail)
-    {ok, Code4, _Headers4, Response4} = cdmi_test_utils:do_request(
-        Workers, filename:join(DirPath, "?children:100-132"), get, RequestHeaders2, []
-    ),
+    GetResponseErrorFun = fun() ->
+        {ok, Code4, _Headers4, Response4} = cdmi_test_utils:do_request(
+            Workers, filename:join(DirPath, "?children:100-132"), get, RequestHeaders2, []
+        ),
+        {Code4, json_utils:decode(Response4)}
+    end,
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"childrenrange">>)),
 
-    ?assertMatch(ExpRestError, {Code4, json_utils:decode(Response4)}).
+    ?assertMatch(ExpRestError, GetResponseErrorFun(), ?ATTEMPTS).
 
 
 accept_header_test(Config) ->

@@ -332,11 +332,14 @@ move_copy_conflict_test(Config) ->
 
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     RequestBody = json_utils:encode(#{<<"move">> => FileUri, <<"copy">> => FileUri}),
-    {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
-        ?WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody
-    ),
+    GetResponseErrorFun = fun() ->
+        {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
+            ?WORKERS(Config), NewMoveFilePath, put, RequestHeaders, RequestBody
+        ),
+        {Code, json_utils:decode(Response)}
+    end,
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_MALFORMED_DATA),
-    ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}),
+    ?assertMatch(ExpRestError, GetResponseErrorFun(), ?ATTEMPTS),
     ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS).
 
 

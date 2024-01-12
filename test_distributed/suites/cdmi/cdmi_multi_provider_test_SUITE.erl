@@ -111,8 +111,7 @@ groups() -> [
         get_dir_with_objectid_endpoint_test,
         get_file_with_objectid_endpoint_test,
         open_binary_file_without_permission_test,
-        open_cdmi_file_without_permission_test,
-        mimetype_and_encoding_create_file_test
+        open_cdmi_file_without_permission_test
     ]},
     {parallel_tests, [parallel], [
         get_file_cdmi_test,
@@ -155,6 +154,7 @@ groups() -> [
         mimetype_and_encoding_noncdmi_file_test,
         update_mimetype_and_encoding_test,
         mimetype_and_encoding_create_file_noncdmi_request_test,
+        mimetype_and_encoding_create_file_test,
 
         out_of_range_test,
         partial_upload_cdmi_test,

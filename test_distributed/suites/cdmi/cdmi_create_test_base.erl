@@ -351,19 +351,21 @@ mimetype_and_encoding_create_file_test(Config) ->
     ?assertMatch(#{<<"mimetype">> := <<"text/plain">>}, CdmiResponse),
 
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
-    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+    GetCdmiMetadataFun =  fun() ->
+        {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
         {ok, ?HTTP_200_OK, _, _},
         cdmi_test_utils:do_request(
             WorkerP2, FilePath ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders2, []
-        ),
-        ?ATTEMPTS
-    ),
-    CdmiResponse2 = json_utils:decode(Response2),
-    ?assertMatch(#{<<"mimetype">> := <<"text/plain">>}, CdmiResponse2),
+        ),?ATTEMPTS),
+        json_utils:decode(Response2)
+    end,
 
     %TODO VFS-7376 what do we return here if file contains valid utf-8 string and we read byte range?
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse2),
-    ?assertMatch(#{<<"value">> := ?FILE_CONTENT}, CdmiResponse2).
+    ?assertMatch(#{
+        <<"mimetype">> := <<"text/plain">>,
+        <<"valuetransferencoding">> := <<"utf-8">>,
+        <<"value">> := ?FILE_CONTENT
+    }, GetCdmiMetadataFun(), ?ATTEMPTS).
 
 
 mimetype_and_encoding_create_file_noncdmi_request_test(Config) ->
@@ -379,15 +381,19 @@ mimetype_and_encoding_create_file_noncdmi_request_test(Config) ->
     ),
 
     RequestHeaders2 = [?CDMI_VERSION_HEADER, cdmi_test_utils:user_2_token_header()],
-    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(
-            ?WORKERS(Config), FilePath ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders2, []
-    ), ?ATTEMPTS),
-    CdmiResponse = json_utils:decode(Response2),
-    ?assertMatch(#{<<"mimetype">> := <<"text/plain">>}, CdmiResponse),
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse),
-    ?assertMatch(#{<<"value">> := ?FILE_CONTENT}, CdmiResponse).
+    GetCdmiMetadataFun = fun() ->
+        {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(
+                ?WORKERS(Config), FilePath ++ "?value;mimetype;valuetransferencoding", get, RequestHeaders2, []
+        ), ?ATTEMPTS),
+        json_utils:decode(Response2)
+    end,
+    ?assertMatch(#{
+        <<"mimetype">> := <<"text/plain">>,
+        <<"valuetransferencoding">> := <<"utf-8">>,
+        <<"value">> := ?FILE_CONTENT
+    }, GetCdmiMetadataFun(), ?ATTEMPTS).
 
 
 wrong_create_path_error_test(Config) ->
@@ -452,12 +458,14 @@ partial_upload_cdmi_test(Config) ->
         {"X-CDMI-Partial", "true"}
     ],
     RequestBody = json_utils:encode(#{<<"value">> => Chunk1}),
-    {ok, ?HTTP_201_CREATED, _Headers1, Response1} = ?assertMatch(
-        {ok, ?HTTP_201_CREATED, _, _},
-        cdmi_test_utils:do_request(WorkerP2, FilePath, put, RequestHeaders, RequestBody
-        ), ?ATTEMPTS),
-    CdmiResponse = json_utils:decode(Response1),
-    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, CdmiResponse),
+    GetResponseFun = fun() ->
+        {ok, ?HTTP_201_CREATED, _Headers1, Response1} = ?assertMatch(
+            {ok, ?HTTP_201_CREATED, _, _},
+            cdmi_test_utils:do_request(WorkerP2, FilePath, put, RequestHeaders, RequestBody
+            ), ?ATTEMPTS),
+        json_utils:decode(Response1)
+    end,
+    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, GetResponseFun(), ?ATTEMPTS),
 
     % upload second chunk of file
     RequestBody2 = json_utils:encode(#{<<"value">> => base64:encode(Chunk2)}),
@@ -514,15 +522,17 @@ partial_upload_noncdmi_test(Config) ->
     ),?ATTEMPTS),
     RequestHeaders2 = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER],
     % check "completionStatus", should be set to "Processing"
-    {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
-        {ok, ?HTTP_200_OK, _, _},
-        cdmi_test_utils:do_request(
-            WorkerP1, FilePath ++ "?completionStatus", get, RequestHeaders2, Chunk1
+    GetResponseFun2 = fun() ->
+        {ok, ?HTTP_200_OK, _Headers2, Response2} = ?assertMatch(
+            {ok, ?HTTP_200_OK, _, _},
+            cdmi_test_utils:do_request(
+                WorkerP1, FilePath ++ "?completionStatus", get, RequestHeaders2, Chunk1
+            ),
+            ?ATTEMPTS
         ),
-        ?ATTEMPTS
-    ),
-    CdmiResponse2 = json_utils:decode(Response2),
-    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, CdmiResponse2),
+        json_utils:decode(Response2)
+    end,
+    ?assertMatch(#{<<"completionStatus">> := <<"Processing">>}, GetResponseFun2(), ?ATTEMPTS),
 
     % upload second chunk of file
     RequestHeaders3 = [

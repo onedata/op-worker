@@ -12,7 +12,7 @@
 -module(cdmi_test_utils).
 -author("Tomasz Lichon").
 
--include("suites/cdmi/cdmi_test.hrl").
+-include("cdmi_test.hrl").
 -include("global_definitions.hrl").
 -include("http/cdmi.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
