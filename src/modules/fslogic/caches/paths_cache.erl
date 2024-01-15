@@ -41,7 +41,8 @@ init_group() ->
     Size = op_worker:get_env(canonical_paths_cache_size, 20000),
     ok = effective_value:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
-        size => Size
+        size => Size,
+        worker => false
     }).
 
 

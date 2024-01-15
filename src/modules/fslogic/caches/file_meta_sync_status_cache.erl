@@ -53,7 +53,8 @@
 init_group() ->
     ok = effective_value:init_group(?CACHE_GROUP, #{
         check_frequency => ?CHECK_FREQUENCY,
-        size => ?CACHE_SIZE
+        size => ?CACHE_SIZE,
+        worker => false
     }).
 
 

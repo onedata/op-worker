@@ -50,7 +50,8 @@ init_group() ->
     
     bounded_cache:init_group(?QOS_EFF_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
-        size => Size
+        size => Size,
+        worker => false
     }).
 
 

@@ -916,7 +916,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, node_manager_plugin, init_etses_for_space, [all])
+        rpc:call(DomainWorker, node_manager_plugin, init_etses_for_space_on_all_nodes, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),

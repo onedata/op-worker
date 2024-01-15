@@ -33,10 +33,10 @@
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 -export([master_node_down/1, master_node_up/1, master_node_ready/1]).
--export([init_etses_for_space/1, init_etses_for_space_on_all_nodes/1]).
+-export([init_etses_for_space_on_all_nodes/1]).
 
 % For rpc
--export([init_etses_for_space_internal/1]).
+-export([init_etses_for_space_on_single_node/1, init_etses_for_space_internal/1]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -193,7 +193,7 @@ custom_workers() -> filter_disabled_workers([
 before_cluster_upgrade() ->
     safe_mode:whitelist_pid(self()),
     gs_channel_service:setup_internal_service(),
-    init_etses().
+    init_etses_on_single_node().
 
 
 %%--------------------------------------------------------------------
@@ -226,6 +226,8 @@ upgrade_cluster(5) ->
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         ?info("Upgrading tmp directory links..."),
+        % NOTE: existence of tmp directory was ensured in previous version upgrade, but we still need to ensure,
+        % that link exists (it was not ensured then).
         lists:foreach(fun file_meta:ensure_tmp_dir_link_exists/1, SpaceIds),
         % NOTE: there is no link for trash dir, so there is no need to ensure it existence.
         ?info("Upgrading trash directories..."),
@@ -263,7 +265,7 @@ upgrade_cluster(5) ->
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
-    safe_mode:disable_if_not_set(),
+    safe_mode:report_node_initialized(),
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
@@ -370,11 +372,11 @@ master_node_up(RecoveredNode) ->
 %%--------------------------------------------------------------------
 -spec master_node_ready(node()) -> ok.
 master_node_ready(_RecoveredNode) ->
-    init_etses_for_space(all).
+    init_etses_for_space_on_single_node(all).
 
 
--spec init_etses() -> ok.
-init_etses() ->
+-spec init_etses_on_single_node() -> ok.
+init_etses_on_single_node() ->
     % TODO VFS-7412 refactor effective_value cache
     auto_storage_import_worker:init_ets(),
     paths_cache:init_group(),
@@ -388,7 +390,7 @@ init_etses() ->
 -spec init_etses_for_space_on_all_nodes(od_space:id() | all) -> ok.
 init_etses_for_space_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, init_etses_for_space, [SpaceId]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, init_etses_for_space_on_single_node, [SpaceId]),
     case BadNodes of
         [] ->
             ok;
@@ -403,11 +405,13 @@ init_etses_for_space_on_all_nodes(SpaceId) ->
     end, Res).
 
 
--spec init_etses_for_space(od_space:id() | all) -> ok.
-init_etses_for_space(SpaceId) ->
+%% @private
+-spec init_etses_for_space_on_single_node(od_space:id() | all) -> ok.
+init_etses_for_space_on_single_node(SpaceId) ->
     gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
 
 
+%% @private
 -spec init_etses_for_space_internal(od_space:id() | all) -> ok.
 init_etses_for_space_internal(Space) ->
     paths_cache:init(Space),

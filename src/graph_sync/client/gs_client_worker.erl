@@ -146,7 +146,7 @@ enable_cache() ->
 %% @private
 -spec is_cache_enabled() -> boolean().
 is_cache_enabled() ->
-    node_cache:get(gs_client_worker_cache_enabled, false) andalso not safe_mode:is_enabled().
+    node_cache:get(gs_client_worker_cache_enabled, false) andalso not safe_mode:should_enforce().
 
 
 %%--------------------------------------------------------------------
@@ -179,15 +179,15 @@ request(Client, Req) ->
     result().
 request(Client, Req, Timeout) ->
     try
-        case safe_mode:is_pid_allowed(self()) of
-            true ->
+        case safe_mode:should_enforce_for_pid(self()) of
+            false ->
                 case check_api_authorization(client_to_credentials(Client), Req) of
                     ok ->
                         do_request(Client, Req, Timeout, reuse_cached);
                     {error, _} = Err1 ->
                         Err1
                 end;
-            false ->
+            true ->
                 ?ERROR_NO_CONNECTION_TO_ONEZONE
         end
     catch
