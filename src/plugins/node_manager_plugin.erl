@@ -36,7 +36,7 @@
 -export([init_etses_for_space_on_all_nodes/1]).
 
 % For rpc
--export([init_etses_for_space_on_single_node/1, init_etses_for_space_internal/1]).
+-export([init_etses_for_space_on_current_node/1, init_etses_for_space_internal/1]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -187,13 +187,15 @@ custom_workers() -> filter_disabled_workers([
 %% @doc
 %% Callback executed before cluster upgrade so that any required preparation
 %% can be done.
+%%
+%% This callback is executed on all cluster nodes.
 %% @end
 %%--------------------------------------------------------------------
 -spec before_cluster_upgrade() -> ok.
 before_cluster_upgrade() ->
     safe_mode:whitelist_pid(self()),
     gs_channel_service:setup_internal_service(),
-    init_etses_on_single_node().
+    init_etses_on_current_node().
 
 
 %%--------------------------------------------------------------------
@@ -225,6 +227,7 @@ upgrade_cluster(5) ->
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) -> init_etses_for_space_on_all_nodes(SpaceId) end, SpaceIds),
         ?info("Upgrading tmp directory links..."),
         % NOTE: existence of tmp directory was ensured in previous version upgrade, but we still need to ensure,
         % that link exists (it was not ensured then).
@@ -265,7 +268,6 @@ upgrade_cluster(5) ->
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
-    safe_mode:report_node_initialized(),
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
@@ -372,11 +374,32 @@ master_node_up(RecoveredNode) ->
 %%--------------------------------------------------------------------
 -spec master_node_ready(node()) -> ok.
 master_node_ready(_RecoveredNode) ->
-    init_etses_for_space_on_single_node(all).
+    init_etses_for_space_on_current_node(all).
 
 
--spec init_etses_on_single_node() -> ok.
-init_etses_on_single_node() ->
+-spec init_etses_for_space_on_all_nodes(od_space:id() | all) -> ok.
+init_etses_for_space_on_all_nodes(SpaceId) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, init_etses_for_space_on_current_node, [SpaceId]),
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
+            ?error("Could not initialize etses for space ~p on nodes: ~w (RPC error)", [SpaceId, BadNodes]),
+            error({etses_not_ready, BadNodes})
+    end,
+    lists:foreach(fun
+        (ok) ->
+            ok;
+        ({badrpc, _} = Error) ->
+            ?error("Could not initialize etses for space: ~p.~nReason: ~p", [SpaceId, Error]),
+            error({etses_not_ready, Error})
+    end, Res).
+
+
+%% @private
+-spec init_etses_on_current_node() -> ok.
+init_etses_on_current_node() ->
     % TODO VFS-7412 refactor effective_value cache
     auto_storage_import_worker:init_ets(),
     paths_cache:init_group(),
@@ -387,27 +410,9 @@ init_etses_on_single_node() ->
     qos_eff_cache:init_group().
 
 
--spec init_etses_for_space_on_all_nodes(od_space:id() | all) -> ok.
-init_etses_for_space_on_all_nodes(SpaceId) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, init_etses_for_space_on_single_node, [SpaceId]),
-    case BadNodes of
-        [] ->
-            ok;
-        _ ->
-            ?error("Could not initialize etses for space ~p on nodes: ~w (RPC error)", [SpaceId, BadNodes])
-    end,
-    lists:foreach(fun
-        (ok) ->
-            ok;
-        ({badrpc, _} = Error) ->
-            ?error("Could not initialize etses for space: ~p.~nReason: ~p", [SpaceId, Error])
-    end, Res).
-
-
 %% @private
--spec init_etses_for_space_on_single_node(od_space:id() | all) -> ok.
-init_etses_for_space_on_single_node(SpaceId) ->
+-spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
+init_etses_for_space_on_current_node(SpaceId) ->
     gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
 
 
