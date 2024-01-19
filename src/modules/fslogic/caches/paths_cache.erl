@@ -42,7 +42,7 @@ init_group() ->
     ok = effective_value:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,
-        worker => true
+        worker => false
     }).
 
 

@@ -144,6 +144,12 @@ change_replicated_internal(SpaceId, ArchiveRecallDetails = #document{
 }) ->
     ?debug("change_replicated_internal: archive_recall_details ~p", [RecallId]),
     archive_recall_details:handle_remote_change(SpaceId, ArchiveRecallDetails);
+change_replicated_internal(SpaceId, DatasetDoc = #document{
+    key = DatasetId,
+    value = #dataset{}
+}) ->
+    ?debug("change_replicated_internal: dataset ~p", [DatasetId]),
+    dataset_api:handle_remote_change(SpaceId, DatasetDoc);
 change_replicated_internal(SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
     ?debug("change_replicated_internal: links_forest ~p", [LinkKey]),
    link_replicated(Model, LinkKey, SpaceId);

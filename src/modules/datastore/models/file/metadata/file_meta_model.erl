@@ -424,7 +424,7 @@ resolve_conflict(_Ctx,
 
                         case NewParentUuid =/= PrevParentUuid of
                             true ->
-                                qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+                                qos_eff_cache:invalidate_on_all_nodes(SpaceId),
                                 qos_logic:reconcile_qos(FileCtx),
                                 dir_stats_collector:report_file_moved(Type, file_ctx:get_logical_guid_const(FileCtx),
                                     OldParentGuid, NewParentGuid);
@@ -581,7 +581,7 @@ invalidate_qos_bounded_cache_if_moved_to_trash(
             FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
             PrevParentCtx = file_ctx:new_by_uuid(PrevParentUuid, SpaceId),
             file_qos:cleanup_reference_related_documents(FileCtx, PrevParentCtx),
-            qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            qos_eff_cache:invalidate_on_all_nodes(SpaceId);
         false ->
             ok
     end.

@@ -97,7 +97,7 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
 
 -spec invalidate_cache_and_reconcile(file_ctx:ctx()) -> ok.
 invalidate_cache_and_reconcile(FileCtx) ->
-    ok = qos_bounded_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(FileCtx)),
+    ok = qos_eff_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(FileCtx)),
     ok = qos_logic:reconcile_qos(FileCtx).
 
 
