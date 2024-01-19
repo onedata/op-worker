@@ -208,7 +208,7 @@ stream_bytes_range_internal({From, To}, #streaming_ctx{
 -spec read_file_data(lfm:handle(), From :: non_neg_integer(), ToRead :: non_neg_integer(), 
     MinBytes :: non_neg_integer()) -> {lfm:handle(), binary()}.
 read_file_data(FileHandle, From, ToRead, MinBytes) ->
-    case lfm:read(FileHandle, From, ToRead) of
+    case lfm:check_size_and_read(FileHandle, From, ToRead) of
         {error, ?ENOSPC} ->
             throw(?ERROR_QUOTA_EXCEEDED);
         Res ->
