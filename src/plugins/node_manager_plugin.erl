@@ -220,10 +220,14 @@ before_cluster_upgrade() ->
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(3) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
