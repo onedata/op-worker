@@ -26,22 +26,24 @@
 ]).
 
 -export([
-    test1/1
+    list_user_root_dir_test/1,
+    list_space_root_dir_test/1
 ]).
 
 groups() -> [
-    {listing_tests, [parallel], [
-        test1
+    {ls_tests, [parallel], [
+        list_user_root_dir_test,
+        list_space_root_dir_test
     ]}
 ].
 
 all() -> [
-    {group, listing_tests}
+    {group, ls_tests}
 ].
 
 
 %%%===================================================================
-%%% Listing tests
+%%% ls tests
 %%%===================================================================
 
 
@@ -50,17 +52,18 @@ all() -> [
 
 -define(LS_FILE_TREE_SPEC, [
     #dir_spec{
-        name = <<"listing_dir1">>,
+        name = <<"ls_dir1">>,
         shares = [#share_spec{}],
-        children = [#file_spec{name = <<"listing_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
+        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
     },
     #dir_spec{
-        name = <<"listing_dir2">>
+        name = <<"ls_dir2">>
     },
     #dir_spec{
-        name = <<"listing_dir3">>,
-        children = [#file_spec{name = <<"listing_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
-    }
+        name = <<"ls_dir3">>,
+        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
+    },
+    #file_spec{name = <<"ls_file1">>}
 ]).
 
 -define(LS_PATH(__ABBREV), ls_build_path(__ABBREV)).
@@ -69,10 +72,51 @@ all() -> [
 -define(LS_ENTRY(__ABBREV), ls_get_entry(?LS_PATH(__ABBREV))).
 
 
-test1(_Config) ->
+list_user_root_dir_test(_Config) ->
+    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(oct_background:get_user_id(?LS_USER)),
+
+    Space1Name = oct_background:get_space_name(space1),
+    Space1Guid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space1)),
+
+    SpaceKrkParPName = oct_background:get_space_name(space_krk_par_p),
+    SpaceKrkParPGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
+
+    % With no caveats listing user root dir should list all user spaces
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [?LS_PATH("d1")]})
+        {ok, [{Space1Guid, Space1Name}, {SpaceKrkParPGuid, SpaceKrkParPName}]},
+        ls_with_caveats(UserRootDirGuid, [])
+    ),
+
+    % But with caveats user root dir ls should show only spaces leading to allowed files
+    ?assertEqual(
+        {ok, [{SpaceKrkParPGuid, SpaceKrkParPName}]},
+        ls_with_caveats(UserRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1")]})
+    ),
+    ?assertEqual(
+        {ok, [{SpaceKrkParPGuid, SpaceKrkParPName}]},
+        ls_with_caveats(UserRootDirGuid, #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1")]})
+    ).
+
+
+list_space_root_dir_test(_Config) ->
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
+
+    % With no caveats listing space dir should list all space directories and files
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1"), ?LS_ENTRY("d2"), ?LS_ENTRY("d3"), ?LS_ENTRY("f1")]},
+        ls_with_caveats(SpaceRootDirGuid, [])
+    ),
+
+    % But with caveats space ls should show only dirs leading to allowed files (even if they do not exist).
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1")]},
+        ls_with_caveats(SpaceRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1;f1")]})
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d2"), ?LS_ENTRY("f1")]},
+        ls_with_caveats(SpaceRootDirGuid, #cv_data_path{
+            whitelist = [?LS_PATH("d2;i_do_not_exist"), ?LS_PATH("f1")]
+        })
     ).
 
 
@@ -153,11 +197,13 @@ ls_build_path(Abbrev) ->
 ls_build_path([], Path) ->
     Path;
 ls_build_path([<<"f", FileSuffix/binary>> | LeftoverTokens], Path) ->
-    NewPath = filepath_utils:join([Path, <<"listing_file", FileSuffix/binary>>]),
+    NewPath = filepath_utils:join([Path, <<"ls_file", FileSuffix/binary>>]),
     ls_build_path(LeftoverTokens, NewPath);
 ls_build_path([<<"d", DirSuffix/binary>> | LeftoverTokens], Path) ->
-    NewPath = filepath_utils:join([Path, <<"listing_dir", DirSuffix/binary>>]),
-    ls_build_path(LeftoverTokens, NewPath).
+    NewPath = filepath_utils:join([Path, <<"ls_dir", DirSuffix/binary>>]),
+    ls_build_path(LeftoverTokens, NewPath);
+ls_build_path([Name | LeftoverTokens], Path) ->
+    ls_build_path(LeftoverTokens, filepath_utils:join([Path, Name])).
 
 
 %% @private
@@ -207,19 +253,19 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_group(listing_tests, Config) ->
+init_per_group(ls_tests, Config) ->
     ls_setup(),
-    Config.
-
-
-end_per_group(listing_tests, Config) ->
-    ls_teardown(),
-    Config.
-
-
-init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_group(ls_tests, Config) ->
+    ls_teardown(),
     lfm_proxy:teardown(Config).
+
+
+init_per_testcase(_Case, Config) ->
+    Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.
