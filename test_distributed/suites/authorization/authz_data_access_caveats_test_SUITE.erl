@@ -27,13 +27,15 @@
 
 -export([
     list_user_root_dir_test/1,
-    list_space_root_dir_test/1
+    list_space_root_dir_test/1,
+    list_directory_test/1
 ]).
 
 groups() -> [
     {ls_tests, [parallel], [
         list_user_root_dir_test,
-        list_space_root_dir_test
+        list_space_root_dir_test,
+        list_directory_test
     ]}
 ].
 
@@ -54,7 +56,7 @@ all() -> [
     #dir_spec{
         name = <<"ls_dir1">>,
         shares = [#share_spec{}],
-        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
+        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 4)]
     },
     #dir_spec{
         name = <<"ls_dir2">>
@@ -116,6 +118,30 @@ list_space_root_dir_test(_Config) ->
         {ok, [?LS_ENTRY("d2"), ?LS_ENTRY("f1")]},
         ls_with_caveats(SpaceRootDirGuid, #cv_data_path{
             whitelist = [?LS_PATH("d2;i_do_not_exist"), ?LS_PATH("f1")]
+        })
+    ).
+
+
+list_directory_test(_Config) ->
+    % Whitelisting Dir should result in listing all it's files
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [?LS_PATH("d1")]})
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1")]})
+    ),
+
+    % Whitelisting concrete files should result in listing only them
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f3")]},
+        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f3")]})
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [
+            ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")]
         })
     ).
 
