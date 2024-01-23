@@ -28,14 +28,16 @@
 -export([
     list_user_root_dir_test/1,
     list_space_root_dir_test/1,
-    list_directory_test/1
+    list_directory_test/1,
+    list_directory_with_intersecting_caveats_test/1
 ]).
 
 groups() -> [
     {ls_tests, [parallel], [
         list_user_root_dir_test,
         list_space_root_dir_test,
-        list_directory_test
+        list_directory_test,
+        list_directory_with_intersecting_caveats_test
     ]}
 ].
 
@@ -143,6 +145,38 @@ list_directory_test(_Config) ->
         ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [
             ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")]
         })
+    ).
+
+
+list_directory_with_intersecting_caveats_test(_Config) ->
+    % Using several caveats should result in listing only their intersection
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), [
+            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;f4")]},
+            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f3"), ?LS_PATH("d1;f4")]}
+        ])
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), [
+            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")]},
+            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f3"), ?LS_OBJECT_ID("d1;f4")]}
+        ])
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), [
+            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;f4")]},
+            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f3"), ?LS_OBJECT_ID("d1;f4")]}
+        ])
+    ),
+    ?assertEqual(
+        {ok, []},
+        ls_with_caveats(?LS_GUID("d1"), [
+            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f4")]},
+            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f3")]}
+        ])
     ).
 
 
