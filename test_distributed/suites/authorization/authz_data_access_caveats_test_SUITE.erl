@@ -29,7 +29,8 @@
     list_user_root_dir_test/1,
     list_space_root_dir_test/1,
     list_directory_test/1,
-    list_directory_with_intersecting_caveats_test/1
+    list_directory_with_intersecting_caveats_test/1,
+    list_shared_directory_test/1
 ]).
 
 groups() -> [
@@ -37,7 +38,8 @@ groups() -> [
         list_user_root_dir_test,
         list_space_root_dir_test,
         list_directory_test,
-        list_directory_with_intersecting_caveats_test
+        list_directory_with_intersecting_caveats_test,
+        list_shared_directory_test
     ]}
 ].
 
@@ -113,8 +115,8 @@ list_space_root_dir_test(_Config) ->
 
     % But with caveats space ls should show only dirs leading to allowed files (even if they do not exist).
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1")]},
-        ls_with_caveats(SpaceRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1;f1")]})
+        {ok, [?LS_ENTRY("d1"), ?LS_ENTRY("d3")]},
+        ls_with_caveats(SpaceRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d3;f2")]})
     ),
     ?assertEqual(
         {ok, [?LS_ENTRY("d2"), ?LS_ENTRY("f1")]},
@@ -180,6 +182,35 @@ list_directory_with_intersecting_caveats_test(_Config) ->
     ).
 
 
+list_shared_directory_test(_Config) ->
+    DirPath = ?LS_PATH("d1"),
+    DirGuid = ?LS_GUID("d1"),
+    [DirShareId] = kv_utils:get([DirPath, shares], node_cache:get(ls_tests_file_tree)),
+    DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
+
+    % Token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ExpEntries = lists:map(fun(AbbrevPath) ->
+        {Guid, Name} = ?LS_ENTRY(AbbrevPath),
+        {file_id:guid_to_share_guid(Guid, DirShareId), Name}
+    end, ["d1;f1", "d1;f2", "d1;f3", "d1;f4"]),
+
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
+        whitelist = [DirPath]
+    })),
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
+        whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;f4")]
+    })),
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, [
+        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f3"), ?LS_OBJECT_ID("d1;f4")]},
+        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f4")]},
+        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f4")]}
+    ])),
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
+        whitelist = [?LS_PATH("non_existent_file")]
+    })).
+
+
 %% @private
 ls_setup() ->
     SpacePath = filepath_utils:join([<<"/">>, oct_background:get_space_id(?LS_SPACE)]),
@@ -229,6 +260,7 @@ ls_describe_file_tree(Desc, ParentPath, FileTreeObjects) when is_list(FileTreeOb
 ls_describe_file_tree(Desc, ParentPath, #object{
     guid = Guid,
     name = Name,
+    shares = Shares,
     children = Children
 }) ->
     Path = filepath_utils:join([ParentPath, Name]),
@@ -237,7 +269,8 @@ ls_describe_file_tree(Desc, ParentPath, #object{
     NewDesc = Desc#{Path => #{
         name => Name,
         guid => Guid,
-        object_id => ObjectId
+        object_id => ObjectId,
+        shares => Shares
     }},
 
     lists:foldl(fun(Child, DescAcc) ->
