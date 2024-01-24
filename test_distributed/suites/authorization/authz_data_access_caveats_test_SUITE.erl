@@ -30,13 +30,14 @@
     list_space_root_dir_test/1,
     list_directory_test/1,
     list_directory_with_offset_and_limit_test/1,
-    list_directory_with_caveats_for_different_directory/1,
+    list_directory_with_caveats_for_different_directory_test/1,
     list_directory_with_intersecting_caveats_test/1,
     list_shared_directory_test/1,
     list_ancestors_with_intersecting_caveats_test/1,
     list_previously_non_existent_file/1,
 
-    allowed_ancestors_operations_test/1
+    allowed_ancestors_operations_test/1,
+    data_access_caveats_cache_test/1
 ]).
 
 groups() -> [
@@ -45,7 +46,7 @@ groups() -> [
         list_space_root_dir_test,
         list_directory_test,
         list_directory_with_offset_and_limit_test,
-        list_directory_with_caveats_for_different_directory,
+        list_directory_with_caveats_for_different_directory_test,
         list_directory_with_intersecting_caveats_test,
         list_shared_directory_test,
         list_ancestors_with_intersecting_caveats_test,
@@ -56,7 +57,8 @@ groups() -> [
 all() -> [
     {group, ls_tests},
 
-    allowed_ancestors_operations_test
+    allowed_ancestors_operations_test,
+    data_access_caveats_cache_test
 ].
 
 
@@ -414,7 +416,6 @@ allowed_ancestors_operations_test(_Config) ->
     SpaceName = oct_background:get_space_name(space_krk_par_p),
     SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
 
-    ?FUNCTION_NAME,
     InaccessibleFileName = <<"inaccessible_file">>,
 
     ReversedAncestors = [{LastDirGuid, _} | _] = lists:foldl(fun(Num, [{DirGuid, _} | _] = Acc) ->
@@ -507,6 +508,119 @@ allowed_ancestors_operations_test(_Config) ->
     ?assertMatch(
         {ok, _},
         lfm_proxy:create(Node, SessionIdWithCaveats, FileInDeepestDirGuid, ?RAND_STR(), 8#777)
+    ).
+
+
+data_access_caveats_cache_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+
+    UserId = oct_background:get_user_id(user1),
+    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
+
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
+
+    #object{
+        guid = RootDirGuid,
+        children = [
+            #object{guid =  DirGuid, children = [
+                #object{guid =  FileGuid}
+            ]},
+            #object{guid = OtherDirGuid}
+        ]
+    } = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk_par_p, #dir_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        children = [
+            #dir_spec{name = <<"dir">>, children = [
+                #file_spec{name = <<"file">>}
+            ]},
+            #dir_spec{}
+        ]
+    }),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    CheckCacheFun = fun(Rule) -> rpc:call(Node, permissions_cache, check_permission, Rule) end,
+
+    Token = tokens:confine(create_oz_temp_access_token(UserId), [
+        #cv_data_objectid{whitelist = [DirObjectId]},
+        #cv_data_objectid{whitelist = [FileObjectId]}
+    ]),
+    SessionId = permissions_test_utils:create_session(Node, UserId, Token),
+
+
+    %% CHECK guid_constraint CACHE
+
+    % before any call cache should be empty
+    lists:foreach(fun(Guid) ->
+        ?assertEqual({error, not_found}, CheckCacheFun([{guid_constraint, Token, Guid}]))
+    end, [UserRootDirGuid, SpaceRootDirGuid, RootDirGuid, DirGuid, FileGuid]),
+
+    % call on file should fill cache up to root dir with remaining guid constraints
+    ?assertEqual({ok, []}, lfm_proxy:get_acl(Node, SessionId, ?FILE_REF(FileGuid))),
+
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            {ok, {false, [[FileGuid], [DirGuid]]}},
+            CheckCacheFun([{guid_constraint, Token, Guid}])
+        )
+    end, [UserRootDirGuid, SpaceRootDirGuid, RootDirGuid]),
+    ?assertEqual(
+        {ok, {false, [[FileGuid]]}},
+        CheckCacheFun([{guid_constraint, Token, DirGuid}])
+    ),
+    ?assertEqual(
+        {ok, true},
+        CheckCacheFun([{guid_constraint, Token, FileGuid}])
+    ),
+
+
+    %% CHECK data_constraint CACHE
+
+    % data_constraint cache is not filed recursively as guid_constraint one is
+    % so only for file should it be filled
+    lists:foreach(fun(Guid) ->
+        ?assertEqual({error, not_found}, CheckCacheFun([{data_constraint, Token, Guid}]))
+    end, [UserRootDirGuid, SpaceRootDirGuid, RootDirGuid, DirGuid]),
+
+    ?assertEqual(
+        {ok, equal_or_descendant},
+        CheckCacheFun([{data_constraint, Token, FileGuid}])
+    ),
+
+    % calling on dir any function reserved only for equal_or_descendant should
+    % cache {equal_or_descendant, ?EACCES} meaning that no such operation can be
+    % performed but since ancestor checks were not performed it is not known whether
+    % ancestor operations can be performed
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_acl(Node, SessionId, ?FILE_REF(DirGuid))
+    ),
+    ?assertEqual(
+        {ok, {equal_or_descendant, ?EACCES}},
+        CheckCacheFun([{data_constraint, Token, DirGuid}])
+    ),
+
+    % after calling operation possible to perform on ancestor cached value should
+    % be changed to signal that file is ancestor and such operations can be performed
+    ?assertMatch(
+        {ok, [_]},
+        lfm_proxy:get_children(Node, SessionId, ?FILE_REF(DirGuid), 0, 100)
+    ),
+    ?assertEqual(
+        {ok, {ancestor, [<<"file">>]}},
+        CheckCacheFun([{data_constraint, Token, DirGuid}])
+    ),
+
+    % Calling ancestor operation on unrelated to file in caveats dir all checks
+    % will be performed and just ?EACESS will be cached meaning that no operation
+    % on this dir can be performed
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_children(Node, SessionId, ?FILE_REF(OtherDirGuid), 0, 100)
+    ),
+    ?assertEqual(
+        {ok, ?EACCES},
+        CheckCacheFun([{data_constraint, Token, OtherDirGuid}])
     ).
 
 
