@@ -29,6 +29,8 @@
     list_user_root_dir_test/1,
     list_space_root_dir_test/1,
     list_directory_test/1,
+    list_directory_with_offset_and_limit_test/1,
+    list_directory_with_caveats_for_different_directory/1,
     list_directory_with_intersecting_caveats_test/1,
     list_shared_directory_test/1,
     list_ancestors_with_intersecting_caveats_test/1,
@@ -42,6 +44,8 @@ groups() -> [
         list_user_root_dir_test,
         list_space_root_dir_test,
         list_directory_test,
+        list_directory_with_offset_and_limit_test,
+        list_directory_with_caveats_for_different_directory,
         list_directory_with_intersecting_caveats_test,
         list_shared_directory_test,
         list_ancestors_with_intersecting_caveats_test,
@@ -68,7 +72,7 @@ all() -> [
     #dir_spec{
         name = <<"ls_dir1">>,
         shares = [#share_spec{}],
-        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 4)]
+        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
     },
     #dir_spec{
         name = <<"ls_dir2">>
@@ -144,11 +148,11 @@ list_space_root_dir_test(_Config) ->
 list_directory_test(_Config) ->
     % Whitelisting Dir should result in listing all it's files
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4")]},
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
         ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [?LS_PATH("d1")]})
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4")]},
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
         ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1")]})
     ),
 
@@ -167,9 +171,29 @@ list_directory_test(_Config) ->
     ),
     CaveatsWithFilesInDifferentDir = #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d3;f1")]},
     ?assertEqual({ok, [?LS_ENTRY("d1;f1")]}, ls_with_caveats(?LS_GUID("d1"), CaveatsWithFilesInDifferentDir)),
-    ?assertEqual({ok, [?LS_ENTRY("d3;f1")]}, ls_with_caveats(?LS_GUID("d3"), CaveatsWithFilesInDifferentDir)),
+    ?assertEqual({ok, [?LS_ENTRY("d3;f1")]}, ls_with_caveats(?LS_GUID("d3"), CaveatsWithFilesInDifferentDir)).
 
-    % Using caveat for different directory should result in {error, eacces}
+
+list_directory_with_offset_and_limit_test(_Config) ->
+    Caveats = #cv_data_path{whitelist = [
+        ?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;dummy"), ?LS_PATH("d1;f4"), ?LS_PATH("d1;f5")
+    ]},
+
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), Caveats, 0, 3)
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
+        ls_with_caveats(?LS_GUID("d1"), Caveats, 2, 3)
+    ),
+    ?assertEqual(
+        {ok, [?LS_ENTRY("d1;f4")]},
+        ls_with_caveats(?LS_GUID("d1"), Caveats, 2, 1)
+    ).
+
+
+list_directory_with_caveats_for_different_directory_test(_Config) ->
     ?assertEqual(
         {error, ?EACCES},
         ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d3")]})
@@ -219,7 +243,7 @@ list_shared_directory_test(_Config) ->
     ExpEntries = lists:map(fun(AbbrevPath) ->
         {Guid, Name} = ?LS_ENTRY(AbbrevPath),
         {file_id:guid_to_share_guid(Guid, DirShareId), Name}
-    end, ["d1;f1", "d1;f2", "d1;f3", "d1;f4"]),
+    end, ["d1;f1", "d1;f2", "d1;f3", "d1;f4", "d1;f5"]),
 
     ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
         whitelist = [DirPath]
@@ -286,17 +310,8 @@ ls_setup() ->
     FileTreeObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?LS_SPACE, ?LS_FILE_TREE_SPEC
     ),
-    node_cache:put(ls_tests_root_guids, [Object#object.guid || Object <- utils:ensure_list(FileTreeObjects)]),
-
     FileTreeDesc = ls_describe_file_tree(#{}, SpacePath, FileTreeObjects),
     node_cache:put(ls_tests_file_tree, FileTreeDesc).
-
-
-%% @private
-ls_teardown() ->
-    lists:foreach(fun(Guid) ->
-        onenv_file_test_utils:rm_and_sync_file(user1, Guid)
-    end, node_cache:get(ls_tests_root_guids)).
 
 
 %% @private
@@ -369,6 +384,11 @@ ls_get_entry(Path) ->
 
 %% @private
 ls_with_caveats(Guid, Caveats) ->
+    ls_with_caveats(Guid, Caveats, 0, 100).
+
+
+%% @private
+ls_with_caveats(Guid, Caveats, Offset, Limit) ->
     Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
     UserId = oct_background:get_user_id(?LS_USER),
 
@@ -376,7 +396,7 @@ ls_with_caveats(Guid, Caveats) ->
     LsToken = tokens:confine(MainToken, Caveats),
     LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
 
-    lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), 0, 100).
+    lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), Offset, Limit).
 
 
 %%%===================================================================
@@ -539,7 +559,6 @@ init_per_group(ls_tests, Config) ->
 
 
 end_per_group(ls_tests, Config) ->
-    ls_teardown(),
     lfm_proxy:teardown(Config).
 
 
