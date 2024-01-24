@@ -20,11 +20,6 @@
 ]).
 
 -export([
-    data_access_caveats_test/1,
-    data_access_caveats_ancestors_test/1,
-    data_access_caveats_ancestors_test2/1,
-    data_access_caveats_cache_test/1,
-
     mkdir_test/1,
     get_children_test/1,
     get_children_attrs_test/1,
@@ -90,11 +85,6 @@
 ]).
 
 all() -> [
-    data_access_caveats_test,
-    data_access_caveats_ancestors_test,
-    data_access_caveats_ancestors_test2,
-    data_access_caveats_cache_test,
-
     mkdir_test,
     get_children_test,
     get_children_attrs_test,
@@ -163,22 +153,6 @@ all() -> [
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
-
-
-data_access_caveats_test(Config) ->
-    permissions_test_base:data_access_caveats_test(Config).
-
-
-data_access_caveats_ancestors_test(Config) ->
-    permissions_test_base:data_access_caveats_ancestors_test(Config).
-
-
-data_access_caveats_ancestors_test2(Config) ->
-    permissions_test_base:data_access_caveats_ancestors_test2(Config).
-
-
-data_access_caveats_cache_test(Config) ->
-    permissions_test_base:data_access_caveats_cache_test(Config).
 
 
 mkdir_test(Config) ->
