@@ -30,7 +30,8 @@
     list_space_root_dir_test/1,
     list_directory_test/1,
     list_directory_with_intersecting_caveats_test/1,
-    list_shared_directory_test/1
+    list_shared_directory_test/1,
+    list_ancestors_with_empty_caveats_intersection_test/1
 ]).
 
 groups() -> [
@@ -39,7 +40,8 @@ groups() -> [
         list_space_root_dir_test,
         list_directory_test,
         list_directory_with_intersecting_caveats_test,
-        list_shared_directory_test
+        list_shared_directory_test,
+        list_ancestors_with_empty_caveats_intersection_test
     ]}
 ].
 
@@ -67,7 +69,14 @@ all() -> [
     },
     #dir_spec{
         name = <<"ls_dir3">>,
-        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
+        children = [
+            #dir_spec{
+                name = <<"ls_dir1">>,
+                children = [#file_spec{name = <<"ls_file1">>}]
+            },
+            #file_spec{name = <<"ls_file1">>},
+            #file_spec{name = <<"ls_file2">>}
+        ]
     },
     #file_spec{name = <<"ls_file1">>}
 ]).
@@ -209,6 +218,23 @@ list_shared_directory_test(_Config) ->
     ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
         whitelist = [?LS_PATH("non_existent_file")]
     })).
+
+
+list_ancestors_with_empty_caveats_intersection_test(_Config) ->
+    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(oct_background:get_user_id(?LS_USER)),
+
+    SpaceName = oct_background:get_space_name(?LS_SPACE),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
+
+    Caveats = [
+        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d3;d1;f1")]},
+        #cv_data_path{whitelist = [?LS_PATH("d3;f2")]}
+    ],
+
+    % Only ancestor directories common in all caveats SHOULD be listed
+    ?assertEqual({ok, [{SpaceGuid, SpaceName}]}, ls_with_caveats(UserRootDirGuid, Caveats)),
+    ?assertEqual({ok, [?LS_ENTRY("d3")]}, ls_with_caveats(SpaceGuid, Caveats)),
+    ?assertEqual({ok, []}, ls_with_caveats(?LS_GUID("d3"), Caveats)).
 
 
 %% @private
