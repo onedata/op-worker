@@ -32,7 +32,9 @@
     list_directory_with_intersecting_caveats_test/1,
     list_shared_directory_test/1,
     list_ancestors_with_intersecting_caveats_test/1,
-    list_previously_non_existent_file/1
+    list_previously_non_existent_file/1,
+
+    allowed_ancestors_operations_test/1
 ]).
 
 groups() -> [
@@ -48,7 +50,9 @@ groups() -> [
 ].
 
 all() -> [
-    {group, ls_tests}
+    {group, ls_tests},
+
+    allowed_ancestors_operations_test
 ].
 
 
@@ -295,22 +299,6 @@ ls_teardown() ->
     end, node_cache:get(ls_tests_root_guids)).
 
 
-% TODO mv to onenv_ct
-%% @private
-create_oz_temp_access_token(UserId) ->
-    OzNode = ?RAND_ELEMENT(oct_background:get_zone_nodes()),
-
-    Auth = ?USER(UserId),
-    Now = ozw_test_rpc:timestamp_seconds(OzNode),
-    Token = ozw_test_rpc:create_user_temporary_token(OzNode, Auth, UserId, #{
-        <<"type">> => ?ACCESS_TOKEN,
-        <<"caveats">> => [#cv_time{valid_until = Now + 360000}]
-    }),
-
-    {ok, SerializedToken} = tokens:serialize(Token),
-    SerializedToken.
-
-
 %% @private
 ls_describe_file_tree(Desc, ParentPath, FileTreeObjects) when is_list(FileTreeObjects) ->
     lists:foldl(fun(FileObject, DescAcc) ->
@@ -392,13 +380,152 @@ ls_with_caveats(Guid, Caveats) ->
 
 
 %%%===================================================================
+%%% Misc tests
+%%%===================================================================
+
+
+allowed_ancestors_operations_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+
+    UserId = oct_background:get_user_id(user1),
+    UserSessionId = oct_background:get_user_session_id(user1, krakow),
+    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
+
+    SpaceName = oct_background:get_space_name(space_krk_par_p),
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
+
+    ?FUNCTION_NAME,
+    InaccessibleFileName = <<"inaccessible_file">>,
+
+    ReversedAncestors = [{LastDirGuid, _} | _] = lists:foldl(fun(Num, [{DirGuid, _} | _] = Acc) ->
+        ChildDirName = <<"dir", (integer_to_binary(Num))/binary>>,
+        {ok, ChildDirGuid} = lfm_proxy:mkdir(Node, UserSessionId, DirGuid, ChildDirName, 8#777),
+        {ok, _} = lfm_proxy:create(Node, UserSessionId, DirGuid, InaccessibleFileName, 8#777),
+        [{ChildDirGuid, ChildDirName} | Acc]
+    end, [{SpaceRootDirGuid, SpaceName}], lists:seq(1, 20)),
+
+    Ancestors = lists:reverse(ReversedAncestors),
+
+    DirInDeepestDirName = <<"file">>,
+    {ok, FileInDeepestDirGuid} = lfm_proxy:mkdir(Node, UserSessionId, LastDirGuid, DirInDeepestDirName, 8#777),
+    {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
+
+    Token = tokens:confine(create_oz_temp_access_token(UserId), #cv_data_objectid{
+        whitelist = [FileInDeepestDirObjectId]
+    }),
+    SessionIdWithCaveats = permissions_test_utils:create_session(Node, UserId, Token),
+
+    lists:foldl(
+        fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
+            DirPath = case ParentPath of
+                <<>> -> <<"/">>;
+                <<"/">> -> <<"/", DirName/binary>>;
+                _ -> <<ParentPath/binary, "/", DirName/binary>>
+            end,
+
+            % Most operations should be forbidden to perform on dirs/ancestors
+            % leading to files allowed by caveats
+            ?assertMatch(
+                {error, ?EACCES},
+                lfm_proxy:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
+            ),
+            ?assertMatch(
+                {error, ?EACCES},
+                lfm_proxy:create(Node, SessionIdWithCaveats, DirGuid, ?RAND_STR(), 8#777)
+            ),
+
+            % Below operations should succeed for every dir/ancestor leading
+            % to file allowed by caveats
+            ?assertMatch(
+                {ok, [Child]},
+                lfm_proxy:get_children(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid), 0, 100)
+            ),
+            ?assertMatch(
+                {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+                lfm_proxy:stat(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
+            ),
+            ?assertMatch(
+                {ok, DirGuid},
+                lfm_proxy:resolve_guid(Node, SessionIdWithCaveats, DirPath)
+            ),
+            ?assertMatch(
+                {ok, ParentGuid},
+                lfm_proxy:get_parent(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
+            ),
+            ?assertMatch(
+                {ok, DirPath},
+                lfm_proxy:get_file_path(Node, SessionIdWithCaveats, DirGuid)
+            ),
+
+            % Get child attr should also succeed but only for children that are
+            % also allowed by caveats
+            case ParentGuid of
+                undefined ->
+                    ok;
+                _ ->
+                    ?assertMatch(
+                        {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+                        lfm_proxy:get_child_attr(Node, SessionIdWithCaveats, ParentGuid, DirName)
+                    ),
+                    ?assertMatch(
+                        {error, ?ENOENT},
+                        lfm_proxy:get_child_attr(Node, SessionIdWithCaveats, ParentGuid, InaccessibleFileName)
+                    )
+            end,
+
+            {DirPath, DirGuid}
+        end,
+        {<<>>, undefined},
+        lists:zip([{UserRootDirGuid, UserId} | Ancestors], Ancestors ++ [{FileInDeepestDirGuid, DirInDeepestDirName}])
+    ),
+
+    % Get acl should finally succeed for dir which is allowed by caveats
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(FileInDeepestDirGuid))
+    ),
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:create(Node, SessionIdWithCaveats, FileInDeepestDirGuid, ?RAND_STR(), 8#777)
+    ).
+
+
+% TODO mv to onenv_ct
+%% @private
+create_oz_temp_access_token(UserId) ->
+    OzNode = ?RAND_ELEMENT(oct_background:get_zone_nodes()),
+
+    Auth = ?USER(UserId),
+    Now = ozw_test_rpc:timestamp_seconds(OzNode),
+    Token = ozw_test_rpc:create_user_temporary_token(OzNode, Auth, UserId, #{
+        <<"type">> => ?ACCESS_TOKEN,
+        <<"caveats">> => [#cv_time{valid_until = Now + 360000}]
+    }),
+
+    {ok, SerializedToken} = tokens:serialize(Token),
+    SerializedToken.
+
+
+%%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "2op"
+        onenv_scenario = "2op",
+        posthook = fun(NewConfig) ->
+            % clean space
+            lists:foreach(fun(SpaceSelector) ->
+                {ok, FileEntries} = onenv_file_test_utils:ls(user1, SpaceSelector, 0, 10000),
+
+                lists_utils:pforeach(fun({Guid, _}) ->
+                    onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+                end, FileEntries)
+            end, [space1, space_krk_par_p]),
+
+            NewConfig
+        end
     }).
 
 
