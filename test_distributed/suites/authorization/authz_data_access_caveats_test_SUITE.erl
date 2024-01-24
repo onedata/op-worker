@@ -37,7 +37,8 @@
     list_previously_non_existent_file/1,
 
     allowed_ancestors_operations_test/1,
-    data_access_caveats_cache_test/1
+    data_access_caveats_cache_test/1,
+    mv_test/1
 ]).
 
 groups() -> [
@@ -51,15 +52,20 @@ groups() -> [
         list_shared_directory_test,
         list_ancestors_with_intersecting_caveats_test,
         list_previously_non_existent_file
+    ]},
+    {misc_tests, [parallel], [
+        allowed_ancestors_operations_test,
+        data_access_caveats_cache_test,
+        mv_test
     ]}
 ].
 
 all() -> [
     {group, ls_tests},
-
-    allowed_ancestors_operations_test,
-    data_access_caveats_cache_test
+    {group, misc_tests}
 ].
+
+-define(ATTEMPTS, 20).
 
 
 %%%===================================================================
@@ -624,6 +630,40 @@ data_access_caveats_cache_test(_Config) ->
     ).
 
 
+mv_test(_Config) ->
+    ParisNode = oct_background:get_random_provider_node(paris),
+
+    SessionIdParis = oct_background:get_user_session_id(user1, paris),
+
+    SpaceId = oct_background:get_space_id(space_krk_par_p),
+    SpaceName = oct_background:get_space_name(space_krk_par_p),
+
+    #object{name = RootDirName, children = [
+        #object{name = DirName},
+        #object{name = FileName, guid = FileGuid}
+    ]} = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk_par_p, #dir_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        children = [
+            #dir_spec{},
+            #file_spec{content = ?RAND_STR()}
+        ]
+    }),
+
+    MvPath = filepath_utils:join([<<"/">>, SpaceName, RootDirName, DirName, FileName]),
+    CanonicalMvPath = filepath_utils:join([<<"/">>, SpaceId, RootDirName, DirName, FileName]),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(ParisNode, SessionIdParis, ?FILE_REF(FileGuid))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(ParisNode, SessionIdParis, ?FILE_REF(FileGuid), MvPath)),
+
+    UserId = oct_background:get_user_id(user1),
+    CheckNode = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
+    Token = tokens:confine(create_oz_temp_access_token(UserId), #cv_data_path{
+        whitelist = [CanonicalMvPath]
+    }),
+    SessionIdWithCaveat = permissions_test_utils:create_session(CheckNode, UserId, Token),
+    ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithCaveat, {path, MvPath}), ?ATTEMPTS).
+
+
 % TODO mv to onenv_ct
 %% @private
 create_oz_temp_access_token(UserId) ->
@@ -668,11 +708,16 @@ end_per_suite(_Config) ->
 
 
 init_per_group(ls_tests, Config) ->
+    NewConfig = lfm_proxy:init(Config, false),
     ls_setup(),
-    lfm_proxy:init(Config).
+    NewConfig;
+init_per_group(misc_tests, Config) ->
+    lfm_proxy:init(Config, false).
 
 
 end_per_group(ls_tests, Config) ->
+    lfm_proxy:teardown(Config);
+end_per_group(misc_tests, Config) ->
     lfm_proxy:teardown(Config).
 
 
