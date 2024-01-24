@@ -31,7 +31,8 @@
     list_directory_test/1,
     list_directory_with_intersecting_caveats_test/1,
     list_shared_directory_test/1,
-    list_ancestors_with_empty_caveats_intersection_test/1
+    list_ancestors_with_intersecting_caveats_test/1,
+    list_previously_non_existent_file/1
 ]).
 
 groups() -> [
@@ -41,7 +42,8 @@ groups() -> [
         list_directory_test,
         list_directory_with_intersecting_caveats_test,
         list_shared_directory_test,
-        list_ancestors_with_empty_caveats_intersection_test
+        list_ancestors_with_intersecting_caveats_test,
+        list_previously_non_existent_file
     ]}
 ].
 
@@ -128,9 +130,9 @@ list_space_root_dir_test(_Config) ->
         ls_with_caveats(SpaceRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d3;f2")]})
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d2"), ?LS_ENTRY("f1")]},
+        {ok, [?LS_ENTRY("d3"), ?LS_ENTRY("f1")]},
         ls_with_caveats(SpaceRootDirGuid, #cv_data_path{
-            whitelist = [?LS_PATH("d2;i_do_not_exist"), ?LS_PATH("f1")]
+            whitelist = [?LS_PATH("d3;non_existent_file"), ?LS_PATH("f1")]
         })
     ).
 
@@ -146,16 +148,27 @@ list_directory_test(_Config) ->
         ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1")]})
     ),
 
-    % Whitelisting concrete files should result in listing only them
+    % Whitelisting concrete files should result in listing only them (the nonexistent ones will be omitted)
     ?assertEqual(
         {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f3")]},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f3")]})
+        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [
+            ?LS_PATH("d1;f1"), ?LS_PATH("d1;f3"), ?LS_PATH("d1;non_existent_file")
+        ]})
     ),
     ?assertEqual(
         {ok, [?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f4")]},
         ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [
-            ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")]
-        })
+            ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")
+        ]})
+    ),
+    CaveatsWithFilesInDifferentDir = #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d3;f1")]},
+    ?assertEqual({ok, [?LS_ENTRY("d1;f1")]}, ls_with_caveats(?LS_GUID("d1"), CaveatsWithFilesInDifferentDir)),
+    ?assertEqual({ok, [?LS_ENTRY("d3;f1")]}, ls_with_caveats(?LS_GUID("d3"), CaveatsWithFilesInDifferentDir)),
+
+    % Using caveat for different directory should result in {error, eacces}
+    ?assertEqual(
+        {error, ?EACCES},
+        ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d3")]})
     ).
 
 
@@ -220,7 +233,7 @@ list_shared_directory_test(_Config) ->
     })).
 
 
-list_ancestors_with_empty_caveats_intersection_test(_Config) ->
+list_ancestors_with_intersecting_caveats_test(_Config) ->
     UserRootDirGuid = fslogic_file_id:user_root_dir_guid(oct_background:get_user_id(?LS_USER)),
 
     SpaceName = oct_background:get_space_name(?LS_SPACE),
@@ -235,6 +248,27 @@ list_ancestors_with_empty_caveats_intersection_test(_Config) ->
     ?assertEqual({ok, [{SpaceGuid, SpaceName}]}, ls_with_caveats(UserRootDirGuid, Caveats)),
     ?assertEqual({ok, [?LS_ENTRY("d3")]}, ls_with_caveats(SpaceGuid, Caveats)),
     ?assertEqual({ok, []}, ls_with_caveats(?LS_GUID("d3"), Caveats)).
+
+
+list_previously_non_existent_file(_Config) ->
+    Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
+    UserId = oct_background:get_user_id(?LS_USER),
+
+    % List dir manually to use the same exact session with caveat for file not existing yet
+    MainToken = node_cache:get(ls_tests_main_token),
+    LsToken = tokens:confine(MainToken, #cv_data_path{whitelist = [?LS_PATH("d2;f1")]}),
+    LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
+
+    LS = fun(Guid) -> lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), 0, 100) end,
+
+    ?assertEqual({ok, []}, LS(?LS_GUID("d2"))),
+
+    [#object{guid = FileGuid}, _] = onenv_file_test_utils:create_and_sync_file_tree(?LS_USER, ?LS_GUID("d2"), [
+        #file_spec{name = <<"ls_file1">>},
+        #file_spec{name = <<"ls_file2">>}
+    ]),
+
+    ?assertEqual({ok, [{FileGuid, <<"ls_file1">>}]}, LS(?LS_GUID("d2"))).
 
 
 %% @private
