@@ -43,6 +43,7 @@
 
 %% API
 -export([
+    init_ets/0,
     notify_connection_to_oz/0,
     notify_space_with_auto_import_configured/1,
     notify_space_unsupported/1,
@@ -83,7 +84,6 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    state_init(),
     case gs_channel_service:is_connected() of
         true -> notify_connection_to_oz();
         false -> ok
@@ -143,6 +143,10 @@ cleanup() ->
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+-spec init_ets() -> ok.
+init_ets() ->
+    state_init().
 
 -spec notify_connection_to_oz() -> ok.
 notify_connection_to_oz() ->

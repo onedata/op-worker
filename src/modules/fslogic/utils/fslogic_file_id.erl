@@ -125,6 +125,7 @@ share_root_dir_uuid_to_shareid(<<?SHARE_ROOT_DIR_UUID_PREFIX, ShareId/binary>>) 
     ShareId.
 
 
+%% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
 -spec is_special_uuid(file_meta:uuid()) -> boolean().
 is_special_uuid(FileUuid) ->
     is_root_dir_uuid(FileUuid)

@@ -82,7 +82,7 @@ all() -> [
     #{
         size => Size,
         group => true,
-        name => ?QOS_BOUNDED_CACHE_GROUP,
+        name => ?QOS_EFF_CACHE_GROUP,
         check_frequency => timer:seconds(300)
     }
 ).
