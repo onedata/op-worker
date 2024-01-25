@@ -139,16 +139,12 @@ send_data_chunk(Data, Req) ->
     http_download_utils:send_data_chunk(Data, Req, MaxSentBlocksCount, ?MIN_HTTP_SEND_RETRY_DELAY).
 
 
--spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
+-spec get_read_block_size(od_space:id() | lfm_context:ctx()) -> non_neg_integer().
+get_read_block_size(SpaceId) when is_binary(SpaceId) ->
+    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+    get_storage_read_block_size(StorageId);
 get_read_block_size(FileHandle) ->
-    case storage:get_block_size(lfm_context:get_storage_id(FileHandle)) of
-        undefined ->
-            ?DEFAULT_READ_BLOCK_SIZE;
-        0 ->
-            ?DEFAULT_READ_BLOCK_SIZE;
-        Int ->
-            Int
-    end.
+    get_storage_read_block_size(lfm_context:get_storage_id(FileHandle)).
 
 
 %%%===================================================================
@@ -160,6 +156,19 @@ get_read_block_size(FileHandle) ->
 -spec calculate_max_read_blocks_count(read_block_size()) -> non_neg_integer().
 calculate_max_read_blocks_count(ReadBlockSize) ->
     max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize).
+
+
+%% @private
+-spec get_storage_read_block_size(storage:id()) -> non_neg_integer().
+get_storage_read_block_size(StorageId) ->
+    case storage:get_block_size(StorageId) of
+        undefined ->
+            ?DEFAULT_READ_BLOCK_SIZE;
+        0 ->
+            ?DEFAULT_READ_BLOCK_SIZE;
+        Int ->
+            Int
+    end.
 
 
 %% @private
