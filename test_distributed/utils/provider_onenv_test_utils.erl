@@ -19,7 +19,7 @@
     initialize/1,
     setup_sessions/1,
     find_importing_provider/2,
-    create_oz_temp_access_token/2,
+    create_oz_temp_access_token/1, create_oz_temp_access_token/2,
     get_primary_cm_node/2
 ]).
 
@@ -71,15 +71,20 @@ find_importing_provider(_Config, SpaceId) ->
     end, undefined, Providers).
 
 
+-spec create_oz_temp_access_token(UserId :: binary()) -> tokens:serialized().
+create_oz_temp_access_token(UserId) ->
+    OzwNode = ?RAND_ELEMENT(oct_background:get_zone_nodes()),
+    create_oz_temp_access_token(OzwNode, UserId).
+
+
 -spec create_oz_temp_access_token(node(), UserId :: binary()) -> tokens:serialized().
 create_oz_temp_access_token(OzwNode, UserId) ->
-    TimeCaveat = #cv_time{
-        valid_until = rpc:call(OzwNode, global_clock, timestamp_seconds, []) + 100000
-    },
-
-    {ok, AccessToken} = rpc:call(OzwNode, token_logic, create_user_temporary_token, [
-        ?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}
-    ]),
+    Auth = ?USER(UserId),
+    Now = ozw_test_rpc:timestamp_seconds(OzwNode),
+    AccessToken = ozw_test_rpc:create_user_temporary_token(OzwNode, Auth, UserId, #{
+        <<"type">> => ?ACCESS_TOKEN,
+        <<"caveats">> => [#cv_time{valid_until = Now + 100000}]
+    }),
     {ok, SerializedAccessToken} = tokens:serialize(AccessToken),
 
     SerializedAccessToken.

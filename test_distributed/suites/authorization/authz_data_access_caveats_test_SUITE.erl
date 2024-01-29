@@ -312,7 +312,7 @@ list_previously_non_existent_file(_Config) ->
 %% @private
 ls_setup() ->
     UserId = oct_background:get_user_id(?LS_USER),
-    MainToken = create_oz_temp_access_token(UserId),
+    MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
     node_cache:put(ls_tests_main_token, MainToken),
 
     FileTreeObjects = onenv_file_test_utils:create_and_sync_file_tree(
@@ -421,7 +421,10 @@ allowed_ancestors_operations_test(_Config) ->
     {ok, FileInDeepestDirGuid} = lfm_proxy:mkdir(Node, UserSessionId, LastDirGuid, DirInDeepestDirName, 8#777),
     {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
 
-    Token = tokens:confine(create_oz_temp_access_token(UserId), ?CV_OBJECTID([FileInDeepestDirObjectId])),
+    Token = tokens:confine(
+        provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+        ?CV_OBJECTID([FileInDeepestDirObjectId])
+    ),
     SessionIdWithCaveats = permissions_test_utils:create_session(Node, UserId, Token),
 
     lists:foldl(
@@ -529,7 +532,7 @@ data_access_caveats_cache_test(_Config) ->
 
     CheckCacheFun = fun(Rule) -> rpc:call(Node, permissions_cache, check_permission, Rule) end,
 
-    Token = tokens:confine(create_oz_temp_access_token(UserId), [
+    Token = tokens:confine(provider_onenv_test_utils:create_oz_temp_access_token(UserId), [
         ?CV_OBJECTID([DirObjectId]),
         ?CV_OBJECTID([FileObjectId])
     ]),
@@ -639,25 +642,12 @@ mv_test(_Config) ->
 
     UserId = oct_background:get_user_id(user1),
     CheckNode = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
-    Token = tokens:confine(create_oz_temp_access_token(UserId), ?CV_PATH([CanonicalMvPath])),
+    Token = tokens:confine(
+        provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+        ?CV_PATH([CanonicalMvPath])
+    ),
     SessionIdWithCaveat = permissions_test_utils:create_session(CheckNode, UserId, Token),
     ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithCaveat, {path, MvPath}), ?ATTEMPTS).
-
-
-% TODO mv to onenv_ct
-%% @private
-create_oz_temp_access_token(UserId) ->
-    OzNode = ?RAND_ELEMENT(oct_background:get_zone_nodes()),
-
-    Auth = ?USER(UserId),
-    Now = ozw_test_rpc:timestamp_seconds(OzNode),
-    Token = ozw_test_rpc:create_user_temporary_token(OzNode, Auth, UserId, #{
-        <<"type">> => ?ACCESS_TOKEN,
-        <<"caveats">> => [#cv_time{valid_until = Now + 360000}]
-    }),
-
-    {ok, SerializedToken} = tokens:serialize(Token),
-    SerializedToken.
 
 
 %%%===================================================================
