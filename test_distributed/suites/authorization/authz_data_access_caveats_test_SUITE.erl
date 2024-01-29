@@ -78,31 +78,40 @@ all() -> [
 
 -define(LS_FILE_TREE_SPEC, [
     #dir_spec{
-        name = <<"ls_dir1">>,
+        name = <<"ls_d1">>,
         shares = [#share_spec{}],
-        children = [#file_spec{name = <<"ls_file", ($0 + Num)>>} || Num <- lists:seq(1, 5)]
-    },
-    #dir_spec{
-        name = <<"ls_dir2">>
-    },
-    #dir_spec{
-        name = <<"ls_dir3">>,
         children = [
-            #dir_spec{
-                name = <<"ls_dir1">>,
-                children = [#file_spec{name = <<"ls_file1">>}]
-            },
-            #file_spec{name = <<"ls_file1">>},
-            #file_spec{name = <<"ls_file2">>}
+            #file_spec{name = <<"f1">>},
+            #file_spec{name = <<"f2">>},
+            #file_spec{name = <<"f3">>},
+            #file_spec{name = <<"f4">>},
+            #file_spec{name = <<"f5">>}
         ]
     },
-    #file_spec{name = <<"ls_file1">>}
+    #dir_spec{
+        name = <<"ls_d2">>
+    },
+    #dir_spec{
+        name = <<"ls_d3">>,
+        children = [
+            #dir_spec{
+                name = <<"d1">>,
+                children = [#file_spec{name = <<"f1">>}]
+            },
+            #file_spec{name = <<"f1">>},
+            #file_spec{name = <<"f2">>}
+        ]
+    },
+    #file_spec{name = <<"ls_f1">>}
 ]).
 
--define(LS_PATH(__ABBREV), ls_build_path(__ABBREV)).
--define(LS_GUID(__ABBREV), ls_get_guid(?LS_PATH(__ABBREV))).
--define(LS_OBJECT_ID(__ABBREV), ls_get_object_id(?LS_PATH(__ABBREV))).
--define(LS_ENTRY(__ABBREV), ls_get_entry(?LS_PATH(__ABBREV))).
+-define(LS_CPATH(__PATH), ls_build_cpath(?LS_SPACE, str_utils:to_binary(__PATH))).
+-define(LS_GUID(__PATH), ls_get_guid(str_utils:to_binary(__PATH))).
+-define(LS_OBJECT_ID(__PATH), ls_get_object_id(str_utils:to_binary(__PATH))).
+-define(LS_ENTRY(__PATH), ls_get_entry(str_utils:to_binary(__PATH))).
+
+-define(CV_PATH(__CANONICAL_PATHS), #cv_data_path{whitelist = __CANONICAL_PATHS}).
+-define(CV_OBJECTID(__OBJECT_IDS), #cv_data_objectid{whitelist = __OBJECT_IDS}).
 
 
 list_user_root_dir_test(_Config) ->
@@ -123,11 +132,11 @@ list_user_root_dir_test(_Config) ->
     % But with caveats user root dir ls should show only spaces leading to allowed files
     ?assertEqual(
         {ok, [{SpaceKrkParPGuid, SpaceKrkParPName}]},
-        ls_with_caveats(UserRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1")]})
+        ls_with_caveats(UserRootDirGuid, ?CV_PATH([?LS_CPATH("ls_d1")]))
     ),
     ?assertEqual(
         {ok, [{SpaceKrkParPGuid, SpaceKrkParPName}]},
-        ls_with_caveats(UserRootDirGuid, #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1")]})
+        ls_with_caveats(UserRootDirGuid, ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1")]))
     ).
 
 
@@ -136,114 +145,109 @@ list_space_root_dir_test(_Config) ->
 
     % With no caveats listing space dir should list all space directories and files
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1"), ?LS_ENTRY("d2"), ?LS_ENTRY("d3"), ?LS_ENTRY("f1")]},
+        {ok, [?LS_ENTRY("ls_d1"), ?LS_ENTRY("ls_d2"), ?LS_ENTRY("ls_d3"), ?LS_ENTRY("ls_f1")]},
         ls_with_caveats(SpaceRootDirGuid, [])
     ),
 
     % But with caveats space ls should show only dirs leading to allowed files (even if they do not exist).
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1"), ?LS_ENTRY("d3")]},
-        ls_with_caveats(SpaceRootDirGuid, #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d3;f2")]})
+        {ok, [?LS_ENTRY("ls_d1"), ?LS_ENTRY("ls_d3")]},
+        ls_with_caveats(SpaceRootDirGuid, ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d3/f2")]))
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d3"), ?LS_ENTRY("f1")]},
-        ls_with_caveats(SpaceRootDirGuid, #cv_data_path{
-            whitelist = [?LS_PATH("d3;non_existent_file"), ?LS_PATH("f1")]
-        })
+        {ok, [?LS_ENTRY("ls_d3"), ?LS_ENTRY("ls_f1")]},
+        ls_with_caveats(SpaceRootDirGuid, ?CV_PATH([?LS_CPATH("ls_d3/non_existent_file"), ?LS_CPATH("ls_f1")]))
     ).
 
 
 list_directory_test(_Config) ->
     % Whitelisting Dir should result in listing all it's files
-    ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [?LS_PATH("d1")]})
-    ),
-    ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f3"), ?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1")]})
-    ),
+    AllFileEntries = [
+        ?LS_ENTRY("ls_d1/f1"), ?LS_ENTRY("ls_d1/f2"), ?LS_ENTRY("ls_d1/f3"),
+        ?LS_ENTRY("ls_d1/f4"), ?LS_ENTRY("ls_d1/f5")
+    ],
+    ?assertEqual({ok, AllFileEntries}, ls_with_caveats(?LS_GUID("ls_d1"), ?CV_PATH([?LS_CPATH("ls_d1")]))),
+    ?assertEqual({ok, AllFileEntries}, ls_with_caveats(?LS_GUID("ls_d1"), ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1")]))),
 
     % Whitelisting concrete files should result in listing only them (the nonexistent ones will be omitted)
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f3")]},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_path{whitelist = [
-            ?LS_PATH("d1;f1"), ?LS_PATH("d1;f3"), ?LS_PATH("d1;non_existent_file")
-        ]})
+        {ok, [?LS_ENTRY("ls_d1/f1"), ?LS_ENTRY("ls_d1/f3")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), ?CV_PATH([
+            ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f3"), ?LS_CPATH("ls_d1/non_existent_file")
+        ]))
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f4")]},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [
-            ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")
-        ]})
+        {ok, [?LS_ENTRY("ls_d1/f2"), ?LS_ENTRY("ls_d1/f4")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d1/f4")]))
     ),
-    CaveatsWithFilesInDifferentDir = #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d3;f1")]},
-    ?assertEqual({ok, [?LS_ENTRY("d1;f1")]}, ls_with_caveats(?LS_GUID("d1"), CaveatsWithFilesInDifferentDir)),
-    ?assertEqual({ok, [?LS_ENTRY("d3;f1")]}, ls_with_caveats(?LS_GUID("d3"), CaveatsWithFilesInDifferentDir)).
+
+    CaveatsWithFilesInDifferentDir = ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d3/f1")]),
+    ?assertEqual({ok, [?LS_ENTRY("ls_d1/f1")]}, ls_with_caveats(?LS_GUID("ls_d1"), CaveatsWithFilesInDifferentDir)),
+    ?assertEqual({ok, [?LS_ENTRY("ls_d3/f1")]}, ls_with_caveats(?LS_GUID("ls_d3"), CaveatsWithFilesInDifferentDir)).
 
 
 list_directory_with_offset_and_limit_test(_Config) ->
-    Caveats = #cv_data_path{whitelist = [
-        ?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;dummy"), ?LS_PATH("d1;f4"), ?LS_PATH("d1;f5")
-    ]},
+    Caveats = ?CV_PATH([
+        ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f2"), ?LS_CPATH("ls_d1/dummy"),
+        ?LS_CPATH("ls_d1/f4"), ?LS_CPATH("ls_d1/f5")
+    ]),
 
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f2"), ?LS_ENTRY("d1;f4")]},
-        ls_with_caveats(?LS_GUID("d1"), Caveats, 0, 3)
+        {ok, [?LS_ENTRY("ls_d1/f1"), ?LS_ENTRY("ls_d1/f2"), ?LS_ENTRY("ls_d1/f4")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), Caveats, 0, 3)
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f4"), ?LS_ENTRY("d1;f5")]},
-        ls_with_caveats(?LS_GUID("d1"), Caveats, 2, 3)
+        {ok, [?LS_ENTRY("ls_d1/f4"), ?LS_ENTRY("ls_d1/f5")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), Caveats, 2, 3)
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f4")]},
-        ls_with_caveats(?LS_GUID("d1"), Caveats, 2, 1)
+        {ok, [?LS_ENTRY("ls_d1/f4")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), Caveats, 2, 1)
     ).
 
 
 list_directory_with_caveats_for_different_directory_test(_Config) ->
     ?assertEqual(
         {error, ?EACCES},
-        ls_with_caveats(?LS_GUID("d1"), #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d3")]})
+        ls_with_caveats(?LS_GUID("ls_d1"), ?CV_OBJECTID([?LS_OBJECT_ID("ls_d3")]))
     ).
 
 
 list_directory_with_intersecting_caveats_test(_Config) ->
     % Using several caveats should result in listing only their intersection
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f4")]},
-        ls_with_caveats(?LS_GUID("d1"), [
-            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;f4")]},
-            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f3"), ?LS_PATH("d1;f4")]}
+        {ok, [?LS_ENTRY("ls_d1/f1"), ?LS_ENTRY("ls_d1/f4")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), [
+            ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f2"), ?LS_CPATH("ls_d1/f4")]),
+            ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f3"), ?LS_CPATH("ls_d1/f4")])
         ])
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f4")]},
-        ls_with_caveats(?LS_GUID("d1"), [
-            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f4")]},
-            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f3"), ?LS_OBJECT_ID("d1;f4")]}
+        {ok, [?LS_ENTRY("ls_d1/f1"), ?LS_ENTRY("ls_d1/f4")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), [
+            ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f1"), ?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d1/f4")]),
+            ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f1"), ?LS_OBJECT_ID("ls_d1/f3"), ?LS_OBJECT_ID("ls_d1/f4")])
         ])
     ),
     ?assertEqual(
-        {ok, [?LS_ENTRY("d1;f1"), ?LS_ENTRY("d1;f4")]},
-        ls_with_caveats(?LS_GUID("d1"), [
-            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;f4")]},
-            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f3"), ?LS_OBJECT_ID("d1;f4")]}
+        {ok, [?LS_ENTRY("ls_d1/f1"), ?LS_ENTRY("ls_d1/f4")]},
+        ls_with_caveats(?LS_GUID("ls_d1"), [
+            ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f2"), ?LS_CPATH("ls_d1/f4")]),
+            ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f1"), ?LS_OBJECT_ID("ls_d1/f3"), ?LS_OBJECT_ID("ls_d1/f4")])
         ])
     ),
     ?assertEqual(
         {ok, []},
-        ls_with_caveats(?LS_GUID("d1"), [
-            #cv_data_path{whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f4")]},
-            #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f2"), ?LS_OBJECT_ID("d1;f3")]}
+        ls_with_caveats(?LS_GUID("ls_d1"), [
+            ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f4")]),
+            ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d1/f3")])
         ])
     ).
 
 
 list_shared_directory_test(_Config) ->
-    DirPath = ?LS_PATH("d1"),
-    DirGuid = ?LS_GUID("d1"),
-    [DirShareId] = kv_utils:get([DirPath, shares], node_cache:get(ls_tests_file_tree)),
+    DirGuid = ?LS_GUID("ls_d1"),
+    [DirShareId] = kv_utils:get([<<"ls_d1">>, shares], node_cache:get(ls_tests_file_tree)),
     DirShareGuid = file_id:guid_to_share_guid(DirGuid, DirShareId),
 
     % Token confinements have no effects on accessing files via shared guid -
@@ -251,22 +255,18 @@ list_shared_directory_test(_Config) ->
     ExpEntries = lists:map(fun(AbbrevPath) ->
         {Guid, Name} = ?LS_ENTRY(AbbrevPath),
         {file_id:guid_to_share_guid(Guid, DirShareId), Name}
-    end, ["d1;f1", "d1;f2", "d1;f3", "d1;f4", "d1;f5"]),
+    end, ["ls_d1/f1", "ls_d1/f2", "ls_d1/f3", "ls_d1/f4", "ls_d1/f5"]),
 
-    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
-        whitelist = [DirPath]
-    })),
-    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
-        whitelist = [?LS_PATH("d1;f1"), ?LS_PATH("d1;f2"), ?LS_PATH("d1;f4")]
-    })),
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, ?CV_PATH([?LS_CPATH("ls_d1")]))),
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, ?CV_PATH([
+        ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f2"), ?LS_CPATH("ls_d1/f4")
+    ]))),
     ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, [
-        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f3"), ?LS_OBJECT_ID("d1;f4")]},
-        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f1"), ?LS_OBJECT_ID("d1;f4")]},
-        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d1;f4")]}
+        ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f1"), ?LS_OBJECT_ID("ls_d1/f3"), ?LS_OBJECT_ID("ls_d1/f4")]),
+        ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f1"), ?LS_OBJECT_ID("ls_d1/f4")]),
+        ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f4")])
     ])),
-    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, #cv_data_path{
-        whitelist = [?LS_PATH("non_existent_file")]
-    })).
+    ?assertEqual({ok, ExpEntries}, ls_with_caveats(DirShareGuid, ?CV_PATH([?LS_CPATH("non_existent_file")]))).
 
 
 list_ancestors_with_intersecting_caveats_test(_Config) ->
@@ -276,14 +276,14 @@ list_ancestors_with_intersecting_caveats_test(_Config) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
 
     Caveats = [
-        #cv_data_objectid{whitelist = [?LS_OBJECT_ID("d3;d1;f1")]},
-        #cv_data_path{whitelist = [?LS_PATH("d3;f2")]}
+        ?CV_OBJECTID([?LS_OBJECT_ID("ls_d3/d1/f1")]),
+        ?CV_PATH([?LS_CPATH("ls_d3/f2")])
     ],
 
     % Only ancestor directories common in all caveats SHOULD be listed
     ?assertEqual({ok, [{SpaceGuid, SpaceName}]}, ls_with_caveats(UserRootDirGuid, Caveats)),
-    ?assertEqual({ok, [?LS_ENTRY("d3")]}, ls_with_caveats(SpaceGuid, Caveats)),
-    ?assertEqual({ok, []}, ls_with_caveats(?LS_GUID("d3"), Caveats)).
+    ?assertEqual({ok, [?LS_ENTRY("ls_d3")]}, ls_with_caveats(SpaceGuid, Caveats)),
+    ?assertEqual({ok, []}, ls_with_caveats(?LS_GUID("ls_d3"), Caveats)).
 
 
 list_previously_non_existent_file(_Config) ->
@@ -292,25 +292,25 @@ list_previously_non_existent_file(_Config) ->
 
     % List dir manually to use the same exact session with caveat for file not existing yet
     MainToken = node_cache:get(ls_tests_main_token),
-    LsToken = tokens:confine(MainToken, #cv_data_path{whitelist = [?LS_PATH("d2;f1")]}),
+    LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
     LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
 
     LS = fun(Guid) -> lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), 0, 100) end,
 
-    ?assertEqual({ok, []}, LS(?LS_GUID("d2"))),
+    ?assertEqual({ok, []}, LS(?LS_GUID("ls_d2"))),
 
-    [#object{guid = FileGuid}, _] = onenv_file_test_utils:create_and_sync_file_tree(?LS_USER, ?LS_GUID("d2"), [
-        #file_spec{name = <<"ls_file1">>},
-        #file_spec{name = <<"ls_file2">>}
-    ]),
+    [#object{guid = FileGuid}, _] = onenv_file_test_utils:create_and_sync_file_tree(
+        ?LS_USER, ?LS_GUID("ls_d2"), [
+            #file_spec{name = <<"f1">>},
+            #file_spec{name = <<"f2">>}
+        ]
+    ),
 
-    ?assertEqual({ok, [{FileGuid, <<"ls_file1">>}]}, LS(?LS_GUID("d2"))).
+    ?assertEqual({ok, [{FileGuid, <<"f1">>}]}, LS(?LS_GUID("ls_d2"))).
 
 
 %% @private
 ls_setup() ->
-    SpacePath = filepath_utils:join([<<"/">>, oct_background:get_space_id(?LS_SPACE)]),
-
     UserId = oct_background:get_user_id(?LS_USER),
     MainToken = create_oz_temp_access_token(UserId),
     node_cache:put(ls_tests_main_token, MainToken),
@@ -318,7 +318,7 @@ ls_setup() ->
     FileTreeObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?LS_SPACE, ?LS_FILE_TREE_SPEC
     ),
-    FileTreeDesc = ls_describe_file_tree(#{}, SpacePath, FileTreeObjects),
+    FileTreeDesc = ls_describe_file_tree(#{}, <<>>, FileTreeObjects),
     node_cache:put(ls_tests_file_tree, FileTreeDesc).
 
 
@@ -350,24 +350,8 @@ ls_describe_file_tree(Desc, ParentPath, #object{
 
 
 %% @private
-ls_build_path(Abbrev) ->
-    ls_build_path(
-        string:split(str_utils:to_binary(Abbrev), <<";">>, all),
-        filepath_utils:join([<<"/">>, oct_background:get_space_id(?LS_SPACE)])
-    ).
-
-
-%% @private
-ls_build_path([], Path) ->
-    Path;
-ls_build_path([<<"f", FileSuffix/binary>> | LeftoverTokens], Path) ->
-    NewPath = filepath_utils:join([Path, <<"ls_file", FileSuffix/binary>>]),
-    ls_build_path(LeftoverTokens, NewPath);
-ls_build_path([<<"d", DirSuffix/binary>> | LeftoverTokens], Path) ->
-    NewPath = filepath_utils:join([Path, <<"ls_dir", DirSuffix/binary>>]),
-    ls_build_path(LeftoverTokens, NewPath);
-ls_build_path([Name | LeftoverTokens], Path) ->
-    ls_build_path(LeftoverTokens, filepath_utils:join([Path, Name])).
+ls_build_cpath(SpaceSelector, RelPath) ->
+    filepath_utils:join([<<"/">>, oct_background:get_space_id(SpaceSelector), RelPath]).
 
 
 %% @private
@@ -437,9 +421,7 @@ allowed_ancestors_operations_test(_Config) ->
     {ok, FileInDeepestDirGuid} = lfm_proxy:mkdir(Node, UserSessionId, LastDirGuid, DirInDeepestDirName, 8#777),
     {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
 
-    Token = tokens:confine(create_oz_temp_access_token(UserId), #cv_data_objectid{
-        whitelist = [FileInDeepestDirObjectId]
-    }),
+    Token = tokens:confine(create_oz_temp_access_token(UserId), ?CV_OBJECTID([FileInDeepestDirObjectId])),
     SessionIdWithCaveats = permissions_test_utils:create_session(Node, UserId, Token),
 
     lists:foldl(
@@ -548,8 +530,8 @@ data_access_caveats_cache_test(_Config) ->
     CheckCacheFun = fun(Rule) -> rpc:call(Node, permissions_cache, check_permission, Rule) end,
 
     Token = tokens:confine(create_oz_temp_access_token(UserId), [
-        #cv_data_objectid{whitelist = [DirObjectId]},
-        #cv_data_objectid{whitelist = [FileObjectId]}
+        ?CV_OBJECTID([DirObjectId]),
+        ?CV_OBJECTID([FileObjectId])
     ]),
     SessionId = permissions_test_utils:create_session(Node, UserId, Token),
 
@@ -657,9 +639,7 @@ mv_test(_Config) ->
 
     UserId = oct_background:get_user_id(user1),
     CheckNode = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
-    Token = tokens:confine(create_oz_temp_access_token(UserId), #cv_data_path{
-        whitelist = [CanonicalMvPath]
-    }),
+    Token = tokens:confine(create_oz_temp_access_token(UserId), ?CV_PATH([CanonicalMvPath])),
     SessionIdWithCaveat = permissions_test_utils:create_session(CheckNode, UserId, Token),
     ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithCaveat, {path, MvPath}), ?ATTEMPTS).
 
