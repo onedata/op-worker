@@ -350,7 +350,7 @@ emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSe
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     OptionalAttrs = case WithStatusSessIds of
         [] -> [];
-        _ -> [replication_status]
+        _ -> [is_fully_replicated]
     end,
     #fuse_response{fuse_response = #file_attr{conflicting_files = ConflictingFiles} = FileAttr} =
         attr_req:get_file_attr_insecure(RootUserCtx, FileCtx, #{

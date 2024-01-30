@@ -49,23 +49,23 @@
 
 all() ->
     ?ALL([
-%%        subscribe_on_dir_test,
-%%        sync_subscribe_on_dir_test,
-%%        proxy_subscribe_on_dir_test,
-%%        sync_proxy_subscribe_on_dir_test,
-%%        subscribe_on_user_root_test,
-%%        subscribe_on_user_root_filter_test,
-%%        subscribe_on_new_space_test,
-%%        subscribe_on_new_space_filter_test,
-%%        events_on_conflicts_test,
-        subscribe_on_replication_info_test % fixme
-%%        subscribe_on_replication_info_multiprovider_test,
-%%        events_for_hardlinks_test,
-%%        attr_auth_filtering_test,
-%%        location_auth_filtering_test,
-%%        remove_auth_filtering_test,
-%%        rename_auth_filtering_test,
-%%        proxy_connection_error_test
+        subscribe_on_dir_test,
+        sync_subscribe_on_dir_test,
+        proxy_subscribe_on_dir_test,
+        sync_proxy_subscribe_on_dir_test,
+        subscribe_on_user_root_test,
+        subscribe_on_user_root_filter_test,
+        subscribe_on_new_space_test,
+        subscribe_on_new_space_filter_test,
+        events_on_conflicts_test,
+        subscribe_on_replication_info_test,
+        subscribe_on_replication_info_multiprovider_test,
+        events_for_hardlinks_test,
+        attr_auth_filtering_test,
+        location_auth_filtering_test,
+        remove_auth_filtering_test,
+        rename_auth_filtering_test,
+        proxy_connection_error_test
     ]).
 
 -define(CONFLICTING_FILE_NAME, <<"abc">>).
@@ -309,11 +309,9 @@ subscribe_on_replication_info_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), true, []]),
-    ct:print("~p", [0]), % fixme
     receive_events_and_check({receive_replication_changed, true}, FileGuid),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), false, []]),
-    ct:print("~p", [1]),% fixme
     receive_events_and_check({receive_replication_changed, true}, FileGuid),
 
     % Check if single event is produced on overlapping subscriptions
@@ -326,20 +324,15 @@ subscribe_on_replication_info_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), true, []]),
-    ct:print("~p", [2]),% fixme
     receive_events_and_check({receive_replication_changed, true}, FileGuid),
-    ct:print("~p", [3]),% fixme
     receive_events_and_check({not_received, file_attr_changed}, FileGuid),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), false, []]),
-    ct:print("~p", [4]),% fixme
     receive_events_and_check({receive_replication_changed, true}, FileGuid),
-    ct:print("~p", [5]),% fixme
     receive_events_and_check({not_received, file_attr_changed}, FileGuid),
 
     % Check if event is produced by standard emission function
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
-    ct:print("~p", [6]),% fixme
     receive_events_and_check({receive_replication_changed, undefined}, FileGuid),
 
     % Check if event is produced on subscription without replication status
@@ -351,13 +344,11 @@ subscribe_on_replication_info_test(Config) ->
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), true, []]),
-    ct:print("~p", [7]),% fixme
     receive_events_and_check({receive_replication_changed, undefined}, FileGuid),
 
     % Check if event is not produced on subscription without replication status if size is not changed
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), false, []]),
-    ct:print("~p", [8]),% fixme
     receive_events_and_check({not_received, file_attr_changed}, FileGuid),
 
     % Cleanup subscription
