@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/0, terminate/0, check_permission/1, cache_permission/3, invalidate/0, invalidate_on_node/0]).
+-export([init_group/0, terminate/0, check_permission/1, cache_permission/3, invalidate/0, invalidate_on_node/0]).
 
 
 -define(CACHE, ?MODULE).
@@ -25,11 +25,10 @@
 %%% API
 %%%===================================================================
 
-init() ->
+init_group() ->
     bounded_cache:init_cache(?CACHE, #{
         check_frequency => timer:seconds(30),
-        size => 0, % Clear cache every 30 seconds
-        worker => true
+        size => 0 % Clear cache every 30 seconds
     }).
 
 

@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
+-include("modules/dataset/dataset.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
@@ -24,14 +25,19 @@
 -export([oldest_upgradable_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
+-export([before_custom_workers_start/0]).
+-export([custom_workers/0]).
 -export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
--export([custom_workers/0]).
 -export([before_listeners_start/0, after_listeners_stop/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 -export([master_node_down/1, master_node_up/1, master_node_ready/1]).
+-export([init_etses_for_space_on_all_nodes/1]).
+
+% For rpc
+-export([init_etses_for_space_on_current_node/1, init_etses_for_space_internal/1]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -126,57 +132,24 @@ before_init() ->
         op_worker_sup:start_link(),
         ok = helpers_nif:init()
     catch
-        _:Error:Stacktrace   ->
+        _:Error:Stacktrace ->
             ?error_stacktrace("Error in node_manager_plugin:before_init: ~p", [Error], Stacktrace),
             {error, cannot_start_node_manager_plugin}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback executed before cluster upgrade so that any required preparation
+%% Callback executed before custom workers start so that any required preparation
 %% can be done.
+%%
+%% This callback is executed on all cluster nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec before_cluster_upgrade() -> ok.
-before_cluster_upgrade() ->
-    gs_channel_service:setup_internal_service().
+-spec before_custom_workers_start() -> ok.
+before_custom_workers_start() ->
+    init_etses_on_current_node().
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
-%% This callback is executed only on one cluster node.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_cluster(node_manager:cluster_generation()) ->
-    {ok, node_manager:cluster_generation()}.
-upgrade_cluster(3) ->
-    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
-    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    {ok, 4};
-upgrade_cluster(4) ->
-    await_zone_connection_and_run(fun() ->
-        {ok, SpaceIds} = provider_logic:get_spaces(),
-
-        lists:foreach(fun(SpaceId) ->
-            case file_meta:make_tmp_dir_exist(SpaceId) of
-                created -> ?info("Created tmp dir for space '~s'.", [SpaceId]);
-                already_exists -> ok
-            end
-        end, SpaceIds)
-    end),
-    {ok, 5};
-upgrade_cluster(5) ->
-    await_zone_connection_and_run(fun() ->
-        {ok, SpaceIds} = provider_logic:get_spaces(),
-        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
-        lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
-        lists:foreach(fun(SpaceId) ->
-            ?info("Created dir for opened deleted files for space '~s'.", [SpaceId]),
-            file_meta:make_opened_deleted_files_dir_exist(SpaceId)
-        end, SpaceIds),
-        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
-    end),
-    {ok, 6}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -222,6 +195,84 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_children_spec, atm_supervision_worker:supervisor_children_spec()}
     ], [{terminate_timeout, infinity}]}
 ]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback executed before cluster upgrade so that any required preparation
+%% can be done.
+%%
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec before_cluster_upgrade() -> ok.
+before_cluster_upgrade() ->
+    safe_mode:whitelist_pid(self()),
+    gs_channel_service:setup_internal_service().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
+%% This callback is executed only on one cluster node.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_cluster(node_manager:cluster_generation()) ->
+    {ok, node_manager:cluster_generation()}.
+upgrade_cluster(3) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
+    await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
+    {ok, 4};
+upgrade_cluster(4) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+
+        lists:foreach(fun(SpaceId) ->
+            case file_meta:make_tmp_dir_exist(SpaceId) of
+                created -> ?info("Created tmp dir for space '~s'.", [SpaceId]);
+                already_exists -> ok
+            end
+        end, SpaceIds)
+    end),
+    {ok, 5};
+upgrade_cluster(5) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) -> init_etses_for_space_on_all_nodes(SpaceId) end, SpaceIds),
+        ?info("Upgrading tmp directory links..."),
+        % NOTE: existence of tmp directory was ensured in previous version upgrade, but we still need to ensure,
+        % that link exists (it was not ensured then).
+        lists:foreach(fun file_meta:ensure_tmp_dir_link_exists/1, SpaceIds),
+        % NOTE: there is no link for trash dir, so there is no need to ensure it existence.
+        ?info("Upgrading trash directories..."),
+        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+        ?info("Upgrading archive root directories..."),
+        % NOTE: below function also ensures existence of archives root link.
+        lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
+        % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
+        % it will create it if it is not yet synced.
+        lists:foreach(fun(SpaceId) ->
+            ?info("Upgrading dataset directory links for space '~s'...", [SpaceId]),
+            ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
+                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end),
+            ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
+                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end)
+        end, SpaceIds),
+        lists:foreach(fun(SpaceId) ->
+            % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
+            ?info("Creating directory for opened deleted files for space '~s'...", [SpaceId]),
+            file_meta:make_opened_deleted_files_dir_exist(SpaceId)
+        end, SpaceIds),
+        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+    end),
+    {ok, 6}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -340,7 +391,56 @@ master_node_up(RecoveredNode) ->
 %%--------------------------------------------------------------------
 -spec master_node_ready(node()) -> ok.
 master_node_ready(_RecoveredNode) ->
-    qos_bounded_cache:ensure_exists_for_all_spaces().
+    init_etses_for_space_on_current_node(all).
+
+
+-spec init_etses_for_space_on_all_nodes(od_space:id() | all) -> ok.
+init_etses_for_space_on_all_nodes(SpaceId) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, init_etses_for_space_on_current_node, [SpaceId]),
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
+            ?error("Could not initialize etses for space ~p on nodes: ~w (RPC error)", [SpaceId, BadNodes]),
+            error({etses_not_ready, BadNodes})
+    end,
+    lists:foreach(fun
+        (ok) ->
+            ok;
+        ({badrpc, _} = Error) ->
+            ?error("Could not initialize etses for space: ~p.~nReason: ~p", [SpaceId, Error]),
+            error({etses_not_ready, Error})
+    end, Res).
+
+
+%% @private
+-spec init_etses_on_current_node() -> ok.
+init_etses_on_current_node() ->
+    % TODO VFS-7412 refactor effective_value cache
+    auto_storage_import_worker:init_ets(),
+    paths_cache:init_group(),
+    dataset_eff_cache:init_group(),
+    file_meta_sync_status_cache:init_group(),
+    archive_recall_cache:init_group(),
+    permissions_cache:init_group(),
+    qos_eff_cache:init_group().
+
+
+%% @private
+-spec init_etses_for_space_on_current_node(od_space:id() | all) -> ok.
+init_etses_for_space_on_current_node(SpaceId) ->
+    gen_server2:call(?NODE_MANAGER_NAME, {apply, ?MODULE, init_etses_for_space_internal, [SpaceId]}).
+
+
+%% @private
+-spec init_etses_for_space_internal(od_space:id() | all) -> ok.
+init_etses_for_space_internal(Space) ->
+    paths_cache:init(Space),
+    dataset_eff_cache:init(Space),
+    archive_recall_cache:init(Space),
+    qos_eff_cache:init(Space),
+    file_meta_sync_status_cache:init(Space).
 
 
 -define(ZONE_CONNECTION_RETRIES, 180).

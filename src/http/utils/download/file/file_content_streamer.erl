@@ -1,22 +1,22 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
 %%% @author Michal Stanisz
-%%% @copyright (C) 2020-2021 ACK CYFRONET AGH
+%%% @copyright (C) 2020-2023 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions for streaming data using http and cowboy.
+%%% This module contains functions for streaming file content using
+%%% http and cowboy.
 %%% @end
 %%%--------------------------------------------------------------------
--module(http_streamer).
+-module(file_content_streamer).
 -author("Bartosz Walkowicz").
 
--include("http/rest.hrl").
+-include("http/http_download.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([
@@ -24,7 +24,7 @@
     build_ctx/2, 
     set_read_block_size/2, set_encoding_fun/2, set_send_fun/2, set_range_policy/2, 
     stream_bytes_range/3,
-    send_data_chunk/2, send_data_chunk/4,
+    send_data_chunk/2,
     get_read_block_size/1
 ]).
 
@@ -62,18 +62,11 @@
 
 -export_type([ctx/0]).
 
-% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
-% Due to lack of backpressure mechanism in cowboy when streaming files it must
-% be additionally implemented. This module implementation checks cowboy process
-% msg queue len to see if next data chunk can be queued. To account for
-% differences in speed between network and storage a simple backoff is
-% implemented with below boundaries.
--define(MIN_SEND_RETRY_DELAY, 100).
--define(MAX_SEND_RETRY_DELAY, 1000).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 -spec init_stream(cowboy:http_status(), cowboy_req:req()) ->
     cowboy_req:req().
@@ -135,48 +128,15 @@ set_range_policy(StreamingCtx, NewPolicy) ->
     tar_utils:stream() | undefined | no_return().
 stream_bytes_range(StreamingCtx, Range, SendState) ->
     stream_bytes_range_internal(Range, 
-        set_streaming_ctx_defaults(StreamingCtx), SendState, ?MIN_SEND_RETRY_DELAY, 0).
+        set_streaming_ctx_defaults(StreamingCtx), SendState, ?MIN_HTTP_SEND_RETRY_DELAY, 0
+    ).
 
 
--spec send_data_chunk(Data :: iodata(), cowboy_req:req()) -> 
+-spec send_data_chunk(Data :: iodata(), cowboy_req:req()) ->
     {NextRetryDelay :: time:millis(), cowboy_req:req()}.
 send_data_chunk(Data, Req) ->
-    send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE ,?MIN_SEND_RETRY_DELAY).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
-%% Cowboy uses separate process to manage socket and all messages, including
-%% data, to stream are sent to that process. However because it doesn't enforce
-%% any backpressure mechanism it is easy, on slow networks and fast storages,
-%% to read to memory entire file while sending process doesn't keep up with
-%% sending those data. To avoid this it is necessary to check message_queue_len
-%% of sending process and ensure it is not larger than max allowed blocks to
-%% read into memory.
-%% @end
-%%--------------------------------------------------------------------
--spec send_data_chunk(
-    Data :: iodata(),
-    cowboy_req:req(),
-    MaxReadBlocksCount :: non_neg_integer(),
-    RetryDelay :: time:millis()
-) ->
-    {NextRetryDelay :: time:millis(), cowboy_req:req()}.
-send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
-    {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
-    
-    case MsgQueueLen < MaxReadBlocksCount of
-        true ->
-            cowboy_req:stream_body(Data, nofin, Req),
-            {max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY), Req};
-        false ->
-            timer:sleep(RetryDelay),
-            send_data_chunk(
-                Data, Req, MaxReadBlocksCount,
-                min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
-            )
-    end.
+    MaxSentBlocksCount = ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE,
+    http_download_utils:send_data_chunk(Data, Req, MaxSentBlocksCount, ?MIN_HTTP_SEND_RETRY_DELAY).
 
 
 -spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
@@ -190,14 +150,17 @@ get_read_block_size(FileHandle) ->
             Int
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec calculate_max_read_blocks_count(read_block_size()) -> non_neg_integer().
 calculate_max_read_blocks_count(ReadBlockSize) ->
     max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize).
+
 
 %% @private
 -spec stream_bytes_range_internal(
@@ -210,6 +173,7 @@ calculate_max_read_blocks_count(ReadBlockSize) ->
     stream_state() | no_return().
 stream_bytes_range_internal({From, To}, _, SendState, _, _) when From > To ->
     SendState;
+
 stream_bytes_range_internal({From, To}, #streaming_ctx{
     file_handle = FileHandle,
     file_size = FileSize,
@@ -244,7 +208,7 @@ stream_bytes_range_internal({From, To}, #streaming_ctx{
 -spec read_file_data(lfm:handle(), From :: non_neg_integer(), ToRead :: non_neg_integer(), 
     MinBytes :: non_neg_integer()) -> {lfm:handle(), binary()}.
 read_file_data(FileHandle, From, ToRead, MinBytes) ->
-    case lfm:read(FileHandle, From, ToRead) of
+    case lfm:check_size_and_read(FileHandle, From, ToRead) of
         {error, ?ENOSPC} ->
             throw(?ERROR_QUOTA_EXCEEDED);
         Res ->
@@ -261,12 +225,15 @@ read_file_data(FileHandle, From, ToRead, MinBytes) ->
 -spec set_streaming_ctx_defaults(ctx()) -> ctx().
 set_streaming_ctx_defaults(#streaming_ctx{read_block_size = undefined, file_handle = FileHandle} = StreamingCtx) ->
     set_streaming_ctx_defaults(set_read_block_size(StreamingCtx, get_read_block_size(FileHandle)));
+
 set_streaming_ctx_defaults(#streaming_ctx{encoding_fun = undefined} = StreamingCtx) ->
     set_streaming_ctx_defaults(set_encoding_fun(StreamingCtx, fun(Data) -> Data end));
+
 set_streaming_ctx_defaults(#streaming_ctx{send_fun = undefined} = StreamingCtx) ->
     set_streaming_ctx_defaults(set_send_fun(StreamingCtx,
         fun(Data, Req, MaxReadBlocksCount, SendRetryDelay) ->
-            send_data_chunk(Data, Req, MaxReadBlocksCount, SendRetryDelay)
+            http_download_utils:send_data_chunk(Data, Req, MaxReadBlocksCount, SendRetryDelay)
         end));
+
 set_streaming_ctx_defaults(StreamingCtx) ->
     StreamingCtx.

@@ -26,6 +26,7 @@
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 -export([handle_file_deleted/1]).
+-export([handle_remote_change/2]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -246,6 +247,16 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
         ?EXTENDED_INFO ->
             {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
+
+
+-spec handle_remote_change(od_space:id(), dataset:doc()) -> ok.
+handle_remote_change(SpaceId, #document{deleted = true, key = DatasetId}) ->
+    ok = file_meta_forest:delete(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
+        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId));
+handle_remote_change(SpaceId, #document{deleted = false, key = DatasetId}) ->
+    archivisation_tree:ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
+    ok.
+
 
 %%%===================================================================
 %%% Util functions

@@ -23,14 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_effective_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
-
-% exported for RPC
--export([
-    schedule_init_effective_caches/1
-]).
 
 %%%===================================================================
 %%% Types
@@ -60,7 +54,6 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_EFFECTIVE_CACHES(Space), {init_effective_caches, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
@@ -152,17 +145,6 @@ supervisor_children_spec() ->
         transfer_onf_stats_aggregator:spec()
     ].
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes effective caches on all nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec init_effective_caches(od_space:id() | all) -> ok.
-init_effective_caches(Space) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_effective_caches, [Space]),
-    ok.
-
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -175,8 +157,6 @@ init_effective_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    permissions_cache:init(),
-    init_effective_caches(),
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
@@ -255,13 +235,6 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
     ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
-handle({bounded_cache_timer, Msg}) ->
-    bounded_cache:check_cache_size(Msg);
-handle(?INIT_EFFECTIVE_CACHES(Space)) ->
-    paths_cache:init(Space),
-    dataset_eff_cache:init(Space),
-    archive_recall_cache:init(Space),
-    file_meta_sync_status_cache:init(Space);
 handle(Request) ->
     ?log_bad_request(Request),
     {error, wrong_request}.
@@ -325,16 +298,6 @@ init_report() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec init_effective_caches() -> ok.
-init_effective_caches() ->
-    % TODO VFS-7412 refactor effective_value cache
-    paths_cache:init_group(),
-    dataset_eff_cache:init_group(),
-    file_meta_sync_status_cache:init_group(),
-    archive_recall_cache:init_group(),
-    schedule_init_effective_caches(all).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -719,9 +682,6 @@ schedule_restart_autocleaning_runs() ->
 -spec schedule_periodical_spaces_autocleaning_check() -> ok.
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
-
-schedule_init_effective_caches(Space) ->
-    schedule(?INIT_EFFECTIVE_CACHES(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

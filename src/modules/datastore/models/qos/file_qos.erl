@@ -184,7 +184,7 @@ add_qos_entry_id(SpaceId, FileUuid, QosEntryId, Storage) ->
     end,
     case datastore_model:update(?CTX, FileUuid, UpdateFun, NewDoc) of
         {ok, _} ->
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId);
         {error, _} = Error -> 
             Error
     end.
@@ -217,9 +217,9 @@ remove_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
     case datastore_model:update(?CTX, FileUuid, UpdateFun) of
         {ok, #document{value = #file_qos{qos_entries = []}}} -> 
             ok = delete(FileUuid, fun(#file_qos{qos_entries = QosEntries}) -> QosEntries =:= [] end),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId);
         {ok, _} ->
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId);
         {error, _} = Error -> Error
     end.
 

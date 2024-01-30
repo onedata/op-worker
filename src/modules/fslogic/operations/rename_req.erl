@@ -692,7 +692,7 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
             ok;
         false ->
             {RenamedFileCtx, _} = file_tree:get_child(TargetParentFileCtx, TargetName, UserCtx),
-            qos_bounded_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(RenamedFileCtx)),
+            qos_eff_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(RenamedFileCtx)),
             qos_logic:reconcile_qos(file_ctx:reset(RenamedFileCtx))
     end,
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),

@@ -584,7 +584,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 % File download code should be still usable after unsuccessful download
                 case Client of
                     % user4 does not have access to files, so list of files to download passed 
-                    % to file_download_utils is empty, hence it cannot be blocked for specific guid
+                    % to file_content_download_utils is empty, hence it cannot be blocked for specific guid
                     ?USER(User4Id) -> ok;
                     _ ->
                         block_file_streaming(DownloadNode, Guid),
@@ -1574,7 +1574,7 @@ init_per_suite(Config) ->
             ProviderNodes = oct_background:get_all_providers_nodes(),
             lists:foreach(fun(OpNode) ->
                 test_node_starter:load_modules([OpNode], [?MODULE]),
-                ok = test_utils:mock_new(OpNode, file_download_utils),
+                ok = test_utils:mock_new(OpNode, file_content_download_utils),
                 ErrorFun = fun(FileAttrs, Req) ->
                     ShouldBlock = lists:any(fun(#file_attr{guid = Guid}) ->
                         {Uuid, _, _} = file_id:unpack_share_guid(Guid),
@@ -1585,14 +1585,14 @@ init_per_suite(Config) ->
                         false -> passthrough
                     end
                 end,
-                ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file,
+                ok = test_utils:mock_expect(OpNode, file_content_download_utils, download_single_file,
                     fun(SessionId, FileAttrs, Callback, Req) ->
                         case ErrorFun(FileAttrs, Req) of
                             passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, Req]);
                             Res -> Res
                         end
                     end),
-                ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball,
+                ok = test_utils:mock_expect(OpNode, file_content_download_utils, download_tarball,
                     fun(Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req) ->
                         case ErrorFun(FileAttrs, Req) of
                             passthrough -> meck:passthrough([Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req]);

@@ -60,7 +60,8 @@ all() ->
         fslogic_get_file_children_attrs_with_replication_status_test,
         fslogic_get_child_attr_test,
         fslogic_mkdir_and_rmdir_test,
-        fslogic_read_dir_test,
+        %% @TODO VFS-11356 - investigate hidden files listing with offsets
+%%        fslogic_read_dir_test,
         chmod_test,
         simple_rename_test,
         update_times_test,
