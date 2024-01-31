@@ -68,7 +68,7 @@
     end)()
 ).
 
--define(SCENARIO_NAME(__PREFIX, __TYPE),
+-define(TEST_GROUP_NAME(__PREFIX, __TYPE),
     <<__PREFIX, (atom_to_binary(__TYPE, utf8))/binary>>
 ).
 
@@ -210,7 +210,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(Node)}}, Config),
 
     lists:foreach(fun({ScenarioType, RequiredPrivs}) ->
-        ScenarioName = ?SCENARIO_NAME("space_privs_", ScenarioType),
+        ScenarioName = ?TEST_GROUP_NAME("space_privs_", ScenarioType),
         ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
@@ -471,7 +471,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     MainToken = initializer:create_access_token(User),
 
     lists:foreach(fun(ScenarioType) ->
-        ScenarioName = ?SCENARIO_NAME("cv_", ScenarioType),
+        ScenarioName = ?TEST_GROUP_NAME("cv_", ScenarioType),
         ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
@@ -825,7 +825,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
     OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
 
     lists:foreach(fun({ScenarioType, ExecutionerSessId}) ->
-        ScenarioName = ?SCENARIO_NAME("posix_", ScenarioType),
+        ScenarioName = ?TEST_GROUP_NAME("posix_", ScenarioType),
         ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
