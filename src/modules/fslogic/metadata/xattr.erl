@@ -23,13 +23,12 @@
 %% API
 -export([list/4, get/4, set/6, remove/3]).
 %% Protected API - for use only by *_req.erl modules
--export([list_insecure/4, get_all_direct_insecure/1]).
+-export([list_insecure/4, get_all_direct_insecure/1, filter_internal/1]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 -spec list(
     user_ctx:ctx(),
@@ -105,10 +104,27 @@ remove(UserCtx, FileCtx0, XattrName) ->
     custom_metadata:remove_xattr(FileUuid, XattrName).
 
 
+-spec get_all_direct_insecure(file_ctx:ctx()) ->
+    {ok, #{custom_metadata:name() => custom_metadata:value()}} | {error, term()}.
+get_all_direct_insecure(FileCtx) ->
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    case custom_metadata:get_all_xattrs(FileUuid) of
+        {ok, AllXattrsWithValues} ->
+            {ok, AllXattrsWithValues};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec filter_internal([custom_metadata:name()]) ->
+    [custom_metadata:name()].
+filter_internal(XattrsKeys) ->
+    lists:filter(fun(Key) -> not is_internal_xattr(Key) end, XattrsKeys).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 %% @private
 -spec list_insecure(
@@ -136,18 +152,6 @@ list_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
         false -> {ok, filter_internal(XattrNames)}
     end.
 
-
-%% @private
--spec get_all_direct_insecure(file_ctx:ctx()) ->
-    {ok, #{custom_metadata:name() => custom_metadata:value()}} | {error, term()}.
-get_all_direct_insecure(FileCtx) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    case custom_metadata:get_all_xattrs(FileUuid) of
-        {ok, AllXattrsWithValues} ->
-            {ok, maps:with(filter_internal(maps:keys(AllXattrsWithValues)), AllXattrsWithValues)};
-        {error, _} = Error ->
-            Error
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -228,10 +232,3 @@ prepend_acl(FileCtx, XattrsKeys) ->
         _ ->
             XattrsKeys
     end.
-
-
-%% @private
--spec filter_internal([custom_metadata:name()]) ->
-    [custom_metadata:name()].
-filter_internal(XattrsKeys) ->
-    lists:filter(fun(Key) -> not is_internal_xattr(Key) end, XattrsKeys).

@@ -59,7 +59,8 @@
     file_ctx :: file_ctx:ctx(),
     user_ctx :: user_ctx:ctx(),
     options :: resolve_opts(),
-    current_stage_attrs = [] :: [attribute()] | [custom_metadata:name()]
+    current_stage_attrs = [] :: [attribute()] | [custom_metadata:name()],
+    xattrs = undefined :: undefined | #{custom_metadata:name() => custom_metadata:value()}
 }).
 
 -type state() :: #state{}.
@@ -263,27 +264,28 @@ resolve_path(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
 %% @private
 -spec resolve_metadata_attrs(state()) -> {state(), file_attr()}.
 resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ok, XattrList} = xattr:list_insecure(RootUserCtx, FileCtx, false, true),
-    {State, #file_attr{
+    {ok, AllXattrs} = xattr:get_all_direct_insecure(FileCtx),
+    {State#state{xattrs = AllXattrs}, #file_attr{
         has_custom_metadata = lists:any(fun
             (<<?CDMI_PREFIX_STR, _/binary>>) -> false;
             (?JSON_METADATA_KEY) -> true;
             (?RDF_METADATA_KEY) -> true;
             (<<?ONEDATA_PREFIX_STR, _/binary>>) -> false;
             (_) -> true
-        end, XattrList)
+        end, maps:keys(AllXattrs))
     }}.
 
 
 %% @private
 -spec resolve_xattrs(state()) -> {state(), file_attr()}.
-resolve_xattrs(#state{file_ctx = FileCtx, current_stage_attrs = XattrNames} = State) ->
-    {ok, AllDirectXattrs} = xattr:get_all_direct_insecure(FileCtx),
+resolve_xattrs(#state{xattrs = undefined, file_ctx = FileCtx} = State) ->
+    {ok, AllXattrs} = xattr:get_all_direct_insecure(FileCtx),
+    resolve_xattrs(State#state{xattrs = AllXattrs});
+resolve_xattrs(#state{current_stage_attrs = XattrNames, xattrs = AllDirectXattrs} = State) ->
+    FilteredXattrs = maps:with(xattr:filter_internal(maps:keys(AllDirectXattrs)), AllDirectXattrs),
     {State, #file_attr{xattrs = lists:foldl(fun(Xattr, Acc) ->
-        Acc#{Xattr => maps:get(Xattr, AllDirectXattrs, undefined)}
+        Acc#{Xattr => maps:get(Xattr, FilteredXattrs, undefined)}
     end, #{}, XattrNames)}}.
-
 
 %%%===================================================================
 %%% Internal functions

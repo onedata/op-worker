@@ -33,8 +33,8 @@
 %%% API
 %%%===================================================================
 
--spec to_json(lfm_attrs:file_attributes(), attr_type() | both, [file_attr:attribute()]) -> json_utils:json_map().
-to_json(FileAttrs, both, RequestedAttributes) ->
+-spec to_json(lfm_attrs:file_attributes(), attr_type() | default, [file_attr:attribute()]) -> json_utils:json_map().
+to_json(FileAttrs, default, RequestedAttributes) ->
     maps:merge(
         to_json(FileAttrs, current, RequestedAttributes),
         to_json(FileAttrs, deprecated, RequestedAttributes)

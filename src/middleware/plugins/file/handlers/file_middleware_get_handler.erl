@@ -585,13 +585,13 @@ build_listing_start_point_param_spec(Key) ->
 
 %% @private
 -spec infer_requested_attributes(middleware:data(), [file_attr:attribute()]) ->
-    {file_attr_translator:attr_type(), [file_attr:attribute()]}.
+    {file_attr_translator:attr_type() | default, [file_attr:attribute()]}.
 infer_requested_attributes(Data, Default) ->
     case maps:get(<<"attributes">>, Data, undefined) of
         undefined ->
             case maps:get(<<"attribute">>, Data, undefined) of
                 undefined ->
-                    {both, Default};
+                    {default, Default};
                 DeprecatedAttrs ->
                     {deprecated, DeprecatedAttrs}
             end;
