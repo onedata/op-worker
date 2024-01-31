@@ -936,8 +936,6 @@ to_serialized_data(#state{session_id = SessId} = State, Msg) ->
     try
         serialize_message_unsafe(State, Msg)
     catch Class:Reason:Stacktrace ->
-        %% @TODO to sobie na razie niech zostanie dopóki się pr nie skończy i wszystkie testy akpceptacyjne nie przemielą, na wszelki wypadek jakby jakiś błąd jednak jeszcze poleciał
-        ?critical("ble: ~p", [Msg]),
         MsgStr = clproto_utils:msg_to_string(Msg),
         ?THROTTLE_ERROR_EXCEPTION(SessId, "Unable to serialize message: ~s", [MsgStr], Class, Reason, Stacktrace),
         {error, serialization_failed}

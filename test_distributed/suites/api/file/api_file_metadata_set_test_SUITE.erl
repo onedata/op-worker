@@ -43,15 +43,15 @@
 
 groups() -> [
     {all_tests, [parallel], [
-%%        set_file_rdf_metadata_test,
-%%        set_file_rdf_metadata_on_provider_not_supporting_space_test,
-%%
-        set_file_json_metadata_test % fixme
-%%        set_file_primitive_json_metadata_test,
-%%        set_file_json_metadata_on_provider_not_supporting_space_test,
-%%
-%%        set_file_xattrs_test,
-%%        set_file_xattrs_on_provider_not_supporting_space_test
+        set_file_rdf_metadata_test,
+        set_file_rdf_metadata_on_provider_not_supporting_space_test,
+
+        set_file_json_metadata_test,
+        set_file_primitive_json_metadata_test,
+        set_file_json_metadata_on_provider_not_supporting_space_test,
+
+        set_file_xattrs_test,
+        set_file_xattrs_on_provider_not_supporting_space_test
     ]}
 ].
 
@@ -208,7 +208,8 @@ set_file_json_metadata_test(Config) ->
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
                     {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
                     {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-                ]
+                ],
+                optional_values_data_sets = all_combinations
             }
         )
     ),

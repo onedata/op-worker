@@ -60,7 +60,28 @@
         Key :: binary(),
         Value :: term(),
         errors:error() | {onenv_api_test_runner:scenario_type(), errors:error()}
-    }]
+    }],
+    % by default (`relaxed`) datasets from the optional values are generated as follows:
+    % - one dataset for each key-value pair
+    % - one dataset containing each key with randomly selected value;
+    % e.g:
+    % given
+    %   optional = [<<"key1">>, <<"key2">>]
+    %   correct_values = #{<<"key1">> => [<<"value1">>, <<"value2">>], <<"key2">> => [<<"value1">>]}
+    % following datasets could be generated:
+    %  #{<<"key1">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value2">>},
+    %  #{<<"key2">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value1">>, #{<<"key2">> => <<"value1">>}
+    % with `all_combinations` option following datasets will be generated (empty dataset is omitted):
+    %  #{<<"key1">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value2">>},
+    %  #{<<"key2">> => <<"value1">>},
+    %  #{<<"key1">> => <<"value1">>, #{<<"key2">> => <<"value1">>}
+    %  #{<<"key1">> => <<"value2">>, #{<<"key2">> => <<"value1">>}
+    % NOTE: calculation of all combinations can take same time (because of naïve implementation),
+    % so it is not recommended to use with more than 10 total correct values for optional keys.
+    optional_values_data_sets = relaxed :: relaxed | all_combinations
 }).
 
 -record(rest_args, {

@@ -447,7 +447,7 @@ get_user_root_dir_children_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = get_children_data_spec(rest, private)
+            data_spec = get_children_data_spec(rest, private, true)
         },
         #suite_spec{
             target_nodes = Providers,
@@ -468,7 +468,7 @@ get_user_root_dir_children_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = get_children_data_spec(gs, private)
+            data_spec = get_children_data_spec(gs, private, true)
         }
     ])).
 
@@ -531,7 +531,12 @@ get_dir_children_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 -spec get_children_data_spec(gs | rest, public | private) -> onenv_api_test_runner:data_spec().
-get_children_data_spec(gs, _Scope) ->
+get_children_data_spec(Api, Scope) ->
+    get_children_data_spec(Api, Scope, false).
+
+%% @private
+-spec get_children_data_spec(gs | rest, public | private, boolean()) -> onenv_api_test_runner:data_spec().
+get_children_data_spec(gs, _Scope, _IsSpace) ->
     #data_spec{
         optional = [<<"limit">>, <<"offset">>],
         correct_values = #{
@@ -546,19 +551,25 @@ get_children_data_spec(gs, _Scope) ->
             {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
         ]
     };
-get_children_data_spec(rest, Scope) ->
+get_children_data_spec(rest, Scope, IsSpace) ->
     AllowedAttrs = case Scope of
         public -> ?PUBLIC_ATTRS;
         private -> ?API_ATTRS
     end,
     AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- AllowedAttrs] ++ [<<"xattr.*">>],
+    % do not check acl, as it messes with privileges
+    AttributesCorrectValues = lists_utils:random_sublist(AllowedAttrsJson -- [<<"acl">>, <<"xattr.*">>]),
+    % do not check localReplicationRate for space dirs as it might be difficult to determine actual correct value
+    FinalAttributesCorrectValues = case IsSpace of
+        true -> AttributesCorrectValues -- [<<"localReplicationRate">>];
+        false -> AttributesCorrectValues
+    end,
     #data_spec{
         optional = [<<"limit">>, <<"attributes">>],
         correct_values = #{
             <<"limit">> => [1, 100],
             <<"attributes">> => [
-                % do not check acl, as it messes with privileges
-                lists_utils:random_sublist(AllowedAttrsJson -- [<<"acl">>, <<"xattr.*">>]),
+                FinalAttributesCorrectValues,
                 [<<"directShareIds">>, <<"posixPermissions">>, <<"parentFileId">>],
                 [<<"fileId">>, <<"name">>],
                 <<"ctime">>
@@ -667,7 +678,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
             #{
                 <<"children">> => lists:map(fun({Guid, Name, _Path, Attrs}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                    case Attributes of
+                    MappedChildAttrs = case Attributes of
                         undefined ->
                             #{
                                 <<"file_id">> => ObjectId,
@@ -683,6 +694,10 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
                         _ ->
                              maps:with(utils:ensure_list(Attributes),
                                 api_test_utils:file_attr_to_json(ShareId, rest, ProviderId, Attrs))
+                    end,
+                    case fslogic_file_id:is_space_dir_guid(Guid) of
+                        true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
+                        false -> MappedChildAttrs
                     end
                 end, ExpFiles2),
                 <<"isLast">> => IsLast
@@ -690,12 +705,22 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
 
         gs_with_details ->
             #{
-                <<"children">> => lists:map(fun({_Guid, _Name, _Path, Attrs}) ->
-                    maps:remove(<<"acl">>, api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, Attrs))
+                <<"children">> => lists:map(fun({Guid, _Name, _Path, Attrs}) ->
+                    MappedChildAttrs = maps:remove(<<"acl">>, api_test_utils:file_attr_to_json(
+                        ShareId, gs, ProviderId, Attrs)),
+                    case fslogic_file_id:is_space_dir_guid(Guid) of
+                        true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
+                        false -> MappedChildAttrs
+                    end
                 end, ExpFiles2),
                 <<"isLast">> => IsLast
             }
     end,
+    ?assertMatch(#{<<"children">> := _}, ListedChildren),
+    ?assertEqual(length(maps:get(<<"children">>, ExpFiles3)), length(maps:get(<<"children">>, ListedChildren))),
+    lists:foreach(fun({Expected, Listed}) ->
+        ?assertEqual(Expected, maps:with(maps:keys(Expected), Listed))
+    end, lists:zip(maps:get(<<"children">>, ExpFiles3), maps:get(<<"children">>, ListedChildren))),
 
     case Format of
         rest ->
@@ -703,7 +728,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
         _ ->
              ok
     end,
-    ?assertEqual(ExpFiles3, maps:remove(<<"nextPageToken">>, ListedChildren)).
+    ?assertEqual(IsLast, maps:get(<<"isLast">>, ListedChildren)).
 
 
 %%%===================================================================

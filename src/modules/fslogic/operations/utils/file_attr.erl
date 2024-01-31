@@ -454,7 +454,7 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
                         {StorageId, FC2} -> {[?LOGICAL_SIZE, ?VIRTUAL_SIZE, ?PHYSICAL_SIZE(StorageId)], FC2}
                     end;
                 false ->
-                    {[?VIRTUAL_SIZE], FileCtx}
+                    {[?LOGICAL_SIZE], FileCtx}
             end,
             StatsResult = case dir_size_stats:get_stats(Guid, StatsToGet) of
                 {ok, StatsMap} -> StatsMap;

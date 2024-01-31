@@ -469,7 +469,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"localReplicationRate">> => LocalReplicationRate2,
         <<"originProviderId">> => ProviderId,
         <<"directShareIds">> => Shares,
-        <<"ownerUserId">> => OwnerId,
+        <<"ownerUserId">> => map_owner_for_api_type(ApiType, OwnerId),
         <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
         <<"symlinkValue">> => SymlinkValue,
         <<"hasCustomMetadata">> => HasMetadata,
@@ -531,7 +531,7 @@ replace_attrs_with_deprecated(JsonAttrs) ->
     end, #{}, JsonAttrs).
 
 
--spec map_file_id_for_api_type(gs | rest, file_id:file_guid() | undefined) -> file_id:objectid() | file_id:file_guid().
+-spec map_file_id_for_api_type(gs | rest, file_id:file_guid() | undefined) -> file_id:objectid() | file_id:file_guid() | null.
 map_file_id_for_api_type(_, undefined) ->
     null;
 map_file_id_for_api_type(gs, Guid) ->
@@ -539,6 +539,15 @@ map_file_id_for_api_type(gs, Guid) ->
 map_file_id_for_api_type(rest, Guid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     ObjectId.
+
+
+-spec map_owner_for_api_type(gs | rest, od_user:id() | undefined) -> od_user:id() | null.
+map_owner_for_api_type(_, undefined) ->
+    null;
+map_owner_for_api_type(gs, ?SPACE_OWNER_ID(_)) ->
+    null;
+map_owner_for_api_type(_, UserId) ->
+    UserId.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -468,15 +468,15 @@ build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
 %% @private
 -spec build_get_attrs_validate_rest_call_fun(#file_attr{}, undefined | od_share:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_attrs_validate_rest_call_fun(FileAttrs, ShareId) ->
+build_get_attrs_validate_rest_call_fun(#file_attr{acl = Acl} = FileAttrs, ShareId) ->
     fun(#api_test_ctx{node = Node, client = Client, data = Data} = TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ProviderId = case ShareId of
             undefined -> opw_test_rpc:get_provider_id(Node);
             _ -> undefined
         end,
         User4Id = oct_background:get_user_id(user4),
-        case {Client, is_acl_requested(Data)} of
-            {?USER(UserId), true} when UserId == User4Id ->
+        case {Client, is_acl_requested(Data), Acl} of
+            {?USER(UserId), true, [_|_]} when UserId == User4Id ->
                 ?assertEqual({?HTTP_400_BAD_REQUEST, #{<<"error">> => errors:to_json(?ERROR_POSIX(?EACCES))}}, {RespCode, RespBody});
             _ ->
                 JsonAttrs = api_test_utils:file_attr_to_json(ShareId, rest, ProviderId, FileAttrs),
@@ -489,12 +489,12 @@ build_get_attrs_validate_rest_call_fun(FileAttrs, ShareId) ->
 %% @private
 -spec build_get_attrs_validate_gs_call_fun(#file_attr{}, undefined | od_share:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_attrs_validate_gs_call_fun(FileAttrs, ShareId) ->
+build_get_attrs_validate_gs_call_fun(#file_attr{acl = Acl} = FileAttrs, ShareId) ->
     fun(#api_test_ctx{node = Node, client = Client, data = Data} = TestCtx, Result) ->
         JsonAttrs = api_test_utils:file_attr_to_json(ShareId, gs, opw_test_rpc:get_provider_id(Node), FileAttrs),
         User4Id = oct_background:get_user_id(user4),
-        case {Client, is_acl_requested(Data)} of
-            {?USER(UserId), true} when UserId == User4Id ->
+        case {Client, is_acl_requested(Data), Acl} of
+            {?USER(UserId), true, [_|_]} when UserId == User4Id ->
                 ?assertEqual(?ERROR_POSIX(?EACCES), Result);
             _ ->
                 {ok, ExpAttrs} = get_attrs_exp_result(TestCtx, JsonAttrs, ShareId),
