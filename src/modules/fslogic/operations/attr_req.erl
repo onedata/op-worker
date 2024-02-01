@@ -233,7 +233,7 @@ ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
     Name :: file_meta:name(), [attribute()]) -> fslogic_worker:fuse_response().
 get_child_attr_insecure(UserCtx, ParentFileCtx, Name, Attributes) ->
     {ChildFileCtx, _NewParentFileCtx} = file_tree:get_child(ParentFileCtx, Name, UserCtx),
-    Response = get_file_attr(UserCtx, ChildFileCtx, Attributes),
+    Response = get_file_attr_insecure(UserCtx, ChildFileCtx, #{attributes => Attributes}),
     ensure_proper_file_name(Response, Name).
 
 
