@@ -70,7 +70,7 @@
 -type authz_acl_test_group_ctx() :: #authz_acl_test_group_ctx{}.
 
 -define(TEST_GROUP_NAME(__PREFIX, __TYPE),
-    <<__PREFIX, (atom_to_binary(__TYPE, utf8))/binary>>
+    <<__PREFIX, (str_utils:to_binary(__TYPE))/binary>>
 ).
 
 
@@ -100,8 +100,87 @@ run_suite(TestSuiteSpec = #authz_test_suite_spec{
         files_owner_session_id = FileOwnerSessionId
     },
 
+    run_open_handle_mode_test_groups(TestSuiteCtx),
     run_posix_permission_test_groups(TestSuiteCtx),
     run_acl_permission_test_groups(TestSuiteCtx).
+
+
+%%%===================================================================
+%%% OPEN_HANDLE MODE TESTS
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests open data session mode. For that it will setup environment,
+%% add full acl permissions and assert that even with full other/anonymous
+%% perms set only operations also available in share mode can be performed.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_open_handle_mode_test_groups(authz_test_suite_ctx()) ->
+    ok | no_return().
+run_open_handle_mode_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
+    suite_spec = #authz_test_suite_spec{
+        files_owner_selector = FilesOwnerSelector,
+        space_owner_selector = SpaceOwnerSelector,
+        space_user_selector = SpaceUserSelector
+    },
+    test_node = TestNode
+}) ->
+    lists:foreach(fun({ExecutionerSelector, TestGroupSuffix, PermsType}) ->
+        TestGroupName = ?TEST_GROUP_NAME("open_handle_mode_", TestGroupSuffix),
+        TestGroupCtx0 = init_test_group(TestGroupName, ExecutionerSelector, TestSuiteCtx),
+
+        ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
+        ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+        TestGroupCtx1 = TestGroupCtx0#authz_test_group_ctx{
+            executioner_session_id = permissions_test_utils:create_session(
+                TestNode, ExecutionerUserId, ExecutionerToken, open_handle
+            )
+        },
+
+        run_open_handle_mode_test_cases(PermsType, TestGroupCtx1)
+    end, ?RAND_SUBLIST([
+        {FilesOwnerSelector, "files_owner_posix", posix},
+        {SpaceOwnerSelector, "space_owner_posix", posix},
+        {SpaceUserSelector, "space_user_posix", posix},
+        {FilesOwnerSelector, "files_owner_acl", acl},
+        {SpaceOwnerSelector, "space_owner_acl", acl},
+        {SpaceUserSelector, "space_user_acl", acl}
+    ], 6)).  %% TODO sublis length?
+
+
+%% @private
+-spec run_open_handle_mode_test_cases(posix | acl_allow | acl_deny, authz_test_group_ctx()) ->
+    ok | no_return().
+run_open_handle_mode_test_cases(PermsType, TestGroupCtx = #authz_test_group_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = TestSuiteSpec = #authz_test_suite_spec{available_in_open_handle_mode = false},
+        test_node = TestNode
+    },
+    required_perms_per_file = RequiredPermsPerFile
+}) ->
+    % If operation is not available in share/public mode then operation
+    % should be rejected even if all permissions are granted
+    set_full_perms(PermsType, TestNode, maps:keys(RequiredPermsPerFile)),
+    ExpError2 = get_exp_error(?EPERM, TestSuiteSpec),
+    ?assertMatch(ExpError2, exec_operation(TestGroupCtx));
+
+% Operation is available in share/public mode but access is still controlled
+% (even for space owner) by posix mode (other bits) or acl
+run_open_handle_mode_test_cases(posix, TestGroupCtx) ->
+    PosixTestGroupCtx = build_posix_test_group_ctx(TestGroupCtx),
+    run_posix_permission_test_group(other, PosixTestGroupCtx),
+
+    run_final_storage_ownership_check(TestGroupCtx);
+
+run_open_handle_mode_test_cases(acl, TestGroupCtx) ->
+    AclTestGroupCtx = build_acl_test_group_ctx(TestGroupCtx),
+    AceType = ?RAND_ELEMENT([allow, deny]),
+    run_acl_permission_test_cases(AceType, ?anonymous, ?no_flags_mask, AclTestGroupCtx),
+
+    run_final_storage_ownership_check(TestGroupCtx).
 
 
 %%%===================================================================
@@ -142,11 +221,11 @@ run_posix_permission_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
             ),
             error(posix_perms_test_failed)
         end
-    end, [
+    end, ?RAND_SUBLIST([
         {owner, TestSuiteSpec#authz_test_suite_spec.files_owner_selector},
         {group, TestSuiteSpec#authz_test_suite_spec.space_user_selector},
         {other, TestSuiteSpec#authz_test_suite_spec.non_space_user}
-    ]).
+    ], 3)). %% TODO sublis length?
 
 
 %% @private
@@ -336,7 +415,7 @@ run_posix_permission_test_cases(PosixUserType, #authz_posix_test_group_ctx{
 
 
 %%%===================================================================
-%%% ACL TESTS SCENARIOS MECHANISM
+%%% ACL TESTS
 %%%===================================================================
 
 
@@ -381,7 +460,7 @@ run_acl_permission_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
             ),
             error(acl_perms_test_failed)
         end
-    end, [
+    end, ?RAND_SUBLIST([
         {FilesOwnerSelector, <<"acl_owner_allow">>, allow, ?owner, ?no_flags_mask},
         {SpaceUserSelector, <<"acl_user_allow">>, allow, SpaceUserId, ?no_flags_mask},
 %%        {SpaceUserSelector, <<"acl_user_group_allow">>, allow, SpaceUserGroupId, ?identifier_group_mask},
@@ -391,7 +470,7 @@ run_acl_permission_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
         {SpaceUserSelector, <<"acl_user_deny">>, deny, SpaceUserId, ?no_flags_mask},
 %%        {SpaceUserSelector, <<"acl_user_group_deny">>, deny, SpaceUserGroupId, ?identifier_group_mask},
         {SpaceUserSelector, <<"acl_everyone_deny">>, deny, ?everyone, ?no_flags_mask}
-    ]).
+    ], 6)).  %% TODO sublis length?
 
 
 %% @private
@@ -537,6 +616,25 @@ flatten_perms_per_file(PermsPerFile) ->
     maps:fold(fun(Guid, Perms, OuterAcc) ->
         lists:foldl(fun(Perm, InnerAcc) -> [{Guid, Perm} | InnerAcc] end, OuterAcc, Perms)
     end, [], PermsPerFile).
+
+
+%% @private
+-spec set_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
+set_full_perms(posix, Node, FileGuids) ->
+    FullPosixPermsPerFile = lists:foldl(fun(Guid, Acc) -> Acc#{Guid => 8#777} end, #{}, FileGuids),
+    permissions_test_utils:set_modes(Node, FullPosixPermsPerFile);
+
+set_full_perms(acl, Node, FileGuids) ->
+    FullAclPermsPerFile = get_full_perms_per_file(Node, FileGuids),
+    permissions_test_utils:set_acls(Node, FullAclPermsPerFile, #{}, ?everyone, ?no_flags_mask).
+
+
+%% @private
+-spec get_full_perms_per_file(node(), [file_id:file_guid()]) -> perms_per_file().
+get_full_perms_per_file(Node, FileGuids) ->
+    lists:foldl(fun(Guid, Acc) ->
+        Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
+    end, #{}, FileGuids).
 
 
 %% @private

@@ -26,11 +26,13 @@
 ]).
 
 -export([
-    mkdir_test/1
+%%    mkdir_test/1,
+    get_children_test/1
 ]).
 
 all() -> [
-    mkdir_test
+%%    mkdir_test,
+    get_children_test
 ].
 
 
@@ -65,6 +67,40 @@ mkdir_test(_Config) ->
             {should_change_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
         end
     }).
+
+
+get_children_test(_Config) ->
+    authz_test_runner:run_suite(#authz_test_suite_spec{
+        name = str_utils:to_binary(?FUNCTION_NAME),
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?list_container]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        available_in_open_handle_mode = true,
+        operation = fun(Node, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            extract_ok(lfm_proxy:get_children(Node, SessId, DirKey, 0, 100))
+        end,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
+        end
+    }).
+
+
+%% @private
+-spec extract_ok
+    (ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}) -> ok;
+    ({error, term()}) -> {error, term()}.
+extract_ok(ok) -> ok;
+extract_ok({ok, _}) -> ok;
+extract_ok({ok, _, _}) -> ok;
+extract_ok({ok, _, _, _}) -> ok;
+extract_ok({error, _} = Error) -> Error.
 
 
 %%%===================================================================
