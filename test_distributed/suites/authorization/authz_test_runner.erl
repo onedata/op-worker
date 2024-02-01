@@ -100,9 +100,108 @@ run_suite(TestSuiteSpec = #authz_test_suite_spec{
         files_owner_session_id = FileOwnerSessionId
     },
 
+    run_share_test_groups(TestSuiteCtx),
     run_open_handle_mode_test_groups(TestSuiteCtx),
     run_posix_permission_test_groups(TestSuiteCtx),
     run_acl_permission_test_groups(TestSuiteCtx).
+
+
+%%%===================================================================
+%%% SHARE TESTS
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests permissions needed to perform operation in share mode.
+%% If operation is not nat available in share mode then checks
+%% that even with all perms set ?EACCES should be returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_share_test_groups(authz_test_suite_ctx()) ->
+    ok | no_return().
+run_share_test_groups(#authz_test_suite_ctx{suite_spec = #authz_test_suite_spec{
+    available_in_share_mode = inapplicable
+}}) ->
+    ok;
+
+run_share_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
+    suite_spec = #authz_test_suite_spec{
+        files_owner_selector = FilesOwnerSelector,
+        space_user_selector = SpaceUserSelector,
+        non_space_user = NonSpaceUserSelector
+    },
+    files_owner_session_id = FileOwnerUserSessId,
+    test_node = TestNode
+}) ->
+    lists:foreach(fun({ExecutionerSelector, PermsType, TestGroupName}) ->
+        TestGroupCtx = init_test_group(TestGroupName, ExecutionerSelector, TestSuiteCtx),
+        TestGroupRootDirPath = TestGroupCtx#authz_test_group_ctx.group_root_dir_path,
+        ExtraData = TestGroupCtx#authz_test_group_ctx.extra_data,
+
+        TestCaseRootDirKey = maps:get(TestGroupRootDirPath, ExtraData),
+        {ok, ShareId} = opt_shares:create(
+            TestNode, FileOwnerUserSessId, TestCaseRootDirKey, TestGroupName
+        ),
+        TestGroupCtxWithShareGuids = TestGroupCtx#authz_test_group_ctx{
+            extra_data = maps:map(fun
+                (_, #file_ref{guid = FileGuid} = FileRef) ->
+                    FileRef#file_ref{guid = file_id:guid_to_share_guid(FileGuid, ShareId)};
+                (_, Val) ->
+                    Val
+            end, ExtraData)
+        },
+
+        run_share_test_cases(PermsType, TestGroupCtxWithShareGuids)
+    end, ?RAND_SUBLIST([
+        {FilesOwnerSelector, posix, <<"owner_posix_share">>},
+        {SpaceUserSelector, posix, <<"space_user_posix_share">>},
+%%        {NonSpaceUserSelector, posix, <<"non_space_user_posix_share">>},  %% TODO
+        {?GUEST_SESS_ID, posix, <<"guest_posix_share">>},
+        {FilesOwnerSelector, {acl, allow}, <<"owner_acl_allow_share">>},
+        {FilesOwnerSelector, {acl, deny}, <<"owner_acl_deny_share">>},
+        {SpaceUserSelector, {acl, allow}, <<"space_user_acl_allow_share">>},
+        {SpaceUserSelector, {acl, deny}, <<"space_user_acl_deny_share">>},
+%%        {NonSpaceUserSelector, {acl, allow}, <<"non_space_user_acl_allow_share">>},   %% TODO
+%%        {NonSpaceUserSelector, {acl, deny}, <<"non_space_user_acl_deny_share">>},   %% TODO
+        {?GUEST_SESS_ID, {acl, allow}, <<"guest_acl_allow_share">>},
+        {?GUEST_SESS_ID, {acl, deny}, <<"guest_acl_deny_share">>}
+    ], 12)).
+
+
+%% @private
+-spec run_share_test_cases(posix | {acl, allow | deny}, authz_test_group_ctx()) ->
+    ok | no_return().
+run_share_test_cases(PermsType0, TestGroupCtx = #authz_test_group_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = TestSuiteSpec = #authz_test_suite_spec{available_in_share_mode = false},
+        test_node = TestNode
+    },
+    required_perms_per_file = RequiredPermsPerFile
+}) ->
+    FileGuids = maps:keys(RequiredPermsPerFile),
+
+    % Set all posix or acl (depending on scenario) perms to files
+    PermsType1 = case PermsType0 of
+        posix -> posix;
+        {acl, _} -> acl
+    end,
+    set_full_perms(PermsType1, TestNode, FileGuids),
+
+    % Even with all perms set operation should fail
+    ActualPermsPerFile = maps:map(fun(_, _) -> <<"all">> end, FileGuids),
+    ExpError = get_exp_error(?EPERM, TestSuiteSpec),
+    assert_operation(ActualPermsPerFile, ExpError, TestGroupCtx);
+
+run_share_test_cases(posix, TestGroupCtx) ->
+    PosixTestGroupCtx = build_posix_test_group_ctx(TestGroupCtx),
+    run_posix_permission_test_cases(other, PosixTestGroupCtx);
+
+run_share_test_cases({acl, AceType}, TestGroupCtx) ->
+    AclTestGroupCtx = build_acl_test_group_ctx(TestGroupCtx),
+    AceWho = lists_utils:random_element([?everyone, ?anonymous]),
+    run_acl_permission_test_cases(AceType, AceWho, ?no_flags_mask, AclTestGroupCtx).
 
 
 %%%===================================================================
@@ -171,16 +270,12 @@ run_open_handle_mode_test_cases(PermsType, TestGroupCtx = #authz_test_group_ctx{
 % (even for space owner) by posix mode (other bits) or acl
 run_open_handle_mode_test_cases(posix, TestGroupCtx) ->
     PosixTestGroupCtx = build_posix_test_group_ctx(TestGroupCtx),
-    run_posix_permission_test_group(other, PosixTestGroupCtx),
-
-    run_final_storage_ownership_check(TestGroupCtx);
+    run_posix_permission_test_cases(other, PosixTestGroupCtx);
 
 run_open_handle_mode_test_cases(acl, TestGroupCtx) ->
     AclTestGroupCtx = build_acl_test_group_ctx(TestGroupCtx),
     AceType = ?RAND_ELEMENT([allow, deny]),
-    run_acl_permission_test_cases(AceType, ?anonymous, ?no_flags_mask, AclTestGroupCtx),
-
-    run_final_storage_ownership_check(TestGroupCtx).
+    run_acl_permission_test_cases(AceType, ?anonymous, ?no_flags_mask, AclTestGroupCtx).
 
 
 %%%===================================================================
@@ -569,7 +664,11 @@ run_acl_permission_test_cases(deny, AceWho, AceFlags, #authz_acl_test_group_ctx{
 
 
 %% @private
--spec init_test_group(binary(), oct_background:entity_selector(), authz_test_suite_ctx()) ->
+-spec init_test_group(
+    binary(),
+    session:id() | oct_background:entity_selector(),
+    authz_test_suite_ctx()
+) ->
     authz_test_group_ctx().
 init_test_group(TestGroupName, ExecutionerSelector, TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = TestSuiteSpec = #authz_test_suite_spec{
@@ -592,9 +691,10 @@ init_test_group(TestGroupName, ExecutionerSelector, TestSuiteCtx = #authz_test_s
         suite_ctx = TestSuiteCtx,
         name = TestGroupName,
         group_root_dir_path = filepath_utils:join([TestSuiteRootDirPath, TestGroupName]),
-        executioner_session_id = oct_background:get_user_session_id(
-            ExecutionerSelector, ProviderSelector
-        ),
+        executioner_session_id = case ExecutionerSelector of
+            ?GUEST_SESS_ID -> ?GUEST_SESS_ID;
+            _ -> oct_background:get_user_session_id(ExecutionerSelector, ProviderSelector)
+        end,
         required_perms_per_file = RequiredPermsPerFile,
         extra_data = ExtraData
     }.
