@@ -6,6 +6,10 @@ CHANGELOG
 
 ### 21.02.4
 
+-   **VFS-11601** Web GUI: Fixed showing ACL when a subject user or
+    group has been removed from space members list.
+-   **VFS-11513** Web GUI: Fixed rare issue when file browser list was
+    not refreshed after deleting files.
 -   **VFS-11459** Added option to set custom region in S3 storage
     helper.
 -   **VFS-11405** Web GUI: Added columns drag&drop to change their order
