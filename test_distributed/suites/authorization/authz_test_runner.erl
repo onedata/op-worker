@@ -56,6 +56,13 @@
 }).
 -type authz_test_group_ctx() :: #authz_test_group_ctx{}.
 
+-record(authz_cv_test_group_ctx, {
+    group_ctx :: authz_test_group_ctx(),
+    executioner_user_id :: od_user:id(),
+    executioner_main_token :: tokens:serialized()
+}).
+-type authz_cv_test_group_ctx() :: #authz_cv_test_group_ctx{}.
+
 -record(authz_posix_test_group_ctx, {
     group_ctx :: authz_test_group_ctx(),
     required_posix_perms_per_file :: posix_perms_per_file(),
@@ -100,10 +107,149 @@ run_suite(TestSuiteSpec = #authz_test_suite_spec{
         files_owner_session_id = FileOwnerSessionId
     },
 
+    run_data_access_caveats_test_groups(TestSuiteCtx),
     run_share_test_groups(TestSuiteCtx),
     run_open_handle_mode_test_groups(TestSuiteCtx),
     run_posix_permission_test_groups(TestSuiteCtx),
     run_acl_permission_test_groups(TestSuiteCtx).
+
+
+%%%===================================================================
+%%% CAVEATS TESTS
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests data caveats. For that it will setup environment,
+%% add full acl permissions and assert that even with full perms set
+%% operations can be performed only when caveats (data constraints)
+%% allow it.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_data_access_caveats_test_groups(authz_test_suite_ctx()) ->
+    ok | no_return().
+run_data_access_caveats_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
+    suite_spec = #authz_test_suite_spec{
+        files_owner_selector = FilesOwnerSelector
+    },
+    test_node = TestNode
+}) ->
+    FilesOwnerUserId = oct_background:get_user_id(FilesOwnerSelector),
+    FilesOwnerMainToken = provider_onenv_test_utils:create_oz_temp_access_token(FilesOwnerUserId),
+
+    lists:foreach(fun(CaveatType) ->
+        TestGroupName = ?TEST_GROUP_NAME("cv_", CaveatType),
+        TestGroupCtx = init_test_group(TestGroupName, FilesOwnerSelector, TestSuiteCtx),
+        CvTestGroupTestCtx = #authz_cv_test_group_ctx{
+            group_ctx = TestGroupCtx,
+            executioner_user_id = FilesOwnerUserId,
+            executioner_main_token = FilesOwnerMainToken
+        },
+
+        % Assert that even with all perms set operation can be performed
+        % only when caveats allows it
+        FileGuids = maps:keys(TestGroupCtx#authz_test_group_ctx.required_perms_per_file),
+        set_full_perms(?RAND_ELEMENT([posix, acl]), TestNode, FileGuids),
+
+        run_caveats_scenario(CaveatType, CvTestGroupTestCtx)
+
+    end, ?RAND_SUBLIST([data_path, data_objectid, data_readonly], 3)).  %% TODO test also other users? / sublist?
+
+
+%% @private
+-spec run_caveats_scenario(
+    data_path | data_objectid | data_readonly,
+    authz_cv_test_group_ctx()
+) ->
+    ok | no_return().
+run_caveats_scenario(data_path, CvTestGroupTestCtx0 = #authz_cv_test_group_ctx{
+    group_ctx = TestGroupCtx = #authz_test_group_ctx{
+        suite_ctx = #authz_test_suite_ctx{suite_spec = TestSuiteSpec}
+    }
+}) ->
+    ExpError = get_exp_error(?EACCES, TestSuiteSpec),
+    assert_operation(#{}, ExpError, constrain_executioner_session(
+        CvTestGroupTestCtx0, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}
+    )),
+
+    assert_operation(#{}, ok, constrain_executioner_session(CvTestGroupTestCtx0, #cv_data_path{
+        whitelist = [get_test_group_root_dir_canonical_path(TestGroupCtx)]
+    })),
+    run_final_storage_ownership_check(TestGroupCtx);
+
+run_caveats_scenario(data_objectid, CvTestGroupTestCtx0 = #authz_cv_test_group_ctx{
+    group_ctx = TestGroupCtx = #authz_test_group_ctx{
+        suite_ctx = #authz_test_suite_ctx{suite_spec = TestSuiteSpec},
+        group_root_dir_path = TestGroupRootDirPath,
+        extra_data = ExtraData
+    }
+}) ->
+    ExpError = get_exp_error(?EACCES, TestSuiteSpec),
+    DummyGuid = <<"Z3VpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
+    {ok, DummyObjectId} = file_id:guid_to_objectid(DummyGuid),
+    assert_operation(#{}, ExpError, constrain_executioner_session(
+        CvTestGroupTestCtx0, #cv_data_objectid{whitelist = [DummyObjectId]}
+    )),
+
+    ?FILE_REF(TestGroupRootDirGuid) = maps:get(TestGroupRootDirPath, ExtraData),
+    {ok, TestGroupRootDirObjectId} = file_id:guid_to_objectid(TestGroupRootDirGuid),
+    assert_operation(#{}, ok, constrain_executioner_session(
+        CvTestGroupTestCtx0, #cv_data_objectid{whitelist = [TestGroupRootDirObjectId]}
+    )),
+    run_final_storage_ownership_check(TestGroupCtx);
+
+run_caveats_scenario(data_readonly, CvTestGroupTestCtx0 = #authz_cv_test_group_ctx{
+    group_ctx = #authz_test_group_ctx{
+        suite_ctx = #authz_test_suite_ctx{
+            suite_spec = TestSuiteSpec = #authz_test_suite_spec{
+                available_in_readonly_mode = AvailableInReadonlyMode
+            }
+        }
+    }
+}) ->
+    CvTestGroupTestCtx1 = constrain_executioner_session(CvTestGroupTestCtx0, #cv_data_readonly{}),
+
+    case AvailableInReadonlyMode of
+        true ->
+            assert_operation(#{}, ok, CvTestGroupTestCtx1),
+            run_final_storage_ownership_check(CvTestGroupTestCtx1#authz_cv_test_group_ctx.group_ctx);
+        false ->
+            ExpError = get_exp_error(?EACCES, TestSuiteSpec),
+            assert_operation(#{}, ExpError, CvTestGroupTestCtx1)
+    end.
+
+
+%% @private
+-spec constrain_executioner_session(authz_cv_test_group_ctx(), caveats:caveat()) ->
+    authz_cv_test_group_ctx().
+constrain_executioner_session(CvTestGroupTestCtx = #authz_cv_test_group_ctx{
+    group_ctx = TestGroupCtx = #authz_test_group_ctx{
+        suite_ctx = #authz_test_suite_ctx{test_node = TestNode}
+    },
+    executioner_user_id = UserId,
+    executioner_main_token = MainToken
+}, Caveat) ->
+    TokenWithCaveat = tokens:confine(MainToken, Caveat),
+    ConstrainedSessionId = permissions_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
+    CvTestGroupTestCtx#authz_cv_test_group_ctx{group_ctx = TestGroupCtx#authz_test_group_ctx{
+        executioner_session_id = ConstrainedSessionId
+    }}.
+
+
+%% @private
+-spec get_test_group_root_dir_canonical_path(authz_test_group_ctx()) ->
+    file_meta:path().
+get_test_group_root_dir_canonical_path(#authz_test_group_ctx{
+    suite_ctx = #authz_test_suite_ctx{suite_spec = #authz_test_suite_spec{
+        space_selector = SpaceSelector
+    }},
+    group_root_dir_path = TestGroupRootDirPath
+}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    [Sep, _SpaceName | PathTokens] = filepath_utils:split(TestGroupRootDirPath),
+    filepath_utils:join([Sep, SpaceId | PathTokens]).
 
 
 %%%===================================================================
@@ -167,7 +313,7 @@ run_share_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
 %%        {NonSpaceUserSelector, {acl, deny}, <<"non_space_user_acl_deny_share">>},   %% TODO
         {?GUEST_SESS_ID, {acl, allow}, <<"guest_acl_allow_share">>},
         {?GUEST_SESS_ID, {acl, deny}, <<"guest_acl_deny_share">>}
-    ], 12)).
+    ], 12)).  %% TODO sublis length?
 
 
 %% @private
@@ -738,8 +884,17 @@ get_full_perms_per_file(Node, FileGuids) ->
 
 
 %% @private
--spec assert_operation(perms_per_file() | posix_perms_per_file(), term(), authz_test_group_ctx()) ->
+-spec assert_operation(
+    perms_per_file() | posix_perms_per_file(),
+    term(),
+    authz_test_group_ctx() | authz_cv_test_group_ctx()
+) ->
     ok | no_return().
+assert_operation(ActualPermsPerFile, ExpResult, #authz_cv_test_group_ctx{
+    group_ctx = TestGroupCtx
+}) ->
+    assert_operation(ActualPermsPerFile, ExpResult, TestGroupCtx);
+
 assert_operation(ActualPermsPerFile, ExpResult, TestGroupCtx = #authz_test_group_ctx{
     suite_ctx = #authz_test_suite_ctx{test_node = TestNode},
     name = TestGroupName
