@@ -519,7 +519,7 @@ on_storage_created(StorageId) ->
 %% @private
 -spec on_space_supported(od_space:id(), id()) -> ok.
 on_space_supported(SpaceId, StorageId) ->
-    % remove possible remnants of previous support 
+    % remove possible remnants of previous support
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     space_logic:on_space_supported(SpaceId).
@@ -539,7 +539,6 @@ on_space_unsupported(SpaceId, StorageId) ->
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     rtransfer_config:add_storage(StorageId),
-    utils:rpc_multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
