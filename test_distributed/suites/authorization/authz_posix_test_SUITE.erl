@@ -26,12 +26,12 @@
 ]).
 
 -export([
-%%    mkdir_test/1,
+    mkdir_test/1,
     get_children_test/1
 ]).
 
 all() -> [
-%%    mkdir_test,
+    mkdir_test,
     get_children_test
 ].
 

@@ -26,9 +26,9 @@
 
 -export([run_suite/1]).
 
--type permissions() :: [binary()].
+-type perms() :: [binary()].
 
--type perms_per_file() :: #{file_id:file_guid() => permissions()}.
+-type perms_per_file() :: #{file_id:file_guid() => perms()}.
 -type posix_perms_per_file() :: #{file_id:file_guid() => [PosixPerm :: atom()]}.
 
 -type posix_user_type() :: owner | group | other.
@@ -41,6 +41,7 @@
     suite_spec :: authz_test_suite_spec(),
     suite_root_dir_path :: file_meta:path(),
     test_node :: node(),
+    space_owner_session_id :: session:id(),
     files_owner_session_id :: session:id()
 }).
 -type authz_test_suite_ctx() :: #authz_test_suite_ctx{}.
@@ -87,31 +88,159 @@
 
 
 -spec run_suite(authz_test_suite_spec()) -> ok | no_return().
-run_suite(TestSuiteSpec = #authz_test_suite_spec{
-    name = TestSuiteName,
-    provider_selector = ProviderSelector,
-    space_selector = SpaceSelector,
-    files_owner_selector = FilesOwnerSelector
-}) ->
-    TestNode = oct_background:get_random_provider_node(ProviderSelector),
-    FileOwnerSessionId = oct_background:get_user_session_id(FilesOwnerSelector, ProviderSelector),
+run_suite(TestSuiteSpec) ->
+    TestSuiteCtx = init_test_suite(TestSuiteSpec),
 
-    SpaceName = oct_background:get_space_name(SpaceSelector),
-    TestSuiteRootDirPath = filepath_utils:join([<<"/">>, SpaceName, TestSuiteName]),
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(TestNode, FileOwnerSessionId, TestSuiteRootDirPath, 8#777)),
-
-    TestSuiteCtx = #authz_test_suite_ctx{
-        suite_spec = TestSuiteSpec,
-        suite_root_dir_path = TestSuiteRootDirPath,
-        test_node = TestNode,
-        files_owner_session_id = FileOwnerSessionId
-    },
-
+    run_file_protection_test_groups(TestSuiteCtx),
     run_data_access_caveats_test_groups(TestSuiteCtx),
     run_share_test_groups(TestSuiteCtx),
     run_open_handle_mode_test_groups(TestSuiteCtx),
     run_posix_permission_test_groups(TestSuiteCtx),
     run_acl_permission_test_groups(TestSuiteCtx).
+
+
+%%%===================================================================
+%%% FILE PROTECTION TESTS
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests file protection blocking operation.
+%% It will setup environment, add full posix or acl permissions and
+%% assert that with file protection flags operation cannot be performed
+%% (even though full posix/acl perms are set).
+%% @end
+%%--------------------------------------------------------------------
+-spec run_file_protection_test_groups(authz_test_group_ctx()) ->
+    ok | no_return().
+run_file_protection_test_groups(TestSuiteCtx = #authz_test_suite_ctx{suite_spec = TestSuiteSpec}) ->
+    lists:dropwhile(fun({ExecutionerSelector, TestGroupSuffix}) ->
+        TestGroupName = ?TEST_GROUP_NAME("file_protection_", TestGroupSuffix),
+        TestGroupCtx = init_test_group(TestGroupName, ExecutionerSelector, TestSuiteCtx),
+
+        ProtectionFlagsToSet = infer_blocking_protection_flags(TestGroupCtx),
+        run_file_protection_test_group(ProtectionFlagsToSet, TestGroupCtx)
+
+    end, ?RAND_SUBLIST([
+        {TestSuiteSpec#authz_test_suite_spec.space_owner_selector, "space_owner"},
+        {TestSuiteSpec#authz_test_suite_spec.files_owner_selector, "files_owner"},
+        {TestSuiteSpec#authz_test_suite_spec.space_user_selector, "space_user"}
+    ], 3)).  %% TODO test also other users? / sublist?
+
+
+%% @private
+-spec run_file_protection_test_group(data_access_control:bitmask(), authz_test_group_ctx()) ->
+    boolean().
+run_file_protection_test_group(0, _TestGroupCtx) ->
+    false;
+
+run_file_protection_test_group(ProtectionFlagsToSet, TestGroupCtx = #authz_test_group_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = TestSuiteSpec = #authz_test_suite_spec{
+            space_selector = SpaceSelector
+        },
+        space_owner_session_id = SpaceOwnerSessionId,
+        test_node = TestNode
+    },
+    executioner_session_id = ExecutionerSessionId,
+    required_perms_per_file = RequiredPermsPerFile,
+    extra_data = ExtraData
+}) ->
+    % Assert that even with all perms set operation cannot be performed
+    % with file protection flags set
+    set_full_perms(acl, TestNode, maps:keys(RequiredPermsPerFile)),
+
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    DatasetId = establish_dataset_on_test_group_root_dir(TestGroupCtx),
+    {ok, ExecutionerUserId} = rpc:call(TestNode, session, get_user_id, [ExecutionerSessionId]),
+
+    % With file protection set operation should fail
+    ExpError = get_exp_error(?EPERM, TestSuiteSpec),
+    ok = opt_datasets:update(
+        TestNode, SpaceOwnerSessionId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask
+    ),
+    await_dataset_eff_cache_clearing(TestNode, SpaceId, ExecutionerUserId, ExtraData),
+    assert_operation(#{}, ExpError, TestGroupCtx),      %% TODO
+
+    % And should succeed without it
+    ok = opt_datasets:update(
+        TestNode, SpaceOwnerSessionId, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
+    ),
+    await_dataset_eff_cache_clearing(TestNode, SpaceId, ExecutionerUserId, ExtraData),
+    assert_operation(#{}, ok, TestGroupCtx),  %% TODO
+
+    run_final_storage_ownership_check(TestGroupCtx),
+    true.
+
+
+%% @private
+-spec infer_blocking_protection_flags(authz_test_group_ctx()) ->
+    data_access_control:bitmask().
+infer_blocking_protection_flags(#authz_test_group_ctx{
+    required_perms_per_file = RequiredPermsPerFile
+}) ->
+    AllNeededPerms = lists:usort(lists:flatten(maps:values(RequiredPermsPerFile))),
+    AllNeededPermsBitmask = permissions_test_utils:perms_to_bitmask(AllNeededPerms),
+
+    lists:foldl(fun({ProtectionFlag, BlockedPerms}, Acc) ->
+        case ?has_any_flags(AllNeededPermsBitmask, BlockedPerms) of
+            true -> ?set_flags(Acc, ProtectionFlag);
+            false -> Acc
+        end
+    end, ?no_flags_mask, [
+        {?DATA_PROTECTION, ?FILE_DATA_PROTECTION_BLOCKED_OPERATIONS},
+        {?METADATA_PROTECTION bor ?DATA_PROTECTION, ?FILE_METADATA_PROTECTION_BLOCKED_OPERATIONS}
+    ]).
+
+
+%% @private
+-spec establish_dataset_on_test_group_root_dir(authz_test_group_ctx()) -> dataset:id().
+establish_dataset_on_test_group_root_dir(#authz_test_group_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        space_owner_session_id = SpaceOwnerSessionId,
+        test_node = TestNode
+    },
+    group_root_dir_path = TestGroupRootDirPath,
+    extra_data = ExtraData
+}) ->
+    TestGroupRootDirKey = maps:get(TestGroupRootDirPath, ExtraData),
+    {ok, DatasetId} = opt_datasets:establish(TestNode, SpaceOwnerSessionId, TestGroupRootDirKey),
+    DatasetId.
+
+
+%% @private
+-spec await_dataset_eff_cache_clearing(node(), od_space:id(), od_user:id(), map()) -> ok.
+await_dataset_eff_cache_clearing(Node, SpaceId, UserId, ExtraData) ->
+    Attempts = 30,
+    Interval = 100,
+    ProtectionFlagsCache = binary_to_atom(<<"dataset_effective_cache_", SpaceId/binary>>, utf8),
+
+    AreProtectionFlagsCached = fun(FileUuid) ->
+        case rpc:call(Node, bounded_cache, get, [ProtectionFlagsCache, FileUuid]) of
+            {ok, _} -> true;
+            ?ERROR_NOT_FOUND -> false
+        end
+    end,
+
+    IsPermEntryCached = fun(Entry) ->
+        case rpc:call(Node, permissions_cache, check_permission, [Entry]) of
+            {ok, _} -> true;
+            _ -> false
+        end
+    end,
+
+    lists:foreach(fun
+        (?FILE_REF(FileGuid)) ->
+            FileUuid = file_id:guid_to_uuid(FileGuid),
+            ?assertMatch(false, AreProtectionFlagsCached(FileUuid), Attempts, Interval),
+            ?assertMatch(
+                false, IsPermEntryCached({{user_perms_matrix, UserId, FileGuid}}), Attempts, Interval
+            );
+        (_) ->
+            ok
+    end, maps:values(ExtraData)).
 
 
 %%%===================================================================
@@ -170,11 +299,11 @@ run_caveats_scenario(data_path, CvTestGroupTestCtx0 = #authz_cv_test_group_ctx{
     }
 }) ->
     ExpError = get_exp_error(?EACCES, TestSuiteSpec),
-    assert_operation(#{}, ExpError, constrain_executioner_session(
+    assert_operation(#{}, ExpError, constrain_executioner_session(  %% TODO
         CvTestGroupTestCtx0, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}
     )),
 
-    assert_operation(#{}, ok, constrain_executioner_session(CvTestGroupTestCtx0, #cv_data_path{
+    assert_operation(#{}, ok, constrain_executioner_session(CvTestGroupTestCtx0, #cv_data_path{ %% TODO
         whitelist = [get_test_group_root_dir_canonical_path(TestGroupCtx)]
     })),
     run_final_storage_ownership_check(TestGroupCtx);
@@ -189,13 +318,13 @@ run_caveats_scenario(data_objectid, CvTestGroupTestCtx0 = #authz_cv_test_group_c
     ExpError = get_exp_error(?EACCES, TestSuiteSpec),
     DummyGuid = <<"Z3VpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
     {ok, DummyObjectId} = file_id:guid_to_objectid(DummyGuid),
-    assert_operation(#{}, ExpError, constrain_executioner_session(
+    assert_operation(#{}, ExpError, constrain_executioner_session( %% TODO
         CvTestGroupTestCtx0, #cv_data_objectid{whitelist = [DummyObjectId]}
     )),
 
     ?FILE_REF(TestGroupRootDirGuid) = maps:get(TestGroupRootDirPath, ExtraData),
     {ok, TestGroupRootDirObjectId} = file_id:guid_to_objectid(TestGroupRootDirGuid),
-    assert_operation(#{}, ok, constrain_executioner_session(
+    assert_operation(#{}, ok, constrain_executioner_session( %% TODO
         CvTestGroupTestCtx0, #cv_data_objectid{whitelist = [TestGroupRootDirObjectId]}
     )),
     run_final_storage_ownership_check(TestGroupCtx);
@@ -213,11 +342,11 @@ run_caveats_scenario(data_readonly, CvTestGroupTestCtx0 = #authz_cv_test_group_c
 
     case AvailableInReadonlyMode of
         true ->
-            assert_operation(#{}, ok, CvTestGroupTestCtx1),
+            assert_operation(#{}, ok, CvTestGroupTestCtx1),  %% TODO
             run_final_storage_ownership_check(CvTestGroupTestCtx1#authz_cv_test_group_ctx.group_ctx);
         false ->
             ExpError = get_exp_error(?EACCES, TestSuiteSpec),
-            assert_operation(#{}, ExpError, CvTestGroupTestCtx1)
+            assert_operation(#{}, ExpError, CvTestGroupTestCtx1)  %% TODO
     end.
 
 
@@ -278,7 +407,7 @@ run_share_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
         space_user_selector = SpaceUserSelector,
         non_space_user = NonSpaceUserSelector
     },
-    files_owner_session_id = FileOwnerUserSessId,
+    space_owner_session_id = SpaceOwnerSessionId,
     test_node = TestNode
 }) ->
     lists:foreach(fun({ExecutionerSelector, PermsType, TestGroupName}) ->
@@ -288,7 +417,7 @@ run_share_test_groups(TestSuiteCtx = #authz_test_suite_ctx{
 
         TestCaseRootDirKey = maps:get(TestGroupRootDirPath, ExtraData),
         {ok, ShareId} = opt_shares:create(
-            TestNode, FileOwnerUserSessId, TestCaseRootDirKey, TestGroupName
+            TestNode, SpaceOwnerSessionId, TestCaseRootDirKey, TestGroupName
         ),
         TestGroupCtxWithShareGuids = TestGroupCtx#authz_test_group_ctx{
             extra_data = maps:map(fun
@@ -336,7 +465,7 @@ run_share_test_cases(PermsType0, TestGroupCtx = #authz_test_group_ctx{
     set_full_perms(PermsType1, TestNode, FileGuids),
 
     % Even with all perms set operation should fail
-    ActualPermsPerFile = maps:map(fun(_, _) -> <<"all">> end, FileGuids),
+    ActualPermsPerFile = maps:map(fun(_, _) -> <<"all">> end, RequiredPermsPerFile),
     ExpError = get_exp_error(?EPERM, TestSuiteSpec),
     assert_operation(ActualPermsPerFile, ExpError, TestGroupCtx);
 
@@ -810,6 +939,33 @@ run_acl_permission_test_cases(deny, AceWho, AceFlags, #authz_acl_test_group_ctx{
 
 
 %% @private
+-spec init_test_suite(authz_test_suite_spec()) -> authz_test_suite_ctx().
+init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
+    name = TestSuiteName,
+    provider_selector = ProviderSelector,
+    space_selector = SpaceSelector,
+    space_owner_selector = SpaceOwnerSelector,
+    files_owner_selector = FilesOwnerSelector
+}) ->
+    TestNode = oct_background:get_random_provider_node(ProviderSelector),
+    FileOwnerSessionId = oct_background:get_user_session_id(FilesOwnerSelector, ProviderSelector),
+
+    SpaceName = oct_background:get_space_name(SpaceSelector),
+    TestSuiteRootDirPath = filepath_utils:join([<<"/">>, SpaceName, TestSuiteName]),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(TestNode, FileOwnerSessionId, TestSuiteRootDirPath, 8#777)),
+
+    #authz_test_suite_ctx{
+        suite_spec = TestSuiteSpec,
+        suite_root_dir_path = TestSuiteRootDirPath,
+        test_node = TestNode,
+        space_owner_session_id = oct_background:get_user_session_id(
+            SpaceOwnerSelector, ProviderSelector
+        ),
+        files_owner_session_id = FileOwnerSessionId
+    }.
+
+
+%% @private
 -spec init_test_group(
     binary(),
     session:id() | oct_background:entity_selector(),
@@ -848,7 +1004,7 @@ init_test_group(TestGroupName, ExecutionerSelector, TestSuiteCtx = #authz_test_s
 
 %% @private
 -spec infer_test_group_root_dir_permissions(authz_test_suite_spec()) ->
-    permissions().
+    perms().
 infer_test_group_root_dir_permissions(#authz_test_suite_spec{requires_traverse_ancestors = true}) ->
     [?traverse_container];
 infer_test_group_root_dir_permissions(_) ->
