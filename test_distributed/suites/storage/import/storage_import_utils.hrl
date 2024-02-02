@@ -23,4 +23,19 @@
     params :: posix_storage_params()
 }).
 
+-type storage_spec() :: #storage_spec{}.
+
+-record(support_spec, {
+    provider :: atom(),
+    storage :: storage_spec(),
+    size :: integer()
+}).
+
+-record(space_spec, {
+    name :: atom(),
+    owner :: atom(),
+    users :: list(),
+    supports :: list()
+}).
+
 -endif.
