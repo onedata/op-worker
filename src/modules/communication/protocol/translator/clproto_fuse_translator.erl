@@ -372,7 +372,8 @@ to_protobuf(#file_attr{} = FileAttr) ->
         ctime = FileAttr#file_attr.ctime,
         type = FileAttr#file_attr.type,
         size = case FileAttr#file_attr.type of
-            ?DIRECTORY_TYPE -> utils:ensure_defined(FileAttr#file_attr.size, 0);
+            %% @TODO VFS-11728 - remove the safeguard after stats are fixed and can not be negative
+            ?DIRECTORY_TYPE -> utils:ensure_defined(max(FileAttr#file_attr.size, 0), 0);
             _ -> FileAttr#file_attr.size
         end,
         %% @TODO VFS-11722 - send undefined to oneclient

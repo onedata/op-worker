@@ -483,7 +483,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         end,
         <<"effDatasetInheritancePath">> => translate_membership(EffDatasetMembership),
         <<"effQosInheritancePath">> => translate_membership(EffQosMembership),
-        <<"qosStatusAggregate">> => translate_qos_status(QosStatus),
+        <<"aggregateQosStatus">> => translate_qos_status(QosStatus),
         <<"archiveRecallRootFileId">> => RecallRootId
     },
     FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->

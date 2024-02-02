@@ -88,7 +88,7 @@ attr_name_from_json(<<"effProtectionFlags">>)        -> eff_protection_flags;
 attr_name_from_json(<<"effDatasetProtectionFlags">>) -> eff_dataset_protection_flags;
 attr_name_from_json(<<"effDatasetInheritancePath">>) -> eff_dataset_membership;
 attr_name_from_json(<<"effQosInheritancePath">>)     -> eff_qos_membership;
-attr_name_from_json(<<"qosStatusAggregate">>)        -> qos_status;
+attr_name_from_json(<<"aggregateQosStatus">>)        -> qos_status;
 attr_name_from_json(<<"archiveRecallRootFileId">>)   -> recall_root_id.
 
 
@@ -121,7 +121,7 @@ attr_name_to_json(eff_protection_flags)         -> <<"effProtectionFlags">>;
 attr_name_to_json(eff_dataset_protection_flags) -> <<"effDatasetProtectionFlags">>;
 attr_name_to_json(eff_dataset_membership)       -> <<"effDatasetInheritancePath">>;
 attr_name_to_json(eff_qos_membership)           -> <<"effQosInheritancePath">>;
-attr_name_to_json(qos_status)                   -> <<"qosStatusAggregate">>;
+attr_name_to_json(qos_status)                   -> <<"aggregateQosStatus">>;
 attr_name_to_json(recall_root_id)               -> <<"archiveRecallRootFileId">>.
 
 
