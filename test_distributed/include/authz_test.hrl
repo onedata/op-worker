@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2024 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of macros used in lfm_permissions tests.
+%%% This file contains definitions of macros used in authz tests.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(LFM_PERMISSIONS_TEST_HRL).
--define(LFM_PERMISSIONS_TEST_HRL, 1).
+-ifndef(AUTHZ_TEST_HRL).
+-define(AUTHZ_TEST_HRL, 1).
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").
@@ -65,61 +65,60 @@
 }).
 
 
--record(test_file, {
+-record(ct_authz_file_spec, {
     % name of file
     name :: binary(),
     % permissions needed to perform #test_spec.operation
     perms = [] :: [Perms :: binary()],
     % function called during environment setup. Term returned will be stored in `ExtraData`
-    % and can be used during test (described in `operation` of #test_spec{}).
-    on_create = undefined :: undefined | fun((OwnerSessId :: session:id(), file_id:file_guid()) -> term())
+    % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
+    on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term())
 }).
 
--record(test_dir, {
+-record(ct_authz_dir_spec, {
     % name of directory
     name :: binary(),
     % permissions needed to perform #test_spec.operation
     perms = [] :: [Perms :: binary()],
     % function called during environment setup. Term returned will be stored in `ExtraData`
-    % and can be used during test (described in `operation` of #test_spec{}).
+    % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
     on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
     % children of directory if needed
-    children = [] :: [#test_dir{} | #test_file{}]
+    children = [] :: [#ct_authz_dir_spec{} | #ct_authz_file_spec{}]
 }).
 
-% Main space used in permissions tests
--define(SPACE_ID, <<"space1">>).
+-record(authz_test_suite_spec, {
+    % Unique name of test suite.
+    name :: binary(),
 
--record(perms_test_spec, {
-    test_node :: node(),
+    % Selector of provider on which tests will be carried.
+    provider_selector = krakow :: oct_background:entity_selector(),
 
-    % Id of space within which test will be carried
-    space_id = ?SPACE_ID :: binary(),
+    % Selector of space within which tests will be carried.
+    space_selector = space_krk :: oct_background:entity_selector(),
 
-    % Name of root dir for test
-    root_dir_name :: binary(),
+    % Selector of user being owner of space. He should be allowed to perform
+    % any operation on files in space regardless of permissions set.
+    space_owner_selector = user1 :: oct_background:entity_selector(),
 
-    % Id of user being owner of space. He should be allowed to perform any
-    % operation on files in space regardless of permissions set.
-    space_owner = <<"owner">> :: binary(),
+    % Selector of user belonging to space specified in `space_selector` in
+    % context of which all files required for tests will be created. It will
+    % be used to test `user` posix bits and `OWNER@` special acl identifier.
+    files_owner_selector = user2 :: oct_background:entity_selector(),
 
-    % Id of user belonging to space specified in `space_id` in context
-    % of which all files required for tests will be created. It will be
-    % used to test `user` posix bits and `OWNER@` special acl identifier
-    owner_user = <<"user1">> :: binary(),
+    % Selector of user belonging to space specified in `space_selector` which
+    % aren't the same as `owner_user`. It will be used to test `group` posix
+    % bits and acl for his Id.
+    space_user_selector = user3 :: oct_background:entity_selector(),
 
-    % Id of user belonging to space specified in `space_id` which aren't
-    % the same as `owner_user`. It will be used to test `group` posix bits
-    % and acl for his Id.
-    space_user = <<"user2">> :: binary(),
+    % Selector of group to which belongs `space_user_selector` and which itself
+    % belong to `space_selector`. It will be used to test acl group identifier.
+    space_user_group_selector = group2 :: oct_background:entity_selector(),
 
-    % Id of group to which belongs `space_user` and which itself belong to
-    % `space_id`. It will be used to test acl group identifier.
-    space_user_group = <<"group2">> :: binary(),
-
-    % Id of user not belonging to space specified in `space_id`. It will be
-    % used to test `other` posix bits and `EVERYONE@` special acl identifier.
-    other_user = <<"user3">> :: binary(),
+    % Selector of user not belonging to space specified in `space_selector`.
+    % It will be used to test `other` posix bits and `EVERYONE@` special acl
+    % identifier.
+    non_space_user = user4 :: oct_background:entity_selector(),
 
     % Tells whether `operation` needs `traverse_ancestors` permission. If so
     % `traverse_container` perm will be added to test root dir as needed perm
@@ -141,7 +140,7 @@
 
     % Description of environment (files and permissions on them) needed to
     % perform `operation`.
-    files :: [#test_dir{} | #test_file{}],
+    files :: [#ct_authz_dir_spec{} | #ct_authz_file_spec{}],
 
     % Tells whether operation should work in readonly mode (readonly caveats set)
     available_in_readonly_mode = false :: boolean(),
@@ -159,23 +158,16 @@
     % not having all perms specified in `files` and space privileges and
     % succeed for combination consisting of only them.
     % It takes following arguments:
-    % - OwnerSessId - session id of user which creates files for this test,
-    % - SessId - session id of user which should perform operation,
+    % - TestNode - node on which operation should be performed,
+    % - ExecutionerSessId - session id of user which should perform operation,
     % - TestCaseRootDirPath - absolute path to root dir of testcase,
-    % - ShareId - Id only in case of share tests. Otherwise left as `undefined`,
     % - ExtraData - mapping of file path (for every file specified in `files`) to
-    %               term returned from `on_create` #dir{} or #file{} fun.
+    %               term returned from `on_create` #ct_authz_dir_spec{} or #ct_authz_file_spec{} fun.
     %               If mentioned fun is left undefined then by default ?FILE_REF(GUID) will
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
     %               following tuple ?FILE_REF(FileGuid), which is required by framework.
-    operation :: fun((ExecutionerSessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
-        ok |
-        {ok, term()} |
-        {ok, term(), term()} |
-        {ok, term(), term(), term()} |
-        {error, term()}
-    ),
+    operation :: fun((node(), session:id(), file_meta:path(), map()) -> ok | {error, term()}),
 
     % Tells whether failed operation returns:
     % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl

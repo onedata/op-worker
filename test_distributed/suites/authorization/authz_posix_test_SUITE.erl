@@ -13,8 +13,8 @@
 -module(authz_posix_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("authz_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("permissions_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -44,7 +44,7 @@ all() -> [
 mkdir_test(_Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
-        files = [#dir{
+        files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_subcontainer]
         }],
@@ -72,7 +72,7 @@ mkdir_test(_Config) ->
 get_children_test(_Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
-        files = [#dir{
+        files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?list_container]
         }],
