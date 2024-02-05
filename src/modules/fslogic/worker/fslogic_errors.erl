@@ -85,6 +85,8 @@ handle_error(Request, Type, Error, Stacktrace) ->
 -spec gen_status_message(Error :: term()) -> #status{}.
 gen_status_message(?ERROR_UNAUTHORIZED(_)) ->
     #status{code = ?EACCES, description = describe_error(?EACCES)};
+gen_status_message(?ERROR_FORBIDDEN) ->
+    #status{code = ?EACCES, description = describe_error(?EACCES)};
 gen_status_message({error, Reason}) ->
     gen_status_message(Reason);
 gen_status_message({badmatch, Error}) ->

@@ -432,14 +432,14 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     end, ?RAND_SUBLIST([
         {FilesOwnerSelector, posix, <<"owner_posix_share">>},
         {SpaceUserSelector, posix, <<"space_user_posix_share">>},
-%%        {NonSpaceUserSelector, posix, <<"non_space_user_posix_share">>},  %% TODO
+        {NonSpaceUserSelector, posix, <<"non_space_user_posix_share">>},
         {?GUEST_SESS_ID, posix, <<"guest_posix_share">>},
         {FilesOwnerSelector, {acl, allow}, <<"owner_acl_allow_share">>},
         {FilesOwnerSelector, {acl, deny}, <<"owner_acl_deny_share">>},
         {SpaceUserSelector, {acl, allow}, <<"space_user_acl_allow_share">>},
         {SpaceUserSelector, {acl, deny}, <<"space_user_acl_deny_share">>},
-%%        {NonSpaceUserSelector, {acl, allow}, <<"non_space_user_acl_allow_share">>},   %% TODO
-%%        {NonSpaceUserSelector, {acl, deny}, <<"non_space_user_acl_deny_share">>},   %% TODO
+        {NonSpaceUserSelector, {acl, allow}, <<"non_space_user_acl_allow_share">>},
+        {NonSpaceUserSelector, {acl, deny}, <<"non_space_user_acl_deny_share">>},
         {?GUEST_SESS_ID, {acl, allow}, <<"guest_acl_allow_share">>},
         {?GUEST_SESS_ID, {acl, deny}, <<"guest_acl_deny_share">>}
     ], 12)).  %% TODO sublis length?
@@ -729,24 +729,21 @@ run_posix_permission_test_case(space_member, PosixTestCaseCtx = #authz_posix_tes
     end;
 
 run_posix_permission_test_case(non_space_member, #authz_posix_test_case_ctx{
-    test_case_ctx = #authz_test_case_ctx{
+    test_case_ctx = TestCaseCtx = #authz_test_case_ctx{
         suite_ctx = #authz_test_suite_ctx{
             suite_spec = TestSuiteSpec = #authz_test_suite_spec{operation = Operation},
             test_node = TestNode
         },
         test_case_root_dir_path = TestCaseRootDirPath,
-        executioner_session_id = ExecutionerSessionId,
         extra_data = ExtraData
     },
-    complementary_posix_perms_per_file = ComplementaryPosixPermsPerFile
+    required_posix_perms_per_file = RequiredPosixPermsPerFile
 }) ->
     % Users not belonging to space or unauthorized should not be able to conduct any operation
-    ModesPerFile = maps:map(fun(_, _) -> 8#777 end, ComplementaryPosixPermsPerFile),
-    permissions_test_utils:set_modes(TestNode, ModesPerFile),
-
-    %% TODO
-    ExpError = get_exp_error(?ENOENT, TestSuiteSpec),
-%%    ?assertMatch(ExpError, Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath, ExtraData)),
+    ExpEaccesError = get_exp_error(?EACCES, TestSuiteSpec),
+    FullModesPerFile = maps:map(fun(_, _) -> 8#777 end, RequiredPosixPermsPerFile),
+    permissions_test_utils:set_modes(TestNode, FullModesPerFile),
+    assert_operation(FullModesPerFile, ExpEaccesError, TestCaseCtx),
 
     % Some operations cannot be performed with special session (either root or guest)
     % and result in eagain error instead of enoent
