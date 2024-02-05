@@ -23,7 +23,7 @@
 %%% API
 %%%===================================================================
 
--spec build_attributes_param_spec(middleware:scope(), file_attr_translator:attr_type(), binary()) ->
+-spec build_attributes_param_spec(middleware:scope(), file_attr_translator:attr_type() | deprecated_recursive, binary()) ->
     middleware_sanitizer:param_spec().
 build_attributes_param_spec(public, current = AttrType, Key) ->
     {any, build_parse_requested_attrs_fun(Key, AttrType, ?PUBLIC_API_ATTRS)};
@@ -32,7 +32,9 @@ build_attributes_param_spec(private, current = AttrType, Key) ->
 build_attributes_param_spec(public, deprecated = AttrType, Key) ->
     {any, build_parse_requested_attrs_fun(Key, AttrType, ?DEPRECATED_PUBLIC_ATTRS)};
 build_attributes_param_spec(private, deprecated = AttrType, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrType, ?DEPRECATED_ALL_ATTRS)}.
+    {any, build_parse_requested_attrs_fun(Key, AttrType, ?DEPRECATED_ALL_ATTRS)};
+build_attributes_param_spec(private, deprecated_recursive, Key) ->
+    {any, build_parse_requested_attrs_fun(Key, deprecated, [path | ?DEPRECATED_ALL_ATTRS])}.
 
 
 %%%===================================================================

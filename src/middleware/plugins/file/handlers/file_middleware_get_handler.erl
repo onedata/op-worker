@@ -40,6 +40,10 @@
 -define(DEFAULT_LIST_ATTRS, [guid, name]).
 -define(DEFAULT_RECURSIVE_FILE_LIST_ATTRS, [guid, path]).
 
+-define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
+    ?APP_NAME, max_read_dir_plus_procs, 20
+)).
+
 
 %%%===================================================================
 %%% API
@@ -129,7 +133,7 @@ data_spec(#op_req{gri = #gri{aspect = files, scope = Sc}}) -> #{
             Sc, current, <<"attributes">>),
         % @TODO VFS-11377 deprecated, left for backwards compatibility
         <<"attribute">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
-            Sc, deprecated, <<"attribute">>)
+            Sc, deprecated_recursive, <<"attribute">>)
     }
 };
 
@@ -376,7 +380,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, RequestedAttributes)),
     
     {ok, value, {
-        lists:map(fun(ChildAttr) -> file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes) end, ChildrenAttrs),
+        lists_utils:pfiltermap(fun(ChildAttr) ->
+            {true, file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes)}
+        end, ChildrenAttrs, ?MAX_MAP_CHILDREN_PROCESSES),
         file_listing:is_finished(ListingPaginationToken), 
         file_listing:encode_pagination_token(ListingPaginationToken)}
     };
@@ -394,9 +400,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
     {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
     {ok, Result, InaccessiblePaths, NextPageToken} =
         ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), ListingOptions, RequestedAttributes)),
-    JsonResult = lists:map(fun(Attrs) ->
-        file_attr_translator:to_json(Attrs, AttrType, RequestedAttributes)
-    end, Result),
+    JsonResult = lists_utils:pfiltermap(fun(Attrs) ->
+        {true, file_attr_translator:to_json(Attrs, AttrType, RequestedAttributes)}
+    end, Result, ?MAX_MAP_CHILDREN_PROCESSES),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->

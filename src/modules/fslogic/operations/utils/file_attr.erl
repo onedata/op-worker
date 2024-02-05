@@ -92,6 +92,7 @@
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
         undefined -> RequestedAttributes;
+        %% @TODO VFS-11299 deprecated, left for compatibility with oneclient
         % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_ATTRS
         _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_ATTRS, ?ONECLIENT_ATTRS))
     end,

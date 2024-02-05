@@ -47,7 +47,7 @@
 }.
 
 -type gather_attributes_mapper_fun(Entry, Attributes) ::
-    fun((Entry, file_attr:resolve_opts()) -> Attributes).
+    fun((Entry) -> Attributes).
 
 -export_type([recursive_listing_opts/0]).
 
@@ -105,7 +105,9 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
     #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
-            child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
+            child_links = lists_utils:pfiltermap(fun(#file_attr{name = Name, guid = Guid}) ->
+                {true, #child_link{name = Name, guid = Guid}}
+            end, ChildrenAttrs, ?MAX_MAP_CHILDREN_PROCESSES),
             pagination_token = PaginationToken
         }
     }.
@@ -256,13 +258,13 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
 list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
     
-    MapperFun = fun(ChildCtx, Opts) ->
+    MapperFun = fun(ChildCtx) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            attr_req:get_file_attr_insecure(UserCtx, ChildCtx, Opts),
+            attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{attributes => Attributes}),
         FileAttr
     end,
     
-    ChildrenAttrs = gather_attributes(MapperFun, Children, #{attributes => Attributes}),
+    ChildrenAttrs = gather_attributes(MapperFun, Children),
     
     case infer_listing_finished(length(ChildrenAttrs), NextToken, ListOpts) of
         {continue, NextBatchOpts} ->
@@ -297,12 +299,21 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
         pagination_token = PaginationToken
     } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
     
-    MapperFun = fun({Path, EntryFileCtx}, Opts) ->
+    AttrsToCalculate = Attributes -- [path, guid],
+    
+    GetAttrsFun = fun({Path, EntryFileCtx}) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            attr_req:get_file_attr_insecure(UserCtx, EntryFileCtx, Opts),
-        FileAttr#file_attr{path = Path}
+            attr_req:get_file_attr_insecure(UserCtx, EntryFileCtx, #{attributes => AttrsToCalculate}),
+        FileAttr#file_attr{path = Path, guid = file_ctx:get_logical_guid_const(EntryFileCtx)}
     end,
-    MappedEntries = gather_attributes(MapperFun, Entries, #{attributes => Attributes -- [path]}),
+    MappedEntries = case AttrsToCalculate of
+        [] ->
+            lists:map(fun({Path, EntryFileCtx}) ->
+                #file_attr{path = Path, guid = file_ctx:get_logical_guid_const(EntryFileCtx)}
+            end, Entries);
+        _ ->
+            gather_attributes(GetAttrsFun, Entries)
+    end,
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_recursive_listing_result{
             entries = MappedEntries,
@@ -321,14 +332,13 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
 %%--------------------------------------------------------------------
 -spec gather_attributes(
     gather_attributes_mapper_fun(Entry, Attributes),
-    [Entry],
-    file_attr:resolve_opts()
+    [Entry]
 ) ->
     [Attributes].
-gather_attributes(MapperFun, Entries, Opts) ->
+gather_attributes(MapperFun, Entries) ->
     FilterMapFun = fun(Entry) ->
         ?catch_not_found(begin
-            {true, MapperFun(Entry, Opts)}
+            {true, MapperFun(Entry)}
         end, false)
     end,
     lists_utils:pfiltermap(FilterMapFun, Entries, ?MAX_MAP_CHILDREN_PROCESSES).

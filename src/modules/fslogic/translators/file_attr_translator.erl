@@ -129,6 +129,7 @@ attr_name_to_json(recall_root_id)               -> <<"archiveRecallRootFileId">>
 %% @private
 -spec attr_name_from_json_deprecated(binary()) -> file_attr:attribute().
 attr_name_from_json_deprecated(<<"file_id">>)             -> guid;
+attr_name_from_json_deprecated(<<"path">>)                -> path;
 attr_name_from_json_deprecated(<<"name">>)                -> name;
 attr_name_from_json_deprecated(<<"atime">>)               -> atime;
 attr_name_from_json_deprecated(<<"mtime">>)               -> mtime;
@@ -151,6 +152,7 @@ attr_name_from_json_deprecated(<<"mode">>)                -> mode.
 %% @private
 -spec attr_name_to_json_deprecated(file_attr:attribute()) -> binary().
 attr_name_to_json_deprecated(guid)                -> <<"file_id">>;
+attr_name_to_json_deprecated(path)                -> <<"path">>;
 attr_name_to_json_deprecated(name)                -> <<"name">>;
 attr_name_to_json_deprecated(atime)               -> <<"atime">>;
 attr_name_to_json_deprecated(mtime)               -> <<"mtime">>;
@@ -273,7 +275,7 @@ to_json_internal(AttrType, #file_attr{
 
 %% @private
 -spec all_attrs(attr_type()) -> [file_attr:attribute()].
-all_attrs(deprecated) -> ?DEPRECATED_ALL_ATTRS;
+all_attrs(deprecated) -> [path | ?DEPRECATED_ALL_ATTRS]; % path is allowed in deprecated recursive listing
 all_attrs(current) -> ?ALL_ATTRS.
 
 
