@@ -628,6 +628,7 @@ data_access_caveats_cache_test(_Config) ->
 
 mv_test(_Config) ->
     ParisNode = oct_background:get_random_provider_node(paris),
+    CheckNode = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
 
     SessionIdParis = oct_background:get_user_session_id(user1, paris),
 
@@ -644,21 +645,34 @@ mv_test(_Config) ->
             #file_spec{content = ?RAND_STR()}
         ]
     }),
+    FileRef = ?FILE_REF(FileGuid),
+    CanonicalCurrentPath = filepath_utils:join([<<"/">>, SpaceId, RootDirName, FileName]),
 
-    MvPath = filepath_utils:join([<<"/">>, SpaceName, RootDirName, DirName, FileName]),
-    CanonicalMvPath = filepath_utils:join([<<"/">>, SpaceId, RootDirName, DirName, FileName]),
-
-    ?assertMatch({ok, _}, lfm_proxy:stat(ParisNode, SessionIdParis, ?FILE_REF(FileGuid))),
-    ?assertMatch({ok, _}, lfm_proxy:mv(ParisNode, SessionIdParis, ?FILE_REF(FileGuid), MvPath)),
+    NewPath = filepath_utils:join([<<"/">>, SpaceName, RootDirName, DirName, FileName]),
+    CanonicalNewPath = filepath_utils:join([<<"/">>, SpaceId, RootDirName, DirName, FileName]),
 
     UserId = oct_background:get_user_id(user1),
-    CheckNode = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
-    Token = tokens:confine(
-        provider_onenv_test_utils:create_oz_temp_access_token(UserId),
-        ?CV_PATH([CanonicalMvPath])
+    MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
+
+    TokenWithBothPaths = tokens:confine(MainToken, ?CV_PATH([CanonicalCurrentPath, CanonicalNewPath])),
+    SessionIdWithBothPathsConstraint = permissions_test_utils:create_session(
+        CheckNode, UserId, TokenWithBothPaths
     ),
-    SessionIdWithCaveat = permissions_test_utils:create_session(CheckNode, UserId, Token),
-    ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithCaveat, {path, MvPath}), ?ATTEMPTS).
+    TokenWithNewPathOnly = tokens:confine(MainToken, ?CV_PATH([CanonicalNewPath])),
+    SessionIdWithNewPathOnlyConstraint = permissions_test_utils:create_session(
+        CheckNode, UserId, TokenWithNewPathOnly
+    ),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(ParisNode, SessionIdParis, FileRef)),
+    ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithBothPathsConstraint, FileRef)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:stat(CheckNode, SessionIdWithNewPathOnlyConstraint, FileRef)),
+
+    {ok, NewGuid} = ?assertMatch({ok, _}, lfm_proxy:mv(ParisNode, SessionIdParis, FileRef, NewPath)),
+    NewFileRef = ?FILE_REF(NewGuid),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(ParisNode, SessionIdParis, NewFileRef), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithBothPathsConstraint, NewFileRef), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(CheckNode, SessionIdWithNewPathOnlyConstraint, NewFileRef), ?ATTEMPTS).
 
 
 %%%===================================================================
