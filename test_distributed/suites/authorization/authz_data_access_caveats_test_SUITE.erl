@@ -14,7 +14,7 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
--include("storage_files_test_SUITE.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
@@ -121,6 +121,7 @@ list_user_root_dir_test(_Config) ->
     Space1Guid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space1)),
 
     SpaceKrkParPName = oct_background:get_space_name(space_krk_par_p),
+    SpaceKrkParPId = oct_background:get_space_id(space_krk_par_p),
     SpaceKrkParPGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
 
     % With no caveats listing user root dir should list all user spaces
@@ -132,11 +133,11 @@ list_user_root_dir_test(_Config) ->
     % But with caveats user root dir ls should show only spaces leading to allowed files
     ?assertEqual(
         {ok, [{SpaceKrkParPGuid, SpaceKrkParPName}]},
-        ls_with_caveats(UserRootDirGuid, ?CV_PATH([?LS_CPATH("ls_d1")]))
+        ls_with_caveats(UserRootDirGuid, ?CV_PATH([filepath_utils:join([<<"/">>, SpaceKrkParPId])]))
     ),
     ?assertEqual(
         {ok, [{SpaceKrkParPGuid, SpaceKrkParPName}]},
-        ls_with_caveats(UserRootDirGuid, ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1")]))
+        ls_with_caveats(UserRootDirGuid, ?CV_OBJECTID([?LS_OBJECT_ID("ls_d3/d1/f1")]))
     ).
 
 
@@ -152,7 +153,7 @@ list_space_root_dir_test(_Config) ->
     % But with caveats space ls should show only dirs leading to allowed files (even if they do not exist).
     ?assertEqual(
         {ok, [?LS_ENTRY("ls_d1"), ?LS_ENTRY("ls_d3")]},
-        ls_with_caveats(SpaceRootDirGuid, ?CV_PATH([?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d3/f2")]))
+        ls_with_caveats(SpaceRootDirGuid, ?CV_OBJECTID([?LS_OBJECT_ID("ls_d1/f1"), ?LS_OBJECT_ID("ls_d3/f2")]))
     ),
     ?assertEqual(
         {ok, [?LS_ENTRY("ls_d3"), ?LS_ENTRY("ls_f1")]},
@@ -291,7 +292,7 @@ list_previously_non_existent_file(_Config) ->
     UserId = oct_background:get_user_id(?LS_USER),
 
     % List dir manually to use the same exact session with caveat for file not existing yet
-    MainToken = node_cache:get(ls_tests_main_token),
+    MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
     LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
 
@@ -313,13 +314,23 @@ list_previously_non_existent_file(_Config) ->
 ls_setup() ->
     UserId = oct_background:get_user_id(?LS_USER),
     MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
-    node_cache:put(ls_tests_main_token, MainToken),
+    store_main_token(MainToken),
 
     FileTreeObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?LS_SPACE, ?LS_FILE_TREE_SPEC
     ),
     FileTreeDesc = ls_describe_file_tree(#{}, <<>>, FileTreeObjects),
     node_cache:put(ls_tests_file_tree, FileTreeDesc).
+
+
+%% @private
+store_main_token(MainToken) ->
+    node_cache:put(ls_tests_main_token, MainToken).
+
+
+%% @private
+get_main_token() ->
+    node_cache:get(ls_tests_main_token).
 
 
 %% @private
@@ -384,7 +395,7 @@ ls_with_caveats(Guid, Caveats, Offset, Limit) ->
     Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
     UserId = oct_background:get_user_id(?LS_USER),
 
-    MainToken = node_cache:get(ls_tests_main_token),
+    MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, Caveats),
     LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
 
@@ -417,13 +428,13 @@ allowed_ancestors_operations_test(_Config) ->
 
     Ancestors = lists:reverse(ReversedAncestors),
 
-    DirInDeepestDirName = <<"file">>,
-    {ok, FileInDeepestDirGuid} = lfm_proxy:mkdir(Node, UserSessionId, LastDirGuid, DirInDeepestDirName, 8#777),
-    {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
+    DeepestDirName = <<"deepest_dir">>,
+    {ok, DeepestDirGuid} = lfm_proxy:mkdir(Node, UserSessionId, LastDirGuid, DeepestDirName, 8#777),
+    {ok, DeepestDirObjectId} = file_id:guid_to_objectid(DeepestDirGuid),
 
     Token = tokens:confine(
         provider_onenv_test_utils:create_oz_temp_access_token(UserId),
-        ?CV_OBJECTID([FileInDeepestDirObjectId])
+        ?CV_OBJECTID([DeepestDirObjectId])
     ),
     SessionIdWithCaveats = permissions_test_utils:create_session(Node, UserId, Token),
 
@@ -488,17 +499,17 @@ allowed_ancestors_operations_test(_Config) ->
             {DirPath, DirGuid}
         end,
         {<<>>, undefined},
-        lists:zip([{UserRootDirGuid, UserId} | Ancestors], Ancestors ++ [{FileInDeepestDirGuid, DirInDeepestDirName}])
+        lists:zip([{UserRootDirGuid, UserId} | Ancestors], Ancestors ++ [{DeepestDirGuid, DeepestDirName}])
     ),
 
     % Get acl should finally succeed for dir which is allowed by caveats
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(FileInDeepestDirGuid))
+        lfm_proxy:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DeepestDirGuid))
     ),
     ?assertMatch(
         {ok, _},
-        lfm_proxy:create(Node, SessionIdWithCaveats, FileInDeepestDirGuid, ?RAND_STR(), 8#777)
+        lfm_proxy:create(Node, SessionIdWithCaveats, DeepestDirGuid, ?RAND_STR(), 8#777)
     ).
 
 
