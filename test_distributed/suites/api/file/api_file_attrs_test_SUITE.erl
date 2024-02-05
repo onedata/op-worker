@@ -379,7 +379,7 @@ get_attrs_data_spec(normal_mode) ->
         ]
     };
 get_attrs_data_spec(share_mode) ->
-    AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_ATTRS],
+    AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_API_ATTRS],
     #data_spec{
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => AllowedAttrsJson},

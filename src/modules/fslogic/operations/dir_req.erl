@@ -46,10 +46,8 @@
     include_directories => boolean()
 }.
 
--type get_attr_fun() ::
-    fun((user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) -> fslogic_worker:fuse_response()).
 -type gather_attributes_mapper_fun(Entry, Attributes) ::
-    fun((Entry, get_attr_fun(), file_attr:resolve_opts()) -> Attributes).
+    fun((Entry, file_attr:resolve_opts()) -> Attributes).
 
 -export_type([recursive_listing_opts/0]).
 
@@ -120,7 +118,7 @@ list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
         [] ->
             ?OPERATIONS(?list_container_mask);
         _ ->
-            ?OPERATIONS(?traverse_container_mask, ?list_container_mask, attr_req:optional_attrs_privs_mask(Attributes))
+            ?OPERATIONS(?traverse_container_mask, ?list_container_mask, attr_req:optional_attrs_perms_mask(Attributes))
     end,
     {Whitelist, FileCtx2} = check_listing_permissions(UserCtx, FileCtx, DirOperationsRequirements),
     {ChildrenAttrs, PaginationToken, FileCtx3} = list_children_attrs_internal(
@@ -149,7 +147,7 @@ list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
     fslogic_worker:fuse_response().
 list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    OptionalPrivs = attr_req:optional_attrs_privs_mask(Attributes),
+    OptionalPrivs = attr_req:optional_attrs_perms_mask(Attributes),
     AccessRequirements = case IsDir of
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask, OptionalPrivs)];
         false-> [?TRAVERSE_ANCESTORS, ?OPERATIONS(OptionalPrivs)]
@@ -258,9 +256,9 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
 list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
     
-    MapperFun = fun(ChildCtx, GetAttrFun, Opts) ->
+    MapperFun = fun(ChildCtx, Opts) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            GetAttrFun(UserCtx, ChildCtx, Opts),
+            attr_req:get_file_attr_insecure(UserCtx, ChildCtx, Opts),
         FileAttr
     end,
     
@@ -299,9 +297,9 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
         pagination_token = PaginationToken
     } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
     
-    MapperFun = fun({Path, EntryFileCtx}, GetAttrFun, Opts) ->
+    MapperFun = fun({Path, EntryFileCtx}, Opts) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            GetAttrFun(UserCtx, EntryFileCtx, Opts),
+            attr_req:get_file_attr_insecure(UserCtx, EntryFileCtx, Opts),
         FileAttr#file_attr{path = Path}
     end,
     MappedEntries = gather_attributes(MapperFun, Entries, #{attributes => Attributes -- [path]}),
@@ -330,7 +328,7 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
 gather_attributes(MapperFun, Entries, Opts) ->
     FilterMapFun = fun(Entry) ->
         ?catch_not_found(begin
-            {true, MapperFun(Entry, fun attr_req:get_file_attr_insecure/3, Opts)}
+            {true, MapperFun(Entry, Opts)}
         end, false)
     end,
     lists_utils:pfiltermap(FilterMapFun, Entries, ?MAX_MAP_CHILDREN_PROCESSES).

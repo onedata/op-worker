@@ -210,9 +210,9 @@ map_file_attr_file_id(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
     });
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_file_id(#{<<"file_id">> := ObjectId} = FileAttrJson) ->
-    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+    maps:keys(FileAttrJson), FileAttrJson#{
         <<"file_id">> => ensure_guid(ObjectId)
-    });
+    };
 map_file_attr_file_id(FileAttrJson) ->
     FileAttrJson.
 
@@ -226,9 +226,9 @@ map_file_attr_parent(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
     });
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_parent(#{<<"parent_id">> := ParentObjectId} = FileAttrJson) ->
-    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+    maps:keys(FileAttrJson), FileAttrJson#{
         <<"parent_id">> => ensure_guid(ParentObjectId)
-    });
+    };
 map_file_attr_parent(FileAttrJson) ->
     FileAttrJson.
 
@@ -242,9 +242,9 @@ map_file_attr_owner(#{<<"ownerUserId">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) -
     });
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_owner(#{<<"owner_id">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) ->
-    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
+    maps:keys(FileAttrJson), FileAttrJson#{
         <<"owner_id">> => null
-    });
+    };
 map_file_attr_owner(FileAttrJson) ->
     FileAttrJson.
 

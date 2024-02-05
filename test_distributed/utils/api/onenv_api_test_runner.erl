@@ -773,14 +773,14 @@ generate_optional_data_sets(#data_spec{optional = []}) ->
     [];
 generate_optional_data_sets(#data_spec{optional = Optional, optional_values_data_sets = Method} = DataSpec) ->
     % generate data sets containing single key for each correct value as well as one data set with all keys with random value
-    OptionalParamsWithValues = lists:flatten(lists:map(fun(Key) ->
+    OptionalParamsWithValues = lists:flatmap(fun(Key) ->
         [#{Key => Val} || Val <- get_correct_values(Key, DataSpec)]
-    end, Optional)),
+    end, Optional),
     case Method of
         relaxed ->
             AllKeysDataset = lists:foldl(fun(KeyVal, Acc) ->
                 maps:merge(Acc, KeyVal)
-            end, #{}, OptionalParamsWithValues),
+            end, #{}, lists_utils:shuffle(OptionalParamsWithValues)),
     
             % run all keys dataset as the last one
             OptionalParamsWithValues ++ [AllKeysDataset];

@@ -34,7 +34,7 @@
     eff_dataset_protection_flags | eff_dataset_membership | eff_qos_membership | qos_status | recall_root_id |
     is_deleted | conflicting_files | {xattrs, [custom_metadata:name()]}.
 
--type file_type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE | ?SYMLINK_TYPE.
+-type file_type() :: file_meta:type().
 
 -type name_conflicts_resolution_policy() ::
     resolve_name_conflicts |
@@ -70,7 +70,7 @@
 
 -define(STAGES, [
     {?FILE_META_ATTRS, direct, fun resolve_file_meta_attrs/1},
-    {?LINKS_ATTRS, direct, fun resolve_name_attrs/1},
+    {?LINKS_TREE_ATTRS, direct, fun resolve_name_attrs/1},
     {?PATH_ATTRS, effective, fun resolve_path/1},
     {?LUMA_ATTRS, direct, fun resolve_luma_attrs/1},
     {?TIMES_ATTRS, direct, fun resolve_times_attrs/1},
@@ -93,7 +93,7 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
         undefined -> RequestedAttributes;
         % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_ATTRS
-        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_ATTRS, ?ONECLIENT_ATTRS))
+        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_ATTRS, ?ONECLIENT_ATTRS))
     end,
     InitialState = #state{
         file_ctx = FileCtx,
@@ -172,8 +172,8 @@ resolve_times_attrs(#state{file_ctx = FileCtx} = State) ->
     {{ATime, CTime, MTime}, FileCtx2} = file_ctx:get_times(FileCtx),
     {State#state{file_ctx = FileCtx2}, #file_attr{
         atime = ATime,
-        ctime = CTime,
-        mtime = MTime
+        mtime = MTime,
+        ctime = CTime
     }}.
 
 

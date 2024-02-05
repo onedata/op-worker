@@ -718,6 +718,7 @@ get_times(
 get_storage_id(FileCtx) ->
     case get_storage(FileCtx) of
         {undefined, FileCtx2} ->
+            % can happen for user root dir or space dir accessed via provider proxy
             {undefined, FileCtx2};
         {Storage, FileCtx2} ->
             {storage:get_id(Storage), FileCtx2}

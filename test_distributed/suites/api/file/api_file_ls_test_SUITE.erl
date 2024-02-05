@@ -85,10 +85,9 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir children details using gs private api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(DirGuid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(DirGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, Result}) ->
-                        ProviderId = opw_test_rpc:get_provider_id(Node),
-                        validate_listed_files(Result, gs_with_details, undefined, Data, Files, ProviderId)
+                        validate_listed_files(Result, gs, undefined, Data, Files, Node)
                     end
                 }
             ],
@@ -106,8 +105,7 @@ get_dir_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(DirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ProviderId = opw_test_rpc:get_provider_id(Node),
-                        validate_listed_files(Response, rest, undefined, Data, Files, ProviderId)
+                        validate_listed_files(Response, rest, undefined, Data, Files, Node)
                     end
                 }
             ],
@@ -123,10 +121,11 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir children details using gs public api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(DirGuid, public),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(DirGuid, public),
                     validate_result_fun = ValidateGdPublicApiCallResultFun
                 }
-            ]
+            ],
+            data_spec = get_children_data_spec(gs, public)
         }
     ])).
 
@@ -145,10 +144,9 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir children details using gs api with public scope">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareDirGuid, public),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(ShareDirGuid, public),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, Result}) ->
-                        ProviderId = opw_test_rpc:get_provider_id(Node),
-                        validate_listed_files(Result, gs_with_details, ShareId, Data, Files, ProviderId)
+                        validate_listed_files(Result, gs, ShareId, Data, Files, Node)
                     end
                 },
                 % 'private' scope is forbidden for shares even if user would be able to
@@ -156,7 +154,7 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir children details using gs api with private scope">>,
                     type = gs_with_shared_guid_and_aspect_private,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareDirGuid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(ShareDirGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
                     end
@@ -253,7 +251,7 @@ get_file_children_test(Config) ->
                     user2,  % space owner - doesn't need any perms
                     user3,  % files owner (see fun create_file_in_space_krk_par_with_additional_metadata/1)
                     user4   % space member - any space member can see file stats (as long as he can
-                    %                traverse to it) no matter perms set on this file
+                            %                traverse to it) no matter perms set on this file
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]
@@ -262,13 +260,10 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file details using gs private api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = fun(#api_test_ctx{data = _Data, node = Node}, {ok, Result}) ->
-                        ProviderId = opw_test_rpc:get_provider_id(Node),
-                        ?assertEqual(#{
-                            <<"children">> => [maps:remove(<<"acl">>, api_test_utils:file_attr_to_json(undefined, gs, ProviderId, FileAttr))],
-                            <<"isLast">> => true
-                        }, Result)
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(FileGuid, private),
+                    validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, Result}) ->
+                        validate_listed_files(Result, gs, undefined, maps:without([<<"offset">>, <<"limit">>, <<"index">>], Data),
+                            [{FileGuid, FileName, FilePath, FileAttr}], Node)
                     end
                 }
             ],
@@ -295,8 +290,7 @@ get_file_children_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        ProviderId = opw_test_rpc:get_provider_id(Node),
-                        validate_listed_files(Response, rest, undefined, Data, [{FileGuid, FileName, FilePath, FileAttr}], ProviderId)
+                        validate_listed_files(Response, rest, undefined, Data, [{FileGuid, FileName, FilePath, FileAttr}], Node)
                     end
                 }
             ],
@@ -312,16 +306,17 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file using gs public api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, public),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(FileGuid, public),
                     validate_result_fun = ValidateGsPublicApiCallResultFun
                 },
                 #scenario_template{
                     name = <<"List file details using gs public api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(FileGuid, public),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(FileGuid, public),
                     validate_result_fun = ValidateGsPublicApiCallResultFun
                 }
-            ]
+            ],
+            data_spec = get_children_data_spec(gs, public)
         }
     ])).
 
@@ -378,7 +373,7 @@ get_shared_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared file details using gs private api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(#api_test_ctx{node = Node}, {ok, Result}) ->
                         ProviderId = opw_test_rpc:get_provider_id(Node),
                         ?assertEqual(#{
@@ -392,7 +387,7 @@ get_shared_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared file children details using gs api with private scope">>,
                     type = gs_with_shared_guid_and_aspect_private,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(ShareFileGuid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
                     end
@@ -442,7 +437,7 @@ get_user_root_dir_children_test(_Config) ->
                     type = rest,
                     prepare_args_fun = build_get_children_prepare_rest_args_fun(User4RootDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{node = Node, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
-                        validate_listed_files(Response, rest, undefined, Data, GetAllSpacesInfoFun(Node), opw_test_rpc:get_provider_id(Node))
+                        validate_listed_files(Response, rest, undefined, Data, GetAllSpacesInfoFun(Node), Node)
                     end
                 }
             ],
@@ -460,10 +455,9 @@ get_user_root_dir_children_test(_Config) ->
                 #scenario_template{
                     name = <<"List user4 root dir children details using gs api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(User4RootDirGuid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(User4RootDirGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = Data, node = Node}, {ok, Result}) ->
-                        ProviderId = opw_test_rpc:get_provider_id(Node),
-                        validate_listed_files(Result, gs_with_details, undefined, Data, GetAllSpacesInfoFun(Node), ProviderId)
+                        validate_listed_files(Result, gs, undefined, Data, GetAllSpacesInfoFun(Node), Node)
                     end
                 }
             ],
@@ -515,13 +509,13 @@ get_dir_children_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"List dir on provider not supporting space using gs api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_prepare_gs_args_fun(Space1Guid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(Space1Guid, private),
                     validate_result_fun = ValidateGsListedFilesOnProvidersNotSupportingSpaceFun
                 },
                 #scenario_template{
                     name = <<"List dir children details on provider not supporting space using gs api">>,
                     type = gs,
-                    prepare_args_fun = build_get_children_details_prepare_gs_args_fun(Space1Guid, private),
+                    prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(Space1Guid, private),
                     validate_result_fun = ValidateGsListedFilesOnProvidersNotSupportingSpaceFun
                 }
             ]
@@ -536,12 +530,18 @@ get_children_data_spec(Api, Scope) ->
 
 %% @private
 -spec get_children_data_spec(gs | rest, public | private, boolean()) -> onenv_api_test_runner:data_spec().
-get_children_data_spec(gs, _Scope, _IsSpace) ->
+get_children_data_spec(gs, Scope, _IsSpace) ->
+    CorrectValuesAttributes = case Scope of
+        public -> [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_API_ATTRS];
+        % do not check acl as it messes with privileges
+        private -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS] -- [<<"acl">>]
+    end,
     #data_spec{
-        optional = [<<"limit">>, <<"offset">>],
+        optional = [<<"limit">>, <<"offset">>, <<"attributes">>],
         correct_values = #{
             <<"limit">> => [1, 100],
-            <<"offset">> => [1, 3, 10]
+            <<"offset">> => [1, 3, 10],
+            <<"attributes">> => [CorrectValuesAttributes]
         },
         bad_values = [
             {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
@@ -553,7 +553,7 @@ get_children_data_spec(gs, _Scope, _IsSpace) ->
     };
 get_children_data_spec(rest, Scope, IsSpace) ->
     AllowedAttrs = case Scope of
-        public -> ?PUBLIC_ATTRS;
+        public -> ?PUBLIC_API_ATTRS;
         private -> ?API_ATTRS
     end,
     AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- AllowedAttrs] ++ [<<"xattr.*">>],
@@ -610,16 +610,9 @@ build_get_children_prepare_rest_args_fun(ValidId) ->
 
 
 %% @private
--spec build_get_children_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+-spec build_get_children_attrs_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_children_prepare_gs_args_fun(FileGuid, Scope) ->
-    build_prepare_gs_args_fun(FileGuid, children, Scope).
-
-
-%% @private
--spec build_get_children_details_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_children_details_prepare_gs_args_fun(FileGuid, Scope) ->
+build_get_children_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
     build_prepare_gs_args_fun(FileGuid, children, Scope).
 
 
@@ -633,14 +626,7 @@ build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = Aspect, scope = Scope},
-            data = case Data1 of
-                undefined -> undefined;
-                _ -> Data1#{<<"attributes">> => case Scope of
-                    public -> [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_ATTRS];
-                    % do not check acl as it messes with privileges
-                    private -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS] -- [<<"acl">>]
-                end}
-            end
+            data = Data1
         }
     end.
 
@@ -648,17 +634,21 @@ build_prepare_gs_args_fun(FileGuid, Aspect, Scope) ->
 %% @private
 -spec validate_listed_files(
     ListedChildren :: term(),
-    Format :: rest | gs_with_details,
+    Format :: rest | gs,
     ShareId :: undefined | od_share:id(),
     Params :: map(),
     AllFiles :: files(),
-    od_provider:id() | undefined
+    Node :: node() | undefined
 ) ->
     ok | no_return().
-validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, ProviderId) ->
+validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) ->
     Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
-    Attributes = maps:get(<<"attributes">>, Params, undefined),
+    Attributes = maps:get(<<"attributes">>, Params, []),
+    ProviderId = case Node of
+        undefined -> undefined;
+        _ -> opw_test_rpc:get_provider_id(Node)
+    end,
 
     ExpFiles1 = case Offset >= length(AllFiles) of
         true ->
@@ -673,49 +663,34 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Provide
 
     IsLast = Limit + Offset >= length(AllFiles),
 
-    ExpFiles3 = case Format of
-        rest ->
-            #{
-                <<"children">> => lists:map(fun({Guid, Name, _Path, Attrs}) ->
+    ExpFiles3 = #{
+        <<"children">> => lists:map(fun({Guid, Name, _Path, Attrs}) ->
+            FileId = case Format of
+                rest ->
                     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                    MappedChildAttrs = case Attributes of
-                        undefined ->
-                            #{
-                                <<"file_id">> => ObjectId,
-                                <<"fileId">> => ObjectId,
-                                <<"name">> => Name
-                            };
-                        [] ->
-                            #{
-                                <<"file_id">> => ObjectId,
-                                <<"fileId">> => ObjectId,
-                                <<"name">> => Name
-                            };
-                        _ ->
-                             maps:with(utils:ensure_list(Attributes),
-                                api_test_utils:file_attr_to_json(ShareId, rest, ProviderId, Attrs))
-                    end,
-                    case fslogic_file_id:is_space_dir_guid(Guid) of
-                        true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
-                        false -> MappedChildAttrs
-                    end
-                end, ExpFiles2),
-                <<"isLast">> => IsLast
-            };
-
-        gs_with_details ->
-            #{
-                <<"children">> => lists:map(fun({Guid, _Name, _Path, Attrs}) ->
-                    MappedChildAttrs = maps:remove(<<"acl">>, api_test_utils:file_attr_to_json(
-                        ShareId, gs, ProviderId, Attrs)),
-                    case fslogic_file_id:is_space_dir_guid(Guid) of
-                        true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
-                        false -> MappedChildAttrs
-                    end
-                end, ExpFiles2),
-                <<"isLast">> => IsLast
-            }
-    end,
+                    ObjectId;
+                gs ->
+                    Guid
+            end,
+            MappedChildAttrs = case Attributes of
+                [] ->
+                    #{
+                        <<"file_id">> => FileId,
+                        <<"fileId">> => FileId,
+                        <<"name">> => Name
+                    };
+                _ ->
+                    maps:with(utils:ensure_list(Attributes),
+                        api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, Attrs))
+            end,
+            case fslogic_file_id:is_space_dir_guid(Guid) of
+                true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
+                false -> MappedChildAttrs
+            end
+        end, ExpFiles2),
+        <<"isLast">> => IsLast
+    },
+    
     ?assertMatch(#{<<"children">> := _}, ListedChildren),
     ?assertEqual(length(maps:get(<<"children">>, ExpFiles3)), length(maps:get(<<"children">>, ListedChildren))),
     lists:foreach(fun({Expected, Listed}) ->

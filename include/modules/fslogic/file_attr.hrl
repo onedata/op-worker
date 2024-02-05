@@ -58,7 +58,7 @@
 -define(IMPLICIT_ATTRS, [guid]).
 -define(FILE_META_ATTRS, [index, type, active_permissions_type, mode, acl, parent_guid, provider_id, shares, owner_id,
     hardlink_count, symlink_value, is_deleted]).
--define(LINKS_ATTRS, [name, conflicting_name, conflicting_files]).
+-define(LINKS_TREE_ATTRS, [name, conflicting_name, conflicting_files]).
 -define(PATH_ATTRS, [path]).
 -define(LUMA_ATTRS, [gid, uid]).
 -define(TIMES_ATTRS, [atime, mtime, ctime]).
@@ -69,16 +69,15 @@
 -define(QOS_STATUS_ATTRS, [qos_status]).
 -define(ARCHIVE_RECALL_ATTRS, [recall_root_id]).
 
--define(ALL_ATTRS, lists:merge([?IMPLICIT_ATTRS, ?FILE_META_ATTRS, ?LINKS_ATTRS, ?PATH_ATTRS, ?LUMA_ATTRS, ?TIMES_ATTRS,
+-define(ALL_ATTRS, lists:merge([?IMPLICIT_ATTRS, ?FILE_META_ATTRS, ?LINKS_TREE_ATTRS, ?PATH_ATTRS, ?LUMA_ATTRS, ?TIMES_ATTRS,
     ?LOCATION_ATTRS, ?METADATA_ATTRS, ?DATASET_ATTRS, ?QOS_EFF_VALUE_ATTRS, ?QOS_STATUS_ATTRS, ?ARCHIVE_RECALL_ATTRS])).
-
--define(PUBLIC_ATTRS, [guid, index, type, active_permissions_type, mode, name, conflicting_name, parent_guid,
-    atime, mtime, ctime, size, shares,  symlink_value, has_custom_metadata]).
 
 % attrs that are used internally by op-worker mechanisms (like events, storage import); are not visible in API
 -define(INTERNAL_ATTRS, [is_deleted, conflicting_files]).
 
 -define(API_ATTRS, ?ALL_ATTRS -- ?INTERNAL_ATTRS).
+-define(PUBLIC_API_ATTRS, [guid, index, type, active_permissions_type, mode, name, conflicting_name, parent_guid,
+    atime, mtime, ctime, size, shares,  symlink_value, has_custom_metadata]).
 
 %% @TODO VFS-11378 remove when all usages provide their custom required attrs
 -define(ONECLIENT_ATTRS, [

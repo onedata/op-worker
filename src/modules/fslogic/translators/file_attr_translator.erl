@@ -171,17 +171,17 @@ attr_name_to_json_deprecated(mode)                -> <<"mode">>.
 
 -spec sanitize_requested_attrs([binary()], attr_type(), [file_attr:attribute()]) ->
     {ok, [file_attr:attribute()]} | {error, [binary()]}.
-sanitize_requested_attrs(Attributes, AttrType, AllowedValues) ->
+sanitize_requested_attrs(Attributes, AttrType, AllowedAttributes) ->
     Result = lists_utils:foldl_while(fun
         (<<"xattr.", XattrName/binary>>, {ok, AttrAcc, XattrAcc}) ->
             {cont, {ok, AttrAcc, [XattrName | XattrAcc]}};
         (Attr, {ok, AttrAcc, XattrAcc}) ->
             try
                 TranslatedAttr = attr_name_from_json(AttrType, Attr),
-                true = lists:member(TranslatedAttr, AllowedValues),
+                true = lists:member(TranslatedAttr, AllowedAttributes),
                 {cont, {ok, [TranslatedAttr | AttrAcc], XattrAcc}}
             catch _:_ ->
-                AllowedValuesJson = [attr_name_to_json(AttrType, A) || A <- AllowedValues],
+                AllowedValuesJson = [attr_name_to_json(AttrType, A) || A <- AllowedAttributes],
                 % add xattr.* to end of list, so allowed values are printed in correct order
                 {halt, {error, AllowedValuesJson ++ [<<"xattr.*">>]}}
             end

@@ -26,7 +26,7 @@
 -spec build_attributes_param_spec(middleware:scope(), file_attr_translator:attr_type(), binary()) ->
     middleware_sanitizer:param_spec().
 build_attributes_param_spec(public, current = AttrType, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrType, ?PUBLIC_ATTRS)};
+    {any, build_parse_requested_attrs_fun(Key, AttrType, ?PUBLIC_API_ATTRS)};
 build_attributes_param_spec(private, current = AttrType, Key) ->
     {any, build_parse_requested_attrs_fun(Key, AttrType, ?API_ATTRS)};
 build_attributes_param_spec(public, deprecated = AttrType, Key) ->
