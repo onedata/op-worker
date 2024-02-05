@@ -62,7 +62,7 @@
     create_and_open/4, create_and_open/5,
     open/3, monitored_open/3,
     fsync/1, fsync/3,
-    sync_block/3,
+    sync_block/4,
     write/3, read/3,
     check_size_and_read/3,
     silent_read/3,
@@ -384,10 +384,10 @@ fsync(SessId, FileKey, ProviderId) ->
     ?run(lfm_files:fsync(SessId, FileKey, ProviderId)).
 
 
--spec sync_block(session:id(), lfm:file_key(), fslogic_blocks:block()) ->
+-spec sync_block(session:id(), lfm:file_key(), fslogic_blocks:block(), 0..255) ->
     ok | {error, Reason :: term()}.
-sync_block(SessionId, FileKey, Block) ->
-    ?run(lfm_files:sync_block(SessionId, FileKey, Block)).
+sync_block(SessionId, FileKey, Block, Priority) ->
+    ?run(lfm_files:sync_block(SessionId, FileKey, Block, Priority)).
 
 
 -spec write(FileHandle :: handle(), Offset :: integer(), Buffer :: binary()) ->

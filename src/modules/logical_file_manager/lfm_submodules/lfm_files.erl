@@ -34,7 +34,7 @@
     open/3,
     create_and_open/4, create_and_open/5,
     monitored_open/3, monitored_release/1,
-    get_file_location/2, read_symlink/2, fsync/1, fsync/3, sync_block/3, write/3,
+    get_file_location/2, read_symlink/2, fsync/1, fsync/3, sync_block/4, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1
@@ -441,12 +441,11 @@ fsync(SessId, FileKey, ProviderId) ->
     ).
 
 
-%% @private
--spec sync_block(session:id(), lfm:file_key(), fslogic_blocks:block()) ->
+-spec sync_block(session:id(), lfm:file_key(), fslogic_blocks:block(), 0..255) ->
     ok | {error, term()}.
-sync_block(SessionId, FileKey, Block) ->
+sync_block(SessionId, FileKey, Block, Priority) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, resolve_symlink),
-    sync_block(SessionId, FileGuid, Block, true, ?DEFAULT_SYNC_PRIORITY).
+    sync_block_internal(SessionId, FileGuid, Block, true, Priority).
 
 
 %%--------------------------------------------------------------------
@@ -702,7 +701,7 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
                     ok;
                 {priority, Priority} ->
                     SyncBlock = #file_block{offset = Offset, size = ReadSize},
-                    sync_block(SessId, FileGuid, SyncBlock, PrefetchData, Priority, 0)
+                    sync_block_internal(SessId, FileGuid, SyncBlock, PrefetchData, Priority, 0)
             end,
 
             FileId = lfm_context:get_file_id(LfmCtx),
@@ -734,10 +733,10 @@ read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions
     end.
 
 %% @private
--spec sync_block(SessId :: session:id(), FileGuid :: file_id:file_guid(), Block :: fslogic_blocks:block(),
-    PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer()) -> ok | no_return().
-sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
-    case sync_block(SessId, FileGuid, Block, PrefetchData, Priority) of
+-spec sync_block_internal(SessId :: session:id(), FileGuid :: file_id:file_guid(), Block :: fslogic_blocks:block(),
+    PrefetchData :: boolean(), Priority :: 0..255, RetryNum :: non_neg_integer()) -> ok | no_return().
+sync_block_internal(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
+    case sync_block_internal(SessId, FileGuid, Block, PrefetchData, Priority) of
         ok ->
             ok;
         {error, Reason} = Error ->
@@ -749,15 +748,15 @@ sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
                 false ->
                     SleepTime = round(?SYNC_MIN_BACKOFF * math:pow(?SYNC_BACKOFF_RATE, RetryNum)),
                     timer:sleep(min(SleepTime, ?SYNC_MAX_BACKOFF)),
-                    sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum + 1)
+                    sync_block_internal(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum + 1)
             end
     end.
 
 
 %% @private
--spec sync_block(session:id(), file_id:file_guid(), fslogic_blocks:block(), boolean(), non_neg_integer()) ->
+-spec sync_block_internal(session:id(), file_id:file_guid(), fslogic_blocks:block(), boolean(), 0..255) ->
     ok | {error, term()}.
-sync_block(SessionId, FileGuid, Block, PrefetchData, Priority) ->
+sync_block_internal(SessionId, FileGuid, Block, PrefetchData, Priority) ->
     Req = #synchronize_block{
         block = Block,
         prefetch = PrefetchData,
