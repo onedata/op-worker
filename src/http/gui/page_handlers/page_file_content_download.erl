@@ -19,10 +19,13 @@
 -include("http/http_download.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/proxyio_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 -export([gen_file_download_url/3, handle/2]).
+
+-define(FIRST_FILE_BLOCK_SYNC_PRIORITY, op_worker:get_env(download_first_file_block_sync_priority, 1)).
 
 
 %%%===================================================================
@@ -112,17 +115,18 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
     FileRef = ?FILE_REF(FileGuid),
 
     case ?lfm_check(lfm:stat(SessionId, FileRef)) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, FileRef, read)),
-            ReadBlockSize = file_content_streamer:get_read_block_size(FileHandle),
-            case lfm:read(FileHandle, 0, ReadBlockSize) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}} ->
+            SpaceId = file_id:guid_to_space_id(FileGuid),
+            SyncBlock = #file_block{
+                offset = 0,
+                size = min(FileSize, file_content_streamer:get_read_block_size(SpaceId))
+            },
+            case lfm:sync_block(SessionId, FileRef, SyncBlock, ?FIRST_FILE_BLOCK_SYNC_PRIORITY) of
                 {error, ?ENOSPC} ->
                     throw(?ERROR_QUOTA_EXCEEDED);
                 Res ->
                     ?lfm_check(Res)
-            end,
-            lfm:monitored_release(FileHandle),
-            ok;
+            end;
         _ -> 
             ok
     end;
