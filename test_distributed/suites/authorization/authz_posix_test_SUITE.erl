@@ -6,6 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-11734 Port permission tests to authz_test_runner
 %%% This test suite verifies correct behaviour of authorization mechanism
 %%% with corresponding lfm (logical_file_manager) functions and posix storage.
 %%% @end

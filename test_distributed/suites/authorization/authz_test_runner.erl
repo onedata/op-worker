@@ -100,6 +100,7 @@
 run_suite(TestSuiteSpec) ->
     TestSuiteCtx = init_test_suite(TestSuiteSpec),
 
+    %% TODO VFS-11733 Rewrite space owner perm tests to onenv
     run_space_privileges_test_group(TestSuiteCtx),
     run_file_protection_test_group(TestSuiteCtx),
     run_data_access_caveats_test_group(TestSuiteCtx),
@@ -150,7 +151,7 @@ init_space_privileges_test_case(PermsType, TestSuiteCtx = #authz_test_suite_ctx{
     },
     test_node = TestNode
 }) ->
-    TestCaseName = build_test_case_name(["space_privileges_and_full", PermsType]),
+    TestCaseName = build_test_case_name(["space_privileges", PermsType]),
     TestCaseCtx = init_test_case(TestCaseName, SpaceUserSelector, TestSuiteCtx),
 
     % Assert that even with all perms set operation cannot be performed
@@ -273,7 +274,7 @@ space_privileges_test_case(#authz_privs_test_case_ctx{
 run_file_protection_test_group(TestSuiteCtx = #authz_test_suite_ctx{suite_spec = TestSuiteSpec}) ->
     ProtectionFlagsToSet = infer_blocking_protection_flags(TestSuiteSpec),
 
-    ProtectionFlagsToSet /= 0 andalso lists:foreach(fun({ExecutionerSelector, UserDesc}) ->
+    lists:foreach(fun({ExecutionerSelector, UserDesc}) ->
 
         TestCaseName = build_test_case_name(["file_protection", UserDesc]),
         TestCaseCtx = init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
@@ -325,7 +326,30 @@ gather_required_perms(FileTreeSpec, Acc) when is_list(FileTreeSpec) ->
 %% @private
 -spec run_file_protection_test_case(data_access_control:bitmask(), authz_test_case_ctx()) ->
     ok | no_return().
-run_file_protection_test_case(ProtectionFlagsToSet, TestCaseCtx = #authz_test_case_ctx{
+run_file_protection_test_case(0, TestCaseCtx = #authz_test_case_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = #authz_test_suite_spec{space_selector = SpaceSelector},
+        test_node = TestNode
+    },
+    executioner_session_id = ExecutionerSessionId,
+    required_perms_per_file = RequiredPermsPerFile,
+    extra_data = ExtraData
+}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    {ok, ExecutionerUserId} = rpc:call(TestNode, session, get_user_id, [ExecutionerSessionId]),
+
+    % Assert that even with full protection flags set operation can be performed
+    PermsType = ?RAND_ELEMENT([posix, acl]),
+    FullPermsPerFile = set_full_perms(PermsType, TestNode, maps:keys(RequiredPermsPerFile)),
+
+    FullProtectionFlags = ?METADATA_PROTECTION bor ?DATA_PROTECTION,
+    establish_dataset_on_test_case_root_dir(FullProtectionFlags, TestCaseCtx),
+    await_dataset_eff_cache_clearing(TestNode, SpaceId, ExecutionerUserId, ExtraData),
+    assert_operation(FullPermsPerFile, ok, TestCaseCtx),
+
+    run_final_storage_ownership_check(TestCaseCtx);
+
+run_file_protection_test_case(BlockingProtectionFlags, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
         suite_spec = TestSuiteSpec = #authz_test_suite_spec{
             space_selector = SpaceSelector
@@ -337,26 +361,24 @@ run_file_protection_test_case(ProtectionFlagsToSet, TestCaseCtx = #authz_test_ca
     required_perms_per_file = RequiredPermsPerFile,
     extra_data = ExtraData
 }) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    {ok, ExecutionerUserId} = rpc:call(TestNode, session, get_user_id, [ExecutionerSessionId]),
+
     % Assert that even with all perms set operation cannot be performed
     % with file protection flags set
     PermsType = ?RAND_ELEMENT([posix, acl]),
     FullPermsPerFile = set_full_perms(PermsType, TestNode, maps:keys(RequiredPermsPerFile)),
 
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-    DatasetId = establish_dataset_on_test_case_root_dir(TestCaseCtx),
-    {ok, ExecutionerUserId} = rpc:call(TestNode, session, get_user_id, [ExecutionerSessionId]),
-
     % With file protection set operation should fail
     ExpError = get_exp_error(?EPERM, TestSuiteSpec),
-    ok = opt_datasets:update(
-        TestNode, SpaceOwnerSessionId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask
-    ),
+
+    DatasetId = establish_dataset_on_test_case_root_dir(BlockingProtectionFlags, TestCaseCtx),
     await_dataset_eff_cache_clearing(TestNode, SpaceId, ExecutionerUserId, ExtraData),
     assert_operation(FullPermsPerFile, ExpError, TestCaseCtx),
 
     % And should succeed without it
     ok = opt_datasets:update(
-        TestNode, SpaceOwnerSessionId, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
+        TestNode, SpaceOwnerSessionId, DatasetId, undefined, ?no_flags_mask, BlockingProtectionFlags
     ),
     await_dataset_eff_cache_clearing(TestNode, SpaceId, ExecutionerUserId, ExtraData),
     assert_operation(FullPermsPerFile, ok, TestCaseCtx),
@@ -365,8 +387,9 @@ run_file_protection_test_case(ProtectionFlagsToSet, TestCaseCtx = #authz_test_ca
 
 
 %% @private
--spec establish_dataset_on_test_case_root_dir(authz_test_case_ctx()) -> dataset:id().
-establish_dataset_on_test_case_root_dir(#authz_test_case_ctx{
+-spec establish_dataset_on_test_case_root_dir(data_access_control:bitmask(), authz_test_case_ctx()) ->
+    dataset:id().
+establish_dataset_on_test_case_root_dir(InitialProtectionFlags, #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
         space_owner_session_id = SpaceOwnerSessionId,
         test_node = TestNode
@@ -375,7 +398,9 @@ establish_dataset_on_test_case_root_dir(#authz_test_case_ctx{
     extra_data = ExtraData
 }) ->
     TestCaseRootDirKey = maps:get(TestCaseRootDirPath, ExtraData),
-    {ok, DatasetId} = opt_datasets:establish(TestNode, SpaceOwnerSessionId, TestCaseRootDirKey),
+    {ok, DatasetId} = opt_datasets:establish(
+        TestNode, SpaceOwnerSessionId, TestCaseRootDirKey, InitialProtectionFlags
+    ),
     DatasetId.
 
 
@@ -587,18 +612,18 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         run_share_test_case(PermsType, TestCaseCtx)
 
     end, ?RAND_SUBLIST([
-        {FilesOwnerSelector, posix, <<"owner_posix_share">>},
-        {SpaceUserSelector, posix, <<"space_user_posix_share">>},
-        {NonSpaceUserSelector, posix, <<"non_space_user_posix_share">>},
-        {?GUEST_SESS_ID, posix, <<"guest_posix_share">>},
-        {FilesOwnerSelector, {acl, allow}, <<"owner_acl_allow_share">>},
-        {FilesOwnerSelector, {acl, deny}, <<"owner_acl_deny_share">>},
-        {SpaceUserSelector, {acl, allow}, <<"space_user_acl_allow_share">>},
-        {SpaceUserSelector, {acl, deny}, <<"space_user_acl_deny_share">>},
-        {NonSpaceUserSelector, {acl, allow}, <<"non_space_user_acl_allow_share">>},
-        {NonSpaceUserSelector, {acl, deny}, <<"non_space_user_acl_deny_share">>},
-        {?GUEST_SESS_ID, {acl, allow}, <<"guest_acl_allow_share">>},
-        {?GUEST_SESS_ID, {acl, deny}, <<"guest_acl_deny_share">>}
+        {FilesOwnerSelector, posix, <<"share_owner_posix">>},
+        {SpaceUserSelector, posix, <<"share_space_user_posix">>},
+        {NonSpaceUserSelector, posix, <<"share_non_space_user_posix">>},
+        {?GUEST_SESS_ID, posix, <<"share_guest_posix">>},
+        {FilesOwnerSelector, {acl, allow}, <<"share_owner_acl_allow">>},
+        {FilesOwnerSelector, {acl, deny}, <<"share_owner_acl_deny">>},
+        {SpaceUserSelector, {acl, allow}, <<"share_space_user_acl_allow">>},
+        {SpaceUserSelector, {acl, deny}, <<"share_space_user_acl_deny">>},
+        {NonSpaceUserSelector, {acl, allow}, <<"share_non_space_user_acl_allow">>},
+        {NonSpaceUserSelector, {acl, deny}, <<"share_non_space_user_acl_deny">>},
+        {?GUEST_SESS_ID, {acl, allow}, <<"share_guest_acl_allow">>},
+        {?GUEST_SESS_ID, {acl, deny}, <<"share_guest_acl_deny">>}
     ], 12)).  %% TODO sublis length?
 
 
@@ -1005,15 +1030,15 @@ run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         run_acl_permission_test_case(AceType, AceWho, AceFlags, AclTestCaseCtx)
 
     end, ?RAND_SUBLIST([
-        {FilesOwnerSelector, <<"acl_owner_allow">>, allow, ?owner, ?no_flags_mask},
-        {SpaceUserSelector, <<"acl_user_allow">>, allow, SpaceUserId, ?no_flags_mask},
+        {FilesOwnerSelector, <<"acl_allow-files_owner">>, allow, ?owner, ?no_flags_mask},
+        {SpaceUserSelector, <<"acl_allow-space_user">>, allow, SpaceUserId, ?no_flags_mask},
 %%        {SpaceUserGroupId, <<"acl_user_group_allow">>, allow, SpaceUserGroupId, ?identifier_group_mask},
-        {SpaceUserSelector, <<"acl_everyone_allow">>, allow, ?everyone, ?no_flags_mask},
+        {SpaceUserSelector, <<"acl_allow-everyone">>, allow, ?everyone, ?no_flags_mask},
 
-        {FilesOwnerSelector, <<"acl_owner_deny">>, deny, ?owner, ?no_flags_mask},
-        {SpaceUserSelector, <<"acl_user_deny">>, deny, SpaceUserId, ?no_flags_mask},
+        {FilesOwnerSelector, <<"acl_deny-files_owner">>, deny, ?owner, ?no_flags_mask},
+        {SpaceUserSelector, <<"acl_deny-space_user">>, deny, SpaceUserId, ?no_flags_mask},
 %%        {SpaceUserGroupId, <<"acl_user_group_deny">>, deny, SpaceUserGroupId, ?identifier_group_mask},
-        {SpaceUserSelector, <<"acl_everyone_deny">>, deny, ?everyone, ?no_flags_mask}
+        {SpaceUserSelector, <<"acl_deny-everyone">>, deny, ?everyone, ?no_flags_mask}
     ], 6)).  %% TODO sublis length?
 
 
@@ -1144,7 +1169,7 @@ init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
 %% @private
 -spec build_test_case_name([term()]) -> binary().
 build_test_case_name(Tokens) ->
-    str_utils:join_binary([str_utils:to_binary(Token) || Token <- Tokens], <<"_">>).
+    str_utils:join_binary([str_utils:to_binary(Token) || Token <- Tokens], <<"-">>).
 
 
 %% @private
@@ -1236,23 +1261,71 @@ assert_operation(ActualPermsPerFile, ExpResult, #authz_cv_test_case_ctx{
 }) ->
     assert_operation(ActualPermsPerFile, ExpResult, TestCaseCtx);
 
-assert_operation(ActualPermsPerFile, ExpResult, TestCaseCtx = #authz_test_case_ctx{
-    suite_ctx = #authz_test_suite_ctx{test_node = TestNode},
-    test_case_name = TestCaseName
-}) ->
+assert_operation(ActualPermsPerFile, ExpResult, TestCaseCtx = #authz_test_case_ctx{}) ->
     try
         ?assertEqual(ExpResult, exec_operation(TestCaseCtx)),
         ok
     catch Class:Reason:Stacktrace ->
-        ActualPermsPerFileJson = format_perms_per_file(TestNode, ActualPermsPerFile),
-
         ?ct_pal_exception(
-            "Operation exec with permissions failed ~s",
-            [?autoformat(TestCaseName, ActualPermsPerFileJson)],
+            "OPERATION EXECUTION ASSERT FAILED!!!~n~s",
+            [format_additional_log_data(ActualPermsPerFile, TestCaseCtx)],
             Class, Reason, Stacktrace
         ),
         error(assert_operation_failed)
     end.
+
+
+%% @private
+-spec format_additional_log_data(perms_per_file() | posix_perms_per_file(), authz_test_case_ctx()) ->
+    binary().
+format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = #authz_test_suite_spec{
+            space_selector = SpaceSelector
+        },
+        test_node = TestNode
+    },
+    test_case_name = TestCaseName,
+    test_case_root_dir_path = TestCaseRootDirPath,
+    executioner_session_id = ExecutionerSessionId,
+    extra_data = ExtraData
+}) ->
+    ?FILE_REF(TestCaseRootDirGuid) = maps:get(TestCaseRootDirPath, ExtraData),
+    RootDirShareId = file_id:guid_to_share_id(TestCaseRootDirGuid),
+    RootDirUuid = file_id:guid_to_uuid(TestCaseRootDirGuid),
+    {ok, RootDirFileMetaDoc} = ?rpc(TestNode, file_meta:get(RootDirUuid)),
+    RootDirProtectionFlagsBitMask = file_meta:get_protection_flags(RootDirFileMetaDoc),
+    RootDirProtectionFlags = utils:ensure_defined(
+        file_meta:protection_flags_to_json(RootDirProtectionFlagsBitMask), [], undefined
+    ),
+
+    ActualPermsPerFileJson = format_perms_per_file(TestNode, ActualPermsPerFile),
+
+    {ok, ExecutionerSession} = ?rpc(TestNode, session:get(ExecutionerSessionId)),
+
+    {ok, ExecutionerUserId} = session:get_user_id(ExecutionerSession),
+    ExecutionerPlaceholder = case ExecutionerUserId of
+        ?GUEST_USER_ID -> <<"@GUEST">>;
+        _ -> oct_background:to_entity_placeholder(ExecutionerUserId)
+    end,
+
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    {ok, ExecutionerSpacePrivs} = get_user_space_privileges(TestNode, SpaceId, ExecutionerUserId),
+
+    {ok, ExecutionerSessionMode} = session:get_mode(ExecutionerSession),
+    ExecutionerSessionConstraints = session:get_data_constraints(ExecutionerSession),
+
+    ?autoformat(
+        TestCaseName,
+        TestCaseRootDirPath,
+        RootDirProtectionFlags,
+        RootDirShareId,
+        ActualPermsPerFileJson,
+        ExecutionerPlaceholder,
+        ExecutionerSpacePrivs,
+        ExecutionerSessionMode,
+        ExecutionerSessionConstraints
+    ).
 
 
 %% @private
@@ -1394,17 +1467,5 @@ get_exp_error(Errno, #authz_test_suite_spec{returned_errors = errno_errors}) ->
 %% @private
 -spec run_final_storage_ownership_check(authz_test_case_ctx()) -> ok | no_return().
 run_final_storage_ownership_check(#authz_test_case_ctx{}) ->
+    %% TODO VFS-11732 rewrite from permissions_test_runner envup
     ok.
-    %% TODO
-%%    case FinalOwnershipCheckFun(ScenarioRootDirPath) of
-%%        skip ->
-%%            ok;
-%%        {should_preserve_ownership, LogicalFilePath} ->
-%%            permissions_test_utils:assert_user_is_file_owner_on_storage(
-%%                Node, SpaceId, LogicalFilePath, OriginalFileOwnerSessionId
-%%            );
-%%        {should_change_ownership, LogicalFilePath} ->
-%%            permissions_test_utils:assert_user_is_file_owner_on_storage(
-%%                Node, SpaceId, LogicalFilePath, OperationExecutionerSessionId
-%%            )
-%%    end.
