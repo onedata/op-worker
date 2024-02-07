@@ -740,8 +740,10 @@ get_from_cache(#gri{type = Type, id = Id}) ->
 %% @private
 -spec client_to_credentials(client()) -> auth_manager:credentials().
 client_to_credentials(SessionId) when is_binary(SessionId) ->
-    {ok, Credentials} = session:get_credentials(SessionId),
-    Credentials;
+    case session:get_credentials(SessionId) of
+        {ok, Credentials} -> Credentials;
+        {error, not_found} -> throw(?ERROR_UNAUTHORIZED)
+    end;
 client_to_credentials(Credentials) ->
     Credentials.
 
