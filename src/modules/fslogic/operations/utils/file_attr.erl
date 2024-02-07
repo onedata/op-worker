@@ -28,11 +28,13 @@
     should_fetch_xattrs/1
 ]).
 
--type attribute() :: guid | index | type | active_permissions_type | mode | acl | name | conflicting_name | path |
-    parent_guid | gid | uid | atime | mtime | ctime | size | is_fully_replicated | local_replication_rate |
-    provider_id | shares | owner_id | hardlink_count | symlink_value | has_custom_metadata | eff_protection_flags |
-    eff_dataset_protection_flags | eff_dataset_inheritance_path | eff_qos_inheritance_path | qos_status | recall_root_id |
-    is_deleted | conflicting_files | {xattrs, [custom_metadata:name()]}.
+-type attribute() :: ?attr_guid | ?attr_index | ?attr_type | ?attr_active_permissions_type | ?attr_mode | ?attr_acl |
+    ?attr_name | ?attr_conflicting_name | ?attr_path | ?attr_parent_guid | ?attr_gid | ?attr_uid | ?attr_atime |
+    ?attr_mtime | ?attr_ctime | ?attr_size | ?attr_is_fully_replicated | ?attr_local_replication_rate | ?attr_provider_id |
+    ?attr_shares | ?attr_owner_id | ?attr_hardlink_count | ?attr_symlink_value | ?attr_has_custom_metadata |
+    ?attr_eff_protection_flags | ?attr_eff_dataset_protection_flags | ?attr_eff_dataset_inheritance_path |
+    ?attr_eff_qos_inheritance_path | ?attr_qos_status | ?attr_recall_root_id | ?attr_is_deleted |
+    ?attr_conflicting_files | ?attr_xattrs([custom_metadata:name()]).
 
 -type file_type() :: file_meta:type().
 
@@ -121,7 +123,7 @@ should_fetch_xattrs(#{attributes := AttributesList}) ->
     should_fetch_xattrs(AttributesList);
 should_fetch_xattrs(AttributesList) ->
     case lists:keyfind(xattrs, 1, AttributesList) of
-        {xattrs, XattrNames} -> {true, XattrNames};
+        ?attr_xattrs(XattrNames) -> {true, XattrNames};
         false -> false
     end.
 
@@ -394,7 +396,7 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 -spec resolve_parent_guid(state()) ->
     {file_id:file_guid() | undefined, state()}.
 resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs, user_ctx = UserCtx} = State) ->
-    case lists:member(parent_guid, RequestedAttrs) of
+    case lists:member(?attr_parent_guid, RequestedAttrs) of
         true ->
             {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
             {ParentGuid, State#state{file_ctx = FileCtx2}};
@@ -407,7 +409,7 @@ resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAt
 -spec resolve_link_count(file_ctx:ctx(), od_share:id(), [attribute()]) ->
     non_neg_integer() | undefined.
 resolve_link_count(FileCtx, ShareId, RequestedAttrs) ->
-    case {ShareId, lists:member(hardlink_count, RequestedAttrs)} of
+    case {ShareId, lists:member(?attr_hardlink_count, RequestedAttrs)} of
         {undefined, true} ->
             {ok, LinkCount} = file_ctx:count_references_const(FileCtx),
             LinkCount;
@@ -420,7 +422,9 @@ resolve_link_count(FileCtx, ShareId, RequestedAttrs) ->
 -spec resolve_location_attrs_for_reg_file(state()) -> {state(), record()}.
 resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs} = State) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
-    {OptionalAttr, FileCtx3} = case {are_any_attrs_requested([local_replication_rate, is_fully_replicated], State), Size} of
+    {OptionalAttr, FileCtx3} = case
+        {are_any_attrs_requested([?attr_local_replication_rate, ?attr_is_fully_replicated], State), Size}
+    of
         {true, 0} ->
             {#file_attr{
                 is_fully_replicated = true,
@@ -451,7 +455,7 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             {State, #file_attr{}};
         _ ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ShouldCalculateLocalReplicationRate = are_any_attrs_requested([local_replication_rate], State),
+            ShouldCalculateLocalReplicationRate = are_any_attrs_requested([?attr_local_replication_rate], State),
             {StatsToGet, FileCtx2} = case ShouldCalculateLocalReplicationRate of
                 true ->
                     case file_ctx:get_storage_id(FileCtx) of
@@ -519,7 +523,7 @@ count_bytes(FileLocationDoc) -> file_location:count_bytes(FileLocationDoc).
 -spec resolve_name_attrs_internal(state()) -> {state(), record()}.
 resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     ShouldCalculateConflicts =
-        are_any_attrs_requested([conflicting_name, conflicting_files], State) orelse
+        are_any_attrs_requested([?attr_conflicting_name, ?attr_conflicting_files], State) orelse
             read_option(name_conflicts_resolution_policy, State, resolve_name_conflicts) == resolve_name_conflicts,
 
     case ShouldCalculateConflicts andalso not file_ctx:is_space_dir_const(FileCtx) of

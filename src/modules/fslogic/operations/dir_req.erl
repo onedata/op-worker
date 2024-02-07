@@ -101,7 +101,7 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
     fslogic_worker:fuse_response().
 list_children(UserCtx, FileCtx0, ListOpts) ->
     #fuse_response{status = #status{code = ?OK}, fuse_response = FuseResponse} =
-        list_children_attrs(UserCtx, FileCtx0, ListOpts, [guid, name]),
+        list_children_attrs(UserCtx, FileCtx0, ListOpts, [?attr_guid, ?attr_name]),
     #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
@@ -114,7 +114,7 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
 -spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()]) ->
     fslogic_worker:fuse_response().
 list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
-    DirOperationsRequirements = case Attributes -- [guid, name] of
+    DirOperationsRequirements = case Attributes -- [?attr_guid, ?attr_name] of
         [] ->
             ?OPERATIONS(?list_container_mask);
         _ ->
@@ -236,7 +236,7 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
                 % safeguard, as file_meta doc can be not synchronized yet
                 ?catch_not_found_as(false, begin
                     {_, FileCtx2} = file_attr:resolve(UserCtx, FileCtx, #{
-                        attributes => [name],
+                        attributes => [?attr_name],
                         name_conflicts_resolution_policy => resolve_name_conflicts
                     }),
                     {true, FileCtx2}
@@ -297,7 +297,7 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
         pagination_token = PaginationToken
     } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
     
-    AttrsToCalculate = Attributes -- [path, guid],
+    AttrsToCalculate = Attributes -- [?attr_guid, ?attr_path],
     
     GetAttrsFun = fun({Path, EntryFileCtx}) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =

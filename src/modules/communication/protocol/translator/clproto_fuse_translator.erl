@@ -609,4 +609,4 @@ to_protobuf(Other) -> clproto_common_translator:to_protobuf(Other).
 
 -spec xattrs_to_attrs_list([custom_metadata:name()]) -> [file_attr:attribute()].
 xattrs_to_attrs_list([])     -> [];
-xattrs_to_attrs_list(Xattrs) -> [{xattrs, Xattrs}].
+xattrs_to_attrs_list(Xattrs) -> [?attr_xattrs(Xattrs)].

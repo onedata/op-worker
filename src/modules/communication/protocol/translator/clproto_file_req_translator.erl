@@ -492,22 +492,22 @@ open_flag_translate_from_protobuf(_) -> rdwr.
 -spec attributes_to_attrs_flags([file_attr:attribute()]) ->
     {boolean(), boolean()}.
 attributes_to_attrs_flags(AttributesList) ->
-    IRS = lists:member(is_fully_replicated, AttributesList),
-    ILC = lists:member(link_count, AttributesList),
+    IRS = lists:member(?attr_is_fully_replicated, AttributesList),
+    ILC = lists:member(?attr_hardlink_count, AttributesList),
     {IRS, ILC}.
 
 
 -spec attrs_flags_to_attrs_list(boolean() | undefined, boolean() | undefined) ->
     [file_attr:attribute()].
 attrs_flags_to_attrs_list(true = _IRS, true = _ILC) ->
-    [is_fully_replicated, link_count];
+    [?attr_is_fully_replicated, ?attr_hardlink_count];
 attrs_flags_to_attrs_list(true = _IRS, _ILC) ->
-    [is_fully_replicated];
+    [?attr_is_fully_replicated];
 attrs_flags_to_attrs_list(_IRS, true = _ILC) ->
-    [link_count];
+    [?attr_hardlink_count];
 attrs_flags_to_attrs_list(_IRS, _ILC) ->
     [].
 
 -spec xattrs_to_attrs_list([custom_metadata:name()]) -> [file_attr:attribute()].
 xattrs_to_attrs_list([])     -> [];
-xattrs_to_attrs_list(Xattrs) -> [{xattrs, Xattrs}].
+xattrs_to_attrs_list(Xattrs) -> [?attr_xattrs(Xattrs)].
