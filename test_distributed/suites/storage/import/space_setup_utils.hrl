@@ -5,37 +5,33 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%% @doc
-%%% Common definitions concerning storage import tests
+%%% Common definitions concerning storage import tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(STORAGE_IMPORT_HRL).
 
 
 -record(posix_storage_params, {
-    type :: binary(),
-    mountPoint :: binary()
+    mount_point :: binary()
 }).
 
 -type posix_storage_params() :: #posix_storage_params{}.
 
--record(storage_spec, {
-    name :: atom(),
-    params :: posix_storage_params()
-}).
-
--type storage_spec() :: #storage_spec{}.
-
 -record(support_spec, {
-    provider :: atom(),
-    storage :: storage_spec(),
+    provider :: oct_background:entity_selector(),
+    storage_params :: posix_storage_params(),
     size :: integer()
 }).
 
+-type support_spec() :: #support_spec{}.
+
 -record(space_spec, {
     name :: atom(),
-    owner :: atom(),
+    owners :: [oct_background:entity_selector()],
     users :: list(),
-    supports :: list()
+    supports :: [support_spec()]
 }).
+
+-type space_spec() :: #space_spec{}.
 
 -endif.
