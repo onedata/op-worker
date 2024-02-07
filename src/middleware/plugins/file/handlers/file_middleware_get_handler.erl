@@ -380,10 +380,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, RequestedAttributes)),
     
     {ok, value, {
-        lists_utils:pfiltermap(fun(ChildAttr) ->
-            {true, file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes)}
-        end, ChildrenAttrs, ?MAX_MAP_CHILDREN_PROCESSES),
-        file_listing:is_finished(ListingPaginationToken), 
+        map_list(fun(ChildAttr) ->
+            file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes)
+        end, ChildrenAttrs),
+        file_listing:is_finished(ListingPaginationToken),
         file_listing:encode_pagination_token(ListingPaginationToken)}
     };
 
@@ -400,9 +400,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
     {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
     {ok, Result, InaccessiblePaths, NextPageToken} =
         ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), ListingOptions, RequestedAttributes)),
-    JsonResult = lists_utils:pfiltermap(fun(Attrs) ->
-        {true, file_attr_translator:to_json(Attrs, AttrType, RequestedAttributes)}
-    end, Result, ?MAX_MAP_CHILDREN_PROCESSES),
+    JsonResult = map_list(fun(ChildAttr) ->
+        file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes)
+    end, Result),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
@@ -603,4 +603,17 @@ infer_requested_attributes(Data, Default) ->
             end;
         {ok, Attrs} ->
             {current, utils:ensure_list(Attrs)}
+    end.
+
+
+%% @private
+-spec map_list(fun((X) -> Y), [X]) -> [Y].
+map_list(MapFun, List) ->
+    case length(List) > 100 of
+        true ->
+            lists_utils:pfiltermap(fun(ChildAttr) ->
+                {true, MapFun(ChildAttr)}
+            end, List, ?MAX_MAP_CHILDREN_PROCESSES);
+        false ->
+            lists:map(MapFun, List)
     end.

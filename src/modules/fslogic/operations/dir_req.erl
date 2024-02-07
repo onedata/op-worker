@@ -105,9 +105,7 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
     #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
-            child_links = lists_utils:pfiltermap(fun(#file_attr{name = Name, guid = Guid}) ->
-                {true, #child_link{name = Name, guid = Guid}}
-            end, ChildrenAttrs, ?MAX_MAP_CHILDREN_PROCESSES),
+            child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
             pagination_token = PaginationToken
         }
     }.
@@ -254,7 +252,7 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
 
 %% @private
 -spec list_children_attrs_internal(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()],
-    [file_attr:file_attr()]) -> {[file_attr:file_attr()], file_listing:pagination_token(), file_ctx:ctx()}.
+    [file_attr:record()]) -> {[file_attr:record()], file_listing:pagination_token(), file_ctx:ctx()}.
 list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
     
@@ -337,9 +335,7 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
     [Attributes].
 gather_attributes(MapperFun, Entries) ->
     FilterMapFun = fun(Entry) ->
-        ?catch_not_found_as(false, begin
-            {true, MapperFun(Entry)}
-        end)
+        ?catch_not_found_as(false, {true, MapperFun(Entry)})
     end,
     lists_utils:pfiltermap(FilterMapFun, Entries, ?MAX_MAP_CHILDREN_PROCESSES).
 

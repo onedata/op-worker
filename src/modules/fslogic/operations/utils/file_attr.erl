@@ -51,9 +51,9 @@
     name_conflicts_resolution_policy => name_conflicts_resolution_policy()
 }.
 
--type file_attr() :: #file_attr{}.
+-type record() :: #file_attr{}.
 
--export_type([file_attr/0, file_type/0, resolve_opts/0, attribute/0]).
+-export_type([record/0, file_type/0, resolve_opts/0, attribute/0]).
 
 -record(state, {
     file_ctx :: file_ctx:ctx(),
@@ -88,7 +88,7 @@
 %%% API
 %%%===================================================================
 
--spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {file_attr(), file_ctx:ctx()}.
+-spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
         undefined -> RequestedAttributes;
@@ -102,15 +102,16 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
-    % for spaces not supported locally effective value cache is not initialized
+    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
+    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
     IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
-        ({_, effective, _}, {AccState, AccFileAttr}) when IsRemoteOnlySpace ->
-            {AccState, AccFileAttr};
+        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsRemoteOnlySpace ->
+            {AccState, AccFileAttrRecord};
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
-            {StageState, StageFileAtrrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
-            {StageState, merge_records(AccFileAttrRecord, StageFileAtrrRecord)}
+            {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
+            {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
         end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
@@ -130,7 +131,7 @@ should_fetch_xattrs(AttributesList) ->
 %%%===================================================================
 
 %% @private
--spec resolve_file_meta_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_file_meta_attrs(state()) -> {state(), record()}.
 resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} = State) ->
     {FileDoc, State2} = get_file_doc(State),
     {ParentGuid, #state{file_ctx = FileCtx} = State3} = resolve_parent_guid(State2),
@@ -155,7 +156,7 @@ resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} 
 
 
 %% @private
--spec resolve_name_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_name_attrs(state()) -> {state(), record()}.
 resolve_name_attrs(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
@@ -169,7 +170,7 @@ resolve_name_attrs(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
 
 
 %% @private
--spec resolve_times_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_times_attrs(state()) -> {state(), record()}.
 resolve_times_attrs(#state{file_ctx = FileCtx} = State) ->
     {{ATime, CTime, MTime}, FileCtx2} = file_ctx:get_times(FileCtx),
     {State#state{file_ctx = FileCtx2}, #file_attr{
@@ -180,7 +181,7 @@ resolve_times_attrs(#state{file_ctx = FileCtx} = State) ->
 
 
 %% @private
--spec resolve_location_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_location_attrs(state()) -> {state(), record()}.
 resolve_location_attrs(#state{file_ctx = FileCtx} = State) ->
     {Type, FileCtx2} = file_ctx:get_effective_type(FileCtx),
     UpdatedState = State#state{file_ctx = FileCtx2},
@@ -192,7 +193,7 @@ resolve_location_attrs(#state{file_ctx = FileCtx} = State) ->
 
 
 %% @private
--spec resolve_luma_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_luma_attrs(state()) -> {state(), record()}.
 resolve_luma_attrs(#state{file_ctx = FileCtx} = State) ->
     case file_id:guid_to_share_id(file_ctx:get_logical_guid_const(FileCtx)) of
         undefined ->
@@ -210,7 +211,7 @@ resolve_luma_attrs(#state{file_ctx = FileCtx} = State) ->
 
 
 %% @private
--spec resolve_dataset_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_dataset_attrs(state()) -> {state(), record()}.
 resolve_dataset_attrs(#state{file_ctx = FileCtx} = State) ->
     {ok, EffectiveDatasetInheritancePath, EffectiveProtectionFlags, EffDatasetProtectionFlags, FileCtx2} =
         dataset_api:get_effective_inheritance_path_and_protection_flags(FileCtx),
@@ -222,7 +223,7 @@ resolve_dataset_attrs(#state{file_ctx = FileCtx} = State) ->
 
 
 %% @private
--spec resolve_archive_recall_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_archive_recall_attrs(state()) -> {state(), record()}.
 resolve_archive_recall_attrs(State) ->
     {FileMetaDoc, #state{file_ctx = FileCtx} = UpdatedState} = get_file_doc(State),
     EffectiveRecallRootGuid = case archive_recall:get_effective_recall(FileMetaDoc) of
@@ -235,7 +236,7 @@ resolve_archive_recall_attrs(State) ->
 
 
 %% @private
--spec resolve_qos_status_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_qos_status_attrs(state()) -> {state(), record()}.
 resolve_qos_status_attrs(#state{file_ctx = FileCtx} = State) ->
     QosStatus = case qos_req:get_effective_file_qos_insecure(FileCtx) of
         {ok, {QosEntriesWithStatus, _}} when map_size(QosEntriesWithStatus) == 0 ->
@@ -249,7 +250,7 @@ resolve_qos_status_attrs(#state{file_ctx = FileCtx} = State) ->
 
 
 %% @private
--spec resolve_qos_eff_value_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_qos_eff_value_attrs(state()) -> {state(), record()}.
 resolve_qos_eff_value_attrs(State) ->
     {FileDoc, UpdatedState} = get_file_doc(State),
     EffectiveQoSInheritancePath = file_qos:qos_inheritance_path(FileDoc),
@@ -257,14 +258,14 @@ resolve_qos_eff_value_attrs(State) ->
 
 
 %% @private
--spec resolve_path(state()) -> {state(), file_attr()}.
+-spec resolve_path(state()) -> {state(), record()}.
 resolve_path(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     {Path, FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
     {State#state{file_ctx = FileCtx2}, #file_attr{path = Path}}.
 
 
 %% @private
--spec resolve_metadata_attrs(state()) -> {state(), file_attr()}.
+-spec resolve_metadata_attrs(state()) -> {state(), record()}.
 resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
     {ok, AllXattrs} = xattr:get_all_direct_insecure(FileCtx),
     {State#state{xattrs = AllXattrs}, #file_attr{
@@ -279,7 +280,7 @@ resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
 
 
 %% @private
--spec resolve_xattrs(state()) -> {state(), file_attr()}.
+-spec resolve_xattrs(state()) -> {state(), record()}.
 resolve_xattrs(#state{xattrs = undefined, file_ctx = FileCtx} = State) ->
     {ok, AllXattrs} = xattr:get_all_direct_insecure(FileCtx),
     resolve_xattrs(State#state{xattrs = AllXattrs});
@@ -294,8 +295,8 @@ resolve_xattrs(#state{current_stage_attrs = XattrNames, xattrs = AllDirectXattrs
 %%%===================================================================
 
 %% @private
--spec resolve_stage(state(), [attribute()], fun((state()) -> {state(), file_attr()})) ->
-    {state(), file_attr()}.
+-spec resolve_stage(state(), [attribute()], fun((state()) -> {state(), record()})) ->
+    {state(), record()}.
 resolve_stage(#state{options = #{attributes := RequestedAttrs}} = State, ?XATTRS_STAGE, StageFun) ->
     case should_fetch_xattrs(RequestedAttrs) of
         {true, XattrsNames} ->
@@ -340,7 +341,7 @@ build_index(FileCtx, FileDoc) ->
 
 %% @private
 -spec resolve_private_base_attrs(user_ctx:ctx(), od_space:id(), file_meta:doc()) ->
-    file_attr().
+    record().
 resolve_private_base_attrs(UserCtx, SpaceId, #document{value = #file_meta{shares = Shares} = FM}) ->
     VisibleShares = case user_ctx:is_root(UserCtx) of
         true ->
@@ -373,7 +374,7 @@ resolve_private_base_attrs(UserCtx, SpaceId, #document{value = #file_meta{shares
 %% @end
 %%--------------------------------------------------------------------
 -spec get_masked_private_base_attrs(od_share:id(), file_meta:doc()) ->
-    file_attr().
+    record().
 get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
     mode = RealMode,
     shares = AllShares
@@ -416,7 +417,7 @@ resolve_link_count(FileCtx, ShareId, RequestedAttrs) ->
 
 
 %% @private
--spec resolve_location_attrs_for_reg_file(state()) -> {state(), file_attr()}.
+-spec resolve_location_attrs_for_reg_file(state()) -> {state(), record()}.
 resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs} = State) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     {OptionalAttr, FileCtx3} = case {are_any_attrs_requested([local_replication_rate, is_fully_replicated], State), Size} of
@@ -443,7 +444,7 @@ resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_att
 
 
 %% @private
--spec resolve_location_attrs_for_dir(state()) -> {state(), file_attr()}.
+-spec resolve_location_attrs_for_dir(state()) -> {state(), record()}.
 resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
@@ -480,7 +481,7 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
 
 
 %% @private
--spec resolve_location_attrs_for_symlink(state()) -> {state(), file_attr()}.
+-spec resolve_location_attrs_for_symlink(state()) -> {state(), record()}.
 resolve_location_attrs_for_symlink(State) ->
     {FileDoc, UpdatedState} = get_file_doc(State),
     {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
@@ -490,7 +491,7 @@ resolve_location_attrs_for_symlink(State) ->
 
 
 %% @private
--spec build_dir_size_attr(map(), boolean(), file_ctx:ctx()) -> file_attr().
+-spec build_dir_size_attr(map(), boolean(), file_ctx:ctx()) -> record().
 build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx) ->
     VirtualSize = maps:get(?VIRTUAL_SIZE, StatsResult, 0),
     OptionalAttr = case ShouldCalculateRatio of
@@ -515,7 +516,7 @@ count_bytes(FileLocationDoc) -> file_location:count_bytes(FileLocationDoc).
 
 
 %% @private
--spec resolve_name_attrs_internal(state()) -> {state(), file_attr()}.
+-spec resolve_name_attrs_internal(state()) -> {state(), record()}.
 resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     ShouldCalculateConflicts =
         are_any_attrs_requested([conflicting_name, conflicting_files], State) orelse
@@ -531,7 +532,7 @@ resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = Sta
 
 
 %% @private
--spec resolve_name_attrs_conflicts(state()) -> {state(), file_attr()}.
+-spec resolve_name_attrs_conflicts(state()) -> {state(), record()}.
 resolve_name_attrs_conflicts(State) ->
     {FileDoc, #state{file_ctx = FileCtx} = UpdatedState} = get_file_doc(State),
     {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),

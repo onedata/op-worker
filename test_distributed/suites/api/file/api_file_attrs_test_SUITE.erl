@@ -468,20 +468,13 @@ build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
 %% @private
 -spec build_get_attrs_validate_rest_call_fun(#file_attr{}, undefined | od_share:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_attrs_validate_rest_call_fun(#file_attr{acl = Acl} = FileAttrs, ShareId) ->
-    fun(#api_test_ctx{node = Node, client = Client, data = Data} = TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ProviderId = case ShareId of
-            undefined -> opw_test_rpc:get_provider_id(Node);
-            _ -> undefined
-        end,
-        User4Id = oct_background:get_user_id(user4),
-        case {Client, is_acl_requested(Data), Acl} of
-            {?USER(UserId), true, [_|_]} when UserId == User4Id ->
-                ?assertEqual({?HTTP_400_BAD_REQUEST, #{<<"error">> => errors:to_json(?ERROR_POSIX(?EACCES))}}, {RespCode, RespBody});
-            _ ->
-                JsonAttrs = api_test_utils:file_attr_to_json(ShareId, rest, ProviderId, FileAttrs),
-                {ok, ExpAttrs} = get_attrs_exp_result(TestCtx, JsonAttrs, ShareId),
-                ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody})
+build_get_attrs_validate_rest_call_fun(FileAttr, ShareId) ->
+    fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        case get_attrs_exp_result(TestCtx, FileAttr, ShareId) of
+            {ok, ExpAttrs} ->
+                ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
+            {error, _} = Error ->
+                ?assertEqual({?HTTP_400_BAD_REQUEST, #{<<"error">> => errors:to_json(Error)}}, {RespCode, RespBody})
         end
     end.
 
@@ -489,58 +482,68 @@ build_get_attrs_validate_rest_call_fun(#file_attr{acl = Acl} = FileAttrs, ShareI
 %% @private
 -spec build_get_attrs_validate_gs_call_fun(#file_attr{}, undefined | od_share:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_attrs_validate_gs_call_fun(#file_attr{acl = Acl} = FileAttrs, ShareId) ->
-    fun(#api_test_ctx{node = Node, client = Client, data = Data} = TestCtx, Result) ->
-        JsonAttrs = api_test_utils:file_attr_to_json(ShareId, gs, opw_test_rpc:get_provider_id(Node), FileAttrs),
-        User4Id = oct_background:get_user_id(user4),
-        case {Client, is_acl_requested(Data), Acl} of
-            {?USER(UserId), true, [_|_]} when UserId == User4Id ->
-                ?assertEqual(?ERROR_POSIX(?EACCES), Result);
-            _ ->
-                {ok, ExpAttrs} = get_attrs_exp_result(TestCtx, JsonAttrs, ShareId),
+build_get_attrs_validate_gs_call_fun(FileAttr, ShareId) ->
+    fun(TestCtx, Result) ->
+        case get_attrs_exp_result(TestCtx, FileAttr, ShareId) of
+            {ok, ExpAttrs} ->
                 {ok, ResultMap} = ?assertMatch({ok, _}, Result),
-                ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap))
+                ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap));
+            {error, _} = Error ->
+                ?assertEqual(Error, Result)
         end
     end.
-
-
-is_acl_requested(Data) ->
-    lists:member(<<"acl">>, utils:ensure_list(maps:get(<<"attributes">>, Data, maps:get(<<"attribute">>, Data, [])))).
 
 
 %% @private
 -spec get_attrs_exp_result(
     onenv_api_test_runner:api_test_ctx(),
-    AllFileAttrs :: map(),
+    file_attr:record(),
     undefined | od_share:id()
 ) ->
     {ok, ExpectedFileAttrs :: map()}.
-get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
-    {AttrType, RequestedAttributesJson} = case maps:get(<<"attributes">>, Data, undefined) of
-        undefined ->
-            case ShareId of
-                %% @TODO VFS-11377 change defaults after deprecated attrs are removed
-                undefined -> {deprecated, lists:flatmap(fun(A) ->
-                    [file_attr_translator:attr_name_to_json(deprecated, A), file_attr_translator:attr_name_to_json(A)]
-                end, ?DEPRECATED_ALL_ATTRS)};
-                _ -> {deprecated, lists:flatmap(fun(A) ->
-                    [file_attr_translator:attr_name_to_json(deprecated, A), file_attr_translator:attr_name_to_json(A)]
-                end, ?DEPRECATED_PUBLIC_ATTRS)}
-            end;
-        Attr ->
-            {current, utils:ensure_list(Attr)}
-    end,
-    JsonAttrs2 = case AttrType of
-        deprecated -> maps:merge(JsonAttrs, api_test_utils:replace_attrs_with_deprecated(JsonAttrs));
-        current -> JsonAttrs
-    end,
-    {ok, maps:with(RequestedAttributesJson, JsonAttrs2)}.
+get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #file_attr{acl = Acl} = FileAttr, ShareId) ->
+    User4Id = oct_background:get_user_id(user4),
+    case {Client, is_acl_requested(Data), Acl} of
+        {?USER(UserId), true, [_|_]} when UserId == User4Id ->
+            ?ERROR_POSIX(?EACCES);
+        _ ->
+            ProviderId = case ShareId of
+                undefined -> opw_test_rpc:get_provider_id(Node);
+                _ -> undefined
+            end,
+            JsonAttrs = api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr),
+            {AttrType, RequestedAttributesJson} = case maps:get(<<"attributes">>, Data, undefined) of
+                undefined ->
+                    case ShareId of
+                        %% @TODO VFS-11377 change defaults after deprecated attrs are removed
+                        undefined ->
+                            {deprecated, lists:flatmap(fun(A) ->
+                                [file_attr_translator:attr_name_to_json(deprecated, A), file_attr_translator:attr_name_to_json(A)]
+                            end, ?DEPRECATED_ALL_ATTRS)};
+                        _ ->
+                            {deprecated, lists:flatmap(fun(A) ->
+                                [file_attr_translator:attr_name_to_json(deprecated, A), file_attr_translator:attr_name_to_json(A)]
+                            end, ?DEPRECATED_PUBLIC_ATTRS)}
+                    end;
+                Attr ->
+                    {current, utils:ensure_list(Attr)}
+            end,
+            JsonAttrs2 = case AttrType of
+                deprecated -> maps:merge(JsonAttrs, api_test_utils:replace_attrs_with_deprecated(JsonAttrs));
+                current -> JsonAttrs
+            end,
+            {ok, maps:with(RequestedAttributesJson, JsonAttrs2)}
+    end.
+
+
+%% @private
+is_acl_requested(Data) ->
+    lists:member(<<"acl">>, utils:ensure_list(maps:get(<<"attributes">>, Data, maps:get(<<"attribute">>, Data, [])))).
 
 
 %%%===================================================================
 %%% Get shares test functions
 %%%===================================================================
-
 
 get_file_shares_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -820,7 +823,6 @@ build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
 %%%===================================================================
 %%% Get file distribution test functions
 %%%===================================================================
-
 
 get_reg_file_distribution_test(Config) ->
     P1Id = oct_background:get_provider_id(krakow),
@@ -1800,7 +1802,6 @@ gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
-
 
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{

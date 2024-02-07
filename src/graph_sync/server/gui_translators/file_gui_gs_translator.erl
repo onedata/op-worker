@@ -204,15 +204,11 @@ map_file_attr_fields(FileAttrJson) ->
 %% @private
 -spec map_file_attr_file_id(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_file_id(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
-    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
-        <<"fileId">> => ensure_guid(ObjectId),
-        <<"file_id">> => ensure_guid(ObjectId)
-    });
+    update_attr_if_exists(FileAttrJson, <<"fileId">>, ensure_guid(ObjectId)),
+    update_attr_if_exists(FileAttrJson, <<"file_id">>, ensure_guid(ObjectId));
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_file_id(#{<<"file_id">> := ObjectId} = FileAttrJson) ->
-    maps:keys(FileAttrJson), FileAttrJson#{
-        <<"file_id">> => ensure_guid(ObjectId)
-    };
+    update_attr_if_exists(FileAttrJson, <<"file_id">>, ensure_guid(ObjectId));
 map_file_attr_file_id(FileAttrJson) ->
     FileAttrJson.
 
@@ -220,15 +216,11 @@ map_file_attr_file_id(FileAttrJson) ->
 %% @private
 -spec map_file_attr_parent(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_parent(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
-    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
-        <<"parentFileId">> => ensure_guid(ParentObjectId),
-        <<"parent_id">> => ensure_guid(ParentObjectId)
-    });
+    update_attr_if_exists(FileAttrJson, <<"parentFileId">>, ensure_guid(ParentObjectId)),
+    update_attr_if_exists(FileAttrJson, <<"parent_id">>, ensure_guid(ParentObjectId));
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_parent(#{<<"parent_id">> := ParentObjectId} = FileAttrJson) ->
-    FileAttrJson#{
-        <<"parent_id">> => ensure_guid(ParentObjectId)
-    };
+    update_attr_if_exists(FileAttrJson, <<"parent_id">>, ensure_guid(ParentObjectId));
 map_file_attr_parent(FileAttrJson) ->
     FileAttrJson.
 
@@ -236,15 +228,11 @@ map_file_attr_parent(FileAttrJson) ->
 %% @private
 -spec map_file_attr_owner(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_owner(#{<<"ownerUserId">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) ->
-    maps:with(maps:keys(FileAttrJson), FileAttrJson#{
-        <<"ownerUserId">> => null,
-        <<"owner_id">> => null
-    });
+    update_attr_if_exists(FileAttrJson, <<"ownerUserId">>, null),
+    update_attr_if_exists(FileAttrJson, <<"owner_id">>, null);
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_owner(#{<<"owner_id">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) ->
-    FileAttrJson#{
-        <<"owner_id">> => null
-    };
+    update_attr_if_exists(FileAttrJson, <<"owner_id">>, null);
 map_file_attr_owner(FileAttrJson) ->
     FileAttrJson.
 
@@ -255,3 +243,15 @@ ensure_guid(null) -> null;
 ensure_guid(ObjectId) ->
     {ok, Guid} = file_id:objectid_to_guid(ObjectId),
     Guid.
+
+
+%% @private
+-spec update_attr_if_exists(json_utils:json_map(), json_utils:json_term(), json_utils:json_term()) ->
+    json_utils:json_map().
+update_attr_if_exists(JsonAttrs, Key, Value) ->
+    case maps:find(Key, JsonAttrs) of
+        {ok, _} ->
+            JsonAttrs#{Key => Value};
+        error ->
+            JsonAttrs
+    end.

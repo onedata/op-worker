@@ -199,7 +199,7 @@ sanitize_requested_attrs(Attributes, AttrType, AllowedAttributes) ->
 %%%===================================================================
 
 %% @private
--spec to_json_internal(attr_type(), file_attr:file_attr(), [file_attr:attribute()]) -> json_utils:json_map().
+-spec to_json_internal(attr_type(), file_attr:record(), [file_attr:attribute()]) -> json_utils:json_map().
 to_json_internal(AttrType, #file_attr{
     guid = Guid,
     index = Index,

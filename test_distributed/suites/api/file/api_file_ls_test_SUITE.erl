@@ -684,6 +684,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
                         api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, Attrs))
             end,
             case fslogic_file_id:is_space_dir_guid(Guid) of
+                % do not check localReplicationRate for space dirs as it might be difficult to determine actual correct value
                 true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
                 false -> MappedChildAttrs
             end

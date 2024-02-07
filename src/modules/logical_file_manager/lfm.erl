@@ -505,7 +505,7 @@ get_children_attrs(SessId, FileKey, ListOpts, Attributes) ->
     dir_req:recursive_listing_opts(),
     [file_attr:attribute()]
 ) ->
-    {ok, [file_attr:file_attr()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
+    {ok, [file_attr:record()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
 get_files_recursively(SessId, FileKey, Options, Attributes) ->
     ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options, Attributes)).
 

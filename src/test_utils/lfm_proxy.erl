@@ -591,7 +591,7 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     dir_req:recursive_listing_opts(),
     [file_attr:attribute()]
 ) ->
-    {ok, [file_attr:file_attr()], [file_meta:path()], recursive_listing:pagination_token()} | lfm:error_reply().
+    {ok, [file_attr:record()], [file_meta:path()], recursive_listing:pagination_token()} | lfm:error_reply().
 get_files_recursively(Worker, SessId, FileKey, Options, Attributes) ->
     ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options, Attributes)).
 
