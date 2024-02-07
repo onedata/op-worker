@@ -25,7 +25,8 @@
 
 -export([gen_file_download_url/3, handle/2]).
 
--define(FIRST_FILE_BLOCK_SYNC_PRIORITY, op_worker:get_env(download_first_file_block_sync_priority, 1)).
+% TODO VFS-11735 Determine highest sync priority
+-define(FIRST_FILE_BLOCK_SYNC_PRIORITY, op_worker:get_env(download_first_file_block_sync_priority, 32)).
 
 
 %%%===================================================================
