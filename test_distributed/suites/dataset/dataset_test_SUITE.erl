@@ -131,11 +131,11 @@ all() -> ?ALL([
         ExpectedRootFilePath, ExpectedRootFileType, ExpectedRootFileDeleted, ExpectedProtectionFlags)
 ).
 
--define(assertDatasetMembership(Node, SessionId, Guid, ExpectedMembership, ExpectedProtectionFlags),
+-define(assertDatasetInheritancePath(Node, SessionId, Guid, ExpectedInheritancePath, ExpectedProtectionFlags),
     ?assertMatch({ok, #file_attr{
-        eff_dataset_membership = ExpectedMembership,
+        eff_dataset_inheritance_path = ExpectedInheritancePath,
         eff_protection_flags = ExpectedProtectionFlags
-    }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid), [eff_dataset_membership, eff_protection_flags]), ?ATTEMPTS)
+    }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid), [eff_dataset_inheritance_path, eff_protection_flags]), ?ATTEMPTS)
 ).
 
 -define(assertFileEffDatasetSummary(Node, SessionId, Guid, ExpectedDirectDataset, ExpectedAncestorDatasets, ExpectedProtectionFlags),
@@ -163,8 +163,8 @@ all() -> ?ALL([
     ?assertMatch([{DatasetId, Name, _}], Fun(), ?ATTEMPTS)
  end).
 
--define(assertFileEffDatasetSummaryAndMembership(Node, SessionId, Guid, ExpectedDirectDataset, ExpectedAncestorDatasets, ExpectedMembership, ExpectedProtectionFlags), begin
-    ?assertDatasetMembership(Node, SessionId, Guid, ExpectedMembership, ExpectedProtectionFlags),
+-define(assertFileEffDatasetSummaryAndInheritancePath(Node, SessionId, Guid, ExpectedDirectDataset, ExpectedAncestorDatasets, ExpectedInheritancePath, ExpectedProtectionFlags), begin
+    ?assertDatasetInheritancePath(Node, SessionId, Guid, ExpectedInheritancePath, ExpectedProtectionFlags),
     ?assertFileEffDatasetSummary(Node, SessionId, Guid, ExpectedDirectDataset, ExpectedAncestorDatasets, ExpectedProtectionFlags)
 end).
 
@@ -190,7 +190,7 @@ establish_dataset_attached_to_space_dir(_Config) ->
     ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(SpaceGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, SpaceGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, SpaceGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, SpaceGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, SpaceGuid, DatasetId, [], ProtectionFlags).
 
 establish_dataset_attached_to_dir(_Config) ->
@@ -203,7 +203,7 @@ establish_dataset_attached_to_dir(_Config) ->
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags).
 
 establish_dataset_attached_to_file(_Config) ->
@@ -216,7 +216,7 @@ establish_dataset_attached_to_file(_Config) ->
     {ok, Guid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags).
 
 
@@ -233,7 +233,7 @@ establish_dataset_attached_to_hardlink(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, LinkPath, FileGuid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags).
 
@@ -253,7 +253,7 @@ establish_dataset_attached_to_file_symlink(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask).
 
@@ -273,7 +273,7 @@ establish_dataset_attached_to_dir_symlink(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirGuid, undefined, [], ?no_flags_mask).
 
@@ -288,7 +288,7 @@ detach_and_reattach_dataset(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     % detach dataset
@@ -296,14 +296,14 @@ detach_and_reattach_dataset(_Config) ->
 
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
     % reattach dataset
     ?assertMatch(ok, reattach(P1Node, UserSessIdP1, DatasetId)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags).
 
 remove_attached_dataset(_Config) ->
@@ -327,7 +327,7 @@ remove_attached_dataset(_Config) ->
         opt_datasets:establish(P1Node, User2SessIdP1, ?FILE_REF(Guid), ProtectionFlags), ?ATTEMPTS),
 
     ?assertAttachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     % traverse permission to file is required to remove attached dataset
@@ -341,7 +341,7 @@ remove_attached_dataset(_Config) ->
     ?assertMatch(ok, opt_datasets:remove(P1Node, User2SessIdP1, DatasetId)),
 
     ?assertNoDataset(P1Node, User2SessIdP1, DatasetId),
-    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, undefined, [], ?no_flags_mask),
     ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, attached),
     ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, detached).
@@ -365,12 +365,12 @@ remove_detached_dataset(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _},
         opt_datasets:establish(P1Node, User2SessIdP1, ?FILE_REF(Guid), ProtectionFlags), ?ATTEMPTS),
     ?assertAttachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     ok = detach(P1Node, User2SessIdP1, DatasetId),
     ?assertDetachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
     % traverse permission to file is NOT required to remove detached dataset
@@ -383,7 +383,7 @@ remove_detached_dataset(_Config) ->
     % revert perms to perform operations on file
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, ?FILE_REF(ParentGuid), ?DEFAULT_DIR_PERMS),
 
-    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, undefined, [], ?no_flags_mask),
     ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, attached),
     ?assertNoTopDatasets(P1Node, User2SessIdP1, SpaceId, detached).
@@ -400,7 +400,7 @@ remove_file_should_detach_dataset(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
@@ -425,7 +425,7 @@ remove_hardlink_should_detach_dataset(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, LinkPath, FileGuid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
     % delete hardlink, dataset should be detached
@@ -452,7 +452,7 @@ remove_file_symlink_should_detach_dataset(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
     % delete symlink, dataset should be detached
@@ -479,7 +479,7 @@ remove_dir_symlink_should_detach_dataset(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirGuid, undefined, [], ?no_flags_mask),
     % delete symlink, dataset should be detached
@@ -504,14 +504,14 @@ remove_file_pointed_by_hardlink(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, LinkPath, FileGuid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
     % delete file, dataset should stay attached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(FileGuid)),
     ?assertMatch(?ERROR_NOT_FOUND, opt_datasets:get_file_eff_summary(P1Node, UserSessIdP1, ?FILE_REF(FileGuid))),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
 
 
@@ -530,14 +530,14 @@ remove_file_pointed_by_symlink(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
     % delete file, dataset should stay attached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(FileGuid)),
     ?assertMatch(?ERROR_NOT_FOUND, opt_datasets:get_file_eff_summary(P1Node, UserSessIdP1, ?FILE_REF(FileGuid))),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
 
 
@@ -556,13 +556,13 @@ remove_dir_pointed_by_symlink(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirGuid, undefined, [], ?no_flags_mask),
     % delete directory, dataset should stay attached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(DirGuid)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags).
 
 
@@ -578,7 +578,7 @@ reattach_if_root_file_is_deleted_should_fail(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
@@ -605,7 +605,7 @@ reattach_if_hardlink_is_deleted_should_fail(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, LinkPath, FileGuid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
 
@@ -635,7 +635,7 @@ reattach_if_file_symlink_is_deleted_should_fail(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
 
@@ -666,7 +666,7 @@ reattach_if_dir_symlink_is_deleted_should_fail(_Config) ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, UserSessIdP1, LinkPath, LinkTarget),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirGuid, undefined, [], ?no_flags_mask),
 
@@ -692,7 +692,7 @@ remove_detached_dataset_if_root_file_has_already_been_deleted(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
@@ -733,7 +733,7 @@ establish_2nd_dataset_on_file_should_fail(_Config) ->
     {ok, Guid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
     ?assertMatch(?ERROR_ALREADY_EXISTS, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)).
 
@@ -763,8 +763,8 @@ establish_nested_datasets_structure(_Config) ->
 
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetIds}) ->
         {ExpParentDatasetId, ExpMembership} = case ExpParentDatasetIds =:= [] of
-            true -> {undefined, ?DIRECT_MEMBERSHIP};
-            false -> {hd(ExpParentDatasetIds), ?DIRECT_AND_ANCESTOR_MEMBERSHIP}
+            true -> {undefined, ?DIRECT_INHERITANCE_PATH};
+            false -> {hd(ExpParentDatasetIds), ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH}
         end,
         ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, ExpParentDatasetId, ProtectionFlags),
         ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ExpMembership, ProtectionFlags),
@@ -801,7 +801,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetId}) ->
         {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
         ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, ExpParentDatasetId, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
-        ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+        ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
         {ChildGuid, ChildDatasetId, DatasetId}
     end, {SpaceGuid, SpaceDatasetId, undefined}, tl(GuidsAndDatasets)).
@@ -820,7 +820,7 @@ all_files_in_dataset_should_have_ancestor_dataset_membership(_Config) ->
         opt_datasets:list_children_datasets(P1Node, UserSessIdP1, SpaceDatasetId, #{offset => 0, limit => 100})),
 
     lists:foreach(fun(Guid) ->
-        ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?ANCESTOR_MEMBERSHIP, ProtectionFlags),
+        ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?ANCESTOR_INHERITANCE, ProtectionFlags),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, undefined, [SpaceDatasetId], ProtectionFlags)
     end, DirGuids ++ FileGuids).
 
@@ -837,13 +837,13 @@ rename_file_should_rename_attached_dataset(_Config) ->
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(SpaceGuid), NewDirName),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags).
 
 rename_file_should_not_rename_detached_dataset(_Config) ->
@@ -859,14 +859,14 @@ rename_file_should_not_rename_detached_dataset(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     {ok, SourcePatch} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     ok = detach(P1Node, UserSessIdP1, DatasetId),
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(SpaceGuid), NewDirName),
 
     ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, false, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask).
 
 
@@ -883,14 +883,14 @@ move_file_should_move_attached_dataset(_Config) ->
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     {ok, TargetParentGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, TargetParentName, ?DEFAULT_DIR_PERMS),
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(TargetParentGuid), NewDirName),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags).
 
 
@@ -908,7 +908,7 @@ move_file_should_not_move_detached_dataset(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     {ok, SourcePatch} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     {ok, TargetParentGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, TargetParentName, ?DEFAULT_DIR_PERMS),
@@ -916,7 +916,7 @@ move_file_should_not_move_detached_dataset(_Config) ->
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(TargetParentGuid), NewDirName),
 
     ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, false, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask).
 
 
@@ -934,7 +934,7 @@ reattach_to_moved_root_file(_Config) ->
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
     {ok, SourcePatch} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     {ok, TargetParentGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, TargetParentName, ?DEFAULT_DIR_PERMS),
@@ -942,12 +942,12 @@ reattach_to_moved_root_file(_Config) ->
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(TargetParentGuid), NewDirName),
 
     ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, false, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_MEMBERSHIP, ?no_flags_mask),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_INHERITANCE_PATH, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
     ok = reattach(P1Node, UserSessIdP1, DatasetId),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
-    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+    ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_INHERITANCE_PATH, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached).
 
@@ -1089,27 +1089,27 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
 
     % verify file dataset ancestors and protection flags
     ?assertAttachedDataset(P1Node, UserSessIdP1, FileDatasetId, FileGuid, DirLvl4DatasetId, ?no_flags_mask, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, FileGuid, FileDatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, FileGuid, FileDatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH, ?ALL_PROTECTION),
 
     % verify dirs dataset ancestors and protection flags
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl4DatasetId, DirLvl4Guid, DirLvl3DatasetId, ?DATA_PROTECTION, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl4Guid, DirLvl4DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl4Guid, DirLvl4DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl3DatasetId, DirLvl3Guid, DirLvl2DatasetId, ?ALL_PROTECTION, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl2DatasetId, DirLvl2Guid, undefined, ?no_flags_mask, ?no_flags_mask),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl2Guid, DirLvl2DatasetId, [], ?DIRECT_MEMBERSHIP, ?no_flags_mask),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl2Guid, DirLvl2DatasetId, [], ?DIRECT_INHERITANCE_PATH, ?no_flags_mask),
 
     % verify links dataset ancestors and protection flags
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link4DatasetId, Link4Guid, DirLvl4DatasetId, ?DATA_PROTECTION, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link4Guid, Link4DatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link4Guid, Link4DatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link3DatasetId, Link3Guid, DirLvl3DatasetId, ?ALL_PROTECTION, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link3Guid, Link3DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link3Guid, Link3DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link1DatasetId, Link1Guid, undefined, ?no_flags_mask, ?no_flags_mask),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link1Guid, Link1DatasetId, [], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION).
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link1Guid, Link1DatasetId, [], ?DIRECT_INHERITANCE_PATH, ?ALL_PROTECTION).
 
 
 remove_hardlink_with_protection_flags(_Config) ->

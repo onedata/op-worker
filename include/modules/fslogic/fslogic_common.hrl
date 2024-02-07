@@ -123,8 +123,8 @@
 % Separator between space name and its id added in case of duplicated name.
 -define(SPACE_NAME_ID_SEPARATOR, <<"@">>).
 
--define(catch_not_found(_Code), ?catch_not_found(_Code, not_found)).
--define(catch_not_found(_Code, ReturnValue),
+-define(catch_not_found(_Code), ?catch_not_found_as(not_found, _Code)).
+-define(catch_not_found_as(ReturnValue, _Code),
     try
         _Code
     catch Class:Reason ->

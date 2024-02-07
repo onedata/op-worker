@@ -593,14 +593,14 @@ build_listing_start_point_param_spec(Key) ->
 -spec infer_requested_attributes(middleware:data(), [file_attr:attribute()]) ->
     {file_attr_translator:attr_type() | default, [file_attr:attribute()]}.
 infer_requested_attributes(Data, Default) ->
-    case maps:get(<<"attributes">>, Data, undefined) of
-        undefined ->
-            case maps:get(<<"attribute">>, Data, undefined) of
-                undefined ->
+    case maps:find(<<"attributes">>, Data) of
+        error ->
+            case maps:find(<<"attribute">>, Data) of
+                error ->
                     {default, Default};
-                DeprecatedAttrs ->
+                {ok, DeprecatedAttrs} ->
                     {deprecated, DeprecatedAttrs}
             end;
-        Attrs ->
+        {ok, Attrs} ->
             {current, utils:ensure_list(Attrs)}
     end.

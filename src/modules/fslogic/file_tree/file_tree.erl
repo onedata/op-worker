@@ -39,12 +39,12 @@
 %%%  +------------------+    +----------+   +----------+            |                          |
 %%%                                          /       \              |                    +----------+
 %%%    +-------------+                      /         \             |                    | ^share3  |
-%%%    | &tmp_space1 |          +----------+          +----------+  |                    +----------+
-%%%    +-------------+          |   dir2   |          |  *file2  |__|__________________________/
-%%%                             +----------+          +----------+  |
-%%%                             /    |    \                         |
-%%%                            ...  ...   ...                       |
-%%%                                                                 |
+%%%    | &tmp_space1 |            +----------+        +----------+  |                    +----------+
+%%%    +-------------+            |   dir2   |        |  *file2  |__|__________________________/
+%%%         |                     +----------+        +----------+  |
+%%%  +-----------------------+    /    |    \                       |
+%%%  | &opened_deleted_files |   ...  ...   ...                     |
+%%%  +-----------------------+                                      |
 %%%
 %%% Description:
 %%% 1) !ROOT -  directory marked as parent for all user_root and space directories.
@@ -74,6 +74,8 @@
 %%%                 * archives_root - space archives root directory, which contains all archives
 %%%                   created in the space. For more details consult archives_tree.erl;
 %%%                 * tmp - directory which content is NOT synchronized between providers.
+%%%                 * opened_deleted_files - child of tmp, contains files that were deleted, but at
+%%%                   least one of theirs handles is still in use (have not been closed).
 %%% 7) file/dir - regular file/directory.
 %%% @end
 %%%--------------------------------------------------------------------

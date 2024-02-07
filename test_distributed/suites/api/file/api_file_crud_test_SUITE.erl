@@ -296,8 +296,8 @@ get_space_dir_attrs(ProviderSelector, SpaceDirGuid, SpaceName) ->
         parent_guid = undefined,
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
-        eff_qos_membership = ?NONE_MEMBERSHIP,
-        eff_dataset_membership = ?NONE_MEMBERSHIP,
+        eff_qos_inheritance_path = ?NONE_INHERITANCE_PATH,
+        eff_dataset_inheritance_path = ?NONE_INHERITANCE_PATH,
         has_custom_metadata = false
     }.
 

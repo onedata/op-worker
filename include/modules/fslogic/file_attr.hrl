@@ -45,8 +45,8 @@
     has_custom_metadata :: undefined | boolean(),
     eff_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_protection_flags :: undefined | data_access_control:bitmask(),
-    eff_dataset_membership :: undefined | dataset:membership(),
-    eff_qos_membership :: undefined | file_qos:membership(),
+    eff_dataset_inheritance_path :: undefined | dataset:inheritance_path(),
+    eff_qos_inheritance_path :: undefined | file_qos:inheritance_path(),
     qos_status :: undefined | qos_status:summary(),
     recall_root_id :: undefined | file_id:file_guid(),
     is_deleted :: undefined | boolean(),
@@ -64,8 +64,8 @@
 -define(TIMES_ATTRS, [atime, mtime, ctime]).
 -define(LOCATION_ATTRS, [size, is_fully_replicated, local_replication_rate]).
 -define(METADATA_ATTRS, [has_custom_metadata]).
--define(DATASET_ATTRS, [eff_dataset_membership, eff_dataset_protection_flags, eff_protection_flags]).
--define(QOS_EFF_VALUE_ATTRS, [eff_qos_membership]).
+-define(DATASET_ATTRS, [eff_dataset_inheritance_path, eff_dataset_protection_flags, eff_protection_flags]).
+-define(QOS_EFF_VALUE_ATTRS, [eff_qos_inheritance_path]).
 -define(QOS_STATUS_ATTRS, [qos_status]).
 -define(ARCHIVE_RECALL_ATTRS, [recall_root_id]).
 
@@ -89,10 +89,10 @@
     uid, gid, owner_id, provider_id, hardlink_count]).
 -define(DEPRECATED_PUBLIC_ATTRS, [guid, parent_guid, name, mode, atime, mtime, ctime, type, size, shares, index]).
 
-% Macros defining types of membership
--define(NONE_MEMBERSHIP, none).
--define(DIRECT_MEMBERSHIP, direct).
--define(ANCESTOR_MEMBERSHIP, ancestor).
--define(DIRECT_AND_ANCESTOR_MEMBERSHIP, direct_and_ancestor).
+% Macros defining types of inheritance path
+-define(NONE_INHERITANCE_PATH, none).
+-define(DIRECT_INHERITANCE_PATH, direct).
+-define(ANCESTOR_INHERITANCE, ancestor).
+-define(DIRECT_AND_ANCESTOR_INHERITANCE_PATH, direct_and_ancestor).
 
 -endif.

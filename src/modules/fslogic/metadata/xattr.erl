@@ -107,13 +107,7 @@ remove(UserCtx, FileCtx0, XattrName) ->
 -spec get_all_direct_insecure(file_ctx:ctx()) ->
     {ok, #{custom_metadata:name() => custom_metadata:value()}} | {error, term()}.
 get_all_direct_insecure(FileCtx) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    case custom_metadata:get_all_xattrs(FileUuid) of
-        {ok, AllXattrsWithValues} ->
-            {ok, AllXattrsWithValues};
-        {error, _} = Error ->
-            Error
-    end.
+    custom_metadata:get_all_xattrs(file_ctx:get_logical_uuid_const(FileCtx)).
 
 
 -spec filter_internal([custom_metadata:name()]) ->

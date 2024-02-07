@@ -143,9 +143,9 @@ get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
 -spec cache_file_doc_in_batch([file_ctx:ctx()]) -> [file_ctx:ctx()].
 cache_file_doc_in_batch(FileCtxs) ->
     FilterMapFun = fun(Ctx) ->
-        ?catch_not_found(begin
+        ?catch_not_found_as(false, begin
             {_, Ctx2} = file_ctx:get_file_doc(Ctx),
             {true, Ctx2}
-        end, false)
+        end)
     end,
     lists_utils:pfiltermap(FilterMapFun, FileCtxs, ?MAX_MAP_CHILDREN_PROCESSES).

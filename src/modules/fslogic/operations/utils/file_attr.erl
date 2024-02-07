@@ -31,7 +31,7 @@
 -type attribute() :: guid | index | type | active_permissions_type | mode | acl | name | conflicting_name | path |
     parent_guid | gid | uid | atime | mtime | ctime | size | is_fully_replicated | local_replication_rate |
     provider_id | shares | owner_id | hardlink_count | symlink_value | has_custom_metadata | eff_protection_flags |
-    eff_dataset_protection_flags | eff_dataset_membership | eff_qos_membership | qos_status | recall_root_id |
+    eff_dataset_protection_flags | eff_dataset_inheritance_path | eff_qos_inheritance_path | qos_status | recall_root_id |
     is_deleted | conflicting_files | {xattrs, [custom_metadata:name()]}.
 
 -type file_type() :: file_meta:type().
@@ -92,8 +92,9 @@
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
         undefined -> RequestedAttributes;
-        %% @TODO VFS-11299 deprecated, left for compatibility with oneclient
-        % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_ATTRS
+        %% @TODO VFS-11299 left for compatibility with oneclient
+        % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_ATTRS.
+        % It does not influence rest output, as it is later cut out in translation (see file_attr_translator.erl).
         _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_ATTRS, ?ONECLIENT_ATTRS))
     end,
     InitialState = #state{
@@ -104,14 +105,14 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     % for spaces not supported locally effective value cache is not initialized
     IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
-    {FinalState, FinalFileAttr} = lists:foldl(fun
+    {FinalState, FinalFileAttrRecord} = lists:foldl(fun
         ({_, effective, _}, {AccState, AccFileAttr}) when IsRemoteOnlySpace ->
             {AccState, AccFileAttr};
-        ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttr}) ->
-            {StageState, StageFileAtrr} = resolve_stage(AccState, AttrsSubset, StageFun),
-            {StageState, merge_records(AccFileAttr, StageFileAtrr)}
+        ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
+            {StageState, StageFileAtrrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
+            {StageState, merge_records(AccFileAttrRecord, StageFileAtrrRecord)}
         end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
-    {FinalFileAttr, FinalState#state.file_ctx}.
+    {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 
 -spec should_fetch_xattrs([attribute()] | resolve_opts()) -> {true, [custom_metadata:name()]} | false.
@@ -211,10 +212,10 @@ resolve_luma_attrs(#state{file_ctx = FileCtx} = State) ->
 %% @private
 -spec resolve_dataset_attrs(state()) -> {state(), file_attr()}.
 resolve_dataset_attrs(#state{file_ctx = FileCtx} = State) ->
-    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, EffDatasetProtectionFlags, FileCtx2} =
-        dataset_api:get_effective_membership_and_protection_flags(FileCtx),
+    {ok, EffectiveDatasetInheritancePath, EffectiveProtectionFlags, EffDatasetProtectionFlags, FileCtx2} =
+        dataset_api:get_effective_inheritance_path_and_protection_flags(FileCtx),
     {State#state{file_ctx = FileCtx2}, #file_attr{
-        eff_dataset_membership = EffectiveDatasetMembership,
+        eff_dataset_inheritance_path = EffectiveDatasetInheritancePath,
         eff_protection_flags = EffectiveProtectionFlags,
         eff_dataset_protection_flags = EffDatasetProtectionFlags
     }}.
@@ -251,8 +252,8 @@ resolve_qos_status_attrs(#state{file_ctx = FileCtx} = State) ->
 -spec resolve_qos_eff_value_attrs(state()) -> {state(), file_attr()}.
 resolve_qos_eff_value_attrs(State) ->
     {FileDoc, UpdatedState} = get_file_doc(State),
-    EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
-    {UpdatedState, #file_attr{eff_qos_membership = EffectiveQoSMembership}}.
+    EffectiveQoSInheritancePath = file_qos:qos_inheritance_path(FileDoc),
+    {UpdatedState, #file_attr{eff_qos_inheritance_path = EffectiveQoSInheritancePath}}.
 
 
 %% @private
@@ -449,8 +450,8 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             {State, #file_attr{}};
         _ ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ShouldCalculateRatio = are_any_attrs_requested([local_replication_rate], State),
-            {StatsToGet, FileCtx2} = case ShouldCalculateRatio of
+            ShouldCalculateLocalReplicationRate = are_any_attrs_requested([local_replication_rate], State),
+            {StatsToGet, FileCtx2} = case ShouldCalculateLocalReplicationRate of
                 true ->
                     case file_ctx:get_storage_id(FileCtx) of
                         {undefined, FC2} -> {[?LOGICAL_SIZE], FC2};
@@ -470,7 +471,10 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
                     %% TODO VFS-7208 return error after introducing API errors to fslogic
                     {State#state{file_ctx = FileCtx2}, #file_attr{}};
                 _ ->
-                    {State#state{file_ctx = FileCtx2}, build_dir_size_attr(StatsResult, ShouldCalculateRatio, FileCtx2)}
+                    {
+                        State#state{file_ctx = FileCtx2},
+                        build_dir_size_attr(StatsResult, ShouldCalculateLocalReplicationRate, FileCtx2)
+                    }
             end
     end.
 

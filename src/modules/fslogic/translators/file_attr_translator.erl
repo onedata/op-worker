@@ -86,8 +86,8 @@ attr_name_from_json(<<"symlinkValue">>)              -> symlink_value;
 attr_name_from_json(<<"hasCustomMetadata">>)         -> has_custom_metadata;
 attr_name_from_json(<<"effProtectionFlags">>)        -> eff_protection_flags;
 attr_name_from_json(<<"effDatasetProtectionFlags">>) -> eff_dataset_protection_flags;
-attr_name_from_json(<<"effDatasetInheritancePath">>) -> eff_dataset_membership;
-attr_name_from_json(<<"effQosInheritancePath">>)     -> eff_qos_membership;
+attr_name_from_json(<<"effDatasetInheritancePath">>) -> eff_dataset_inheritance_path;
+attr_name_from_json(<<"effQosInheritancePath">>)     -> eff_qos_inheritance_path;
 attr_name_from_json(<<"aggregateQosStatus">>)        -> qos_status;
 attr_name_from_json(<<"archiveRecallRootFileId">>)   -> recall_root_id.
 
@@ -119,8 +119,8 @@ attr_name_to_json(symlink_value)                -> <<"symlinkValue">>;
 attr_name_to_json(has_custom_metadata)          -> <<"hasCustomMetadata">>;
 attr_name_to_json(eff_protection_flags)         -> <<"effProtectionFlags">>;
 attr_name_to_json(eff_dataset_protection_flags) -> <<"effDatasetProtectionFlags">>;
-attr_name_to_json(eff_dataset_membership)       -> <<"effDatasetInheritancePath">>;
-attr_name_to_json(eff_qos_membership)           -> <<"effQosInheritancePath">>;
+attr_name_to_json(eff_dataset_inheritance_path)       -> <<"effDatasetInheritancePath">>;
+attr_name_to_json(eff_qos_inheritance_path)           -> <<"effQosInheritancePath">>;
 attr_name_to_json(qos_status)                   -> <<"aggregateQosStatus">>;
 attr_name_to_json(recall_root_id)               -> <<"archiveRecallRootFileId">>.
 
@@ -227,8 +227,8 @@ to_json_internal(AttrType, #file_attr{
     has_custom_metadata = HasMetadata,
     eff_protection_flags = EffProtectionFlags,
     eff_dataset_protection_flags = EffDatasetProtectionFlags,
-    eff_dataset_membership = EffDatasetMembership,
-    eff_qos_membership = EffQosMembership,
+    eff_dataset_inheritance_path = EffDatasetInheritancePath,
+    eff_qos_inheritance_path = EffQosInheritancePath,
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
     xattrs = Xattrs
@@ -260,8 +260,8 @@ to_json_internal(AttrType, #file_attr{
         has_custom_metadata => HasMetadata,
         eff_protection_flags => translate_protection_flags(EffProtectionFlags),
         eff_dataset_protection_flags => translate_protection_flags(EffDatasetProtectionFlags),
-        eff_dataset_membership => translate_membership(EffDatasetMembership),
-        eff_qos_membership => translate_membership(EffQosMembership),
+        eff_dataset_inheritance_path => translate_membership(EffDatasetInheritancePath),
+        eff_qos_inheritance_path => translate_membership(EffQosInheritancePath),
         qos_status => translate_qos_status(QosStatus),
         recall_root_id => RecallRootId
     },
@@ -309,18 +309,18 @@ translate_acl(Acl) -> acl:to_json(Acl, gui).
 
 
 %% @private
--spec translate_protection_flags(undefined | file_qos:membership() | dataset:membership()) -> undefined | [binary()].
+-spec translate_protection_flags(undefined | file_qos:inheritance_path() | dataset:inheritance_path()) -> undefined | [binary()].
 translate_protection_flags(undefined) -> undefined;
 translate_protection_flags(ProtectionFlags) -> file_meta:protection_flags_to_json(ProtectionFlags).
 
 
 %% @private
--spec translate_membership(undefined | file_qos:membership() | dataset:membership()) -> undefined | binary().
-translate_membership(?NONE_MEMBERSHIP)                -> <<"none">>;
-translate_membership(?DIRECT_MEMBERSHIP)              -> <<"direct">>;
-translate_membership(?ANCESTOR_MEMBERSHIP)            -> <<"ancestor">>;
-translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>;
-translate_membership(undefined)                       -> undefined.
+-spec translate_membership(undefined | file_qos:inheritance_path() | dataset:inheritance_path()) -> undefined | binary().
+translate_membership(?NONE_INHERITANCE_PATH)                -> <<"none">>;
+translate_membership(?DIRECT_INHERITANCE_PATH)              -> <<"direct">>;
+translate_membership(?ANCESTOR_INHERITANCE)                 -> <<"ancestor">>;
+translate_membership(?DIRECT_AND_ANCESTOR_INHERITANCE_PATH) -> <<"directAndAncestor">>;
+translate_membership(undefined)                             -> undefined.
 
 
 %% @private

@@ -236,13 +236,13 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
         case (Num == 1 orelse Num == TotalNum) of
             true ->
                 % safeguard, as file_meta doc can be not synchronized yet
-                ?catch_not_found(begin
+                ?catch_not_found_as(false, begin
                     {_, FileCtx2} = file_attr:resolve(UserCtx, FileCtx, #{
                         attributes => [name],
                         name_conflicts_resolution_policy => resolve_name_conflicts
                     }),
                     {true, FileCtx2}
-                end, false);
+                end);
             false ->
                 % Other files than first and last don't need to resolve name
                 % conflicts (to check for collisions) as list_children
@@ -337,9 +337,9 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
     [Attributes].
 gather_attributes(MapperFun, Entries) ->
     FilterMapFun = fun(Entry) ->
-        ?catch_not_found(begin
+        ?catch_not_found_as(false, begin
             {true, MapperFun(Entry)}
-        end, false)
+        end)
     end,
     lists_utils:pfiltermap(FilterMapFun, Entries, ?MAX_MAP_CHILDREN_PROCESSES).
 

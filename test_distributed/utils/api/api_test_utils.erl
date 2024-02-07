@@ -203,11 +203,11 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi);
             false -> []
         end,
-        eff_qos_membership = case {HasDirectQos, HasParentQos} of
-            {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
-            {true, _} -> ?DIRECT_MEMBERSHIP;
-            {_, true} -> ?ANCESTOR_MEMBERSHIP;
-            _ -> ?NONE_MEMBERSHIP
+        eff_qos_inheritance_path = case {HasDirectQos, HasParentQos} of
+            {true, true} -> ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH;
+            {true, _} -> ?DIRECT_INHERITANCE_PATH;
+            {_, true} -> ?ANCESTOR_INHERITANCE;
+            _ -> ?NONE_INHERITANCE_PATH
         end,
         qos_status = case HasDirectQos orelse HasParentQos of
             true -> ?IMPOSSIBLE_QOS_STATUS;
@@ -415,8 +415,8 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     has_custom_metadata = HasMetadata,
     eff_protection_flags = EffProtectionFlags,
     eff_dataset_protection_flags = EffDatasetProtectionFlags,
-    eff_dataset_membership = EffDatasetMembership,
-    eff_qos_membership = EffQosMembership,
+    eff_dataset_inheritance_path = EffDatasetInheritancePath,
+    eff_qos_inheritance_path = EffQosInheritancePath,
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
     xattrs = Xattrs
@@ -481,8 +481,8 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffDatasetProtectionFlags)
         end,
-        <<"effDatasetInheritancePath">> => translate_membership(EffDatasetMembership),
-        <<"effQosInheritancePath">> => translate_membership(EffQosMembership),
+        <<"effDatasetInheritancePath">> => translate_membership(EffDatasetInheritancePath),
+        <<"effQosInheritancePath">> => translate_membership(EffQosInheritancePath),
         <<"aggregateQosStatus">> => translate_qos_status(QosStatus),
         <<"archiveRecallRootFileId">> => RecallRootId
     },
@@ -814,11 +814,11 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
 
 
 %% @private
-translate_membership(undefined) -> undefined;
-translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
-translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
-translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
-translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.
+translate_membership(undefined)                             -> undefined;
+translate_membership(?NONE_INHERITANCE_PATH)                -> <<"none">>;
+translate_membership(?DIRECT_INHERITANCE_PATH)              -> <<"direct">>;
+translate_membership(?ANCESTOR_INHERITANCE)                 -> <<"ancestor">>;
+translate_membership(?DIRECT_AND_ANCESTOR_INHERITANCE_PATH) -> <<"directAndAncestor">>.
 
 
 %% @private
