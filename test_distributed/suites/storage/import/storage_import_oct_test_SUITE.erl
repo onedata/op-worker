@@ -46,11 +46,11 @@ create_storage_test(_Config) ->
 
 
 set_up_space_test(_Config) ->
-    Data = #space_spec{name = space_test, owners = [user1], users = [user2],
+    Data = #space_spec{name = space_test, owner = user1, users = [user2],
         supports = [
             #support_spec{
                 provider = ?RANDOM_PROVIDER(),
-                storage_params = #posix_storage_params{mount_point = <<"/tmp">>},
+                storage = #posix_storage_params{mount_point = <<"/tmp">>},
                 size = 1000000
              }
     ]},
