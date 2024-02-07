@@ -470,7 +470,7 @@ build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_get_attrs_validate_rest_call_fun(FileAttr, ShareId) ->
     fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        case get_attrs_exp_result(TestCtx, FileAttr, ShareId) of
+        case get_attrs_exp_result(TestCtx, FileAttr, ShareId, rest) of
             {ok, ExpAttrs} ->
                 ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
             {error, _} = Error ->
@@ -484,7 +484,7 @@ build_get_attrs_validate_rest_call_fun(FileAttr, ShareId) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_get_attrs_validate_gs_call_fun(FileAttr, ShareId) ->
     fun(TestCtx, Result) ->
-        case get_attrs_exp_result(TestCtx, FileAttr, ShareId) of
+        case get_attrs_exp_result(TestCtx, FileAttr, ShareId, gs) of
             {ok, ExpAttrs} ->
                 {ok, ResultMap} = ?assertMatch({ok, _}, Result),
                 ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap));
@@ -498,10 +498,11 @@ build_get_attrs_validate_gs_call_fun(FileAttr, ShareId) ->
 -spec get_attrs_exp_result(
     onenv_api_test_runner:api_test_ctx(),
     file_attr:record(),
-    undefined | od_share:id()
+    undefined | od_share:id(),
+    Format :: gs | rest
 ) ->
     {ok, ExpectedFileAttrs :: map()}.
-get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #file_attr{acl = Acl} = FileAttr, ShareId) ->
+get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #file_attr{acl = Acl} = FileAttr, ShareId, Format) ->
     User4Id = oct_background:get_user_id(user4),
     case {Client, is_acl_requested(Data), Acl} of
         {?USER(UserId), true, [_|_]} when UserId == User4Id ->
@@ -511,7 +512,7 @@ get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #
                 undefined -> opw_test_rpc:get_provider_id(Node);
                 _ -> undefined
             end,
-            JsonAttrs = api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr),
+            JsonAttrs = api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, FileAttr),
             {AttrType, RequestedAttributesJson} = case maps:get(<<"attributes">>, Data, undefined) of
                 undefined ->
                     case ShareId of

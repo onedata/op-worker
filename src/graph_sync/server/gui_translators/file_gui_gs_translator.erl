@@ -34,7 +34,6 @@
 %%% API
 %%%===================================================================
 
-
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = children}, {ChildrenAttrsJson, IsLast, _PaginationToken}) ->
     #{
@@ -204,8 +203,8 @@ map_file_attr_fields(FileAttrJson) ->
 %% @private
 -spec map_file_attr_file_id(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_file_id(#{<<"fileId">> := ObjectId} = FileAttrJson) ->
-    update_attr_if_exists(FileAttrJson, <<"fileId">>, ensure_guid(ObjectId)),
-    update_attr_if_exists(FileAttrJson, <<"file_id">>, ensure_guid(ObjectId));
+    FileAttrJson2 = update_attr_if_exists(FileAttrJson, <<"fileId">>, ensure_guid(ObjectId)),
+    update_attr_if_exists(FileAttrJson2, <<"file_id">>, ensure_guid(ObjectId));
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_file_id(#{<<"file_id">> := ObjectId} = FileAttrJson) ->
     update_attr_if_exists(FileAttrJson, <<"file_id">>, ensure_guid(ObjectId));
@@ -216,8 +215,8 @@ map_file_attr_file_id(FileAttrJson) ->
 %% @private
 -spec map_file_attr_parent(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_parent(#{<<"parentFileId">> := ParentObjectId} = FileAttrJson) ->
-    update_attr_if_exists(FileAttrJson, <<"parentFileId">>, ensure_guid(ParentObjectId)),
-    update_attr_if_exists(FileAttrJson, <<"parent_id">>, ensure_guid(ParentObjectId));
+    FileAttrJson2 = update_attr_if_exists(FileAttrJson, <<"parentFileId">>, ensure_guid(ParentObjectId)),
+    update_attr_if_exists(FileAttrJson2, <<"parent_id">>, ensure_guid(ParentObjectId));
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_parent(#{<<"parent_id">> := ParentObjectId} = FileAttrJson) ->
     update_attr_if_exists(FileAttrJson, <<"parent_id">>, ensure_guid(ParentObjectId));
@@ -228,8 +227,8 @@ map_file_attr_parent(FileAttrJson) ->
 %% @private
 -spec map_file_attr_owner(json_utils:json_map()) -> json_utils:json_map().
 map_file_attr_owner(#{<<"ownerUserId">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) ->
-    update_attr_if_exists(FileAttrJson, <<"ownerUserId">>, null),
-    update_attr_if_exists(FileAttrJson, <<"owner_id">>, null);
+    FileAttrJson2 = update_attr_if_exists(FileAttrJson, <<"ownerUserId">>, null),
+    update_attr_if_exists(FileAttrJson2, <<"owner_id">>, null);
 %% @TODO VFS-11377 deprecated, remove when possible
 map_file_attr_owner(#{<<"owner_id">> := ?SPACE_OWNER_ID(_)} = FileAttrJson) ->
     update_attr_if_exists(FileAttrJson, <<"owner_id">>, null);
