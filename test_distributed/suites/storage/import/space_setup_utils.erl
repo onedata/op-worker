@@ -34,15 +34,15 @@ create_storage(Provider, StorageSpec) ->
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
 set_up_space(#space_spec{
     name = SpaceName,
-    owner = Owner,
+    owner = OwnerSelector,
     users = Users,
-    supports = Supports
+    supports = SupportSpecs
 }) ->
-    OwnerId = oct_background:get_user_id(Owner),
+    OwnerId = oct_background:get_user_id(OwnerSelector),
     SpaceId = ozw_test_rpc:create_space(OwnerId, atom_to_binary(SpaceName)),
-    SerializedToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
+    SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
 
-    support_space(Supports, SerializedToken),
+    support_space(SupportSpecs, SupportToken),
     add_users_to_space(Users, SpaceId),
 
     SpaceId.
@@ -57,13 +57,12 @@ build_create_storage_data(#posix_storage_params{mount_point = MountPoint}) ->
 
 
 %% @private
--spec support_space([support_spec()], binary()) -> ok.
-support_space(Supports, SerializedToken) ->
+-spec support_space([support_spec()], tokens:serialized()) -> ok.
+support_space(SupportSpecs, SupportToken) ->
     lists:foreach(fun(#support_spec{provider = Provider, storage = StorageSpec, size = Size}) ->
         StorageId = create_storage(Provider, StorageSpec),
-        opw_test_rpc:support_space(Provider, StorageId, SerializedToken, Size)
-    end, Supports),
-    ok.
+        opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
+    end, SupportSpecs).
 
 
 %% @private
