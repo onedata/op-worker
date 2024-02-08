@@ -76,7 +76,7 @@ translate_resource(#gri{aspect = eff_groups, scope = private}, Groups) ->
                 type = op_group,
                 id = SpaceId,
                 aspect = instance,
-                scope = private
+                scope = shared
             })
         end, Groups)
     };
