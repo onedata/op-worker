@@ -24,7 +24,7 @@
 -record(space_spec, {
     name :: atom(),
     owner :: oct_background:entity_selector(),
-    users :: list(),
+    users :: [oct_background:entity_selector()],
     supports :: [space_setup_utils:support_spec()]
 }).
 
