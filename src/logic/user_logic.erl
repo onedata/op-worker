@@ -27,6 +27,7 @@
 -export([get/2, get_protected_data/2, get_shared_data/3]).
 -export([get_full_name/1, get_full_name/3]).
 -export([fetch_idp_access_token/3]).
+-export([get_eff_groups/1, get_eff_groups/2]).
 -export([has_eff_group/2, has_eff_group/3]).
 -export([get_eff_spaces/1, get_eff_spaces/2]).
 -export([has_eff_space/2, has_eff_space/3]).
@@ -140,6 +141,25 @@ fetch_idp_access_token(Client, UserId, IdP) ->
     case Result of
         {ok, #{<<"token">> := Token, <<"ttl">> := Ttl}} ->
             {ok, {Token, Ttl}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+-spec get_eff_groups(od_user:doc() | od_user:record()) ->
+    {ok, [od_group:id()]} | errors:error().
+get_eff_groups(#od_user{eff_groups = EffGroups}) ->
+    {ok, EffGroups};
+get_eff_groups(#document{value = User}) ->
+    get_eff_groups(User).
+    
+    
+-spec get_eff_groups(gs_client_worker:client(), od_user:id()) ->
+    {ok, [od_group:id()]} | errors:error().
+get_eff_groups(Client, UserId) ->
+    case get(Client, UserId) of
+        {ok, Doc} ->
+            get_eff_groups(Doc);
         {error, Reason} ->
             {error, Reason}
     end.
