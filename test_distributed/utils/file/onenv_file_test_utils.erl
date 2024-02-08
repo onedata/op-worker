@@ -25,6 +25,7 @@
 
 -export([
     resolve_file/1,
+    ls/4,
     create_file_tree/4,
     create_and_sync_file_tree/3, create_and_sync_file_tree/4,
     mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3, prepare_symlink_value/3
@@ -65,6 +66,19 @@ resolve_file(FileSelector) ->
     catch error:{badkeys, _} ->
         {FileSelector, file_id:guid_to_space_id(FileSelector)}
     end.
+
+
+-spec ls(oct_background:entity_selector(), object_selector(), file_listing:offset(), file_listing:limit()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
+ls(UserSelector, FileSelector, Offset, Limit) ->
+    {FileGuid, SpaceId} = resolve_file(FileSelector),
+    ProviderId = ?RAND_ELEMENT(oct_background:get_space_supporting_providers(
+        SpaceId
+    )),
+    Node = oct_background:get_random_provider_node(ProviderId),
+    UserSessionId = oct_background:get_user_session_id(UserSelector, ProviderId),
+
+    lfm_proxy:get_children(Node, UserSessionId, ?FILE_REF(FileGuid), Offset, Limit).
 
 
 -spec create_file_tree(od_user:id(), file_id:file_guid(), oct_background:entity_selector(), object_spec()) ->

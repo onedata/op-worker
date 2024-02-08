@@ -42,7 +42,9 @@
     rest_download_file_test/1,
     rest_download_file_at_path_test/1,
     rest_download_dir_test/1,
-    rest_download_dir_at_path_test/1
+    rest_download_dir_at_path_test/1,
+
+    sync_first_file_block_test/1
 ]).
 
 % Exported for performance tests
@@ -53,7 +55,7 @@
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
+    {parallel_tests, [parallel], [
         gui_download_file_test,
         gui_download_dir_test,
         gui_download_multiple_files_test,
@@ -66,11 +68,15 @@ groups() -> [
         rest_download_file_at_path_test,
         rest_download_dir_test,
         rest_download_dir_at_path_test
+    ]},
+    {sequential_tests, [], [
+        sync_first_file_block_test
     ]}
 ].
 
 -define(STANDARD_CASES, [
-    {group, all_tests}
+    {group, parallel_tests},
+    {group, sequential_tests}
 ]).
 
 -define(PERFORMANCE_CASES, [
@@ -1288,6 +1294,41 @@ get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
 
 
 %%%===================================================================
+%%% Misc tests
+%%%===================================================================
+
+
+sync_first_file_block_test(_Config) ->
+    ParisNode = oct_background:get_random_provider_node(paris),
+
+    FileBlocks = ?RAND_INT(2, 6),
+    FileSize = FileBlocks * ?DEFAULT_READ_BLOCK_SIZE,
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+        user2, space_krk_par, #file_spec{content = ?RAND_CONTENT(FileSize)}, krakow
+    ),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    DownloadRestPath = <<"data/", FileObjectId/binary, "/content">>,
+    HeadersWithAuth = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
+
+    test_utils:mock_assert_num_calls(ParisNode, rtransfer_config, fetch, 6, 0),
+
+    % first download should synchronize all blocks
+    ?assertMatch(
+        {ok, 200, _, _},
+        rest_test_utils:request(ParisNode, DownloadRestPath, get, HeadersWithAuth, [])
+    ),
+    test_utils:mock_assert_num_calls(ParisNode, rtransfer_config, fetch, 6, FileBlocks),
+
+    % the next one will not do anything as it is already present
+    ?assertMatch(
+        {ok, 200, _, _},
+        rest_test_utils:request(ParisNode, DownloadRestPath, get, HeadersWithAuth, [])
+    ),
+    test_utils:mock_assert_num_calls(ParisNode, rtransfer_config, fetch, 6, FileBlocks).
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -1627,9 +1668,18 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     % if it is the first request made.
     utils:rpc_multicall(Providers, file_middleware_get_handler, assert_operation_supported, [download_url, private]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(sync_first_file_block_test = Case, Config) ->
+    ProviderNodes = oct_background:get_all_providers_nodes(),
+    lists:foreach(fun(OpNode) ->
+        ok = test_utils:mock_new(OpNode, rtransfer_config, [passthrough])
+    end, ProviderNodes),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 40}),
     Config.
 
+end_per_testcase(sync_first_file_block_test = Case, Config) ->
+    ok = test_utils:mock_unload(oct_background:get_all_providers_nodes(), rtransfer_config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, _Config) ->
     ok.

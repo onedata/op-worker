@@ -103,7 +103,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 
     % TODO VFS-7037 uncomment and make it pass
 %%    ct:pal("Create fuse sessions on nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
-%%    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(OzNode, User1),
+%%    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(User1),
 %%    {FuseSessIdP1, ConnectionsP1} = setup_fuse_session_with_connections(
 %%        AccessToken, WorkerToKillP1, WorkerToCheckP1, SpaceGuid, Attempts
 %%    ),
