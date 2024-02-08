@@ -28,7 +28,7 @@
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
--export([delete/1]).
+-export([create/1, get/2, update/1, delete/1]).
 
 
 %%%===================================================================
@@ -95,6 +95,24 @@ validate(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= rdf_metadata
 ->
     middleware_utils:assert_file_managed_locally(Guid).
+
+
+%% @doc {@link middleware_handler} callback create/1.
+-spec create(middleware:req()) -> middleware:create_result().
+create(_) ->
+    error(not_implemented).
+
+
+%% @doc {@link middleware_handler} callback get/2.
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+get(_, _) ->
+    error(not_implemented).
+
+
+%% @doc {@link middleware_handler} callback update/1.
+-spec update(middleware:req()) -> middleware:update_result().
+update(_) ->
+    error(not_implemented).
 
 
 -spec delete(middleware:req()) -> middleware:delete_result().

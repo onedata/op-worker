@@ -28,7 +28,7 @@
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
--export([create/1]).
+-export([create/1, get/2, update/1, delete/1]).
 
 
 %%%===================================================================
@@ -321,6 +321,24 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
 create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = cancel_archive_recall}}) ->
     SessionId = Auth#auth.session_id,
     mi_archives:cancel_recall(SessionId, FileGuid).
+
+
+%% @doc {@link middleware_handler} callback get/2.
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+get(_, _) ->
+    error(not_implemented).
+
+
+%% @doc {@link middleware_handler} callback update/1.
+-spec update(middleware:req()) -> middleware:update_result().
+update(_) ->
+    error(not_implemented).
+
+
+%% @doc {@link middleware_handler} callback delete/1.
+-spec delete(middleware:req()) -> middleware:delete_result().
+delete(_) ->
+    error(not_implemented).
 
 
 %%%===================================================================

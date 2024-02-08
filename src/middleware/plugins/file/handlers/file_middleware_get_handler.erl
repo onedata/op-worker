@@ -29,7 +29,7 @@
 
 %% middleware_handler callbacks
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
--export([get/2]).
+-export([create/1, get/2, update/1, delete/1]).
 
 
 -define(DEFAULT_LIST_OFFSET, 0).
@@ -343,6 +343,12 @@ validate(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
     end, FileIds).
 
 
+%% @doc {@link middleware_handler} callback create/1.
+-spec create(middleware:req()) -> middleware:create_result().
+create(_) ->
+    error(not_implemented).
+
+
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance, scope = Sc}}, _) ->
     DefaultAttrs = case Sc of
@@ -566,6 +572,18 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = {dir_size_stats_coll
     BrowseRequest = ts_browse_request:from_json(Data),
     {ok, value, mi_file_metadata:get_historical_dir_size_stats(
         Auth#auth.session_id, ?FILE_REF(FileGuid), ProviderId, BrowseRequest)}.
+
+
+%% @doc {@link middleware_handler} callback update/1.
+-spec update(middleware:req()) -> middleware:delete_result().
+update(_) ->
+    error(not_implemented).
+
+
+%% @doc {@link middleware_handler} callback delete/1.
+-spec delete(middleware:req()) -> middleware:delete_result().
+delete(_) ->
+    error(not_implemented).
 
 
 %%%===================================================================
