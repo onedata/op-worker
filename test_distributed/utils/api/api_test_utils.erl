@@ -204,10 +204,10 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             false -> []
         end,
         eff_qos_inheritance_path = case {HasDirectQos, HasParentQos} of
-            {true, true} -> ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH;
-            {true, _} -> ?DIRECT_INHERITANCE_PATH;
-            {_, true} -> ?ANCESTOR_INHERITANCE;
-            _ -> ?NONE_INHERITANCE_PATH
+            {true, true} -> ?direct_and_ancestor_inheritance_path;
+            {true, _} -> ?direct_inheritance_path;
+            {_, true} -> ?ancestor_inheritance;
+            _ -> ?none_inheritance_path
         end,
         qos_status = case HasDirectQos orelse HasParentQos of
             true -> ?IMPOSSIBLE_QOS_STATUS;
@@ -815,10 +815,10 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
 
 %% @private
 translate_membership(undefined)                             -> undefined;
-translate_membership(?NONE_INHERITANCE_PATH)                -> <<"none">>;
-translate_membership(?DIRECT_INHERITANCE_PATH)              -> <<"direct">>;
-translate_membership(?ANCESTOR_INHERITANCE)                 -> <<"ancestor">>;
-translate_membership(?DIRECT_AND_ANCESTOR_INHERITANCE_PATH) -> <<"directAndAncestor">>.
+translate_membership(?none_inheritance_path)                -> <<"none">>;
+translate_membership(?direct_inheritance_path)              -> <<"direct">>;
+translate_membership(?ancestor_inheritance)                 -> <<"ancestor">>;
+translate_membership(?direct_and_ancestor_inheritance_path) -> <<"directAndAncestor">>.
 
 
 %% @private

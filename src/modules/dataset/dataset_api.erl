@@ -191,10 +191,10 @@ get_effective_inheritance_path_and_protection_flags(FileCtx) ->
     {ok, EffDatasetProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffInheritancePath = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
-        {true, true} -> ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH;
-        {true, false} -> ?DIRECT_INHERITANCE_PATH;
-        {false, true} -> ?ANCESTOR_INHERITANCE;
-        {false, false} -> ?NONE_INHERITANCE_PATH
+        {true, true} -> ?direct_and_ancestor_inheritance_path;
+        {true, false} -> ?direct_inheritance_path;
+        {false, true} -> ?ancestor_inheritance;
+        {false, false} -> ?none_inheritance_path
     end,
     {ok, EffInheritancePath, EffProtectionFlags, EffDatasetProtectionFlags, FileCtx2}.
 

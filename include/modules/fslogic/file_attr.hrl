@@ -161,9 +161,9 @@
 ]).
 
 % Macros defining types of inheritance path
--define(NONE_INHERITANCE_PATH, none).
--define(DIRECT_INHERITANCE_PATH, direct).
--define(ANCESTOR_INHERITANCE, ancestor).
--define(DIRECT_AND_ANCESTOR_INHERITANCE_PATH, direct_and_ancestor).
+-define(none_inheritance_path, none).
+-define(direct_inheritance_path, direct).
+-define(ancestor_inheritance, ancestor).
+-define(direct_and_ancestor_inheritance_path, direct_and_ancestor).
 
 -endif.

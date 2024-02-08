@@ -316,10 +316,10 @@ translate_protection_flags(ProtectionFlags) -> file_meta:protection_flags_to_jso
 
 %% @private
 -spec translate_membership(undefined | file_qos:inheritance_path() | dataset:inheritance_path()) -> undefined | binary().
-translate_membership(?NONE_INHERITANCE_PATH)                -> <<"none">>;
-translate_membership(?DIRECT_INHERITANCE_PATH)              -> <<"direct">>;
-translate_membership(?ANCESTOR_INHERITANCE)                 -> <<"ancestor">>;
-translate_membership(?DIRECT_AND_ANCESTOR_INHERITANCE_PATH) -> <<"directAndAncestor">>;
+translate_membership(?none_inheritance_path)                -> <<"none">>;
+translate_membership(?direct_inheritance_path)              -> <<"direct">>;
+translate_membership(?ancestor_inheritance)                 -> <<"ancestor">>;
+translate_membership(?direct_and_ancestor_inheritance_path) -> <<"directAndAncestor">>;
 translate_membership(undefined)                             -> undefined.
 
 

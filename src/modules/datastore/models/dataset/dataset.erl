@@ -45,8 +45,8 @@
 -type name() :: file_meta:name().
 -type error() :: {error, term()}.
 -type detached_info() :: detached_dataset_info:info().
--type inheritance_path() :: ?NONE_INHERITANCE_PATH | ?DIRECT_INHERITANCE_PATH | ?ANCESTOR_INHERITANCE
-    | ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH.
+-type inheritance_path() :: ?none_inheritance_path | ?direct_inheritance_path | ?ancestor_inheritance
+    | ?direct_and_ancestor_inheritance_path.
 -type detachment_reason() :: ?DATASET_ROOT_FILE_DELETED | ?DATASET_USER_TRIGGERED_DETACHMENT.
 
 -export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, inheritance_path/0, detachment_reason/0]).

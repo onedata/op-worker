@@ -77,8 +77,8 @@
 -type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
--type inheritance_path() :: ?NONE_INHERITANCE_PATH | ?DIRECT_INHERITANCE_PATH
-    | ?ANCESTOR_INHERITANCE | ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH.
+-type inheritance_path() :: ?none_inheritance_path | ?direct_inheritance_path
+    | ?ancestor_inheritance | ?direct_and_ancestor_inheritance_path.
 
 -export_type([effective_file_qos/0, assigned_entries/0, inheritance_path/0]).
 
@@ -262,12 +262,12 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
 -spec qos_inheritance_path(file_meta:uuid() | file_meta:doc()) -> inheritance_path().
 qos_inheritance_path(UuidOrDoc) ->
     case {get_direct_qos_entries(UuidOrDoc), get_effective_qos_entries(UuidOrDoc)} of
-        {[], []} -> ?NONE_INHERITANCE_PATH;
-        {[], _} -> ?ANCESTOR_INHERITANCE;
+        {[], []} -> ?none_inheritance_path;
+        {[], _} -> ?ancestor_inheritance;
         {Direct, Effective} -> 
             case lists_utils:subtract(Effective, Direct) of
-                [] -> ?DIRECT_INHERITANCE_PATH;
-                _ -> ?DIRECT_AND_ANCESTOR_INHERITANCE_PATH
+                [] -> ?direct_inheritance_path;
+                _ -> ?direct_and_ancestor_inheritance_path
             end
     end.
 
