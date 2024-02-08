@@ -347,7 +347,6 @@ process_request(#req_ctx{
     handler = Handler,
     req = #op_req{operation = create, return_revision = RR} = Req
 }) ->
-    assert_handler_function_exported(Handler, create, 1),
     Result = Handler:create(Req),
     case {Result, Req} of
         {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, auth = Cl}} ->
@@ -379,7 +378,6 @@ process_request(#req_ctx{
     req = #op_req{operation = get, return_revision = true} = Req,
     versioned_entity = {Entity, Rev}
 }) ->
-    assert_handler_function_exported(Handler, get, 2),
     case Handler:get(Req, Entity) of
         {ok, value, _} = Res -> Res;
         {ok, ResultGri, Data} -> {ok, ResultGri, {Data, Rev}};
@@ -392,21 +390,18 @@ process_request(#req_ctx{
     req = #op_req{operation = get} = Req,
     versioned_entity = {Entity, _}
 }) ->
-    assert_handler_function_exported(Handler, get, 2),
     Handler:get(Req, Entity);
 
 process_request(#req_ctx{
     handler = Handler,
     req = #op_req{operation = update} = Req
 }) ->
-    assert_handler_function_exported(Handler, update, 1),
     Handler:update(Req);
 
 process_request(#req_ctx{
     handler = Handler,
     req = #op_req{operation = delete, auth = Cl, gri = GRI} = Req
 }) ->
-    assert_handler_function_exported(Handler, delete, 1),
     case {Handler:delete(Req), GRI} of
         {ok, #gri{type = Type, id = Id, aspect = instance}} ->
             % If an entity instance is deleted, log an information about it
@@ -418,15 +413,4 @@ process_request(#req_ctx{
             ok;
         {Result, _} ->
             Result
-    end.
-
-
-%% @private
--spec assert_handler_function_exported(module(), atom(), non_neg_integer()) -> ok | no_return().
-assert_handler_function_exported(Handler, Function, Arity) ->
-    case erlang:function_exported(Handler, Function, Arity) of
-        true ->
-            ok;
-        false ->
-            error({not_implemented, Handler, Function, Arity})
     end.
