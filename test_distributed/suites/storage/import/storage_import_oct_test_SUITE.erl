@@ -41,7 +41,7 @@ all() -> ?ALL(?TEST_CASES).
 %%%===================================================================
 
 create_storage_test(_Config) ->
-    Data =  #posix_storage_params{mount_point = <<"/tmp">>},
+    Data =  #posix_storage_params{mount_point = <<"/tmp/a/b/c/d">>},
     space_setup_utils:create_storage(?RANDOM_PROVIDER(), Data).
 
 
@@ -50,7 +50,7 @@ set_up_space_test(_Config) ->
         supports = [
             #support_spec{
                 provider = ?RANDOM_PROVIDER(),
-                storage = #posix_storage_params{mount_point = <<"/tmp">>},
+                storage_spec = #posix_storage_params{mount_point = <<"/tmp/a/b/c">>},
                 size = 1000000
              }
     ]},

@@ -53,13 +53,9 @@ set_up_space(#space_spec{
 %%%===================================================================
 
 %% @private
--spec ensure_dir_exists(oct_background:node_selector(), posix_storage_params()) -> ok | {error, _}.
+-spec ensure_dir_exists(oct_background:node_selector(), posix_storage_params()) -> ok.
 ensure_dir_exists(Provider, #posix_storage_params{mount_point = MountPoint}) ->
-    case opw_test_rpc:call(Provider, file, read_file_info, [MountPoint]) of
-        {ok, _} -> ok;
-        {error, _} ->
-            opw_test_rpc:call(Provider, file, make_dir, [MountPoint])
-    end.
+    ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])).
 
 
 %% @private
@@ -70,7 +66,7 @@ build_create_storage_data(#posix_storage_params{mount_point = MountPoint}) ->
 %% @private
 -spec support_space([support_spec()], tokens:serialized()) -> ok.
 support_space(SupportSpecs, SupportToken) ->
-    lists:foreach(fun(#support_spec{provider = Provider, storage = StorageParams, size = Size}) ->
+    lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageParams, size = Size}) ->
         StorageId = create_storage(Provider, StorageParams),
         opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
     end, SupportSpecs).
