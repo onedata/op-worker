@@ -17,7 +17,7 @@
 
 -record(support_spec, {
     provider :: oct_background:entity_selector(),
-    storage_spec :: space_setup_utils:posix_storage_params(),
+    storage_spec :: space_setup_utils:posix_storage_params() | storage:id(),
     size :: integer()
 }).
 

@@ -27,9 +27,10 @@
 %%%===================================================================
 
 -spec create_storage(oct_background:node_selector(), posix_storage_params()) -> od_storage:id().
-create_storage(Provider, StorageParams) ->
-    ensure_dir_exists(Provider, StorageParams),
-    panel_test_rpc:add_storage(Provider, build_create_storage_data(StorageParams)).
+create_storage(Provider, #posix_storage_params{mount_point = MountPoint}) ->
+    ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
+    panel_test_rpc:add_storage(Provider,
+        #{?RAND_STR() => #{<<"type">> => <<"posix">>, <<"mountPoint">> => MountPoint}}).
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
@@ -53,21 +54,13 @@ set_up_space(#space_spec{
 %%%===================================================================
 
 %% @private
--spec ensure_dir_exists(oct_background:node_selector(), posix_storage_params()) -> ok.
-ensure_dir_exists(Provider, #posix_storage_params{mount_point = MountPoint}) ->
-    ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])).
-
-
-%% @private
-build_create_storage_data(#posix_storage_params{mount_point = MountPoint}) ->
-    #{?RAND_STR() => #{<<"type">> => <<"posix">>, <<"mountPoint">> => MountPoint}}.
-
-
-%% @private
 -spec support_space([support_spec()], tokens:serialized()) -> ok.
 support_space(SupportSpecs, SupportToken) ->
-    lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageParams, size = Size}) ->
-        StorageId = create_storage(Provider, StorageParams),
+    lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageSpec, size = Size}) ->
+        StorageId = case is_binary(StorageSpec) of
+            true -> StorageSpec;
+            false -> create_storage(Provider, StorageSpec)
+        end,
         opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
     end, SupportSpecs).
 
