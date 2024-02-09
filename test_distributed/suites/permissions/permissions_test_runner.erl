@@ -155,7 +155,7 @@ run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
             TestCaseRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
             {PermsPerFile, ExtraData} = create_files(
-                Node, FileOwnerSessId, ScenariosRootDirPath, #dir{
+                Node, FileOwnerSessId, ScenariosRootDirPath, #test_dir{
                     name = ScenarioName,
                     perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
                     children = Files
@@ -215,7 +215,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
                 name = ScenarioName,
                 perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
                 children = Files
@@ -347,7 +347,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
     % Create necessary file hierarchy
     {PermsPerFile, ExtraData} = create_files(
-        Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+        Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
             name = ScenarioName,
             perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
             children = Files
@@ -476,7 +476,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
                 name = ScenarioName,
                 perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
                 children = Files
@@ -611,7 +611,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData0} = create_files(
-            Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
                 name = ScenarioName,
                 perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
                 children = Files
@@ -734,7 +734,7 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
     % Create necessary file hierarchy
     {PermsPerFile, ExtraData} = create_files(
-        Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+        Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
             name = ScenarioName,
             perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
             children = Files
@@ -830,7 +830,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
                 name = ScenarioName,
                 perms = scenarios_root_dir_permissions(RequiresTraverseAncestors),
                 children = Files
@@ -1096,7 +1096,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
-            Node, FileOwnerUserSessId, ScenariosRootDirPath, #dir{
+            Node, FileOwnerUserSessId, ScenariosRootDirPath, #test_dir{
                 name = ScenarioName,
                 perms = case RequiresTraverseAncestors of
                     true -> [?traverse_container];
@@ -1287,9 +1287,9 @@ scenarios_root_dir_permissions(false) -> [].
 
 
 %% @private
--spec create_files(node(), session:id(), file_meta:path(), #dir{} | #file{}) ->
+-spec create_files(node(), session:id(), file_meta:path(), #test_dir{} | #test_file{}) ->
     {#{file_id:file_guid() => [FilePerm :: binary()]}, ExtraData :: map()}.
-create_files(Node, FileOwnerSessId, ParentDirPath, #file{
+create_files(Node, FileOwnerSessId, ParentDirPath, #test_file{
     name = FileName,
     perms = FilePerms,
     on_create = HookFun
@@ -1308,7 +1308,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #file{
             #{FilePath => HookFun(FileOwnerSessId, FileGuid)}
     end,
     {#{FileGuid => FilePerms}, ExtraData};
-create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
+create_files(Node, FileOwnerSessId, ParentDirPath, #test_dir{
     name = DirName,
     perms = DirPerms,
     on_create = HookFun,

@@ -58,7 +58,7 @@ get_response(#gri{aspect = As}, RdfMetadata) when
     ?OK_REPLY({binary, RdfMetadata});
 
 get_response(#gri{aspect = As}, Metadata) when
-    As =:= attrs;
+    As =:= instance;
     As =:= qos_summary;
     As =:= xattrs;
     As =:= json_metadata

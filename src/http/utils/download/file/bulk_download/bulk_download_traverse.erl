@@ -117,7 +117,7 @@ do_master_job(Job, MasterJobArgs) ->
 do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId, relative_path = RelativePath}, BulkDownloadId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, BulkDownloadId),
     #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} = 
-        attr_req:get_file_attr(UserCtx, FileCtx, [size]),
+        attr_req:get_file_attr(UserCtx, FileCtx, ?BULK_DOWNLOAD_ATTRS),
     Pid = get_main_pid(BulkDownloadId),
     bulk_download_main_process:report_next_file(Pid, FileAttrs, RelativePath),
     case slave_job_loop(Pid) of

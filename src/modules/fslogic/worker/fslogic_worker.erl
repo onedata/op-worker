@@ -106,11 +106,9 @@
     read_symlink,
 
     get_file_attr,
-    get_file_details,
     get_file_children,
     get_child_attr,
-    get_file_children_attrs,
-    get_file_children_details
+    get_file_children_attrs
 ]).
 -define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
     % Necessary operations for direct-io to work (contains private information
@@ -508,14 +506,12 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{optional_attrs = OptionalAttrs}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, OptionalAttrs);
+handle_file_request(UserCtx, #get_file_attr{attributes = Attributes}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, Attributes);
 handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
     attr_req:get_file_references(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
-    attr_req:get_file_details(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_child_attr{name = Name, optional_attrs = OptionalAttrs}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, OptionalAttrs);
+handle_file_request(UserCtx, #get_child_attr{name = Name, attributes = Attributes}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, Attributes);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -527,14 +523,12 @@ handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) 
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
-    dir_req:get_children(UserCtx, FileCtx, ListingOpts);
+    dir_req:list_children(UserCtx, FileCtx, ListingOpts);
 handle_file_request(UserCtx, #get_file_children_attrs{
     listing_options = ListingOpts,
-    optional_attrs = OptionalAttrs
+    attributes = Attributes
 }, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, OptionalAttrs);
-handle_file_request(UserCtx, #get_file_children_details{listing_options = ListingOpts}, FileCtx) ->
-    dir_req:get_children_details(UserCtx, FileCtx, ListingOpts);
+    dir_req:list_children_attrs(UserCtx, FileCtx, ListingOpts, Attributes);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -604,11 +598,11 @@ handle_file_request(UserCtx, #report_file_read{offset = Offset, size = Size}, Fi
     file_req:report_file_read(UserCtx, FileCtx, Offset, Size);
 handle_file_request(UserCtx, #get_recursive_file_list{
     listing_options = Options,
-    optional_attrs = OptionalAttrs
+    attributes = Attributes
 }, FileCtx) ->
-    dir_req:list_recursively(UserCtx, FileCtx, Options, OptionalAttrs);
-handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, optional_attrs = OptionalAttrs}, RootFileCtx) ->
-    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, OptionalAttrs);
+    dir_req:list_recursively(UserCtx, FileCtx, Options, Attributes);
+handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, attributes = Attributes}, RootFileCtx) ->
+    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, Attributes);
 handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
     dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
 

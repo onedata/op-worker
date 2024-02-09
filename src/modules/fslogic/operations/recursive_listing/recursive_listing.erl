@@ -38,7 +38,7 @@
 -module(recursive_listing).
 -author("Michal Stanisz").
 
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/recursive_listing.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

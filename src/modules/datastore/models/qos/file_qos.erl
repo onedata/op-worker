@@ -35,7 +35,6 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -52,7 +51,7 @@
     get_direct_qos_entries/1,
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    qos_membership/1,
+    qos_inheritance_path/1,
     cleanup_reference_related_documents/1, cleanup_reference_related_documents/2, 
     cleanup_on_no_reference/1,
     delete_associated_entries_on_no_references/1
@@ -78,10 +77,10 @@
 -type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
--type membership() :: ?NONE_MEMBERSHIP | ?DIRECT_MEMBERSHIP 
-    | ?ANCESTOR_MEMBERSHIP | ?DIRECT_AND_ANCESTOR_MEMBERSHIP.
+-type inheritance_path() :: ?none_inheritance_path | ?direct_inheritance_path
+    | ?ancestor_inheritance | ?direct_and_ancestor_inheritance_path.
 
--export_type([effective_file_qos/0, assigned_entries/0, membership/0]).
+-export_type([effective_file_qos/0, assigned_entries/0, inheritance_path/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -260,15 +259,15 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
     end.
 
 
--spec qos_membership(file_meta:uuid() | file_meta:doc()) -> membership().
-qos_membership(UuidOrDoc) ->
+-spec qos_inheritance_path(file_meta:uuid() | file_meta:doc()) -> inheritance_path().
+qos_inheritance_path(UuidOrDoc) ->
     case {get_direct_qos_entries(UuidOrDoc), get_effective_qos_entries(UuidOrDoc)} of
-        {[], []} -> ?NONE_MEMBERSHIP;
-        {[], _} -> ?ANCESTOR_MEMBERSHIP;
+        {[], []} -> ?none_inheritance_path;
+        {[], _} -> ?ancestor_inheritance;
         {Direct, Effective} -> 
             case lists_utils:subtract(Effective, Direct) of
-                [] -> ?DIRECT_MEMBERSHIP;
-                _ -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP
+                [] -> ?direct_inheritance_path;
+                _ -> ?direct_and_ancestor_inheritance_path
             end
     end.
 

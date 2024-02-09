@@ -34,7 +34,7 @@
     lfm_basic_rdwr_after_file_delete_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
-    lfm_get_details_test/1,
+    lfm_get_attrs_test/1,
     lfm_synch_stat_test/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
@@ -80,12 +80,12 @@
     readdir_should_work_with_api_token/1,
     readdir_should_work_with_api_token_not_full_batch/1,
     readdir_should_work_with_startid/1,
-    get_children_details_should_return_empty_result_for_empty_dir/1,
-    get_children_details_should_return_empty_result_zero_size/1,
-    get_children_details_should_work_with_zero_offset/1,
-    get_children_details_should_work_with_non_zero_offset/1,
-    get_children_details_should_work_with_size_greater_than_dir_size/1,
-    get_children_details_should_work_with_startid/1,
+    get_children_attrs_should_return_empty_result_for_empty_dir/1,
+    get_children_attrs_should_return_empty_result_zero_size/1,
+    get_children_attrs_should_work_with_zero_offset/1,
+    get_children_attrs_should_work_with_non_zero_offset/1,
+    get_children_attrs_should_work_with_size_greater_than_dir_size/1,
+    get_children_attrs_should_work_with_startid/1,
     get_recursive_file_list/1,
     get_recursive_file_list_prefix_test/1,
     get_recursive_file_list_inaccessible_paths_test/1,
@@ -117,7 +117,7 @@
     lfm_basic_rdwr_after_file_delete_test,
     lfm_write_test,
     lfm_stat_test,
-    lfm_get_details_test,
+    lfm_get_attrs_test,
     lfm_synch_stat_test,
     lfm_cp_file,
     lfm_cp_empty_dir,
@@ -164,12 +164,12 @@
     readdir_should_work_with_api_token,
     readdir_should_work_with_api_token_not_full_batch,
     readdir_should_work_with_startid,
-    get_children_details_should_return_empty_result_for_empty_dir,
-    get_children_details_should_return_empty_result_zero_size,
-    get_children_details_should_work_with_zero_offset,
-    get_children_details_should_work_with_non_zero_offset,
-    get_children_details_should_work_with_size_greater_than_dir_size,
-    get_children_details_should_work_with_startid,
+    get_children_attrs_should_return_empty_result_for_empty_dir,
+    get_children_attrs_should_return_empty_result_zero_size,
+    get_children_attrs_should_work_with_zero_offset,
+    get_children_attrs_should_work_with_non_zero_offset,
+    get_children_attrs_should_work_with_size_greater_than_dir_size,
+    get_children_attrs_should_work_with_startid,
     get_recursive_file_list,
     get_recursive_file_list_prefix_test,
     get_recursive_file_list_inaccessible_paths_test,
@@ -269,23 +269,23 @@ readdir_should_work_with_api_token_not_full_batch(Config) ->
 readdir_should_work_with_startid(Config) ->
     lfm_files_test_base:readdir_should_work_with_startid(Config).
 
-get_children_details_should_return_empty_result_for_empty_dir(Config) ->
-    lfm_files_test_base:get_children_details_should_return_empty_result_for_empty_dir(Config).
+get_children_attrs_should_return_empty_result_for_empty_dir(Config) ->
+    lfm_files_test_base:get_children_attrs_should_return_empty_result_for_empty_dir(Config).
 
-get_children_details_should_return_empty_result_zero_size(Config) ->
-    lfm_files_test_base:get_children_details_should_return_empty_result_zero_size(Config).
+get_children_attrs_should_return_empty_result_zero_size(Config) ->
+    lfm_files_test_base:get_children_attrs_should_return_empty_result_zero_size(Config).
 
-get_children_details_should_work_with_zero_offset(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_zero_offset(Config).
+get_children_attrs_should_work_with_zero_offset(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_zero_offset(Config).
 
-get_children_details_should_work_with_non_zero_offset(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_non_zero_offset(Config).
+get_children_attrs_should_work_with_non_zero_offset(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_non_zero_offset(Config).
 
-get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_size_greater_than_dir_size(Config).
+get_children_attrs_should_work_with_size_greater_than_dir_size(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_size_greater_than_dir_size(Config).
 
-get_children_details_should_work_with_startid(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_startid(Config).
+get_children_attrs_should_work_with_startid(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_startid(Config).
 
 get_recursive_file_list(Config) ->
     lfm_files_test_base:get_recursive_file_list(Config).
@@ -332,8 +332,8 @@ lfm_write_test(Config) ->
 lfm_stat_test(Config) ->
     lfm_files_test_base:lfm_stat(Config).
 
-lfm_get_details_test(Config) ->
-    lfm_files_test_base:lfm_get_details(Config).
+lfm_get_attrs_test(Config) ->
+    lfm_files_test_base:lfm_stat2(Config).
 
 lfm_synch_stat_test(Config) ->
     lfm_files_test_base:lfm_synch_stat(Config).

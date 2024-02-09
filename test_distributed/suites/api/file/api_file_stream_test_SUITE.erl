@@ -14,7 +14,6 @@
 
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -1667,7 +1666,7 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     % TODO VFS-6828 - call needed to preload file_middleware module and add 'download_url' atom
     % to known/existing atoms. Otherwise gs_ws_handler may fail to decode this request (gri)
     % if it is the first request made.
-    utils:rpc_multicall(Providers, file_middleware_plugin, resolve_handler, [get, download_url, private]),
+    utils:rpc_multicall(Providers, file_middleware_get_handler, assert_operation_supported, [download_url, private]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(sync_first_file_block_test = Case, Config) ->
     ProviderNodes = oct_background:get_all_providers_nodes(),

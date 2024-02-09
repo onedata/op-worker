@@ -16,6 +16,7 @@
 -include("http/cdmi.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("onenv_test_utils.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% Tests

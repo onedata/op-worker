@@ -20,7 +20,6 @@
 -author("Lukasz Opiola").
 
 -include("modules/logical_file_manager/lfm.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -33,7 +32,6 @@
     get_fs_stats/2,
 
     stat/2, stat/3,
-    get_details/2,
     get_file_references/2,
 
     get_file_path/2,
@@ -74,11 +72,9 @@
 -export([
     mkdir/3, mkdir/4,
     create_dir_at_path/3,
-    get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
     get_children_attrs/4,
-    get_children_details/3,
     get_files_recursively/4,
     get_children_count/2
 ]).
@@ -162,7 +158,7 @@ get_fs_stats(SessId, FileKey) ->
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
-    stat(SessId, FileKey, [size]).
+    stat(SessId, FileKey, ?ONECLIENT_ATTRS).
 
 
 %%--------------------------------------------------------------------
@@ -170,21 +166,10 @@ stat(SessId, FileKey) ->
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(session:id(), file_key(), [attr_req:optional_attr()]) ->
+-spec stat(session:id(), file_key(), [file_attr:attribute()]) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
-stat(SessId, FileKey, OptionalAttrs) ->
-    ?run(lfm_attrs:stat(SessId, FileKey, OptionalAttrs)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file details (see file_details.hrl).
-%% @end
-%%--------------------------------------------------------------------
--spec get_details(session:id(), file_key()) ->
-    {ok, lfm_attrs:file_details()} | error_reply().
-get_details(SessId, FileKey) ->
-    ?run(lfm_attrs:get_details(SessId, FileKey)).
+stat(SessId, FileKey, Attributes) ->
+    ?run(lfm_attrs:stat(SessId, FileKey, Attributes)).
 
 
 -spec get_file_references(session:id(), file_key()) ->
@@ -480,12 +465,6 @@ create_dir_at_path(SessId, ParentGuid, Path) ->
     ?run(lfm_dirs:create_dir_at_path(SessId, ParentGuid, Path)).
 
 
--spec get_children(session:id(), file_key(), file_listing:options()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | error_reply().
-get_children(SessId, FileKey, ListOpts) ->
-    ?run(lfm_dirs:get_children(SessId, FileKey, ListOpts)).
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets basic file attributes (see file_attr.hrl) of a child with given name.
@@ -494,7 +473,13 @@ get_children(SessId, FileKey, ListOpts) ->
 -spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
     {ok, #file_attr{}} | error_reply().
 get_child_attr(SessId, ParentGuid, ChildName)  ->
-    ?run(lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName)).
+    get_child_attr(SessId, ParentGuid, ChildName, ?ONECLIENT_ATTRS).
+
+
+-spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name(), [file_attr:attribute()]) ->
+    {ok, #file_attr{}} | error_reply().
+get_child_attr(SessId, ParentGuid, ChildName, Attributes)  ->
+    ?run(lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName, Attributes)).
 
 
 %%--------------------------------------------------------------------
@@ -505,24 +490,13 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 -spec get_children_attrs(session:id(), file_key(), file_listing:options()) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    get_children_attrs(SessId, FileKey, ListOpts, [size]).
+    get_children_attrs(SessId, FileKey, ListOpts, ?ONECLIENT_ATTRS).
 
 
--spec get_children_attrs(session:id(), file_key(), file_listing:options(), [attr_req:optional_attr()]) ->
+-spec get_children_attrs(session:id(), file_key(), file_listing:options(), [file_attr:attribute()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
-get_children_attrs(SessId, FileKey, ListOpts, OptionalAttrs) ->
-    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, OptionalAttrs)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets file details (see file_details.hrl) for each directory children.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_details(session:id(), file_key(), file_listing:options()) ->
-    {ok, [lfm_attrs:file_details()], file_listing:pagination_token()} | error_reply().
-get_children_details(SessId, FileKey, ListOpts) ->
-    ?run(lfm_dirs:get_children_details(SessId, FileKey, ListOpts)).
+get_children_attrs(SessId, FileKey, ListOpts, Attributes) ->
+    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, Attributes)).
 
 
 %%--------------------------------------------------------------------
@@ -536,11 +510,11 @@ get_children_details(SessId, FileKey, ListOpts) ->
     session:id(),
     lfm:file_key(),
     dir_req:recursive_listing_opts(),
-    [attr_req:optional_attr()]
+    [file_attr:attribute()]
 ) ->
-    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
-get_files_recursively(SessId, FileKey, Options, OptionalAttrs) -> 
-    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options, OptionalAttrs)).
+    {ok, [file_attr:record()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
+get_files_recursively(SessId, FileKey, Options, Attributes) ->
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options, Attributes)).
 
 
 -spec get_children_count(session:id(), file_key()) ->

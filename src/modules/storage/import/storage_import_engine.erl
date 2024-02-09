@@ -497,9 +497,9 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
 check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated) ->
     try
         case get_attr_including_deleted(FileCtx) of
-            {ok, _FileAttr, true} ->
+            {ok, #file_attr{is_deleted = true} = _FileAttr} ->
                 {?FILE_UNMODIFIED, undefined, StorageFileCtx};
-            {ok, FileAttr, false} ->
+            {ok, #file_attr{is_deleted = false} = FileAttr} ->
                 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
             {error, ?ENOENT} ->
                 maybe_import_file(StorageFileCtx, Info)
@@ -766,19 +766,19 @@ create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
     {ok, StorageFileCtx3}.
 
 
--spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}, boolean()} | {error, term()}.
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
 get_attr_including_deleted(FileCtx) ->
     try
-        {#fuse_response{
+        #fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileAttr
-        }, _, IsDeleted} =
-            attr_req:get_file_attr_and_conflicts_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+        } =
+            attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => allow_name_conflicts,
-                include_optional_attrs => [size]
+                attributes => [?attr_is_deleted | ?ONECLIENT_ATTRS]
             }),
-        {ok, FileAttr, IsDeleted}
+        {ok, FileAttr}
     catch
         Class:Reason:Stacktrace ->
             #status{code = Error} = fslogic_errors:gen_status_message(Reason),

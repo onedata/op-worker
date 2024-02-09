@@ -18,7 +18,7 @@
 -include("onenv_test_utils.hrl").
 -include("distribution_assert.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("modules/fslogic/file_details.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 

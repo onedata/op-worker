@@ -91,7 +91,7 @@ report_data_sent(MainPid, NewDelay) ->
 
 
 -spec report_next_file(pid(), lfm_attrs:file_attributes(), file_meta:path()) -> ok.
-report_next_file(MainPid, FileAttrs, RelativePath) -> 
+report_next_file(MainPid, FileAttrs, RelativePath) ->
     MainPid ! ?MSG_NEXT_FILE(FileAttrs, RelativePath, self()),
     ok.
 
@@ -171,8 +171,9 @@ handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
     BulkDownloadId, UserCtx, #state{symlink_resolution_policy = follow_external} = State
 ) ->
+    SessId = user_ctx:get_session_id(UserCtx),
     % when starting download from symlink it should be considered external and therefore resolved
-    case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
+    case check_result(lfm:stat(SessId, #file_ref{guid = Guid, follow_symlink = true}, ?BULK_DOWNLOAD_ATTRS)) of
         {ok, ResolvedFileAttrs} ->
             handle_multiple_files([ResolvedFileAttrs#file_attr{name = Name} | Tail], BulkDownloadId, UserCtx, State);
         ignored ->
