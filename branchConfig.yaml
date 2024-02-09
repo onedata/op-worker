@@ -10,4 +10,4 @@ sources:
   # Specification of branches from which sources for components will be pulled.
   oz-worker: current_branch
   op-worker: current_branch
-  onepanel: feature/VFS-11611-add-storage-function
+  onepanel: current_branch
