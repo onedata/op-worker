@@ -324,19 +324,19 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = cancel_archive_re
 
 
 %% @doc {@link middleware_handler} callback get/2.
--spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+-spec get(middleware:req(), middleware:entity()) -> no_return().
 get(_, _) ->
     error(not_implemented).
 
 
 %% @doc {@link middleware_handler} callback update/1.
--spec update(middleware:req()) -> middleware:update_result().
+-spec update(middleware:req()) -> no_return().
 update(_) ->
     error(not_implemented).
 
 
 %% @doc {@link middleware_handler} callback delete/1.
--spec delete(middleware:req()) -> middleware:delete_result().
+-spec delete(middleware:req()) -> no_return().
 delete(_) ->
     error(not_implemented).
 

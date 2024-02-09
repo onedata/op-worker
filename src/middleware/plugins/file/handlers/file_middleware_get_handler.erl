@@ -344,7 +344,7 @@ validate(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
 
 
 %% @doc {@link middleware_handler} callback create/1.
--spec create(middleware:req()) -> middleware:create_result().
+-spec create(middleware:req()) -> no_return().
 create(_) ->
     error(not_implemented).
 
@@ -575,13 +575,13 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = {dir_size_stats_coll
 
 
 %% @doc {@link middleware_handler} callback update/1.
--spec update(middleware:req()) -> middleware:delete_result().
+-spec update(middleware:req()) -> no_return().
 update(_) ->
     error(not_implemented).
 
 
 %% @doc {@link middleware_handler} callback delete/1.
--spec delete(middleware:req()) -> middleware:delete_result().
+-spec delete(middleware:req()) -> no_return().
 delete(_) ->
     error(not_implemented).
 

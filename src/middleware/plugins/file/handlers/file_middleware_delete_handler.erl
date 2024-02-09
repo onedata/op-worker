@@ -98,19 +98,19 @@ validate(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 
 
 %% @doc {@link middleware_handler} callback create/1.
--spec create(middleware:req()) -> middleware:create_result().
+-spec create(middleware:req()) -> no_return().
 create(_) ->
     error(not_implemented).
 
 
 %% @doc {@link middleware_handler} callback get/2.
--spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+-spec get(middleware:req(), middleware:entity()) -> no_return().
 get(_, _) ->
     error(not_implemented).
 
 
 %% @doc {@link middleware_handler} callback update/1.
--spec update(middleware:req()) -> middleware:update_result().
+-spec update(middleware:req()) -> no_return().
 update(_) ->
     error(not_implemented).
 
