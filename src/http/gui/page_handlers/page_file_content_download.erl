@@ -117,6 +117,8 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
 
     case ?lfm_check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}} ->
+            ?lfm_check(lfm:check_perms(SessionId, FileRef, read)),
+
             SpaceId = file_id:guid_to_space_id(FileGuid),
             SyncBlock = #file_block{
                 offset = 0,
