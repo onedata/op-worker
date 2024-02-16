@@ -72,7 +72,7 @@
     perms = [] :: [Perms :: binary()],
     % function called during environment setup. Term returned will be stored in `ExtraData`
     % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
-    on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term())
+    on_create = undefined :: undefined | fun((node(), session:id(), file_id:file_guid()) -> term())
 }).
 
 -record(ct_authz_dir_spec, {
