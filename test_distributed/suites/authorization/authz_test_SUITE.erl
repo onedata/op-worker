@@ -158,9 +158,10 @@ all() -> [
 %%%===================================================================
 
 
-mkdir_test(_Config) ->
+mkdir_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_subcontainer]
@@ -186,9 +187,10 @@ mkdir_test(_Config) ->
     }).
 
 
-get_children_test(_Config) ->
+get_children_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?list_container]
@@ -209,9 +211,10 @@ get_children_test(_Config) ->
     }).
 
 
-get_children_attrs_test(_Config) ->
+get_children_attrs_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?traverse_container, ?list_container]
@@ -234,9 +237,10 @@ get_children_attrs_test(_Config) ->
     }).
 
 
-get_child_attr_test(_Config) ->
+get_child_attr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?traverse_container],
@@ -256,9 +260,10 @@ get_child_attr_test(_Config) ->
     }).
 
 
-mv_dir_test(_Config) ->
+mv_dir_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
@@ -293,9 +298,10 @@ mv_dir_test(_Config) ->
     }).
 
 
-rm_dir_test(_Config) ->
+rm_dir_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
@@ -321,9 +327,10 @@ rm_dir_test(_Config) ->
     }).
 
 
-create_file_test(_Config) ->
+create_file_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
@@ -349,9 +356,10 @@ create_file_test(_Config) ->
     }).
 
 
-open_for_read_test(_Config) ->
+open_for_read_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_object],
@@ -378,9 +386,10 @@ open_for_read_test(_Config) ->
     }).
 
 
-open_for_write_test(_Config) ->
+open_for_write_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_object],
@@ -407,9 +416,10 @@ open_for_write_test(_Config) ->
     }).
 
 
-open_for_rdwr_test(_Config) ->
+open_for_rdwr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_object, ?write_object],
@@ -436,9 +446,10 @@ open_for_rdwr_test(_Config) ->
     }).
 
 
-create_and_open_test(_Config) ->
+create_and_open_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object],
@@ -465,9 +476,10 @@ create_and_open_test(_Config) ->
     }).
 
 
-truncate_test(_Config) ->
+truncate_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_object]
@@ -488,9 +500,10 @@ truncate_test(_Config) ->
     }).
 
 
-mv_file_test(_Config) ->
+mv_file_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
@@ -525,9 +538,10 @@ mv_file_test(_Config) ->
     }).
 
 
-rm_file_test(_Config) ->
+rm_file_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
@@ -553,9 +567,10 @@ rm_file_test(_Config) ->
     }).
 
 
-get_parent_test(_Config) ->
+get_parent_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
@@ -571,9 +586,10 @@ get_parent_test(_Config) ->
     }).
 
 
-get_file_path_test(_Config) ->
+get_file_path_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = false, % TODO VFS-6057
@@ -589,9 +605,10 @@ get_file_path_test(_Config) ->
     }).
 
 
-get_file_guid_test(_Config) ->
+get_file_guid_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
@@ -606,9 +623,10 @@ get_file_guid_test(_Config) ->
     }).
 
 
-get_file_attr_test(_Config) ->
+get_file_attr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
@@ -624,9 +642,10 @@ get_file_attr_test(_Config) ->
     }).
 
 
-get_file_distribution_test(_Config) ->
+get_file_distribution_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_metadata]
@@ -648,9 +667,10 @@ get_file_distribution_test(_Config) ->
     }).
 
 
-get_historical_dir_size_stats_test(_Config) ->
+get_historical_dir_size_stats_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
             perms = [?read_metadata],
@@ -682,9 +702,10 @@ get_historical_dir_size_stats_test(_Config) ->
     }).
 
 
-get_file_storage_locations_test(_Config) ->
+get_file_storage_locations_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_metadata]
@@ -856,9 +877,10 @@ get_file_storage_locations_test(_Config) ->
 %%    ).
 
 
-check_read_perms_test(_Config) ->
+check_read_perms_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_object]
@@ -879,9 +901,10 @@ check_read_perms_test(_Config) ->
     }).
 
 
-check_write_perms_test(_Config) ->
+check_write_perms_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_object]
@@ -902,9 +925,10 @@ check_write_perms_test(_Config) ->
     }).
 
 
-check_rdwr_perms_test(_Config) ->
+check_rdwr_perms_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_object, ?write_object]
@@ -925,9 +949,10 @@ check_rdwr_perms_test(_Config) ->
     }).
 
 
-create_share_test(_Config) ->
+create_share_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
@@ -1049,9 +1074,10 @@ create_share_test(_Config) ->
 %%    ).
 
 
-get_acl_test(_Config) ->
+get_acl_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_acl]
@@ -1070,9 +1096,10 @@ get_acl_test(_Config) ->
     }).
 
 
-set_acl_test(_Config) ->
+set_acl_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_acl]
@@ -1099,9 +1126,10 @@ set_acl_test(_Config) ->
     }).
 
 
-remove_acl_test(_Config) ->
+remove_acl_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_acl]
@@ -1122,9 +1150,10 @@ remove_acl_test(_Config) ->
     }).
 
 
-get_transfer_encoding_test(_Config) ->
+get_transfer_encoding_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1148,9 +1177,10 @@ get_transfer_encoding_test(_Config) ->
     }).
 
 
-set_transfer_encoding_test(_Config) ->
+set_transfer_encoding_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1172,9 +1202,10 @@ set_transfer_encoding_test(_Config) ->
     }).
 
 
-get_cdmi_completion_status_test(_Config) ->
+get_cdmi_completion_status_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1198,9 +1229,10 @@ get_cdmi_completion_status_test(_Config) ->
     }).
 
 
-set_cdmi_completion_status_test(_Config) ->
+set_cdmi_completion_status_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1222,9 +1254,10 @@ set_cdmi_completion_status_test(_Config) ->
     }).
 
 
-get_mimetype_test(_Config) ->
+get_mimetype_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1248,9 +1281,10 @@ get_mimetype_test(_Config) ->
     }).
 
 
-set_mimetype_test(_Config) ->
+set_mimetype_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1272,9 +1306,10 @@ set_mimetype_test(_Config) ->
     }).
 
 
-get_metadata_test(_Config) ->
+get_metadata_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1300,9 +1335,10 @@ get_metadata_test(_Config) ->
     }).
 
 
-set_metadata_test(_Config) ->
+set_metadata_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1324,9 +1360,10 @@ set_metadata_test(_Config) ->
     }).
 
 
-remove_metadata_test(_Config) ->
+remove_metadata_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1352,9 +1389,10 @@ remove_metadata_test(_Config) ->
     }).
 
 
-get_xattr_test(_Config) ->
+get_xattr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1380,9 +1418,10 @@ get_xattr_test(_Config) ->
     }).
 
 
-list_xattr_test(_Config) ->
+list_xattr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -1405,9 +1444,10 @@ list_xattr_test(_Config) ->
     }).
 
 
-set_xattr_test(_Config) ->
+set_xattr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1430,9 +1470,10 @@ set_xattr_test(_Config) ->
     }).
 
 
-remove_xattr_test(_Config) ->
+remove_xattr_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1458,9 +1499,10 @@ remove_xattr_test(_Config) ->
     }).
 
 
-add_qos_entry_test(_Config) ->
+add_qos_entry_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
@@ -1477,9 +1519,10 @@ add_qos_entry_test(_Config) ->
     }).
 
 
-get_qos_entry_test(_Config) ->
+get_qos_entry_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -1504,9 +1547,10 @@ get_qos_entry_test(_Config) ->
     }).
 
 
-remove_qos_entry_test(_Config) ->
+remove_qos_entry_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -1531,9 +1575,10 @@ remove_qos_entry_test(_Config) ->
     }).
 
 
-get_effective_file_qos_test(_Config) ->
+get_effective_file_qos_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -1558,9 +1603,10 @@ get_effective_file_qos_test(_Config) ->
     }).
 
 
-check_qos_fulfillment_test(_Config) ->
+check_qos_fulfillment_test(Config) ->
     authz_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
+        space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
@@ -1601,26 +1647,54 @@ init_per_suite(Config) ->
             {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}],
         posthook = fun(NewConfig) ->
-            % clean space
-            lists:foreach(fun(SpaceSelector) ->
-                {ok, FileEntries} = onenv_file_test_utils:ls(space_owner, SpaceSelector, 0, 10000),
+            delete_spaces_from_previous_run(),
 
-                lists_utils:pforeach(fun({Guid, _}) ->
-                    onenv_file_test_utils:rm_and_sync_file(space_owner, Guid)
-                end, FileEntries)
-            end, [space_krk]),
+            [StorageId] = lists:filter(fun(StorageId) ->
+                StorageDetails = opw_test_rpc:storage_describe(krakow, StorageId),
+                <<"posix">> == maps:get(<<"type">>, StorageDetails)
+            end, opw_test_rpc:get_storages(krakow)),
 
-            NewConfig
+            [{storage_id, StorageId} | NewConfig]
         end
     }).
+
+
+%% @private
+-spec delete_spaces_from_previous_run() -> ok.
+delete_spaces_from_previous_run() ->
+    AllTestCases = all(),
+
+    RemovedSpaces = lists:filter(fun(SpaceId) ->
+        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
+        SpaceName = maps:get(<<"name">>, SpaceDetails),
+
+        Exists = lists:member(binary_to_atom(SpaceName), AllTestCases),
+        Exists andalso ozw_test_rpc:delete_space(SpaceId),
+
+        Exists
+    end, ozw_test_rpc:list_spaces()),
+
+    ?assertEqual([], lists_utils:intersect(opw_test_rpc:get_spaces(krakow), RemovedSpaces), ?ATTEMPTS),
+
+    ok.
 
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
+init_per_testcase(Case, Config) ->
+    SpaceId = space_setup_utils:set_up_space(#space_spec{
+        name = Case,
+        owner = space_owner,
+        users = [user1, user2],
+        supports = [#support_spec{
+            provider = krakow,
+            size = 10000000,
+            storage_spec = ?config(storage_id, Config)
+        }]
+    }),
+    [{space_id, SpaceId} | lfm_proxy:init(Config)].
 
 
 end_per_testcase(_Case, Config) ->

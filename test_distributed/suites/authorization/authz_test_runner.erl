@@ -130,12 +130,11 @@ run_suite(TestSuiteSpec) ->
     ok | no_return().
 run_space_owner_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
-        space_selector = SpaceSelector,
+        space_id = SpaceId,
         space_owner_selector = SpaceOwnerSelector
     },
     test_node = TestNode
 }) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
     SpaceOwnerId = oct_background:get_user_id(SpaceOwnerSelector),
     ozw_test_rpc:space_set_user_privileges(SpaceId, SpaceOwnerId, []),
 
@@ -188,7 +187,7 @@ run_space_privileges_test_group(TestSuiteCtx) ->
     authz_privs_test_case_ctx().
 init_space_privileges_test_case(PermsType, TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
-        space_selector = SpaceSelector,
+        space_id = SpaceId,
         space_user_selector = SpaceUserSelector,
         posix_requires_space_privs = PosixSpacePrivs,
         acl_requires_space_privs = AclSpacePrivs
@@ -210,7 +209,7 @@ init_space_privileges_test_case(PermsType, TestSuiteCtx = #authz_test_suite_ctx{
             acl -> AclSpacePrivs
         end,
         full_perms_per_file = FullPermsPerFile,
-        space_id = oct_background:get_space_id(SpaceSelector),
+        space_id = SpaceId,  %% TODO rm field
         executioner_user_id = oct_background:get_user_id(SpaceUserSelector)
     }.
 
@@ -220,7 +219,7 @@ init_space_privileges_test_case(PermsType, TestSuiteCtx = #authz_test_suite_ctx{
     authz_privs_test_case_ctx().
 teardown_space_privileges_test_case(#authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
-        space_selector = SpaceSelector,
+        space_id = SpaceId,
         files_owner_selector = FilesOwnerSelector,
         space_user_selector = SpaceUserSelector
     },
@@ -228,7 +227,6 @@ teardown_space_privileges_test_case(#authz_test_suite_ctx{
 }) ->
     AdminPrivs = privileges:space_admin(),
 
-    SpaceId = oct_background:get_space_id(SpaceSelector),
     FilesOwnerId = oct_background:get_user_id(FilesOwnerSelector),
     set_user_space_privileges(TestNode, FilesOwnerId, SpaceId, AdminPrivs),
 
@@ -372,14 +370,13 @@ gather_required_perms(FileTreeSpec, Acc) when is_list(FileTreeSpec) ->
     ok | no_return().
 run_file_protection_test_case(0, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
-        suite_spec = #authz_test_suite_spec{space_selector = SpaceSelector},
+        suite_spec = #authz_test_suite_spec{space_id = SpaceId},
         test_node = TestNode
     },
     executioner_session_id = ExecutionerSessionId,
     required_perms_per_file = RequiredPermsPerFile,
     extra_data = ExtraData
 }) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
     {ok, ExecutionerUserId} = rpc:call(TestNode, session, get_user_id, [ExecutionerSessionId]),
 
     % Assert that even with full protection flags set operation can be performed
@@ -396,7 +393,7 @@ run_file_protection_test_case(0, TestCaseCtx = #authz_test_case_ctx{
 run_file_protection_test_case(BlockingProtectionFlags, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
         suite_spec = TestSuiteSpec = #authz_test_suite_spec{
-            space_selector = SpaceSelector
+            space_id = SpaceId
         },
         space_owner_session_id = SpaceOwnerSessionId,
         test_node = TestNode
@@ -405,7 +402,6 @@ run_file_protection_test_case(BlockingProtectionFlags, TestCaseCtx = #authz_test
     required_perms_per_file = RequiredPermsPerFile,
     extra_data = ExtraData
 }) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
     {ok, ExecutionerUserId} = rpc:call(TestNode, session, get_user_id, [ExecutionerSessionId]),
 
     % Assert that even with all perms set operation cannot be performed
@@ -635,11 +631,10 @@ constrain_executioner_session(CvTestCaseCtx = #authz_cv_test_case_ctx{
     file_meta:path().
 get_test_case_root_dir_canonical_path(#authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{suite_spec = #authz_test_suite_spec{
-        space_selector = SpaceSelector
+        space_id = SpaceId
     }},
     test_case_root_dir_path = TestCaseRootDirPath
 }) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
     [Sep, _SpaceName | PathTokens] = filepath_utils:split(TestCaseRootDirPath),
     filepath_utils:join([Sep, SpaceId | PathTokens]).
 
@@ -949,8 +944,8 @@ run_posix_permission_test_case(files_owner, PosixTestCaseCtx = #authz_posix_test
     end;
 
 run_posix_permission_test_case(space_member, PosixTestCaseCtx = #authz_posix_test_case_ctx{
-    test_case_ctx = #authz_test_case_ctx{
-        suite_ctx = TestCaseCtx = #authz_test_suite_ctx{
+    test_case_ctx = TestCaseCtx = #authz_test_case_ctx{
+        suite_ctx = #authz_test_suite_ctx{
             suite_spec = TestSuiteSpec,
             test_node = TestNode
         }
@@ -1213,14 +1208,18 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
 init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
     name = TestSuiteName,
     provider_selector = ProviderSelector,
-    space_selector = SpaceSelector,
+    space_id = SpaceId,
     space_owner_selector = SpaceOwnerSelector,
     files_owner_selector = FilesOwnerSelector
 }) ->
     TestNode = oct_background:get_random_provider_node(ProviderSelector),
     FileOwnerSessionId = oct_background:get_user_session_id(FilesOwnerSelector, ProviderSelector),
 
-    SpaceName = oct_background:get_space_name(SpaceSelector),
+    {ok, SpaceName} = ?rpc(TestNode, space_logic:get_name(?ROOT_SESS_ID, SpaceId)),
+
+    % TODO is necessay?
+    ?assertMatch({ok, _}, lfm_proxy:resolve_guid(TestNode, FileOwnerSessionId, filepath_utils:join([<<"/">>, SpaceName])), ?ATTEMPTS),
+
     TestSuiteRootDirPath = filepath_utils:join([<<"/">>, SpaceName, TestSuiteName]),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(TestNode, FileOwnerSessionId, TestSuiteRootDirPath, 8#777)),
 
@@ -1362,7 +1361,7 @@ assert_operation(ActualPermsPerFile, ExpResult, TestCaseCtx = #authz_test_case_c
 format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
         suite_spec = #authz_test_suite_spec{
-            space_selector = SpaceSelector
+            space_id = SpaceId
         },
         test_node = TestNode
     },
@@ -1390,7 +1389,6 @@ format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
         _ -> oct_background:to_entity_placeholder(ExecutionerUserId)
     end,
 
-    SpaceId = oct_background:get_space_id(SpaceSelector),
     {ok, ExecutionerSpacePrivs} = get_user_space_privileges(TestNode, SpaceId, ExecutionerUserId),
 
     {ok, ExecutionerSessionMode} = session:get_mode(ExecutionerSession),

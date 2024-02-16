@@ -95,21 +95,21 @@
     provider_selector = krakow :: oct_background:entity_selector(),
 
     % Selector of space within which tests will be carried.
-    space_selector = space_krk :: oct_background:entity_selector(),
+    space_id = space_krk :: od_space:id(),
 
     % Selector of user being owner of space. He should be allowed to perform
     % any operation on files in space regardless of permissions set.
-    space_owner_selector = user1 :: oct_background:entity_selector(),
+    space_owner_selector = space_owner :: oct_background:entity_selector(),
 
     % Selector of user belonging to space specified in `space_selector` in
     % context of which all files required for tests will be created. It will
     % be used to test `user` posix bits and `OWNER@` special acl identifier.
-    files_owner_selector = user2 :: oct_background:entity_selector(),
+    files_owner_selector = user1 :: oct_background:entity_selector(),
 
     % Selector of user belonging to space specified in `space_selector` which
     % aren't the same as `owner_user`. It will be used to test `group` posix
     % bits and acl for his Id.
-    space_user_selector = user3 :: oct_background:entity_selector(),
+    space_user_selector = user2 :: oct_background:entity_selector(),
 
     % Selector of group to which belongs `space_user_selector` and which itself
     % belong to `space_selector`. It will be used to test acl group identifier.
@@ -118,7 +118,7 @@
     % Selector of user not belonging to space specified in `space_selector`.
     % It will be used to test `other` posix bits and `EVERYONE@` special acl
     % identifier.
-    non_space_user_selector = user4 :: oct_background:entity_selector(),
+    non_space_user_selector = user3 :: oct_background:entity_selector(),
 
     % Tells whether `operation` needs `traverse_ancestors` permission. If so
     % `traverse_container` perm will be added to test root dir as needed perm
