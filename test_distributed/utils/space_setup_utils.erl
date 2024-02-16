@@ -10,6 +10,7 @@
 -module(space_setup_utils).
 -author("Katarzyna Such").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -22,9 +23,18 @@
 %% API
 -export([create_storage/2, set_up_space/1]).
 
+
+-define(SUPPORT_PARAMETERS, #support_parameters{
+    accounting_enabled = false,
+    dir_stats_service_enabled = true,
+    dir_stats_service_status = disabled
+}).
+
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
 
 -spec create_storage(oct_background:node_selector(), posix_storage_params()) -> od_storage:id().
 create_storage(Provider, #posix_storage_params{mount_point = MountPoint}) ->
@@ -49,9 +59,11 @@ set_up_space(#space_spec{
 
     SpaceId.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec support_space([support_spec()], tokens:serialized()) -> ok.
@@ -61,7 +73,7 @@ support_space(SupportSpecs, SupportToken) ->
             true -> StorageSpec;
             false -> create_storage(Provider, StorageSpec)
         end,
-        opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
+        opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size, ?SUPPORT_PARAMETERS)
     end, SupportSpecs).
 
 
