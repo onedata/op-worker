@@ -100,7 +100,7 @@
 run_suite(TestSuiteSpec) ->
     TestSuiteCtx = init_test_suite(TestSuiteSpec),
 
-    %% TODO VFS-11733 Rewrite space owner perm tests to onenv
+    run_space_owner_test_group(TestSuiteCtx),
     run_space_privileges_test_group(TestSuiteCtx),
     run_file_protection_test_group(TestSuiteCtx),
     run_data_access_caveats_test_group(TestSuiteCtx),
@@ -108,6 +108,50 @@ run_suite(TestSuiteSpec) ->
     run_open_handle_mode_test_group(TestSuiteCtx),
     run_posix_permission_test_group(TestSuiteCtx),
     run_acl_permission_test_group(TestSuiteCtx).
+
+
+%%%===================================================================
+%%% SPACE PRIVILEGES TESTS
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tests permissions needed to perform operation as space owner.
+%%
+%% NOTE: below tests checks only posix/acl and space privileges cases as
+%% space owner is specially handled for them. For all other mechanisms
+%% (caveats, etc.) that works for space owner as for any other user -
+%% space owner should be included in tests for that mechanism.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_space_owner_test_group(authz_test_suite_ctx()) ->
+    ok | no_return().
+run_space_owner_test_group(TestSuiteCtx = #authz_test_suite_ctx{
+    suite_spec = #authz_test_suite_spec{
+        space_selector = SpaceSelector,
+        space_owner_selector = SpaceOwnerSelector
+    },
+    test_node = TestNode
+}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    SpaceOwnerId = oct_background:get_user_id(SpaceOwnerSelector),
+    ozw_test_rpc:space_set_user_privileges(SpaceId, SpaceOwnerId, []),
+
+    lists:foreach(fun(PermsType) ->
+        TestCaseName = build_test_case_name(["space_owner", PermsType]),
+        TestCaseCtx = init_test_case(TestCaseName, SpaceOwnerSelector, TestSuiteCtx),
+
+        % Assert that even with all perms and space privileges denied
+        % operation will be performed
+        FileGuids = maps:keys(TestCaseCtx#authz_test_case_ctx.required_perms_per_file),
+        FullPermsPerFile = deny_full_perms(PermsType, TestNode, FileGuids),
+
+        assert_operation(FullPermsPerFile, ok, TestCaseCtx),
+
+        run_final_storage_ownership_check(TestCaseCtx)
+    end, ?RAND_SUBLIST([posix, acl], 2)).  %% TODO sublist?
 
 
 %%%===================================================================
@@ -455,40 +499,61 @@ await_dataset_eff_cache_clearing(Node, SpaceId, UserId, ExtraData) ->
     ok | no_return().
 run_data_access_caveats_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
+        space_owner_selector = SpaceOwnerSelector,
         files_owner_selector = FilesOwnerSelector
-    },
-    test_node = TestNode
+    }
 }) ->
-    FilesOwnerUserId = oct_background:get_user_id(FilesOwnerSelector),
-    FilesOwnerMainToken = provider_onenv_test_utils:create_oz_temp_access_token(FilesOwnerUserId),
+    lists:foreach(fun({CaveatType, ExecutionerSelector}) ->
 
-    lists:foreach(fun(CaveatType) ->
-        TestCaseName = build_test_case_name(["cv", CaveatType]),
-        TestCaseCtx = init_test_case(TestCaseName, FilesOwnerSelector, TestSuiteCtx),
+        TestCaseName = build_test_case_name(["cv", ExecutionerSelector, CaveatType]),
+        CvTestCaseCtx = init_data_access_caveats_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
+        run_data_access_caveats_test_case(CaveatType, CvTestCaseCtx)
 
-        % Assert that even with all perms set operation can be performed
-        % only when caveats allows it
-        FileGuids = maps:keys(TestCaseCtx#authz_test_case_ctx.required_perms_per_file),
-        FullPermsPerFile = set_full_perms(?RAND_ELEMENT([posix, acl]), TestNode, FileGuids),
-
-        CvTestCaseCtx = #authz_cv_test_case_ctx{
-            test_case_ctx = TestCaseCtx,
-            executioner_user_id = FilesOwnerUserId,
-            executioner_main_token = FilesOwnerMainToken,
-            full_perms_per_file = FullPermsPerFile
-        },
-        run_caveats_test_case(CaveatType, CvTestCaseCtx)
-
-    end, ?RAND_SUBLIST([data_path, data_objectid, data_readonly], 3)).  %% TODO test also other users? / sublist?
+    end, ?RAND_SUBLIST([
+        {data_path, SpaceOwnerSelector},
+        {data_path, FilesOwnerSelector},
+        {data_objectid, SpaceOwnerSelector},
+        {data_objectid, FilesOwnerSelector},
+        {data_readonly, SpaceOwnerSelector},
+        {data_readonly, FilesOwnerSelector}
+    ], 3)).  %% TODO test also other users? / sublist?
 
 
 %% @private
--spec run_caveats_test_case(
+-spec init_data_access_caveats_test_case(
+    binary(),
+    session:id() | oct_background:entity_selector(),
+    authz_test_suite_ctx()
+) ->
+    authz_cv_test_case_ctx().
+init_data_access_caveats_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx = #authz_test_suite_ctx{
+    test_node = TestNode
+}) ->
+    TestCaseCtx = init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
+
+    % Assert that even with all perms set operation can be performed
+    % only when caveats allows it
+    FileGuids = maps:keys(TestCaseCtx#authz_test_case_ctx.required_perms_per_file),
+    FullPermsPerFile = set_full_perms(?RAND_ELEMENT([posix, acl]), TestNode, FileGuids),
+
+    ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
+    ExecutionerMainToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+
+    #authz_cv_test_case_ctx{
+        test_case_ctx = TestCaseCtx,
+        executioner_user_id = ExecutionerUserId,
+        executioner_main_token = ExecutionerMainToken,
+        full_perms_per_file = FullPermsPerFile
+    }.
+
+
+%% @private
+-spec run_data_access_caveats_test_case(
     data_path | data_objectid | data_readonly,
     authz_cv_test_case_ctx()
 ) ->
     ok | no_return().
-run_caveats_test_case(data_path, CvTestCaseCtx = #authz_cv_test_case_ctx{
+run_data_access_caveats_test_case(data_path, CvTestCaseCtx = #authz_cv_test_case_ctx{
     test_case_ctx = TestCaseCtx = #authz_test_case_ctx{
         suite_ctx = #authz_test_suite_ctx{suite_spec = TestSuiteSpec}
     },
@@ -504,7 +569,7 @@ run_caveats_test_case(data_path, CvTestCaseCtx = #authz_cv_test_case_ctx{
     })),
     run_final_storage_ownership_check(TestCaseCtx);
 
-run_caveats_test_case(data_objectid, CvTestCaseCtx = #authz_cv_test_case_ctx{
+run_data_access_caveats_test_case(data_objectid, CvTestCaseCtx = #authz_cv_test_case_ctx{
     test_case_ctx = TestCaseCtx = #authz_test_case_ctx{
         suite_ctx = #authz_test_suite_ctx{suite_spec = TestSuiteSpec},
         test_case_root_dir_path = TestCaseRootDirPath,
@@ -526,7 +591,7 @@ run_caveats_test_case(data_objectid, CvTestCaseCtx = #authz_cv_test_case_ctx{
     )),
     run_final_storage_ownership_check(TestCaseCtx);
 
-run_caveats_test_case(data_readonly, CvTesCaseCtx = #authz_cv_test_case_ctx{
+run_data_access_caveats_test_case(data_readonly, CvTesCaseCtx = #authz_cv_test_case_ctx{
     test_case_ctx = #authz_test_case_ctx{
         suite_ctx = #authz_test_suite_ctx{
             suite_spec = TestSuiteSpec = #authz_test_suite_spec{
@@ -601,9 +666,10 @@ run_share_test_group(#authz_test_suite_ctx{suite_spec = #authz_test_suite_spec{
 
 run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
+        space_owner_selector = SpaceOwnerSelector,
         files_owner_selector = FilesOwnerSelector,
         space_user_selector = SpaceUserSelector,
-        non_space_user = NonSpaceUserSelector
+        non_space_user_selector = NonSpaceUserSelector
     }
 }) ->
     lists:foreach(fun({ExecutionerSelector, PermsType, TestCaseName}) ->
@@ -612,12 +678,15 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         run_share_test_case(PermsType, TestCaseCtx)
 
     end, ?RAND_SUBLIST([
-        {FilesOwnerSelector, posix, <<"share_owner_posix">>},
+        {SpaceOwnerSelector, posix, <<"share_space_owner_posix">>},
+        {FilesOwnerSelector, posix, <<"share_files_owner_posix">>},
         {SpaceUserSelector, posix, <<"share_space_user_posix">>},
         {NonSpaceUserSelector, posix, <<"share_non_space_user_posix">>},
         {?GUEST_SESS_ID, posix, <<"share_guest_posix">>},
-        {FilesOwnerSelector, {acl, allow}, <<"share_owner_acl_allow">>},
-        {FilesOwnerSelector, {acl, deny}, <<"share_owner_acl_deny">>},
+        {SpaceOwnerSelector, {acl, allow}, <<"share_space_owner_acl_allow">>},
+        {SpaceOwnerSelector, {acl, deny}, <<"share_space_owner_acl_deny">>},
+        {FilesOwnerSelector, {acl, allow}, <<"share_files_owner_acl_allow">>},
+        {FilesOwnerSelector, {acl, deny}, <<"share_files_owner_acl_deny">>},
         {SpaceUserSelector, {acl, allow}, <<"share_space_user_acl_allow">>},
         {SpaceUserSelector, {acl, deny}, <<"share_space_user_acl_deny">>},
         {NonSpaceUserSelector, {acl, allow}, <<"share_non_space_user_acl_allow">>},
@@ -814,7 +883,7 @@ run_posix_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     end, ?RAND_SUBLIST([
         {files_owner, TestSuiteSpec#authz_test_suite_spec.files_owner_selector},
         {space_member, TestSuiteSpec#authz_test_suite_spec.space_user_selector},
-        {non_space_member, TestSuiteSpec#authz_test_suite_spec.non_space_user}
+        {non_space_member, TestSuiteSpec#authz_test_suite_spec.non_space_user_selector}
     ], 3)). %% TODO sublis length?
 
 
@@ -1238,6 +1307,18 @@ set_full_perms(posix, Node, FileGuids) ->
 set_full_perms(acl, Node, FileGuids) ->
     FullAclPermsPerFile = get_full_perms_per_file(Node, FileGuids),
     permissions_test_utils:set_acls(Node, FullAclPermsPerFile, #{}, ?everyone, ?no_flags_mask),
+    FullAclPermsPerFile.
+
+
+%% @private
+-spec deny_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
+deny_full_perms(posix, Node, FileGuids) ->
+    ZeroPosixPermsPerFile = lists:foldl(fun(Guid, Acc) -> Acc#{Guid => 8#777} end, #{}, FileGuids),
+    permissions_test_utils:set_modes(Node, ZeroPosixPermsPerFile),
+    ZeroPosixPermsPerFile;
+deny_full_perms(acl, Node, FileGuids) ->
+    FullAclPermsPerFile = get_full_perms_per_file(Node, FileGuids),
+    permissions_test_utils:set_acls(Node, #{}, FullAclPermsPerFile, ?everyone, ?no_flags_mask),
     FullAclPermsPerFile.
 
 

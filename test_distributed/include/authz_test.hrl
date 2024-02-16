@@ -118,7 +118,7 @@
     % Selector of user not belonging to space specified in `space_selector`.
     % It will be used to test `other` posix bits and `EVERYONE@` special acl
     % identifier.
-    non_space_user = user4 :: oct_background:entity_selector(),
+    non_space_user_selector = user4 :: oct_background:entity_selector(),
 
     % Tells whether `operation` needs `traverse_ancestors` permission. If so
     % `traverse_container` perm will be added to test root dir as needed perm
