@@ -956,6 +956,7 @@ create_share_test(Config) ->
         files = [#ct_authz_dir_spec{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EAGAIN)},
         available_in_readonly_mode = false,
         available_in_share_mode = false,
         available_in_open_handle_mode = false,

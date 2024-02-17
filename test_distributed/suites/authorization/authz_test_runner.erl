@@ -556,9 +556,10 @@ run_data_access_caveats_test_case(data_path, CvTestCaseCtx = #authz_cv_test_case
         CvTestCaseCtx, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}
     )),
 
-    assert_operation(FullPermsPerFile, ok, constrain_executioner_session(CvTestCaseCtx, #cv_data_path{
-        whitelist = [get_test_case_root_dir_canonical_path(TestCaseCtx)]
-    })),
+    ExpResult = cv_test_case_get_exp_result(CvTestCaseCtx),
+    assert_operation(FullPermsPerFile, ExpResult, constrain_executioner_session(
+        CvTestCaseCtx, #cv_data_path{whitelist = [get_test_case_root_dir_canonical_path(TestCaseCtx)]}
+    )),
     run_final_storage_ownership_check(TestCaseCtx);
 
 run_data_access_caveats_test_case(data_objectid, CvTestCaseCtx = #authz_cv_test_case_ctx{
@@ -576,14 +577,15 @@ run_data_access_caveats_test_case(data_objectid, CvTestCaseCtx = #authz_cv_test_
         CvTestCaseCtx, #cv_data_objectid{whitelist = [DummyObjectId]}
     )),
 
+    ExpResult = cv_test_case_get_exp_result(CvTestCaseCtx),
     ?FILE_REF(TestCaseRootDirGuid) = maps:get(TestCaseRootDirPath, ExtraData),
     {ok, TestCaseRootDirObjectId} = file_id:guid_to_objectid(TestCaseRootDirGuid),
-    assert_operation(FullPermsPerFile, ok, constrain_executioner_session(
+    assert_operation(FullPermsPerFile, ExpResult, constrain_executioner_session(
         CvTestCaseCtx, #cv_data_objectid{whitelist = [TestCaseRootDirObjectId]}
     )),
     run_final_storage_ownership_check(TestCaseCtx);
 
-run_data_access_caveats_test_case(data_readonly, CvTesCaseCtx = #authz_cv_test_case_ctx{
+run_data_access_caveats_test_case(data_readonly, CvTestCaseCtx = #authz_cv_test_case_ctx{
     test_case_ctx = #authz_test_case_ctx{
         suite_ctx = #authz_test_suite_ctx{
             suite_spec = TestSuiteSpec = #authz_test_suite_spec{
@@ -593,11 +595,12 @@ run_data_access_caveats_test_case(data_readonly, CvTesCaseCtx = #authz_cv_test_c
     },
     full_perms_per_file = FullPermsPerFile
 }) ->
-    CvTestCaseCtx1 = constrain_executioner_session(CvTesCaseCtx, #cv_data_readonly{}),
+    CvTestCaseCtx1 = constrain_executioner_session(CvTestCaseCtx, #cv_data_readonly{}),
 
     case AvailableInReadonlyMode of
         true ->
-            assert_operation(FullPermsPerFile, ok, CvTestCaseCtx1),
+            ExpResult = cv_test_case_get_exp_result(CvTestCaseCtx),
+            assert_operation(FullPermsPerFile, ExpResult, CvTestCaseCtx1),
             run_final_storage_ownership_check(CvTestCaseCtx1#authz_cv_test_case_ctx.test_case_ctx);
         false ->
             ExpError = get_exp_error(?EACCES, TestSuiteSpec),
@@ -620,6 +623,19 @@ constrain_executioner_session(CvTestCaseCtx = #authz_cv_test_case_ctx{
     CvTestCaseCtx#authz_cv_test_case_ctx{test_case_ctx = TestCaseCtx#authz_test_case_ctx{
         executioner_session_id = ConstrainedSessionId
     }}.
+
+
+%% @private
+-spec cv_test_case_get_exp_result(authz_cv_test_case_ctx()) -> ok | errors:error().
+cv_test_case_get_exp_result(#authz_cv_test_case_ctx{test_case_ctx = #authz_test_case_ctx{
+    suite_ctx = #authz_test_suite_ctx{suite_spec = #authz_test_suite_spec{
+        blocked_by_data_access_caveats = {true, ExpError}
+    }}
+}}) ->
+    ExpError;
+
+cv_test_case_get_exp_result(_) ->
+    ok.
 
 
 %% @private

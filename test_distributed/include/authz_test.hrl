@@ -142,6 +142,9 @@
     % perform `operation`.
     files :: [#ct_authz_dir_spec{} | #ct_authz_file_spec{}],
 
+    % Tells whether operation is blocked if session token contains data caveats
+    blocked_by_data_access_caveats = false :: false | {true, errors:error()},
+
     % Tells whether operation should work in readonly mode (readonly caveats set)
     available_in_readonly_mode = false :: boolean(),
 
