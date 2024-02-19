@@ -20,7 +20,7 @@
 
 %% API
 -export([
-    set_cors_headers/1,
+    allow_onezone_as_frame_ancestor/1,
     set_content_disposition_header/2,
 
     send_data_chunk/4
@@ -32,12 +32,9 @@
 %%%===================================================================
 
 
--spec set_cors_headers(cowboy_req:req()) -> cowboy_req:req().
-set_cors_headers(Req1) ->
-    OzUrl = oneprovider:get_oz_url(),
-
-    Req2 = gui_cors:allow_origin(OzUrl, Req1),
-    gui_cors:allow_frame_origin(OzUrl, Req2).
+-spec allow_onezone_as_frame_ancestor(cowboy_req:req()) -> cowboy_req:req().
+allow_onezone_as_frame_ancestor(Req) ->
+    http_cors:allow_frame_ancestors(oneprovider:get_oz_url(), Req).
 
 
 -spec set_content_disposition_header(cowboy_req:req(), file_meta:name()) ->

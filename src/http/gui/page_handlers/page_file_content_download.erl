@@ -144,10 +144,13 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req) ->
-    OzUrl = oneprovider:get_oz_url(),
-    Req2 = gui_cors:allow_origin(OzUrl, Req),
-    Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
+handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, InitialReq) ->
+    Req = case SessionId of
+        % for public downloads, the page will be embeddable everywhere (no CSP headers)
+        ?GUEST -> InitialReq;
+        % authorized downloads will work only from the Onedata GUI (served from Onezone origin)
+        _ -> http_download_utils:allow_onezone_as_frame_ancestor(InitialReq)
+    end,
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
         case lfm:stat(SessionId, ?FILE_REF(FileGuid, false)) of
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
@@ -158,7 +161,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
     end, [], FileGuids),
     case {FileAttrsList, FollowSymlinks} of
         {{error, Errno}, _} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req3);
+            http_req:send_error(?ERROR_POSIX(Errno), Req);
         {[#file_attr{type = ?DIRECTORY_TYPE, guid = Guid, name = FileName}], _} ->
             TargetName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
                 undefined ->
@@ -167,35 +170,35 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
                     archivisation_tree:get_filename_for_download(ArchiveId)
             end,
             file_content_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req3
+                FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req
             );
         {[#file_attr{type = ?REGULAR_FILE_TYPE} = Attr], _} ->
             file_content_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req
             );
         {[#file_attr{type = ?SYMLINK_TYPE, guid = Guid, name = SymlinkName}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
                     file_content_download_utils:download_tarball(
-                        FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req3
+                        FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req
                     );
                 {ok, #file_attr{} = ResolvedAttr} ->
                     file_content_download_utils:download_single_file(
                         SessionId, ResolvedAttr, SymlinkName,
                         fun() -> file_download_code:remove(FileDownloadCode) end,
-                        Req3
+                        Req
                     );
                 {error, Errno} ->
-                    http_req:send_error(?ERROR_POSIX(Errno), Req3)
+                    http_req:send_error(?ERROR_POSIX(Errno), Req)
             end;
         {[#file_attr{type = ?SYMLINK_TYPE} = Attr], false} ->
             file_content_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             TarballName = <<"onedata-download-", Timestamp/binary, ".tar">>,
             file_content_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req3
+                FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req
             )
     end.
