@@ -6,7 +6,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO VFS-11734 Port permission tests to authz_api_test_runner
 %%% This test suite verifies correct behaviour of authorization mechanism
 %%% with corresponding lfm (logical_file_manager) functions.
 %%% @end
@@ -50,10 +49,10 @@
     resolve_guid/1,
     stat/1,
 
-%%    set_perms_test/1,
-    check_read_perms_test/1,
-    check_write_perms_test/1,
-    check_rdwr_perms_test/1,
+    set_perms/1,
+    check_read_perms/1,
+    check_write_perms/1,
+    check_rdwr_perms/1,
 
     create_share_test/1,
 %%    remove_share_test/1,
@@ -110,10 +109,10 @@ all() -> [
     resolve_guid,
     stat,
 
-%%    set_perms_test,
-    check_read_perms_test,
-    check_write_perms_test,
-    check_rdwr_perms_test,
+    set_perms,
+    check_read_perms,
+    check_write_perms,
+    check_rdwr_perms,
 
     create_share_test,
 %%    remove_share_test,
@@ -157,6 +156,9 @@ all() -> [
 ).
 -define(RUN_AUTHZ_FILE_COMMON_API_TEST(__CONFIG),
     authz_file_common_api_tests:?FUNCTION_NAME(?config(space_id, Config))
+).
+-define(RUN_AUTHZ_PERMS_API_TEST(__CONFIG),
+    authz_perms_api_tests:?FUNCTION_NAME(?config(space_id, Config))
 ).
 -define(RUN_AUTHZ_ACL_API_TEST(__CONFIG),
     authz_acl_api_tests:?FUNCTION_NAME(?config(space_id, Config))
@@ -251,226 +253,20 @@ stat(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
-%%%% TODO
-%%set_perms_test(Config) ->
-%%    [_, _, Node] = ?config(op_worker_nodes, Config),
-%%    FileOwner = <<"user1">>,
-%%
-%%    FileOwnerUserSessionId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
-%%    GroupUserSessionId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-%%    OtherUserSessionId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
-%%    SpaceOwnerSessionId = ?config({session_id, {<<"owner">>, ?GET_DOMAIN(W)}}, Config),
-%%
-%%    DirPath = <<"/space1/dir1">>,
-%%    {ok, DirGuid} = ?assertMatch(
-%%        {ok, _},
-%%        lfm_proxy:mkdir(Node, FileOwnerUserSessionId, DirPath)
-%%    ),
-%%
-%%    FilePath = <<"/space1/dir1/file1">>,
-%%    {ok, FileGuid} = ?assertMatch(
-%%        {ok, _},
-%%        lfm_proxy:create(Node, FileOwnerUserSessionId, FilePath, 8#777)
-%%    ),
-%%    {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), <<"share">>)),
-%%    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-%%
-%%    % Open file to ensure it's creation on storage
-%%    {ok, Handle} = lfm_proxy:open(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), write),
-%%    ok = lfm_proxy:close(Node, Handle),
-%%
-%%    AssertProperStorageAttrsFun = fun(ExpMode) ->
-%%        permissions_test_utils:assert_user_is_file_owner_on_storage(
-%%            Node, ?SPACE_ID, FilePath, FileOwnerUserSessionId, #{mode => ?FILE_MODE(ExpMode)}
-%%        )
-%%    end,
-%%
-%%    AssertProperStorageAttrsFun(8#777),
-%%
-%%    %% POSIX
-%%
-%%    % file owner can always change file perms if he has access to it
-%%    permissions_test_utils:set_modes(Node, #{DirGuid => 8#677, FileGuid => 8#777}),
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)
-%%    ),
-%%    permissions_test_utils:set_modes(Node, #{DirGuid => 8#100, FileGuid => 8#000}),
-%%    ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)),
-%%    AssertProperStorageAttrsFun(8#000),
-%%
-%%    % but not if that access is via shared guid
-%%    permissions_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
-%%    ?assertMatch(
-%%        {error, ?EPERM},
-%%        lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(ShareFileGuid), 8#000)
-%%    ),
-%%    AssertProperStorageAttrsFun(8#777),
-%%
-%%    % other users from space can't change perms no matter what
-%%    permissions_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:set_perms(Node, GroupUserSessionId, ?FILE_REF(FileGuid), 8#000)
-%%    ),
-%%    AssertProperStorageAttrsFun(8#777),
-%%
-%%    % with exception being space owner who can always change perms no matter what
-%%    permissions_test_utils:set_modes(Node, #{DirGuid => 8#000, FileGuid => 8#000}),
-%%    ?assertMatch(ok, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, ?FILE_REF(FileGuid), 8#555)),
-%%    AssertProperStorageAttrsFun(8#555),
-%%
-%%    % but even space owner cannot perform write operation on space dir
-%%    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(<<"space1">>),
-%%    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, ?FILE_REF(SpaceGuid), 8#000)),
-%%    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, ?FILE_REF(SpaceGuid), 8#555)),
-%%    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, ?FILE_REF(SpaceGuid), 8#777)),
-%%
-%%    % users outside of space shouldn't even see the file
-%%    permissions_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
-%%    ?assertMatch(
-%%        {error, ?ENOENT},
-%%        lfm_proxy:set_perms(Node, OtherUserSessionId, ?FILE_REF(FileGuid), 8#000)
-%%    ),
-%%    AssertProperStorageAttrsFun(8#777),
-%%
-%%    %% ACL
-%%
-%%    % file owner can always change file perms if he has access to it
-%%    permissions_test_utils:set_acls(Node, #{
-%%        DirGuid => ?ALL_DIR_PERMS -- [?traverse_container],
-%%        FileGuid => ?ALL_FILE_PERMS
-%%    }, #{}, ?everyone, ?no_flags_mask),
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)
-%%    ),
-%%
-%%    permissions_test_utils:set_acls(Node, #{
-%%        DirGuid => [?traverse_container],
-%%        FileGuid => []
-%%    }, #{}, ?everyone, ?no_flags_mask),
-%%    ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)),
-%%
-%%    % but not if that access is via shared guid
-%%    ?assertMatch(
-%%        {error, ?EPERM},
-%%        lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(ShareFileGuid), 8#000)
-%%    ),
-%%
-%%    % file owner cannot change acl after his access was denied by said acl
-%%    permissions_test_utils:set_acls(Node, #{}, #{
-%%        FileGuid => ?ALL_FILE_PERMS
-%%    }, ?everyone, ?no_flags_mask),
-%%
-%%    PermsBitmask = permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS),
-%%
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:set_acl(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), [
-%%            ?ALLOW_ACE(?owner, ?no_flags_mask, PermsBitmask)
-%%        ])
-%%    ),
-%%
-%%    % but space owner always can change acl for any file
-%%    ?assertMatch(
-%%        ok,
-%%        lfm_proxy:set_acl(Node, SpaceOwnerSessionId, ?FILE_REF(FileGuid), [
-%%            ?ALLOW_ACE(?owner, ?no_flags_mask, PermsBitmask)
-%%        ])
-%%    ),
-%%
-%%    % other users from space can't change perms no matter what
-%%    permissions_test_utils:set_acls(Node, #{
-%%        DirGuid => ?ALL_DIR_PERMS,
-%%        FileGuid => ?ALL_FILE_PERMS
-%%    }, #{}, ?everyone, ?no_flags_mask),
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:set_perms(Node, GroupUserSessionId, ?FILE_REF(FileGuid), 8#000)
-%%    ),
-%%
-%%    % users outside of space shouldn't even see the file
-%%    permissions_test_utils:set_acls(Node, #{
-%%        DirGuid => ?ALL_DIR_PERMS,
-%%        FileGuid => ?ALL_FILE_PERMS
-%%    }, #{}, ?everyone, ?no_flags_mask),
-%%    ?assertMatch(
-%%        {error, ?ENOENT},
-%%        lfm_proxy:set_perms(Node, OtherUserSessionId, ?FILE_REF(FileGuid), 8#000)
-%%    ).
+set_perms(Config) ->
+    ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-check_read_perms_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?read_object]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, read))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+check_read_perms(Config) ->
+    ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-check_write_perms_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?write_object]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, write))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+check_write_perms(Config) ->
+    ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-check_rdwr_perms_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?read_object, ?write_object]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+check_rdwr_perms(Config) ->
+    ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
 create_share_test(Config) ->
