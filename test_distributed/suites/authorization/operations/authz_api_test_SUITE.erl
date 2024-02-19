@@ -67,12 +67,12 @@
     set_acl_test/1,
     remove_acl_test/1,
 
-    get_transfer_encoding_test/1,
-    set_transfer_encoding_test/1,
-    get_cdmi_completion_status_test/1,
-    set_cdmi_completion_status_test/1,
-    get_mimetype_test/1,
-    set_mimetype_test/1,
+    get_transfer_encoding/1,
+    set_transfer_encoding/1,
+    get_cdmi_completion_status/1,
+    set_cdmi_completion_status/1,
+    get_mimetype/1,
+    set_mimetype/1,
 
     get_metadata_test/1,
     set_metadata_test/1,
@@ -82,10 +82,10 @@
     set_xattr_test/1,
     remove_xattr_test/1,
 
-    add_qos_entry_test/1,
-    get_qos_entry_test/1,
-    remove_qos_entry_test/1,
-    get_effective_file_qos_test/1,
+    add_qos_entry/1,
+    get_qos_entry/1,
+    remove_qos_entry/1,
+    get_effective_file_qos/1,
     check_qos_status/1
 ]).
 
@@ -127,12 +127,12 @@ all() -> [
     set_acl_test,
     remove_acl_test,
 
-    get_transfer_encoding_test,
-    set_transfer_encoding_test,
-    get_cdmi_completion_status_test,
-    set_cdmi_completion_status_test,
-    get_mimetype_test,
-    set_mimetype_test,
+    get_transfer_encoding,
+    set_transfer_encoding,
+    get_cdmi_completion_status,
+    set_cdmi_completion_status,
+    get_mimetype,
+    set_mimetype,
 
     get_metadata_test,
     set_metadata_test,
@@ -142,15 +142,16 @@ all() -> [
     set_xattr_test,
     remove_xattr_test,
 
-    add_qos_entry_test,
-    get_qos_entry_test,
-    remove_qos_entry_test,
-    get_effective_file_qos_test,
+    add_qos_entry,
+    get_qos_entry,
+    remove_qos_entry,
+    get_effective_file_qos,
     check_qos_status
 ].
 
 
--define(RUN_QOS_API_TEST(__CONFIG), authz_qos_api_tests:?FUNCTION_NAME(?config(space_id, Config))).
+-define(RUN_AUTHZ_CDMI_API_TEST(__CONFIG), authz_cdmi_api_tests:?FUNCTION_NAME(?config(space_id, Config))).
+-define(RUN_AUTHZ_QOS_API_TEST(__CONFIG), authz_qos_api_tests:?FUNCTION_NAME(?config(space_id, Config))).
 
 -define(ATTEMPTS, 10).
 
@@ -1153,160 +1154,28 @@ remove_acl_test(Config) ->
     }).
 
 
-get_transfer_encoding_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?read_attributes],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                opt_cdmi:set_transfer_encoding(Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"base64">>),
-                ?FILE_REF(Guid)
-            end
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:get_transfer_encoding(Node, SessionId, FileKey))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+get_transfer_encoding(Config) ->
+    ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
-set_transfer_encoding_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?write_attributes]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:set_transfer_encoding(Node, SessionId, FileKey, <<"base64">>))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+set_transfer_encoding(Config) ->
+    ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
-get_cdmi_completion_status_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?read_attributes],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                opt_cdmi:set_cdmi_completion_status(Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"Completed">>),
-                ?FILE_REF(Guid)
-            end
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:get_cdmi_completion_status(Node, SessionId, FileKey))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+get_cdmi_completion_status(Config) ->
+    ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
-set_cdmi_completion_status_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?write_attributes]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:set_cdmi_completion_status(Node, SessionId, FileKey, <<"Completed">>))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+set_cdmi_completion_status(Config) ->
+    ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
-get_mimetype_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?read_attributes],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                opt_cdmi:set_mimetype(Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"mimetype">>),
-                ?FILE_REF(Guid)
-            end
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:get_mimetype(Node, SessionId, FileKey))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+get_mimetype(Config) ->
+    ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
-set_mimetype_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?write_attributes]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:set_mimetype(Node, SessionId, FileKey, <<"mimetype">>))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+set_mimetype(Config) ->
+    ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
 get_metadata_test(Config) ->
@@ -1502,24 +1371,24 @@ remove_xattr_test(Config) ->
     }).
 
 
-add_qos_entry_test(Config) ->
-    ?RUN_QOS_API_TEST(Config).
+add_qos_entry(Config) ->
+    ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
-get_qos_entry_test(Config) ->
-    ?RUN_QOS_API_TEST(Config).
+get_qos_entry(Config) ->
+    ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
-remove_qos_entry_test(Config) ->
-    ?RUN_QOS_API_TEST(Config).
+remove_qos_entry(Config) ->
+    ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
-get_effective_file_qos_test(Config) ->
-    ?RUN_QOS_API_TEST(Config).
+get_effective_file_qos(Config) ->
+    ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
 check_qos_status(Config) ->
-    ?RUN_QOS_API_TEST(Config).
+    ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
 %%%===================================================================
