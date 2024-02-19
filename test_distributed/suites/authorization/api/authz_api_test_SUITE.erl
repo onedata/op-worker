@@ -7,17 +7,14 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This test suite verifies correct behaviour of authorization mechanism
-%%% with corresponding lfm (logical_file_manager) functions.
+%%% with corresponding operations.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(authz_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("authz_api_test.hrl").
--include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("space_setup_utils.hrl").
--include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -46,7 +43,8 @@
 
     get_parent/1,
     get_file_path/1,
-    resolve_guid/1,
+    %% TODO
+%%    resolve_guid/1,
     stat/1,
 
     set_perms/1,
@@ -54,9 +52,9 @@
     check_write_perms/1,
     check_rdwr_perms/1,
 
-    create_share_test/1,
-%%    remove_share_test/1,
-%%    share_perms_test/1,
+    create_share/1,
+    remove_share/1,
+    share_perms_are_checked_only_up_to_share_root/1,
 
     get_acl/1,
     set_acl/1,
@@ -114,9 +112,9 @@ all() -> [
     check_write_perms,
     check_rdwr_perms,
 
-    create_share_test,
-%%    remove_share_test,
-%%    share_perms_test,
+    create_share,
+    remove_share,
+    share_perms_are_checked_only_up_to_share_root,
 
     get_acl,
     set_acl,
@@ -159,6 +157,9 @@ all() -> [
 ).
 -define(RUN_AUTHZ_PERMS_API_TEST(__CONFIG),
     authz_perms_api_tests:?FUNCTION_NAME(?config(space_id, Config))
+).
+-define(RUN_AUTHZ_SHARE_API_TEST(__CONFIG),
+    authz_share_api_tests:?FUNCTION_NAME(?config(space_id, Config))
 ).
 -define(RUN_AUTHZ_ACL_API_TEST(__CONFIG),
     authz_acl_api_tests:?FUNCTION_NAME(?config(space_id, Config))
@@ -269,130 +270,16 @@ check_rdwr_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-create_share_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_dir_spec{name = <<"dir1">>}],
-        posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
-        acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
-        blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EAGAIN)},
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_shares:create(Node, SessionId, DirKey, <<"create_share">>))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
-    }).
+create_share(Config) ->
+    ?RUN_AUTHZ_SHARE_API_TEST(Config).
 
 
-%%%% TODO
-%%remove_share_test(Config) ->
-%%    [_, _, W] = ?config(op_worker_nodes, Config),
-%%
-%%    SpaceOwnerSessionId = ?config({session_id, {<<"owner">>, ?GET_DOMAIN(W)}}, Config),
-%%    {ok, SpaceName} = rpc:call(Node, space_logic, get_name, [?ROOT_SESS_ID, ?SPACE_ID]),
-%%    ScenariosRootDirPath = filename:join(["/", SpaceName, ?SCENARIO_NAME]),
-%%    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, SpaceOwnerSessionId, ScenariosRootDirPath, 8#700)),
-%%
-%%    FilePath = filename:join([ScenariosRootDirPath, ?RAND_STR()]),
-%%    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SpaceOwnerSessionId, FilePath, 8#700)),
-%%    {ok, ShareId} = opt_shares:create(Node, SpaceOwnerSessionId, ?FILE_REF(FileGuid), <<"share">>),
-%%
-%%    RemoveShareFun = fun(SessionId) ->
-%%        % Remove share via gs call to test token data caveats
-%%        % (middleware should reject any api call with data caveats)
-%%        rpc:call(Node, middleware, handle, [#op_req{
-%%            auth = permissions_test_utils:get_auth(Node, SessionId),
-%%            gri = #gri{type = op_share, id = ShareId, aspect = instance},
-%%            operation = delete
-%%        }])
-%%    end,
-%%
-%%    UserId = <<"user2">>,
-%%    UserSessionId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-%%
-%%    % Assert share removal requires only ?SPACE_MANAGE_SHARES space priv
-%%    % and no file permissions
-%%    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, []),
-%%    ?assertEqual(?ERROR_POSIX(?EPERM), RemoveShareFun(UserSessionId)),
-%%
-%%    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, privileges:space_admin()),
-%%    MainToken = initializer:create_access_token(UserId),
-%%
-%%    % Assert api operations are unauthorized in case of data caveats
-%%    Token1 = tokens:confine(MainToken, #cv_data_readonly{}),
-%%    CaveatSessionId1 = permissions_test_utils:create_session(Node, UserId, Token1),
-%%    ?assertEqual(
-%%        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED({cv_data_readonly})),
-%%        RemoveShareFun(CaveatSessionId1)
-%%    ),
-%%    Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [ScenariosRootDirPath]}),
-%%    CaveatSessionId2 = permissions_test_utils:create_session(Node, UserId, Token2),
-%%    ?assertMatch(
-%%        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED({cv_data_path, [ScenariosRootDirPath]})),
-%%        RemoveShareFun(CaveatSessionId2)
-%%    ),
-%%    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-%%    Token3 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ObjectId]}),
-%%    CaveatSessionId3 = permissions_test_utils:create_session(Node, UserId, Token3),
-%%    ?assertMatch(
-%%        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED({cv_data_objectid, [ObjectId]})),
-%%        RemoveShareFun(CaveatSessionId3)
-%%    ),
-%%
-%%    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, [?SPACE_MANAGE_SHARES]),
-%%    ?assertEqual(ok, RemoveShareFun(UserSessionId)).
+remove_share(Config) ->
+    ?RUN_AUTHZ_SHARE_API_TEST(Config).
 
 
-%% TODO
-%%share_perms_test(Config) ->
-%%    [_, _, W] = ?config(op_worker_nodes, Config),
-%%    FileOwner = <<"user1">>,
-%%
-%%    FileOwnerUserSessionId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
-%%    GroupUserSessionId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
-%%
-%%    ScenarioDirName = ?SCENARIO_NAME,
-%%    ScenarioDirPath = <<"/space1/", ScenarioDirName/binary>>,
-%%    ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, FileOwnerUserSessionId, ScenarioDirPath, 8#700)),
-%%
-%%    MiddleDirPath = <<ScenarioDirPath/binary, "/dir2">>,
-%%    {ok, MiddleDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, FileOwnerUserSessionId, MiddleDirPath, 8#777)),
-%%
-%%    BottomDirPath = <<MiddleDirPath/binary, "/dir3">>,
-%%    {ok, BottomDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, FileOwnerUserSessionId, BottomDirPath), 8#777),
-%%
-%%    FilePath = <<BottomDirPath/binary, "/file1">>,
-%%    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, FileOwnerUserSessionId, FilePath, 8#777)),
-%%
-%%    {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(Node, FileOwnerUserSessionId, ?FILE_REF(MiddleDirGuid), <<"share">>)),
-%%    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-%%
-%%    % Accessing file in normal mode by space user should result in eacces (dir1 perms -> 8#700)
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:stat(Node, GroupUserSessionId, ?FILE_REF(FileGuid))
-%%    ),
-%%    % But accessing it in share mode should succeed as perms should be checked only up to
-%%    % share root (dir1/dir2 -> 8#777) and not space root
-%%    ?assertMatch(
-%%        {ok, #file_attr{guid = ShareFileGuid}},
-%%        lfm_proxy:stat(Node, GroupUserSessionId, ?FILE_REF(ShareFileGuid))
-%%    ),
-%%
-%%    % Changing BottomDir mode to 8#770 should forbid access to file in share mode
-%%    ?assertEqual(ok, lfm_proxy:set_perms(Node, ?ROOT_SESS_ID, ?FILE_REF(BottomDirGuid), 8#770)),
-%%    ?assertMatch(
-%%        {error, ?EACCES},
-%%        lfm_proxy:stat(Node, GroupUserSessionId, ?FILE_REF(ShareFileGuid))
-%%    ).
+share_perms_are_checked_only_up_to_share_root(Config) ->
+    ?RUN_AUTHZ_SHARE_API_TEST(Config).
 
 
 get_acl(Config) ->
