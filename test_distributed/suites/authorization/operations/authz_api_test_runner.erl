@@ -13,10 +13,10 @@
 %%% consisting of only required perms succeeds.
 %%% @end
 %%%-------------------------------------------------------------------
--module(authz_test_runner).
+-module(authz_api_test_runner).
 -author("Bartosz Walkowicz").
 
--include("authz_test.hrl").
+-include("authz_api_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").

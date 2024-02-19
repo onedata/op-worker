@@ -6,15 +6,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO VFS-11734 Port permission tests to authz_test_runner
+%%% TODO VFS-11734 Port permission tests to authz_api_test_runner
 %%% This test suite verifies correct behaviour of authorization mechanism
 %%% with corresponding lfm (logical_file_manager) functions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(authz_test_SUITE).
+-module(authz_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("authz_test.hrl").
+-include("authz_api_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("space_setup_utils.hrl").
@@ -86,7 +86,7 @@
     get_qos_entry_test/1,
     remove_qos_entry_test/1,
     get_effective_file_qos_test/1,
-    check_qos_fulfillment_test/1
+    check_qos_status/1
 ]).
 
 all() -> [
@@ -146,9 +146,11 @@ all() -> [
     get_qos_entry_test,
     remove_qos_entry_test,
     get_effective_file_qos_test,
-    check_qos_fulfillment_test
+    check_qos_status
 ].
 
+
+-define(RUN_QOS_API_TEST(__CONFIG), authz_qos_api_tests:?FUNCTION_NAME(?config(space_id, Config))).
 
 -define(ATTEMPTS, 10).
 
@@ -159,7 +161,7 @@ all() -> [
 
 
 mkdir_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -188,7 +190,7 @@ mkdir_test(Config) ->
 
 
 get_children_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -203,7 +205,7 @@ get_children_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children(Node, SessionId, DirKey, 0, 100))
+            authz_api_test_utils:extract_ok(lfm_proxy:get_children(Node, SessionId, DirKey, 0, 100))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -212,7 +214,7 @@ get_children_test(Config) ->
 
 
 get_children_attrs_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -227,7 +229,7 @@ get_children_attrs_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_attrs(Node, SessionId, DirKey, #{
+            authz_api_test_utils:extract_ok(lfm_proxy:get_children_attrs(Node, SessionId, DirKey, #{
                 offset => 0, limit => 100, tune_for_large_continuous_listing => false
             }))
         end,
@@ -238,7 +240,7 @@ get_children_attrs_test(Config) ->
 
 
 get_child_attr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -252,7 +254,7 @@ get_child_attr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
-            extract_ok(lfm_proxy:get_child_attr(Node, SessionId, ParentDirGuid, <<"file1">>))
+            authz_api_test_utils:extract_ok(lfm_proxy:get_child_attr(Node, SessionId, ParentDirGuid, <<"file1">>))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
@@ -261,7 +263,7 @@ get_child_attr_test(Config) ->
 
 
 mv_dir_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [
@@ -290,7 +292,7 @@ mv_dir_test(Config) ->
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            extract_ok(lfm_proxy:mv(Node, SessionId, SrcDirKey, DstDirKey, <<"dir21">>))
+            authz_api_test_utils:extract_ok(lfm_proxy:mv(Node, SessionId, SrcDirKey, DstDirKey, <<"dir21">>))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/dir21">>}
@@ -299,7 +301,7 @@ mv_dir_test(Config) ->
 
 
 rm_dir_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [
@@ -322,13 +324,13 @@ rm_dir_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:unlink(Node, SessionId, DirKey))
+            authz_api_test_utils:extract_ok(lfm_proxy:unlink(Node, SessionId, DirKey))
         end
     }).
 
 
 create_file_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -357,7 +359,7 @@ create_file_test(Config) ->
 
 
 open_for_read_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -378,7 +380,7 @@ open_for_read_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:open(Node, SessionId, FileKey, read))
+            authz_api_test_utils:extract_ok(lfm_proxy:open(Node, SessionId, FileKey, read))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -387,7 +389,7 @@ open_for_read_test(Config) ->
 
 
 open_for_write_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -408,7 +410,7 @@ open_for_write_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:open(Node, SessionId, FileKey, write))
+            authz_api_test_utils:extract_ok(lfm_proxy:open(Node, SessionId, FileKey, write))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -417,7 +419,7 @@ open_for_write_test(Config) ->
 
 
 open_for_rdwr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -438,7 +440,7 @@ open_for_rdwr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:open(Node, SessionId, FileKey, rdwr))
+            authz_api_test_utils:extract_ok(lfm_proxy:open(Node, SessionId, FileKey, rdwr))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -447,7 +449,7 @@ open_for_rdwr_test(Config) ->
 
 
 create_and_open_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -468,7 +470,7 @@ create_and_open_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
-            extract_ok(lfm_proxy:create_and_open(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777))
+            authz_api_test_utils:extract_ok(lfm_proxy:create_and_open(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_change_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
@@ -477,7 +479,7 @@ create_and_open_test(Config) ->
 
 
 truncate_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -492,7 +494,7 @@ truncate_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:truncate(Node, SessionId, FileKey, 0))
+            authz_api_test_utils:extract_ok(lfm_proxy:truncate(Node, SessionId, FileKey, 0))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -501,7 +503,7 @@ truncate_test(Config) ->
 
 
 mv_file_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [
@@ -530,7 +532,7 @@ mv_file_test(Config) ->
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            extract_ok(lfm_proxy:mv(Node, SessionId, SrcFileKey, DstDirKey, <<"file21">>))
+            authz_api_test_utils:extract_ok(lfm_proxy:mv(Node, SessionId, SrcFileKey, DstDirKey, <<"file21">>))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/file21">>}
@@ -539,7 +541,7 @@ mv_file_test(Config) ->
 
 
 rm_file_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [
@@ -562,13 +564,13 @@ rm_file_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:unlink(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(lfm_proxy:unlink(Node, SessionId, FileKey))
         end
     }).
 
 
 get_parent_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
@@ -578,7 +580,7 @@ get_parent_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_parent(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(lfm_proxy:get_parent(Node, SessionId, FileKey))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -587,7 +589,7 @@ get_parent_test(Config) ->
 
 
 get_file_path_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
@@ -597,7 +599,7 @@ get_file_path_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_file_path(Node, SessionId, FileGuid))
+            authz_api_test_utils:extract_ok(lfm_proxy:get_file_path(Node, SessionId, FileGuid))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -606,7 +608,7 @@ get_file_path_test(Config) ->
 
 
 get_file_guid_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
@@ -615,7 +617,7 @@ get_file_guid_test(Config) ->
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            extract_ok(lfm_proxy:resolve_guid(Node, SessionId, FilePath))
+            authz_api_test_utils:extract_ok(lfm_proxy:resolve_guid(Node, SessionId, FilePath))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -624,7 +626,7 @@ get_file_guid_test(Config) ->
 
 
 get_file_attr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{name = <<"file1">>}],
@@ -634,7 +636,7 @@ get_file_attr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:stat(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(lfm_proxy:stat(Node, SessionId, FileKey))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -643,7 +645,7 @@ get_file_attr_test(Config) ->
 
 
 get_file_distribution_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -658,7 +660,7 @@ get_file_distribution_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -668,7 +670,7 @@ get_file_distribution_test(Config) ->
 
 
 get_historical_dir_size_stats_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{
@@ -691,7 +693,7 @@ get_historical_dir_size_stats_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             ProviderId = opw_test_rpc:get_provider_id(Node),
 
-            extract_ok(opt_file_metadata:get_historical_dir_size_stats(
+            authz_api_test_utils:extract_ok(opt_file_metadata:get_historical_dir_size_stats(
                 Node, SessionId, FileKey, ProviderId, #time_series_layout_get_request{})
             )
         end,
@@ -703,7 +705,7 @@ get_historical_dir_size_stats_test(Config) ->
 
 
 get_file_storage_locations_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -718,7 +720,7 @@ get_file_storage_locations_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:get_storage_locations(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(opt_file_metadata:get_storage_locations(Node, SessionId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -878,7 +880,7 @@ get_file_storage_locations_test(Config) ->
 
 
 check_read_perms_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -893,7 +895,7 @@ check_read_perms_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, read))
+            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, read))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -902,7 +904,7 @@ check_read_perms_test(Config) ->
 
 
 check_write_perms_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -917,7 +919,7 @@ check_write_perms_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, write))
+            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, write))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -926,7 +928,7 @@ check_write_perms_test(Config) ->
 
 
 check_rdwr_perms_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -941,7 +943,7 @@ check_rdwr_perms_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr))
+            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -950,7 +952,7 @@ check_rdwr_perms_test(Config) ->
 
 
 create_share_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_dir_spec{name = <<"dir1">>}],
@@ -963,7 +965,7 @@ create_share_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(opt_shares:create(Node, SessionId, DirKey, <<"create_share">>))
+            authz_api_test_utils:extract_ok(opt_shares:create(Node, SessionId, DirKey, <<"create_share">>))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1029,9 +1031,9 @@ create_share_test(Config) ->
 %%
 %%    initializer:testmaster_mock_space_user_privileges([W], ?SPACE_ID, UserId, [?SPACE_MANAGE_SHARES]),
 %%    ?assertEqual(ok, RemoveShareFun(UserSessionId)).
-%%
-%%
-%%%% TODO
+
+
+%% TODO
 %%share_perms_test(Config) ->
 %%    [_, _, W] = ?config(op_worker_nodes, Config),
 %%    FileOwner = <<"user1">>,
@@ -1076,7 +1078,7 @@ create_share_test(Config) ->
 
 
 get_acl_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1089,7 +1091,7 @@ get_acl_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_acl(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(lfm_proxy:get_acl(Node, SessionId, FileKey))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -1098,7 +1100,7 @@ get_acl_test(Config) ->
 
 
 set_acl_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1113,7 +1115,7 @@ set_acl_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_acl(Node, SessionId, FileKey, [
+            authz_api_test_utils:extract_ok(lfm_proxy:set_acl(Node, SessionId, FileKey, [
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
@@ -1128,7 +1130,7 @@ set_acl_test(Config) ->
 
 
 remove_acl_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1143,7 +1145,7 @@ remove_acl_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_acl(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(lfm_proxy:remove_acl(Node, SessionId, FileKey))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -1152,7 +1154,7 @@ remove_acl_test(Config) ->
 
 
 get_transfer_encoding_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1169,7 +1171,7 @@ get_transfer_encoding_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_cdmi:get_transfer_encoding(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(opt_cdmi:get_transfer_encoding(Node, SessionId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1179,7 +1181,7 @@ get_transfer_encoding_test(Config) ->
 
 
 set_transfer_encoding_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1194,7 +1196,7 @@ set_transfer_encoding_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_cdmi:set_transfer_encoding(Node, SessionId, FileKey, <<"base64">>))
+            authz_api_test_utils:extract_ok(opt_cdmi:set_transfer_encoding(Node, SessionId, FileKey, <<"base64">>))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1204,7 +1206,7 @@ set_transfer_encoding_test(Config) ->
 
 
 get_cdmi_completion_status_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1221,7 +1223,7 @@ get_cdmi_completion_status_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_cdmi:get_cdmi_completion_status(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(opt_cdmi:get_cdmi_completion_status(Node, SessionId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1231,7 +1233,7 @@ get_cdmi_completion_status_test(Config) ->
 
 
 set_cdmi_completion_status_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1246,7 +1248,7 @@ set_cdmi_completion_status_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_cdmi:set_cdmi_completion_status(Node, SessionId, FileKey, <<"Completed">>))
+            authz_api_test_utils:extract_ok(opt_cdmi:set_cdmi_completion_status(Node, SessionId, FileKey, <<"Completed">>))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1256,7 +1258,7 @@ set_cdmi_completion_status_test(Config) ->
 
 
 get_mimetype_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1273,7 +1275,7 @@ get_mimetype_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_cdmi:get_mimetype(Node, SessionId, FileKey))
+            authz_api_test_utils:extract_ok(opt_cdmi:get_mimetype(Node, SessionId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1283,7 +1285,7 @@ get_mimetype_test(Config) ->
 
 
 set_mimetype_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1298,7 +1300,7 @@ set_mimetype_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_cdmi:set_mimetype(Node, SessionId, FileKey, <<"mimetype">>))
+            authz_api_test_utils:extract_ok(opt_cdmi:set_mimetype(Node, SessionId, FileKey, <<"mimetype">>))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1308,7 +1310,7 @@ set_mimetype_test(Config) ->
 
 
 get_metadata_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1327,7 +1329,7 @@ get_metadata_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:get_custom_metadata(Node, SessionId, FileKey, json, [], false))
+            authz_api_test_utils:extract_ok(opt_file_metadata:get_custom_metadata(Node, SessionId, FileKey, json, [], false))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1337,7 +1339,7 @@ get_metadata_test(Config) ->
 
 
 set_metadata_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1352,7 +1354,7 @@ set_metadata_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:set_custom_metadata(Node, SessionId, FileKey, json, <<"VAL">>, []))
+            authz_api_test_utils:extract_ok(opt_file_metadata:set_custom_metadata(Node, SessionId, FileKey, json, <<"VAL">>, []))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1362,7 +1364,7 @@ set_metadata_test(Config) ->
 
 
 remove_metadata_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1381,7 +1383,7 @@ remove_metadata_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:remove_custom_metadata(Node, SessionId, FileKey, json))
+            authz_api_test_utils:extract_ok(opt_file_metadata:remove_custom_metadata(Node, SessionId, FileKey, json))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1391,7 +1393,7 @@ remove_metadata_test(Config) ->
 
 
 get_xattr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1411,7 +1413,7 @@ get_xattr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>))
+            authz_api_test_utils:extract_ok(lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -1420,7 +1422,7 @@ get_xattr_test(Config) ->
 
 
 list_xattr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1437,7 +1439,7 @@ list_xattr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false))
+            authz_api_test_utils:extract_ok(lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -1446,7 +1448,7 @@ list_xattr_test(Config) ->
 
 
 set_xattr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1461,7 +1463,7 @@ set_xattr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{
+            authz_api_test_utils:extract_ok(lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{
                 name = <<"myxattr">>, value = <<"VAL">>
             }))
         end,
@@ -1472,7 +1474,7 @@ set_xattr_test(Config) ->
 
 
 remove_xattr_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
+    authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = ?config(space_id, Config),
         files = [#ct_authz_file_spec{
@@ -1492,7 +1494,7 @@ remove_xattr_test(Config) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_xattr(Node, SessionId, FileKey, <<"myxattr">>))
+            authz_api_test_utils:extract_ok(lfm_proxy:remove_xattr(Node, SessionId, FileKey, <<"myxattr">>))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -1501,135 +1503,23 @@ remove_xattr_test(Config) ->
 
 
 add_qos_entry_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_qos:add_qos_entry(Node, SessionId, FileKey, <<"country=FR">>, 1))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+    ?RUN_QOS_API_TEST(Config).
 
 
 get_qos_entry_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                {ok, QosEntryId} = opt_qos:add_qos_entry(
-                    Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"country=FR">>, 1
-                ),
-                QosEntryId
-            end
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(opt_qos:get_qos_entry(Node, SessionId, QosEntryId))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+    ?RUN_QOS_API_TEST(Config).
 
 
 remove_qos_entry_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                {ok, QosEntryId} = opt_qos:add_qos_entry(
-                    Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"country=FR">>, 1
-                ),
-                QosEntryId
-            end
-        }],
-        available_in_readonly_mode = false,
-        available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(opt_qos:remove_qos_entry(Node, SessionId, QosEntryId))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+    ?RUN_QOS_API_TEST(Config).
 
 
 get_effective_file_qos_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                {ok, _QosEntryId} = opt_qos:add_qos_entry(
-                    Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"country=FR">>, 1
-                ),
-                ?FILE_REF(Guid)
-            end
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_qos:get_effective_file_qos(Node, SessionId, FileKey))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+    ?RUN_QOS_API_TEST(Config).
 
 
-check_qos_fulfillment_test(Config) ->
-    authz_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                {ok, QosEntryId} = opt_qos:add_qos_entry(
-                    Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"country=FR">>, 1
-                ),
-                QosEntryId
-            end
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(opt_qos:check_qos_status(Node, SessionId, QosEntryId))
-        end,
-        returned_errors = api_errors,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+check_qos_status(Config) ->
+    ?RUN_QOS_API_TEST(Config).
 
 
 %%%===================================================================
@@ -1638,26 +1528,26 @@ check_qos_fulfillment_test(Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, authz_test_runner],
+%%    StorageType = ?RAND_ELEMENT([posix, s3]),
+    StorageType = posix,  % TODO
+
+    ModulesToLoad = [?MODULE, authz_api_test_runner],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = ?RAND_ELEMENT([
-            "1op_posix"
-%%            "1op_s3"  %% TODO
-        ]),
+        onenv_scenario = get_onenv_scenario(StorageType),
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}],
         posthook = fun(NewConfig) ->
             delete_spaces_from_previous_run(),
-
-            [StorageId] = lists:filter(fun(StorageId) ->
-                StorageDetails = opw_test_rpc:storage_describe(krakow, StorageId),
-                <<"posix">> == maps:get(<<"type">>, StorageDetails)
-            end, opw_test_rpc:get_storages(krakow)),
-
-            [{storage_id, StorageId} | NewConfig]
+            [{storage_type, StorageType}, {storage_id, find_storage_id(StorageType)} | NewConfig]
         end
     }).
+
+
+%% @private
+-spec get_onenv_scenario(posix | s3) -> list().
+get_onenv_scenario(posix) -> "1op_posix";
+get_onenv_scenario(s3) -> "1op_s3".
 
 
 %% @private
@@ -1678,6 +1568,19 @@ delete_spaces_from_previous_run() ->
     ?assertEqual([], lists_utils:intersect(opw_test_rpc:get_spaces(krakow), RemovedSpaces), ?ATTEMPTS),
 
     ok.
+
+
+%% @private
+-spec find_storage_id(posix | s3) -> storage:id().
+find_storage_id(StorageType) ->
+    StorageTypeBin = atom_to_binary(StorageType),
+
+    [StorageId] = lists:filter(fun(StorageId) ->
+        StorageDetails = opw_test_rpc:storage_describe(krakow, StorageId),
+        StorageTypeBin == maps:get(<<"type">>, StorageDetails)
+    end, opw_test_rpc:get_storages(krakow)),
+
+    StorageId.
 
 
 end_per_suite(_Config) ->
@@ -1720,14 +1623,3 @@ create_dummy_file(Node, SessId, DirGuid) ->
     {ok, {_Guid, FileHandle}} =
         lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, ?DEFAULT_FILE_PERMS),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
-
-
-%% @private
--spec extract_ok
-    (ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}) -> ok;
-    ({error, term()}) -> {error, term()}.
-extract_ok(ok) -> ok;
-extract_ok({ok, _}) -> ok;
-extract_ok({ok, _, _}) -> ok;
-extract_ok({ok, _, _, _}) -> ok;
-extract_ok({error, _} = Error) -> Error.
