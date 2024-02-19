@@ -59,9 +59,9 @@
 %%    remove_share_test/1,
 %%    share_perms_test/1,
 
-    get_acl_test/1,
-    set_acl_test/1,
-    remove_acl_test/1,
+    get_acl/1,
+    set_acl/1,
+    remove_acl/1,
 
     get_transfer_encoding/1,
     set_transfer_encoding/1,
@@ -119,9 +119,9 @@ all() -> [
 %%    remove_share_test,
 %%    share_perms_test,
 
-    get_acl_test,
-    set_acl_test,
-    remove_acl_test,
+    get_acl,
+    set_acl,
+    remove_acl,
 
     get_transfer_encoding,
     set_transfer_encoding,
@@ -154,6 +154,9 @@ all() -> [
 ).
 -define(RUN_AUTHZ_REG_FILE_API_TEST(__CONFIG),
     authz_reg_file_api_tests:?FUNCTION_NAME(?config(space_id, Config))
+).
+-define(RUN_AUTHZ_ACL_API_TEST(__CONFIG),
+    authz_acl_api_tests:?FUNCTION_NAME(?config(space_id, Config))
 ).
 -define(RUN_AUTHZ_CDMI_API_TEST(__CONFIG),
     authz_cdmi_api_tests:?FUNCTION_NAME(?config(space_id, Config))
@@ -652,80 +655,16 @@ create_share_test(Config) ->
 %%    ).
 
 
-get_acl_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?read_acl]
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_acl(Node, SessionId, FileKey))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+get_acl(Config) ->
+    ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
-set_acl_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?write_acl]
-        }],
-        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:set_acl(Node, SessionId, FileKey, [
-                ?ALLOW_ACE(
-                    ?group,
-                    ?no_flags_mask,
-                    permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
-                )
-            ]))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+set_acl(Config) ->
+    ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
-remove_acl_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{
-            name = <<"file1">>,
-            perms = [?write_acl]
-        }],
-        posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:remove_acl(Node, SessionId, FileKey))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+remove_acl(Config) ->
+    ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
 get_transfer_encoding(Config) ->
