@@ -14,6 +14,7 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("space_setup_utils.hrl").
+-include_lib("storage_import_oct_test.hrl").
 
 -export([
     all/0,
@@ -23,48 +24,56 @@
 
 %% tests
 -export([
-    create_storage_test/1,
-    set_up_space_test/1
+    empty_import_test/1,
+    create_directory_import_test/1
 ]).
 
 -define(TEST_CASES, [
-    create_storage_test,
-    set_up_space_test
+    empty_import_test,
+    create_directory_import_test
 ]).
 
 -define(RANDOM_PROVIDER(), ?RAND_ELEMENT([krakow, paris])).
 
 all() -> ?ALL(?TEST_CASES).
 
+-define(RUN_TEST(),
+    try
+        storage_import_oct_test_base:?FUNCTION_NAME(#storage_import_test_config{
+            p1_selector = krakow,
+            p2_selector = paris,
+            space_selector = space_krk_par_p})
+    catch __TYPE:__REASON:__STACKTRACE ->
+        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
+        error(test_failed)
+    end
+).
+
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
 
-create_storage_test(_Config) ->
-    Data =  #posix_storage_params{mount_point = <<"/tmp/a/b/c/d">>},
-    space_setup_utils:create_storage(?RANDOM_PROVIDER(), Data).
+empty_import_test(_Config) ->
+    ?RUN_TEST().
 
 
-set_up_space_test(_Config) ->
-    Data = #space_spec{name = space_test, owner = user1, users = [user2],
-        supports = [
-            #support_spec{
-                provider = ?RANDOM_PROVIDER(),
-                storage_spec = #posix_storage_params{mount_point = <<"/tmp/a/b/c">>},
-                size = 1000000
-             }
-    ]},
-    space_setup_utils:set_up_space(Data).
+create_directory_import_test(_Config) ->
+    ?RUN_TEST().
 
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    ModulesToLoad = [?MODULE, initializer, sd_test_utils, storage_import_oct_test_base],
+    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60}
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
+            {dbsync_changes_broadcast_interval, timer:seconds(1)},
+            {datastore_links_tree_order, 100},
+            {cache_to_disk_delay_ms, timer:seconds(1)},
+            {cache_to_disk_force_delay_ms, timer:seconds(2)}
         ]}]
     }).
 

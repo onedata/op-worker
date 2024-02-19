@@ -12,7 +12,8 @@
 
 
 -record(posix_storage_params, {
-    mount_point :: binary()
+    mount_point :: binary(),
+    imported_storage = false :: boolean()
 }).
 
 -record(support_spec, {

@@ -27,10 +27,11 @@
 %%%===================================================================
 
 -spec create_storage(oct_background:node_selector(), posix_storage_params()) -> od_storage:id().
-create_storage(Provider, #posix_storage_params{mount_point = MountPoint}) ->
+create_storage(Provider, #posix_storage_params{mount_point = MountPoint, imported_storage = Imported}) ->
     ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
     panel_test_rpc:add_storage(Provider,
-        #{?RAND_STR() => #{<<"type">> => <<"posix">>, <<"mountPoint">> => MountPoint}}).
+        #{?RAND_STR() => #{<<"type">> => <<"posix">>, <<"mountPoint">> => MountPoint,
+            <<"importedStorage">> => Imported}}).
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
@@ -42,9 +43,8 @@ set_up_space(#space_spec{
 }) ->
     OwnerId = oct_background:get_user_id(OwnerSelector),
     SpaceId = ozw_test_rpc:create_space(OwnerId, atom_to_binary(SpaceName)),
-    SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
 
-    support_space(SupportSpecs, SupportToken),
+    support_space(SupportSpecs, OwnerId, SpaceId),
     add_users_to_space(Users, SpaceId),
 
     SpaceId.
@@ -54,13 +54,15 @@ set_up_space(#space_spec{
 %%%===================================================================
 
 %% @private
--spec support_space([support_spec()], tokens:serialized()) -> ok.
-support_space(SupportSpecs, SupportToken) ->
+-spec support_space([support_spec()], oct_background:entity_id(), oct_background:entity_id()) -> ok.
+support_space(SupportSpecs, OwnerId, SpaceId) ->
     lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageSpec, size = Size}) ->
         StorageId = case is_binary(StorageSpec) of
             true -> StorageSpec;
             false -> create_storage(Provider, StorageSpec)
         end,
+%%        TODO change test_rpc_api implementation in oz-worker
+        SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
         opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
     end, SupportSpecs).
 
