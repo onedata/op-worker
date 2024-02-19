@@ -14,20 +14,9 @@
 -module(permissions_test_base).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("permissions_test.hrl").
--include("proto/common/handshake_messages.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("storage_files_test_SUITE.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/aai/caveats.hrl").
--include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/performance.hrl").
--include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 -export([
     init_per_suite/1, end_per_suite/1,
@@ -40,9 +29,6 @@
 ]).
 % Export for use in rpc
 -export([check_perms/3]).
-
-
--define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
 -define(ATTEMPTS, 35).
 
@@ -202,14 +188,6 @@ end_per_suite(Config) ->
 
 init_per_testcase(multi_provider_permission_cache_test, Config) ->
     ct:timetrap({minutes, 15}),
-    init_per_testcase(default, Config);
-
-init_per_testcase(mv_dir_test, Config) ->
-    ct:timetrap({minutes, 5}),
-    init_per_testcase(default, Config);
-
-init_per_testcase(mv_file_test, Config) ->
-    ct:timetrap({minutes, 5}),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->

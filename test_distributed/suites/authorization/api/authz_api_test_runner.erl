@@ -1575,3 +1575,29 @@ get_exp_error(Errno, #authz_test_suite_spec{returned_errors = errno_errors}) ->
 run_final_storage_ownership_check(#authz_test_case_ctx{}) ->
     %% TODO VFS-11732 rewrite from permissions_test_runner envup
     ok.
+
+
+%%%% @private
+%%-spec run_final_ownership_check(scenario_ctx()) -> ok | no_return().
+%%run_final_ownership_check(#scenario_ctx{
+%%    meta_spec = #perms_test_spec{
+%%        test_node = Node,
+%%        space_id = SpaceId,
+%%        final_ownership_check = FinalOwnershipCheckFun
+%%    },
+%%    scenario_root_dir_path = ScenarioRootDirPath,
+%%    files_owner_session_id = OriginalFileOwnerSessId,
+%%    executioner_session_id = OperationExecutionerSessId
+%%}) ->
+%%    case FinalOwnershipCheckFun(ScenarioRootDirPath) of
+%%        skip ->
+%%            ok;
+%%        {should_preserve_ownership, LogicalFilePath} ->
+%%            permissions_test_utils:assert_user_is_file_owner_on_storage(
+%%                Node, SpaceId, LogicalFilePath, OriginalFileOwnerSessId
+%%            );
+%%        {should_change_ownership, LogicalFilePath} ->
+%%            permissions_test_utils:assert_user_is_file_owner_on_storage(
+%%                Node, SpaceId, LogicalFilePath, OperationExecutionerSessId
+%%            )
+%%    end.
