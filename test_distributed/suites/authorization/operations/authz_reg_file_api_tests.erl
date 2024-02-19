@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests concerning authorization of regular file operations.
+%%% Tests concerning authorization of regular file specific operations.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(authz_reg_file_api_tests).

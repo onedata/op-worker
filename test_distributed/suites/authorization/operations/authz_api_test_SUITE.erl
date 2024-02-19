@@ -29,12 +29,12 @@
 ]).
 
 -export([
-    mkdir_test/1,
-    get_children_test/1,
-    get_children_attrs_test/1,
-    get_child_attr_test/1,
-    mv_dir_test/1,
-    rm_dir_test/1,
+    mkdir/1,
+    get_children/1,
+    get_children_attrs/1,
+    get_child_attr/1,
+    mv_dir/1,
+    rm_dir/1,
 
     create_file/1,
     open_for_read/1,
@@ -89,12 +89,12 @@
 ]).
 
 all() -> [
-    mkdir_test,
-    get_children_test,
-    get_children_attrs_test,
-    get_child_attr_test,
-    mv_dir_test,
-    rm_dir_test,
+    mkdir,
+    get_children,
+    get_children_attrs,
+    get_child_attr,
+    mv_dir,
+    rm_dir,
 
     create_file,
     open_for_read,
@@ -149,6 +149,9 @@ all() -> [
 ].
 
 
+-define(RUN_AUTHZ_DIR_API_TEST(__CONFIG),
+    authz_dir_api_tests:?FUNCTION_NAME(?config(space_id, Config))
+).
 -define(RUN_AUTHZ_REG_FILE_API_TEST(__CONFIG),
     authz_reg_file_api_tests:?FUNCTION_NAME(?config(space_id, Config))
 ).
@@ -170,173 +173,28 @@ all() -> [
 %%%===================================================================
 
 
-mkdir_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_dir_spec{
-            name = <<"dir1">>,
-            perms = [?traverse_container, ?add_subcontainer]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
-            case lfm_proxy:mkdir(Node, SessionId, ParentDirGuid, <<"dir2">>, 8#777) of
-                {ok, DirGuid} ->
-                    permissions_test_utils:ensure_dir_created_on_storage(Node, DirGuid);
-                {error, _} = Error ->
-                    Error
-            end
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_change_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
-        end
-    }).
+mkdir(Config) ->
+    ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
-get_children_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_dir_spec{
-            name = <<"dir1">>,
-            perms = [?list_container]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_children(Node, SessionId, DirKey, 0, 100))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
-    }).
+get_children(Config) ->
+    ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
-get_children_attrs_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_dir_spec{
-            name = <<"dir1">>,
-            perms = [?traverse_container, ?list_container]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_children_attrs(Node, SessionId, DirKey, #{
-                offset => 0, limit => 100, tune_for_large_continuous_listing => false
-            }))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
-    }).
+get_children_attrs(Config) ->
+    ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
-get_child_attr_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_dir_spec{
-            name = <<"dir1">>,
-            perms = [?traverse_container],
-            children = [#ct_authz_file_spec{name = <<"file1">>}]
-        }],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_child_attr(Node, SessionId, ParentDirGuid, <<"file1">>))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
-        end
-    }).
+get_child_attr(Config) ->
+    ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
-mv_dir_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [
-            #ct_authz_dir_spec{
-                name = <<"dir1">>,
-                perms = [?traverse_container, ?delete_subcontainer],
-                children = [
-                    #ct_authz_dir_spec{
-                        name = <<"dir11">>,
-                        perms = [?delete]
-                    }
-                ]
-            },
-            #ct_authz_dir_spec{
-                name = <<"dir2">>,
-                perms = [?traverse_container, ?add_subcontainer]
-            }
-        ],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
-            SrcDirKey = maps:get(SrcDirPath, ExtraData),
-            DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
-            DstDirKey = maps:get(DstDirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:mv(Node, SessionId, SrcDirKey, DstDirKey, <<"dir21">>))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/dir21">>}
-        end
-    }).
+mv_dir(Config) ->
+    ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
-rm_dir_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [
-            #ct_authz_dir_spec{
-                name = <<"dir1">>,
-                perms = [?traverse_container, ?delete_subcontainer],
-                children = [
-                    #ct_authz_dir_spec{
-                        name = <<"dir2">>,
-                        perms = [?delete, ?list_container]
-                    }
-                ]
-            }
-        ],
-        posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
-        available_in_readonly_mode = false,
-        available_in_share_mode = false,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
-            DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:unlink(Node, SessionId, DirKey))
-        end
-    }).
+rm_dir(Config) ->
+    ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
 create_file(Config) ->
@@ -1035,23 +893,3 @@ init_per_testcase(Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid()) -> ok.
-fill_file_with_dummy_data(Node, SessId, Guid) ->
-    lfm_test_utils:write_file(Node, SessId, Guid, <<"DATA">>).
-
-
-%% @private
--spec create_dummy_file(node(), session:id(), file_id:file_guid()) -> ok.
-create_dummy_file(Node, SessId, DirGuid) ->
-    RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
-    {ok, {_Guid, FileHandle}} =
-        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, ?DEFAULT_FILE_PERMS),
-    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
