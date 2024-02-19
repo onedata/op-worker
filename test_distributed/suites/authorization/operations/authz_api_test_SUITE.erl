@@ -45,10 +45,10 @@
     mv_file/1,
     rm_file/1,
 
-    get_parent_test/1,
-    get_file_path_test/1,
-    get_file_guid_test/1,
-    get_file_attr_test/1,
+    get_parent/1,
+    get_file_path/1,
+    resolve_guid/1,
+    stat/1,
 
 %%    set_perms_test/1,
     check_read_perms_test/1,
@@ -105,10 +105,10 @@ all() -> [
     mv_file,
     rm_file,
 
-    get_parent_test,
-    get_file_path_test,
-    get_file_guid_test,
-    get_file_attr_test,
+    get_parent,
+    get_file_path,
+    resolve_guid,
+    stat,
 
 %%    set_perms_test,
     check_read_perms_test,
@@ -154,6 +154,9 @@ all() -> [
 ).
 -define(RUN_AUTHZ_REG_FILE_API_TEST(__CONFIG),
     authz_reg_file_api_tests:?FUNCTION_NAME(?config(space_id, Config))
+).
+-define(RUN_AUTHZ_FILE_COMMON_API_TEST(__CONFIG),
+    authz_file_common_api_tests:?FUNCTION_NAME(?config(space_id, Config))
 ).
 -define(RUN_AUTHZ_ACL_API_TEST(__CONFIG),
     authz_acl_api_tests:?FUNCTION_NAME(?config(space_id, Config))
@@ -232,79 +235,20 @@ rm_file(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
-get_parent_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_parent(Node, SessionId, FileKey))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+get_parent(Config) ->
+    ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
-get_file_path_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
-        available_in_readonly_mode = true,
-        available_in_share_mode = false, % TODO VFS-6057
-        available_in_open_handle_mode = false, % TODO VFS-6057
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_file_path(Node, SessionId, FileGuid))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+get_file_path(Config) ->
+    ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
-get_file_guid_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
-        available_in_readonly_mode = true,
-        available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, _ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            authz_api_test_utils:extract_ok(lfm_proxy:resolve_guid(Node, SessionId, FilePath))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+resolve_guid(Config) ->
+    ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
-get_file_attr_test(Config) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = ?config(space_id, Config),
-        files = [#ct_authz_file_spec{name = <<"file1">>}],
-        available_in_readonly_mode = true,
-        available_in_share_mode = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:stat(Node, SessionId, FileKey))
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
-    }).
+stat(Config) ->
+    ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
 %%%% TODO

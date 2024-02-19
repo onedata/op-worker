@@ -31,9 +31,6 @@ users:
   - &user3
     name: user3
     password: password
-  - &user4
-    name: user4
-    password: password
 
 
 spaces:
@@ -51,7 +48,6 @@ spaces:
     user: *user1
     users:
       - user: *user2
-      - user: *user4
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"
