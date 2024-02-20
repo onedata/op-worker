@@ -259,34 +259,6 @@ from_protobuf(#'Uuid'{uuid = Guid}) ->
     #guid{
         guid = Guid
     };
-from_protobuf(#'ReportFileWritten'{offset = Offset, size = Size}) ->
-    #report_file_written{
-        offset = Offset,
-        size = Size
-    };
-from_protobuf(#'ReportFileRead'{offset = Offset, size = Size}) ->
-    #report_file_read{
-        offset = Offset,
-        size = Size
-    };
-from_protobuf(#'ListFilesRecursively'{
-    token = Token,
-    start_after = StartAfter,
-    prefix = Prefix,
-    limit = Limit,
-    include_dirs = IncludeDirs,
-    xattrs = Xattrs
-}) ->
-    #get_recursive_file_list{
-        attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs),
-        listing_options = maps_utils:remove_undefined(#{
-            pagination_token => Token,
-            start_after_path => StartAfter,
-            prefix => Prefix,
-            limit => Limit,
-            include_directories => IncludeDirs
-        })
-    };
 from_protobuf(#'FSync'{
     data_only = DataOnly,
     handle_id = HandleId
@@ -550,32 +522,6 @@ to_protobuf(#guid{guid = Guid}) ->
     {uuid, #'Uuid'{
         uuid = Guid
     }};
-to_protobuf(#report_file_written{offset = Offset, size = Size}) ->
-    {report_file_written, #'ReportFileWritten'{
-        offset = Offset,
-        size = Size
-    }};
-to_protobuf(#report_file_read{offset = Offset, size = Size}) ->
-    {report_file_read, #'ReportFileRead'{
-        offset = Offset,
-        size = Size
-    }};
-to_protobuf(#get_recursive_file_list{
-    listing_options = ListingOptions,
-    attributes = Attributes
-}) ->
-    Xattrs = case file_attr:should_fetch_xattrs(Attributes) of
-        {true, XattrNames} -> XattrNames;
-        false -> []
-    end,
-    {list_files_recursively, #'ListFilesRecursively'{
-        token = maps:get(pagination_token, ListingOptions, undefined),
-        start_after = maps:get(start_after_path, ListingOptions, undefined),
-        prefix = maps:get(prefix, ListingOptions, undefined),
-        limit = maps:get(limit, ListingOptions, undefined),
-        include_dirs = maps:get(include_directories , ListingOptions, undefined),
-        xattrs = Xattrs
-    }};
 to_protobuf(#file_recursive_listing_result{
     entries = Entries,
     pagination_token = PaginationToken
@@ -605,8 +551,3 @@ to_protobuf(#multipart_uploads{} = Msg) -> clproto_multipart_upload_translator:t
 %% OTHER
 to_protobuf(undefined) -> undefined;
 to_protobuf(Other) -> clproto_common_translator:to_protobuf(Other).
-
-
--spec xattrs_to_attrs_list([custom_metadata:name()]) -> [file_attr:attribute()].
-xattrs_to_attrs_list([])     -> [];
-xattrs_to_attrs_list(Xattrs) -> [?attr_xattrs(Xattrs)].
