@@ -43,8 +43,8 @@ set_up_space(#space_spec{
 }) ->
     OwnerId = oct_background:get_user_id(OwnerSelector),
     SpaceId = ozw_test_rpc:create_space(OwnerId, atom_to_binary(SpaceName)),
-
-    support_space(SupportSpecs, OwnerId, SpaceId),
+    SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
+    support_space(SupportSpecs, SupportToken),
     add_users_to_space(Users, SpaceId),
 
     SpaceId.
@@ -54,15 +54,13 @@ set_up_space(#space_spec{
 %%%===================================================================
 
 %% @private
--spec support_space([support_spec()], oct_background:entity_id(), oct_background:entity_id()) -> ok.
-support_space(SupportSpecs, OwnerId, SpaceId) ->
+-spec support_space([support_spec()], tokens:serialized()) -> ok.
+support_space(SupportSpecs, SupportToken) ->
     lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageSpec, size = Size}) ->
         StorageId = case is_binary(StorageSpec) of
             true -> StorageSpec;
             false -> create_storage(Provider, StorageSpec)
         end,
-%%        TODO change test_rpc_api implementation in oz-worker
-        SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
         opw_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
     end, SupportSpecs).
 
