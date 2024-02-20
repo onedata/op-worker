@@ -147,7 +147,7 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
 handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, InitialReq) ->
     Req = case SessionId of
         % for public downloads, the page will be embeddable everywhere (no CSP headers)
-        ?GUEST -> InitialReq;
+        ?GUEST_SESS_ID -> InitialReq;
         % authorized downloads will work only from the Onedata GUI (served from Onezone origin)
         _ -> http_download_utils:allow_onezone_as_frame_ancestor(InitialReq)
     end,
