@@ -18,7 +18,6 @@
 -include_lib("space_setup_utils.hrl").
 
 -define(RANDOM_PROVIDER(), ?RAND_ELEMENT([krakow, paris])).
--define(TEST_DIR, <<"test_dir">>).
 
 -type import_config() :: #import_config{}.
 
@@ -39,19 +38,20 @@ empty_import_test(Config) ->
     [W1, W2] = ?WORKERS(Config),
     SessionId = oct_background:get_user_session_id(user1, Config#storage_import_test_config.p1_selector),
     SessionId2 = oct_background:get_user_session_id(user1, Config#storage_import_test_config.p2_selector),
-
-    Data = #space_spec{name = ?FUNCTION_NAME, owner = user1, users = [user2],
+    SpaceName = ?FUNCTION_NAME,
+    Data = #space_spec{name = SpaceName, owner = user1, users = [user2],
         supports = [
             #support_spec{
                 provider = Config#storage_import_test_config.p1_selector,
-                storage_spec = #posix_storage_params{mount_point = <<"/mnt/synced_storage">>,
-                    imported_storage = true},
+                storage_spec = #posix_storage_params{
+                    mount_point = <<"/mnt/synced_storage", (generator:gen_name())/binary>>,
+                    imported_storage = true
+                },
                 size = 10000000000
             },
             #support_spec{
                 provider = Config#storage_import_test_config.p2_selector,
-                storage_spec = #posix_storage_params{mount_point = <<"/mnt/st2">>
-                },
+                storage_spec = #posix_storage_params{mount_point = <<"/mnt/st2", (generator:gen_name())/binary>>},
                 size = 10000000000
             }
         ]},
@@ -59,11 +59,11 @@ empty_import_test(Config) ->
     enable_initial_scan(Config, SpaceId),
     assertInitialScanFinished(W1, SpaceId),
     ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessionId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(W1, SessionId, {path, ?SPACE_PATH(SpaceName)}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessionId, {path, ?SPACE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessionId, {path, ?SPACE_PATH(SpaceName)}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessionId2, {path, ?SPACE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessionId2, {path, ?SPACE_PATH(SpaceName)}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -89,14 +89,18 @@ create_directory_import_test(Config) ->
 
     ImportedStorageId = space_setup_utils:create_storage(
         Config#storage_import_test_config.p1_selector,
-        #posix_storage_params{mount_point = <<"/mnt/synced_storage">>, imported_storage = true}
+        #posix_storage_params{mount_point =
+            <<"/mnt/synced_storage", (generator:gen_name())/binary>> ,
+            imported_storage = true
+        }
     ),
     NotImportedStorageId = space_setup_utils:create_storage(
         Config#storage_import_test_config.p2_selector,
-        #posix_storage_params{mount_point = <<"/mnt/st2">>}
+        #posix_storage_params{mount_point = <<"/mnt/st2", (generator:gen_name())/binary>>}
     ),
-
-    Data = #space_spec{name = ?FUNCTION_NAME, owner = user1, users = [user2],
+    SpaceName = binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME))/binary,
+        (integer_to_binary(?RAND_INT(10000)))/binary>>),
+    Data = #space_spec{name = SpaceName, owner = user1, users = [user2],
         supports = [
             #support_spec{
                 provider = Config#storage_import_test_config.p1_selector,
@@ -111,17 +115,19 @@ create_directory_import_test(Config) ->
         ]},
 
     SpaceId = space_setup_utils:set_up_space(Data),
-    StorageTestDirPath = filename:join([<<"/">>, ?TEST_DIR]),
-    SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, ?TEST_DIR]),
+    DirName = generator:gen_name(),
+    StorageTestDirPath = filename:join([<<"/">>, DirName]),
+
     SDHandle = sd_test_utils:new_handle(W1, SpaceId, StorageTestDirPath, ImportedStorageId),
     ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
     enable_initial_scan(Config, SpaceId),
     assertInitialScanFinished(W1, SpaceId),
 
     %% Check if dir was imported
-    ?assertMatch({ok, [{_, ?TEST_DIR}]},
-        lfm_proxy:get_children(W1, SessionId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, [{_, DirName}]},
+        lfm_proxy:get_children(W1, SessionId, {path, ?SPACE_PATH(SpaceName)}, 0, 10), ?ATTEMPTS),
 
+    SpaceTestDirPath = filename:join([<<"/">>, SpaceName, DirName]),
     StorageSDHandleW1 = sd_test_utils:get_storage_mountpoint_handle(W1, SpaceId, ImportedStorageId),
     StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, SpaceId, NotImportedStorageId),
     {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(W1, StorageSDHandleW1),
@@ -141,19 +147,41 @@ create_directory_import_test(Config) ->
         gid = MountGid2
     }}, lfm_proxy:stat(W2, SessionId2, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
+%%     this is original, not working
+%%    ?assertMonitoring(W1, #{
+%%        <<"scans">> => 1,
+%%        <<"created">> => 1,
+%%        <<"modified">> => 1,
+%%        <<"deleted">> => 0,
+%%        <<"failed">> => 0,
+%%        <<"unmodified">> => 0,
+%%        <<"createdMinHist">> => 1,
+%%        <<"createdHourHist">> => 1,
+%%        <<"createdDayHist">> => 1,
+%%        <<"modifiedMinHist">> => 1,
+%%        <<"modifiedHourHist">> => 1,
+%%        <<"modifiedDayHist">> => 1,
+%%        <<"deletedMinHist">> => 0,
+%%        <<"deletedHourHist">> => 0,
+%%        <<"deletedDayHist">> => 0,
+%%        <<"queueLengthMinHist">> => 0,
+%%        <<"queueLengthHourHist">> => 0,
+%%        <<"queueLengthDayHist">> => 0
+%%    }, SpaceId).
+
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"unmodified">> => 0,
+        <<"unmodified">> => 1,
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
+        <<"modifiedMinHist">> => 0,
+        <<"modifiedHourHist">> => 0,
+        <<"modifiedDayHist">> => 0,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0,

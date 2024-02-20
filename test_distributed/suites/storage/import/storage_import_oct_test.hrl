@@ -18,7 +18,7 @@
 ]).
 
 -define(ATTEMPTS, 30).
--define(SPACE_PATH, <<"/", (atom_to_binary(?FUNCTION_NAME))/binary>>).
+-define(SPACE_PATH(SpaceName), <<"/", (atom_to_binary(SpaceName))/binary>>).
 
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId, Attempts),
     storage_import_oct_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).
