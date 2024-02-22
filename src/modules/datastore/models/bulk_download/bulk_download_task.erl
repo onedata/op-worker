@@ -88,7 +88,7 @@ get_ctx() ->
 %%%===================================================================
 
 %% @private
--spec lookup(bulk_download:id()) -> ok.
+-spec lookup(bulk_download:id()) -> {ok, #bulk_download_task{}} | {error, term()}.
 lookup(BulkDownloadId) ->
     case datastore_model:get(?CTX, BulkDownloadId) of
         {ok, #document{value = #bulk_download_task{pid = Pid} = Record}} ->
