@@ -135,7 +135,7 @@ run_space_owner_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     test_node = TestNode
 }) ->
     SpaceOwnerId = oct_background:get_user_id(SpaceOwnerSelector),
-    ozw_test_rpc:space_set_user_privileges(SpaceId, SpaceOwnerId, []),
+    ozt_spaces:set_privileges(SpaceId, SpaceOwnerId, []),
 
     lists:foreach(fun(PermsType) ->
         TestCaseName = build_test_case_name(["space_owner", PermsType]),
@@ -186,14 +186,14 @@ run_space_privileges_test_group(TestSuiteCtx) ->
     authz_privs_test_case_ctx().
 init_space_privileges_test_case(PermsType, TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
-        space_user_selector = SpaceUserSelector,
+        other_member_selector = OtherMemberSelector,
         posix_requires_space_privs = PosixSpacePrivs,
         acl_requires_space_privs = AclSpacePrivs
     },
     test_node = TestNode
 }) ->
     TestCaseName = build_test_case_name(["space_privileges", PermsType]),
-    TestCaseCtx = init_test_case(TestCaseName, SpaceUserSelector, TestSuiteCtx),
+    TestCaseCtx = init_test_case(TestCaseName, OtherMemberSelector, TestSuiteCtx),
 
     % Assert that even with all perms set operation cannot be performed
     % without space privileges
@@ -207,7 +207,7 @@ init_space_privileges_test_case(PermsType, TestSuiteCtx = #authz_test_suite_ctx{
             acl -> AclSpacePrivs
         end,
         full_perms_per_file = FullPermsPerFile,
-        executioner_user_id = oct_background:get_user_id(SpaceUserSelector)
+        executioner_user_id = oct_background:get_user_id(OtherMemberSelector)
     }.
 
 
@@ -218,7 +218,7 @@ teardown_space_privileges_test_case(#authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         space_id = SpaceId,
         files_owner_selector = FilesOwnerSelector,
-        space_user_selector = SpaceUserSelector
+        other_member_selector = OtherMemberSelector
     },
     test_node = TestNode
 }) ->
@@ -228,8 +228,8 @@ teardown_space_privileges_test_case(#authz_test_suite_ctx{
     FilesOwnerId = oct_background:get_user_id(FilesOwnerSelector),
     set_user_space_privileges(TestNode, FilesOwnerId, SpaceId, AdminPrivs),
 
-    SpaceUserId = oct_background:get_user_id(SpaceUserSelector),
-    set_user_space_privileges(TestNode, SpaceUserId, SpaceId, AdminPrivs).
+    OtherMemberId = oct_background:get_user_id(OtherMemberSelector),
+    set_user_space_privileges(TestNode, OtherMemberId, SpaceId, AdminPrivs).
 
 
 %% @private
@@ -325,7 +325,7 @@ run_file_protection_test_group(TestSuiteCtx = #authz_test_suite_ctx{suite_spec =
     end, ?RAND_SUBLIST([
         {TestSuiteSpec#authz_test_suite_spec.space_owner_selector, "space_owner"},
         {TestSuiteSpec#authz_test_suite_spec.files_owner_selector, "files_owner"},
-        {TestSuiteSpec#authz_test_suite_spec.space_user_selector, "space_user"}
+        {TestSuiteSpec#authz_test_suite_spec.other_member_selector, "other_space_member"}
     ], 3)).  %% TODO test also other users? / sublist?
 
 
@@ -355,10 +355,10 @@ gather_required_perms(FileTreeSpec) ->
 
 %% @private
 -spec gather_required_perms(file_tree_spec() | [file_tree_spec()], perms()) -> perms().
-gather_required_perms(#ct_authz_file_spec{perms = RequiredPerms}, Acc) ->
+gather_required_perms(#ct_authz_file_spec{required_perms = RequiredPerms}, Acc) ->
     RequiredPerms ++ Acc;
 
-gather_required_perms(#ct_authz_dir_spec{perms = RequiredPerms, children = ChildrenSpec}, Acc) ->
+gather_required_perms(#ct_authz_dir_spec{required_perms = RequiredPerms, children = ChildrenSpec}, Acc) ->
     lists:foldl(fun gather_required_perms/2, RequiredPerms ++ Acc, ChildrenSpec);
 
 gather_required_perms(FileTreeSpec, Acc) when is_list(FileTreeSpec) ->
@@ -675,8 +675,8 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         space_owner_selector = SpaceOwnerSelector,
         files_owner_selector = FilesOwnerSelector,
-        space_user_selector = SpaceUserSelector,
-        non_space_user_selector = NonSpaceUserSelector
+        other_member_selector = OtherMemberSelector,
+        non_member_selector = NonMemberSelector
     }
 }) ->
     lists:foreach(fun({ExecutionerSelector, PermsType, TestCaseName}) ->
@@ -687,17 +687,17 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     end, ?RAND_SUBLIST([
         {SpaceOwnerSelector, posix, <<"share_space_owner_posix">>},
         {FilesOwnerSelector, posix, <<"share_files_owner_posix">>},
-        {SpaceUserSelector, posix, <<"share_space_user_posix">>},
-        {NonSpaceUserSelector, posix, <<"share_non_space_user_posix">>},
+        {OtherMemberSelector, posix, <<"share_other_space_member_posix">>},
+        {NonMemberSelector, posix, <<"share_non_space_member_posix">>},
         {?GUEST_SESS_ID, posix, <<"share_guest_posix">>},
         {SpaceOwnerSelector, {acl, allow}, <<"share_space_owner_acl_allow">>},
         {SpaceOwnerSelector, {acl, deny}, <<"share_space_owner_acl_deny">>},
         {FilesOwnerSelector, {acl, allow}, <<"share_files_owner_acl_allow">>},
         {FilesOwnerSelector, {acl, deny}, <<"share_files_owner_acl_deny">>},
-        {SpaceUserSelector, {acl, allow}, <<"share_space_user_acl_allow">>},
-        {SpaceUserSelector, {acl, deny}, <<"share_space_user_acl_deny">>},
-        {NonSpaceUserSelector, {acl, allow}, <<"share_non_space_user_acl_allow">>},
-        {NonSpaceUserSelector, {acl, deny}, <<"share_non_space_user_acl_deny">>},
+        {OtherMemberSelector, {acl, allow}, <<"share_other_space_member_acl_allow">>},
+        {OtherMemberSelector, {acl, deny}, <<"share_other_space_member_acl_deny">>},
+        {NonMemberSelector, {acl, allow}, <<"share_non_space_member_acl_allow">>},
+        {NonMemberSelector, {acl, deny}, <<"share_non_space_member_acl_deny">>},
         {?GUEST_SESS_ID, {acl, allow}, <<"share_guest_acl_allow">>},
         {?GUEST_SESS_ID, {acl, deny}, <<"share_guest_acl_deny">>}
     ], 12)).  %% TODO sublis length?
@@ -782,7 +782,7 @@ run_open_handle_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         files_owner_selector = FilesOwnerSelector,
         space_owner_selector = SpaceOwnerSelector,
-        space_user_selector = SpaceUserSelector
+        other_member_selector = OtherMemberSelector
     }
 }) ->
     lists:foreach(fun({ExecutionerSelector, TestCaseSuffix, PermsType}) ->
@@ -794,10 +794,10 @@ run_open_handle_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     end, ?RAND_SUBLIST([
         {FilesOwnerSelector, "files_owner_posix", posix},
         {SpaceOwnerSelector, "space_owner_posix", posix},
-        {SpaceUserSelector, "space_user_posix", posix},
+        {OtherMemberSelector, "other_space_member_posix", posix},
         {FilesOwnerSelector, "files_owner_acl", acl},
         {SpaceOwnerSelector, "space_owner_acl", acl},
-        {SpaceUserSelector, "space_user_acl", acl}
+        {OtherMemberSelector, "other_space_member_acl", acl}
     ], 6)).  %% TODO sublis length?
 
 
@@ -889,8 +889,8 @@ run_posix_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         end
     end, ?RAND_SUBLIST([
         {files_owner, TestSuiteSpec#authz_test_suite_spec.files_owner_selector},
-        {space_member, TestSuiteSpec#authz_test_suite_spec.space_user_selector},
-        {non_space_member, TestSuiteSpec#authz_test_suite_spec.non_space_user_selector}
+        {space_member, TestSuiteSpec#authz_test_suite_spec.other_member_selector},
+        {non_space_member, TestSuiteSpec#authz_test_suite_spec.non_member_selector}
     ], 3)). %% TODO sublis length?
 
 
@@ -1093,11 +1093,11 @@ run_posix_mode_test_case(PosixUserType, #authz_posix_test_case_ctx{
 run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         files_owner_selector = FilesOwnerSelector,
-        space_user_selector = SpaceUserSelector
+        other_member_selector = OtherMemberSelector
     }
 }) ->
-    SpaceUserId = oct_background:get_user_id(SpaceUserSelector),
-%%    SpaceUserGroupId = <<"todo">>,  %% TODO
+    OtherMemberId = oct_background:get_user_id(OtherMemberSelector),
+%%    OtherMemberGroupId = <<"todo">>,  %% TODO VFS-11774
 
     lists:foreach(fun({ExecutionerSelector, TestCaseName, AceType, AceWho, AceFlags}) ->
 
@@ -1107,14 +1107,14 @@ run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
 
     end, ?RAND_SUBLIST([
         {FilesOwnerSelector, <<"acl_allow-files_owner">>, allow, ?owner, ?no_flags_mask},
-        {SpaceUserSelector, <<"acl_allow-space_user">>, allow, SpaceUserId, ?no_flags_mask},
-%%        {SpaceUserGroupId, <<"acl_user_group_allow">>, allow, SpaceUserGroupId, ?identifier_group_mask},
-        {SpaceUserSelector, <<"acl_allow-everyone">>, allow, ?everyone, ?no_flags_mask},
+        {OtherMemberSelector, <<"acl_allow-other_space_member">>, allow, OtherMemberId, ?no_flags_mask},
+%%        {OtherMemberGroupId, <<"acl_user_group_allow">>, allow, OtherMemberGroupId, ?identifier_group_mask},
+        {OtherMemberSelector, <<"acl_allow-everyone">>, allow, ?everyone, ?no_flags_mask},
 
         {FilesOwnerSelector, <<"acl_deny-files_owner">>, deny, ?owner, ?no_flags_mask},
-        {SpaceUserSelector, <<"acl_deny-space_user">>, deny, SpaceUserId, ?no_flags_mask},
-%%        {SpaceUserGroupId, <<"acl_user_group_deny">>, deny, SpaceUserGroupId, ?identifier_group_mask},
-        {SpaceUserSelector, <<"acl_deny-everyone">>, deny, ?everyone, ?no_flags_mask}
+        {OtherMemberSelector, <<"acl_deny-other_space_member">>, deny, OtherMemberId, ?no_flags_mask},
+%%        {OtherMemberGroupId, <<"acl_user_group_deny">>, deny, OtherMemberGroupId, ?identifier_group_mask},
+        {OtherMemberSelector, <<"acl_deny-everyone">>, deny, ?everyone, ?no_flags_mask}
     ], 6)).  %% TODO sublis length?
 
 
@@ -1228,10 +1228,6 @@ init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
     FileOwnerSessionId = oct_background:get_user_session_id(FilesOwnerSelector, ProviderSelector),
 
     {ok, SpaceName} = ?rpc(TestNode, space_logic:get_name(?ROOT_SESS_ID, SpaceId)),
-
-    % TODO is necessay?
-    ?assertMatch({ok, _}, lfm_proxy:resolve_guid(TestNode, FileOwnerSessionId, filepath_utils:join([<<"/">>, SpaceName])), ?ATTEMPTS),
-
     TestSuiteRootDirPath = filepath_utils:join([<<"/">>, SpaceName, TestSuiteName]),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(TestNode, FileOwnerSessionId, TestSuiteRootDirPath, 8#777)),
 
@@ -1269,7 +1265,7 @@ init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx = #authz_test_sui
 }) ->
     FileTreeSpec = #ct_authz_dir_spec{
         name = TestCaseName,
-        perms = infer_test_case_root_dir_permissions(TestSuiteSpec),
+        required_perms = infer_test_case_root_dir_permissions(TestSuiteSpec),
         children = TestSuiteSpec#authz_test_suite_spec.files
     },
     {RequiredPermsPerFile, ExtraData} = create_file_tree(
@@ -1445,7 +1441,13 @@ exec_operation(#authz_test_case_ctx{
     executioner_session_id = ExecutionerSessionId,
     extra_data = ExtraData
 }) ->
-    Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath, ExtraData).
+    case Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath, ExtraData) of
+        ok -> ok;
+        {ok, _} -> ok;
+        {ok, _, _} -> ok;
+        {ok, _, _, _} -> ok;
+        {error, _} = Error -> Error
+    end.
 
 
 %% @private
@@ -1454,9 +1456,8 @@ exec_operation(#authz_test_case_ctx{
 ) ->
     ok.
 set_user_space_privileges(TestNode, UserId, SpaceId, Privileges) ->
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, Privileges),
-    % TODO slow - takes seconds for privs to sync? -.-
-    ?assertMatch({ok, Privileges}, get_user_space_privileges(TestNode, SpaceId, UserId), ?ATTEMPTS),
+    ozt_spaces:set_privileges(SpaceId, UserId, Privileges),
+    ?assertMatch({ok, Privileges}, get_user_space_privileges(TestNode, SpaceId, UserId)),
     ok.
 
 
@@ -1472,7 +1473,7 @@ get_user_space_privileges(Node, SpaceId, UserId) ->
     {perms_per_file(), extra_data()}.
 create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_file_spec{
     name = FileName,
-    perms = RequiredFilePerms,
+    required_perms = RequiredFilePerms,
     on_create = HookFun
 }) ->
     FilePath = filepath_utils:join([ParentDirPath, FileName]),
@@ -1487,7 +1488,7 @@ create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_file_spec{
 
 create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_dir_spec{
     name = DirName,
-    perms = RequiredDirPerms,
+    required_perms = RequiredDirPerms,
     on_create = HookFun,
     children = Children
 }) ->
@@ -1596,7 +1597,7 @@ run_final_storage_ownership_check(#authz_test_case_ctx{}) ->
 %%            permissions_test_utils:assert_user_is_file_owner_on_storage(
 %%                Node, SpaceId, LogicalFilePath, OriginalFileOwnerSessId
 %%            );
-%%        {should_change_ownership, LogicalFilePath} ->
+%%        {should_assign_ownership, LogicalFilePath} ->
 %%            permissions_test_utils:assert_user_is_file_owner_on_storage(
 %%                Node, SpaceId, LogicalFilePath, OperationExecutionerSessId
 %%            )

@@ -40,9 +40,7 @@ add_qos_entry(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_qos:add_qos_entry(
-                Node, SessionId, FileKey, <<"country=FR">>, 1
-            ))
+            opt_qos:add_qos_entry(Node, SessionId, FileKey, <<"country=FR">>, 1)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -70,7 +68,7 @@ get_qos_entry(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_qos:get_qos_entry(Node, SessionId, QosEntryId))
+            opt_qos:get_qos_entry(Node, SessionId, QosEntryId)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -98,7 +96,7 @@ remove_qos_entry(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_qos:remove_qos_entry(Node, SessionId, QosEntryId))
+            opt_qos:remove_qos_entry(Node, SessionId, QosEntryId)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -126,7 +124,7 @@ get_effective_file_qos(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_qos:get_effective_file_qos(Node, SessionId, FileKey))
+            opt_qos:get_effective_file_qos(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -154,7 +152,7 @@ check_qos_status(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_qos:check_qos_status(Node, SessionId, QosEntryId))
+            opt_qos:check_qos_status(Node, SessionId, QosEntryId)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->

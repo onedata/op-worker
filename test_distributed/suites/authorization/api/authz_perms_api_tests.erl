@@ -30,7 +30,6 @@
 %%%===================================================================
 
 
-%% TODO fix? split?
 set_perms(SpaceId) ->
     Node = oct_background:get_random_provider_node(krakow),
 
@@ -165,7 +164,7 @@ check_read_perms(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_object]
+            required_perms = [?read_object]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
@@ -175,7 +174,7 @@ check_read_perms(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, read))
+            lfm_proxy:check_perms(Node, SessionId, FileKey, read)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -189,7 +188,7 @@ check_write_perms(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_object]
+            required_perms = [?write_object]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -199,7 +198,7 @@ check_write_perms(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, write))
+            lfm_proxy:check_perms(Node, SessionId, FileKey, write)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -213,7 +212,7 @@ check_rdwr_perms(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_object, ?write_object]
+            required_perms = [?read_object, ?write_object]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
@@ -223,7 +222,7 @@ check_rdwr_perms(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr))
+            lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}

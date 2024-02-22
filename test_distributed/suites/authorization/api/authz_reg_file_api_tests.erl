@@ -41,7 +41,7 @@ create_file(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?traverse_container, ?add_object]
+            required_perms = [?traverse_container, ?add_object]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -59,7 +59,7 @@ create_file(SpaceId) ->
             end
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_change_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
+            {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
         end
     }).
 
@@ -70,13 +70,7 @@ open_for_read(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_object],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                % write to file to force its creation on storage. Otherwise it
-                % may be not possible during tests without necessary perms.
-                fill_file_with_dummy_data(Node, FileOwnerSessionId, Guid),
-                ?FILE_REF(Guid)
-            end
+            required_perms = [?read_object]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
@@ -86,7 +80,7 @@ open_for_read(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:open(Node, SessionId, FileKey, read))
+            lfm_proxy:open(Node, SessionId, FileKey, read)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -100,13 +94,7 @@ open_for_write(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_object],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                % write to file to force its creation on storage. Otherwise it
-                % may be not possible during tests without necessary perms.
-                fill_file_with_dummy_data(Node, FileOwnerSessionId, Guid),
-                ?FILE_REF(Guid)
-            end
+            required_perms = [?write_object]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -116,7 +104,7 @@ open_for_write(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:open(Node, SessionId, FileKey, write))
+            lfm_proxy:open(Node, SessionId, FileKey, write)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -130,13 +118,7 @@ open_for_rdwr(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_object, ?write_object],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                % write to file to force its creation on storage. Otherwise it
-                % may be not possible during tests without necessary perms.
-                fill_file_with_dummy_data(Node, FileOwnerSessionId, Guid),
-                ?FILE_REF(Guid)
-            end
+            required_perms = [?read_object, ?write_object]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
@@ -146,7 +128,7 @@ open_for_rdwr(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:open(Node, SessionId, FileKey, rdwr))
+            lfm_proxy:open(Node, SessionId, FileKey, rdwr)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -160,13 +142,7 @@ create_and_open(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?traverse_container, ?add_object],
-            on_create = fun(Node, FileOwnerSessionId, Guid) ->
-                % Create dummy file to ensure that directory is created on storage.
-                % Otherwise it may be not possible during tests without necessary perms.
-                create_dummy_file(Node, FileOwnerSessionId, Guid),
-                ?FILE_REF(Guid)
-            end
+            required_perms = [?traverse_container, ?add_object]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -176,10 +152,10 @@ create_and_open(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:create_and_open(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777))
+            lfm_proxy:create_and_open(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_change_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
+            {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
         end
     }).
 
@@ -190,7 +166,7 @@ truncate(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_object]
+            required_perms = [?write_object]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -200,7 +176,7 @@ truncate(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:truncate(Node, SessionId, FileKey, 0))
+            lfm_proxy:truncate(Node, SessionId, FileKey, 0)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -215,17 +191,17 @@ mv_file(SpaceId) ->
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
-                perms = [?traverse_container, ?delete_object],
+                required_perms = [?traverse_container, ?delete_object],
                 children = [
                     #ct_authz_file_spec{
                         name = <<"file11">>,
-                        perms = [?delete]
+                        required_perms = [?delete]
                     }
                 ]
             },
             #ct_authz_dir_spec{
                 name = <<"dir2">>,
-                perms = [?traverse_container, ?add_object]
+                required_perms = [?traverse_container, ?add_object]
             }
         ],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -238,7 +214,7 @@ mv_file(SpaceId) ->
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:mv(Node, SessionId, SrcFileKey, DstDirKey, <<"file21">>))
+            lfm_proxy:mv(Node, SessionId, SrcFileKey, DstDirKey, <<"file21">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/file21">>}
@@ -253,11 +229,11 @@ rm_file(SpaceId) ->
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
-                perms = [?traverse_container, ?delete_object],
+                required_perms = [?traverse_container, ?delete_object],
                 children = [
                     #ct_authz_file_spec{
                         name = <<"file1">>,
-                        perms = [?delete]
+                        required_perms = [?delete]
                     }
                 ]
             }
@@ -270,26 +246,6 @@ rm_file(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:unlink(Node, SessionId, FileKey))
+            lfm_proxy:unlink(Node, SessionId, FileKey)
         end
     }).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid()) -> ok.
-fill_file_with_dummy_data(Node, SessId, Guid) ->
-    lfm_test_utils:write_file(Node, SessId, Guid, <<"DATA">>).
-
-
-%% @private
--spec create_dummy_file(node(), session:id(), file_id:file_guid()) -> ok.
-create_dummy_file(Node, SessId, DirGuid) ->
-    RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
-    {ok, {_Guid, FileHandle}} =
-        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, ?DEFAULT_FILE_PERMS),
-    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).

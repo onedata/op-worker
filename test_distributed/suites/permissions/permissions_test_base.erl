@@ -8,7 +8,7 @@
 %%% @doc
 %%% This test suite verifies correct behaviour of posix and acl
 %%% permissions with corresponding lfm (logical_file_manager) functions
-%%% TODO VFS-11695 rewrite permissions test to onenv
+%%% TODO VFS-11759 rewrite permissions cache test to onenv
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_test_base).
@@ -32,7 +32,6 @@
 
 -define(ATTEMPTS, 35).
 
-% TODO VFS-7563 add tests concerning datasets
 
 %%%===================================================================
 %%% Test functions

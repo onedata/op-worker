@@ -37,7 +37,7 @@ get_transfer_encoding(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_attributes],
+            required_perms = [?read_attributes],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 opt_cdmi:set_transfer_encoding(Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"base64">>),
                 ?FILE_REF(Guid)
@@ -49,7 +49,7 @@ get_transfer_encoding(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:get_transfer_encoding(Node, SessionId, FileKey))
+            opt_cdmi:get_transfer_encoding(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -64,7 +64,7 @@ set_transfer_encoding(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_attributes]
+            required_perms = [?write_attributes]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -74,7 +74,7 @@ set_transfer_encoding(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:set_transfer_encoding(Node, SessionId, FileKey, <<"base64">>))
+            opt_cdmi:set_transfer_encoding(Node, SessionId, FileKey, <<"base64">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -89,7 +89,7 @@ get_cdmi_completion_status(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_attributes],
+            required_perms = [?read_attributes],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 opt_cdmi:set_cdmi_completion_status(Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"Completed">>),
                 ?FILE_REF(Guid)
@@ -101,7 +101,7 @@ get_cdmi_completion_status(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:get_cdmi_completion_status(Node, SessionId, FileKey))
+            opt_cdmi:get_cdmi_completion_status(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -116,7 +116,7 @@ set_cdmi_completion_status(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_attributes]
+            required_perms = [?write_attributes]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -126,9 +126,7 @@ set_cdmi_completion_status(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:set_cdmi_completion_status(
-                Node, SessionId, FileKey, <<"Completed">>
-            ))
+            opt_cdmi:set_cdmi_completion_status(Node, SessionId, FileKey, <<"Completed">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -143,7 +141,7 @@ get_mimetype(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_attributes],
+            required_perms = [?read_attributes],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 opt_cdmi:set_mimetype(Node, FileOwnerSessionId, ?FILE_REF(Guid), <<"mimetype">>),
                 ?FILE_REF(Guid)
@@ -155,7 +153,7 @@ get_mimetype(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:get_mimetype(Node, SessionId, FileKey))
+            opt_cdmi:get_mimetype(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -170,7 +168,7 @@ set_mimetype(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_attributes]
+            required_perms = [?write_attributes]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -180,9 +178,7 @@ set_mimetype(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_cdmi:set_mimetype(
-                Node, SessionId, FileKey, <<"mimetype">>
-            ))
+            opt_cdmi:set_mimetype(Node, SessionId, FileKey, <<"mimetype">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->

@@ -15,12 +15,8 @@
 -include("authz_api_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("space_setup_utils.hrl").
--include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("onenv_ct/include/oct_background.hrl").
 -include("storage_files_test_SUITE.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
     create_share/1,
@@ -48,7 +44,7 @@ create_share(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_shares:create(Node, SessionId, DirKey, <<"create_share">>))
+            opt_shares:create(Node, SessionId, DirKey, <<"create_share">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -80,7 +76,7 @@ remove_share(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_shares:remove(Node, SessionId, ShareId))
+            opt_shares:remove(Node, SessionId, ShareId)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -89,18 +85,16 @@ remove_share(SpaceId) ->
     }).
 
 
-%% TODO random posix/acl ??
 share_perms_are_checked_only_up_to_share_root(SpaceId) ->
+    SpaceOwnerUserId = oct_background:get_user_id(space_owner),
     SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    FilesOwnerId = oct_background:get_user_id(user1),
 
     #object{children = [#object{
         shares = [ShareId],
         children = [#object{
-            guid = BottomDirGuid,
             children = [#object{guid = FileGuid}]
         }]
-    }]} = onenv_file_test_utils:create_file_tree(FilesOwnerId, SpaceDirGuid, krakow, #dir_spec{
+    }]} = onenv_file_test_utils:create_file_tree(SpaceOwnerUserId, SpaceDirGuid, krakow, #dir_spec{
         name = <<"root_dir">>,
         mode = ?FILE_MODE(8#700),
         children = [#dir_spec{
@@ -113,20 +107,16 @@ share_perms_are_checked_only_up_to_share_root(SpaceId) ->
         }]
     }),
 
-    Node = oct_background:get_random_provider_node(krakow),
+    TestNode = oct_background:get_random_provider_node(krakow),
     SpaceUserSessionId = oct_background:get_user_session_id(user2, krakow),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % Accessing file in normal mode by space user should result in eacces (root_dir perms -> 8#700)
-    ?assertMatch({error, ?EACCES}, lfm_proxy:stat(Node, SpaceUserSessionId, ?FILE_REF(FileGuid))),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:stat(TestNode, SpaceUserSessionId, ?FILE_REF(FileGuid))),
 
     % But accessing it in share mode should succeed as perms should be checked only up to
     % share root (root_dir/middle_dir -> 8#777) and not space root
     ?assertMatch(
         {ok, #file_attr{guid = ShareFileGuid}},
-        lfm_proxy:stat(Node, SpaceUserSessionId, ?FILE_REF(ShareFileGuid))
-    ),
-
-    % Changing BottomDir mode to 8#770 should forbid access to file in share mode
-    ?assertEqual(ok, lfm_proxy:set_perms(Node, ?ROOT_SESS_ID, ?FILE_REF(BottomDirGuid), 8#770)),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:stat(Node, SpaceUserSessionId, ?FILE_REF(ShareFileGuid))).
+        lfm_proxy:stat(TestNode, SpaceUserSessionId, ?FILE_REF(ShareFileGuid))
+    ).

@@ -22,8 +22,8 @@ sources:
       - op-panel
 
 users:
-  - &admin
-    name: admin
+  - &space_owner
+    name: space_owner
     password: password
   - &user1
     name: user1
@@ -38,10 +38,11 @@ users:
 
 spaces:
   - name: space_krk
-    user: *admin
+    user: *space_owner
     users:
       - user: *user1
       - user: *user2
+      - user: *user3
     supports:
       - provider: "oneprovider-1"
         storage_name: "s3"

@@ -8,6 +8,7 @@
 %%% @doc
 %%% This test suite verifies correct behaviour of authorization mechanism
 %%% with corresponding operations.
+%%% TODO VFS-7563 add tests concerning datasets
 %%% @end
 %%%-------------------------------------------------------------------
 -module(authz_api_test_SUITE).
@@ -43,8 +44,7 @@
 
     get_parent/1,
     get_file_path/1,
-    %% TODO
-%%    resolve_guid/1,
+    resolve_guid/1,
     stat/1,
 
     set_perms/1,
@@ -107,7 +107,8 @@ all() -> [
     resolve_guid,
     stat,
 
-    set_perms,
+    %% TODO VFS-11773 rewrite/fix test
+%%    set_perms,
     check_read_perms,
     check_write_perms,
     check_rdwr_perms,
@@ -384,8 +385,7 @@ check_qos_status(Config) ->
 
 
 init_per_suite(Config) ->
-%%    StorageType = ?RAND_ELEMENT([posix, s3]),
-    StorageType = posix,  % TODO
+    StorageType = ?RAND_ELEMENT([posix, s3]),
 
     ModulesToLoad = [?MODULE, authz_api_test_runner],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{

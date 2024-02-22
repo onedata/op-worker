@@ -34,7 +34,7 @@ get_acl(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_acl]
+            required_perms = [?read_acl]
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
@@ -42,7 +42,7 @@ get_acl(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_acl(Node, SessionId, FileKey))
+            lfm_proxy:get_acl(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -56,7 +56,7 @@ set_acl(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_acl]
+            required_perms = [?write_acl]
         }],
         posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -66,13 +66,13 @@ set_acl(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:set_acl(Node, SessionId, FileKey, [
+            lfm_proxy:set_acl(Node, SessionId, FileKey, [
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
                     permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
                 )
-            ]))
+            ])
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -86,7 +86,7 @@ remove_acl(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_acl]
+            required_perms = [?write_acl]
         }],
         posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -96,7 +96,7 @@ remove_acl(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:remove_acl(Node, SessionId, FileKey))
+            lfm_proxy:remove_acl(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}

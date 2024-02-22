@@ -41,7 +41,7 @@ mkdir(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?traverse_container, ?add_subcontainer]
+            required_perms = [?traverse_container, ?add_subcontainer]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -59,7 +59,7 @@ mkdir(SpaceId) ->
             end
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_change_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
+            {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
         end
     }).
 
@@ -70,7 +70,7 @@ get_children(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?list_container]
+            required_perms = [?list_container]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
@@ -80,7 +80,7 @@ get_children(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_children(Node, SessionId, DirKey, 0, 100))
+            lfm_proxy:get_children(Node, SessionId, DirKey, 0, 100)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -94,7 +94,7 @@ get_children_attrs(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?traverse_container, ?list_container]
+            required_perms = [?traverse_container, ?list_container]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
@@ -104,9 +104,9 @@ get_children_attrs(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_children_attrs(Node, SessionId, DirKey, #{
+            lfm_proxy:get_children_attrs(Node, SessionId, DirKey, #{
                 offset => 0, limit => 100, tune_for_large_continuous_listing => false
-            }))
+            })
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -120,7 +120,7 @@ get_child_attr(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?traverse_container],
+            required_perms = [?traverse_container],
             children = [#ct_authz_file_spec{name = <<"file1">>}]
         }],
         available_in_readonly_mode = true,
@@ -129,7 +129,7 @@ get_child_attr(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_child_attr(Node, SessionId, ParentDirGuid, <<"file1">>))
+            lfm_proxy:get_child_attr(Node, SessionId, ParentDirGuid, <<"file1">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
@@ -144,17 +144,17 @@ mv_dir(SpaceId) ->
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
-                perms = [?traverse_container, ?delete_subcontainer],
+                required_perms = [?traverse_container, ?delete_subcontainer],
                 children = [
                     #ct_authz_dir_spec{
                         name = <<"dir11">>,
-                        perms = [?delete]
+                        required_perms = [?delete]
                     }
                 ]
             },
             #ct_authz_dir_spec{
                 name = <<"dir2">>,
-                perms = [?traverse_container, ?add_subcontainer]
+                required_perms = [?traverse_container, ?add_subcontainer]
             }
         ],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -167,7 +167,7 @@ mv_dir(SpaceId) ->
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:mv(Node, SessionId, SrcDirKey, DstDirKey, <<"dir21">>))
+            lfm_proxy:mv(Node, SessionId, SrcDirKey, DstDirKey, <<"dir21">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/dir21">>}
@@ -182,11 +182,11 @@ rm_dir(SpaceId) ->
         files = [
             #ct_authz_dir_spec{
                 name = <<"dir1">>,
-                perms = [?traverse_container, ?delete_subcontainer],
+                required_perms = [?traverse_container, ?delete_subcontainer],
                 children = [
                     #ct_authz_dir_spec{
                         name = <<"dir2">>,
-                        perms = [?delete, ?list_container]
+                        required_perms = [?delete, ?list_container]
                     }
                 ]
             }
@@ -199,6 +199,6 @@ rm_dir(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirKey = maps:get(DirPath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:unlink(Node, SessionId, DirKey))
+            lfm_proxy:unlink(Node, SessionId, DirKey)
         end
     }).

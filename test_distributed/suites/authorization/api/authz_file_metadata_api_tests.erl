@@ -46,7 +46,7 @@ get_custom_metadata(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_metadata],
+            required_perms = [?read_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 opt_file_metadata:set_custom_metadata(
                     Node, FileOwnerSessionId, ?FILE_REF(Guid), json, <<"VAL">>, []
@@ -62,9 +62,7 @@ get_custom_metadata(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_file_metadata:get_custom_metadata(
-                Node, SessionId, FileKey, json, [], false
-            ))
+            opt_file_metadata:get_custom_metadata(Node, SessionId, FileKey, json, [], false)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -79,7 +77,7 @@ set_custom_metadata(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_metadata]
+            required_perms = [?write_metadata]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -89,9 +87,7 @@ set_custom_metadata(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_file_metadata:set_custom_metadata(
-                Node, SessionId, FileKey, json, <<"VAL">>, [])
-            )
+            opt_file_metadata:set_custom_metadata(Node, SessionId, FileKey, json, <<"VAL">>, [])
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -106,7 +102,7 @@ remove_custom_metadata(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_metadata],
+            required_perms = [?write_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 opt_file_metadata:set_custom_metadata(
                     Node, FileOwnerSessionId, ?FILE_REF(Guid), json, <<"VAL">>, []
@@ -122,9 +118,7 @@ remove_custom_metadata(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_file_metadata:remove_custom_metadata(
-                Node, SessionId, FileKey, json
-            ))
+            opt_file_metadata:remove_custom_metadata(Node, SessionId, FileKey, json)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -139,7 +133,7 @@ get_xattr(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_metadata],
+            required_perms = [?read_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
                 lfm_proxy:set_xattr(Node, FileOwnerSessionId, ?FILE_REF(Guid), Xattr),
@@ -154,7 +148,7 @@ get_xattr(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>))
+            lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -180,7 +174,7 @@ list_xattr(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false))
+            lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -194,7 +188,7 @@ set_xattr(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_metadata]
+            required_perms = [?write_metadata]
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -204,9 +198,7 @@ set_xattr(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{
-                name = <<"myxattr">>, value = <<"VAL">>
-            }))
+            lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -220,7 +212,7 @@ remove_xattr(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?write_metadata],
+            required_perms = [?write_metadata],
             on_create = fun(Node, FileOwnerSessionId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
                 lfm_proxy:set_xattr(Node, FileOwnerSessionId, ?FILE_REF(Guid), Xattr),
@@ -235,7 +227,7 @@ remove_xattr(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:remove_xattr(Node, SessionId, FileKey, <<"myxattr">>))
+            lfm_proxy:remove_xattr(Node, SessionId, FileKey, <<"myxattr">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -249,7 +241,7 @@ get_file_distribution(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_metadata]
+            required_perms = [?read_metadata]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
@@ -259,7 +251,7 @@ get_file_distribution(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey))
+            opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -274,11 +266,11 @@ get_historical_dir_size_stats(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_dir_spec{
             name = <<"dir1">>,
-            perms = [?read_metadata],
+            required_perms = [?read_metadata],
             children = [
                 #ct_authz_file_spec{
                     name = <<"file1">>,
-                    perms = []
+                    required_perms = []
                 }
             ]
         }],
@@ -292,8 +284,8 @@ get_historical_dir_size_stats(SpaceId) ->
             FileKey = maps:get(FilePath, ExtraData),
             ProviderId = opw_test_rpc:get_provider_id(Node),
 
-            authz_api_test_utils:extract_ok(opt_file_metadata:get_historical_dir_size_stats(
-                Node, SessionId, FileKey, ProviderId, #time_series_layout_get_request{})
+            opt_file_metadata:get_historical_dir_size_stats(
+                Node, SessionId, FileKey, ProviderId, #time_series_layout_get_request{}
             )
         end,
         returned_errors = api_errors,
@@ -309,7 +301,7 @@ get_file_storage_locations(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{
             name = <<"file1">>,
-            perms = [?read_metadata]
+            required_perms = [?read_metadata]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
@@ -319,7 +311,7 @@ get_file_storage_locations(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(opt_file_metadata:get_storage_locations(Node, SessionId, FileKey))
+            opt_file_metadata:get_storage_locations(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->

@@ -44,7 +44,7 @@ create_storage(Provider, #posix_storage_params{mount_point = MountPoint}) ->
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().
-set_up_space(#space_spec{
+set_up_space(SpaceSpec = #space_spec{
     name = SpaceName,
     owner = OwnerSelector,
     users = Users,
@@ -52,10 +52,12 @@ set_up_space(#space_spec{
 }) ->
     OwnerId = oct_background:get_user_id(OwnerSelector),
     SpaceId = ozw_test_rpc:create_space(OwnerId, atom_to_binary(SpaceName)),
-    SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
 
+    SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
     support_space(SupportSpecs, SupportToken),
+
     add_users_to_space(Users, SpaceId),
+    invalidate_caches(SpaceId, SpaceSpec),
 
     SpaceId.
 
@@ -84,3 +86,17 @@ add_users_to_space(Users, SpaceId) ->
         UserId = oct_background:get_user_id(User),
         ozw_test_rpc:add_user_to_space(SpaceId, UserId)
     end, Users).
+
+
+%% @private
+-spec invalidate_caches(od_space:id(), space_spec()) -> ok.
+invalidate_caches(SpaceId, #space_spec{
+    owner = OwnerSelector,
+    users = Users
+}) ->
+    opt:force_fetch_entity(od_space, SpaceId),
+
+    lists:foreach(fun(User) ->
+        UserId = oct_background:get_user_id(User),
+        opt:invalidate_cache(od_user, UserId)
+    end, [OwnerSelector | Users]).

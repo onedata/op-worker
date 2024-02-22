@@ -69,7 +69,7 @@
     % name of file
     name :: binary(),
     % permissions needed to perform #test_spec.operation
-    perms = [] :: [Perms :: binary()],
+    required_perms = [] :: [Perms :: binary()],
     % function called during environment setup. Term returned will be stored in `ExtraData`
     % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
     on_create = undefined :: undefined | fun((node(), session:id(), file_id:file_guid()) -> term())
@@ -79,7 +79,7 @@
     % name of directory
     name :: binary(),
     % permissions needed to perform #test_spec.operation
-    perms = [] :: [Perms :: binary()],
+    required_perms = [] :: [Perms :: binary()],
     % function called during environment setup. Term returned will be stored in `ExtraData`
     % and can be used during test (described in `operation` of #authz_test_suite_spec{}).
     on_create = undefined :: undefined | fun((session:id(), file_id:file_guid()) -> term()),
@@ -91,34 +91,34 @@
     % Unique name of test suite.
     name :: binary(),
 
-    % Selector of provider on which tests will be carried.
+    % Selector of provider on which tests will be carried out.
     provider_selector = krakow :: oct_background:entity_selector(),
 
-    % Selector of space within which tests will be carried.
+    % Selector of space within which tests will be carried out.
     space_id = space_krk :: od_space:id(),
 
     % Selector of user being owner of space. He should be allowed to perform
     % any operation on files in space regardless of permissions set.
     space_owner_selector = space_owner :: oct_background:entity_selector(),
 
-    % Selector of user belonging to space specified in `space_selector` in
+    % Selector of user belonging to space specified in `space_id` in
     % context of which all files required for tests will be created. It will
     % be used to test `user` posix bits and `OWNER@` special acl identifier.
     files_owner_selector = user1 :: oct_background:entity_selector(),
 
-    % Selector of user belonging to space specified in `space_selector` which
+    % Selector of user belonging to space specified in `space_id` which
     % aren't the same as `owner_user`. It will be used to test `group` posix
     % bits and acl for his Id.
-    space_user_selector = user2 :: oct_background:entity_selector(),
+    other_member_selector = user2 :: oct_background:entity_selector(),
 
-    % Selector of group to which belongs `space_user_selector` and which itself
-    % belong to `space_selector`. It will be used to test acl group identifier.
-    space_user_group_selector = group2 :: oct_background:entity_selector(),
+    % Selector of group to which belongs `other_space_member_selector` and which itself
+    % belong to `space_id`. It will be used to test acl group identifier.
+    other_member_group_selector = group2 :: oct_background:entity_selector(),
 
-    % Selector of user not belonging to space specified in `space_selector`.
+    % Selector of user not belonging to space specified in `space_id`.
     % It will be used to test `other` posix bits and `EVERYONE@` special acl
     % identifier.
-    non_space_user_selector = user3 :: oct_background:entity_selector(),
+    non_member_selector = user3 :: oct_background:entity_selector(),
 
     % Tells whether `operation` needs `traverse_ancestors` permission. If so
     % `traverse_container` perm will be added to test root dir as needed perm
@@ -170,7 +170,9 @@
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
     %               following tuple ?FILE_REF(FileGuid), which is required by framework.
-    operation :: fun((node(), session:id(), file_meta:path(), map()) -> ok | {error, term()}),
+    operation :: fun((node(), session:id(), file_meta:path(), map()) ->
+        ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}
+    ),
 
     % Tells whether failed operation returns:
     % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl

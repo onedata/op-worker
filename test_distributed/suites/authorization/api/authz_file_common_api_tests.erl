@@ -40,7 +40,7 @@ get_parent(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_parent(Node, SessionId, FileKey))
+            lfm_proxy:get_parent(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -59,7 +59,7 @@ get_file_path(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:get_file_path(Node, SessionId, FileGuid))
+            lfm_proxy:get_file_path(Node, SessionId, FileGuid)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -67,6 +67,7 @@ get_file_path(SpaceId) ->
     }).
 
 
+%% TODO
 resolve_guid(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
@@ -77,7 +78,7 @@ resolve_guid(SpaceId) ->
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            authz_api_test_utils:extract_ok(lfm_proxy:resolve_guid(Node, SessionId, FilePath))
+            lfm_proxy:resolve_guid(Node, SessionId, FilePath)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -96,7 +97,7 @@ stat(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            authz_api_test_utils:extract_ok(lfm_proxy:stat(Node, SessionId, FileKey))
+            lfm_proxy:stat(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}

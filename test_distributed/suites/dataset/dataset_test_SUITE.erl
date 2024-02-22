@@ -313,7 +313,7 @@ remove_attached_dataset(_Config) ->
     UserId2 = oct_background:get_user_id(user2),
     SpaceId = oct_background:get_space_id(space1),
     % assign user2 privilege to manage datasets
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [?SPACE_MANAGE_DATASETS | privileges:space_member()]),
+    ozt_spaces:set_privileges(SpaceId, UserId2, [?SPACE_MANAGE_DATASETS | privileges:space_member()]),
 
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
@@ -354,7 +354,7 @@ remove_detached_dataset(_Config) ->
     UserId2 = oct_background:get_user_id(user2),
     % assign user2 privilege to manage datasets
     SpaceId = oct_background:get_space_id(space1),
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [?SPACE_MANAGE_DATASETS | privileges:space_member()]),
+    ozt_spaces:set_privileges(SpaceId, UserId2, [?SPACE_MANAGE_DATASETS | privileges:space_member()]),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
     ParentDirName = ?DIR_NAME(),
