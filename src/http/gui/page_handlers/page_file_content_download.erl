@@ -87,11 +87,12 @@ handle(<<"GET">>, Req) ->
             http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req);
 
         false ->
-            case bulk_download:can_continue(FileDownloadCode) of
-                true -> 
-                    % follow links parameter is not important, as it will be overwritten by an existing bulk download instance
-                    handle_http_download(FileDownloadCode, <<>>, [], true, Req);
-                false -> 
+            case bulk_download:find_started_for_code(FileDownloadCode) of
+                {ok, SessionId} ->
+                    % the list of guids and the follow links parameter is not important, 
+                    % as it will be overwritten by an existing bulk download instance
+                    handle_http_download(FileDownloadCode, SessionId, [], true, Req);
+                error ->
                     http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
             end
     end.
@@ -145,12 +146,7 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
 ) ->
     cowboy_req:req().
 handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, InitialReq) ->
-    Req = case SessionId of
-        % for public downloads, the page will be embeddable everywhere (no CSP headers)
-        ?GUEST_SESS_ID -> InitialReq;
-        % authorized downloads will work only from the Onedata GUI (served from Onezone origin)
-        _ -> http_download_utils:allow_onezone_as_frame_ancestor(InitialReq)
-    end,
+    Req = add_headers_regulating_frame_ancestors(SessionId, InitialReq),
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
         case lfm:stat(SessionId, ?FILE_REF(FileGuid, false)) of
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
@@ -202,3 +198,23 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
                 FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req
             )
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add CSP headers depending if the download is in share mode or not.
+%% For simplicity, to determine if the download is in share mode, we check
+%% the SessionId which comes from a file download code / resumed bulk download task.
+%% There is no need to check the Guids to be downloaded (it's not possible for them
+%% to be non-share guids, but if that somehow happens, the download will simply fail
+%% as the files will not be readable with the guest session).
+%% @end
+%%--------------------------------------------------------------------
+-spec add_headers_regulating_frame_ancestors(session:id(), cowboy_req:req()) -> cowboy_req:req().
+add_headers_regulating_frame_ancestors(?GUEST_SESS_ID, Req) ->
+    % for public downloads, the page will be embeddable everywhere (no CSP headers)
+    Req;
+add_headers_regulating_frame_ancestors(_, Req) ->
+    % authorized downloads will work only from the Onedata GUI (served from Onezone origin)
+    http_download_utils:allow_onezone_as_frame_ancestor(Req).
