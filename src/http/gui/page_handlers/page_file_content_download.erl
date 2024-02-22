@@ -87,11 +87,12 @@ handle(<<"GET">>, Req) ->
             http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req);
 
         false ->
-            case bulk_download:can_continue(FileDownloadCode) of
-                true -> 
-                    % follow links parameter is not important, as it will be overwritten by an existing bulk download instance
-                    handle_http_download(FileDownloadCode, <<>>, [], true, Req);
-                false -> 
+            case bulk_download:find_started_for_code(FileDownloadCode) of
+                {ok, SessionId} ->
+                    % the list of guids and the follow links parameter is not important, 
+                    % as it will be overwritten by an existing bulk download instance
+                    handle_http_download(FileDownloadCode, SessionId, [], true, Req);
+                error ->
                     http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
             end
     end.
@@ -144,10 +145,8 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req) ->
-    OzUrl = oneprovider:get_oz_url(),
-    Req2 = gui_cors:allow_origin(OzUrl, Req),
-    Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
+handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, InitialReq) ->
+    Req = add_headers_regulating_frame_ancestors(SessionId, InitialReq),
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
         case lfm:stat(SessionId, ?FILE_REF(FileGuid, false)) of
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
@@ -158,7 +157,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
     end, [], FileGuids),
     case {FileAttrsList, FollowSymlinks} of
         {{error, Errno}, _} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req3);
+            http_req:send_error(?ERROR_POSIX(Errno), Req);
         {[#file_attr{type = ?DIRECTORY_TYPE, guid = Guid, name = FileName}], _} ->
             TargetName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
                 undefined ->
@@ -167,35 +166,55 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
                     archivisation_tree:get_filename_for_download(ArchiveId)
             end,
             file_content_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req3
+                FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req
             );
         {[#file_attr{type = ?REGULAR_FILE_TYPE} = Attr], _} ->
             file_content_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req
             );
         {[#file_attr{type = ?SYMLINK_TYPE, guid = Guid, name = SymlinkName}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
                     file_content_download_utils:download_tarball(
-                        FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req3
+                        FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req
                     );
                 {ok, #file_attr{} = ResolvedAttr} ->
                     file_content_download_utils:download_single_file(
                         SessionId, ResolvedAttr, SymlinkName,
                         fun() -> file_download_code:remove(FileDownloadCode) end,
-                        Req3
+                        Req
                     );
                 {error, Errno} ->
-                    http_req:send_error(?ERROR_POSIX(Errno), Req3)
+                    http_req:send_error(?ERROR_POSIX(Errno), Req)
             end;
         {[#file_attr{type = ?SYMLINK_TYPE} = Attr], false} ->
             file_content_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             TarballName = <<"onedata-download-", Timestamp/binary, ".tar">>,
             file_content_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req3
+                FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req
             )
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Add CSP headers depending if the download is in share mode or not.
+%% For simplicity, to determine if the download is in share mode, we check
+%% the SessionId which comes from a file download code / resumed bulk download task.
+%% There is no need to check the Guids to be downloaded (it's not possible for them
+%% to be non-share guids, but if that somehow happens, the download will simply fail
+%% as the files will not be readable with the guest session).
+%% @end
+%%--------------------------------------------------------------------
+-spec add_headers_regulating_frame_ancestors(session:id(), cowboy_req:req()) -> cowboy_req:req().
+add_headers_regulating_frame_ancestors(?GUEST_SESS_ID, Req) ->
+    % for public downloads, the page will be embeddable everywhere (no CSP headers)
+    Req;
+add_headers_regulating_frame_ancestors(_, Req) ->
+    % authorized downloads will work only from the Onedata GUI (served from Onezone origin)
+    http_download_utils:allow_onezone_as_frame_ancestor(Req).
