@@ -30,8 +30,12 @@
 create_storage(Provider, #posix_storage_params{mount_point = MountPoint, imported_storage = Imported}) ->
     ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
     panel_test_rpc:add_storage(Provider,
-        #{?RAND_STR() => #{<<"type">> => <<"posix">>, <<"mountPoint">> => MountPoint,
-            <<"importedStorage">> => Imported}}).
+        #{?RAND_STR() => #{
+            <<"type">> => <<"posix">>,
+            <<"mountPoint">> => MountPoint,
+            <<"importedStorage">> => Imported
+        }}
+    ).
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().

@@ -12,11 +12,6 @@
 -define(SYNC_ACL, true).
 -define(MAX_DEPTH, 9999999999999999999999).
 
--define(WORKERS(__CONFIG), [
-    oct_background:get_random_provider_node(__CONFIG#storage_import_test_config.p1_selector),
-    oct_background:get_random_provider_node(__CONFIG#storage_import_test_config.p2_selector)
-]).
-
 -define(ATTEMPTS, 30).
 -define(SPACE_PATH(SpaceName), <<"/", (atom_to_binary(SpaceName))/binary>>).
 
@@ -25,13 +20,6 @@
 
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId),
     ?assertMonitoring(Worker, ExpectedSSM, SpaceId, 1)).
-
--record(storage_import_test_config, {
-    p1_selector :: oct_background:entity_selector(),
-    p2_selector :: oct_background:entity_selector(),
-    space_selector = undefined :: undefined | oct_background:entity_selector(),
-    import_config = undefined :: undefined | storage_import_oct_test_base:import_config()
-}).
 
 -record(import_config, {
     max_depth :: atom(),

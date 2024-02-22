@@ -37,28 +37,20 @@
 
 all() -> ?ALL(?TEST_CASES).
 
--define(RUN_TEST(),
-    try
-        storage_import_oct_test_base:?FUNCTION_NAME(#storage_import_test_config{
-            p1_selector = krakow,
-            p2_selector = paris,
-            space_selector = space_krk_par_p})
-    catch __TYPE:__REASON:__STACKTRACE ->
-        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
-        error(test_failed)
-    end
+-define(RUN_TEST(Config),
+    storage_import_oct_test_base:?FUNCTION_NAME(Config)
 ).
 
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
 
-empty_import_test(_Config) ->
-    ?RUN_TEST().
+empty_import_test(Config) ->
+    ?RUN_TEST(Config).
 
 
-create_directory_import_test(_Config) ->
-    ?RUN_TEST().
+create_directory_import_test(Config) ->
+    ?RUN_TEST(Config).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -83,7 +75,39 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    Config.
+    ImportedStorageId = space_setup_utils:create_storage(
+        krakow,
+        #posix_storage_params{mount_point =
+        <<"/mnt/synced_storage", (generator:gen_name())/binary>> ,
+            imported_storage = true
+        }
+    ),
+    NotImportedStorageId = space_setup_utils:create_storage(
+        paris,
+        #posix_storage_params{mount_point = <<"/mnt/st2", (generator:gen_name())/binary>>}
+    ),
+    SpaceName = binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME))/binary,
+        (integer_to_binary(?RAND_INT(10000)))/binary>>),
+    Data = #space_spec{name = SpaceName, owner = user1, users = [user2],
+        supports = [
+            #support_spec{
+                provider = krakow,
+                storage_spec = ImportedStorageId,
+                size = 10000000000
+            },
+            #support_spec{
+                provider = paris,
+                storage_spec = NotImportedStorageId,
+                size = 10000000000
+            }
+        ]},
+    SpaceId = space_setup_utils:set_up_space(Data),
+    [
+        {space_id, SpaceId},
+        {space_name, SpaceName},
+        {imported_storage_id, ImportedStorageId},
+        {not_imported_storage_id, NotImportedStorageId}
+     | Config].
 
 
 end_per_testcase(_Case, _Config) ->

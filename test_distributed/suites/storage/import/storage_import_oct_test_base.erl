@@ -10,16 +10,15 @@
 -module(storage_import_oct_test_base).
 -author("Katarzyna Such").
 
--include_lib("storage_import_oct_test.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include("modules/fslogic/file_attr.hrl").
 -include_lib("space_setup_utils.hrl").
+-include_lib("storage_import_oct_test.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("onenv_test_utils.hrl").
 
 -define(RANDOM_PROVIDER(), ?RAND_ELEMENT([krakow, paris])).
-
--type import_config() :: #import_config{}.
 
 -export([assert_monitoring_state/4]).
 
@@ -35,37 +34,22 @@
 %%%===================================================================
 
 empty_import_test(Config) ->
-    [W1, W2] = ?WORKERS(Config),
-    SessionId = oct_background:get_user_session_id(user1, Config#storage_import_test_config.p1_selector),
-    SessionId2 = oct_background:get_user_session_id(user1, Config#storage_import_test_config.p2_selector),
-    SpaceName = ?FUNCTION_NAME,
-    Data = #space_spec{name = SpaceName, owner = user1, users = [user2],
-        supports = [
-            #support_spec{
-                provider = Config#storage_import_test_config.p1_selector,
-                storage_spec = #posix_storage_params{
-                    mount_point = <<"/mnt/synced_storage", (generator:gen_name())/binary>>,
-                    imported_storage = true
-                },
-                size = 10000000000
-            },
-            #support_spec{
-                provider = Config#storage_import_test_config.p2_selector,
-                storage_spec = #posix_storage_params{mount_point = <<"/mnt/st2", (generator:gen_name())/binary>>},
-                size = 10000000000
-            }
-        ]},
-    SpaceId = space_setup_utils:set_up_space(Data),
+    [NodeKrakow] =  oct_background:get_provider_nodes(krakow),
+    [NodeParis] =  oct_background:get_provider_nodes(paris),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+    SessionId2 = oct_background:get_user_session_id(user1, paris),
+    SpaceId = proplists:get_value(space_id, Config),
+    SpaceName = proplists:get_value(space_name, Config),
     enable_initial_scan(Config, SpaceId),
-    assertInitialScanFinished(W1, SpaceId),
+    assertInitialScanFinished(NodeKrakow, SpaceId),
     ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessionId, {path, ?SPACE_PATH(SpaceName)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(NodeKrakow, SessionId, {path, ?SPACE_PATH(SpaceName)}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessionId, {path, ?SPACE_PATH(SpaceName)}), ?ATTEMPTS),
+        lfm_proxy:stat(NodeKrakow, SessionId, {path, ?SPACE_PATH(SpaceName)}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessionId2, {path, ?SPACE_PATH(SpaceName)}), ?ATTEMPTS),
+        lfm_proxy:stat(NodeParis, SessionId2, {path, ?SPACE_PATH(SpaceName)}), ?ATTEMPTS),
 
-    ?assertMonitoring(W1, #{
+    ?assertMonitoring(NodeKrakow, #{
         <<"scans">> => 1,
         <<"created">> => 0,
         <<"deleted">> => 0,
@@ -83,55 +67,33 @@ empty_import_test(Config) ->
 
 
 create_directory_import_test(Config) ->
-    [W1, W2] = ?WORKERS(Config),
-    SessionId = oct_background:get_user_session_id(user1, Config#storage_import_test_config.p1_selector),
-    SessionId2 = oct_background:get_user_session_id(user1, Config#storage_import_test_config.p2_selector),
+    [NodeKrakow] =  oct_background:get_provider_nodes(krakow),
+    [NodeParis] =  oct_background:get_provider_nodes(paris),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+    SessionId2 = oct_background:get_user_session_id(user1, paris),
 
-    ImportedStorageId = space_setup_utils:create_storage(
-        Config#storage_import_test_config.p1_selector,
-        #posix_storage_params{mount_point =
-            <<"/mnt/synced_storage", (generator:gen_name())/binary>> ,
-            imported_storage = true
-        }
-    ),
-    NotImportedStorageId = space_setup_utils:create_storage(
-        Config#storage_import_test_config.p2_selector,
-        #posix_storage_params{mount_point = <<"/mnt/st2", (generator:gen_name())/binary>>}
-    ),
-    SpaceName = binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME))/binary,
-        (integer_to_binary(?RAND_INT(10000)))/binary>>),
-    Data = #space_spec{name = SpaceName, owner = user1, users = [user2],
-        supports = [
-            #support_spec{
-                provider = Config#storage_import_test_config.p1_selector,
-                storage_spec = ImportedStorageId,
-                size = 10000000000
-            },
-            #support_spec{
-                provider = Config#storage_import_test_config.p2_selector,
-                storage_spec = NotImportedStorageId,
-                size = 10000000000
-            }
-        ]},
+    SpaceId = proplists:get_value(space_id, Config),
+    SpaceName = proplists:get_value(space_name, Config),
+    ImportedStorageId = proplists:get_value(imported_storage_id, Config),
+    NotImportedStorageId = proplists:get_value(not_imported_storage_id, Config),
 
-    SpaceId = space_setup_utils:set_up_space(Data),
     DirName = generator:gen_name(),
     StorageTestDirPath = filename:join([<<"/">>, DirName]),
 
-    SDHandle = sd_test_utils:new_handle(W1, SpaceId, StorageTestDirPath, ImportedStorageId),
-    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
+    SDHandle = sd_test_utils:new_handle(NodeKrakow, SpaceId, StorageTestDirPath, ImportedStorageId),
+    ok = sd_test_utils:mkdir(NodeKrakow, SDHandle, ?DEFAULT_DIR_PERMS),
     enable_initial_scan(Config, SpaceId),
-    assertInitialScanFinished(W1, SpaceId),
+    assertInitialScanFinished(NodeKrakow, SpaceId),
 
     %% Check if dir was imported
     ?assertMatch({ok, [{_, DirName}]},
-        lfm_proxy:get_children(W1, SessionId, {path, ?SPACE_PATH(SpaceName)}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(NodeKrakow, SessionId, {path, ?SPACE_PATH(SpaceName)}, 0, 10), ?ATTEMPTS),
 
     SpaceTestDirPath = filename:join([<<"/">>, SpaceName, DirName]),
-    StorageSDHandleW1 = sd_test_utils:get_storage_mountpoint_handle(W1, SpaceId, ImportedStorageId),
-    StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, SpaceId, NotImportedStorageId),
-    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(W1, StorageSDHandleW1),
-    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(W2, StorageSDHandleW2),
+    StorageSDHandleNodeKrakow = sd_test_utils:get_storage_mountpoint_handle(NodeKrakow, SpaceId, ImportedStorageId),
+    StorageSDHandleNodeParis = sd_test_utils:get_storage_mountpoint_handle(NodeKrakow, SpaceId, NotImportedStorageId),
+    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(NodeKrakow, StorageSDHandleNodeKrakow),
+    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(NodeParis, StorageSDHandleNodeParis),
 
     SpaceOwner = ?SPACE_OWNER_ID(SpaceId),
 
@@ -139,16 +101,16 @@ create_directory_import_test(Config) ->
         owner_id = SpaceOwner,
         uid = MountUid1,
         gid = 0
-    }}, lfm_proxy:stat(W1, SessionId, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    }}, lfm_proxy:stat(NodeKrakow, SessionId, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{
         owner_id = SpaceOwner,
         uid = MountUid2,
         gid = MountGid2
-    }}, lfm_proxy:stat(W2, SessionId2, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    }}, lfm_proxy:stat(NodeParis, SessionId2, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
 %%     this is original, not working
-%%    ?assertMonitoring(W1, #{
+%%    ?assertMonitoring(NodeKrakow, #{
 %%        <<"scans">> => 1,
 %%        <<"created">> => 1,
 %%        <<"modified">> => 1,
@@ -169,7 +131,7 @@ create_directory_import_test(Config) ->
 %%        <<"queueLengthDayHist">> => 0
 %%    }, SpaceId).
 
-    ?assertMonitoring(W1, #{
+    ?assertMonitoring(NodeKrakow, #{
         <<"scans">> => 1,
         <<"created">> => 1,
         <<"modified">> => 0,
@@ -196,24 +158,17 @@ create_directory_import_test(Config) ->
 %%%===================================================================
 
 enable_initial_scan(Config, SpaceId) ->
-    [W1 | _] = ?WORKERS(Config),
-    ImportConfig = case Config#storage_import_test_config.import_config of
-        undefined -> #{};
-        Import -> Import
-    end,
+    [NodeKrakow] =  oct_background:get_provider_nodes(krakow),
+    ImportConfig = proplists:get_value(import_config, Config, #{}),
     MaxDepth = maps:get(max_depth, ImportConfig, ?MAX_DEPTH),
     SyncAcl = maps:get(sync_acl, ImportConfig, ?SYNC_ACL),
-    ?assertMatch(ok, rpc:call(W1, storage_import, set_or_configure_auto_mode,
-        [SpaceId, #{max_depth => MaxDepth, sync_acl => SyncAcl}])).
+    ?assertMatch(ok, ?rpc(NodeKrakow, storage_import:set_or_configure_auto_mode(
+        SpaceId, #{max_depth => MaxDepth, sync_acl => SyncAcl}))).
 
 
 assertInitialScanFinished(Worker, SpaceId) ->
-    ?assertEqual(true, try
-        rpc:call(Worker, storage_import_monitoring, is_initial_scan_finished, [SpaceId])
-    catch
-        _:_ ->
-            error
-    end, ?ATTEMPTS).
+    ?assertEqual(true, catch(?rpc(Worker, storage_import_monitoring:is_initial_scan_finished(SpaceId))), ?ATTEMPTS).
+
 
 assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
     SSM = monitoring_describe(Worker, SpaceId),
@@ -240,26 +195,30 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
             end
     end.
 
+
 assert(ExpectedSSM, SSM) ->
     maps:fold(fun(Key, Value, _AccIn) ->
         assert_for_key(Key, Value, SSM)
-    end, undefined, ExpectedSSM).
+    end, ok, ExpectedSSM).
+
 
 assert_for_key(Key, ExpectedValue, SSM) ->
-    Value = maps:get(Key, SSM),
-    case Value of
+    case maps:get(Key, SSM) of
         ExpectedValue -> ok;
-        _ ->
+        Value ->
             throw({assertion_error, Key, ExpectedValue, Value})
     end.
 
+
 monitoring_describe(Worker, SpaceId) ->
-    rpc:call(Worker, storage_import_monitoring, describe, [SpaceId]).
+    ?rpc(Worker, storage_import_monitoring:describe(SpaceId)).
+
 
 storage_import_monitoring_description(SSM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
         {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
     end, {"~n#storage_import_monitoring fields values:~n", []}, SSM).
+
 
 flatten_histograms(SSM) ->
     SSM#{
