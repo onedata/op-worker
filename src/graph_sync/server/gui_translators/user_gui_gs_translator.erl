@@ -71,10 +71,10 @@ translate_resource(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
     };
 translate_resource(#gri{aspect = eff_groups, scope = private}, Groups) ->
     #{
-        <<"list">> => lists:map(fun(SpaceId) ->
+        <<"list">> => lists:map(fun(GroupId) ->
             gri:serialize(#gri{
                 type = op_group,
-                id = SpaceId,
+                id = GroupId,
                 aspect = instance,
                 scope = shared
             })
