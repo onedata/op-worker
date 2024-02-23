@@ -57,7 +57,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([run/5, can_continue/1, is_offset_allowed/2, continue/3]).
+-export([run/5, find_started_for_code/1, is_offset_allowed/2, continue/3]).
 
 -type id() :: binary().
 
@@ -82,11 +82,11 @@ run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, CowboyReq) ->
     data_streaming_loop(BulkDownloadId, MainPid, CowboyReq).
     
 
--spec can_continue(id()) -> boolean().
-can_continue(BulkDownloadId) ->
-    case bulk_download_task:get_main_pid(BulkDownloadId) of
-        {ok, _} -> true;
-        _ -> false
+-spec find_started_for_code(id()) -> {ok, session:id()} | error.
+find_started_for_code(BulkDownloadId) ->
+    case bulk_download_task:get_session_id(BulkDownloadId) of
+        {ok, SessionId} -> {ok, SessionId};
+        _ -> error
     end.
 
 
