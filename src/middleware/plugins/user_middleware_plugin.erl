@@ -44,6 +44,7 @@
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, instance, shared) -> ?MODULE;
 resolve_handler(get, eff_spaces, private) -> ?MODULE;
+resolve_handler(get, eff_groups, private) -> ?MODULE;
 resolve_handler(get, eff_handle_services, private) -> ?MODULE;
 resolve_handler(get, eff_atm_inventories, private) -> ?MODULE;
 
@@ -64,6 +65,7 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     As =:= instance;
     As =:= eff_spaces;
+    As =:= eff_groups;
     As =:= eff_handle_services;
     As =:= eff_atm_inventories
 ->
@@ -133,6 +135,7 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}
 validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
     As =:= eff_spaces;
+    As =:= eff_groups;
     As =:= eff_handle_services;
     As =:= eff_atm_inventories
 ->
@@ -169,6 +172,9 @@ get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_user{
 
 get(#op_req{gri = #gri{aspect = eff_spaces}}, User) ->
     user_logic:get_eff_spaces(User);
+
+get(#op_req{gri = #gri{aspect = eff_groups}}, User) ->
+    user_logic:get_eff_groups(User);
 
 get(#op_req{gri = #gri{aspect = eff_handle_services}}, User) ->
     user_logic:get_eff_handle_services(User);
