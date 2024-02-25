@@ -149,7 +149,7 @@ run_space_owner_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         assert_operation(FullPermsPerFile, ok, TestCaseCtx),
 
         run_final_storage_ownership_check(TestCaseCtx)
-    end, ?RAND_SUBLIST([posix, acl], 2)).  %% TODO sublist?
+    end, [posix, acl]).
 
 
 %%%===================================================================
@@ -178,7 +178,7 @@ run_space_privileges_test_group(TestSuiteCtx) ->
             teardown_space_privileges_test_case(TestSuiteCtx)
         end
 
-    end, ?RAND_SUBLIST([posix, acl], 2)).  %% TODO sublist?
+    end, [posix, acl]).
 
 
 %% @private
@@ -288,7 +288,7 @@ space_privileges_test_case(#authz_privs_test_case_ctx{
         set_user_space_privileges(TestNode, ExecutionerUserId, SpaceId, PrivsToSet),
 
         assert_operation(FullPermsPerFile, ExpError, TestCaseCtx)
-    end, combinations(RequiredSpacePrivs) -- [[]]),  %% TODO random sublist?
+    end, combinations(RequiredSpacePrivs) -- [[]]),
 
     % And should succeed if he has only required ones
     set_user_space_privileges(TestNode, ExecutionerUserId, SpaceId, RequiredSpacePrivs),
@@ -322,11 +322,11 @@ run_file_protection_test_group(TestSuiteCtx = #authz_test_suite_ctx{suite_spec =
         TestCaseCtx = init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
         run_file_protection_test_case(ProtectionFlagsToSet, TestCaseCtx)
 
-    end, ?RAND_SUBLIST([
+    end, [
         {TestSuiteSpec#authz_test_suite_spec.space_owner_selector, "space_owner"},
         {TestSuiteSpec#authz_test_suite_spec.files_owner_selector, "files_owner"},
         {TestSuiteSpec#authz_test_suite_spec.other_member_selector, "other_space_member"}
-    ], 3)).  %% TODO test also other users? / sublist?
+    ]).
 
 
 %% @private
@@ -503,14 +503,14 @@ run_data_access_caveats_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         CvTestCaseCtx = init_data_access_caveats_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
         run_data_access_caveats_test_case(CaveatType, CvTestCaseCtx)
 
-    end, ?RAND_SUBLIST([
+    end, [
         {data_path, SpaceOwnerSelector},
         {data_path, FilesOwnerSelector},
         {data_objectid, SpaceOwnerSelector},
         {data_objectid, FilesOwnerSelector},
         {data_readonly, SpaceOwnerSelector},
         {data_readonly, FilesOwnerSelector}
-    ], 6)).  %% TODO test also other users? / sublist?
+    ]).
 
 
 %% @private
@@ -684,7 +684,7 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         TestCaseCtx = init_share_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
         run_share_test_case(PermsType, TestCaseCtx)
 
-    end, ?RAND_SUBLIST([
+    end, [
         {SpaceOwnerSelector, posix, <<"share_space_owner_posix">>},
         {FilesOwnerSelector, posix, <<"share_files_owner_posix">>},
         {OtherMemberSelector, posix, <<"share_other_space_member_posix">>},
@@ -700,7 +700,7 @@ run_share_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         {NonMemberSelector, {acl, deny}, <<"share_non_space_member_acl_deny">>},
         {?GUEST_SESS_ID, {acl, allow}, <<"share_guest_acl_allow">>},
         {?GUEST_SESS_ID, {acl, deny}, <<"share_guest_acl_deny">>}
-    ], 12)).  %% TODO sublis length?
+    ]).
 
 
 %% @private
@@ -791,14 +791,14 @@ run_open_handle_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         TestCaseCtx = init_open_handle_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
         run_open_handle_mode_test_case(PermsType, TestCaseCtx)
 
-    end, ?RAND_SUBLIST([
+    end, [
         {FilesOwnerSelector, "files_owner_posix", posix},
         {SpaceOwnerSelector, "space_owner_posix", posix},
         {OtherMemberSelector, "other_space_member_posix", posix},
         {FilesOwnerSelector, "files_owner_acl", acl},
         {SpaceOwnerSelector, "space_owner_acl", acl},
         {OtherMemberSelector, "other_space_member_acl", acl}
-    ], 6)).  %% TODO sublis length?
+    ]).
 
 
 %% @private
@@ -887,11 +887,11 @@ run_posix_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
             ),
             error(posix_perms_test_failed)
         end
-    end, ?RAND_SUBLIST([
+    end, [
         {files_owner, TestSuiteSpec#authz_test_suite_spec.files_owner_selector},
         {space_member, TestSuiteSpec#authz_test_suite_spec.other_member_selector},
         {non_space_member, TestSuiteSpec#authz_test_suite_spec.non_member_selector}
-    ], 3)). %% TODO sublis length?
+    ]).
 
 
 %% @private
@@ -1105,7 +1105,7 @@ run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         AclTestCaseCtx = build_acl_test_case_ctx(TestCaseCtx),
         run_acl_permission_test_case(AceType, AceWho, AceFlags, AclTestCaseCtx)
 
-    end, ?RAND_SUBLIST([
+    end, [
         {FilesOwnerSelector, <<"acl_allow-files_owner">>, allow, ?owner, ?no_flags_mask},
         {OtherMemberSelector, <<"acl_allow-other_space_member">>, allow, OtherMemberId, ?no_flags_mask},
 %%        {OtherMemberGroupId, <<"acl_user_group_allow">>, allow, OtherMemberGroupId, ?identifier_group_mask},
@@ -1115,7 +1115,7 @@ run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
         {OtherMemberSelector, <<"acl_deny-other_space_member">>, deny, OtherMemberId, ?no_flags_mask},
 %%        {OtherMemberGroupId, <<"acl_user_group_deny">>, deny, OtherMemberGroupId, ?identifier_group_mask},
         {OtherMemberSelector, <<"acl_deny-everyone">>, deny, ?everyone, ?no_flags_mask}
-    ], 6)).  %% TODO sublis length?
+    ]).
 
 
 %% @private
