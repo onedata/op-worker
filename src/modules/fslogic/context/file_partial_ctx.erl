@@ -189,7 +189,7 @@ get_space_id_from_user_spaces(SpaceName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
         false ->
-            throw(?ENOENT);
+            throw(?EACCES);
         {true, SpaceId} ->
             SpaceId
     end.

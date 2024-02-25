@@ -181,7 +181,7 @@
 
     % Tells whether successfully executed operation should change ownership on underlying storage
     final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
-        skip |
+        {inapplicable_due_to, Reason :: atom()} |
         {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
     )

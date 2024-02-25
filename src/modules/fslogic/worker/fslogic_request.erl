@@ -119,6 +119,8 @@ get_target_providers_for_file(UserCtx, FilePartialCtx) ->
         false ->
             SpaceId = file_partial_ctx:get_space_id_const(FilePartialCtx),
             SessionId = user_ctx:get_session_id(UserCtx),
+            % Eventual lack of access to space (not a member, data access caveats, etc.)
+            % badmatch with concrete error will be propagated and handled in fslogic_errors
             {ok, Providers} = space_logic:get_provider_ids(SessionId, SpaceId),
             case lists:member(oneprovider:get_id(), Providers) of
                 true ->

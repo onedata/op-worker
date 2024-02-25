@@ -200,5 +200,6 @@ rm_dir(SpaceId) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirKey = maps:get(DirPath, ExtraData),
             lfm_proxy:unlink(Node, SessionId, DirKey)
-        end
+        end,
+        final_ownership_check = fun(_) -> {inapplicable_due_to, dir_removal} end
     }).

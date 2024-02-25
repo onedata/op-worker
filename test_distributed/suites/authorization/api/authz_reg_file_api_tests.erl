@@ -247,5 +247,6 @@ rm_file(SpaceId) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             lfm_proxy:unlink(Node, SessionId, FileKey)
-        end
+        end,
+        final_ownership_check = fun(_) -> {inapplicable_due_to, file_removal} end
     }).

@@ -67,7 +67,6 @@ get_file_path(SpaceId) ->
     }).
 
 
-%% TODO
 resolve_guid(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),

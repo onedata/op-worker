@@ -1591,7 +1591,7 @@ run_final_storage_ownership_check(#authz_test_case_ctx{}) ->
 %%    executioner_session_id = OperationExecutionerSessId
 %%}) ->
 %%    case FinalOwnershipCheckFun(ScenarioRootDirPath) of
-%%        skip ->
+%%        {inapplicable_due_to, _} ->
 %%            ok;
 %%        {should_preserve_ownership, LogicalFilePath} ->
 %%            permissions_test_utils:assert_user_is_file_owner_on_storage(
