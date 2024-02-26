@@ -1607,7 +1607,7 @@ init_per_suite(Config) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             User3Id = oct_background:get_user_id(user3),
             lists:foreach(fun(SpaceId) ->
-                ozt_spaces:set_privileges(SpaceId, User3Id, [
+                ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
                     ?SPACE_MANAGE_SHARES | privileges:space_member()
                 ])
             end, oct_background:get_provider_supported_spaces(krakow)),
