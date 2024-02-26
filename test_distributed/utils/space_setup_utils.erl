@@ -24,6 +24,7 @@
 -export([create_storage/2, set_up_space/1]).
 
 
+% TODO VFS-11796 do not use defined default parameters - add onepanel rpc instead
 -define(SUPPORT_PARAMETERS, #support_parameters{
     accounting_enabled = false,
     dir_stats_service_enabled = true,
