@@ -261,6 +261,34 @@ from_protobuf(#'FSync'{
         data_only = DataOnly,
         handle_id = HandleId
     };
+from_protobuf(#'ReportFileWritten'{offset = Offset, size = Size}) ->
+    #report_file_written{
+        offset = Offset,
+        size = Size
+    };
+from_protobuf(#'ReportFileRead'{offset = Offset, size = Size}) ->
+    #report_file_read{
+        offset = Offset,
+        size = Size
+    };
+from_protobuf(#'ListFilesRecursively'{
+    token = Token,
+    start_after = StartAfter,
+    prefix = Prefix,
+    limit = Limit,
+    include_dirs = IncludeDirs,
+    xattrs = Xattrs
+}) ->
+    #get_recursive_file_list{
+        attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs),
+        listing_options = maps_utils:remove_undefined(#{
+            pagination_token => Token,
+            start_after_path => StartAfter,
+            prefix => Prefix,
+            limit => Limit,
+            include_directories => IncludeDirs
+        })
+    };
 
 %% OTHER
 from_protobuf(undefined) -> undefined.
@@ -464,6 +492,32 @@ to_protobuf(#fsync{
     {fsync, #'FSync'{
         data_only = DataOnly,
         handle_id = HandleId
+    }};
+to_protobuf(#report_file_written{offset = Offset, size = Size}) ->
+    {report_file_written, #'ReportFileWritten'{
+        offset = Offset,
+        size = Size
+    }};
+to_protobuf(#report_file_read{offset = Offset, size = Size}) ->
+    {report_file_read, #'ReportFileRead'{
+        offset = Offset,
+        size = Size
+    }};
+to_protobuf(#get_recursive_file_list{
+    listing_options = ListingOptions,
+    attributes = Attributes
+}) ->
+    Xattrs = case file_attr:should_fetch_xattrs(Attributes) of
+        {true, XattrNames} -> XattrNames;
+        false -> []
+    end,
+    {list_files_recursively, #'ListFilesRecursively'{
+        token = maps:get(pagination_token, ListingOptions, undefined),
+        start_after = maps:get(start_after_path, ListingOptions, undefined),
+        prefix = maps:get(prefix, ListingOptions, undefined),
+        limit = maps:get(limit, ListingOptions, undefined),
+        include_dirs = maps:get(include_directories , ListingOptions, undefined),
+        xattrs = Xattrs
     }};
 
 
