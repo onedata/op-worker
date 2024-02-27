@@ -44,7 +44,7 @@ get_transfer_encoding(SpaceId) ->
             end
         }],
         available_in_readonly_mode = true,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -69,7 +69,7 @@ set_transfer_encoding(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -96,7 +96,7 @@ get_cdmi_completion_status(SpaceId) ->
             end
         }],
         available_in_readonly_mode = true,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -121,7 +121,7 @@ set_cdmi_completion_status(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -148,7 +148,7 @@ get_mimetype(SpaceId) ->
             end
         }],
         available_in_readonly_mode = true,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -173,7 +173,7 @@ set_mimetype(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,

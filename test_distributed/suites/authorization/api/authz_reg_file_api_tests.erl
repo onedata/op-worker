@@ -46,7 +46,7 @@ create_file(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -75,7 +75,7 @@ open_for_read(SpaceId) ->
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
-        available_in_share_mode = true,
+        available_for_share_guid = true,
         available_in_open_handle_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -99,7 +99,7 @@ open_for_write(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -123,7 +123,7 @@ open_for_rdwr(SpaceId) ->
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -147,7 +147,7 @@ create_and_open(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -171,7 +171,7 @@ truncate(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -207,7 +207,7 @@ mv_file(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
@@ -241,7 +241,7 @@ rm_file(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,

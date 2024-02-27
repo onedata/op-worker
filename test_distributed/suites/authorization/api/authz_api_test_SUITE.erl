@@ -389,7 +389,7 @@ init_per_suite(Config) ->
 
     ModulesToLoad = [?MODULE, authz_api_test_runner],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = prepare_onenv_scenario(Config, StorageType),
+        onenv_scenario = "1op_s3",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}],
@@ -398,25 +398,6 @@ init_per_suite(Config) ->
             [{storage_type, StorageType}, {storage_id, find_storage_id(StorageType)} | NewConfig]
         end
     }).
-
-
-%% @private
--spec prepare_onenv_scenario(test_config:config(), posix | s3) -> list().
-prepare_onenv_scenario(Config, StorageType) ->
-    ScenarioName = io_lib:format("tmp_~p_~p", [?MODULE, StorageType]),
-    CTTestsRootDir = test_utils:ct_tests_root_dir(Config),
-
-    Result = case file:make_symlink(
-        ?TEST_FILE(Config, io_lib:format("1op_~p.yaml", [StorageType])),
-        filename:join([CTTestsRootDir, "onenv_scenarios", ScenarioName ++ ".yaml"])
-    ) of
-        ok -> ok;
-        {error, eexist} -> ok;
-        {error, _} = Error -> Error
-    end,
-    ?assertEqual(ok, Result),
-
-    ScenarioName.
 
 
 %% @private

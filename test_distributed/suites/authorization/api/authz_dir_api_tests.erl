@@ -46,7 +46,7 @@ mkdir(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -75,7 +75,7 @@ get_children(SpaceId) ->
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
-        available_in_share_mode = true,
+        available_for_share_guid = true,
         available_in_open_handle_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -99,7 +99,7 @@ get_children_attrs(SpaceId) ->
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
-        available_in_share_mode = true,
+        available_for_share_guid = true,
         available_in_open_handle_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -124,7 +124,7 @@ get_child_attr(SpaceId) ->
             children = [#ct_authz_file_spec{name = <<"file1">>}]
         }],
         available_in_readonly_mode = true,
-        available_in_share_mode = true,
+        available_for_share_guid = true,
         available_in_open_handle_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -160,7 +160,7 @@ mv_dir(SpaceId) ->
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
@@ -194,7 +194,7 @@ rm_dir(SpaceId) ->
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,

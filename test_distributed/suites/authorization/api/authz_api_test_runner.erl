@@ -667,7 +667,7 @@ get_test_case_root_dir_canonical_path(#authz_test_case_ctx{
 -spec run_share_test_group(authz_test_suite_ctx()) ->
     ok | no_return().
 run_share_test_group(#authz_test_suite_ctx{suite_spec = #authz_test_suite_spec{
-    available_in_share_mode = inapplicable
+    available_for_share_guid = not_a_file_guid_based_operation
 }}) ->
     ok;
 
@@ -737,7 +737,7 @@ init_share_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx = #authz_te
     ok | no_return().
 run_share_test_case(PermsType0, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
-        suite_spec = TestSuiteSpec = #authz_test_suite_spec{available_in_share_mode = false},
+        suite_spec = TestSuiteSpec = #authz_test_suite_spec{available_for_share_guid = false},
         test_node = TestNode
     },
     required_perms_per_file = RequiredPermsPerFile

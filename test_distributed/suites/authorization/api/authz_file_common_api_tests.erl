@@ -35,7 +35,7 @@ get_parent(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
-        available_in_share_mode = true,
+        available_for_share_guid = true,
         available_in_open_handle_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -54,7 +54,7 @@ get_file_path(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
-        available_in_share_mode = false, % TODO VFS-6057
+        available_for_share_guid = false, % TODO VFS-6057
         available_in_open_handle_mode = false, % TODO VFS-6057
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -73,7 +73,7 @@ resolve_guid(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
-        available_in_share_mode = inapplicable,
+        available_for_share_guid = not_a_file_guid_based_operation,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -91,7 +91,7 @@ stat(SpaceId) ->
         space_id = SpaceId,
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
-        available_in_share_mode = true,
+        available_for_share_guid = true,
         available_in_open_handle_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,

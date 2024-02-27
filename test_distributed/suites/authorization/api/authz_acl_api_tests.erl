@@ -37,7 +37,7 @@ get_acl(SpaceId) ->
             required_perms = [?read_acl]
         }],
         available_in_readonly_mode = true,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -61,7 +61,7 @@ set_acl(SpaceId) ->
         posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -91,7 +91,7 @@ remove_acl(SpaceId) ->
         posix_requires_space_privs = {file_owner, [?SPACE_WRITE_DATA]},
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,

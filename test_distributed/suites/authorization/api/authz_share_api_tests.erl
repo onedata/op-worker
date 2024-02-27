@@ -39,7 +39,7 @@ create_share(SpaceId) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EAGAIN)},
         available_in_readonly_mode = false,
-        available_in_share_mode = false,
+        available_for_share_guid = false,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
@@ -71,7 +71,7 @@ remove_share(SpaceId) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EACCES)},
         available_in_readonly_mode = false,
-        available_in_share_mode = inapplicable,
+        available_for_share_guid = not_a_file_guid_based_operation,
         available_in_open_handle_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,

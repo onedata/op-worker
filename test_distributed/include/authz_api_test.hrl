@@ -151,7 +151,7 @@
     % Tells whether operation should work in share mode. For some operation this
     % check is entirely inapplicable due to operation call not using file guid
     % (can't be called via shared guid == no share mode).
-    available_in_share_mode = false :: boolean() | inapplicable,
+    available_for_share_guid = false :: boolean() | not_a_file_guid_based_operation,
 
     % Tells whether operation should work in open handle mode.
     available_in_open_handle_mode = false :: boolean(),
@@ -181,7 +181,10 @@
 
     % Tells whether successfully executed operation should change ownership on underlying storage
     final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
+        % Reason can be arbitrary and is only used to communicate why the check is inapplicable,
+        % does not impact the tests.
         {inapplicable_due_to, Reason :: atom()} |
+
         {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
     )
