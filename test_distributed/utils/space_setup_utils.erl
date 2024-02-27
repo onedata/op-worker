@@ -58,7 +58,7 @@ set_up_space(SpaceSpec = #space_spec{
     support_space(SupportSpecs, SupportToken),
 
     add_users_to_space(Users, SpaceId),
-    invalidate_caches(SpaceId, SpaceSpec),
+    force_fetch_entities(SpaceId, SpaceSpec),
 
     SpaceId.
 
@@ -90,8 +90,8 @@ add_users_to_space(Users, SpaceId) ->
 
 
 %% @private
--spec invalidate_caches(od_space:id(), space_spec()) -> ok.
-invalidate_caches(SpaceId, #space_spec{
+-spec force_fetch_entities(od_space:id(), space_spec()) -> ok.
+force_fetch_entities(SpaceId, #space_spec{
     owner = OwnerSelector,
     users = Users
 }) ->
@@ -99,5 +99,5 @@ invalidate_caches(SpaceId, #space_spec{
 
     lists:foreach(fun(User) ->
         UserId = oct_background:get_user_id(User),
-        opt:invalidate_cache(od_user, UserId)
+        opt:force_fetch_entity(od_user, UserId)
     end, [OwnerSelector | Users]).
