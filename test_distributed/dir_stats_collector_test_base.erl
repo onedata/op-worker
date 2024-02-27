@@ -29,7 +29,7 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
-    restart_test/1, parallel_write_test/4]).
+    restart_test/1, parallel_write_test/4, local_opened_file_deletion_closing_race_base/1]).
 -export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
@@ -1033,6 +1033,26 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         ?LOGICAL_SIZE => 20 * FileSize,
         ?PHYSICAL_SIZE_KEY(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
     }).
+
+
+local_opened_file_deletion_closing_race_base(Config) ->
+    enable(Config),
+    [Node | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Node),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    
+    {ok, {FileGuid, Handle}} = lfm_proxy:create_and_open(Node, SessId, SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_MODE),
+    lfm_proxy:write(Node, Handle, 0, crypto:strong_rand_bytes(8)),
+    ?assertMatch({ok, #{?VIRTUAL_SIZE := 8, ?LOGICAL_SIZE := 8}}, rpc:call(Node, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS),
+    DeleteFun = fun() ->
+        ok = lfm_proxy:unlink(Node, SessId, #file_ref{guid = FileGuid})
+    end,
+    CloseFun = fun() ->
+        ok = lfm_proxy:close(Node, Handle)
+    end,
+    lists_utils:pforeach(fun(Fun) -> Fun() end, [DeleteFun, CloseFun]),
+    ?assertMatch({ok, #{?VIRTUAL_SIZE := 0, ?LOGICAL_SIZE := 0}}, rpc:call(Node, dir_size_stats, get_stats, [SpaceGuid])).
 
 
 %%%===================================================================

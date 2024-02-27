@@ -376,7 +376,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
     % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx3} = get_storage_file_id(FileCtx2),
-    FileCtx4 = delete_location(FileCtx3),
+    FileCtx4 = delete_location(FileCtx3, other),
     FileCtx5 = delete_file_meta(FileCtx4),
     remove_associated_documents(FileCtx5, StorageFileDeleted, StorageFileId),
     FileCtx6 = remove_deletion_marker(FileCtx5, UserCtx, StorageFileId),
@@ -384,7 +384,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS), StorageFileDeleted) ->
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx2} = get_storage_file_id(FileCtx),
-    FileCtx3 = delete_location(FileCtx2),
+    FileCtx3 = delete_location(FileCtx2, other),
     remove_local_associated_documents(FileCtx3, StorageFileDeleted, StorageFileId),
     maybe_try_to_delete_parent(FileCtx3, UserCtx, ?LOCAL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionScope), _StorageFileDeleted) ->
@@ -395,16 +395,17 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScop
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     % get StorageFileId before location is deleted as it's stored in file_location doc
     {StorageFileId, FileCtx3} = get_storage_file_id(FileCtx2),
-    FileCtx4 = delete_location(FileCtx3),
     file_meta:delete_without_link(FileDoc), % do not match, document may not exist
     case DocsDeletionScope of
         ?ALL_DOCS ->
+            FileCtx4 = delete_location(FileCtx3, opened_file_deletion),
             remove_associated_documents(FileCtx4, StorageFileDeleted, StorageFileId),
             % remove deletion marker even if open_file_handling method is rename
             % as deletion marker may have been created when error occurred on deleting file on storage
             FileCtx5 = remove_deletion_marker(FileCtx4, UserCtx, StorageFileId),
             maybe_try_to_delete_parent(FileCtx5, UserCtx, DocsDeletionScope, StorageFileId);
         ?LOCAL_DOCS->
+            FileCtx4 = delete_location(FileCtx3, opened_file_deletion),
             remove_local_associated_documents(FileCtx4, StorageFileDeleted, StorageFileId),
             % remove deletion marker even if open_file_handling method is rename
             % as deletion marker may have been created when error occurred on deleting file on storage
@@ -702,8 +703,8 @@ docs_deletion_scope_to_removal_status(?LOCAL_DOCS) -> ?REMOTE_REMOVE;
 docs_deletion_scope_to_removal_status(?ALL_DOCS) -> ?LOCAL_REMOVE.
 
 
--spec delete_location(file_ctx:ctx()) -> file_ctx:ctx().
-delete_location(FileCtx) ->
+-spec delete_location(file_ctx:ctx(), dir_size_stats:update_ctx()) -> file_ctx:ctx().
+delete_location(FileCtx, UpdateCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
@@ -715,7 +716,7 @@ delete_location(FileCtx) ->
         false ->
             %  NOTE: we are inside replica_synchronizer so direct operations on cache are possible
             fslogic_cache:flush(),
-            ok = fslogic_cache:delete_doc(file_location:local_id(FileUuid))
+            ok = fslogic_cache:delete_doc(file_location:local_id(FileUuid), UpdateCtx)
     end,
     FileCtx2.
 
