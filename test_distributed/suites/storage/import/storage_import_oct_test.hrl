@@ -13,7 +13,7 @@
 -define(MAX_DEPTH, 9999999999999999999999).
 
 -define(ATTEMPTS, 30).
--define(SPACE_PATH(SpaceName), <<"/", (atom_to_binary(SpaceName))/binary>>).
+-define(SPACE_PATH(), <<"/", (atom_to_binary(?FUNCTION_NAME))/binary>>).
 
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId, Attempts),
     storage_import_oct_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).
@@ -24,6 +24,15 @@
 -record(import_config, {
     max_depth :: atom(),
     sync_acl :: integer()
+}).
+
+-type import_config() :: #import_config{}.
+
+-record(storage_import_test_config, {
+    space_id :: od_space:id(),
+    imported_storage_id :: storage:id(),
+    not_imported_storage_id :: storage:id(),
+    import_config = #{} :: import_config()
 }).
 
 -endif.

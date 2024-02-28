@@ -11,8 +11,9 @@
 -module(storage_import_oct_test_SUITE).
 -author("Katarzyna Such").
 
--include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("space_setup_utils.hrl").
 -include_lib("storage_import_oct_test.hrl").
 
@@ -38,7 +39,7 @@
 all() -> ?ALL(?TEST_CASES).
 
 -define(RUN_TEST(Config),
-    storage_import_oct_test_base:?FUNCTION_NAME(Config)
+    storage_import_oct_test_base:?FUNCTION_NAME(?config(storage_import_test_config, Config))
 ).
 
 %%%==================================================================
@@ -57,7 +58,7 @@ create_directory_import_test(Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, initializer, sd_test_utils, storage_import_oct_test_base],
+    ModulesToLoad = [?MODULE, sd_test_utils, storage_import_oct_test_base],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
@@ -66,19 +67,40 @@ init_per_suite(Config) ->
             {datastore_links_tree_order, 100},
             {cache_to_disk_delay_ms, timer:seconds(1)},
             {cache_to_disk_force_delay_ms, timer:seconds(2)}
-        ]}]
+        ]}],
+        posthook = fun(NewConfig) ->
+            delete_spaces_from_previous_run(),
+            NewConfig
+        end
     }).
+
+
+%% @private
+-spec delete_spaces_from_previous_run() -> ok.
+delete_spaces_from_previous_run() ->
+    AllTestCases = all(),
+    RemovedSpaces = lists:filter(fun(SpaceId) ->
+        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
+        SpaceName = maps:get(<<"name">>, SpaceDetails),
+        Exists = lists:member(binary_to_atom(SpaceName), AllTestCases),
+        Exists andalso ozw_test_rpc:delete_space(SpaceId),
+
+        Exists
+    end, ozw_test_rpc:list_spaces()),
+
+    ?assertEqual([], lists_utils:intersect(opw_test_rpc:get_spaces(krakow), RemovedSpaces), ?ATTEMPTS),
+
+    ok.
 
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
-
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Case, Config) ->
     ImportedStorageId = space_setup_utils:create_storage(
         krakow,
-        #posix_storage_params{mount_point =
-        <<"/mnt/synced_storage", (generator:gen_name())/binary>> ,
+        #posix_storage_params{
+            mount_point = <<"/mnt/synced_storage", (generator:gen_name())/binary>>,
             imported_storage = true
         }
     ),
@@ -86,10 +108,8 @@ init_per_testcase(_Case, Config) ->
         paris,
         #posix_storage_params{mount_point = <<"/mnt/st2", (generator:gen_name())/binary>>}
     ),
-    SpaceName = binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME))/binary,
-        (integer_to_binary(?RAND_INT(10000)))/binary>>),
-    Data = #space_spec{name = SpaceName, owner = user1, users = [user2],
-        supports = [
+    SpaceId = space_setup_utils:set_up_space(
+        #space_spec{name = Case, owner = user1, users = [user2], supports = [
             #support_spec{
                 provider = krakow,
                 storage_spec = ImportedStorageId,
@@ -100,14 +120,12 @@ init_per_testcase(_Case, Config) ->
                 storage_spec = NotImportedStorageId,
                 size = 10000000000
             }
-        ]},
-    SpaceId = space_setup_utils:set_up_space(Data),
-    [
-        {space_id, SpaceId},
-        {space_name, SpaceName},
-        {imported_storage_id, ImportedStorageId},
-        {not_imported_storage_id, NotImportedStorageId}
-     | Config].
+    ]}),
+    [{storage_import_test_config, #storage_import_test_config{
+        space_id = SpaceId,
+        imported_storage_id = ImportedStorageId,
+        not_imported_storage_id = NotImportedStorageId
+    }} | Config].
 
 
 end_per_testcase(_Case, _Config) ->
