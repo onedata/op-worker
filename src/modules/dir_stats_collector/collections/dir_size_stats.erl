@@ -518,12 +518,13 @@ delete(Guid) ->
 
 -spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
 init_dir(Guid) ->
+    %%  This function is called both for the first dir stats initiation, as well as any successive re-initialization (disabling and re-enabling).
+    %%  However, the previous statistics are not cleared upon disabling, so we need to clear them, apart from the incarnation info.
     StatsToRetain = #{?INCARNATION_TIME_SERIES => [?CURRENT_METRIC]},
     Uuid = file_id:guid_to_uuid(Guid),
     case datastore_time_series_collection:get_slice(?CTX, Uuid, StatsToRetain, #{window_limit => 1}) of
         {ok, Slice} ->
             Incarnation = internal_stats_to_incarnation(Slice),
-            % remove historical stats from previous incarnation
             ok = delete(Guid),
             ok = datastore_time_series_collection:create(?CTX, Uuid, internal_stats_config(Guid)),
             datastore_time_series_collection:consume_measurements(?CTX, Uuid,

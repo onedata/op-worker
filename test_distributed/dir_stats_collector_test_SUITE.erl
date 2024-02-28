@@ -61,7 +61,8 @@ all() -> [
     multiple_status_change_test,
     adding_file_when_disabled_test,
     restart_test,
-    local_opened_file_deletion_closing_race
+    local_opened_file_deletion_closing_race,
+    local_opened_many_files_deletion_closing_race
 ].
 
 
