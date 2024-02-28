@@ -703,8 +703,8 @@ docs_deletion_scope_to_removal_status(?LOCAL_DOCS) -> ?REMOTE_REMOVE;
 docs_deletion_scope_to_removal_status(?ALL_DOCS) -> ?LOCAL_REMOVE.
 
 
--spec delete_location(file_ctx:ctx(), dir_size_stats:update_ctx()) -> file_ctx:ctx().
-delete_location(FileCtx, UpdateCtx) ->
+-spec delete_location(file_ctx:ctx(), dir_size_stats:update_reason()) -> file_ctx:ctx().
+delete_location(FileCtx, UpdateReason) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
@@ -716,7 +716,7 @@ delete_location(FileCtx, UpdateCtx) ->
         false ->
             %  NOTE: we are inside replica_synchronizer so direct operations on cache are possible
             fslogic_cache:flush(),
-            ok = fslogic_cache:delete_doc(file_location:local_id(FileUuid), UpdateCtx)
+            ok = fslogic_cache:delete_doc(file_location:local_id(FileUuid), UpdateReason)
     end,
     FileCtx2.
 

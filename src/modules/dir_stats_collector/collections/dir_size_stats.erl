@@ -128,9 +128,9 @@ end).
 
 % opened file deletion (closing last handle of opened file) require special handling
 % (see get_conflict_protected_reference_list/2) - this is due to logical size NOT being counted for deleted opened files.
--type update_ctx() :: opened_file_deletion | other.
+-type update_reason() :: opened_file_deletion | other.
 
--export_type([update_ctx/0]).
+-export_type([update_reason/0]).
 
 %%%===================================================================
 %%% API - generic stats
@@ -187,12 +187,12 @@ report_virtual_size_changed(Guid, SizeDiff) ->
     report_virtual_size_changed(Guid, SizeDiff, other).
 
 
--spec report_virtual_size_changed(file_id:file_guid(), integer(), update_ctx()) -> ok.
+-spec report_virtual_size_changed(file_id:file_guid(), integer(), update_reason()) -> ok.
 report_virtual_size_changed(_Guid, 0, _) ->
     ok;
-report_virtual_size_changed(Guid, SizeDiff, UpdateCtx) ->
+report_virtual_size_changed(Guid, SizeDiff, UpdateReason) ->
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    case get_conflict_protected_reference_list(Uuid, UpdateCtx) of
+    case get_conflict_protected_reference_list(Uuid, UpdateReason) of
         [?OPENED_DELETED_FILE_LINK_PATTERN = MainRef] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId),
                 ?MODULE, #{?VIRTUAL_SIZE => SizeDiff});
@@ -518,12 +518,14 @@ delete(Guid) ->
 
 -spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
 init_dir(Guid) ->
-    SliceLayout = #{?INCARNATION_TIME_SERIES => [?CURRENT_METRIC]},
+    StatsToRetain = #{?INCARNATION_TIME_SERIES => [?CURRENT_METRIC]},
     Uuid = file_id:guid_to_uuid(Guid),
-    case datastore_time_series_collection:get_slice(?CTX, Uuid, SliceLayout, #{window_limit => 1}) of
+    case datastore_time_series_collection:get_slice(?CTX, Uuid, StatsToRetain, #{window_limit => 1}) of
         {ok, Slice} ->
             Incarnation = internal_stats_to_incarnation(Slice),
+            % remove historical stats from previous incarnation
             ok = delete(Guid),
+            ok = datastore_time_series_collection:create(?CTX, Uuid, internal_stats_config(Guid)),
             datastore_time_series_collection:consume_measurements(?CTX, Uuid,
                 #{?INCARNATION_TIME_SERIES => #{?CURRENT_METRIC => [{?NOW(), Incarnation}]}});
         {error, not_found} ->
@@ -841,8 +843,8 @@ get_conflict_protected_reference_list(Uuid) ->
     get_conflict_protected_reference_list(Uuid, other).
 
 %% @private
--spec get_conflict_protected_reference_list(file_meta:uuid(), update_ctx()) -> file_meta_hardlinks:references_list().
-get_conflict_protected_reference_list(Uuid, UpdateCtx) ->
+-spec get_conflict_protected_reference_list(file_meta:uuid(), update_reason()) -> file_meta_hardlinks:references_list().
+get_conflict_protected_reference_list(Uuid, UpdateReason) ->
     ReferencesList = case file_meta_hardlinks:list_references(Uuid) of
         {ok, List} ->
             List;
@@ -852,9 +854,9 @@ get_conflict_protected_reference_list(Uuid, UpdateCtx) ->
 
     #reference_list_changes{added = Added, removed = Removed, removed_main_refs = RemovedMainRefs} =
         node_cache:get({?MODULE, Uuid}, #reference_list_changes{}),
-    case RemovedMainRefs ++ ReferencesList -- Added ++ Removed of
+    case (RemovedMainRefs ++ ReferencesList ++ Removed) -- Added of
         [] ->
-            case UpdateCtx of
+            case UpdateReason of
                 % stats of deleted opened files are handled specially (see on_opened_file_delete/2 and on_deleted_file_close/2);
                 % note that for opened deleted file there is maximally one hardlink so this case means that the file was closed
                 % before stats were calculated.

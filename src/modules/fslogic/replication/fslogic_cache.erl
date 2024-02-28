@@ -369,8 +369,8 @@ cache_doc(#document{key = Key} = LocationDoc) ->
 %% Deletes file location.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_doc(file_location:id(), dir_size_stats:update_ctx()) -> ok | {error, term()}.
-delete_doc(Key, StatsUpdateCtx) ->
+-spec delete_doc(file_location:id(), dir_size_stats:update_reason()) -> ok | {error, term()}.
+delete_doc(Key, StatsUpdateReason) ->
     GetDocAns = case get_doc(Key) of
         #document{} = Doc -> {ok, Doc};
         _ -> file_location:get(Key)
@@ -382,7 +382,7 @@ delete_doc(Key, StatsUpdateCtx) ->
             storage_id = StorageId,
             size = LocationSize
         }}} ->
-            dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize, StatsUpdateCtx),
+            dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize, StatsUpdateReason),
             StorageSize = get_local_size(Key),
             cache_size_change(Key, SpaceId, StorageId, -StorageSize),
             apply_size_change(Key, FileUuid),

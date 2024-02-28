@@ -41,7 +41,8 @@
     multiple_status_change_test/1,
     adding_file_when_disabled_test/1,
     restart_test/1,
-    local_opened_file_deletion_closing_race/1
+    local_opened_file_deletion_closing_race/1,
+    local_opened_many_files_deletion_closing_race/1
 ]).
 
 
@@ -125,7 +126,11 @@ restart_test(Config) ->
 
 
 local_opened_file_deletion_closing_race(Config) ->
-    dir_stats_collector_test_base:local_opened_file_deletion_closing_race_base(Config).
+    dir_stats_collector_test_base:local_opened_file_deletion_closing_race_base(Config, 1).
+
+
+local_opened_many_files_deletion_closing_race(Config) ->
+    dir_stats_collector_test_base:local_opened_file_deletion_closing_race_base(Config, 100).
 
 
 %%%===================================================================
