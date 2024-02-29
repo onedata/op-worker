@@ -181,7 +181,10 @@ assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessi
             {ok, UidAndGidAttrs} = rpc:call(Node, luma, map_to_storage_credentials, [
                 UserId, SpaceId, StorageId
             ]),
-            ExpOwnerPosixAttrs = maps:merge(UidAndGidAttrs, ExpAttrs),
+            ExpOwnerPosixAttrs = ExpAttrs#{
+                uid => binary_to_integer(maps:get(<<"uid">>, UidAndGidAttrs)),
+                gid => binary_to_integer(maps:get(<<"gid">>, UidAndGidAttrs))
+            },
 
             StorageFilePath = get_storage_file_path(Node, SpaceId, LogicalFilePath),
 
