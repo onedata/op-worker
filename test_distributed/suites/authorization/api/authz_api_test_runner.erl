@@ -1513,7 +1513,7 @@ create_file_tree(Node, FileOwnerSessId, ParentDirPath, #ct_authz_dir_spec{
 -spec create_file(node(), session:id(), file_meta:path()) -> file_id:file_guid().
 create_file(Node, FileOwnerSessId, FilePath) ->
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, FileOwnerSessId, FilePath, 8#777)),
-    permissions_test_utils:ensure_file_created_on_storage(Node, FileGuid),
+    storage_test_utils:ensure_file_created_on_storage(Node, FileGuid),
     FileGuid.
 
 
@@ -1521,7 +1521,7 @@ create_file(Node, FileOwnerSessId, FilePath) ->
 -spec create_dir(node(), session:id(), file_meta:path()) -> file_id:file_guid().
 create_dir(Node, FileOwnerSessId, DirPath) ->
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, FileOwnerSessId, DirPath)),
-    permissions_test_utils:ensure_dir_created_on_storage(Node, DirGuid),
+    storage_test_utils:ensure_dir_created_on_storage(Node, DirGuid),
     DirGuid.
 
 

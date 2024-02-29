@@ -53,7 +53,7 @@ create_file(SpaceId) ->
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
             case lfm_proxy:create(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777) of
                 {ok, FileGuid} ->
-                    permissions_test_utils:ensure_file_created_on_storage(Node, FileGuid);
+                    storage_test_utils:ensure_file_created_on_storage(Node, FileGuid);
                 {error, _} = Error ->
                     Error
             end

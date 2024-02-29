@@ -53,7 +53,7 @@ mkdir(SpaceId) ->
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
             case lfm_proxy:mkdir(Node, SessionId, ParentDirGuid, <<"dir2">>, 8#777) of
                 {ok, DirGuid} ->
-                    permissions_test_utils:ensure_dir_created_on_storage(Node, DirGuid);
+                    storage_test_utils:ensure_dir_created_on_storage(Node, DirGuid);
                 {error, _} = Error ->
                     Error
             end

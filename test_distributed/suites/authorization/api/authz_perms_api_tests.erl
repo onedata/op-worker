@@ -57,7 +57,7 @@ set_perms(SpaceId) ->
     ok = lfm_proxy:close(Node, Handle),
 
     AssertProperStorageAttrsFun = fun(ExpMode) ->
-        permissions_test_utils:assert_user_is_file_owner_on_storage(
+        storage_test_utils:assert_file_attrs_on_posix_storage(
             Node, SpaceId, FilePath, FileOwnerUserSessionId, #{mode => ?FILE_MODE(ExpMode)}
         )
     end,
