@@ -556,7 +556,7 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
+                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}},
                         ?file_req(Worker, SessId, Guid, #create_dir{mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
@@ -611,13 +611,13 @@ default_permissions_test(Config) ->
             {mkdir, <<"/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1">>, ?TRASH_DIR_NAME, 8#777, [SessId1], ?EPERM}, % TODO VFS-7064 change to EEXIST
-            {get_attr, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {get_attr, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {get_attr, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {get_attr, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
-            {delete, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
+            {get_attr, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {get_attr, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?EACCES},
+            {delete, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?EACCES},
             {delete, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?EPERM},
             % TODO VFS-7064 uncomment after adding link to trash directory
             % {delete, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), [SessId1, SessId2, SessId3, SessId4], ?EPERM},
@@ -694,11 +694,11 @@ simple_rename_test(Config) ->
         ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name2/t6_dir4/t6_dir3">>})
     ),
     ?assertMatch(
-        #fuse_response{status = #status{code = ?ENOENT}},
+        #fuse_response{status = #status{code = ?EACCES}},
         ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name1/t6_dir1/t6_dir2">>})
     ),
     ?assertMatch(
-        #fuse_response{status = #status{code = ?ENOENT}},
+        #fuse_response{status = #status{code = ?EACCES}},
         ?req(Worker, SessId2, #resolve_guid{path = <<"/space_name1/t6_dir1/t6_dir2/t6_dir3">>})
     ).
 

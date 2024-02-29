@@ -595,7 +595,7 @@ rename_removed_opened_file_test(Config) ->
     RenamedStorageId = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
     ?assertMatch({ok, #file_location{file_id = RenamedStorageId}},
         lfm_proxy:get_file_location(Worker, SessId(User), ?FILE_REF(Guid1))),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), ?FILE_REF(Guid1))),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:get_file_location(Worker, SessId(User2), ?FILE_REF(Guid1))),
 
     lfm_proxy:close_all(Worker),
     {ok, ListAns4} = ?assertMatch({ok, _},
