@@ -17,9 +17,9 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    get_acl/1,
-    set_acl/1,
-    remove_acl/1
+    test_get_acl/1,
+    test_set_acl/1,
+    test_remove_acl/1
 ]).
 
 
@@ -28,7 +28,7 @@
 %%%===================================================================
 
 
-get_acl(SpaceId) ->
+test_get_acl(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -50,7 +50,7 @@ get_acl(SpaceId) ->
     }).
 
 
-set_acl(SpaceId) ->
+test_set_acl(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -80,7 +80,7 @@ set_acl(SpaceId) ->
     }).
 
 
-remove_acl(SpaceId) ->
+test_remove_acl(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,

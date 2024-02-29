@@ -21,12 +21,12 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 -export([
-    mkdir/1,
-    get_children/1,
-    get_children_attrs/1,
-    get_child_attr/1,
-    mv_dir/1,
-    rm_dir/1
+    test_mkdir/1,
+    test_get_children/1,
+    test_get_children_attrs/1,
+    test_get_child_attr/1,
+    test_mv_dir/1,
+    test_rm_dir/1
 ]).
 
 
@@ -35,7 +35,7 @@
 %%%===================================================================
 
 
-mkdir(SpaceId) ->
+test_mkdir(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -64,7 +64,7 @@ mkdir(SpaceId) ->
     }).
 
 
-get_children(SpaceId) ->
+test_get_children(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -88,7 +88,7 @@ get_children(SpaceId) ->
     }).
 
 
-get_children_attrs(SpaceId) ->
+test_get_children_attrs(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -114,7 +114,7 @@ get_children_attrs(SpaceId) ->
     }).
 
 
-get_child_attr(SpaceId) ->
+test_get_child_attr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -137,7 +137,7 @@ get_child_attr(SpaceId) ->
     }).
 
 
-mv_dir(SpaceId) ->
+test_mv_dir(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -175,7 +175,7 @@ mv_dir(SpaceId) ->
     }).
 
 
-rm_dir(SpaceId) ->
+test_rm_dir(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,

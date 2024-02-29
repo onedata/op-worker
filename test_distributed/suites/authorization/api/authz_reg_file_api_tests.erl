@@ -19,14 +19,14 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    create_file/1,
-    open_for_read/1,
-    open_for_write/1,
-    open_for_rdwr/1,
-    create_and_open/1,
-    truncate/1,
-    mv_file/1,
-    rm_file/1
+    test_create_file/1,
+    test_open_for_read/1,
+    test_open_for_write/1,
+    test_open_for_rdwr/1,
+    test_create_and_open/1,
+    test_truncate/1,
+    test_mv_file/1,
+    test_rm_file/1
 ]).
 
 
@@ -35,7 +35,7 @@
 %%%===================================================================
 
 
-create_file(SpaceId) ->
+test_create_file(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -64,7 +64,7 @@ create_file(SpaceId) ->
     }).
 
 
-open_for_read(SpaceId) ->
+test_open_for_read(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -88,7 +88,7 @@ open_for_read(SpaceId) ->
     }).
 
 
-open_for_write(SpaceId) ->
+test_open_for_write(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -112,7 +112,7 @@ open_for_write(SpaceId) ->
     }).
 
 
-open_for_rdwr(SpaceId) ->
+test_open_for_rdwr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -136,7 +136,7 @@ open_for_rdwr(SpaceId) ->
     }).
 
 
-create_and_open(SpaceId) ->
+test_create_and_open(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -160,7 +160,7 @@ create_and_open(SpaceId) ->
     }).
 
 
-truncate(SpaceId) ->
+test_truncate(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -184,7 +184,7 @@ truncate(SpaceId) ->
     }).
 
 
-mv_file(SpaceId) ->
+test_mv_file(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -222,7 +222,7 @@ mv_file(SpaceId) ->
     }).
 
 
-rm_file(SpaceId) ->
+test_rm_file(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,

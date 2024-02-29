@@ -17,10 +17,10 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    get_parent/1,
-    get_file_path/1,
-    resolve_guid/1,
-    stat/1
+    test_get_parent/1,
+    test_get_file_path/1,
+    test_resolve_guid/1,
+    test_stat/1
 ]).
 
 
@@ -29,7 +29,7 @@
 %%%===================================================================
 
 
-get_parent(SpaceId) ->
+test_get_parent(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -48,7 +48,7 @@ get_parent(SpaceId) ->
     }).
 
 
-get_file_path(SpaceId) ->
+test_get_file_path(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -67,7 +67,7 @@ get_file_path(SpaceId) ->
     }).
 
 
-resolve_guid(SpaceId) ->
+test_resolve_guid(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -85,7 +85,7 @@ resolve_guid(SpaceId) ->
     }).
 
 
-stat(SpaceId) ->
+test_stat(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,

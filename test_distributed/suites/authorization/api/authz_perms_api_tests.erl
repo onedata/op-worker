@@ -18,10 +18,10 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
-    set_perms/1,
-    check_read_perms/1,
-    check_write_perms/1,
-    check_rdwr_perms/1
+    test_set_perms/1,
+    test_check_read_perms/1,
+    test_check_write_perms/1,
+    test_check_rdwr_perms/1
 ]).
 
 
@@ -30,7 +30,7 @@
 %%%===================================================================
 
 
-set_perms(SpaceId) ->
+test_set_perms(SpaceId) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     FileOwnerUserSessionId = oct_background:get_user_session_id(user1, krakow),
@@ -158,7 +158,7 @@ set_perms(SpaceId) ->
     ).
 
 
-check_read_perms(SpaceId) ->
+test_check_read_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -182,7 +182,7 @@ check_read_perms(SpaceId) ->
     }).
 
 
-check_write_perms(SpaceId) ->
+test_check_write_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -206,7 +206,7 @@ check_write_perms(SpaceId) ->
     }).
 
 
-check_rdwr_perms(SpaceId) ->
+test_check_rdwr_perms(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
