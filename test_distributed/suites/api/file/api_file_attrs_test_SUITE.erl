@@ -1812,7 +1812,7 @@ init_per_suite(Config) ->
             User3Id = oct_background:get_user_id(user3),
             lists:foreach(fun(SpacePlaceholder) ->
                 SpaceId = oct_background:get_space_id(SpacePlaceholder),
-                ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ozt_spaces:set_privileges(SpaceId, User3Id, [
                     ?SPACE_MANAGE_SHARES | privileges:space_member()
                 ])
             end, [space_krk_par, space_s3]),

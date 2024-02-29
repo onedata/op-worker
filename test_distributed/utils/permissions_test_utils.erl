@@ -85,6 +85,7 @@ assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSes
     end).
 
 
+%% TODO VFS-11787 Remove and fix failures
 -spec ensure_file_created_on_storage(node(), file_id:file_guid()) -> ok.
 ensure_file_created_on_storage(Node, FileGuid) ->
     % Open and close file in dir to ensure it is created on storage.
@@ -92,6 +93,7 @@ ensure_file_created_on_storage(Node, FileGuid) ->
     ok = lfm_proxy:close(Node, Handle).
 
 
+%% TODO VFS-11787 Remove and fix failures
 -spec ensure_dir_created_on_storage(node(), file_id:file_guid()) -> ok.
 ensure_dir_created_on_storage(Node, DirGuid) ->
     % Create and open file in dir to ensure it is created on storage.

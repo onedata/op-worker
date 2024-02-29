@@ -118,7 +118,7 @@ is_offset_allowed(MainPid, Offset) ->
 %% @private
 -spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> no_return().
 main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
-    bulk_download_task:save_main_pid(BulkDownloadId, self()),
+    bulk_download_task:save(BulkDownloadId, self(), SessionId),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
     %% @TODO VFS-8882 - use preserve/follow_external in API
     SymlinkResolutionPolicy = case FollowSymlinks of

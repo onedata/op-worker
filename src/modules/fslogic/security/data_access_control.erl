@@ -136,7 +136,7 @@ assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
         false ->
             case file_ctx:is_in_user_space_const(FileCtx0, UserCtx) of
                 true -> AccessRequirements0;
-                false -> throw(?ENOENT)
+                false -> throw(?EACCES)
             end
     end,
     % Special case - user in 'open_handle' mode should be treated as ?GUEST

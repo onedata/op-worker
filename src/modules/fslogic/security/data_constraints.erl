@@ -42,7 +42,7 @@
 
 %% API
 -export([get_allow_all_constraints/0, get/1]).
--export([has_no_constraints/1]).
+-export([assert_no_constraints/1, has_no_constraints/1]).
 -export([assert_not_readonly_mode/1, inspect/4]).
 -export([filter_available_spaces/2]).
 
@@ -83,6 +83,15 @@
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
     #constraints{spaces = any, paths = any, guids = any, readonly = false}.
+
+
+-spec assert_no_constraints(user_ctx:ctx()) -> ok | no_return().
+assert_no_constraints(UserCtx) ->
+    DataConstraints = user_ctx:get_data_constraints(UserCtx),
+    case has_no_constraints(DataConstraints) of
+        true -> ok;
+        false -> throw(?EACCES)
+    end.
 
 
 -spec has_no_constraints(constraints()) -> boolean().

@@ -37,6 +37,10 @@ translate_resource(GRI = #gri{aspect = instance, scope = private}, #od_user{
             aspect = eff_spaces,
             scope = private
         }),
+        <<"effGroupList">> => gri:serialize(GRI#gri{
+            aspect = eff_groups,
+            scope = private
+        }),
         <<"effHandleServiceList">> => gri:serialize(GRI#gri{
             aspect = eff_handle_services,
             scope = private
@@ -64,6 +68,17 @@ translate_resource(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
                 scope = private
             })
         end, Spaces)
+    };
+translate_resource(#gri{aspect = eff_groups, scope = private}, Groups) ->
+    #{
+        <<"list">> => lists:map(fun(GroupId) ->
+            gri:serialize(#gri{
+                type = op_group,
+                id = GroupId,
+                aspect = instance,
+                scope = shared
+            })
+        end, Groups)
     };
 translate_resource(#gri{aspect = eff_handle_services, scope = private}, HServices) ->
     #{

@@ -23,7 +23,8 @@
 %% node_manager_plugin_behaviour callbacks
 -export([cluster_generations/0]).
 -export([oldest_upgradable_cluster_generation/0]).
--export([app_name/0, cm_nodes/0, db_nodes/0]).
+-export([app_name/0, release_version/0, build_version/0]).
+-export([cm_nodes/0, db_nodes/0]).
 -export([before_init/0]).
 -export([before_custom_workers_start/0]).
 -export([custom_workers/0]).
@@ -87,9 +88,27 @@ oldest_upgradable_cluster_generation() ->
 %% Overrides {@link node_manager_plugin_default:app_name/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec app_name() -> {ok, Name :: atom()}.
+-spec app_name() -> atom().
 app_name() ->
-    {ok, op_worker}.
+    op_worker.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:release_version/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec release_version() -> string() | binary().
+release_version() ->
+    op_worker:get_release_version().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:app_name/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_version() -> string() | binary().
+build_version() ->
+    op_worker:get_build_version().
 
 %%--------------------------------------------------------------------
 %% @doc
