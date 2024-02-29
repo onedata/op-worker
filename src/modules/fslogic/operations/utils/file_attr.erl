@@ -431,7 +431,7 @@ resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_att
                 local_replication_rate = 1.0
             }, FileCtx2};
         {true, _} ->
-            {FLDoc, FC3} = file_ctx:get_local_file_location_doc(FileCtx2),
+            FLDoc = file_ctx:get_local_file_location_doc_const(FileCtx2),
             ResAttr = lists:foldl(fun
                 (local_replication_rate, AccAttr) ->
                     AccAttr#file_attr{local_replication_rate = count_bytes(FLDoc)/Size};
@@ -440,7 +440,7 @@ resolve_location_attrs_for_reg_file(#state{file_ctx = FileCtx, current_stage_att
                 (_, AccAttr) ->
                     AccAttr
             end, #file_attr{}, RequestedAttrs),
-            {ResAttr, FC3};
+            {ResAttr, FileCtx2};
         {false, _} ->
             {#file_attr{}, FileCtx2}
     end,

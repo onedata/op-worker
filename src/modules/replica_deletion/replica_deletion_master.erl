@@ -191,7 +191,7 @@ find_supporter_and_prepare_deletion_request(FileCtx) ->
         {[{Provider, Blocks} | _], FileCtx2} ->
             % todo VFS-4628 handle retries to other providers
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
-            {LocalLocation, _} = file_ctx:get_local_file_location_doc(FileCtx2, false),
+            LocalLocation = file_ctx:get_local_file_location_doc_const(FileCtx2, false),
             VV = file_location:get_version_vector(LocalLocation),
             prepare_deletion_request(FileUuid, Provider, Blocks, VV)
     end.
