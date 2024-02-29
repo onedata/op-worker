@@ -1573,32 +1573,27 @@ get_exp_error(Errno, #authz_test_suite_spec{returned_errors = errno_errors}) ->
 
 %% @private
 -spec run_final_storage_ownership_check(authz_test_case_ctx()) -> ok | no_return().
-run_final_storage_ownership_check(#authz_test_case_ctx{}) ->
-    %% TODO VFS-11732 rewrite from permissions_test_runner envup
-    ok.
-
-
-%%%% @private
-%%-spec run_final_ownership_check(scenario_ctx()) -> ok | no_return().
-%%run_final_ownership_check(#scenario_ctx{
-%%    meta_spec = #perms_test_spec{
-%%        test_node = Node,
-%%        space_id = SpaceId,
-%%        final_ownership_check = FinalOwnershipCheckFun
-%%    },
-%%    scenario_root_dir_path = ScenarioRootDirPath,
-%%    files_owner_session_id = OriginalFileOwnerSessId,
-%%    executioner_session_id = OperationExecutionerSessId
-%%}) ->
-%%    case FinalOwnershipCheckFun(ScenarioRootDirPath) of
-%%        {inapplicable_due_to, _} ->
-%%            ok;
-%%        {should_preserve_ownership, LogicalFilePath} ->
-%%            permissions_test_utils:assert_user_is_file_owner_on_storage(
-%%                Node, SpaceId, LogicalFilePath, OriginalFileOwnerSessId
-%%            );
-%%        {should_assign_ownership, LogicalFilePath} ->
-%%            permissions_test_utils:assert_user_is_file_owner_on_storage(
-%%                Node, SpaceId, LogicalFilePath, OperationExecutionerSessId
-%%            )
-%%    end.
+run_final_storage_ownership_check(#authz_test_case_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = #authz_test_suite_spec{
+            space_id = SpaceId,
+            final_ownership_check = FinalOwnershipCheckFun
+        },
+        test_node = TestNode,
+        files_owner_session_id = FilesOwnerSessionId
+    },
+    test_case_root_dir_path = TestCaseRootDirPath,
+    executioner_session_id = ExecutionerSessionId
+}) ->
+    case FinalOwnershipCheckFun(TestCaseRootDirPath) of
+        {inapplicable_due_to, _} ->
+            ok;
+        {should_preserve_ownership, LogicalFilePath} ->
+            storage_test_utils:assert_file_attrs_on_posix_storage(
+                TestNode, SpaceId, LogicalFilePath, FilesOwnerSessionId
+            );
+        {should_assign_ownership, LogicalFilePath} ->
+            storage_test_utils:assert_file_attrs_on_posix_storage(
+                TestNode, SpaceId, LogicalFilePath, ExecutionerSessionId
+            )
+    end.
