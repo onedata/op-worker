@@ -294,7 +294,7 @@ list_previously_non_existent_file(_Config) ->
     % List dir manually to use the same exact session with caveat for file not existing yet
     MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
-    LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
+    LsSessId = authz_test_utils:create_session(Node, UserId, LsToken),
 
     LS = fun(Guid) -> lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), 0, 100) end,
 
@@ -397,7 +397,7 @@ ls_with_caveats(Guid, Caveats, Offset, Limit) ->
 
     MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, Caveats),
-    LsSessId = permissions_test_utils:create_session(Node, UserId, LsToken),
+    LsSessId = authz_test_utils:create_session(Node, UserId, LsToken),
 
     lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), Offset, Limit).
 
@@ -436,7 +436,7 @@ allowed_ancestors_operations_test(_Config) ->
         provider_onenv_test_utils:create_oz_temp_access_token(UserId),
         ?CV_OBJECTID([DeepestDirObjectId])
     ),
-    SessionIdWithCaveats = permissions_test_utils:create_session(Node, UserId, Token),
+    SessionIdWithCaveats = authz_test_utils:create_session(Node, UserId, Token),
 
     lists:foldl(
         fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
@@ -547,7 +547,7 @@ data_access_caveats_cache_test(_Config) ->
         ?CV_OBJECTID([DirObjectId]),
         ?CV_OBJECTID([FileObjectId])
     ]),
-    SessionId = permissions_test_utils:create_session(Node, UserId, Token),
+    SessionId = authz_test_utils:create_session(Node, UserId, Token),
 
 
     %% CHECK guid_constraint CACHE
@@ -655,11 +655,11 @@ mv_test(_Config) ->
     MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
 
     TokenWithBothPaths = tokens:confine(MainToken, ?CV_PATH([CanonicalCurrentPath, CanonicalNewPath])),
-    SessionIdWithBothPathsConstraint = permissions_test_utils:create_session(
+    SessionIdWithBothPathsConstraint = authz_test_utils:create_session(
         CheckNode, UserId, TokenWithBothPaths
     ),
     TokenWithNewPathOnly = tokens:confine(MainToken, ?CV_PATH([CanonicalNewPath])),
-    SessionIdWithNewPathOnlyConstraint = permissions_test_utils:create_session(
+    SessionIdWithNewPathOnlyConstraint = authz_test_utils:create_session(
         CheckNode, UserId, TokenWithNewPathOnly
     ),
 

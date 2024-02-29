@@ -1,141 +1,41 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2024 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions used in lfm_permissions framework and tests.
+%%% Utility functions used in authorization framework and tests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(permissions_test_utils).
+-module(authz_test_utils).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("permissions_test.hrl").
--include("proto/common/handshake_messages.hrl").
 -include("storage_files_test_SUITE.hrl").
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    assert_user_is_file_owner_on_storage/4,
-    assert_user_is_file_owner_on_storage/5,
+    all_perms/2,
+    complementary_perms/3,
 
-    ensure_file_created_on_storage/2,
-    ensure_dir_created_on_storage/2,
+    perms_to_bitmask/1,
+    perm_to_bitmask/1,
 
-    create_session/3, create_session/4,
-    get_auth/2,
-
-    all_perms/2, complementary_perms/3,
-    perms_to_bitmask/1, perm_to_bitmask/1,
-    perm_to_posix_perms/1, posix_perm_to_mode/2,
+    perm_to_posix_perms/1,
+    posix_perm_to_mode/2,
 
     set_modes/2,
-    set_acls/5
+    set_acls/5,
+
+    create_session/3, create_session/4
 ]).
-
-
-% See p1/p2_local_feed_luma.json
--define(EXP_POSIX_STORAGE_CONFIG, #{
-    p1 => #{
-        <<"owner">> => #{uid => 3001, gid => 3000},
-        <<"user1">> => #{uid => 3002, gid => 3000},
-        <<"user2">> => #{uid => 3003, gid => 3000},
-        <<"user3">> => #{uid => 3004, gid => 3000}
-    },
-    p2 => #{
-        <<"owner">> => #{uid => 6001, gid => 6000},
-        <<"user1">> => #{uid => 6002, gid => 6000},
-        <<"user2">> => #{uid => 6003, gid => 6000},
-        <<"user3">> => #{uid => 6004, gid => 6000}
-    }
-}).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec assert_user_is_file_owner_on_storage(node(), od_space:id(), file_meta:path(), session:id()) ->
-    ok | no_return().
-assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessId) ->
-    assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessId, #{}).
-
-
--spec assert_user_is_file_owner_on_storage(
-    node(),
-    od_space:id(),
-    file_meta:path(),
-    session:id(),
-    AdditionalAttrs :: map()
-) ->
-    ok | no_return().
-assert_user_is_file_owner_on_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessId, AdditionalAttrs) ->
-    ?EXEC_IF_SUPPORTED_BY_POSIX(Node, SpaceId, fun() ->
-        ?ASSERT_FILE_INFO(
-            get_exp_owner_posix_attrs(Node, ExpOwnerSessId, AdditionalAttrs),
-            Node,
-            storage_file_path(Node, SpaceId, LogicalFilePath)
-        )
-    end).
-
-
-%% TODO VFS-11787 Remove and fix failures
--spec ensure_file_created_on_storage(node(), file_id:file_guid()) -> ok.
-ensure_file_created_on_storage(Node, FileGuid) ->
-    % Open and close file in dir to ensure it is created on storage.
-    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), write),
-    ok = lfm_proxy:close(Node, Handle).
-
-
-%% TODO VFS-11787 Remove and fix failures
--spec ensure_dir_created_on_storage(node(), file_id:file_guid()) -> ok.
-ensure_dir_created_on_storage(Node, DirGuid) ->
-    % Create and open file in dir to ensure it is created on storage.
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-        Node, ?ROOT_SESS_ID, DirGuid, <<"__tmp_file">>, 8#777
-    )),
-    {ok, Handle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), write),
-    ok = lfm_proxy:close(Node, Handle),
-
-    % Remove file to ensure it will not disturb tests
-    ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)).
-
-
--spec create_session(node(), od_user:id(), tokens:serialized()) ->
-    session:id().
-create_session(Node, UserId, AccessToken) ->
-    create_session(Node, UserId, AccessToken, normal).
-
-
--spec create_session(node(), od_user:id(), tokens:serialized(), session:mode()) ->
-    session:id().
-create_session(Node, UserId, AccessToken, SessionMode) ->
-    Nonce = crypto:strong_rand_bytes(10),
-    Identity = ?SUB(user, UserId),
-    TokenCredentials = auth_manager:build_token_credentials(
-        AccessToken, undefined,
-        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
-    ),
-    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
-        Node,
-        session_manager,
-        reuse_or_create_fuse_session,
-        [Nonce, Identity, SessionMode, TokenCredentials]
-    )),
-    SessionId.
-
-
--spec get_auth(node(), session:id()) -> aai:auth().
-get_auth(Node, SessionId) ->
-    {ok, Credentials} = rpc:call(Node, session, get_credentials, [SessionId]),
-    {ok, Auth, _} = rpc:call(Node, auth_manager, verify_credentials, [Credentials]),
-    Auth#auth{session_id = SessionId}.
 
 
 -spec all_perms(node(), file_id:file_guid()) -> Perms :: [binary()].
@@ -201,7 +101,7 @@ perm_to_posix_perms(?read_acl) -> [];
 perm_to_posix_perms(?write_acl) -> [owner].
 
 
--spec posix_perm_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
+-spec posix_perm_to_mode(read | write | exec, owner | group | other) ->
     non_neg_integer().
 posix_perm_to_mode(read, owner)  -> 8#4 bsl 6;
 posix_perm_to_mode(write, owner) -> 8#2 bsl 6;
@@ -254,8 +154,32 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
     end, ok, DeniedPermsPerFile).
 
 
+-spec create_session(node(), od_user:id(), tokens:serialized()) ->
+    session:id().
+create_session(Node, UserId, AccessToken) ->
+    create_session(Node, UserId, AccessToken, normal).
+
+
+-spec create_session(node(), od_user:id(), tokens:serialized(), session:mode()) ->
+    session:id().
+create_session(Node, UserId, AccessToken, SessionMode) ->
+    Nonce = crypto:strong_rand_bytes(10),
+    Identity = ?SUB(user, UserId),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
+    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
+        Node,
+        session_manager,
+        reuse_or_create_fuse_session,
+        [Nonce, Identity, SessionMode, TokenCredentials]
+    )),
+    SessionId.
+
+
 %%%===================================================================
-%%% API
+%%% Internal functions
 %%%===================================================================
 
 
@@ -268,26 +192,3 @@ is_dir(Node, Guid) ->
         rpc:call(Node, file_meta, get, [Uuid])
     ),
     FileType == ?DIRECTORY_TYPE.
-
-
-%% @private
--spec get_exp_owner_posix_attrs(node(), session:id(), map()) ->
-    #{uid => integer(), gid => integer()}.
-get_exp_owner_posix_attrs(Worker, SessionId, AdditionalAttrs) ->
-    {ok, UserId} = rpc:call(Worker, session, get_user_id, [SessionId]),
-    ProviderName = list_to_atom(
-        lists:nth(2, string:tokens(atom_to_list(?GET_HOSTNAME(Worker)), "."))
-    ),
-    maps:merge(
-        AdditionalAttrs,
-        maps:get(UserId, maps:get(ProviderName, ?EXP_POSIX_STORAGE_CONFIG))
-    ).
-
-
-%% @private
--spec storage_file_path(node(), od_space:id(), file_meta:path()) -> binary().
-storage_file_path(W, SpaceId, LogicalPath) ->
-    [<<"/">>, <<"/", LogicalPathWithoutSpaceId/binary>>] = binary:split(
-        LogicalPath, SpaceId, [global]
-    ),
-    storage_test_utils:file_path(W, SpaceId, LogicalPathWithoutSpaceId).

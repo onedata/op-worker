@@ -67,17 +67,17 @@ set_perms(SpaceId) ->
     %% POSIX
 
     % file owner can always change file perms if he has access to it
-    permissions_test_utils:set_modes(Node, #{DirGuid => 8#677, FileGuid => 8#777}),
+    authz_test_utils:set_modes(Node, #{DirGuid => 8#677, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)
     ),
-    permissions_test_utils:set_modes(Node, #{DirGuid => 8#100, FileGuid => 8#000}),
+    authz_test_utils:set_modes(Node, #{DirGuid => 8#100, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)),
     AssertProperStorageAttrsFun(8#000),
 
     % but not if that access is via shared guid
-    permissions_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
+    authz_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?EPERM},
         lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(ShareFileGuid), 8#000)
@@ -85,7 +85,7 @@ set_perms(SpaceId) ->
     AssertProperStorageAttrsFun(8#777),
 
     % other users from space can't change perms no matter what
-    permissions_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
+    authz_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:set_perms(Node, GroupUserSessionId, ?FILE_REF(FileGuid), 8#000)
@@ -93,7 +93,7 @@ set_perms(SpaceId) ->
     AssertProperStorageAttrsFun(8#777),
 
     % with exception being space owner who can always change perms no matter what
-    permissions_test_utils:set_modes(Node, #{DirGuid => 8#000, FileGuid => 8#000}),
+    authz_test_utils:set_modes(Node, #{DirGuid => 8#000, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, ?FILE_REF(FileGuid), 8#555)),
     AssertProperStorageAttrsFun(8#555),
 
@@ -104,7 +104,7 @@ set_perms(SpaceId) ->
     ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, ?FILE_REF(SpaceGuid), 8#777)),
 
     % users outside of space shouldn't even see the file
-    permissions_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
+    authz_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
     ?assertMatch(
         {error, ?ENOENT},
         lfm_proxy:set_perms(Node, OtherUserSessionId, ?FILE_REF(FileGuid), 8#000)
@@ -114,7 +114,7 @@ set_perms(SpaceId) ->
     %% ACL
 
     % file owner can always change file perms if he has access to it
-    permissions_test_utils:set_acls(Node, #{
+    authz_test_utils:set_acls(Node, #{
         DirGuid => ?ALL_DIR_PERMS -- [?traverse_container],
         FileGuid => ?ALL_FILE_PERMS
     }, #{}, ?everyone, ?no_flags_mask),
@@ -123,7 +123,7 @@ set_perms(SpaceId) ->
         lfm_proxy:set_perms(Node, FileOwnerUserSessionId, ?FILE_REF(FileGuid), 8#000)
     ),
 
-    permissions_test_utils:set_acls(Node, #{
+    authz_test_utils:set_acls(Node, #{
         DirGuid => [?traverse_container],
         FileGuid => []
     }, #{}, ?everyone, ?no_flags_mask),
@@ -138,7 +138,7 @@ set_perms(SpaceId) ->
     % but space owner always can change acl for any file
 
     % other users from space can't change perms no matter what
-    permissions_test_utils:set_acls(Node, #{
+    authz_test_utils:set_acls(Node, #{
         DirGuid => ?ALL_DIR_PERMS,
         FileGuid => ?ALL_FILE_PERMS
     }, #{}, ?everyone, ?no_flags_mask),
@@ -148,7 +148,7 @@ set_perms(SpaceId) ->
     ),
 
     % users outside of space shouldn't even see the file
-    permissions_test_utils:set_acls(Node, #{
+    authz_test_utils:set_acls(Node, #{
         DirGuid => ?ALL_DIR_PERMS,
         FileGuid => ?ALL_FILE_PERMS
     }, #{}, ?everyone, ?no_flags_mask),

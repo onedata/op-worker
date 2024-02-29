@@ -70,7 +70,7 @@ set_acl(SpaceId) ->
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
-                    permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
+                    authz_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
                 )
             ])
         end,

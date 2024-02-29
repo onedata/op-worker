@@ -334,7 +334,7 @@ run_file_protection_test_group(TestSuiteCtx = #authz_test_suite_ctx{suite_spec =
     data_access_control:bitmask().
 infer_blocking_protection_flags(#authz_test_suite_spec{files = FileTreeSpec}) ->
     AllNeededPerms = gather_required_perms(FileTreeSpec),
-    AllNeededPermsBitmask = permissions_test_utils:perms_to_bitmask(AllNeededPerms),
+    AllNeededPermsBitmask = authz_test_utils:perms_to_bitmask(AllNeededPerms),
 
     lists:foldl(fun({ProtectionFlag, BlockedPerms}, Acc) ->
         case ?has_any_flags(AllNeededPermsBitmask, BlockedPerms) of
@@ -619,7 +619,7 @@ constrain_executioner_session(CvTestCaseCtx = #authz_cv_test_case_ctx{
     executioner_main_token = MainToken
 }, Caveat) ->
     TokenWithCaveat = tokens:confine(MainToken, Caveat),
-    ConstrainedSessionId = permissions_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
+    ConstrainedSessionId = authz_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
     CvTestCaseCtx#authz_cv_test_case_ctx{test_case_ctx = TestCaseCtx#authz_test_case_ctx{
         executioner_session_id = ConstrainedSessionId
     }}.
@@ -815,7 +815,7 @@ init_open_handle_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
     ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
     ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
     TestCaseCtx#authz_test_case_ctx{
-        executioner_session_id = permissions_test_utils:create_session(
+        executioner_session_id = authz_test_utils:create_session(
             TestNode, ExecutionerUserId, ExecutionerToken, open_handle
         )
     }.
@@ -901,7 +901,7 @@ build_posix_test_case_ctx(TestCaseCtx = #authz_test_case_ctx{
     required_perms_per_file = RequiredPermsPerFile
 }) ->
     RequiredPosixPermsPerFile = maps:map(fun(_, Perms) ->
-        lists:usort(lists:flatmap(fun permissions_test_utils:perm_to_posix_perms/1, Perms))
+        lists:usort(lists:flatmap(fun authz_test_utils:perm_to_posix_perms/1, Perms))
     end, RequiredPermsPerFile),
 
     ComplementaryPosixPermsPerFile = maps:fold(fun(FileGuid, FileRequiredPosixPerms, Acc) ->
@@ -944,7 +944,7 @@ run_posix_permission_test_case(files_owner, PosixTestCaseCtx = #authz_posix_test
             % If operation requires only ownership then it should succeed
             % even if all files modes are set to 0
             ModesPerFile = maps:map(fun(_, _) -> 0 end, ComplementaryPosixPermsPerFile),
-            permissions_test_utils:set_modes(TestNode, ModesPerFile),
+            authz_test_utils:set_modes(TestNode, ModesPerFile),
             assert_operation(ModesPerFile, ok, TestCaseCtx),
 
             run_final_storage_ownership_check(TestCaseCtx);
@@ -975,7 +975,7 @@ run_posix_permission_test_case(space_member, PosixTestCaseCtx = #authz_posix_tes
             % even if all files modes are set to 777
             ExpError = get_exp_error(?EACCES, TestSuiteSpec),
             ModesPerFile = maps:map(fun(_, _) -> 8#777 end, ComplementaryPosixPermsPerFile),
-            permissions_test_utils:set_modes(TestNode, ModesPerFile),
+            authz_test_utils:set_modes(TestNode, ModesPerFile),
             assert_operation(ModesPerFile, ExpError, TestCaseCtx);
 
         false ->
@@ -1000,7 +1000,7 @@ run_posix_permission_test_case(non_space_member, #authz_posix_test_case_ctx{
     % Users not belonging to space or unauthorized should not be able to conduct any operation
     ExpEaccesError = get_exp_error(?EACCES, TestSuiteSpec),
     FullModesPerFile = maps:map(fun(_, _) -> 8#777 end, RequiredPosixPermsPerFile),
-    permissions_test_utils:set_modes(TestNode, FullModesPerFile),
+    authz_test_utils:set_modes(TestNode, FullModesPerFile),
     assert_operation(FullModesPerFile, ExpEaccesError, TestCaseCtx),
 
     % Some operations cannot be performed with special session (either root or guest)
@@ -1039,14 +1039,14 @@ run_posix_mode_test_case(PosixUserType, #authz_posix_test_case_ctx{
     complementary_posix_perms_per_file = ComplementaryPosixPermsPerFile
 }) ->
     FlattenedRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
-        {Guid, permissions_test_utils:posix_perm_to_mode(PosixPerm, PosixUserType)}
+        {Guid, authz_test_utils:posix_perm_to_mode(PosixPerm, PosixUserType)}
     end, flatten_perms_per_file(RequiredPosixPermsPerFile)),
 
     [RequiredModesComb | EaccesModesCombs] = combinations(FlattenedRequiredModes),
 
     ComplementaryModesPerFile = maps:map(fun(_, Perms) ->
         lists:foldl(fun(Perm, Acc) ->
-            Acc bor permissions_test_utils:posix_perm_to_mode(Perm, PosixUserType)
+            Acc bor authz_test_utils:posix_perm_to_mode(Perm, PosixUserType)
         end, 0, Perms)
     end, ComplementaryPosixPermsPerFile),
 
@@ -1056,7 +1056,7 @@ run_posix_mode_test_case(PosixUserType, #authz_posix_test_case_ctx{
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccesModeComb),
 
-        permissions_test_utils:set_modes(TestNode, EaccesModesPerFile),
+        authz_test_utils:set_modes(TestNode, EaccesModesPerFile),
 
         ExpError = get_exp_error(?EACCES, TestSuiteSpec),
         assert_operation(EaccesModesPerFile, ExpError, TestCaseCtx)
@@ -1067,7 +1067,7 @@ run_posix_mode_test_case(PosixUserType, #authz_posix_test_case_ctx{
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, RequiredModesComb),
 
-    permissions_test_utils:set_modes(TestNode, RequiredModesPerFile),
+    authz_test_utils:set_modes(TestNode, RequiredModesPerFile),
     assert_operation(RequiredModesPerFile, ok, TestCaseCtx),
 
     run_final_storage_ownership_check(TestCaseCtx).
@@ -1126,7 +1126,7 @@ build_acl_test_case_ctx(TestCaseCtx = #authz_test_case_ctx{
     required_perms_per_file = RequiredPermsPerFile
 }) ->
     ComplementaryPermsPerFile = maps:fold(fun(FileGuid, FileRequiredPerms, Acc) ->
-        Acc#{FileGuid => permissions_test_utils:complementary_perms(
+        Acc#{FileGuid => authz_test_utils:complementary_perms(
             TestNode, FileGuid, FileRequiredPerms
         )}
     end, #{}, RequiredPermsPerFile),
@@ -1169,12 +1169,12 @@ run_acl_permission_test_case(allow, AceWho, AceFlags, #authz_acl_test_case_ctx{
             Acc#{Guid => [Perm | maps:get(Guid, Acc)]}
         end, ComplementaryPermsPerFile, EaccesPermComb),
 
-        permissions_test_utils:set_acls(TestNode, EaccesPermsPerFile, #{}, AceWho, AceFlags),
+        authz_test_utils:set_acls(TestNode, EaccesPermsPerFile, #{}, AceWho, AceFlags),
         assert_operation(EaccesPermsPerFile, ExpError, TestCaseCtx)
     end, EaccesPermsCombs),
 
     % Granting only required perms should result in success
-    permissions_test_utils:set_acls(TestNode, RequiredPermsPerFile, #{}, AceWho, AceFlags),
+    authz_test_utils:set_acls(TestNode, RequiredPermsPerFile, #{}, AceWho, AceFlags),
     assert_operation(RequiredPermsPerFile, ok, TestCaseCtx),
 
     run_final_storage_ownership_check(TestCaseCtx);
@@ -1190,7 +1190,7 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
     complementary_perms_per_file = ComplementaryPermsPerFile
 }) ->
     AllPermsPerFile = maps:map(fun(Guid, _) ->
-        permissions_test_utils:all_perms(TestNode, Guid)
+        authz_test_utils:all_perms(TestNode, Guid)
     end, RequiredPermsPerFile),
 
     % Denying only required perms and granting all others should result in eacces
@@ -1199,12 +1199,12 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
     lists:foreach(fun({Guid, Perm}) ->
         EaccesPermsPerFile = #{Guid => [Perm]},
 
-        permissions_test_utils:set_acls(TestNode, AllPermsPerFile, EaccesPermsPerFile, AceWho, AceFlags),
+        authz_test_utils:set_acls(TestNode, AllPermsPerFile, EaccesPermsPerFile, AceWho, AceFlags),
         assert_operation(EaccesPermsPerFile, ExpError, TestCaseCtx)
     end, flatten_perms_per_file(RequiredPermsPerFile)),
 
     % Denying all perms but required ones should result in success
-    permissions_test_utils:set_acls(TestNode, #{}, ComplementaryPermsPerFile, AceWho, AceFlags),
+    authz_test_utils:set_acls(TestNode, #{}, ComplementaryPermsPerFile, AceWho, AceFlags),
     assert_operation(ComplementaryPermsPerFile, ok, TestCaseCtx),
 
     run_final_storage_ownership_check(TestCaseCtx).
@@ -1323,12 +1323,12 @@ set_full_perms(#authz_test_suite_ctx{
     perms_per_file() | #{file_id:file_guid() => file_meta:mode()}.
 set_full_perms(posix, Node, FileGuids) ->
     FullPosixPermsPerFile = lists:foldl(fun(Guid, Acc) -> Acc#{Guid => 8#777} end, #{}, FileGuids),
-    permissions_test_utils:set_modes(Node, FullPosixPermsPerFile),
+    authz_test_utils:set_modes(Node, FullPosixPermsPerFile),
     FullPosixPermsPerFile;
 
 set_full_perms(acl, Node, FileGuids) ->
     FullAclPermsPerFile = get_full_perms_per_file(Node, FileGuids),
-    permissions_test_utils:set_acls(Node, FullAclPermsPerFile, #{}, ?everyone, ?no_flags_mask),
+    authz_test_utils:set_acls(Node, FullAclPermsPerFile, #{}, ?everyone, ?no_flags_mask),
     FullAclPermsPerFile.
 
 
@@ -1336,11 +1336,11 @@ set_full_perms(acl, Node, FileGuids) ->
 -spec deny_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
 deny_full_perms(posix, Node, FileGuids) ->
     ZeroPosixPermsPerFile = lists:foldl(fun(Guid, Acc) -> Acc#{Guid => 8#777} end, #{}, FileGuids),
-    permissions_test_utils:set_modes(Node, ZeroPosixPermsPerFile),
+    authz_test_utils:set_modes(Node, ZeroPosixPermsPerFile),
     ZeroPosixPermsPerFile;
 deny_full_perms(acl, Node, FileGuids) ->
     FullAclPermsPerFile = get_full_perms_per_file(Node, FileGuids),
-    permissions_test_utils:set_acls(Node, #{}, FullAclPermsPerFile, ?everyone, ?no_flags_mask),
+    authz_test_utils:set_acls(Node, #{}, FullAclPermsPerFile, ?everyone, ?no_flags_mask),
     FullAclPermsPerFile.
 
 
@@ -1348,7 +1348,7 @@ deny_full_perms(acl, Node, FileGuids) ->
 -spec get_full_perms_per_file(node(), [file_id:file_guid()]) -> perms_per_file().
 get_full_perms_per_file(Node, FileGuids) ->
     lists:foldl(fun(Guid, Acc) ->
-        Acc#{Guid => permissions_test_utils:all_perms(Node, Guid)}
+        Acc#{Guid => authz_test_utils:all_perms(Node, Guid)}
     end, #{}, FileGuids).
 
 
@@ -1554,7 +1554,7 @@ format_perms_per_file(TestNode, PermsPerFile) ->
                 ModeBin = list_to_binary(string:right(integer_to_list(Perms, 8), 3, $0)),
                 <<"POSIX MODE: ", ModeBin/binary>>;
             false ->
-                AllPossiblePerms = permissions_test_utils:all_perms(TestNode, Guid),
+                AllPossiblePerms = authz_test_utils:all_perms(TestNode, Guid),
                 case lists:usort(Perms) == lists:usort(AllPossiblePerms) of
                     true -> <<"ACL: FULL">>;
                     false -> lists:map(fun str_utils:to_binary/1, Perms)

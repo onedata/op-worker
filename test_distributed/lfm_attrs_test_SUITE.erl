@@ -900,7 +900,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
         initializer:create_access_token(User),
         #cv_interface{interface = oneclient}
     ),
-    OpenHandleSessId = permissions_test_utils:create_session(
+    OpenHandleSessId = authz_test_utils:create_session(
         Worker, User, ClientAccessToken, open_handle
     ),
 

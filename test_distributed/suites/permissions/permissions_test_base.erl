@@ -61,12 +61,12 @@ multi_provider_permission_cache_test(Config) ->
     lists:foreach(fun(_IterationNum) ->
         PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
         Mode = lists:foldl(fun(Perm, Acc) ->
-            Acc bor permissions_test_utils:posix_perm_to_mode(Perm, owner)
+            Acc bor authz_test_utils:posix_perm_to_mode(Perm, owner)
         end, 0, PosixPerms),
-        permissions_test_utils:set_modes(P1W2, #{Guid => Mode}),
+        authz_test_utils:set_modes(P1W2, #{Guid => Mode}),
 
         {AllowedPerms, DeniedPerms} = lists:foldl(fun(Perm, {AllowedPermsAcc, DeniedPermsAcc}) ->
-            case permissions_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
+            case authz_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
                 [] -> {[Perm | AllowedPermsAcc], DeniedPermsAcc};
                 _ -> {AllowedPermsAcc, [Perm | DeniedPermsAcc]}
             end
@@ -86,10 +86,10 @@ multi_provider_permission_cache_test(Config) ->
     % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
     lists:foreach(fun(_IterationNum) ->
         SetPerms = lists_utils:random_sublist(AllPerms),
-        permissions_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
+        authz_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
 
         run_multi_provider_perm_test(
-            Nodes, User, Guid, SetPerms, permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
+            Nodes, User, Guid, SetPerms, authz_test_utils:complementary_perms(P1W2, Guid, SetPerms),
             {error, ?EACCES}, <<"denied acl perm">>, Config
         ),
         run_multi_provider_perm_test(
@@ -211,7 +211,7 @@ check_perms(Node, User, Guid, Perms, Config) ->
 
     rpc:call(Node, ?MODULE, check_perms, [
         UserCtx, file_ctx:new_by_guid(Guid),
-        [?OPERATIONS(permissions_test_utils:perms_to_bitmask(Perms))]
+        [?OPERATIONS(authz_test_utils:perms_to_bitmask(Perms))]
     ]).
 
 
