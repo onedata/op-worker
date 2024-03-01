@@ -70,6 +70,7 @@ init_per_suite(Config) ->
         ]}],
         posthook = fun(NewConfig) ->
             delete_spaces_from_previous_run(),
+%%            delete_storages_from_previous_run(),
             NewConfig
         end
     }).
@@ -79,18 +80,61 @@ init_per_suite(Config) ->
 -spec delete_spaces_from_previous_run() -> ok.
 delete_spaces_from_previous_run() ->
     AllTestCases = all(),
+%%    Removed = lists:filtermap(fun(SpaceId) ->
     RemovedSpaces = lists:filter(fun(SpaceId) ->
         SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
         SpaceName = maps:get(<<"name">>, SpaceDetails),
+%%        [StorageKrakow] = opw_test_rpc:get_space_local_storages(krakow, SpaceId),
+%%        [StorageParis] = opw_test_rpc:get_space_local_storages(paris, SpaceId),
         Exists = lists:member(binary_to_atom(SpaceName), AllTestCases),
         Exists andalso ozw_test_rpc:delete_space(SpaceId),
-
+%%        case Exists of
+%%            true -> {true, {SpaceId, StorageKrakow, StorageParis}};
+%%            false -> false
+%%        end
         Exists
     end, ozw_test_rpc:list_spaces()),
-
+%%    RemovedSpaces = [Space || {Space, _, _} <- Removed]
     ?assertEqual([], lists_utils:intersect(opw_test_rpc:get_spaces(krakow), RemovedSpaces), ?ATTEMPTS),
 
+%%    lists:foreach(fun({_, StorageKrakow, StorageParis}) ->
+%%        ok = opw_test_rpc:call(krakow, storage, delete, [StorageKrakow]),
+%%        ok = opw_test_rpc:call(paris, storage, delete, [StorageParis])
+%%    end, Removed),
+
     ok.
+
+%%%% @private
+%%-spec delete_storages_from_previous_run() -> ok.
+%%delete_storages_from_previous_run() ->
+%%    RemovedKrakow = lists:filter(fun(StorageId) ->
+%%        StorageDetails = opw_test_rpc:storage_describe(krakow, StorageId),
+%%        MountPoint = maps:get(<<"mountPoint">>, StorageDetails, <<>>),
+%%        case MountPoint of
+%%            <<"/mnt/synced_storage">> ->
+%%                opw_test_rpc:call(krakow, storage, delete, [StorageId]),
+%%                true;
+%%            _ ->
+%%                false
+%%        end
+%%    end, opw_test_rpc:get_storages(krakow)),
+%%    ct:pal("krakow ~n ~p~n~n", [RemovedKrakow]),
+%%    ?assertEqual([], lists_utils:intersect(opw_test_rpc:get_storages(krakow), RemovedKrakow), ?ATTEMPTS),
+%%
+%%    RemovedParis = lists:filter(fun(StorageId) ->
+%%        StorageDetails = opw_test_rpc:storage_describe(paris, StorageId),
+%%        MountPoint = maps:get(<<"mountPoint">>, StorageDetails, <<>>),
+%%        case MountPoint of
+%%            <<"/mnt/st2">> ->
+%%                opw_test_rpc:call(paris, storage, delete, [StorageId]),
+%%                true;
+%%            _ ->
+%%                false
+%%        end
+%%    end, opw_test_rpc:get_storages(paris)),
+%%    ct:pal("paris~n~p~n~n", [RemovedParis]),
+%%    ?assertEqual([], lists_utils:intersect(opw_test_rpc:get_storages(paris), RemovedParis), ?ATTEMPTS),
+%%    ok.
 
 
 end_per_suite(_Config) ->

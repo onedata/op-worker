@@ -58,10 +58,6 @@ set_up_space(SpaceSpec = #space_spec{
 }) ->
     OwnerId = oct_background:get_user_id(OwnerSelector),
     SpaceId = ozw_test_rpc:create_space(OwnerId, atom_to_binary(SpaceName)),
-<<<<<<<< HEAD:test_distributed/utils/storage/space_setup_utils.erl
-========
-
->>>>>>>> 7d77bec8c2932b9f3507a0197056bf07c13d8a68:test_distributed/utils/space_setup_utils.erl
     SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
     support_space(SupportSpecs, SupportToken),
 

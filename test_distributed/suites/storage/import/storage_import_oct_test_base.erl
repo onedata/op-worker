@@ -18,6 +18,8 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("onenv_test_utils.hrl").
 
+-type import_config() :: #import_config{}.
+
 -define(RANDOM_PROVIDER(), ?RAND_ELEMENT([krakow, paris])).
 
 -export([assert_monitoring_state/4]).
@@ -45,11 +47,11 @@ empty_import_test(Config) ->
     assert_initial_scan_finished(Krakow, SpaceId),
 
     ?assertMatch({ok, []},
-        lfm_proxy:get_children(Krakow, SessionIdKrakow, {path, ?SPACE_PATH()}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(Krakow, SessionIdKrakow, {path, ?SPACE_PATH(?FUNCTION_NAME)}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(Krakow, SessionIdKrakow, {path, ?SPACE_PATH()}), ?ATTEMPTS),
+        lfm_proxy:stat(Krakow, SessionIdKrakow, {path, ?SPACE_PATH(?FUNCTION_NAME)}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(Paris, SessionIdParis, {path, ?SPACE_PATH()}), ?ATTEMPTS),
+        lfm_proxy:stat(Paris, SessionIdParis, {path, ?SPACE_PATH(?FUNCTION_NAME)}), ?ATTEMPTS),
 
     ?assertMonitoring(Krakow, #{
         <<"scans">> => 1,
@@ -90,7 +92,7 @@ create_directory_import_test(Config) ->
 
     %% Check if dir was imported
     ?assertMatch({ok, [{_, DirName}]},
-        lfm_proxy:get_children(Krakow, SessionIdKrakow, {path, ?SPACE_PATH()}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(Krakow, SessionIdKrakow, {path, ?SPACE_PATH(?FUNCTION_NAME)}, 0, 10), ?ATTEMPTS),
 
     SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, DirName]),
     StorageSDHandleKrakow = sd_test_utils:get_storage_mountpoint_handle(Krakow, SpaceId, ImportedStorageId),
