@@ -243,6 +243,7 @@ wait(Fun) ->
         wait(Fun)
     end.
 
+
 %% @private
 -spec maybe_update_slave_job_pid(job()) -> ok.
 maybe_update_slave_job_pid(#space_unsupport_job{slave_job_pid = Pid} = Job) ->
@@ -252,6 +253,7 @@ maybe_update_slave_job_pid(#space_unsupport_job{slave_job_pid = Pid} = Job) ->
             space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()}),
             ok
     end.
+
 
 %% @private
 -spec start_changes_stream(od_space:id()) -> ok.
@@ -263,18 +265,20 @@ start_changes_stream(SpaceId) ->
             Pid ! end_of_stream,
             ok;
         ({ok, Batch}) ->
-            lists:foreach(fun expire_docs/1, Batch)
+            lists:foreach(fun expire_doc/1, Batch)
     end,
     couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, 0}, {until, Until}], [self()]
+        [{since, 0}, {until, Until}, {include_ignored, true}], [self()]
     ),
     ok.
 
 
 %% @private
--spec expire_docs(datastore:doc()) -> ok.
-expire_docs(#document{value = Value} = Doc) ->
+-spec expire_doc(datastore:doc() | {ignored, datastore:doc()}) -> ok.
+expire_doc({ignored, Doc}) ->
+    expire_doc(Doc);
+expire_doc(#document{value = Value} = Doc) ->
     case Value of
         #links_forest{model = Model, key = Key} -> expire_links(Model, Key, Doc);
         #links_node{model = Model, key = Key} -> expire_links(Model, Key, Doc);

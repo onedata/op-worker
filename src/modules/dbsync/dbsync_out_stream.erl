@@ -324,7 +324,7 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% Handles change that include document.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_doc_change(datastore:doc(), filter(), state()) -> state().
+-spec handle_doc_change(datastore:doc()| {ignored, datastore:doc()}, filter(), state()) -> state().
 handle_doc_change(#document{seq = Seq} = Doc, Filter, State = #state{until = Until}) when Seq >= Until ->
     case Filter(Doc) of
         true -> aggregate_change(Doc, State);
