@@ -170,6 +170,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         FileCtx = file_ctx:new_by_guid(FileGuid),
         UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
 
+        assert_has_access_to_space(UserCtx, FileCtx),
         middleware_utils:assert_file_managed_locally(FileGuid),
 
         middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
@@ -248,4 +249,18 @@ ensure_guest_ctx(UserCtx) ->
     case user_ctx:is_guest(UserCtx) of
         true -> UserCtx;
         false -> user_ctx:new(?GUEST_SESS_ID)
+    end.
+
+
+%% @private
+-spec assert_has_access_to_space(user_ctx:ctx(), file_ctx:ctx()) -> ok | no_return().
+assert_has_access_to_space(UserCtx, FileCtx) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+
+    case session_utils:is_special(SessionId) of
+        true ->
+            ok;
+        false ->
+            file_ctx:is_in_user_space_const(FileCtx, UserCtx) orelse throw(?ERROR_POSIX(?EACCES)),
+            ok
     end.

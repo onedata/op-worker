@@ -55,6 +55,7 @@ remove_share(UserCtx, FileCtx, ShareId) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
+    data_constraints:assert_no_constraints(UserCtx),
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     ok = file_meta:remove_share(FileCtx, ShareId),

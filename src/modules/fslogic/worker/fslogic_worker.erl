@@ -308,63 +308,54 @@ init_report() ->
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
     try
-        UserCtx = user_ctx:new(SessId),
-        FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
-        Providers = fslogic_request:get_target_providers(UserCtx,
-            FilePartialCtx, Request),
+        OriginalUserCtx = user_ctx:new(SessId),
+        FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
+
+        EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
+        Providers = fslogic_request:get_target_providers(EffLocalUserCtx, FilePartialCtx, Request),
+
         case lists:member(oneprovider:get_id(), Providers) of
             true ->
-                handle_request_and_process_response_locally(UserCtx, Request,
-                    FilePartialCtx);
+                OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
+                handle_request_and_process_response_locally(
+                    OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
+                );
             false ->
-                handle_request_remotely(UserCtx, Request, Providers)
+                handle_request_remotely(OriginalUserCtx, Request, Providers)
         end
     catch
         Type2:Error2:Stacktrace ->
             fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
     end.
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%% Handle request locally and do postprocessing of the response
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
-    file_partial_ctx:ctx() | undefined) -> response().
-handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) ->
-    {FileCtx1, ShareId} = case FilePartialCtx of
-        undefined ->
-            {undefined, undefined};
-        _ ->
-            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
-            {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
+-spec infer_eff_user_ctx(user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined) ->
+    user_ctx:ctx().
+infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
+    ShareId = case FilePartialCtx of
+        undefined -> undefined;
+        _ -> file_partial_ctx:get_share_id_const(FilePartialCtx)
     end,
-    ok = fslogic_log:report_file_access_operation(Request, user_ctx:get_user_id(UserCtx0), FileCtx1),
-    try
-        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
-            {false, undefined} ->
-                UserCtx0;
-            {IsInOpenHandleMode, _} ->
-                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
-                    true -> ok;
-                    false -> throw(?EPERM)
-                end,
-                case IsInOpenHandleMode of
-                    true ->
-                        UserCtx0;
-                    false ->
-                        % Operations concerning shares must be carried with GUEST auth
-                        case user_ctx:is_guest(UserCtx0) of
-                            true -> UserCtx0;
-                            false -> user_ctx:new(?GUEST_SESS_ID)
-                        end
-                end
-        end,
-        handle_request_locally(UserCtx1, Request, FileCtx1)
-    catch
-        Type:Error:Stacktrace ->
-            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+
+    case {user_ctx:is_in_open_handle_mode(UserCtx), ShareId} of
+        {false, undefined} ->
+            UserCtx;
+        {IsInOpenHandleMode, _} ->
+            case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
+                true -> ok;
+                false -> throw(?EPERM)
+            end,
+            case IsInOpenHandleMode of
+                true ->
+                    UserCtx;
+                false ->
+                    % Operations concerning shares must be carried with GUEST auth
+                    case user_ctx:is_guest(UserCtx) of
+                        true -> UserCtx;
+                        false -> user_ctx:new(?GUEST_SESS_ID)
+                    end
+            end
     end.
 
 
@@ -399,6 +390,33 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle request locally and do postprocessing of the response
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_request_and_process_response_locally(
+    od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
+) ->
+    response().
+handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+    FileCtx1 = case FilePartialCtx of
+        undefined ->
+            undefined;
+        _ ->
+            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            FileCtx0
+    end,
+    ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
+    try
+        handle_request_locally(EffUserCtx, Request, FileCtx1)
+    catch
+        Type:Error:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+    end.
 
 
 %%--------------------------------------------------------------------
