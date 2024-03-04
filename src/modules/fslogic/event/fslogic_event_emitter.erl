@@ -151,7 +151,7 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => resolve_name_conflicts,
-                attributes => ?ONECLIENT_ATTRS
+                attributes => ?ONECLIENT_ATTRS -- [?attr_size]
             }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr

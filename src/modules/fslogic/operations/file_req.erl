@@ -394,12 +394,13 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         dir_size_stats:report_file_created(?REGULAR_FILE_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
         Ans#fuse_response{fuse_response = FileAttr2}
     catch
-        Error:Reason ->
+        Class:Reason:Stacktrace ->
+            ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
-            erlang:Error(Reason)
+            erlang:Class(Reason)
     end.
 
 
