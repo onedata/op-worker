@@ -115,8 +115,7 @@ groups() -> [
     ]},
 
     {authz_perms_api_tests, [], [
-        %% TODO VFS-11773 rewrite/fix test
-%%    test_set_perms,
+        test_set_perms,
         test_check_read_perms,
         test_check_write_perms,
         test_check_rdwr_perms
