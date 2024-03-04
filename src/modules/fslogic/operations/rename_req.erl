@@ -707,7 +707,8 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
 %% @private
 -spec validate_target_name(file_meta:name()) -> ok | no_return().
 validate_target_name(TargetName) ->
-    file_meta:is_valid_filename(TargetName) orelse throw(?EINVAL).
+    file_meta:is_valid_filename(TargetName) orelse throw(?EINVAL),
+    ok.
 
 
 %% @private

@@ -346,8 +346,7 @@ list_files_recursively(_Config) ->
     ),
 
     LsTokenWithObjectIdsCaveats = tokens:confine(MainToken, ?CV_OBJECTID([
-        ?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d2"), ?LS_OBJECT_ID("ls_d3/d1"),
-        ?LS_OBJECT_ID("ls_d3/f2")
+        ?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d3/d1"), ?LS_OBJECT_ID("ls_d3/f2")
     ])),
     LsSessionWithObjectIdsCaveats = authz_test_utils:create_session(Node, UserId, LsTokenWithObjectIdsCaveats),
 
