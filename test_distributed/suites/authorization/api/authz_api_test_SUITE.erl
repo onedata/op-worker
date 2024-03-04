@@ -87,7 +87,7 @@
 ]).
 
 groups() -> [
-    {authz_dir_api_tests, [parallel], [
+    {authz_dir_api_tests, [], [
         test_mkdir,
         test_get_children,
         test_get_children_attrs,
@@ -96,7 +96,7 @@ groups() -> [
         test_rm_dir
     ]},
 
-    {authz_reg_file_api_tests, [parallel], [
+    {authz_reg_file_api_tests, [], [
         test_create_file,
         test_open_for_read,
         test_open_for_write,
@@ -107,14 +107,14 @@ groups() -> [
         test_rm_file
     ]},
 
-    {authz_file_common_api_tests, [parallel], [
+    {authz_file_common_api_tests, [], [
         test_get_parent,
         test_get_file_path,
         test_resolve_guid,
         test_stat
     ]},
 
-    {authz_perms_api_tests, [parallel], [
+    {authz_perms_api_tests, [], [
         %% TODO VFS-11773 rewrite/fix test
 %%    test_set_perms,
         test_check_read_perms,
@@ -122,19 +122,19 @@ groups() -> [
         test_check_rdwr_perms
     ]},
 
-    {authz_share_api_tests, [parallel], [
+    {authz_share_api_tests, [], [
         test_create_share,
         test_remove_share,
         test_share_perms_are_checked_only_up_to_share_root
     ]},
 
-    {authz_acl_api_tests, [parallel], [
+    {authz_acl_api_tests, [], [
         test_get_acl,
         test_set_acl,
         test_remove_acl
     ]},
 
-    {authz_cdmi_api_tests, [parallel], [
+    {authz_cdmi_api_tests, [], [
         test_get_transfer_encoding,
         test_set_transfer_encoding,
         test_get_cdmi_completion_status,
@@ -143,7 +143,7 @@ groups() -> [
         test_set_mimetype
     ]},
 
-    {authz_file_metadata_api_tests, [parallel], [
+    {authz_file_metadata_api_tests, [], [
         test_get_custom_metadata,
         test_set_custom_metadata,
         test_remove_custom_metadata,
@@ -156,7 +156,7 @@ groups() -> [
         test_get_file_storage_locations
     ]},
 
-    {authz_qos_api_tests, [parallel], [
+    {authz_qos_api_tests, [], [
         test_add_qos_entry,
         test_get_qos_entry,
         test_remove_qos_entry,

@@ -36,6 +36,8 @@
     list_ancestors_with_intersecting_caveats_test/1,
     list_previously_non_existent_file/1,
 
+    list_files_recursively/1,
+
     allowed_ancestors_operations_test/1,
     data_access_caveats_cache_test/1,
     mv_test/1
@@ -51,7 +53,9 @@ groups() -> [
         list_directory_with_intersecting_caveats_test,
         list_shared_directory_test,
         list_ancestors_with_intersecting_caveats_test,
-        list_previously_non_existent_file
+        list_previously_non_existent_file,
+
+        list_files_recursively
     ]},
     {misc_tests, [parallel], [
         allowed_ancestors_operations_test,
@@ -112,6 +116,8 @@ all() -> [
 
 -define(CV_PATH(__CANONICAL_PATHS), #cv_data_path{whitelist = __CANONICAL_PATHS}).
 -define(CV_OBJECTID(__OBJECT_IDS), #cv_data_objectid{whitelist = __OBJECT_IDS}).
+
+-define(ATTR_PATH(__PATH), #file_attr{path = __PATH}).
 
 
 list_user_root_dir_test(_Config) ->
@@ -294,11 +300,11 @@ list_previously_non_existent_file(_Config) ->
     % List dir manually to use the same exact session with caveat for file not existing yet
     MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
-    LsSessId = authz_test_utils:create_session(Node, UserId, LsToken),
+    LsSession = authz_test_utils:create_session(Node, UserId, LsToken),
 
-    LS = fun(Guid) -> lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), 0, 100) end,
+    LSFun = fun(Guid) -> lfm_proxy:get_children(Node, LsSession, ?FILE_REF(Guid), 0, 100) end,
 
-    ?assertEqual({ok, []}, LS(?LS_GUID("ls_d2"))),
+    ?assertEqual({ok, []}, LSFun(?LS_GUID("ls_d2"))),
 
     [#object{guid = FileGuid}, _] = onenv_file_test_utils:create_and_sync_file_tree(
         ?LS_USER, ?LS_GUID("ls_d2"), [
@@ -307,7 +313,48 @@ list_previously_non_existent_file(_Config) ->
         ]
     ),
 
-    ?assertEqual({ok, [{FileGuid, <<"f1">>}]}, LS(?LS_GUID("ls_d2"))).
+    ?assertEqual({ok, [{FileGuid, <<"f1">>}]}, LSFun(?LS_GUID("ls_d2"))).
+
+
+list_files_recursively(_Config) ->
+    Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
+    UserId = oct_background:get_user_id(?LS_USER),
+
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
+
+    LSFun = fun(SessionId) ->
+        {ok, Entries, _, undefined} = lfm_proxy:get_files_recursively(
+            Node, SessionId, ?FILE_REF(SpaceRootDirGuid), #{limit => 100}, [name, guid, path]
+        ),
+        Entries
+    end,
+
+    MainToken = get_main_token(),
+
+    LsTokenWithPathCaveats = tokens:confine(MainToken, ?CV_PATH([
+        ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f3"), ?LS_CPATH("ls_d1/f5"),
+        ?LS_CPATH("ls_d3/f1"), ?LS_CPATH("ls_f1")
+    ])),
+    LsSessionWithPathCaveats = authz_test_utils:create_session(Node, UserId, LsTokenWithPathCaveats),
+
+    ?assertMatch(
+        [
+            ?ATTR_PATH(<<"ls_d1/f1">>), ?ATTR_PATH(<<"ls_d1/f3">>), ?ATTR_PATH(<<"ls_d1/f5">>),
+            ?ATTR_PATH(<<"ls_d3/f1">>), ?ATTR_PATH(<<"ls_f1">>)
+        ],
+        LSFun(LsSessionWithPathCaveats)
+    ),
+
+    LsTokenWithObjectIdsCaveats = tokens:confine(MainToken, ?CV_OBJECTID([
+        ?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d2"), ?LS_OBJECT_ID("ls_d3/d1"),
+        ?LS_OBJECT_ID("ls_d3/f2")
+    ])),
+    LsSessionWithObjectIdsCaveats = authz_test_utils:create_session(Node, UserId, LsTokenWithObjectIdsCaveats),
+
+    ?assertMatch(
+        [?ATTR_PATH(<<"ls_d1/f2">>), ?ATTR_PATH(<<"ls_d3/d1/f1">>), ?ATTR_PATH(<<"ls_d3/f2">>)],
+        LSFun(LsSessionWithObjectIdsCaveats)
+    ).
 
 
 %% @private
@@ -397,9 +444,9 @@ ls_with_caveats(Guid, Caveats, Offset, Limit) ->
 
     MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, Caveats),
-    LsSessId = authz_test_utils:create_session(Node, UserId, LsToken),
+    LsSession = authz_test_utils:create_session(Node, UserId, LsToken),
 
-    lfm_proxy:get_children(Node, LsSessId, ?FILE_REF(Guid), Offset, Limit).
+    lfm_proxy:get_children(Node, LsSession, ?FILE_REF(Guid), Offset, Limit).
 
 
 %%%===================================================================
