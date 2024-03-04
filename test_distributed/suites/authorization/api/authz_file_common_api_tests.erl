@@ -88,7 +88,7 @@ test_resolve_guid(SpaceId) ->
 
 
 test_stat(SpaceId) ->
-    Xattrs = ?RAND_SUBLIST([
+    Xattrs = ?RAND_ELEMENT([
         ?attr_xattrs([<<"key">>]),
         ?attr_xattrs([<<"cdmi_acl">>]),
         ?attr_xattrs([<<"cdmi_mimetype">>]),

@@ -115,6 +115,8 @@ rename_file_test(Config) ->
 
     %% with illegal target filename
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<".">>)),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<"..">>)),
 
     {ok, Children} = lfm_proxy:get_children(W, SessId, ?FILE_REF(DirGuid), 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
@@ -269,6 +271,7 @@ rename_dir_test(Config) ->
     {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/renamed_dir2/inner_file2"))),
     {_, Dir3Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_dir3"))),
     {_, Dir4Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_dir4"))),
+    {_, Dir5Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_dir5"))),
     {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, ?FILE_REF(File1Guid), write)),
     {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, ?FILE_REF(File2Guid), write)),
     ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
@@ -298,6 +301,11 @@ rename_dir_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/renamed_dir4_target/some_file"))),
     ?assertEqual({error, ?ENOTEMPTY}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir4Guid), filename(1, TestDir, "/renamed_dir4_target"))),
 
+    %% with illegal target filename
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<".">>)),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<"..">>)),
+
     {ok, Children} = lfm_proxy:get_children(W, SessId, ?FILE_REF(DirGuid), 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
     ExpectedLs = ordsets:from_list([
@@ -306,7 +314,8 @@ rename_dir_test(Config) ->
         <<"renamed_dir3_target">>,
         <<"renamed_dir4_target">>,
         <<"renamed_dir3">>,
-        <<"renamed_dir4">>
+        <<"renamed_dir4">>,
+        <<"renamed_dir5">>
     ]),
     ?assertEqual(ExpectedLs, ActualLs).
 

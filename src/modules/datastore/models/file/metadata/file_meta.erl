@@ -23,6 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
+-export([is_valid_filename/1]).
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
@@ -99,6 +100,26 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given term is valid path()
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_filename(term()) -> boolean().
+is_valid_filename(<<"">>) ->
+    false;
+is_valid_filename(<<".">>) ->
+    false;
+is_valid_filename(<<"..">>) ->
+    false;
+is_valid_filename(FileName) when not is_binary(FileName) ->
+    false;
+is_valid_filename(FileName) when is_binary(FileName) ->
+    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
+        [] -> true;
+        _ -> false
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1188,28 +1209,6 @@ fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
     Doc#document{key = datastore_key:new_adjacent_to(ParentUuid)};
 fill_uuid(Doc, _ParentUuid) ->
     Doc.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if given term is valid path()
-%% @end
-%%--------------------------------------------------------------------
--spec is_valid_filename(term()) -> boolean().
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<".">>) ->
-    false;
-is_valid_filename(<<"..">>) ->
-    false;
-is_valid_filename(FileName) when not is_binary(FileName) ->
-    false;
-is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-        [] -> true;
-        _ -> false
-    end.
 
 
 %% @private
