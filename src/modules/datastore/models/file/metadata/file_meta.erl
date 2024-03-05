@@ -60,7 +60,6 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?LINK_TYPE.
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
@@ -73,7 +72,7 @@
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
-    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     conflicts/0, path_type/0, link/0
 ]).
 
@@ -651,14 +650,14 @@ get_scope_id(Entry) ->
     end).
 
 
--spec get_type(file_meta() | doc()) -> type().
+-spec get_type(file_meta() | doc()) -> onedata_file:type().
 get_type(#file_meta{type = Type}) ->
     Type;
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
 
 
--spec get_effective_type(file_meta() | doc()) -> type().
+-spec get_effective_type(file_meta() | doc()) -> onedata_file:type().
 get_effective_type(#file_meta{type = ?LINK_TYPE}) ->
     ?REGULAR_FILE_TYPE;
 get_effective_type(#file_meta{type = Type}) ->
@@ -864,13 +863,13 @@ make_opened_deleted_files_dir_exist(SpaceId) ->
     end.
 
 
--spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
+-spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope) ->
     new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, false).
 
 
--spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
+-spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id(), boolean()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges) ->
     #document{

@@ -28,23 +28,13 @@
     should_fetch_xattrs/1
 ]).
 
--type attribute() :: ?attr_guid | ?attr_index | ?attr_type | ?attr_active_permissions_type | ?attr_mode | ?attr_acl |
-    ?attr_name | ?attr_conflicting_name | ?attr_path | ?attr_parent_guid | ?attr_gid | ?attr_uid | ?attr_atime |
-    ?attr_mtime | ?attr_ctime | ?attr_size | ?attr_is_fully_replicated | ?attr_local_replication_rate | ?attr_provider_id |
-    ?attr_shares | ?attr_owner_id | ?attr_hardlink_count | ?attr_symlink_value | ?attr_has_custom_metadata |
-    ?attr_eff_protection_flags | ?attr_eff_dataset_protection_flags | ?attr_eff_dataset_inheritance_path |
-    ?attr_eff_qos_inheritance_path | ?attr_qos_status | ?attr_recall_root_id | ?attr_is_deleted |
-    ?attr_conflicting_files | ?attr_xattrs([custom_metadata:name()]).
-
--type file_type() :: file_meta:type().
-
 -type name_conflicts_resolution_policy() ::
     resolve_name_conflicts |
     allow_name_conflicts.
 
 -type resolve_opts() :: #{
     % Tells which attributes are to be calculated.
-    attributes := [attribute()],
+    attributes := [onedata_file:attr_name()],
     % Tells whether to calculate attr even if file was recently removed (default: false).
     allow_deleted_files => boolean(),
     % Tells whether to perform a check if file name collide with other files in
@@ -55,14 +45,14 @@
 
 -type record() :: #file_attr{}.
 
--export_type([record/0, file_type/0, resolve_opts/0, attribute/0]).
+-export_type([record/0, resolve_opts/0]).
 
 -record(state, {
     file_ctx :: file_ctx:ctx(),
     user_ctx :: user_ctx:ctx(),
     options :: resolve_opts(),
-    current_stage_attrs = [] :: [attribute()] | [custom_metadata:name()],
-    xattrs = undefined :: undefined | #{custom_metadata:name() => custom_metadata:value()}
+    current_stage_attrs = [] :: [onedata_file:attr_name()] | [onedata_file:xattr_name()],
+    xattrs = undefined :: undefined | #{onedata_file:xattr_name() => onedata_file:xattr_value()}
 }).
 
 -type state() :: #state{}.
@@ -118,7 +108,7 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 
--spec should_fetch_xattrs([attribute()] | resolve_opts()) -> {true, [custom_metadata:name()]} | false.
+-spec should_fetch_xattrs([onedata_file:attr_name()] | resolve_opts()) -> {true, [onedata_file:xattr_name()]} | false.
 should_fetch_xattrs(#{attributes := AttributesList}) ->
     should_fetch_xattrs(AttributesList);
 should_fetch_xattrs(AttributesList) ->
@@ -297,7 +287,7 @@ resolve_xattrs(#state{current_stage_attrs = XattrNames, xattrs = AllDirectXattrs
 %%%===================================================================
 
 %% @private
--spec resolve_stage(state(), [attribute()], fun((state()) -> {state(), record()})) ->
+-spec resolve_stage(state(), [onedata_file:attr_name()], fun((state()) -> {state(), record()})) ->
     {state(), record()}.
 resolve_stage(#state{options = #{attributes := RequestedAttrs}} = State, ?XATTRS_STAGE, StageFun) ->
     case should_fetch_xattrs(RequestedAttrs) of
@@ -406,7 +396,7 @@ resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAt
 
 
 %% @private
--spec resolve_link_count(file_ctx:ctx(), od_share:id(), [attribute()]) ->
+-spec resolve_link_count(file_ctx:ctx(), od_share:id(), [onedata_file:attr_name()]) ->
     non_neg_integer() | undefined.
 resolve_link_count(FileCtx, ShareId, RequestedAttrs) ->
     case {ShareId, lists:member(?attr_hardlink_count, RequestedAttrs)} of
@@ -578,7 +568,7 @@ merge_records(RecordA, RecordB) ->
 
 
 %% @private
--spec are_any_attrs_requested([attribute()], state()) -> boolean().
+-spec are_any_attrs_requested([onedata_file:attr_name()], state()) -> boolean().
 are_any_attrs_requested(Attrs, #state{current_stage_attrs = RequestedAttrs}) ->
     lists_utils:intersect(Attrs, RequestedAttrs) =/= [].
 

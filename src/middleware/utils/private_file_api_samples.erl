@@ -48,7 +48,7 @@ generate_for(SessionId, FileGuid) ->
 
 
 %% @private
--spec gen_samples(file_meta:type(), file_id:objectid()) -> rest_api_samples:record().
+-spec gen_samples(onedata_file:type(), file_id:objectid()) -> rest_api_samples:record().
 gen_samples(FileType, FileId) ->
     #rest_api_samples{
         api_root = oneprovider:build_rest_url(<<"">>),
@@ -57,7 +57,7 @@ gen_samples(FileType, FileId) ->
 
 
 %% @private
--spec rest_api_endpoints(file_meta:type() | file_and_dir, file_id:objectid()) ->
+-spec rest_api_endpoints(onedata_file:type() | file_and_dir, file_id:objectid()) ->
     [rest_api_request_sample:record()].
 rest_api_endpoints(?DIRECTORY_TYPE, FileId) ->
     [

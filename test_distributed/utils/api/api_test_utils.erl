@@ -520,10 +520,10 @@ replace_attrs_with_deprecated(JsonAttrs) ->
         (<<"xattr.", _/binary>> = K, V, Acc) ->
             Acc#{K => V};
         (K, V, Acc) ->
-            A = file_attr_translator:attr_name_from_json(K),
+            A = onedata_file:attr_name_from_json(K),
             case lists:member(A, ?DEPRECATED_ALL_ATTRS) of
                 true ->
-                    DeprecatedKey = file_attr_translator:attr_name_to_json(deprecated, A),
+                    DeprecatedKey = onedata_file:attr_name_to_json(deprecated, A),
                     Acc#{DeprecatedKey => V};
                 false ->
                     Acc

@@ -390,7 +390,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %%%===================================================================
 
 %% @private
--spec do_master_job_internal(file_meta:type(), master_job(), id(), new_jobs_preprocessor()) ->
+-spec do_master_job_internal(onedata_file:type(), master_job(), id(), new_jobs_preprocessor()) ->
     {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor) ->
     do_dir_master_job(Job, TaskId, NewJobsPreprocessor, ?LISTING_ERROR_RETRY_INITIAL_BACKOFF);
@@ -524,7 +524,7 @@ generate_children_jobs(MasterJob, TaskId, Children) ->
 
 
 %% @private
--spec generate_child_jobs(file_meta:type(), master_job(), id(), file_ctx:ctx(), file_meta:name()) ->
+-spec generate_child_jobs(onedata_file:type(), master_job(), id(), file_ctx:ctx(), file_meta:name()) ->
     {[slave_job()], [master_job()]}.
 generate_child_jobs(?DIRECTORY_TYPE, MasterJob, TaskId, ChildCtx, Filename) ->
     #tree_traverse{

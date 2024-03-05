@@ -543,7 +543,7 @@ open_flag_translate_from_protobuf('WRITE') -> write;
 open_flag_translate_from_protobuf(_) -> rdwr.
 
 
--spec attributes_to_attrs_flags([file_attr:attribute()]) ->
+-spec attributes_to_attrs_flags([onedata_file:attr_name()]) ->
     {boolean(), boolean()}.
 attributes_to_attrs_flags(AttributesList) ->
     IRS = lists:member(?attr_is_fully_replicated, AttributesList),
@@ -552,7 +552,7 @@ attributes_to_attrs_flags(AttributesList) ->
 
 
 -spec attrs_flags_to_attrs_list(boolean() | undefined, boolean() | undefined) ->
-    [file_attr:attribute()].
+    [onedata_file:attr_name()].
 attrs_flags_to_attrs_list(true = _IRS, true = _ILC) ->
     [?attr_is_fully_replicated, ?attr_hardlink_count];
 attrs_flags_to_attrs_list(true = _IRS, _ILC) ->
@@ -562,6 +562,6 @@ attrs_flags_to_attrs_list(_IRS, true = _ILC) ->
 attrs_flags_to_attrs_list(_IRS, _ILC) ->
     [].
 
--spec xattrs_to_attrs_list([custom_metadata:name()]) -> [file_attr:attribute()].
+-spec xattrs_to_attrs_list([onedata_file:xattr_name()]) -> [onedata_file:attr_name()].
 xattrs_to_attrs_list([])     -> [];
 xattrs_to_attrs_list(Xattrs) -> [?attr_xattrs(Xattrs)].

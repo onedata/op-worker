@@ -1354,7 +1354,7 @@ is_suffixed(FileName) ->
     end.
 
 %% @private
--spec get_file_type(storage_file_ctx:ctx()) -> {{ok, file_meta:type()} | ?ERROR_NOT_SUPPORTED, storage_file_ctx:ctx()}.
+-spec get_file_type(storage_file_ctx:ctx()) -> {{ok, onedata_file:type()} | ?ERROR_NOT_SUPPORTED, storage_file_ctx:ctx()}.
 get_file_type(StorageFileCtx) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     InferTypeAns = storage_driver:infer_type(StMode),

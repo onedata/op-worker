@@ -29,7 +29,7 @@
 }).
 
 -record(get_file_attr, {
-    attributes = [] :: [file_attr:attribute()]
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
 -record(get_file_references, {
@@ -37,7 +37,7 @@
 
 -record(get_child_attr, {
     name :: file_meta:name(),
-    attributes = [] :: [file_attr:attribute()]
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
 %% @TODO VFS-11299 deprecated, left for compatibility with oneclient
@@ -47,7 +47,7 @@
 
 -record(get_file_children_attrs, {
     listing_options :: file_listing:options(),
-    attributes = [] :: [file_attr:attribute()]
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
 -record(create_dir, {
@@ -144,8 +144,8 @@
 }).
 
 -record(xattr, {
-    name :: binary(),
-    value :: term()
+    name :: onedata_file:xattr_name(),
+    value :: onedata_file:xattr_value()
 }).
 
 -record(get_xattr, {
@@ -178,7 +178,7 @@
 
 -record(get_file_attr_by_path, {
     path :: file_meta:path(),
-    attributes = [] :: [file_attr:attribute()]
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
 -record(create_path, {
@@ -197,7 +197,7 @@
 
 -record(get_recursive_file_list, {
     listing_options :: dir_req:recursive_listing_opts(),
-    attributes = [] :: [file_attr:attribute()]
+    attributes = [] :: [onedata_file:attr_name()]
 }).
 
 -type file_request_type() ::

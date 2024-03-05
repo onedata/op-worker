@@ -222,21 +222,21 @@ report_physical_size_changed(Guid, StorageId, SizeDiff) ->
 %%% API - reporting file count changes
 %%%===================================================================
 
--spec report_file_created(file_meta:type(), file_id:file_guid()) -> ok.
+-spec report_file_created(onedata_file:type(), file_id:file_guid()) -> ok.
 report_file_created(?DIRECTORY_TYPE, Guid) ->
     update_stats(Guid, #{?DIR_COUNT => 1});
 report_file_created(_, Guid) ->
     update_stats(Guid, #{?REG_FILE_AND_LINK_COUNT => 1}).
 
 
--spec report_file_created_without_state_check(file_meta:type(), file_id:file_guid()) -> ok.
+-spec report_file_created_without_state_check(onedata_file:type(), file_id:file_guid()) -> ok.
 report_file_created_without_state_check(?DIRECTORY_TYPE, Guid) ->
     ok = dir_stats_collector:update_stats_of_dir_without_state_check(Guid, ?MODULE, #{?DIR_COUNT => 1});
 report_file_created_without_state_check(_, Guid) ->
     ok = dir_stats_collector:update_stats_of_dir_without_state_check(Guid, ?MODULE, #{?REG_FILE_AND_LINK_COUNT => 1}).
 
 
--spec report_file_deleted(file_meta:type(), file_id:file_guid()) -> ok.
+-spec report_file_deleted(onedata_file:type(), file_id:file_guid()) -> ok.
 report_file_deleted(?DIRECTORY_TYPE, Guid) ->
     update_stats(Guid, #{?DIR_COUNT => -1});
 report_file_deleted(_, Guid) ->

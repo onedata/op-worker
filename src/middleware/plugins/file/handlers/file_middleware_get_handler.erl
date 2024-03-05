@@ -355,13 +355,13 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instanc
         private -> ?DEPRECATED_ALL_ATTRS;
         public -> ?DEPRECATED_PUBLIC_ATTRS
     end,
-    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, DefaultAttrs),
+    {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, DefaultAttrs),
     {ok, FileAttr} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), RequestedAttributes)),
-    {ok, file_attr_translator:to_json(FileAttr, AttrType, RequestedAttributes)};
+    {ok, file_attr_translator:to_json(FileAttr, AttrGeneration, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
+    {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_LIST_ATTRS),
 
     BaseOpts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
     ListingOpts = case maps:get(<<"token">>, Data, undefined) of
@@ -387,7 +387,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     
     {ok, value, {
         map_list(fun(ChildAttr) ->
-            file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes)
+            file_attr_translator:to_json(ChildAttr, AttrGeneration, RequestedAttributes)
         end, ChildrenAttrs),
         file_listing:is_finished(ListingPaginationToken),
         file_listing:encode_pagination_token(ListingPaginationToken)}
@@ -403,11 +403,11 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
         prefix => maps:get(<<"prefix">>, Data, undefined),
         include_directories => maps:get(<<"include_directories">>, Data, undefined)
     }),
-    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
+    {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRS),
     {ok, Result, InaccessiblePaths, NextPageToken} =
         ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), ListingOptions, RequestedAttributes)),
     JsonResult = map_list(fun(ChildAttr) ->
-        file_attr_translator:to_json(ChildAttr, AttrType, RequestedAttributes)
+        file_attr_translator:to_json(ChildAttr, AttrGeneration, RequestedAttributes)
     end, Result),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
@@ -540,14 +540,14 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
 
     {ok, TargetFileGuid} = ?lfm_check(lfm:resolve_symlink(SessionId, ?FILE_REF(FileGuid))),
     
-    {AttrType, RequestedAttributes} = infer_requested_attributes(Data, ?API_ATTRS),
+    {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, ?API_ATTRS),
     {ok, TargetFileAttrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(TargetFileGuid), RequestedAttributes)),
 
     TargetFileGri = #gri{
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, file_attr_translator:to_json(TargetFileAttrs, AttrType, RequestedAttributes)};
+    {ok, TargetFileGri, file_attr_translator:to_json(TargetFileAttrs, AttrGeneration, RequestedAttributes)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
     {ok, mi_archives:get_recall_details(Auth#auth.session_id, FileGuid)};
@@ -608,8 +608,8 @@ build_listing_start_point_param_spec(Key) ->
 
 
 %% @private
--spec infer_requested_attributes(middleware:data(), [file_attr:attribute()]) ->
-    {file_attr_translator:attr_type() | default, [file_attr:attribute()]}.
+-spec infer_requested_attributes(middleware:data(), [onedata_file:attr_name()]) ->
+    {onedata_file:attr_generation() | default, [onedata_file:attr_name()]}.
 infer_requested_attributes(Data, Default) ->
     case maps:find(<<"attributes">>, Data) of
         error ->

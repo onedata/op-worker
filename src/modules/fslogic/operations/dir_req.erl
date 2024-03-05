@@ -111,7 +111,7 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
     }.
 
 
--spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()]) ->
+-spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [onedata_file:attr_name()]) ->
     fslogic_worker:fuse_response().
 list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
     DirOperationsRequirements = case Attributes -- [?attr_guid, ?attr_name] of
@@ -143,7 +143,7 @@ list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
     list_children_ctxs_insecure(UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}).
 
 
--spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [file_attr:attribute()]) ->
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [onedata_file:attr_name()]) ->
     fslogic_worker:fuse_response().
 list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -251,7 +251,7 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
 
 
 %% @private
--spec list_children_attrs_internal(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()],
+-spec list_children_attrs_internal(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [onedata_file:attr_name()],
     [file_attr:record()]) -> {[file_attr:record()], file_listing:pagination_token(), file_ctx:ctx()}.
 list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
@@ -282,7 +282,7 @@ list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_recursively_insecure(
-    user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [file_attr:attribute()]
+    user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [onedata_file:attr_name()]
 ) ->
     fslogic_worker:fuse_response().
 list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->

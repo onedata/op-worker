@@ -166,7 +166,7 @@ stat(SessId, FileKey) ->
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(session:id(), file_key(), [file_attr:attribute()]) ->
+-spec stat(session:id(), file_key(), [onedata_file:attr_name()]) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey, Attributes) ->
     ?run(lfm_attrs:stat(SessId, FileKey, Attributes)).
@@ -476,7 +476,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
     get_child_attr(SessId, ParentGuid, ChildName, ?ONECLIENT_ATTRS).
 
 
--spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name(), [file_attr:attribute()]) ->
+-spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name(), [onedata_file:attr_name()]) ->
     {ok, #file_attr{}} | error_reply().
 get_child_attr(SessId, ParentGuid, ChildName, Attributes)  ->
     ?run(lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName, Attributes)).
@@ -493,7 +493,7 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
     get_children_attrs(SessId, FileKey, ListOpts, ?ONECLIENT_ATTRS).
 
 
--spec get_children_attrs(session:id(), file_key(), file_listing:options(), [file_attr:attribute()]) ->
+-spec get_children_attrs(session:id(), file_key(), file_listing:options(), [onedata_file:attr_name()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts, Attributes) ->
     ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, Attributes)).
@@ -510,7 +510,7 @@ get_children_attrs(SessId, FileKey, ListOpts, Attributes) ->
     session:id(),
     lfm:file_key(),
     dir_req:recursive_listing_opts(),
-    [file_attr:attribute()]
+    [onedata_file:attr_name()]
 ) ->
     {ok, [file_attr:record()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
 get_files_recursively(SessId, FileKey, Options, Attributes) ->
@@ -569,7 +569,7 @@ has_custom_metadata(SessId, FileKey) ->
 
 
 -spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
-    {ok, [custom_metadata:name()]} | error_reply().
+    {ok, [onedata_file:xattr_name()]} | error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     ?run(lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal)).
 
@@ -586,13 +586,13 @@ set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
     ?run(lfm_attrs:set_xattr(SessId, FileKey, Xattr, Create, Replace)).
 
 
--spec get_xattr(session:id(), file_key(), custom_metadata:name(), boolean()) ->
+-spec get_xattr(session:id(), file_key(), onedata_file:xattr_name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ?run(lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited)).
 
 
--spec remove_xattr(session:id(), file_key(), custom_metadata:name()) ->
+-spec remove_xattr(session:id(), file_key(), onedata_file:xattr_name()) ->
     ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(lfm_attrs:remove_xattr(SessId, FileKey, XattrName)).

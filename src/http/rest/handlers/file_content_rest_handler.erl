@@ -148,9 +148,15 @@ sanitize_params(#op_req{
             RequiredParamsDependingOnAspect
     end,
     AllOptionalParams = OptionalParamsDependingOnAspect#{
-        <<"type">> => {atom, [
-            ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
-        ]},
+        <<"type">> => {atom, fun(TypeBinary) ->
+            try
+                {true, onedata_file:type_from_json(TypeBinary)}
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, lists:map(fun onedata_file:type_to_json/1, [
+                    ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
+                ])))
+            end
+        end},
         <<"mode">> => {binary, fun(Mode) ->
             try binary_to_integer(Mode, 8) of
                 ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
