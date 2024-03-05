@@ -500,7 +500,7 @@ file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
     
     BaseJson = file_attr_to_json(undefined, ApiType, CheckingProviderId, FileAttr),
     
-    maps:with(lists:map(fun file_attr_translator:attr_name_to_json/1, ?PUBLIC_API_ATTRS), BaseJson#{
+    maps:with(lists:map(fun onedata_file:attr_name_to_json/1, ?PUBLIC_API_ATTRS), BaseJson#{
         <<"fileId">> => map_file_id_for_api_type(ApiType, file_id:guid_to_share_guid(FileGuid, ShareId)),
         <<"parentFileId">> => case IsShareRoot of
             true -> null;

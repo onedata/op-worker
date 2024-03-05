@@ -49,7 +49,7 @@
     recall_root_id :: undefined | file_id:file_guid(),
     is_deleted :: undefined | boolean(),
     conflicting_files :: undefined | file_meta:conflicts(),
-    xattrs :: undefined | #{onedata_file:xattr_name() => onedata_file:value()}
+    xattrs :: undefined | #{onedata_file:xattr_name() => onedata_file:xattr_value()}
 }).
 
 

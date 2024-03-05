@@ -76,7 +76,7 @@ get_attrs(Node, SessId, FileGuid) ->
     get_attrs(Node, SessId, FileGuid, []).
 
 
--spec get_attrs(node(), session:id(), file_id:file_guid(), [custom_metadata:name()]) ->
+-spec get_attrs(node(), session:id(), file_id:file_guid(), [onedata_file:xattr_name()]) ->
     {ok, lfm_attrs:file_attributes()} | error().
 get_attrs(Node, SessId, FileGuid, RequestedXattrs) ->
     XattrsOpt = case RequestedXattrs of
@@ -93,7 +93,7 @@ get_attrs(Node, SessId, FileGuid, RequestedXattrs) ->
     end.
 
 
--spec set_xattr(node(), file_id:file_guid(), custom_metadata:name(), custom_metadata:value()) ->
+-spec set_xattr(node(), file_id:file_guid(), onedata_file:xattr_name(), custom_metadata:value()) ->
     ok | error().
 set_xattr(Node, FileGuid, Name, Value) ->
     lfm_proxy:set_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), #xattr{
@@ -186,7 +186,7 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
     end, utils:ensure_list(Files)).
 
 
--spec await_xattr(node(), file_id:file_guid(), [custom_metadata:name()], non_neg_integer()) -> ok.
+-spec await_xattr(node(), file_id:file_guid(), [onedata_file:xattr_name()], non_neg_integer()) -> ok.
 await_xattr(Node, FileGuid, ExpectedXattrs, Attempts) ->
     CheckFun = fun() ->
         try

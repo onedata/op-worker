@@ -149,7 +149,7 @@
 }).
 
 -record(get_xattr, {
-    name :: custom_metadata:name(),
+    name :: onedata_file:xattr_name(),
     inherited = false :: boolean()
 }).
 
@@ -160,7 +160,7 @@
 }).
 
 -record(remove_xattr, {
-    name :: custom_metadata:name()
+    name :: onedata_file:xattr_name()
 }).
 
 -record(list_xattr, {
@@ -393,7 +393,7 @@
 }).
 
 -record(xattr_list, {
-    names :: [custom_metadata:name()]
+    names :: [onedata_file:xattr_name()]
 }).
 
 -record(storage_stats, {
