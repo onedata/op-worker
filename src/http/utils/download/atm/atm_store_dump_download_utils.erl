@@ -160,7 +160,7 @@ stream_store_content(Req1, State) ->
 %% @private
 -spec set_response_headers(cowboy_req:req(), binary()) -> cowboy_req:req().
 set_response_headers(Req1, FileName) ->
-    Req2 = http_download_utils:set_cors_headers(Req1),
+    Req2 = http_download_utils:allow_onezone_as_frame_ancestor(Req1),
     http_download_utils:set_content_disposition_header(Req2, FileName).
 
 

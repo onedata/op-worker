@@ -31,7 +31,8 @@
 
 %% API
 -export([new_by_guid/1, new_by_logical_path/2, new_by_canonical_path/2]).
--export([get_space_id_const/1, is_space_dir_const/1, is_user_root_dir_const/2]).
+-export([get_space_id_const/1, get_share_id_const/1]).
+-export([is_space_dir_const/1, is_user_root_dir_const/2]).
 -export([get_parent/2, get_canonical_path/1]).
 
 %%%===================================================================
@@ -139,6 +140,12 @@ get_space_id_const(#file_partial_ctx{canonical_path = Path}) ->
 get_space_id_const(FileCtx) ->
     file_ctx:get_space_id_const(FileCtx).
 
+-spec get_share_id_const(ctx()) -> od_share:id() | undefined.
+get_share_id_const(#file_partial_ctx{}) ->
+    undefined;
+get_share_id_const(FileCtx) ->
+    file_ctx:get_share_id_const(FileCtx).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if file is a space root dir.
@@ -182,7 +189,7 @@ get_space_id_from_user_spaces(SpaceName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
         false ->
-            throw(?ENOENT);
+            throw(?EACCES);
         {true, SpaceId} ->
             SpaceId
     end.

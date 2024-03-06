@@ -67,7 +67,7 @@
 -export([enable_cache/0]).
 -export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
--export([force_fetch_entity/1]).
+-export([force_fetch_entity/1, force_fetch_entity/2]).
 -export([process_push_message/1]).
 
 %% gen_server callbacks
@@ -203,6 +203,16 @@ request(Client, Req, Timeout) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% @see force_fetch_entity/2
+%% @end
+%%--------------------------------------------------------------------
+-spec force_fetch_entity(gri:gri()) -> result().
+force_fetch_entity(GRI) ->
+    force_fetch_entity(?ROOT_SESS_ID, GRI).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Fetches the entity from Onezone, ignoring the local cache. This guarantees
 %% that the newest version of the entity (at the moment of serving the request
 %% by Onezone) is fetched and then cached locally. Should be called whenever the
@@ -210,9 +220,9 @@ request(Client, Req, Timeout) ->
 %% as possible.
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(gri:gri()) -> result().
-force_fetch_entity(GRI) ->
-    do_request(?ROOT_SESS_ID, #gs_req_graph{
+-spec force_fetch_entity(client(), gri:gri()) -> result().
+force_fetch_entity(Client, GRI) ->
+    do_request(Client, #gs_req_graph{
         operation = get,
         gri = GRI,
         subscribe = true
@@ -740,8 +750,10 @@ get_from_cache(#gri{type = Type, id = Id}) ->
 %% @private
 -spec client_to_credentials(client()) -> auth_manager:credentials().
 client_to_credentials(SessionId) when is_binary(SessionId) ->
-    {ok, Credentials} = session:get_credentials(SessionId),
-    Credentials;
+    case session:get_credentials(SessionId) of
+        {ok, Credentials} -> Credentials;
+        {error, not_found} -> throw(?ERROR_UNAUTHORIZED)
+    end;
 client_to_credentials(Credentials) ->
     Credentials.
 

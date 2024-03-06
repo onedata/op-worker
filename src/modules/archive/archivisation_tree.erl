@@ -52,7 +52,7 @@
 %% API
 -export([ensure_archives_root_dir_exists/1,
     ensure_dataset_archives_dir_exists/2, ensure_dataset_root_link_exists/2,
-    create_archive_dir/4, is_special_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
+    create_archive_dir/4, is_special_uuid/1, is_archives_root_dir_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
     uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
 %%%===================================================================
@@ -125,6 +125,13 @@ is_special_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
 is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(_) ->
+    false.
+
+
+-spec is_archives_root_dir_uuid(file_meta:uuid()) -> boolean().
+is_archives_root_dir_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
+    true;
+is_archives_root_dir_uuid(_) ->
     false.
 
 

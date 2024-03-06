@@ -208,7 +208,8 @@ set_file_json_metadata_test(Config) ->
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
                     {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
                     {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-                ]
+                ],
+                optional_values_data_sets = all_combinations
             }
         )
     ),
@@ -276,7 +277,7 @@ set_file_json_metadata_test(Config) ->
                     }]}
             end,
             lists:foreach(fun(Node) ->
-                ?assertMatch(ExpResult, get_json(Node, FileGuid), ?ATTEMPTS)
+                ?assertEqual(ExpResult, get_json(Node, FileGuid), ?ATTEMPTS)
             end, Providers),
 
             case FilterOrError of

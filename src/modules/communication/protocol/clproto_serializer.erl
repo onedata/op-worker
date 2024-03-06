@@ -17,6 +17,7 @@
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("clproto/include/messages.hrl").
 
+
 %% API
 -export([load_msg_defs/0]). 
 -export([deserialize_client_message/2, serialize_server_message/2]).
@@ -54,10 +55,10 @@ deserialize_client_message(Message, SessionId) ->
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
 
     try
-        Stream = clproto_translator:translate_from_protobuf(MsgStm),
-        EffSessionAuth = clproto_translator:translate_from_protobuf(PToken),
-        EffSessionMode = clproto_translator:session_mode_translate_from_protobuf(PSessionMode),
-        Body = clproto_translator:translate_from_protobuf(MsgBody),
+        Stream = clproto_translator:from_protobuf(MsgStm),
+        EffSessionAuth = clproto_translator:from_protobuf(PToken),
+        EffSessionMode = clproto_translator:session_mode_from_protobuf(PSessionMode),
+        Body = clproto_translator:from_protobuf(MsgBody),
 
         {ok, #client_message{
             message_id = DecodedId,
@@ -87,8 +88,8 @@ deserialize_server_message(Message, SessionId) ->
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
     {ok, #server_message{
         message_id = DecodedId,
-        message_stream = clproto_translator:translate_from_protobuf(MsgStm),
-        message_body = clproto_translator:translate_from_protobuf(MsgBody),
+        message_stream = clproto_translator:from_protobuf(MsgStm),
+        message_body = clproto_translator:from_protobuf(MsgBody),
         effective_session_id = utils:ensure_defined(
             EffSessionId, undefined, SessionId
         )
@@ -107,24 +108,11 @@ serialize_server_message(#server_message{
     {ok, EncodedId} = clproto_message_id:encode(MsgId),
     ServerMessage = #'ServerMessage'{
         message_id = EncodedId,
-        message_stream = clproto_translator:translate_to_protobuf(MsgStm),
-        message_body = clproto_translator:translate_to_protobuf(MsgBody),
+        message_stream = clproto_translator:to_protobuf(MsgStm),
+        message_body = clproto_translator:to_protobuf(MsgBody),
         proxy_session_id = EffSessionId
     },
-
-    case VerifyMsg of
-        true ->
-            ok = messages:verify_msg(ServerMessage);
-        false ->
-            ok
-    end,
-
-    case enif_protobuf:encode(ServerMessage) of
-        {error, Reason} ->
-            throw({serialization_failed, Reason});
-        EncodedServerMessage ->
-            {ok, EncodedServerMessage}
-    end.
+    serialize_message(ServerMessage, VerifyMsg).
 
 
 -spec serialize_client_message(#client_message{}, VerifyMsg :: boolean()) ->
@@ -141,23 +129,32 @@ serialize_client_message(#client_message{
     {ok, EncodedId} = clproto_message_id:encode(MsgId),
     ClientMessage = #'ClientMessage'{
         message_id = EncodedId,
-        message_stream = clproto_translator:translate_to_protobuf(MsgStm),
-        message_body = clproto_translator:translate_to_protobuf(MsgBody),
+        message_stream = clproto_translator:to_protobuf(MsgStm),
+        message_body = clproto_translator:to_protobuf(MsgBody),
         proxy_session_id = EffSessionId,
-        proxy_session_macaroon = clproto_translator:translate_to_protobuf(Auth),
-        proxy_session_mode = clproto_translator:session_mode_translate_to_protobuf(EffSessionMode)
+        proxy_session_macaroon = clproto_translator:to_protobuf(Auth),
+        proxy_session_mode = clproto_translator:session_mode_to_protobuf(EffSessionMode)
     },
+    serialize_message(ClientMessage, VerifyMsg).
 
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec serialize_message(#'ClientMessage'{} | #'ServerMessage'{}, boolean()) ->
+    {ok, binary()} | no_return().
+serialize_message(Message, VerifyMsg) ->
     case VerifyMsg of
         true ->
-            ok = messages:verify_msg(ClientMessage);
+            ok = messages:verify_msg(Message);
         false ->
             ok
     end,
-
-    case enif_protobuf:encode(ClientMessage) of
+    
+    case enif_protobuf:encode(Message) of
         {error, Reason} ->
             throw({serialization_failed, Reason});
-        EncodedClientMessage ->
-            {ok, EncodedClientMessage}
+        EncodedMessage ->
+            {ok, EncodedMessage}
     end.

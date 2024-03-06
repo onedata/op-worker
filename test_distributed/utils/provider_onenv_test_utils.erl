@@ -19,7 +19,7 @@
     initialize/1,
     setup_sessions/1,
     find_importing_provider/2,
-    create_oz_temp_access_token/2,
+    create_oz_temp_access_token/1,
     get_primary_cm_node/2
 ]).
 
@@ -43,11 +43,10 @@ setup_sessions(Config) ->
         Acc#{ProviderId => oct_background:get_provider_nodes(ProviderId)}
     end, #{}, oct_background:get_provider_ids()),
 
-    [OzNode | _] = test_config:get_all_oz_worker_nodes(Config),
     Sessions = maps:map(fun(ProviderId, Users) ->
         [Node | _] = maps:get(ProviderId, NodesPerProvider),
         lists:map(fun(UserId) ->
-            {ok, SessId} = setup_user_session(UserId, OzNode, Node),
+            {ok, SessId} = setup_user_session(UserId, Node),
             {UserId, SessId}
         end, Users)
     end, ProviderUsers),
@@ -71,15 +70,15 @@ find_importing_provider(_Config, SpaceId) ->
     end, undefined, Providers).
 
 
--spec create_oz_temp_access_token(node(), UserId :: binary()) -> tokens:serialized().
-create_oz_temp_access_token(OzwNode, UserId) ->
-    TimeCaveat = #cv_time{
-        valid_until = rpc:call(OzwNode, global_clock, timestamp_seconds, []) + 100000
-    },
-
-    {ok, AccessToken} = rpc:call(OzwNode, token_logic, create_user_temporary_token, [
-        ?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}
-    ]),
+-spec create_oz_temp_access_token(UserId :: binary()) -> tokens:serialized().
+create_oz_temp_access_token(UserId) ->
+    OzwNode = ?RAND_ELEMENT(oct_background:get_zone_nodes()),
+    Auth = ?USER(UserId),
+    Now = ozw_test_rpc:timestamp_seconds(OzwNode),
+    AccessToken = ozw_test_rpc:create_user_temporary_token(OzwNode, Auth, UserId, #{
+        <<"type">> => ?ACCESS_TOKEN,
+        <<"caveats">> => [#cv_time{valid_until = Now + 100000}]
+    }),
     {ok, SerializedAccessToken} = tokens:serialize(AccessToken),
 
     SerializedAccessToken.
@@ -100,10 +99,10 @@ get_primary_cm_node(Config, ProviderPlaceholder) ->
 %%%===================================================================
 
 %% @private
--spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) ->
+-spec setup_user_session(UserId :: binary(), OpwNode :: node()) ->
     {ok, SessId :: binary()}.
-setup_user_session(UserId, OzwNode, OpwNode) ->
-    AccessToken = create_oz_temp_access_token(OzwNode, UserId),
+setup_user_session(UserId, OpwNode) ->
+    AccessToken = create_oz_temp_access_token(UserId),
     Nonce = base64:encode(crypto:strong_rand_bytes(8)),
     Identity = ?SUB(user, UserId),
     Credentials =

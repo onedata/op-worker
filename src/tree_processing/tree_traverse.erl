@@ -490,7 +490,7 @@ list_children(#tree_traverse{
     end,
     try
         {ok, UserCtx} = acquire_user_ctx(Job, TaskId),
-        {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
+        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
             limit => BatchSize,
             ignore_missing_links => ListingErrorsHandlingPolicy == ignore_known
         })}

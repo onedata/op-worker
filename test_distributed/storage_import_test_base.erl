@@ -15,6 +15,7 @@
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").

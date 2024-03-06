@@ -29,6 +29,7 @@ rel/vars.config
 /test_distributed/logs
 !/test_distributed/logs/.gitkeep
 /test_distributed/cover_tmp.spec
+/test_distributed/onenv_scenarios/tmp_*
 test_coverage
 qos_expression_*.erl
 pkg-list.json

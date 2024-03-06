@@ -429,13 +429,13 @@ check_file_location_and_maybe_sync(Job, FileCtx, Info) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsDir) ->
     % Get only two blocks - it is enough to verify if file can be imported
-    case file_ctx:get_local_file_location_doc(FileCtx, {blocks_num, 2}) of
-        {FLDoc = #document{
+    case file_ctx:get_local_file_location_doc_const(FileCtx, {blocks_num, 2}) of
+        FLDoc = #document{
             value = #file_location{
                 file_id = FileId,
                 rename_src_file_id = RenameSrcFileId,
                 size = Size
-            }}, _} ->
+            }} ->
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
                 {_, true} ->
@@ -466,7 +466,7 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
                     % To determine which case it is, maybe_import_file will check whether file is still on storage.
                     maybe_import_file(StorageFileCtx, Info)
             end;
-        {undefined, _} ->
+        undefined ->
             % This may happen in the following cases:
             %  * File has just been deleted by lfm, in such case it won't be imported as
             %    maybe_import_file checks whether file is still on storage.
@@ -497,9 +497,9 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
 check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated) ->
     try
         case get_attr_including_deleted(FileCtx) of
-            {ok, _FileAttr, true} ->
+            {ok, #file_attr{is_deleted = true} = _FileAttr} ->
                 {?FILE_UNMODIFIED, undefined, StorageFileCtx};
-            {ok, FileAttr, false} ->
+            {ok, #file_attr{is_deleted = false} = FileAttr} ->
                 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
             {error, ?ENOENT} ->
                 maybe_import_file(StorageFileCtx, Info)
@@ -766,19 +766,19 @@ create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
     {ok, StorageFileCtx3}.
 
 
--spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}, boolean()} | {error, term()}.
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
 get_attr_including_deleted(FileCtx) ->
     try
-        {#fuse_response{
+        #fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileAttr
-        }, _, IsDeleted} =
-            attr_req:get_file_attr_and_conflicts_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+        } =
+            attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => allow_name_conflicts,
-                include_optional_attrs => [size]
+                attributes => [?attr_is_deleted | ?ONECLIENT_ATTRS]
             }),
-        {ok, FileAttr, IsDeleted}
+        {ok, FileAttr}
     catch
         Class:Reason:Stacktrace ->
             #status{code = Error} = fslogic_errors:gen_status_message(Reason),
@@ -1066,9 +1066,9 @@ maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info, ShouldUpda
 -spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx(), ShouldUpdate :: boolean()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
 maybe_update_file_location(StorageFileCtx, FileCtx, ShouldUpdate) ->
-    case file_ctx:get_local_file_location_doc(FileCtx) of
-        {undefined, _} -> {false, FileCtx, StorageFileCtx, ?FILE_LOCATION_ATTR_NAME};
-        {FileLocationDoc, _} -> maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc, ShouldUpdate)
+    case file_ctx:get_local_file_location_doc_const(FileCtx) of
+        undefined -> {false, FileCtx, StorageFileCtx, ?FILE_LOCATION_ATTR_NAME};
+        FileLocationDoc -> maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc, ShouldUpdate)
     end.
 
 -spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx(), file_location:doc(), ShouldUpdate :: boolean()) ->

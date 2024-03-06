@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2016-2020 ACK CYFRONET AGH
+%%% @author Tomasz Lichon, Michał Stanisz
+%%% @copyright (C) 2016-2023 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -11,24 +11,30 @@
 %%%--------------------------------------------------------------------
 -module(dir_req).
 -author("Tomasz Lichon").
+-author("Michal Stanisz").
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/recursive_listing.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
 -export([
     mkdir/4,
     create_dir_at_path/3,
-    get_children_ctxs/3,
-    get_children/3,
-    get_children_attrs/4,
-    get_children_details/3,
+    list_children_ctxs/3,
+    list_children_attrs/4,
     list_recursively/4
+]).
+
+%% Deprecated API
+-export([
+    list_children/3
 ]).
 
 -type recursive_listing_opts() :: #{
@@ -40,16 +46,18 @@
     include_directories => boolean()
 }.
 
--type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
-    fslogic_worker:fuse_response() | no_return()).
--type listing_fun() :: fun((State, file_listing:options()) -> {[any()], file_listing:pagination_token(), State}).
+-type gather_attributes_mapper_fun(Entry, Attributes) ::
+    fun((Entry) -> Attributes).
 
 -export_type([recursive_listing_opts/0]).
+
+-define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
+    ?APP_NAME, max_read_dir_plus_procs, 20
+)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
 
 -spec mkdir(
     user_ctx:ctx(),
@@ -73,7 +81,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 create_dir_at_path(UserCtx, RootFileCtx, Path) ->
     #fuse_response{fuse_response = #guid{guid = Guid}} =
         guid_req:ensure_dir(UserCtx, RootFileCtx, Path, ?DEFAULT_DIR_MODE),
-    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), [size]) of
+    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), ?ONECLIENT_ATTRS) of
         % if dir does not exist, it will be created during error handling
         #fuse_response{fuse_response = #file_attr{type = ?DIRECTORY_TYPE}} = Response ->
             Response;
@@ -88,167 +96,74 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
     end.
 
 
--spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
+%% @TODO VFS-11299 deprecated, left for compatibility with oneclient
+-spec list_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
-get_children(UserCtx, FileCtx0, ListOpts) ->
-    ListFun = fun(Ctx, Opts) ->
-        {ChildrenCtxs, Token, Ctx1} = get_children_ctxs(
-            UserCtx, Ctx, Opts, ?OPERATIONS(?list_container_mask)),
-        ChildrenNum = length(ChildrenCtxs),
-
-        Result = lists:filtermap(fun({Num, ChildCtx}) ->
-            ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
-            ChildUuid = file_ctx:get_logical_uuid_const(ChildCtx),
-            {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
-            case (Num == 1 orelse Num == ChildrenNum) of
-                true ->
-                    try
-                        {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
-                        % Get parent uuid from doc - if function is executed for regular file uuid from FileCtx
-                        % cannot be used (file is returned as its own child for regular files so uuid from FileCtx
-                        % is equal to ChildUuid is such a case)
-                        {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
-                        ProviderId = file_meta:get_provider_id(FileDoc),
-                        Scope = file_meta:get_scope(FileDoc),
-                        case file_meta:check_name_and_get_conflicting_files(
-                            ParentUuid, ChildName, ChildUuid, ProviderId, Scope)
-                        of
-                            {conflicting, ExtendedName, _ConflictingFiles} ->
-                                {true, #child_link{name = ExtendedName, guid = ChildGuid}};
-                            _ ->
-                                {true, #child_link{name = ChildName, guid = ChildGuid}}
-                        end
-                    catch _:_ ->
-                        % Documents for file have not yet synchronized
-                        false
-                    end;
-                false ->
-                    % Other files than first and last don't need to resolve name
-                    % conflicts (to check for collisions) as list_children
-                    % (file_meta:tag_children to be precise) already did it
-                    {true, #child_link{name = ChildName, guid = ChildGuid}}
-            end
-        end, lists_utils:enumerate(ChildrenCtxs)),
-        {Result, Token, Ctx1}
-    end,
-    
-    {ChildrenLinks, ListingToken, FileCtx1} = list_up_to_limit(ListFun, FileCtx0, ListOpts, []),
-
-    fslogic_times:update_atime(FileCtx1),
+list_children(UserCtx, FileCtx0, ListOpts) ->
+    #fuse_response{status = #status{code = ?OK}, fuse_response = FuseResponse} =
+        list_children_attrs(UserCtx, FileCtx0, ListOpts, [?attr_guid, ?attr_name]),
+    #file_children_attrs{child_attrs = ChildrenAttrs, pagination_token = PaginationToken} = FuseResponse,
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
-            child_links = ChildrenLinks,
-            pagination_token = ListingToken
+            child_links = [#child_link{name = Name, guid = Guid} || #file_attr{name = Name, guid = Guid} <- ChildrenAttrs],
+            pagination_token = PaginationToken
         }
     }.
 
 
--spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()
-) ->
-    {
-        ChildrenCtxs :: [file_ctx:ctx()],
-        file_listing:pagination_token(),
-        NewFileCtx :: file_ctx:ctx()
+-spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()]) ->
+    fslogic_worker:fuse_response().
+list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
+    DirOperationsRequirements = case Attributes -- [?attr_guid, ?attr_name] of
+        [] ->
+            ?OPERATIONS(?list_container_mask);
+        _ ->
+            ?OPERATIONS(?traverse_container_mask, ?list_container_mask, attr_req:optional_attrs_perms_mask(Attributes))
+    end,
+    {Whitelist, FileCtx2} = check_listing_permissions(UserCtx, FileCtx, DirOperationsRequirements),
+    {ChildrenAttrs, PaginationToken, FileCtx3} = list_children_attrs_internal(
+        UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}, Attributes, []),
+    
+    fslogic_times:update_atime(FileCtx3),
+    
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = #file_children_attrs{
+            child_attrs = ChildrenAttrs,
+            pagination_token = PaginationToken
+        }
     }.
-get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
-    get_children_ctxs(
-        UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)).
 
 
-%%--------------------------------------------------------------------
-%% @equiv get_children_attrs_insecure/7 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [attr_req:optional_attr()]) ->
+% NOTE: this function may return less elements than provided limit even when listing is not finished.
+-spec list_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
+    {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
+list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
+    {Whitelist, FileCtx2} = check_listing_permissions(
+        UserCtx, FileCtx, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)),
+    list_children_ctxs_insecure(UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}).
+
+
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [file_attr:attribute()]) ->
     fslogic_worker:fuse_response().
-get_children_attrs(UserCtx, FileCtx0, ListOpts, OptionalAttrs) ->
+list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    OptionalPrivs = attr_req:optional_attrs_perms_mask(Attributes),
     AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
-        false -> [?TRAVERSE_ANCESTORS]
-    end,
-    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, AccessRequirements
-    ),
-    get_children_attrs_insecure(
-        UserCtx, FileCtx2, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @equiv get_children_details_insecure/6 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
-    fslogic_worker:fuse_response().
-get_children_details(UserCtx, FileCtx0, ListOpts) ->
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
-        false -> [?TRAVERSE_ANCESTORS]
-    end,
-    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, AccessRequirements
-    ),
-    get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
-
-
--spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [attr_req:optional_attr()]) ->
-    fslogic_worker:fuse_response().
-list_recursively(UserCtx, FileCtx0, ListOpts, OptionalAttrs) ->
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
-        false -> [?TRAVERSE_ANCESTORS]
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask, OptionalPrivs)];
+        false-> [?TRAVERSE_ANCESTORS, ?OPERATIONS(OptionalPrivs)]
     end,
     {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    list_recursively_insecure(UserCtx, FileCtx2, ListOpts, OptionalAttrs).
+    list_recursively_insecure(UserCtx, FileCtx2, ListOpts, Attributes).
     
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% file_listing:list_children/4 with permissions_check
-%% TODO VFS-7149 untangle permissions_check and fslogic_worker
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), data_access_control:requirement()
-) ->
-    {
-        ChildrenCtxs :: [file_ctx:ctx()],
-        file_listing:pagination_token(),
-        NewFileCtx :: file_ctx:ctx()
-    }.
-get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, DirOperationsRequirements];
-        false -> [?TRAVERSE_ANCESTORS]
-    end,
-    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, AccessRequirements
-    ),
-    file_tree:list_children(FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList).
-
-
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Creates new directory.
-%% @end
-%%--------------------------------------------------------------------
--spec mkdir_insecure(
-    user_ctx:ctx(),
-    ParentFileCtx :: file_ctx:ctx(),
-    Name :: file_meta:name(),
-    Mode :: file_meta:posix_permissions()
-) ->
+-spec mkdir_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
@@ -269,7 +184,8 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                 allow_deleted_files => false,
-                name_conflicts_resolution_policy => allow_name_conflicts
+                name_conflicts_resolution_policy => allow_name_conflicts,
+                attributes => ?ONECLIENT_ATTRS
             }),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
@@ -278,92 +194,82 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
         }
     catch
-        Error:Reason ->
+        Class:Reason:Stacktrace ->
+            ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
-            erlang:Error(Reason)
+            erlang:Class(Reason)
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each directory children
-%% starting with Offset-th from specified Token entry and up to Limit of entries
-%% and allowed by CanonicalChildrenWhiteList.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(),
-    [attr_req:optional_attr()], undefined | [file_meta:name()]
-) ->
-    fslogic_worker:fuse_response().
-get_children_attrs_insecure(
-    UserCtx, FileCtx0, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
-) ->
-    ListFun = fun(Ctx, Opts) ->
-        {Children, Token, Ctx1} = file_tree:list_children(
-            Ctx, UserCtx, Opts, CanonicalChildrenWhiteList),
-        ComputeAttrsOpts = #{
-            allow_deleted_files => false,
-            include_optional_attrs => OptionalAttrs
-        },
-        GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
-            % fetching xattrs require more privileges than file listing, so insecure version cannot be called
-            {true, _} -> fun attr_req:get_file_attr/3;
-            false -> fun attr_req:get_file_attr_insecure/3
-        end,
-        Result = readdir_plus:gather_attributes(
-            child_attrs_mapper(GetAttrFun, UserCtx),
-            Children,
-            ComputeAttrsOpts
-        ),
-        {Result, Token, Ctx1}
+-spec check_listing_permissions(user_ctx:ctx(), file_ctx:ctx(), data_access_control:requirement()) ->
+    {file_listing:whitelist(), file_ctx:ctx()}.
+check_listing_permissions(UserCtx, FileCtx0, DirOperationsRequirements) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx0),
+    %% TODO VFS-7149 untangle permissions_check and fslogic_worker
+    AccessRequirements = case IsDir of
+        true -> [?TRAVERSE_ANCESTORS, DirOperationsRequirements];
+        false -> [?TRAVERSE_ANCESTORS]
     end,
-    {ChildrenAttrs, ListingToken, FileCtx1} = list_up_to_limit(ListFun, FileCtx0, ListOpts, []),
-
-    fslogic_times:update_atime(FileCtx1),
-
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_children_attrs{
-            child_attrs = ChildrenAttrs,
-            pagination_token = ListingToken
-        }
-    }.
+    fslogic_authz:ensure_authorized_readdir(UserCtx, FileCtx2, AccessRequirements).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Gets file details (see file_details.hrl) for each directory children
-%% starting with Offset-th from specified StartId entry and up to Limit
-%% of entries and allowed by CanonicalChildrenWhiteList.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_details_insecure(
-    user_ctx:ctx(),
-    file_ctx:ctx(),
-    file_listing:options(),
-    undefined | [file_meta:name()]
-) ->
-    fslogic_worker:fuse_response().
-get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
-    file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ListingToken, FileCtx1} = file_tree:list_children(
-        FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
-    ),
-    ChildrenDetails = readdir_plus:gather_attributes(
-        child_attrs_mapper(fun(U, F, _Opts) -> attr_req:get_file_details_insecure(U, F) end, UserCtx),
-        Children,
-        #{}
-    ),
-    fslogic_times:update_atime(FileCtx1),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_children_details{
-            child_details = ChildrenDetails,
-            pagination_token = ListingToken
-        }
-    }.
+-spec list_children_ctxs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
+    {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
+list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts) ->
+    {ChildrenCtxs, PaginationToken, FileCtx3} = file_tree:list_children(
+        FileCtx, UserCtx, ListOpts),
+    FinalChildrenCtxs = ensure_extended_name_in_edge_files(UserCtx, ChildrenCtxs),
+    {FinalChildrenCtxs, PaginationToken, FileCtx3}.
+
+
+%% @private
+-spec ensure_extended_name_in_edge_files(user_ctx:ctx(), [file_ctx:ctx()]) -> [file_ctx:ctx()].
+ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
+    TotalNum = length(FilesBatch),
+    lists:filtermap(fun({Num, FileCtx}) ->
+        case (Num == 1 orelse Num == TotalNum) of
+            true ->
+                % safeguard, as file_meta doc can be not synchronized yet
+                ?catch_not_found_as(false, begin
+                    {_, FileCtx2} = file_attr:resolve(UserCtx, FileCtx, #{
+                        attributes => [?attr_name],
+                        name_conflicts_resolution_policy => resolve_name_conflicts
+                    }),
+                    {true, FileCtx2}
+                end);
+            false ->
+                % Other files than first and last don't need to resolve name
+                % conflicts (to check for collisions) as list_children
+                % (file_meta:tag_children to be precise) already did it
+                {true, FileCtx}
+        end
+    end, lists_utils:enumerate(FilesBatch)).
+
+
+%% @private
+-spec list_children_attrs_internal(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [file_attr:attribute()],
+    [file_attr:record()]) -> {[file_attr:record()], file_listing:pagination_token(), file_ctx:ctx()}.
+list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
+    {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
+    
+    MapperFun = fun(ChildCtx) ->
+        #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
+            attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{attributes => Attributes}),
+        FileAttr
+    end,
+    
+    ChildrenAttrs = gather_attributes(MapperFun, Children),
+    
+    case infer_listing_finished(length(ChildrenAttrs), NextToken, ListOpts) of
+        {continue, NextBatchOpts} ->
+            list_children_attrs_internal(UserCtx, FileCtx2, NextBatchOpts, Attributes, Acc ++ ChildrenAttrs);
+        stop ->
+            {Acc ++ ChildrenAttrs, NextToken, FileCtx2}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -376,62 +282,62 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
 %% @end
 %%--------------------------------------------------------------------
 -spec list_recursively_insecure(
-    user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [attr_req:optional_attr()]
+    user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [file_attr:attribute()]
 ) ->
     fslogic_worker:fuse_response().
-list_recursively_insecure(UserCtx, FileCtx, ListOpts, OptionalAttrs) ->
+list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
     FinalListOpts = kv_utils:move_found(
         include_directories,
         include_branching_nodes,
         ListOpts
     ),
     #recursive_listing_result{
-        entries = Entries
-    } = Result = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
-    ComputeAttrsOpts = #{
-        allow_deleted_files => false,
-        include_optional_attrs => OptionalAttrs
-    },
-    GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
-        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
-        {true, _} -> fun attr_req:get_file_attr/3;
-        false -> fun attr_req:get_file_attr_insecure/3
+        entries = Entries,
+        inaccessible_paths = InaccessiblePaths,
+        pagination_token = PaginationToken
+    } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
+    
+    AttrsToCalculate = Attributes -- [?attr_guid, ?attr_path],
+    
+    GetAttrsFun = fun({Path, EntryFileCtx}) ->
+        #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
+            attr_req:get_file_attr_insecure(UserCtx, EntryFileCtx, #{attributes => AttrsToCalculate}),
+        FileAttr#file_attr{path = Path, guid = file_ctx:get_logical_guid_const(EntryFileCtx)}
     end,
-    MapperFun = fun({Path, EntryFileCtx}, BaseOpts) ->
-        #fuse_response{
-            status = #status{code = ?OK},
-            fuse_response = FileAttrs
-        } = GetAttrFun(UserCtx, EntryFileCtx, BaseOpts),
-        {Path, FileAttrs}
+    MappedEntries = case AttrsToCalculate of
+        [] ->
+            lists:map(fun({Path, EntryFileCtx}) ->
+                #file_attr{path = Path, guid = file_ctx:get_logical_guid_const(EntryFileCtx)}
+            end, Entries);
+        _ ->
+            gather_attributes(GetAttrsFun, Entries)
     end,
-    MappedEntries = readdir_plus:gather_attributes(MapperFun, Entries, ComputeAttrsOpts),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = Result#recursive_listing_result{entries = MappedEntries}
+        fuse_response = #file_recursive_listing_result{
+            entries = MappedEntries,
+            inaccessible_paths = InaccessiblePaths,
+            pagination_token = PaginationToken
+        }
     }.
 
 
-%% @private
--spec child_attrs_mapper(map_child_fun(), user_ctx:ctx()) -> 
-    readdir_plus:gather_attributes_fun(file_ctx:ctx(), fslogic_worker:fuse_response_type()).
-child_attrs_mapper(AttrsMappingFun, UserCtx) ->
-    fun(ChildCtx, BaseOpts) ->
-        #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
-            AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
-        Result
-    end.
-
-
-%% @private
--spec list_up_to_limit(listing_fun(), State, file_listing:options(), [ListedEntry]) ->
-    {ListedEntry, file_listing:pagination_token(), State}.
-list_up_to_limit(ListFun, InitialState, Opts, Acc) ->
-    {Result, NextToken, State} = erlang:apply(ListFun, [InitialState, Opts]),
-    case infer_listing_finished(length(Result), NextToken, Opts) of
-        {continue, NextBatchOpts} ->
-            list_up_to_limit(ListFun, State, NextBatchOpts, Acc ++ Result);
-        stop ->
-            {Acc ++ Result, NextToken, State}
-    end.
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls MapperFun for every passed entry in parallel and
+%% filters out entries for which it raised an error (potentially docs not
+%% synchronized between providers or deleted files).
+%% @end
+%%--------------------------------------------------------------------
+-spec gather_attributes(
+    gather_attributes_mapper_fun(Entry, Attributes),
+    [Entry]
+) ->
+    [Attributes].
+gather_attributes(MapperFun, Entries) ->
+    FilterMapFun = fun(Entry) ->
+        ?catch_not_found_as(false, {true, MapperFun(Entry)})
+    end,
+    lists_utils:pfiltermap(FilterMapFun, Entries, ?MAX_MAP_CHILDREN_PROCESSES).
 
 
 %% @private

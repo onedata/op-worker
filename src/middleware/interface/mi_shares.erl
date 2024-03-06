@@ -39,7 +39,7 @@ create(SessionId, FileKey, Name, Description) ->
 
 -spec remove(session:id(), od_share:id()) -> ok | no_return().
 remove(SessionId, ShareId) ->
-    RootFileGuid = get_share_root_file_guid(SessionId, ShareId),
+    RootFileGuid = get_share_root_file_guid(ShareId),
 
     middleware_worker:check_exec(SessionId, RootFileGuid, #share_remove_request{share_id = ShareId}).
 
@@ -50,10 +50,11 @@ remove(SessionId, ShareId) ->
 
 
 %% @private
--spec get_share_root_file_guid(session:id(), od_share:id()) ->
-    file_id:file_guid() | no_return().
-get_share_root_file_guid(SessionId, ShareId) ->
+-spec get_share_root_file_guid(od_share:id()) -> file_id:file_guid() | no_return().
+get_share_root_file_guid(ShareId) ->
+    % Share guid is public information (it can be fetched using public share view)
+    % and as such it is justified to get it as root
     #document{value = #od_share{root_file = ShareGuid}} = ?check(share_logic:get(
-        SessionId, ShareId
+        ?ROOT_SESS_ID, ShareId
     )),
     file_id:share_guid_to_guid(ShareGuid).

@@ -40,7 +40,7 @@
     lfm_basic_rdwr_after_file_delete/1,
     lfm_write/1,
     lfm_stat/1,
-    lfm_get_details/1,
+    lfm_stat2/1,
     lfm_synch_stat/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
@@ -87,12 +87,12 @@
     readdir_should_work_with_token/3,
     readdir_should_work_with_startid/1,
     readdir_plus_should_read_xattrs/1,
-    get_children_details_should_return_empty_result_for_empty_dir/1,
-    get_children_details_should_return_empty_result_zero_size/1,
-    get_children_details_should_work_with_zero_offset/1,
-    get_children_details_should_work_with_non_zero_offset/1,
-    get_children_details_should_work_with_size_greater_than_dir_size/1,
-    get_children_details_should_work_with_startid/1,
+    get_children_attrs_should_return_empty_result_for_empty_dir/1,
+    get_children_attrs_should_return_empty_result_zero_size/1,
+    get_children_attrs_should_work_with_zero_offset/1,
+    get_children_attrs_should_work_with_non_zero_offset/1,
+    get_children_attrs_should_work_with_size_greater_than_dir_size/1,
+    get_children_attrs_should_work_with_startid/1,
     get_recursive_file_list/1,
     get_recursive_file_list_prefix_test_base/1,
     get_recursive_file_list_inaccessible_paths_test_base/1,
@@ -518,48 +518,48 @@ readdir_plus_should_read_xattrs(Config) ->
     end,
     readdir_plus_read_xattrs_base(Config, ReadFun).
 
-get_children_details_should_return_empty_result_for_empty_dir(Config) ->
+get_children_attrs_should_return_empty_result_for_empty_dir(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 0),
-    verify_details(Config, MainDirPath, Files, 0, 0, 10).
+    verify_attrs(Config, MainDirPath, Files, 10, 0, 0).
 
-get_children_details_should_return_empty_result_zero_size(Config) ->
+get_children_attrs_should_return_empty_result_zero_size(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 10),
-    verify_details(Config, MainDirPath, Files, 0, 0, 0).
+    verify_attrs(Config, MainDirPath, Files, 0, 0, 0).
 
-get_children_details_should_work_with_zero_offset(Config) ->
+get_children_attrs_should_work_with_zero_offset(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 5),
-    verify_details(Config, MainDirPath, Files, 5, 0, 5).
+    verify_attrs(Config, MainDirPath, Files, 5, 0, 5).
 
-get_children_details_should_work_with_non_zero_offset(Config) ->
+get_children_attrs_should_work_with_non_zero_offset(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 5),
-    verify_details(Config, MainDirPath, Files, 2, 3, 3).
+    verify_attrs(Config, MainDirPath, Files, 3, 3, 2).
 
-get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
+get_children_attrs_should_work_with_size_greater_than_dir_size(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 5),
-    verify_details(Config, MainDirPath, Files, 5, 0, 10).
+    verify_attrs(Config, MainDirPath, Files, 10, 0, 5).
 
-get_children_details_should_work_with_startid(Config) ->
+get_children_attrs_should_work_with_startid(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, 10),
 
     % list all files in chunks (use 0 offset for each chunk)
-    StartId1 = verify_details(Config, MainDirPath, Files, 0, 4, 0, 4, undefined),
-    StartId2 = verify_details(Config, MainDirPath, Files, 3, 4, 0, 4, StartId1),
-    StartId3 = verify_details(Config, MainDirPath, Files, 6, 3, 0, 3, StartId2),
-    StartId4 = verify_details(Config, MainDirPath, Files, 8, 2, 0, 3, StartId3),
+    StartId1 = verify_attrs(Config, MainDirPath, Files, 0, 4, 0, 4, undefined),
+    StartId2 = verify_attrs(Config, MainDirPath, Files, 3, 4, 0, 4, StartId1),
+    StartId3 = verify_attrs(Config, MainDirPath, Files, 6, 3, 0, 3, StartId2),
+    StartId4 = verify_attrs(Config, MainDirPath, Files, 8, 2, 0, 3, StartId3),
     ?assertEqual(file_listing:build_index(lists:last(Files), ?GET_DOMAIN_BIN(W)), StartId4),
 
     % test ls with startid and positive offset
-    StartId5 = verify_details(Config, MainDirPath, Files, 4, 2, 4, 2, undefined),
-    StartId6 = verify_details(Config, MainDirPath, Files, 7, 3, 2, 4, StartId5),
+    StartId5 = verify_attrs(Config, MainDirPath, Files, 4, 2, 4, 2, undefined),
+    StartId6 = verify_attrs(Config, MainDirPath, Files, 7, 3, 2, 4, StartId5),
     ?assertEqual(file_listing:build_index(lists:last(Files), ?GET_DOMAIN_BIN(W)), StartId6),
 
     % test ls with startid and offset beyond files num
-    verify_details(Config, MainDirPath, Files, 0, 0, 20, 4, StartId5),
+    verify_attrs(Config, MainDirPath, Files, 0, 0, 20, 4, StartId5),
 
     % test ls with startid and negative offset
-    StartId7 = verify_details(Config, MainDirPath, Files, 3, 4, -2, 4, StartId5),
-    verify_details(Config, MainDirPath, Files, 0, 6, -10, 6, StartId7).
+    StartId7 = verify_attrs(Config, MainDirPath, Files, 3, 4, -2, 4, StartId5),
+    verify_attrs(Config, MainDirPath, Files, 0, 6, -10, 6, StartId7).
 
 
 get_recursive_file_list(Config) ->
@@ -711,7 +711,7 @@ get_recursive_file_list_should_read_xattrs(Config) ->
         ListingOpts = #{offset => 0, limit => 10, tune_for_large_continuous_listing => false},
         Ans = lfm_proxy:get_files_recursively(Worker, SessId1, {path, MainDirPath}, ListingOpts, [{xattrs, Xattrs}]),
         {ok, List, _, _} = ?assertMatch({ok, _, _, _}, Ans),
-        lists:map(fun({_Path, Attrs}) -> Attrs end, List)
+        List
     end,
     readdir_plus_read_xattrs_base(Config, ReadFun).
 
@@ -1352,7 +1352,7 @@ lfm_stat(Config) ->
     ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
     ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
 
-lfm_get_details(Config) ->
+lfm_stat2(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -1365,33 +1365,37 @@ lfm_get_details(Config) ->
     {ok, Handle11} = O11,
 
     Index1 = file_listing:build_index(<<"space_id2">>),
-    ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"space_name2">>, size = undefined, index = Index1},
+    ?assertMatch({ok, #file_attr{
+        name = <<"space_name2">>,
+        size = undefined,
+        index = Index1,
         active_permissions_type = posix,
-        has_metadata = false
-    }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2">>})),
+        has_custom_metadata = false
+    }}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2">>}, [name, size, index, active_permissions_type, has_custom_metadata])),
 
     Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
-    ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"test5">>, size = 0, index = Index2},
+    ?assertMatch({ok, #file_attr{
+        name = <<"test5">>,
+        size = 0,
+        index = Index2,
         active_permissions_type = posix,
-        has_metadata = false
-    }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
+        has_custom_metadata = false
+    }}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}, [name, size, index, active_permissions_type, has_custom_metadata])),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
-    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 3}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 3}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 3, <<"abc">>)),
-    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 6}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 2, <<"abc">>)),
-    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 6}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 6}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
-    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 10}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch(ok, lfm_proxy:set_xattr(W, SessId1, ?FILE_REF(FileGuid), #xattr{name = <<"123456789">>, value = <<"!@#">>})),
-    ?assertMatch({ok, #file_details{has_metadata = true}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
+    ?assertMatch({ok, #file_attr{has_custom_metadata = true}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}, [has_custom_metadata]), 10).
 
 lfm_synch_stat(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1994,8 +1998,8 @@ share_getattr(Config) ->
                 uid = ?SHARE_UID,
                 gid = ?SHARE_GID,
                 parent_guid = undefined,      % share root should not point to any parent
-                owner_id = <<"unknown">>,
-                provider_id = <<"unknown">>,
+                owner_id = undefined,
+                provider_id = undefined,
                 shares = [ShareId1]}          % other shares shouldn't be shown
             },
             lfm_proxy:stat(W, SessId, ?FILE_REF(ShareGuid))
@@ -2561,13 +2565,42 @@ verify_attrs(Config, MainDirPath, Files, Limit, ExpectedSize, Offset) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}),
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath},
+        #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}),
     {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({F1, F2}) ->
         ?assertEqual(F1#file_attr.name, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))).
+
+verify_attrs(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, Index) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    {ok, List, _} = ?assertMatch(
+        {ok, _, _},
+        lfm_proxy:get_children_attrs(
+            Worker, SessId1, {path, MainDirPath},
+            #{offset => Offset, limit => Limit, index => Index, tune_for_large_continuous_listing => false, inclusive => true},
+            [index | ?ONECLIENT_ATTRS]
+        )
+    ),
+    ?assertEqual(ExpectedSize, length(List)),
+
+    lists:foreach(fun({F1, F2}) ->
+        ?assertEqual(F1#file_attr.name, F2)
+    end, lists:zip(List, lists:sublist(Files, FilesOffset + 1, ExpectedSize))),
+
+    case List of
+        [_ | _] ->
+            LastFile = lists:last(List),
+            LastFile#file_attr.index;
+        _ ->
+            undefined
+    end.
 
 verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, PaginationToken) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -2637,34 +2670,6 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
             undefined
     end.
 
-verify_details(Config, MainDirPath, Files, ExpectedSize, Offset, Limit) ->
-    verify_details(Config, MainDirPath, Files, Offset, ExpectedSize, Offset, Limit, undefined).
-
-verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, Index) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    {SessId1, _UserId1} =
-        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-
-    {ok, List, _} = ?assertMatch(
-        {ok, _, _},
-        lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, 
-            #{offset => Offset, limit => Limit, index => Index, tune_for_large_continuous_listing => false, inclusive => true})
-    ),
-    ?assertEqual(ExpectedSize, length(List)),
-
-    lists:foreach(fun({F1, F2}) ->
-        ?assertEqual(F1#file_details.file_attr#file_attr.name, F2)
-    end, lists:zip(List, lists:sublist(Files, FilesOffset + 1, ExpectedSize))),
-
-    case List of
-        [_ | _] ->
-            LastFile = lists:last(List),
-            LastFile#file_details.file_attr#file_attr.index;
-        _ ->
-            undefined
-    end.
-
 verify_file_content(Config, Handle, FileContent) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker, Handle, 0, size(FileContent))).
@@ -2678,9 +2683,9 @@ produce_truncate_event(Worker, SessId, FileKey, Size) ->
     ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).
 
 get_files_recursively(Worker, SessId, FileRef, Options) ->
-    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options, [size]) of
+    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options, [guid, path]) of
         {ok, Res, IP, Token} ->
-            {ok, lists:map(fun({Path, #file_attr{guid = Guid}}) -> {Guid, Path} end, Res), IP, Token};
+            {ok, lists:map(fun(#file_attr{guid = Guid, path = Path}) -> {Guid, Path} end, Res), IP, Token};
         Other ->
             Other
     end.

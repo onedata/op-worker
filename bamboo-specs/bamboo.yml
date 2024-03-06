@@ -105,6 +105,8 @@ stages:
         - atm_value
         - atm_workflow_execution
         - atm_workflow_executions_collection
+        - authz_data_access_caveats
+        - authz_api
         - autocleaning
         - cdmi_single_provider
         - cdmi_multi_provider
@@ -851,6 +853,20 @@ atm_workflow_executions_collection:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_atm_workflow_executions_collection.tar.gz
+
+authz_data_access_caveats:
+  <<: *ct-onenv-job
+  key: AUTHZDATAACCESSCAVEATS
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_authz_data_access_caveats.tar.gz
+
+authz_api:
+  <<: *ct-onenv-job
+  key: AUTHZAPI
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_authz_api.tar.gz
 
 autocleaning:
   <<: *ct-job
@@ -1881,6 +1897,8 @@ Coverage report:
     - artifact: ct_logs_atm_value.tar.gz
     - artifact: ct_logs_atm_workflow_execution.tar.gz
     - artifact: ct_logs_atm_workflow_executions_collection.tar.gz
+    - artifact: ct_logs_authz_data_access_caveats.tar.gz
+    - artifact: ct_logs_authz_api.tar.gz
     - artifact: ct_logs_autocleaning.tar.gz
     - artifact: ct_logs_cdmi_single_provider.tar.gz
     - artifact: ct_logs_cdmi_multi_provider.tar.gz
