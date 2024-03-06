@@ -61,7 +61,7 @@ change_replicated_internal(SpaceId, #document{
             hardlink_replicated(LinkDoc, FileCtx);
         Error ->
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
-            ?warning("hardlink eplicated ~p - posthook failed with error ~p",
+            ?warning("hardlink replicated ~p - posthook failed with error ~p",
                 [FileUuid, Error])
     end,
     ok = file_meta_posthooks:execute_hooks(FileUuid, doc);

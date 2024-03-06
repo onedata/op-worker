@@ -126,6 +126,7 @@ task_finished(TaskId, _Pool) ->
             ?warning("dir deletion job ~p failed, reruning", [TaskId]),
             Backoff = min(binary_to_integer(maps:get(<<"backoff">>, AdditionalData, <<"8">>)) * 2, ?ERROR_RESTART_MAX_BACKOFF_SEC),
             % start in another function so current traverse can finish
+            %% @TODO VFS-11719 this is insecure in case of provider restart
             spawn(fun() ->
                 timer:sleep(Backoff),
                 ?MODULE:start_internal(file_ctx:new_by_guid(RootGuid), UserId, (binary_to_term(EncodedOptions))#{

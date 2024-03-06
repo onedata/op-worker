@@ -4,6 +4,36 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.4
+
+-   **VFS-11601** Web GUI: Fixed showing ACL when a subject user or
+    group has been removed from space members list.
+-   **VFS-11513** Web GUI: Fixed rare issue when file browser list was
+    not refreshed after deleting files.
+-   **VFS-11459** Added option to set custom region in S3 storage
+    helper.
+-   **VFS-11405** Web GUI: Added columns drag&drop to change their order
+    in transfers table.
+-   **VFS-11366** Improvements to directory size statistics; hard link
+    sizes are now counted without duplicates toward virtual size (as
+    opposed to logical size), archives are counted toward the space data
+    size and presented in the UI.
+-   **VFS-11282** Added possibility to download automation store's
+    content as a JSON file.
+-   **VFS-11268** Web GUI: Fixed a rare file list crash when the list is
+    being refreshed simultaneously with deleting files.
+-   **VFS-11242** Web GUI: added showing separate directory size
+    statistics of archives and directories in the space root.
+-   **VFS-11210** Fixed a bug with S3 storage backend config
+    modification, causing wrong validation of the endpoint.
+-   **VFS-11125** Web GUI: Added columns drag&drop to change their order
+    in file, dataset and archive browser.
+-   **VFS-10999** Added the public "infer access token scope" endpoint,
+    which analyses the provided access token to infer the scope of data
+    access the token can be used for.
+-   **VFS-10649** Web GUI: added complex charts dashboard editor to the
+    automation GUI.
+
 ### 21.02.3
 
 -   **VFS-11231** Refactored oneclient connection pool to improve

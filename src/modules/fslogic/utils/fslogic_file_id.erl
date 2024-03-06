@@ -31,7 +31,7 @@
 -export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
--export([gen_link_uuid/1, gen_link_uuid/2, gen_deleted_opnened_file_ink_uuid/1,
+-export([gen_link_uuid/1, gen_link_uuid/2, gen_deleted_opened_file_link_uuid/1,
     is_link_uuid/1, ensure_referenced_uuid/1, ensure_referenced_guid/1]).
 -export([gen_symlink_uuid/0, is_symlink_uuid/1, is_symlink_guid/1]).
 
@@ -258,7 +258,7 @@ gen_link_uuid(FileUuid) ->
 gen_link_uuid(FileUuid, LinkPart) ->
     <<?LINK_UUID_PREFIX, LinkPart/binary, ?LINK_UUID_SEPARATOR, FileUuid/binary>>.
 
-gen_deleted_opnened_file_ink_uuid(FileUuid) ->
+gen_deleted_opened_file_link_uuid(FileUuid) ->
     gen_link_uuid(FileUuid, ?OPENED_DELETED_FILE_LINK_ID_SEED).
 
 -spec is_link_uuid(file_meta:uuid() | file_meta_hardlinks:link()) -> boolean().
