@@ -702,8 +702,12 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
     AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
     AllHeaders = AuthHeaders#{<<"X-Callback-Url">> => build_job_output_url(LambdaInput)},
 
+    AtmWorkflowExecutionCtx = atm_run_job_batch_ctx:get_workflow_execution_ctx(AtmRunJobBatchCtx),
+    AtmWorkflowExecutionEnv = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
+
     Body = json_utils:encode(#{
         <<"ctx">> => #{
+            <<"spaceId">> => atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
             <<"atmWorkflowExecutionId">> => LambdaInput#atm_lambda_input.workflow_execution_id,
             <<"logLevel">> => audit_log:severity_from_int(LambdaInput#atm_lambda_input.log_level),
             <<"timeoutSeconds">> => op_worker:get_env(atm_workflow_job_timeout_sec, 1800),
