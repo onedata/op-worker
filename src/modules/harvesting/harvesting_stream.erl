@@ -488,7 +488,7 @@ start_changes_stream(SpaceId, Since, Until) ->
 changes_stream_start_link(SpaceId, Callback, Since, Until) ->
     couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, Since}, {until, Until}, {include_ignored, true}], [self()]
+        [{since, Since}, {until, Until}, {ignored_policy, include_ignored}], [self()]
     ).
 
 -spec stop_changes_stream(state()) -> state().
@@ -503,14 +503,14 @@ stop_changes_stream(State = #hs_state{stream_pid = StreamPid}) ->
             State
     end.
 
--spec maybe_add_docs_to_batch(state(), [datastore:doc() | {ignored, datastore:doc()}]) -> state().
+-spec maybe_add_docs_to_batch(state(), [{change | ignored, datastore:doc()}]) -> state().
 maybe_add_docs_to_batch(State, []) ->
     State;
 maybe_add_docs_to_batch(State, [Doc | Docs]) ->
     maybe_add_docs_to_batch(maybe_add_doc_to_batch(State, Doc), Docs).
 
 
--spec maybe_add_doc_to_batch(state(), datastore:doc() | {ignored, datastore:doc()}) -> state().
+-spec maybe_add_doc_to_batch(state(), {change | ignored, datastore:doc()}) -> state().
 maybe_add_doc_to_batch(State, {ignored, #document{seq = Seq}}) ->
     State#hs_state{last_seen_seq = Seq};
 maybe_add_doc_to_batch(State = #hs_state{

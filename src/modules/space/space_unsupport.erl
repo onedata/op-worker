@@ -269,7 +269,7 @@ start_changes_stream(SpaceId) ->
     end,
     couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, 0}, {until, Until}, {include_ignored, true}], [self()]
+        [{since, 0}, {until, Until}, {ignored_policy, include_ignored}], [self()]
     ),
     ok.
 
