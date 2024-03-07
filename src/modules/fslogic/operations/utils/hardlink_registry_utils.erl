@@ -78,7 +78,7 @@ create_hidden_hardlink_for_opened_deleted_file(FileCtx) ->
     RegisterHidden = fun() ->
         ParentUuid = ?OPENED_DELETED_FILES_DIR_UUID(SpaceId),
         Doc = file_meta_hardlinks:new_doc(FileUuid, FileUuid, ParentUuid, SpaceId, true),
-        LinkUuid = fslogic_file_id:gen_deleted_opnened_file_ink_uuid(FileUuid),
+        LinkUuid = fslogic_file_id:gen_deleted_opened_file_link_uuid(FileUuid),
         file_meta:create({uuid, ParentUuid}, Doc#document{key = LinkUuid}),
         {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid),
         LinkUuid
