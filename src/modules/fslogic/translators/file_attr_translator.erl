@@ -75,7 +75,7 @@ to_json_internal(AttrGeneration, #file_attr{
         ?attr_guid => utils:convert_defined(Guid, fun file_id:check_guid_to_objectid/1),
         ?attr_index => file_listing:encode_index(Index),
         ?attr_type => utils:convert_defined(Type, fun onedata_file:type_to_json/1),
-        ?attr_active_permissions_type => ActivePermissionsType,
+        ?attr_active_permissions_type => utils:convert_defined(ActivePermissionsType, fun atom_to_binary/1),
         ?attr_mode => utils:convert_defined(Mode, fun(M) -> list_to_binary(string:right(integer_to_list(M, 8), 3, $0)) end),
         ?attr_acl => utils:convert_defined(Acl, fun(A) -> acl:to_json(A, gui) end),
         ?attr_name => Name,
