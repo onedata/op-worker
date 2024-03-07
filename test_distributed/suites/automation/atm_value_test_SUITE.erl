@@ -446,12 +446,11 @@ atm_file_value_validation_test(_Config) ->
         'SYMLNK' -> {[SymlinkGuid], [DirGuid, FileGuid]}
     end,
 
-    FileAttrsToResolve = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES),
-    FileAttrsToResolveBin = lists:map(fun str_utils:to_binary/1, FileAttrsToResolve),
+    FileAttrsToResolve = ?RAND_SUBLIST(?API_ATTRS),
 
     BuildBareFileObjectFun = fun(Guid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{<<"file_id">> => ObjectId}
+        #{<<"fileId">> => ObjectId}
     end,
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
@@ -461,15 +460,14 @@ atm_file_value_validation_test(_Config) ->
         },
         valid_values = lists:map(fun(Guid) ->
             BareFileObject = BuildBareFileObjectFun(Guid),
-            {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
-            ResolvedFileObject = maps:with(FileAttrsToResolveBin, file_attr_translator:to_json(
-                FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS)),
+            {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid), FileAttrsToResolve)),
+            ResolvedFileObject = file_attr_translator:to_json(FileAttrs, current, FileAttrsToResolve),
             {BareFileObject, ResolvedFileObject}
         end, FilesWithAllowedType),
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
-                [5.5, <<"NaN">>, [5], #{<<"file_id">> => 5}]
+                [5.5, <<"NaN">>, [5], #{<<"fileId">> => 5}]
             ),
 
             lists:map(fun({Guid, UnverifiedConstraint}) ->
@@ -520,20 +518,20 @@ atm_file_value_to_from_store_item_test(_Config) ->
             attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
         },
         values = lists:flatten([
-            #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+            #{<<"fileId">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
                 <<"removed_file_id">>, SpaceKrkId
             )))},
-            #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
+            #{<<"fileId">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
 
             lists:map(fun(Guid) ->
-                {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
+                {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid), ?ATM_FILE_VALUE_DESCRIBE_ATTRS)),
 
                 % atm_file_type is but a reference to underlying file entity -
                 % as such compressing and expanding should remove any attribute but file_id
                 {
                     different,
-                    file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS),
-                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))}
+                    file_attr_translator:to_json(FileAttrs, current, ?ATM_FILE_VALUE_DESCRIBE_ATTRS),
+                    #{<<"fileId">> => ?ok(file_id:guid_to_objectid(Guid))}
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
         ])
@@ -563,14 +561,14 @@ atm_file_value_describe_test(_Config) ->
         values = lists:flatten([
             {
                 error,
-                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+                #{<<"fileId">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
                     <<"removed_file_id">>, SpaceKrkId
                 )))},
                 ?ERROR_POSIX(?ENOENT)
             },
             {
                 error,
-                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
+                #{<<"fileId">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
                 ?ERROR_POSIX(?EACCES)
             },
 
@@ -581,8 +579,8 @@ atm_file_value_describe_test(_Config) ->
                 % as such describe should resolve all attributes
                 {
                     different,
-                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
-                    file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS)
+                    #{<<"fileId">> => ?ok(file_id:guid_to_objectid(Guid))},
+                    file_attr_translator:to_json(FileAttrs, current, ?ATM_FILE_VALUE_DESCRIBE_ATTRS)
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
         ])
