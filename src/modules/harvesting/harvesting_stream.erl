@@ -515,11 +515,11 @@ maybe_add_doc_to_batch(State, {ignored, #document{seq = Seq}}) ->
     State#hs_state{last_seen_seq = Seq};
 maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = true
-}, Doc = #document{
+}, {change, Doc = #document{
     deleted = false,
     value = ModelRecord,
     seq = Seq
-}) ->
+}}) ->
     case is_harvested_model(ModelRecord) of
         true ->
             maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, Doc);
@@ -530,10 +530,10 @@ maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = false,
     batch = Batch,
     provider_id = ProviderId
-}, Doc = #document{
+}, {change, Doc = #document{
     seq = Seq,
     mutators = [ProviderId | _]
-}) ->
+}}) ->
     case should_doc_be_harvested(Doc) of
         true ->
             Batch2 = harvesting_batch:accumulate(Doc, Batch),
@@ -541,7 +541,7 @@ maybe_add_doc_to_batch(State = #hs_state{
         false ->
             State#hs_state{last_seen_seq = Seq}
     end;
-maybe_add_doc_to_batch(State, #document{seq = Seq}) ->
+maybe_add_doc_to_batch(State, {change, #document{seq = Seq}}) ->
     State#hs_state{last_seen_seq = Seq}.
 
 -spec maybe_persist_last_seen_seq(state()) -> state().

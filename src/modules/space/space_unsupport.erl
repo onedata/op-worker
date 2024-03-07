@@ -275,10 +275,8 @@ start_changes_stream(SpaceId) ->
 
 
 %% @private
--spec expire_doc(datastore:doc() | {ignored, datastore:doc()}) -> ok.
-expire_doc({ignored, Doc}) ->
-    expire_doc(Doc);
-expire_doc(#document{value = Value} = Doc) ->
+-spec expire_doc({change | ignored, datastore:doc()}) -> ok.
+expire_doc({_, #document{value = Value} = Doc}) ->
     case Value of
         #links_forest{model = Model, key = Key} -> expire_links(Model, Key, Doc);
         #links_node{model = Model, key = Key} -> expire_links(Model, Key, Doc);

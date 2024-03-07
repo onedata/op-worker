@@ -324,13 +324,13 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% Handles change that include document.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_doc_change(datastore:doc()| {ignored, datastore:doc()}, filter(), state()) -> state().
-handle_doc_change(#document{seq = Seq} = Doc, Filter, State = #state{until = Until}) when Seq >= Until ->
+-spec handle_doc_change({change, datastore:doc()}, filter(), state()) -> state().
+handle_doc_change({change, #document{seq = Seq} = Doc}, Filter, State = #state{until = Until}) when Seq >= Until ->
     case Filter(Doc) of
         true -> aggregate_change(Doc, State);
         false -> State#state{until = Seq + 1}
     end;
-handle_doc_change(#document{seq = Seq} = Doc, _Filter, State = #state{until = Until}) ->
+handle_doc_change({change, #document{seq = Seq} = Doc}, _Filter, State = #state{until = Until}) ->
     case get_last_change(State) of
         undefined ->
             % couchbase_changes_worker can be initialized with lower sequence if some sequence documents have
