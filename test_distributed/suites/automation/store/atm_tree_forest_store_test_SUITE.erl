@@ -371,7 +371,7 @@ check_listed_values(Values, Expected, Type) ->
 
 
 -spec retrieve_id(atm_data_type:type(), automation:item()) -> automation:item().
-retrieve_id(atm_file_type, #{<<"file_id">> := CdmiId}) ->
+retrieve_id(atm_file_type, #{<<"fileId">> := CdmiId}) ->
     {ok, Guid} = file_id:objectid_to_guid(CdmiId),
     Guid;
 retrieve_id(atm_dataset_type, #{<<"datasetId">> := DatasetId}) ->
@@ -431,12 +431,12 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
     end,
     
     AtmStoreDummySchemaId = <<"dummyId">>,
-    
+
     RootsToAdd = lists:map(fun(Root) ->
         case Type of
             atm_file_type -> 
                 {ok, CdmiId} = file_id:guid_to_objectid(Root),
-                #{<<"file_id">> => CdmiId};
+                #{<<"fileId">> => CdmiId};
             atm_dataset_type ->
                 #{<<"datasetId">> => Root}
         end

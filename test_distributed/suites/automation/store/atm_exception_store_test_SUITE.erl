@@ -119,7 +119,7 @@ update_content_test(_Config) ->
     {ok, NonExistingObjectId} = file_id:guid_to_objectid(<<"none">>),
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
         AtmWorkflowExecutionAuth,
-        #atm_item_execution{trace_id = <<"ASD">>, value = #{<<"file_id">> => NonExistingObjectId}},
+        #atm_item_execution{trace_id = <<"ASD">>, value = #{<<"fileId">> => NonExistingObjectId}},
         #atm_exception_store_content_update_options{function = append},
         AtmStoreId
     ))).
