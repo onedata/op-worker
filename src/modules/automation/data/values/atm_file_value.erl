@@ -83,8 +83,10 @@ describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs, current, ??DEPRECATED_ALL_FILE_ATTRS)};  %% TODO hardcoded attrs
-        {error, Errno} -> ?ERROR_POSIX(Errno)
+        {ok, FileAttrs} ->
+            {ok, file_attr_translator:to_json(FileAttrs, current, ?ATM_FILE_VALUE_DESCRIBE_ATTRS)};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end.
 
 
