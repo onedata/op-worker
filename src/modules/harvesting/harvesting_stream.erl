@@ -522,7 +522,7 @@ maybe_add_doc_to_batch(State = #hs_state{
 }}) ->
     case is_harvested_model(ModelRecord) of
         true ->
-            maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, Doc);
+            maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, {change, Doc});
         false ->
             State#hs_state{last_seen_seq = Seq}
     end;
