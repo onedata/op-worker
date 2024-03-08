@@ -251,7 +251,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    RequestedAttrs = maps:get(<<"responseAttributes">>, Data, ?API_ATTRS),
+    RequestedAttrs = maps:get(<<"responseAttributes">>, Data, ?API_FILE_ATTRS),
     {ok, FileAttr} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid), RequestedAttrs)),
     {ok, resource, {GRI#gri{id = Guid}, file_attr_translator:to_json(FileAttr, current, RequestedAttrs)}};
 

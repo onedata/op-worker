@@ -53,7 +53,7 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
             } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => resolve_name_conflicts,
-                attributes => [?attr_conflicting_files | ?ONECLIENT_ATTRS]
+                attributes => [?attr_conflicting_files | ?ONECLIENT_FILE_ATTRS]
             }),
             emit_suffixes(ConflictingFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
@@ -151,7 +151,7 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => resolve_name_conflicts,
-                attributes => ?ONECLIENT_ATTRS -- [?attr_size]
+                attributes => ?ONECLIENT_FILE_ATTRS -- [?attr_size]
             }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
@@ -356,7 +356,7 @@ emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSe
         attr_req:get_file_attr_insecure(RootUserCtx, FileCtx, #{
             allow_deleted_files => true,
             name_conflicts_resolution_policy => resolve_name_conflicts,
-            attributes => ?ONECLIENT_ATTRS ++ [?attr_conflicting_files | OptionalAttrs]
+            attributes => ?ONECLIENT_FILE_ATTRS ++ [?attr_conflicting_files | OptionalAttrs]
         }),
     emit_suffixes(ConflictingFiles, {ctx, FileCtx}),
     event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithStatusSessIds),

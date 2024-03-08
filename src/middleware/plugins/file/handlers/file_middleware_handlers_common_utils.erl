@@ -26,15 +26,15 @@
 -spec build_attributes_param_spec(middleware:scope(), onedata_file:attr_generation() | deprecated_recursive, binary()) ->
     middleware_sanitizer:param_spec().
 build_attributes_param_spec(public, current = AttrGeneration, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?PUBLIC_API_ATTRS)};
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?PUBLIC_API_FILE_ATTRS)};
 build_attributes_param_spec(private, current = AttrGeneration, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?API_ATTRS)};
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?API_FILE_ATTRS)};
 build_attributes_param_spec(public, deprecated = AttrGeneration, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_PUBLIC_ATTRS)};
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_PUBLIC_FILE_ATTRS)};
 build_attributes_param_spec(private, deprecated = AttrGeneration, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_ALL_ATTRS)};
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_ALL_FILE_ATTRS)};
 build_attributes_param_spec(private, deprecated_recursive, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, deprecated, [path | ?DEPRECATED_ALL_ATTRS])}.
+    {any, build_parse_requested_attrs_fun(Key, deprecated, [path | ?DEPRECATED_ALL_FILE_ATTRS])}.
 
 
 %%%===================================================================

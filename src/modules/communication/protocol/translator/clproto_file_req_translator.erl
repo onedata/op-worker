@@ -35,9 +35,9 @@ from_protobuf(#'FileRequest'{
         file_request = from_protobuf(Record)
     };
 from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC, xattrs = Xattrs}) ->
-    #get_file_attr{attributes = ?ONECLIENT_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)};
+    #get_file_attr{attributes = ?ONECLIENT_FILE_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)};
 from_protobuf(#'GetFileAttrByPath'{path = Path, xattrs = Xattrs}) ->
-    #get_file_attr_by_path{path = Path, attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs)};
+    #get_file_attr_by_path{path = Path, attributes = ?ONECLIENT_FILE_ATTRS ++ xattrs_to_attrs_list(Xattrs)};
 from_protobuf(#'GetChildAttr'{
     name = Name,
     include_replication_status = IRS,
@@ -46,7 +46,7 @@ from_protobuf(#'GetChildAttr'{
 }) ->
     #get_child_attr{
         name = Name,
-        attributes = ?ONECLIENT_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
+        attributes = ?ONECLIENT_FILE_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
     };
 from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -94,7 +94,7 @@ from_protobuf(#'GetFileChildrenAttrs'{
         listing_options = maps_utils:remove_undefined(BaseListingOpts#{
             limit => Size
         }),
-        attributes = ?ONECLIENT_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
+        attributes = ?ONECLIENT_FILE_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
     };
 from_protobuf(#'CreateDir'{
     name = Name,
@@ -280,7 +280,7 @@ from_protobuf(#'ListFilesRecursively'{
     xattrs = Xattrs
 }) ->
     #get_recursive_file_list{
-        attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs),
+        attributes = ?ONECLIENT_FILE_ATTRS ++ xattrs_to_attrs_list(Xattrs),
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
             start_after_path => StartAfter,

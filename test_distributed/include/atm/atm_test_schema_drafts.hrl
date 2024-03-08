@@ -18,7 +18,7 @@
 -include_lib("ctool/include/onedata_file.hrl").
 
 
--define(ATM_FILE_ATTRIBUTES, ?API_ATTRS).
+-define(ATM_FILE_ATTRIBUTES, ?API_FILE_ATTRS).
 
 -define(ECHO_DOCKER_IMAGE_ID, <<"test/echo">>).
 

@@ -368,7 +368,7 @@ test_for_hardlink_between_files_test(_Config) ->
 %% @private
 -spec get_attrs_data_spec(TestMode :: normal_mode | share_mode) -> onenv_api_test_runner:data_spec().
 get_attrs_data_spec(normal_mode) ->
-    AllowedAttrsJson = [onedata_file:attr_name_to_json(A) || A <- ?API_ATTRS],
+    AllowedAttrsJson = [onedata_file:attr_name_to_json(A) || A <- ?API_FILE_ATTRS],
     #data_spec{
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => AllowedAttrsJson},
@@ -379,7 +379,7 @@ get_attrs_data_spec(normal_mode) ->
         ]
     };
 get_attrs_data_spec(share_mode) ->
-    AllowedAttrsJson = [onedata_file:attr_name_to_json(A) || A <- ?PUBLIC_API_ATTRS],
+    AllowedAttrsJson = [onedata_file:attr_name_to_json(A) || A <- ?PUBLIC_API_FILE_ATTRS],
     #data_spec{
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => AllowedAttrsJson},
@@ -520,11 +520,11 @@ get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #
                         undefined ->
                             {deprecated, lists:flatmap(fun(A) ->
                                 [onedata_file:attr_name_to_json(deprecated, A), onedata_file:attr_name_to_json(A)]
-                            end, ?DEPRECATED_ALL_ATTRS)};
+                            end, ?DEPRECATED_ALL_FILE_ATTRS)};
                         _ ->
                             {deprecated, lists:flatmap(fun(A) ->
                                 [onedata_file:attr_name_to_json(deprecated, A), onedata_file:attr_name_to_json(A)]
-                            end, ?DEPRECATED_PUBLIC_ATTRS)}
+                            end, ?DEPRECATED_PUBLIC_FILE_ATTRS)}
                     end;
                 Attr ->
                     {current, utils:ensure_list(Attr)}

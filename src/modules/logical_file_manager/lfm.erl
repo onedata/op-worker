@@ -158,7 +158,7 @@ get_fs_stats(SessId, FileKey) ->
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
-    stat(SessId, FileKey, ?ONECLIENT_ATTRS).
+    stat(SessId, FileKey, ?ONECLIENT_FILE_ATTRS).
 
 
 %%--------------------------------------------------------------------
@@ -473,7 +473,7 @@ create_dir_at_path(SessId, ParentGuid, Path) ->
 -spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
     {ok, #file_attr{}} | error_reply().
 get_child_attr(SessId, ParentGuid, ChildName)  ->
-    get_child_attr(SessId, ParentGuid, ChildName, ?ONECLIENT_ATTRS).
+    get_child_attr(SessId, ParentGuid, ChildName, ?ONECLIENT_FILE_ATTRS).
 
 
 -spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name(), [onedata_file:attr_name()]) ->
@@ -490,7 +490,7 @@ get_child_attr(SessId, ParentGuid, ChildName, Attributes)  ->
 -spec get_children_attrs(session:id(), file_key(), file_listing:options()) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    get_children_attrs(SessId, FileKey, ListOpts, ?ONECLIENT_ATTRS).
+    get_children_attrs(SessId, FileKey, ListOpts, ?ONECLIENT_FILE_ATTRS).
 
 
 -spec get_children_attrs(session:id(), file_key(), file_listing:options(), [onedata_file:attr_name()]) ->

@@ -83,7 +83,7 @@ describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)};
+        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS)};
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
@@ -101,7 +101,7 @@ transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec =
 
     maps:with(
         lists:map(fun str_utils:to_binary/1, Attrs),
-        file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)
+        file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS)
     ).
 
 

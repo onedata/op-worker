@@ -62,16 +62,16 @@
 
 -define(STAGES, [
     {?FILE_META_ATTRS, direct, fun resolve_file_meta_attrs/1},
-    {?LINKS_TREE_ATTRS, direct, fun resolve_name_attrs/1},
-    {?PATH_ATTRS, effective, fun resolve_path/1},
-    {?LUMA_ATTRS, direct, fun resolve_luma_attrs/1},
-    {?TIMES_ATTRS, direct, fun resolve_times_attrs/1},
-    {?LOCATION_ATTRS, direct, fun resolve_location_attrs/1},
-    {?METADATA_ATTRS, direct, fun resolve_metadata_attrs/1},
-    {?DATASET_ATTRS, effective, fun resolve_dataset_attrs/1},
-    {?QOS_EFF_VALUE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
-    {?QOS_STATUS_ATTRS, effective, fun resolve_qos_status_attrs/1},
-    {?ARCHIVE_RECALL_ATTRS, effective, fun resolve_archive_recall_attrs/1},
+    {?LINK_TREE_FILE_ATTRS, direct, fun resolve_name_attrs/1},
+    {?PATH_FILE_ATTRS, effective, fun resolve_path/1},
+    {?LUMA_FILE_ATTRS, direct, fun resolve_luma_attrs/1},
+    {?TIMES_FILE_ATTRS, direct, fun resolve_times_attrs/1},
+    {?LOCATION_FILE_ATTRS, direct, fun resolve_location_attrs/1},
+    {?METADATA_FILE_ATTRS, direct, fun resolve_metadata_attrs/1},
+    {?DATASET_FILE_ATTRS, effective, fun resolve_dataset_attrs/1},
+    {?QOS_EFF_VALUE_FILE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
+    {?QOS_STATUS_FILE_ATTRS, effective, fun resolve_qos_status_attrs/1},
+    {?ARCHIVE_RECALL_FILE_ATTRS, effective, fun resolve_archive_recall_attrs/1},
     {?XATTRS_STAGE, direct, fun resolve_xattrs/1}
 ]).
 
@@ -85,9 +85,9 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
         undefined -> RequestedAttributes;
         %% @TODO VFS-11299 left for compatibility with oneclient
-        % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_ATTRS.
+        % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_FILE_ATTRS.
         % It does not influence rest output, as it is later cut out in translation (see file_attr_translator.erl).
-        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_ATTRS, ?ONECLIENT_ATTRS))
+        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_FILE_ATTRS, ?ONECLIENT_FILE_ATTRS))
     end,
     InitialState = #state{
         file_ctx = FileCtx,

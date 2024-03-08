@@ -113,8 +113,8 @@ to_json_internal(AttrGeneration, #file_attr{
 
 %% @private
 -spec all_attrs(onedata_file:attr_generation()) -> [onedata_file:attr_name()].
-all_attrs(deprecated) -> [?attr_path | ?DEPRECATED_ALL_ATTRS]; % path is allowed in deprecated recursive listing
-all_attrs(current) -> ?ALL_ATTRS.
+all_attrs(deprecated) -> [?attr_path | ?DEPRECATED_ALL_FILE_ATTRS]; % path is allowed in deprecated recursive listing
+all_attrs(current) -> ?ALL_FILE_ATTRS.
 
 
 %% @private

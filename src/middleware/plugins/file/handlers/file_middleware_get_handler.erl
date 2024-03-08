@@ -352,8 +352,8 @@ create(_) ->
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance, scope = Sc}}, _) ->
     DefaultAttrs = case Sc of
-        private -> ?DEPRECATED_ALL_ATTRS;
-        public -> ?DEPRECATED_PUBLIC_ATTRS
+        private -> ?DEPRECATED_ALL_FILE_ATTRS;
+        public -> ?DEPRECATED_PUBLIC_FILE_ATTRS
     end,
     {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, DefaultAttrs),
     {ok, FileAttr} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), RequestedAttributes)),
@@ -540,7 +540,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
 
     {ok, TargetFileGuid} = ?lfm_check(lfm:resolve_symlink(SessionId, ?FILE_REF(FileGuid))),
     
-    {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, ?API_ATTRS),
+    {AttrGeneration, RequestedAttributes} = infer_requested_attributes(Data, ?API_FILE_ATTRS),
     {ok, TargetFileAttrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(TargetFileGuid), RequestedAttributes)),
 
     TargetFileGri = #gri{

@@ -186,7 +186,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     
     {ok, FileAttr} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
-        lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), ?API_ATTRS),
+        lfm_proxy:stat(P2Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), ?API_FILE_ATTRS),
         ?ATTEMPTS
     ),
 
@@ -500,7 +500,7 @@ file_attr_to_json(ShareId, ApiType, CheckingProviderId, #file_attr{
     
     BaseJson = file_attr_to_json(undefined, ApiType, CheckingProviderId, FileAttr),
     
-    maps:with(lists:map(fun onedata_file:attr_name_to_json/1, ?PUBLIC_API_ATTRS), BaseJson#{
+    maps:with(lists:map(fun onedata_file:attr_name_to_json/1, ?PUBLIC_API_FILE_ATTRS), BaseJson#{
         <<"fileId">> => map_file_id_for_api_type(ApiType, file_id:guid_to_share_guid(FileGuid, ShareId)),
         <<"parentFileId">> => case IsShareRoot of
             true -> null;
@@ -521,7 +521,7 @@ replace_attrs_with_deprecated(JsonAttrs) ->
             Acc#{K => V};
         (K, V, Acc) ->
             A = onedata_file:attr_name_from_json(K),
-            case lists:member(A, ?DEPRECATED_ALL_ATTRS) of
+            case lists:member(A, ?DEPRECATED_ALL_FILE_ATTRS) of
                 true ->
                     DeprecatedKey = onedata_file:attr_name_to_json(deprecated, A),
                     Acc#{DeprecatedKey => V};

@@ -1244,7 +1244,7 @@ emit_space_dir_created(DirUuid, SpaceId) ->
         attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
             allow_deleted_files => false,
             name_conflicts_resolution_policy => allow_name_conflicts,
-            attributes => ?ONECLIENT_ATTRS
+            attributes => ?ONECLIENT_FILE_ATTRS
         }),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
