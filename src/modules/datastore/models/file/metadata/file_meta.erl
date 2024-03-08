@@ -808,15 +808,15 @@ make_space_exist(SpaceId) ->
                 {error, already_exists} -> ok
             end,
 
-            trash:create(SpaceId),
-            archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
-            make_tmp_dir_exist(SpaceId),
-            make_opened_deleted_files_dir_exist(SpaceId),
-
             emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
-    end.
+    end,
+    
+    trash:create(SpaceId),
+    archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
+    make_tmp_dir_exist(SpaceId),
+    make_opened_deleted_files_dir_exist(SpaceId).
 
 
 -spec make_tmp_dir_exist(od_space:id()) -> created | already_exists.
@@ -826,6 +826,7 @@ make_tmp_dir_exist(SpaceId) ->
     TmpDirDoc = new_special_dir_doc(
         TmpDirUuid, ?TMP_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId
     ),
+    ensure_tmp_dir_link_exists(SpaceId),
     case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
         {ok, _} ->
             case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
@@ -833,7 +834,6 @@ make_tmp_dir_exist(SpaceId) ->
                 {error, already_exists} -> created
             end;
         {error, already_exists} ->
-            ensure_tmp_dir_link_exists(SpaceId),
             already_exists
     end.
 
