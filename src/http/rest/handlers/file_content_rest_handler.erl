@@ -148,7 +148,7 @@ sanitize_params(#op_req{
             RequiredParamsDependingOnAspect
     end,
     AllOptionalParams = OptionalParamsDependingOnAspect#{
-        <<"type">> => {atom, fun(TypeBinary) ->
+        <<"type">> => {binary, fun(TypeBinary) ->
             try
                 {true, onedata_file:type_from_json(TypeBinary)}
             catch _:_ ->

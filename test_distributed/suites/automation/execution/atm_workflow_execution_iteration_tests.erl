@@ -474,7 +474,7 @@ create_initial_files() ->
 build_file_data_spec() ->
     #atm_file_data_spec{
         file_type = 'ANY',
-        attributes = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+        attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
     }.
 
 
