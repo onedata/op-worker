@@ -436,14 +436,14 @@ atm_file_value_validation_test(_Config) ->
         #symlink_spec{symlink_value = <<"a/b">>}
     ]),
 
-    AllowedFileType = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
+    AllowedFileType = ?RAND_ELEMENT(['ANY', ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE]),
     AllowedFileTypeBin = str_utils:to_binary(AllowedFileType),
 
     {FilesWithAllowedType, FilesWithNotAllowedType} = case AllowedFileType of
         'ANY' -> {[DirGuid, FileGuid, SymlinkGuid], []};
-        'REG' -> {[FileGuid], [DirGuid, SymlinkGuid]};
-        'DIR' -> {[DirGuid], [FileGuid, SymlinkGuid]};
-        'SYMLNK' -> {[SymlinkGuid], [DirGuid, FileGuid]}
+        ?REGULAR_FILE_TYPE -> {[FileGuid], [DirGuid, SymlinkGuid]};
+        ?DIRECTORY_TYPE -> {[DirGuid], [FileGuid, SymlinkGuid]};
+        ?SYMLINK_TYPE -> {[SymlinkGuid], [DirGuid, FileGuid]}
     end,
 
     FileAttrsToResolve = ?RAND_SUBLIST(?API_FILE_ATTRS),
@@ -513,7 +513,7 @@ atm_file_value_to_from_store_item_test(_Config) ->
 
     atm_value_to_from_store_item_test_base(#atm_value_to_from_store_item_testcase{
         data_spec = #atm_file_data_spec{
-            file_type = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
+            file_type = ?RAND_ELEMENT(['ANY', ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE]),
             % attributes shouldn't have any impact on compress/expand functionality
             attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
         },
@@ -554,7 +554,7 @@ atm_file_value_describe_test(_Config) ->
 
     atm_value_describe_test_base(#atm_value_describe_testcase{
         data_spec = #atm_file_data_spec{
-            file_type = ?RAND_ELEMENT(['ANY', 'REG', 'DIR', 'SYMLNK']),
+            file_type = ?RAND_ELEMENT(['ANY', ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE]),
             % attributes shouldn't have any impact on describe functionality
             attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)
         },

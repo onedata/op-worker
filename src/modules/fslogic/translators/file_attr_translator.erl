@@ -38,83 +38,86 @@ to_json(FileAttrs, AttrGeneration, RequestedAttributes) ->
 %% @private
 -spec to_json_internal(onedata_file:attr_generation(), file_attr:record(), [onedata_file:attr_name()]) ->
     json_utils:json_map().
-to_json_internal(AttrGeneration, #file_attr{
-    guid = Guid,
-    index = Index,
-    type = Type,
-    active_permissions_type = ActivePermissionsType,
-    mode = Mode,
-    acl = Acl,
-    name = Name,
-    conflicting_name = ConflictingName,
-    path = Path,
-    parent_guid = ParentGuid,
-    gid = Gid,
-    uid = Uid,
-    atime = Atime,
-    mtime = Mtime,
-    ctime = Ctime,
-    size = Size,
-    is_fully_replicated = FullyReplicated,
-    local_replication_rate = LocalReplicationRate,
-    provider_id = ProviderId,
-    shares = Shares,
-    owner_id = OwnerId,
-    hardlink_count = HardlinksCount,
-    symlink_value = SymlinkValue,
-    has_custom_metadata = HasMetadata,
-    eff_protection_flags = EffProtectionFlags,
-    eff_dataset_protection_flags = EffDatasetProtectionFlags,
-    eff_dataset_inheritance_path = EffDatasetInheritancePath,
-    eff_qos_inheritance_path = EffQosInheritancePath,
-    qos_status = QosStatus,
-    recall_root_id = RecallRootId,
-    xattrs = Xattrs
-}, RequestedAttrs) ->
-    BaseMap = #{
-        ?attr_guid => utils:convert_defined(Guid, fun file_id:check_guid_to_objectid/1),
-        ?attr_index => file_listing:encode_index(Index),
-        ?attr_type => utils:convert_defined(Type, fun onedata_file:type_to_json/1),
-        ?attr_active_permissions_type => utils:convert_defined(ActivePermissionsType, fun atom_to_binary/1),
-        ?attr_mode => utils:convert_defined(Mode, fun(M) -> list_to_binary(string:right(integer_to_list(M, 8), 3, $0)) end),
-        ?attr_acl => utils:convert_defined(Acl, fun(A) -> acl:to_json(A, gui) end),
-        ?attr_name => Name,
-        ?attr_conflicting_name => ConflictingName,
-        ?attr_path => Path,
-        ?attr_parent_guid => utils:convert_defined(map_parent_id(ParentGuid), fun file_id:check_guid_to_objectid/1),
-        ?attr_gid => Gid,
-        ?attr_uid => Uid,
-        ?attr_atime => Atime,
-        ?attr_mtime => Mtime,
-        ?attr_ctime => Ctime,
-        ?attr_size => Size,
-        ?attr_is_fully_replicated => FullyReplicated,
-        ?attr_local_replication_rate => LocalReplicationRate,
-        ?attr_provider_id => ProviderId,
-        ?attr_shares => Shares,
-        ?attr_owner_id => OwnerId,
-        ?attr_hardlink_count => HardlinksCount,
-        ?attr_symlink_value => SymlinkValue,
-        ?attr_has_custom_metadata => HasMetadata,
-        ?attr_eff_protection_flags => utils:convert_defined(EffProtectionFlags, fun file_meta:protection_flags_to_json/1),
-        ?attr_eff_dataset_protection_flags => utils:convert_defined(EffDatasetProtectionFlags, fun file_meta:protection_flags_to_json/1),
-        ?attr_eff_dataset_inheritance_path => utils:convert_defined(EffDatasetInheritancePath, fun inheritance_path_to_json/1),
-        ?attr_eff_qos_inheritance_path => utils:convert_defined(EffQosInheritancePath, fun inheritance_path_to_json/1),
-        ?attr_qos_status => utils:convert_defined(QosStatus, fun atom_to_binary/1),
-        ?attr_recall_root_id => RecallRootId
-    },
-    BaseJson = maps:fold(fun(Key, Value, Acc) ->
-        Acc#{onedata_file:attr_name_to_json(AttrGeneration, Key) => utils:undefined_to_null(Value)}
-    end, #{}, maps:with(RequestedAttrs, BaseMap)),
+to_json_internal(AttrGeneration, FileAttr, RequestedAttrs) ->
+    BaseJson = maps_utils:generate_from_list(fun(AttrName) ->
+        {
+            onedata_file:attr_name_to_json(AttrGeneration, AttrName),
+            utils:undefined_to_null(get_attr_as_json(AttrName, FileAttr))
+        }
+    end, RequestedAttrs),
     maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
-    end, BaseJson, utils:ensure_defined(Xattrs, #{})).
+    end, BaseJson, utils:ensure_defined(FileAttr#file_attr.xattrs, #{})).
 
 
 %% @private
 -spec all_attrs(onedata_file:attr_generation()) -> [onedata_file:attr_name()].
 all_attrs(deprecated) -> [?attr_path | ?DEPRECATED_ALL_FILE_ATTRS]; % path is allowed in deprecated recursive listing
 all_attrs(current) -> ?ALL_FILE_ATTRS.
+
+
+%% @private
+-spec get_attr_as_json(onedata_file:attr_name(), file_attr:record()) -> undefined | json_utils:json_term().
+get_attr_as_json(?attr_guid, #file_attr{guid = Guid}) when Guid /= undefined ->
+    file_id:check_guid_to_objectid(Guid);
+get_attr_as_json(?attr_index, #file_attr{index = Index}) ->
+    file_listing:encode_index(Index);
+get_attr_as_json(?attr_type, #file_attr{type = Type}) ->
+    onedata_file:type_to_json(Type);
+get_attr_as_json(?attr_active_permissions_type, #file_attr{active_permissions_type = ActivePermissionsType}) ->
+    atom_to_binary(ActivePermissionsType);
+get_attr_as_json(?attr_mode, #file_attr{mode = Mode}) ->
+    list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0));
+get_attr_as_json(?attr_acl, #file_attr{acl = Acl}) ->
+    acl:to_json(Acl, gui);
+get_attr_as_json(?attr_name, #file_attr{name = Name}) ->
+    Name;
+get_attr_as_json(?attr_conflicting_name, #file_attr{conflicting_name = ConflictingName}) ->
+    ConflictingName;
+get_attr_as_json(?attr_path, #file_attr{path = Path}) ->
+    Path;
+get_attr_as_json(?attr_parent_guid, #file_attr{parent_guid = ParentGuid}) ->
+    file_id:check_guid_to_objectid(map_parent_id(ParentGuid));
+get_attr_as_json(?attr_gid, #file_attr{gid = Gid}) ->
+    Gid;
+get_attr_as_json(?attr_uid, #file_attr{uid = Uid}) ->
+    Uid;
+get_attr_as_json(?attr_atime, #file_attr{atime = ATime}) ->
+    ATime;
+get_attr_as_json(?attr_mtime, #file_attr{mtime = MTime}) ->
+    MTime;
+get_attr_as_json(?attr_ctime, #file_attr{ctime = CTime}) ->
+    CTime;
+get_attr_as_json(?attr_size, #file_attr{size = Size}) ->
+    Size;
+get_attr_as_json(?attr_is_fully_replicated, #file_attr{is_fully_replicated = FullyReplicated}) ->
+    FullyReplicated;
+get_attr_as_json(?attr_local_replication_rate, #file_attr{local_replication_rate = LocalReplicationRate}) ->
+    LocalReplicationRate;
+get_attr_as_json(?attr_provider_id, #file_attr{provider_id = ProviderId}) ->
+    ProviderId;
+get_attr_as_json(?attr_shares, #file_attr{shares = Shares}) ->
+    Shares;
+get_attr_as_json(?attr_owner_id, #file_attr{owner_id = OwnerId}) ->
+    OwnerId;
+get_attr_as_json(?attr_hardlink_count, #file_attr{hardlink_count = HardlinksCount}) ->
+    HardlinksCount;
+get_attr_as_json(?attr_symlink_value, #file_attr{symlink_value = SymlinkValue}) ->
+    SymlinkValue;
+get_attr_as_json(?attr_has_custom_metadata, #file_attr{has_custom_metadata = HasMetadata}) ->
+    HasMetadata;
+get_attr_as_json(?attr_eff_protection_flags, #file_attr{eff_protection_flags = EffProtectionFlags}) ->
+    file_meta:protection_flags_to_json(EffProtectionFlags);
+get_attr_as_json(?attr_eff_dataset_protection_flags, #file_attr{eff_dataset_protection_flags = EffDatasetProtectionFlags}) ->
+    file_meta:protection_flags_to_json(EffDatasetProtectionFlags);
+get_attr_as_json(?attr_eff_dataset_inheritance_path, #file_attr{eff_dataset_inheritance_path = EffDatasetInheritancePath}) ->
+    inheritance_path_to_json(EffDatasetInheritancePath);
+get_attr_as_json(?attr_eff_qos_inheritance_path, #file_attr{eff_qos_inheritance_path = EffQosInheritancePath}) ->
+    inheritance_path_to_json(EffQosInheritancePath);
+get_attr_as_json(?attr_qos_status, #file_attr{qos_status = QosStatus}) ->
+    atom_to_binary(QosStatus);
+get_attr_as_json(?attr_recall_root_id, #file_attr{recall_root_id = RecallRootId}) ->
+    RecallRootId.
 
 
 %% @private
