@@ -201,7 +201,7 @@ check_in_space_constraint(AtmWorkflowExecutionAuth, FileGuid) ->
 
 %% @private
 -spec infer_attributes_to_fetch(atm_file_data_spec:record()) ->
-    undefined | [onedata_file:attr_name()].  %% TODO undefined
+    [onedata_file:attr_name()].
 infer_attributes_to_fetch(#atm_file_data_spec{
     file_type = FileType,
     attributes = RequestedAttributes

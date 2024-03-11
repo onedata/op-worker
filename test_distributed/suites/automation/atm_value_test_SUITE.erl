@@ -446,7 +446,7 @@ atm_file_value_validation_test(_Config) ->
         'SYMLNK' -> {[SymlinkGuid], [DirGuid, FileGuid]}
     end,
 
-    FileAttrsToResolve = ?RAND_SUBLIST(?API_ATTRS),
+    FileAttrsToResolve = ?RAND_SUBLIST(?API_FILE_ATTRS),
 
     BuildBareFileObjectFun = fun(Guid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),

@@ -165,7 +165,10 @@ example_data_spec(atm_dataset_type) ->
     #atm_dataset_data_spec{};
 
 example_data_spec(atm_file_type) ->
-    #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)};
+    #atm_file_data_spec{
+        file_type = 'ANY',
+        attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES, 1, all)
+    };
 
 example_data_spec(atm_number_type) ->
     #atm_number_data_spec{integers_only = false, allowed_values = undefined};

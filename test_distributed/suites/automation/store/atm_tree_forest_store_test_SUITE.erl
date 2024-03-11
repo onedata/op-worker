@@ -248,7 +248,7 @@ example_configs() ->
         #atm_tree_forest_store_config{item_data_spec = ItemDataSpec}
     end, [
         #atm_dataset_data_spec{},
-        #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)}
+        #atm_file_data_spec{file_type = 'ANY'}
     ]).
 
 
@@ -443,7 +443,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
     end, Roots),
     AtmDataSpec = case Type of
         atm_file_type ->
-            #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)};
+            #atm_file_data_spec{file_type = 'ANY'};
         atm_dataset_type ->
             #atm_dataset_data_spec{}
     end,

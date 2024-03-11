@@ -453,7 +453,7 @@ map_from_file_list_to_object_list_store() ->
     end, FileObjects),
 
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(
-        AtmFileDataSpec#atm_file_data_spec{attributes = []},
+        AtmFileDataSpec#atm_file_data_spec{attributes = undefined},
         InputItems
     ),
 
