@@ -178,7 +178,7 @@ stream_change_to_harvesting_stream(State = #state{
         changes = [Doc = #document{seq = Seq} | Changes]
 }) when (Until =:= infinity)
     orelse (Until =/= infinity andalso Since < Until andalso Seq < Until) ->
-    Callback({ok, Doc}),
+    Callback({ok, {change, Doc}}),
     State#state{since = Seq, changes = Changes};
 stream_change_to_harvesting_stream(State = #state{
     callback = Callback,

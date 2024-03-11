@@ -148,7 +148,7 @@ local_changes_should_be_broadcast(Config) ->
         Docs = lists:map(fun(N) ->
             timer:sleep(100),
             Doc = ?DOC(<<"p1">>, N),
-            gen_server:cast(Pid, {change, {ok, Doc}}),
+            gen_server:cast(Pid, {change, {ok, {change, Doc}}}),
             Doc
         end, lists:seq(1, 100)),
         assert_broadcast(Docs, <<"p1">>, get_providers(SpaceId))
@@ -162,7 +162,7 @@ remote_changes_should_not_be_broadcast(Config) ->
         ]),
         lists:foreach(fun(ProviderId) ->
             Doc = ?DOC(ProviderId, 1),
-            gen_server:cast(Pid, {change, {ok, Doc}})
+            gen_server:cast(Pid, {change, {ok, {change, Doc}}})
         end, lists:delete(<<"p1">>, get_providers(SpaceId))),
         ?assertNotReceivedMatch({send, _, #tree_broadcast2{
             message_body = #changes_batch{docs = [_ | _]}
@@ -375,7 +375,7 @@ changes_request_should_be_handled(Config) ->
             ),
             ?assertEqual(true, is_pid(Pid)),
             Doc = ?DOC(<<"p1">>, 1),
-            gen_server:cast(Pid, {change, {ok, Doc}}),
+            gen_server:cast(Pid, {change, {ok, {change, Doc}}}),
             ?assertReceivedMatch({send, ProviderId, #changes_batch{
                 space_id = SpaceId,
                 since = 1,

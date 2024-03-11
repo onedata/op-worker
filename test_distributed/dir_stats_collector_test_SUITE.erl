@@ -12,6 +12,9 @@
 -author("Michal Wrzeszcz").
 
 
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
@@ -37,7 +40,9 @@
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1,
     adding_file_when_disabled_test/1,
-    restart_test/1
+    restart_test/1,
+    local_opened_file_deletion_closing_race/1,
+    local_opened_many_files_deletion_closing_race/1
 ]).
 
 
@@ -55,7 +60,9 @@ all() -> [
     race_with_file_adding_to_large_dir_test,
     multiple_status_change_test,
     adding_file_when_disabled_test,
-    restart_test
+    restart_test,
+    local_opened_file_deletion_closing_race,
+    local_opened_many_files_deletion_closing_race
 ].
 
 
@@ -117,6 +124,14 @@ adding_file_when_disabled_test(Config) ->
 
 restart_test(Config) ->
     dir_stats_collector_test_base:restart_test(Config).
+
+
+local_opened_file_deletion_closing_race(Config) ->
+    dir_stats_collector_test_base:local_opened_file_deletion_closing_race_base(Config, 1).
+
+
+local_opened_many_files_deletion_closing_race(Config) ->
+    dir_stats_collector_test_base:local_opened_file_deletion_closing_race_base(Config, 100).
 
 
 %%%===================================================================
