@@ -57,7 +57,7 @@ validate_constraints(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
 
 -spec to_store_item(automation:item(), atm_file_data_spec:record()) ->
     atm_store:item().
-to_store_item(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
+to_store_item(#{<<"fileId">> := ObjectId}, _AtmDataSpec) ->
     {ok, Guid} = file_id:objectid_to_guid(ObjectId),
     Guid.
 
@@ -70,7 +70,7 @@ to_store_item(#{<<"file_id">> := ObjectId}, _AtmDataSpec) ->
     {ok, automation:item()}.
 from_store_item(_AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-    {ok, #{<<"file_id">> => ObjectId}}.
+    {ok, #{<<"fileId">> => ObjectId}}.
 
 
 -spec describe_store_item(
@@ -83,8 +83,10 @@ describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS)};
-        {error, Errno} -> ?ERROR_POSIX(Errno)
+        {ok, FileAttrs} ->
+            {ok, file_attr_translator:to_json(FileAttrs, current, ?ATM_FILE_VALUE_DESCRIBE_ATTRS)};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end.
 
 
@@ -95,14 +97,10 @@ describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
 ) ->
     automation:item().
 transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec = #atm_file_data_spec{
-    attributes = Attrs
+    attributes = RequestedAttributes
 }) ->
-    FileAttrs = resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
-
-    maps:with(
-        lists:map(fun str_utils:to_binary/1, Attrs),
-        file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_FILE_ATTRS)
-    ).
+    FileAttr = resolve_internal(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
+    file_attr_translator:to_json(FileAttr, current, RequestedAttributes).
 
 
 %%%===================================================================
@@ -142,10 +140,10 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
         #fuse_response{fuse_response = #file_recursive_listing_result{
             entries = Entries,
             pagination_token = PaginationToken
-        }} = dir_req:list_recursively(UserCtx, FileCtx, Opts, [file_id]),
+        }} = dir_req:list_recursively(UserCtx, FileCtx, Opts, [?attr_guid]),
         MappedEntries = lists:map(fun(#file_attr{guid = ChildGuid}) ->
             {ok, ChildObjectId} = file_id:guid_to_objectid(ChildGuid),
-            #{<<"file_id">> => ChildObjectId}
+            #{<<"fileId">> => ChildObjectId}
         end, Entries),
 
         {MappedEntries, PaginationToken}
@@ -167,14 +165,14 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     atm_file_data_spec:record()
 ) ->
     lfm_attrs:file_attributes() | no_return().
-resolve_internal(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} = Value, AtmDataSpec) ->
+resolve_internal(AtmWorkflowExecutionAuth, #{<<"fileId">> := ObjectId} = Value, AtmDataSpec) ->
     try
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
 
         check_in_space_constraint(AtmWorkflowExecutionAuth, Guid),
 
-        %% TODO VFS-10945 refactor attr_req/allow to select attributes to fetch
-        FileAttrs = fetch_attributes(AtmWorkflowExecutionAuth, Guid),
+        AttributesToFetch = infer_attributes_to_fetch(AtmDataSpec),
+        FileAttrs = fetch_attributes(AtmWorkflowExecutionAuth, Guid, AttributesToFetch),
 
         check_file_type_constraint(FileAttrs, AtmDataSpec),
 
@@ -202,12 +200,29 @@ check_in_space_constraint(AtmWorkflowExecutionAuth, FileGuid) ->
 
 
 %% @private
--spec fetch_attributes(atm_workflow_execution_auth:record(), file_id:file_guid()) ->
+-spec infer_attributes_to_fetch(atm_file_data_spec:record()) ->
+    [onedata_file:attr_name()].
+infer_attributes_to_fetch(#atm_file_data_spec{
+    file_type = FileType,
+    attributes = RequestedAttributes
+}) ->
+    case (FileType /= 'ANY') and (not lists:member(?attr_type, RequestedAttributes)) of
+        true -> [?attr_type | RequestedAttributes];
+        false -> RequestedAttributes
+    end.
+
+
+%% @private
+-spec fetch_attributes(
+    atm_workflow_execution_auth:record(),
+    file_id:file_guid(),
+    [onedata_file:attr_name()]
+) ->
     lfm_attrs:file_attributes() | no_return().
-fetch_attributes(AtmWorkflowExecutionAuth, FileGuid) ->
+fetch_attributes(AtmWorkflowExecutionAuth, FileGuid, AttributesToFetch) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
-    case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+    case lfm:stat(SessionId, ?FILE_REF(FileGuid), AttributesToFetch) of
         {ok, FileAttrs} ->
             FileAttrs;
         {error, Errno} ->

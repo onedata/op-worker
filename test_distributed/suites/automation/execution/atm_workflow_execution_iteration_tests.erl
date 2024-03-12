@@ -515,13 +515,13 @@ build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
 -spec file_object_to_atm_file_value(onenv_file_test_utils:object()) -> automation:item().
 file_object_to_atm_file_value(#object{guid = Guid}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-    #{<<"file_id">> => ObjectId}.
+    #{<<"fileId">> => ObjectId}.
 
 
 %% @private
 -spec filter_out_everything_but_file_id_from_atm_file_value(automation:item()) -> automation:item().
 filter_out_everything_but_file_id_from_atm_file_value(AtmFileValue) ->
-    maps:with([<<"file_id">>], AtmFileValue).
+    maps:with([<<"fileId">>], AtmFileValue).
 
 
 %% @private

@@ -65,7 +65,7 @@ get_attr_as_json(?attr_index, #file_attr{index = Index}) ->
 get_attr_as_json(?attr_type, #file_attr{type = Type}) ->
     onedata_file:type_to_json(Type);
 get_attr_as_json(?attr_active_permissions_type, #file_attr{active_permissions_type = ActivePermissionsType}) ->
-    ActivePermissionsType;
+    atom_to_binary(ActivePermissionsType);
 get_attr_as_json(?attr_mode, #file_attr{mode = Mode}) ->
     list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0));
 get_attr_as_json(?attr_acl, #file_attr{acl = Acl}) ->
