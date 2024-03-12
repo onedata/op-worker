@@ -58,7 +58,7 @@ all_attrs(current) -> ?ALL_FILE_ATTRS.
 
 %% @private
 -spec get_attr_as_json(onedata_file:attr_name(), file_attr:record()) -> undefined | json_utils:json_term().
-get_attr_as_json(?attr_guid, #file_attr{guid = Guid}) when Guid /= undefined ->
+get_attr_as_json(?attr_guid, #file_attr{guid = Guid}) ->
     file_id:check_guid_to_objectid(Guid);
 get_attr_as_json(?attr_index, #file_attr{index = Index}) ->
     file_listing:encode_index(Index);
@@ -100,8 +100,8 @@ get_attr_as_json(?attr_shares, #file_attr{shares = Shares}) ->
     Shares;
 get_attr_as_json(?attr_owner_id, #file_attr{owner_id = OwnerId}) ->
     OwnerId;
-get_attr_as_json(?attr_hardlink_count, #file_attr{hardlink_count = HardlinksCount}) ->
-    HardlinksCount;
+get_attr_as_json(?attr_hardlink_count, #file_attr{hardlink_count = HardlinkCount}) ->
+    HardlinkCount;
 get_attr_as_json(?attr_symlink_value, #file_attr{symlink_value = SymlinkValue}) ->
     SymlinkValue;
 get_attr_as_json(?attr_has_custom_metadata, #file_attr{has_custom_metadata = HasMetadata}) ->
