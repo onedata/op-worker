@@ -77,7 +77,7 @@ get_attr_as_json(?attr_conflicting_name, #file_attr{conflicting_name = Conflicti
 get_attr_as_json(?attr_path, #file_attr{path = Path}) ->
     Path;
 get_attr_as_json(?attr_parent_guid, #file_attr{parent_guid = ParentGuid}) ->
-    file_id:check_guid_to_objectid(map_parent_id(ParentGuid));
+    utils:convert_defined(map_parent_id(ParentGuid), fun file_id:check_guid_to_objectid/1);
 get_attr_as_json(?attr_gid, #file_attr{gid = Gid}) ->
     Gid;
 get_attr_as_json(?attr_uid, #file_attr{uid = Uid}) ->
@@ -115,7 +115,7 @@ get_attr_as_json(?attr_eff_dataset_inheritance_path, #file_attr{eff_dataset_inhe
 get_attr_as_json(?attr_eff_qos_inheritance_path, #file_attr{eff_qos_inheritance_path = EffQosInheritancePath}) ->
     inheritance_path_to_json(EffQosInheritancePath);
 get_attr_as_json(?attr_qos_status, #file_attr{qos_status = QosStatus}) ->
-    atom_to_binary(QosStatus);
+    utils:convert_defined(QosStatus, fun atom_to_binary/1);
 get_attr_as_json(?attr_recall_root_id, #file_attr{recall_root_id = RecallRootId}) ->
     RecallRootId.
 
