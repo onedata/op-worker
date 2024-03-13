@@ -113,7 +113,7 @@
 
     % Selector of group to which belongs `other_space_member_selector` and which itself
     % belong to `space_id`. It will be used to test acl group identifier.
-    other_member_group_selector = group2 :: oct_background:entity_selector(),
+    other_member_group_selector = group1 :: oct_background:entity_selector(),
 
     % Selector of user not belonging to space specified in `space_id`.
     % It will be used to test `other` posix bits and `EVERYONE@` special acl

@@ -1093,11 +1093,12 @@ run_posix_mode_test_case(PosixUserType, #authz_posix_test_case_ctx{
 run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         files_owner_selector = FilesOwnerSelector,
-        other_member_selector = OtherMemberSelector
+        other_member_selector = OtherMemberSelector,
+        other_member_group_selector = OtherMemberGroupSelector
     }
 }) ->
     OtherMemberId = oct_background:get_user_id(OtherMemberSelector),
-%%    OtherMemberGroupId = <<"todo">>,  %% TODO VFS-11774
+    OtherMemberGroupId = oct_background:get_group_id(OtherMemberGroupSelector),
 
     lists:foreach(fun({ExecutionerSelector, TestCaseName, AceType, AceWho, AceFlags}) ->
 
@@ -1108,12 +1109,12 @@ run_acl_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     end, [
         {FilesOwnerSelector, <<"acl_allow-files_owner">>, allow, ?owner, ?no_flags_mask},
         {OtherMemberSelector, <<"acl_allow-other_space_member">>, allow, OtherMemberId, ?no_flags_mask},
-%%        {OtherMemberGroupId, <<"acl_user_group_allow">>, allow, OtherMemberGroupId, ?identifier_group_mask},
+        {OtherMemberSelector, <<"acl_user_group_allow">>, allow, OtherMemberGroupId, ?identifier_group_mask},
         {OtherMemberSelector, <<"acl_allow-everyone">>, allow, ?everyone, ?no_flags_mask},
 
         {FilesOwnerSelector, <<"acl_deny-files_owner">>, deny, ?owner, ?no_flags_mask},
         {OtherMemberSelector, <<"acl_deny-other_space_member">>, deny, OtherMemberId, ?no_flags_mask},
-%%        {OtherMemberGroupId, <<"acl_user_group_deny">>, deny, OtherMemberGroupId, ?identifier_group_mask},
+        {OtherMemberSelector, <<"acl_user_group_deny">>, deny, OtherMemberGroupId, ?identifier_group_mask},
         {OtherMemberSelector, <<"acl_deny-everyone">>, deny, ?everyone, ?no_flags_mask}
     ]).
 
