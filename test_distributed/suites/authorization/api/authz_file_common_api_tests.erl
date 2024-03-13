@@ -90,6 +90,7 @@ test_resolve_guid(SpaceId) ->
 test_stat(SpaceId) ->
     Xattrs = ?RAND_ELEMENT([
         ?attr_xattrs([<<"key">>]),
+        % TODO VFS-11826 remove below cases after stat internal xattrs test is implemented
         ?attr_xattrs([<<"cdmi_acl">>]),
         ?attr_xattrs([<<"cdmi_mimetype">>]),
         ?attr_xattrs([<<"onedata_json">>])]

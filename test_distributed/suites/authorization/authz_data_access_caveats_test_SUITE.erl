@@ -300,7 +300,7 @@ list_previously_non_existent_file(_Config) ->
     % List dir manually to use the same exact session with caveat for file not existing yet
     MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
-    LsSession = authz_test_utils:create_session(Node, UserId, LsToken),
+    LsSession = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
 
     LSFun = fun(Guid) -> lfm_proxy:get_children(Node, LsSession, ?FILE_REF(Guid), 0, 100) end,
 
@@ -324,7 +324,7 @@ list_files_recursively(_Config) ->
 
     LSFun = fun(SessionId) ->
         {ok, Entries, _, undefined} = lfm_proxy:get_files_recursively(
-            Node, SessionId, ?FILE_REF(SpaceRootDirGuid), #{limit => 100}, [name, guid, path]
+            Node, SessionId, ?FILE_REF(SpaceRootDirGuid), #{limit => 100}, [?attr_name, ?attr_guid, ?attr_path]
         ),
         Entries
     end,
@@ -335,7 +335,7 @@ list_files_recursively(_Config) ->
         ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f3"), ?LS_CPATH("ls_d1/f5"),
         ?LS_CPATH("ls_d3/f1"), ?LS_CPATH("ls_f1")
     ])),
-    LsSessionWithPathCaveats = authz_test_utils:create_session(Node, UserId, LsTokenWithPathCaveats),
+    LsSessionWithPathCaveats = provider_onenv_test_utils:create_session(Node, UserId, LsTokenWithPathCaveats),
 
     ?assertMatch(
         [
@@ -348,7 +348,9 @@ list_files_recursively(_Config) ->
     LsTokenWithObjectIdsCaveats = tokens:confine(MainToken, ?CV_OBJECTID([
         ?LS_OBJECT_ID("ls_d1/f2"), ?LS_OBJECT_ID("ls_d3/d1"), ?LS_OBJECT_ID("ls_d3/f2")
     ])),
-    LsSessionWithObjectIdsCaveats = authz_test_utils:create_session(Node, UserId, LsTokenWithObjectIdsCaveats),
+    LsSessionWithObjectIdsCaveats = provider_onenv_test_utils:create_session(
+        Node, UserId, LsTokenWithObjectIdsCaveats
+    ),
 
     ?assertMatch(
         [?ATTR_PATH(<<"ls_d1/f2">>), ?ATTR_PATH(<<"ls_d3/d1/f1">>), ?ATTR_PATH(<<"ls_d3/f2">>)],
@@ -443,7 +445,7 @@ ls_with_caveats(Guid, Caveats, Offset, Limit) ->
 
     MainToken = get_main_token(),
     LsToken = tokens:confine(MainToken, Caveats),
-    LsSession = authz_test_utils:create_session(Node, UserId, LsToken),
+    LsSession = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
 
     lfm_proxy:get_children(Node, LsSession, ?FILE_REF(Guid), Offset, Limit).
 
@@ -482,7 +484,7 @@ allowed_ancestors_operations_test(_Config) ->
         provider_onenv_test_utils:create_oz_temp_access_token(UserId),
         ?CV_OBJECTID([DeepestDirObjectId])
     ),
-    SessionIdWithCaveats = authz_test_utils:create_session(Node, UserId, Token),
+    SessionIdWithCaveats = provider_onenv_test_utils:create_session(Node, UserId, Token),
 
     lists:foldl(
         fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
@@ -593,7 +595,7 @@ data_access_caveats_cache_test(_Config) ->
         ?CV_OBJECTID([DirObjectId]),
         ?CV_OBJECTID([FileObjectId])
     ]),
-    SessionId = authz_test_utils:create_session(Node, UserId, Token),
+    SessionId = provider_onenv_test_utils:create_session(Node, UserId, Token),
 
 
     %% CHECK guid_constraint CACHE
@@ -701,11 +703,11 @@ mv_test(_Config) ->
     MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
 
     TokenWithBothPaths = tokens:confine(MainToken, ?CV_PATH([CanonicalCurrentPath, CanonicalNewPath])),
-    SessionIdWithBothPathsConstraint = authz_test_utils:create_session(
+    SessionIdWithBothPathsConstraint = provider_onenv_test_utils:create_session(
         CheckNode, UserId, TokenWithBothPaths
     ),
     TokenWithNewPathOnly = tokens:confine(MainToken, ?CV_PATH([CanonicalNewPath])),
-    SessionIdWithNewPathOnlyConstraint = authz_test_utils:create_session(
+    SessionIdWithNewPathOnlyConstraint = provider_onenv_test_utils:create_session(
         CheckNode, UserId, TokenWithNewPathOnly
     ),
 

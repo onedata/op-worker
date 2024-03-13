@@ -17,7 +17,10 @@
 %% API
 -export([
     initialize/1,
+
     setup_sessions/1,
+    create_session/2, create_session/3, create_session/4,
+
     find_importing_provider/2,
     create_oz_temp_access_token/1,
     get_primary_cm_node/2
@@ -46,12 +49,40 @@ setup_sessions(Config) ->
     Sessions = maps:map(fun(ProviderId, Users) ->
         [Node | _] = maps:get(ProviderId, NodesPerProvider),
         lists:map(fun(UserId) ->
-            {ok, SessId} = setup_user_session(UserId, Node),
-            {UserId, SessId}
+            {UserId, create_session(Node, UserId)}
         end, Users)
     end, ProviderUsers),
 
     test_config:set_many(Config, [[sess_id, Sessions]]).
+
+
+-spec create_session(node(), od_user:id()) -> session:id().
+create_session(Node, UserId) ->
+    create_session(Node, UserId, create_oz_temp_access_token(UserId)).
+
+
+-spec create_session(node(), od_user:id(), tokens:serialized()) ->
+    session:id().
+create_session(Node, UserId, AccessToken) ->
+    create_session(Node, UserId, AccessToken, normal).
+
+
+-spec create_session(node(), od_user:id(), tokens:serialized(), session:mode()) ->
+    session:id().
+create_session(Node, UserId, AccessToken, SessionMode) ->
+    Nonce = crypto:strong_rand_bytes(10),
+    Identity = ?SUB(user, UserId),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
+    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
+        Node,
+        session_manager,
+        reuse_or_create_fuse_session,
+        [Nonce, Identity, SessionMode, TokenCredentials]
+    )),
+    SessionId.
 
 
 -spec find_importing_provider(test_config:config(), od_space:id()) -> od_provider:id() | undefined.
@@ -92,21 +123,3 @@ get_primary_cm_node(Config, ProviderPlaceholder) ->
             false -> CMAcc
         end
     end, undefined, test_config:get_custom(Config, [cm_nodes])).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%% @private
--spec setup_user_session(UserId :: binary(), OpwNode :: node()) ->
-    {ok, SessId :: binary()}.
-setup_user_session(UserId, OpwNode) ->
-    AccessToken = create_oz_temp_access_token(UserId),
-    Nonce = base64:encode(crypto:strong_rand_bytes(8)),
-    Identity = ?SUB(user, UserId),
-    Credentials =
-        rpc:call(OpwNode, auth_manager, build_token_credentials,
-            [AccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
-
-    rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).

@@ -619,7 +619,7 @@ constrain_executioner_session(CvTestCaseCtx = #authz_cv_test_case_ctx{
     executioner_main_token = MainToken
 }, Caveat) ->
     TokenWithCaveat = tokens:confine(MainToken, Caveat),
-    ConstrainedSessionId = authz_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
+    ConstrainedSessionId = provider_onenv_test_utils:create_session(TestNode, UserId, TokenWithCaveat),
     CvTestCaseCtx#authz_cv_test_case_ctx{test_case_ctx = TestCaseCtx#authz_test_case_ctx{
         executioner_session_id = ConstrainedSessionId
     }}.
@@ -815,7 +815,7 @@ init_open_handle_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
     ExecutionerUserId = oct_background:get_user_id(ExecutionerSelector),
     ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
     TestCaseCtx#authz_test_case_ctx{
-        executioner_session_id = authz_test_utils:create_session(
+        executioner_session_id = provider_onenv_test_utils:create_session(
             TestNode, ExecutionerUserId, ExecutionerToken, open_handle
         )
     }.

@@ -27,9 +27,7 @@
     posix_perm_to_mode/2,
 
     set_modes/2,
-    set_acls/5,
-
-    create_session/3, create_session/4
+    set_acls/5
 ]).
 
 
@@ -152,30 +150,6 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
             ]
         ))
     end, ok, DeniedPermsPerFile).
-
-
--spec create_session(node(), od_user:id(), tokens:serialized()) ->
-    session:id().
-create_session(Node, UserId, AccessToken) ->
-    create_session(Node, UserId, AccessToken, normal).
-
-
--spec create_session(node(), od_user:id(), tokens:serialized(), session:mode()) ->
-    session:id().
-create_session(Node, UserId, AccessToken, SessionMode) ->
-    Nonce = crypto:strong_rand_bytes(10),
-    Identity = ?SUB(user, UserId),
-    TokenCredentials = auth_manager:build_token_credentials(
-        AccessToken, undefined,
-        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
-    ),
-    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
-        Node,
-        session_manager,
-        reuse_or_create_fuse_session,
-        [Nonce, Identity, SessionMode, TokenCredentials]
-    )),
-    SessionId.
 
 
 %%%===================================================================
