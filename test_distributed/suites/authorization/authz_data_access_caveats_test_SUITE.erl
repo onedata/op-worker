@@ -298,11 +298,11 @@ list_previously_non_existent_file(_Config) ->
     UserId = oct_background:get_user_id(?LS_USER),
 
     % List dir manually to use the same exact session with caveat for file not existing yet
-    MainToken = get_main_token(),
+    MainToken = get_main_access_token(),
     LsToken = tokens:confine(MainToken, ?CV_PATH([?LS_CPATH("ls_d2/f1")])),
-    LsSession = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
+    LsSessionId = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
 
-    LSFun = fun(Guid) -> lfm_proxy:get_children(Node, LsSession, ?FILE_REF(Guid), 0, 100) end,
+    LSFun = fun(Guid) -> lfm_proxy:get_children(Node, LsSessionId, ?FILE_REF(Guid), 0, 100) end,
 
     ?assertEqual({ok, []}, LSFun(?LS_GUID("ls_d2"))),
 
@@ -329,7 +329,7 @@ list_files_recursively(_Config) ->
         Entries
     end,
 
-    MainToken = get_main_token(),
+    MainToken = get_main_access_token(),
 
     LsTokenWithPathCaveats = tokens:confine(MainToken, ?CV_PATH([
         ?LS_CPATH("ls_d1/f1"), ?LS_CPATH("ls_d1/f3"), ?LS_CPATH("ls_d1/f5"),
@@ -362,7 +362,7 @@ list_files_recursively(_Config) ->
 ls_setup() ->
     UserId = oct_background:get_user_id(?LS_USER),
     MainToken = provider_onenv_test_utils:create_oz_temp_access_token(UserId),
-    store_main_token(MainToken),
+    store_main_access_token(MainToken),
 
     FileTreeObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?LS_SPACE, ?LS_FILE_TREE_SPEC
@@ -372,13 +372,13 @@ ls_setup() ->
 
 
 %% @private
-store_main_token(MainToken) ->
-    node_cache:put(ls_tests_main_token, MainToken).
+store_main_access_token(MainToken) ->
+    node_cache:put(ls_tests_main_access_token, MainToken).
 
 
 %% @private
-get_main_token() ->
-    node_cache:get(ls_tests_main_token).
+get_main_access_token() ->
+    node_cache:get(ls_tests_main_access_token).
 
 
 %% @private
@@ -443,11 +443,11 @@ ls_with_caveats(Guid, Caveats, Offset, Limit) ->
     Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
     UserId = oct_background:get_user_id(?LS_USER),
 
-    MainToken = get_main_token(),
+    MainToken = get_main_access_token(),
     LsToken = tokens:confine(MainToken, Caveats),
-    LsSession = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
+    LsSessionId = provider_onenv_test_utils:create_session(Node, UserId, LsToken),
 
-    lfm_proxy:get_children(Node, LsSession, ?FILE_REF(Guid), Offset, Limit).
+    lfm_proxy:get_children(Node, LsSessionId, ?FILE_REF(Guid), Offset, Limit).
 
 
 %%%===================================================================

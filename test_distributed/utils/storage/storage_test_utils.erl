@@ -29,7 +29,7 @@
     ensure_file_created_on_storage/2,
     ensure_dir_created_on_storage/2,
 
-    assert_file_attrs_on_posix_storage/4,
+    assert_file_owner_on_posix_storage/4,
     assert_file_attrs_on_posix_storage/5
 ]).
 
@@ -164,9 +164,9 @@ ensure_dir_created_on_storage(Node, DirGuid) ->
     ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)).
 
 
--spec assert_file_attrs_on_posix_storage(node(), od_space:id(), file_meta:path(), session:id()) ->
+-spec assert_file_owner_on_posix_storage(node(), od_space:id(), file_meta:path(), session:id()) ->
     ok | no_return().
-assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessionId) ->
+assert_file_owner_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessionId) ->
     assert_file_attrs_on_posix_storage(Node, SpaceId, LogicalFilePath, ExpOwnerSessionId, #{}).
 
 

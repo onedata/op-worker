@@ -1590,11 +1590,11 @@ run_final_storage_ownership_check(#authz_test_case_ctx{
         {inapplicable_due_to, _} ->
             ok;
         {should_preserve_ownership, LogicalFilePath} ->
-            storage_test_utils:assert_file_attrs_on_posix_storage(
+            storage_test_utils:assert_file_owner_on_posix_storage(
                 TestNode, SpaceId, LogicalFilePath, FilesOwnerSessionId
             );
         {should_assign_ownership, LogicalFilePath} ->
-            storage_test_utils:assert_file_attrs_on_posix_storage(
+            storage_test_utils:assert_file_owner_on_posix_storage(
                 TestNode, SpaceId, LogicalFilePath, ExecutionerSessionId
             )
     end.

@@ -99,11 +99,12 @@ test_set_perms(SpaceId) ->
     ?assertMatch(ok, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, FileRef, 8#555)),
     AssertAttrsOnStorage(8#555),
 
-    % but even space owner cannot perform write operation on space dir
+    % but no user (even space owner) cannot change space dir perms
     SpaceDirRef = ?FILE_REF(SpaceDirGuid),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, SpaceDirRef, 8#000)),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, SpaceDirRef, 8#555)),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, SpaceDirRef, 8#777)),
+    lists:foreach(fun(SessionId) ->
+        RandMode = ?RAND_ELEMENT([8#000, 8#555, 8#777]),
+        ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SessionId, SpaceDirRef, RandMode))
+    end, [SpaceOwnerSessionId, FileOwnerSessionId, SpaceMemberSessionId]),
 
     % users outside of space shouldn't even see the file
     authz_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
@@ -126,7 +127,9 @@ test_set_perms(SpaceId) ->
     % but not if that access is via shared guid
     ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, FileOwnerSessionId, ShareFileRef, 8#000)),
 
-    % but space owner always can change acl for any file
+    % but space owner always can change perms no matter the ACL
+    SetAclFun(#{DirGuid => [], FileGuid => []}),
+    ?assertMatch(ok, lfm_proxy:set_perms(Node, SpaceOwnerSessionId, FileRef, 8#000)),
 
     % other users from space can't change perms no matter what
     SetAclFun(#{DirGuid => ?ALL_DIR_PERMS, FileGuid => ?ALL_FILE_PERMS}),

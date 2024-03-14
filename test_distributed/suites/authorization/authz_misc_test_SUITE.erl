@@ -8,7 +8,6 @@
 %%% @doc
 %%% This test suite verifies correct behaviour of misc authorization mechanism
 %%% functionalities.
-%%% TODO XD - tests last around 1 minute but environment gets up ~9 minutes XDXDXD
 %%% @end
 %%%-------------------------------------------------------------------
 -module(authz_misc_test_SUITE).
@@ -74,14 +73,14 @@ test_expired_session(_Config) ->
 
 test_multi_provider_posix_permission_cache(_Config) ->
     NodeKrakow = oct_background:get_random_provider_node(krakow),
-    AssertNodes = lists:flatmap(fun oct_background:get_provider_nodes/1, [krakow, paris]),
+    AssertionNodes = oct_background:get_all_providers_nodes(),
 
     UserSelector = user2,
     {Guid, AllPerms} = prepare_multi_provider_permission_cache_test_env(NodeKrakow, UserSelector),
 
     % Set random posix permissions for file/dir and assert they are properly propagated to other
     % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
-    lists:foreach(fun(_IterationNum) ->
+    utils:repeat(5, fun(_IterationNum) ->
         PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
         PosixMode = lists:foldl(fun(Perm, Acc) ->
             Acc bor authz_test_utils:posix_perm_to_mode(Perm, owner)
@@ -96,40 +95,45 @@ test_multi_provider_posix_permission_cache(_Config) ->
         end, {[], []}, AllPerms),
 
         run_multi_provider_perm_test(
-            AssertNodes, UserSelector, Guid, PosixPerms, DeniedPerms,
+            AssertionNodes, UserSelector, Guid, PosixPerms, DeniedPerms,
             {error, ?EACCES}, <<"denied posix perm">>
         ),
         run_multi_provider_perm_test(
-            AssertNodes, UserSelector, Guid, PosixPerms, AllowedPerms,
+            AssertionNodes, UserSelector, Guid, PosixPerms, AllowedPerms,
             ok, <<"allowed posix perm">>
         )
-    end, lists:seq(1, 5)).
+    end).
 
 
 test_multi_provider_acl_permission_cache(_Config) ->
     NodeKrakow = oct_background:get_random_provider_node(krakow),
-    AssertNodes = lists:flatmap(fun oct_background:get_provider_nodes/1, [krakow, paris]),
+    AssertionNodes = oct_background:get_all_providers_nodes(),
 
     UserSelector = user2,
     {Guid, AllPerms} = prepare_multi_provider_permission_cache_test_env(NodeKrakow, UserSelector),
 
     % Set random acl permissions for file/dir and assert they are properly propagated to other
     % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
-    lists:foreach(fun(_IterationNum) ->
+    utils:repeat(10, fun(_IterationNum) ->
         SetPerms = lists_utils:random_sublist(AllPerms),
         authz_test_utils:set_acls(NodeKrakow, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
 
         ComplementaryPerms = authz_test_utils:complementary_perms(NodeKrakow, Guid, SetPerms),
 
         run_multi_provider_perm_test(
-            AssertNodes, UserSelector, Guid, SetPerms, ComplementaryPerms,
+            AssertionNodes, UserSelector, Guid, SetPerms, ComplementaryPerms,
             {error, ?EACCES}, <<"denied acl perm">>
         ),
         run_multi_provider_perm_test(
-            AssertNodes, UserSelector, Guid, SetPerms, SetPerms,
+            AssertionNodes, UserSelector, Guid, SetPerms, SetPerms,
             ok, <<"allowed acl perm">>
         )
-    end, lists:seq(1, 10)).
+    end).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 %% @private
@@ -156,13 +160,8 @@ run_multi_provider_perm_test(AssertNodes, User, Guid, PermsSet, TestedPerms, Exp
                 ?assertEqual(ExpResult, check_perms(Node, User, Guid, [TestedPerm]), ?ATTEMPTS)
             catch Class:Reason:Stacktrace ->
                 ?ct_pal_exception(
-                    "PERMISSIONS TESTS FAILURE~n"
-                    "   Scenario: multi_provider_permission_cache_test ~p~n"
-                    "   Node: ~p~n"
-                    "   Perms set: ~p~n"
-                    "   Tested perm: ~p~n"
-                    "   Reason: ~p~n",
-                    [Scenario, Node, PermsSet, TestedPerm, Reason],
+                    "Multi provider permission cache test case failure ~ts",
+                    [?autoformat(Scenario, Node, PermsSet, TestedPerm)],
                     Class, Reason, Stacktrace
                 ),
                 error(assert_multi_provider_perms_cache_failed)
