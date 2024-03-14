@@ -24,7 +24,7 @@
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_location_change/2, clear_location_changes/0]).
 % Doc API
--export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
+-export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/2, attach_blocks/1,
     attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1, ensure_synced/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, check_blocks/1,
@@ -369,8 +369,8 @@ cache_doc(#document{key = Key} = LocationDoc) ->
 %% Deletes file location.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_doc(file_location:id()) -> ok | {error, term()}.
-delete_doc(Key) ->
+-spec delete_doc(file_location:id(), dir_size_stats:update_reason()) -> ok | {error, term()}.
+delete_doc(Key, StatsUpdateReason) ->
     GetDocAns = case get_doc(Key) of
         #document{} = Doc -> {ok, Doc};
         _ -> file_location:get(Key)
@@ -382,7 +382,7 @@ delete_doc(Key) ->
             storage_id = StorageId,
             size = LocationSize
         }}} ->
-            dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize),
+            dir_size_stats:report_virtual_size_changed(file_id:pack_guid(FileUuid, SpaceId), -LocationSize, StatsUpdateReason),
             StorageSize = get_local_size(Key),
             cache_size_change(Key, SpaceId, StorageId, -StorageSize),
             apply_size_change(Key, FileUuid),

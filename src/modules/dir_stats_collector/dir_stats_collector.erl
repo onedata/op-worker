@@ -96,7 +96,7 @@
 
     % Field used during collections initialization - multiple collection types for dir are initialized together so
     % progress data cannot be stored in dir_stats_cache and must be stored in separate map
-    % NOTE: values of statistics are kept in dir_stats_cache during initialization - this filed contains only
+    % NOTE: values of statistics are kept in dir_stats_cache during initialization - this field contains only
     %       information about progress (children of directory already used and children to be used)
     initialization_progress_map = #{} ::
         #{file_id:file_guid() => dir_stats_collections_initializer:initialization_progress()},
