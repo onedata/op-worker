@@ -80,7 +80,7 @@ test_multi_provider_posix_permission_cache(_Config) ->
 
     % Set random posix permissions for file/dir and assert they are properly propagated to other
     % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
-    utils:repeat(5, fun(_IterationNum) ->
+    utils:repeat(5, fun() ->
         PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
         PosixMode = lists:foldl(fun(Perm, Acc) ->
             Acc bor authz_test_utils:posix_perm_to_mode(Perm, owner)
@@ -114,7 +114,7 @@ test_multi_provider_acl_permission_cache(_Config) ->
 
     % Set random acl permissions for file/dir and assert they are properly propagated to other
     % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
-    utils:repeat(10, fun(_IterationNum) ->
+    utils:repeat(10, fun() ->
         SetPerms = lists_utils:random_sublist(AllPerms),
         authz_test_utils:set_acls(NodeKrakow, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
 

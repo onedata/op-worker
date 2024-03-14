@@ -117,7 +117,8 @@ test_set_perms(SpaceId) ->
         authz_test_utils:set_acls(Node, AclPerFile, #{}, ?everyone, ?no_flags_mask)
     end,
 
-    % file owner can always change file perms if he has access to it
+    % file owner can change the file perms regardless of the current file perms,
+    % but must be able to access its location (traverse to the directory)
     SetAclFun(#{DirGuid => ?ALL_DIR_PERMS -- [?traverse_container], FileGuid => ?ALL_FILE_PERMS}),
     ?assertMatch({error, ?EACCES}, lfm_proxy:set_perms(Node, FileOwnerSessionId, FileRef, 8#000)),
 
