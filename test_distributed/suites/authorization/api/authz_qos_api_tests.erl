@@ -16,11 +16,11 @@
 -include("modules/logical_file_manager/lfm.hrl").
 
 -export([
-    add_qos_entry/1,
-    get_qos_entry/1,
-    remove_qos_entry/1,
-    get_effective_file_qos/1,
-    check_qos_status/1
+    test_add_qos_entry/1,
+    test_get_qos_entry/1,
+    test_remove_qos_entry/1,
+    test_get_effective_file_qos/1,
+    test_check_qos_status/1
 ]).
 
 
@@ -29,7 +29,7 @@
 %%%===================================================================
 
 
-add_qos_entry(SpaceId) ->
+test_add_qos_entry(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -49,7 +49,7 @@ add_qos_entry(SpaceId) ->
     }).
 
 
-get_qos_entry(SpaceId) ->
+test_get_qos_entry(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -77,7 +77,7 @@ get_qos_entry(SpaceId) ->
     }).
 
 
-remove_qos_entry(SpaceId) ->
+test_remove_qos_entry(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -105,7 +105,7 @@ remove_qos_entry(SpaceId) ->
     }).
 
 
-get_effective_file_qos(SpaceId) ->
+test_get_effective_file_qos(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -133,7 +133,7 @@ get_effective_file_qos(SpaceId) ->
     }).
 
 
-check_qos_status(SpaceId) ->
+test_check_qos_status(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
