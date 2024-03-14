@@ -107,16 +107,17 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec is_valid_filename(term()) -> boolean().
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<".">>) ->
-    false;
-is_valid_filename(<<"..">>) ->
-    false;
 is_valid_filename(FileName) when not is_binary(FileName) ->
     false;
+is_valid_filename(<<"">>) ->
+    false;
+is_valid_filename(<<?CURRENT_DIRECTORY>>) ->
+    false;
+is_valid_filename(<<?PARENT_DIRECTORY>>) ->
+    false;
 is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
+    % Ensure name contains no POSIX forbidden characters (/ or \0)
+    case binary:matches(FileName, [<<?DIRECTORY_SEPARATOR>>, <<0>>]) of
         [] -> true;
         _ -> false
     end.

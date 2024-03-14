@@ -117,6 +117,7 @@ rename_file_test(Config) ->
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<".">>)),
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<"..">>)),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(1, TestDir, "")}, <<"path_with", 0, "null">>)),
 
     {ok, Children} = lfm_proxy:get_children(W, SessId, ?FILE_REF(DirGuid), 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
@@ -305,6 +306,7 @@ rename_dir_test(Config) ->
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<".">>)),
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<"..">>)),
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(Dir5Guid), {path, filename(1, TestDir, "")}, <<"path_with", 0, "null">>)),
 
     {ok, Children} = lfm_proxy:get_children(W, SessId, ?FILE_REF(DirGuid), 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
