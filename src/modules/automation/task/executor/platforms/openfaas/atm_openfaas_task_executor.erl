@@ -712,6 +712,7 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
             <<"logLevel">> => audit_log:severity_from_int(LambdaInput#atm_lambda_input.log_level),
             <<"timeoutSeconds">> => op_worker:get_env(atm_workflow_job_timeout_sec, 1800),
             <<"oneproviderDomain">> => oneprovider:get_domain(),
+            <<"onezoneDomain">> => oneprovider:get_oz_domain(),
             <<"oneproviderId">> => oneprovider:get_id(),
             <<"heartbeatUrl">> => build_job_heartbeat_url(LambdaInput),
             <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx),
