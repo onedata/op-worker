@@ -105,8 +105,12 @@ stages:
         - atm_value
         - atm_workflow_execution
         - atm_workflow_executions_collection
+        - authz_api
+        - authz_data_access_caveats
+        - authz_misc
         - autocleaning
-        - cdmi
+        - cdmi_single_provider
+        - cdmi_multi_provider
         - ceph_helper
         - cephrados_helper
         - client_events
@@ -165,7 +169,6 @@ stages:
         - memory_pools_cleanup
         - model_file_meta
         - monitoring
-        - multi_provider_cdmi
         - multi_provider_changes_rest
         - multi_provider_db_sync
         - multi_provider_file_ops
@@ -179,8 +182,6 @@ stages:
         - node_failure
         - nulldevice_helper
         - performance_2_provider
-        - permissions_posix
-        - permissions_s3
         - posix_helper
         - provider_connection
         - qos
@@ -197,7 +198,7 @@ stages:
         - replica_migration_transfers_rest
         - replication
         - replication_transfers_rest
-        - rest
+        - rest_handler
         - reverse_luma
         - s3_helper
         - sequencer
@@ -853,6 +854,27 @@ atm_workflow_executions_collection:
     - <<: *ct_logs
       name: ct_logs_atm_workflow_executions_collection.tar.gz
 
+authz_api:
+  <<: *ct-onenv-job
+  key: AUTHZAPI
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_authz_api.tar.gz
+
+authz_data_access_caveats:
+  <<: *ct-onenv-job
+  key: AUTHZDATAACCESSCAVEATS
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_authz_data_access_caveats.tar.gz
+
+authz_misc:
+  <<: *ct-onenv-job
+  key: AUTHZMISC
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_authz_misc.tar.gz
+
 autocleaning:
   <<: *ct-job
   key: AUT
@@ -860,12 +882,19 @@ autocleaning:
     - <<: *ct_logs
       name: ct_logs_autocleaning.tar.gz
 
-cdmi:
-  <<: *ct-job
+cdmi_single_provider:
+  <<: *ct-onenv-job
   key: CDMI
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_cdmi.tar.gz
+      name: ct_logs_cdmi_single_provider.tar.gz
+
+cdmi_multi_provider:
+  <<: *ct-onenv-job
+  key: MULTIPROVCDMI
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_cdmi_multi_provider.tar.gz
 
 ceph_helper:
   <<: *ct-job
@@ -1285,13 +1314,6 @@ monitoring:
     - <<: *ct_logs
       name: ct_logs_monitoring.tar.gz
 
-multi_provider_cdmi:
-  <<: *ct-job
-  key: MULTIPROVCDMI
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_cdmi.tar.gz
-
 multi_provider_changes_rest:
   <<: *ct-job
   key: MUL
@@ -1391,22 +1413,6 @@ performance_2_provider:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_performance_2_provider.tar.gz
-
-permissions_posix:
-  <<: *ct-job
-  key: PERMPOSIX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_permissions_posix.tar.gz
-  requirements: *os-agent
-
-permissions_s3:
-  <<: *ct-job
-  key: PERMS3
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_permissions_s3.tar.gz
-  requirements: *os-agent
 
 posix_helper:
   <<: *ct-job
@@ -1521,12 +1527,12 @@ replication_transfers_rest:
     - <<: *ct_logs
       name: ct_logs_replication_transfers_rest.tar.gz
 
-rest:
-  <<: *ct-job
+rest_handler:
+  <<: *ct-onenv-job
   key: RES
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_rest.tar.gz
+      name: ct_logs_rest_handler.tar.gz
 
 reverse_luma:
   <<: *ct-job
@@ -1889,8 +1895,12 @@ Coverage report:
     - artifact: ct_logs_atm_value.tar.gz
     - artifact: ct_logs_atm_workflow_execution.tar.gz
     - artifact: ct_logs_atm_workflow_executions_collection.tar.gz
+    - artifact: ct_logs_authz_api.tar.gz
+    - artifact: ct_logs_authz_data_access_caveats.tar.gz
+    - artifact: ct_logs_authz_misc.tar.gz
     - artifact: ct_logs_autocleaning.tar.gz
-    - artifact: ct_logs_cdmi.tar.gz
+    - artifact: ct_logs_cdmi_single_provider.tar.gz
+    - artifact: ct_logs_cdmi_multi_provider.tar.gz
     - artifact: ct_logs_ceph_helper.tar.gz
     - artifact: ct_logs_cephrados_helper.tar.gz
     - artifact: ct_logs_client_events.tar.gz
@@ -1949,7 +1959,6 @@ Coverage report:
     - artifact: ct_logs_memory_pools_cleanup.tar.gz
     - artifact: ct_logs_model_file_meta.tar.gz
     - artifact: ct_logs_monitoring.tar.gz
-    - artifact: ct_logs_multi_provider_cdmi.tar.gz
     - artifact: ct_logs_multi_provider_changes_rest.tar.gz
     - artifact: ct_logs_multi_provider_db_sync.tar.gz
     - artifact: ct_logs_multi_provider_file_ops.tar.gz
@@ -1963,8 +1972,6 @@ Coverage report:
     - artifact: ct_logs_node_failure.tar.gz
     - artifact: ct_logs_nulldevice_helper.tar.gz
     - artifact: ct_logs_performance_2_provider.tar.gz
-    - artifact: ct_logs_permissions_posix.tar.gz
-    - artifact: ct_logs_permissions_s3.tar.gz
     - artifact: ct_logs_posix_helper.tar.gz
     - artifact: ct_logs_provider_connection.tar.gz
     - artifact: ct_logs_qos.tar.gz
@@ -1981,7 +1988,7 @@ Coverage report:
     - artifact: ct_logs_replica_migration_transfers_rest.tar.gz
     - artifact: ct_logs_replication.tar.gz
     - artifact: ct_logs_replication_transfers_rest.tar.gz
-    - artifact: ct_logs_rest.tar.gz
+    - artifact: ct_logs_rest_handler.tar.gz
     - artifact: ct_logs_reverse_luma.tar.gz
     - artifact: ct_logs_s3_helper.tar.gz
     - artifact: ct_logs_sequencer.tar.gz

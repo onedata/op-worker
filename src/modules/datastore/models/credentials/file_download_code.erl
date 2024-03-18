@@ -6,22 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% File download code record that holds a code for downloading a file via GUI.
-%%% Download codes are intended to be deleted right after the first successful download.
-%%% In case of a download failure, the code can still be used until the end of
-%%% the expiration period, after which it becomes invalid.
-%%% This approach allows resuming failed downloads at any time within the code validity.
+%%% Download code record that holds arguments for downloading e.g. file content
+%%% or store dump via GUI.
+%%% Download codes are intended to be deleted right after the first successful
+%%% download. In case of a download failure, the code can still be used until
+%%% the end of the expiration period, after which it becomes invalid.
+%%% This approach allows resuming failed downloads at any time within the code
+%%% validity.
+%%
+%%% NOTE: module is prefixed `file_` due to historical reason and being record
+%%% stored in database.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_download_code).
 -author("Lukasz Opiola").
 
+-include("http/http_download.hrl").
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/3, verify/1, remove/1]).
+-export([create/1, verify/1, remove/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -48,8 +54,8 @@
 %%%===================================================================
 
 
--spec create(session:id(), [fslogic_worker:file_guid()], boolean()) -> {ok, code()} | {error, term()}.
-create(SessionId, FileGuids, FollowSymlinks) ->
+-spec create(download_args:record()) -> {ok, code()} | {error, term()}.
+create(DownloadArgs) ->
     Ctx = ?CTX,
 
     ExpirationInterval = ?EXPIRATION_INTERVAL,
@@ -60,9 +66,7 @@ create(SessionId, FileGuids, FollowSymlinks) ->
             % Setting and checking expiration is necessary as couch will only
             % remove document from db and not from memory
             expires = ?NOW() + ExpirationInterval,
-            session_id = SessionId,
-            file_guids = FileGuids,
-            follow_symlinks = FollowSymlinks
+            download_args = DownloadArgs
         }
     },
     case datastore_model:save(CtxWithExpiration, Doc) of
@@ -71,18 +75,16 @@ create(SessionId, FileGuids, FollowSymlinks) ->
     end.
 
 
--spec verify(code()) -> false | {true, session:id(), [fslogic_worker:file_guid()], boolean()}.
+-spec verify(code()) -> false | {true, download_args:record()}.
 verify(Code) ->
     Now = ?NOW(),
 
     case datastore_model:get(?CTX, Code) of
         {ok, #document{value = #file_download_code{
             expires = Expires,
-            session_id = SessionId,
-            file_guids = FileGuids,
-            follow_symlinks = FollowSymlinks
+            download_args = DownloadArgs
         }}} when Now < Expires ->
-            {true, SessionId, FileGuids, FollowSymlinks};
+            {true, DownloadArgs};
         {ok, _} ->
             ok = datastore_model:delete(?CTX, Code),
             false;
@@ -118,7 +120,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 
 %%--------------------------------------------------------------------
@@ -146,6 +148,11 @@ get_record_struct(3) ->
         {session_id, string},
         {file_guids, [string]},
         {follow_symlinks, boolean}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {expires, integer},
+        {download_args, {custom, string, {persistent_record, to_string, from_string, download_args}}}
     ]}.
 
 
@@ -182,4 +189,19 @@ upgrade_record(2, Record) ->
         SessionId,
         FileGuids,
         false
-    }}.
+    }};
+upgrade_record(3, Record) ->
+    {
+        file_download_code,
+        Expires,
+        SessionId,
+        FileGuids,
+        FollowSymlinks
+    } = Record,
+
+    DownloadArgs = #file_content_download_args{
+        session_id = SessionId,
+        file_guids = FileGuids,
+        follow_symlinks = FollowSymlinks
+    },
+    {4, {file_download_code, Expires, DownloadArgs}}.

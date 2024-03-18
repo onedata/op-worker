@@ -17,16 +17,16 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
--include("modules/fslogic/file_details.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([establish/2, establish/3, update/4, remove/1, remove/2, move_if_applicable/2]).
--export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
+-export([get_info/1, get_effective_inheritance_path_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 -export([handle_file_deleted/1]).
+-export([handle_remote_change/2]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -181,22 +181,22 @@ get_info(DatasetId) ->
     {ok, collect_state_dependant_info(DatasetId)}.
 
 
--spec get_effective_membership_and_protection_flags(file_ctx:ctx()) ->
-    {ok, dataset:membership(), data_access_control:bitmask(), data_access_control:bitmask(), file_ctx:ctx()}.
-get_effective_membership_and_protection_flags(FileCtx) ->
+-spec get_effective_inheritance_path_and_protection_flags(file_ctx:ctx()) ->
+    {ok, dataset:inheritance_path(), data_access_control:bitmask(), data_access_control:bitmask(), file_ctx:ctx()}.
+get_effective_inheritance_path_and_protection_flags(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     {ok, EffDatasetProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
-    EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
-        {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
-        {true, false} -> ?DIRECT_MEMBERSHIP;
-        {false, true} -> ?ANCESTOR_MEMBERSHIP;
-        {false, false} -> ?NONE_MEMBERSHIP
+    EffInheritancePath = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
+        {true, true} -> ?direct_and_ancestor_inheritance_path;
+        {true, false} -> ?direct_inheritance_path;
+        {false, true} -> ?ancestor_inheritance;
+        {false, false} -> ?none_inheritance_path
     end,
-    {ok, EffMembership, EffProtectionFlags, EffDatasetProtectionFlags, FileCtx2}.
+    {ok, EffInheritancePath, EffProtectionFlags, EffDatasetProtectionFlags, FileCtx2}.
 
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, file_eff_summary()}.
@@ -247,6 +247,16 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
         ?EXTENDED_INFO ->
             {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
+
+
+-spec handle_remote_change(od_space:id(), dataset:doc()) -> ok.
+handle_remote_change(SpaceId, #document{deleted = true, key = DatasetId}) ->
+    ok = file_meta_forest:delete(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
+        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId));
+handle_remote_change(SpaceId, #document{deleted = false, key = DatasetId}) ->
+    archivisation_tree:ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
+    ok.
+
 
 %%%===================================================================
 %%% Util functions

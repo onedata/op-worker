@@ -19,7 +19,6 @@
 
 %% API
 -export([
-    init_qos_cache_for_space/1,
     init_retry_failed_files/0,
     init_traverse_pools/0,
     init_traverse_pool/0
@@ -29,8 +28,6 @@
 -export([init/1, handle/1, cleanup/0]).
 
 
--define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
--define(CHECK_QOS_CACHE, bounded_cache_timer).
 -define(RETRY_FAILED_FILES, retry_failed_files).
 
 -define(RETRY_FAILED_FILES_INTERVAL_SECONDS,
@@ -48,8 +45,6 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    qos_bounded_cache:init_group(),
-    qos_bounded_cache:init_qos_cache_for_all_spaces(),
     % file_links_reconciliation_traverse is started here, as it uses QoS traverse pool.
     % Although it is sufficient to be started just once for every space, the procedure
     % is idempotent and it's safe to attempt its start at every application init.
@@ -73,17 +68,6 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle({?CHECK_QOS_CACHE, Msg}) ->
-    ?debug("Cleaning QoS bounded cache if needed"),
-    bounded_cache:check_cache_size(Msg);
-handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
-    case qos_bounded_cache:is_cache_initialized(SpaceId) of
-        true ->
-            ok;
-        false ->
-            ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
-            qos_bounded_cache:init_qos_cache_for_space(SpaceId)
-    end;
 handle(?RETRY_FAILED_FILES) ->
     case provider_logic:get_spaces() of
         {ok, Spaces} ->
@@ -116,16 +100,6 @@ cleanup() ->
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Schedule initialization of QoS bounded cache for given space.
-%% @end
-%%--------------------------------------------------------------------
--spec init_qos_cache_for_space(od_space:id()) -> ok.
-init_qos_cache_for_space(SpaceId) ->
-    erlang:send_after(0, ?MODULE, {sync_timer, {?INIT_QOS_CACHE_FOR_SPACE, SpaceId}}),
-    ok.
 
 -spec init_retry_failed_files() -> ok.
 init_retry_failed_files() ->

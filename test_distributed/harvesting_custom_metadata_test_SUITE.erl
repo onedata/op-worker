@@ -641,7 +641,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
     RequestBody1 = #{<<"value">> => FileContent},
     RawRequestBody1 = json_utils:encode((RequestBody1)),
     {ok, _, _, Response1} = ?assertMatch({ok, ?HTTP_201_CREATED, _, _},
-        cdmi_test_utils:do_request(Worker, filename:join(?SPACE_NAME1, FileName), put, RequestHeaders1, RawRequestBody1)),
+        cdmi_test_utils:do_request(Worker, binary_to_list(filename:join(?SPACE_NAME1, FileName)), put, RequestHeaders1, RawRequestBody1)),
     CdmiResponse1 = json_utils:decode(Response1),
     FileId = maps:get(<<"objectID">>, CdmiResponse1),
 

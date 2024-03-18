@@ -122,7 +122,7 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     try
         SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
-        {ok, #recursive_listing_result{entries = Entries, pagination_token = PaginationToken}} =
+        {ok, #dataset_recursive_listing_result{entries = Entries, pagination_token = PaginationToken}} =
             dataset_req:list_recursively(SpaceId, CompressedRoot, Opts, UserCtx),
         MappedEntries = lists:map(fun({_Path, DatasetInfo}) -> 
             dataset_utils:dataset_info_to_json(DatasetInfo) 

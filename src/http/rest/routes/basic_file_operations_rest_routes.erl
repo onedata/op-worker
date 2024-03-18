@@ -56,6 +56,8 @@ routes() -> [
     %% List files recursively
     {<<"/data/:id/files">>, rest_handler, #rest_req{
         method = 'GET',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -99,11 +101,13 @@ routes() -> [
     %% Get file attributes
     {<<"/data/:id">>, rest_handler, #rest_req{
         method = 'GET',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = attrs, 
+            aspect = instance,
             scope = private
         }
     }},

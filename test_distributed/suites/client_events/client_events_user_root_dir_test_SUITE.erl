@@ -476,9 +476,8 @@ create_supported_space(NodeSelector, Name, UserPlaceholder) ->
 
 support_space(NodeSelector, UserPlaceholder, SpaceId) ->
     UserId = oct_background:get_user_id(UserPlaceholder),
-    {ok, SerializedToken} = tokens:serialize(ozw_test_rpc:create_space_support_token(UserId, SpaceId)),
     [StorageId | _] = opw_test_rpc:get_storages(NodeSelector),
-    opw_test_rpc:support_space(NodeSelector, StorageId, SerializedToken, 1234321).
+    panel_test_rpc:support_space(NodeSelector, StorageId, ozw_test_rpc:create_space_support_token(UserId, SpaceId), 1234321).
 
 
 maybe_break_connection_to_zone(alive, _) ->

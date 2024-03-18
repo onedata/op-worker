@@ -118,9 +118,9 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
         false ->
             ok;
         true ->
+            % TODO VFS-7412 refactor effective_value cache
             ok = permissions_cache:invalidate(),
-            ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
-            ok = fslogic_worker:init_effective_caches(SpaceId),
+            ok = node_manager_plugin:init_etses_for_space_on_all_nodes(SpaceId),
             monitoring_event_emitter:emit_od_space_updated(SpaceId),
             % run asynchronously as this requires the space record, which will be cached
             % only after run_after finishes (running synchronously could cause an infinite loop)

@@ -84,7 +84,7 @@ basic_test(Config0) ->
     % Create link and verify its stats
     {Link, LinkAttr} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
     % stat ignores fully_replicated field so use attrs without it in asserts
-    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{fully_replicated = undefined},
+    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{is_fully_replicated = undefined},
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
         lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link})),
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
@@ -284,7 +284,7 @@ verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid) ->
     ?assertEqual(FileAttr#file_attr.shares, LinkAttr#file_attr.shares),
     ?assertEqual(FileAttr#file_attr.provider_id, LinkAttr#file_attr.provider_id),
     ?assertEqual(FileAttr#file_attr.owner_id, LinkAttr#file_attr.owner_id),
-    ?assertEqual(true, LinkAttr#file_attr.fully_replicated),
+    ?assertEqual(true, LinkAttr#file_attr.is_fully_replicated),
 
     % Time can be changed by event after file creation
     ?assert(FileAttr#file_attr.atime =< LinkAttr#file_attr.atime),

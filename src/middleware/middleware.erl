@@ -208,7 +208,7 @@ get_router(op_atm_workflow_execution) -> atm_workflow_execution_middleware_plugi
 get_router(op_atm_workflow_schema) -> atm_workflow_schema_middleware_plugin;
 get_router(op_atm_workflow_schema_snapshot) -> atm_workflow_schema_snapshot_middleware_plugin;
 get_router(op_dataset) -> dataset_middleware_plugin;
-get_router(op_file) -> file_middleware_plugin;
+get_router(op_file) -> file_middleware_router;
 get_router(op_group) -> group_middleware_plugin;
 get_router(op_handle) -> handle_middleware_plugin;
 get_router(op_handle_service) -> handle_service_middleware_plugin;
@@ -336,6 +336,7 @@ validate_request(#req_ctx{handler = Handler, versioned_entity = {Entity, _}, req
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Handles an middleware request based on operation,
 %% should be wrapped in a try-catch.

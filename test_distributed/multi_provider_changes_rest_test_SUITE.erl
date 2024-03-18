@@ -16,6 +16,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("rest_test_utils.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").

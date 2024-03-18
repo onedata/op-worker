@@ -23,6 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
+-export([is_valid_filename/1]).
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
@@ -40,8 +41,8 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    ensure_space_docs_exist/1, ensure_tmp_dir_exist/1, ensure_opened_deleted_files_dir_exist/1,
-    new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
+    ensure_space_docs_exist/1, ensure_tmp_dir_exist/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exist/1,
+    new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
@@ -115,6 +116,27 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given term is valid path()
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_filename(term()) -> boolean().
+is_valid_filename(FileName) when not is_binary(FileName) ->
+    false;
+is_valid_filename(<<"">>) ->
+    false;
+is_valid_filename(<<?CURRENT_DIRECTORY>>) ->
+    false;
+is_valid_filename(<<?PARENT_DIRECTORY>>) ->
+    false;
+is_valid_filename(FileName) when is_binary(FileName) ->
+    % Ensure name contains no POSIX forbidden characters (/ or \0)
+    case binary:matches(FileName, [<<?DIRECTORY_SEPARATOR>>, <<0>>]) of
+        [] -> true;
+        _ -> false
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -754,22 +776,22 @@ get_shares(#file_meta{shares = Shares}) ->
 ensure_space_docs_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
         {ok, #document{key = SpaceDirUuid}} ->
-            ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false)),
-            space_logic:on_space_dir_created(SpaceId);
+            ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false));
         {error, already_exists} ->
             ok
-    end.
+    end,
+    space_logic:on_space_dir_created(SpaceId).
 
 
 -spec ensure_tmp_dir_exist(od_space:id()) -> created | already_exists.
 ensure_tmp_dir_exist(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    TmpDirDoc = new_doc(
-        TmpDirUuid, ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
-        ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId, true
+    TmpDirDoc = new_special_dir_doc(
+        TmpDirUuid, ?TMP_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId
     ),
-    case datastore_model:create(?CTX, TmpDirDoc) of
+    ensure_tmp_dir_link_exists(SpaceId),
+    case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
         {ok, _} ->
             case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
                 {ok, _} -> created;
@@ -780,14 +802,20 @@ ensure_tmp_dir_exist(SpaceId) ->
     end.
 
 
+-spec ensure_tmp_dir_link_exists(od_space:id()) -> ok.
+ensure_tmp_dir_link_exists(SpaceId) ->
+    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
+        ?TMP_DIR_NAME, fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId)))).
+
+
 -spec ensure_opened_deleted_files_dir_exist(od_space:id()) -> ok.
 ensure_opened_deleted_files_dir_exist(SpaceId) ->
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    Doc = new_doc(
-        ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
-        ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId, true
+    Doc = new_special_dir_doc(
+        ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DEFAULT_DIR_MODE,
+        ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId
     ),
-    case file_meta:create({uuid, TmpDirUuid}, Doc) of
+    case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
         {ok, _} ->
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
             case times:save_with_current_times(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId, true) of
@@ -801,13 +829,13 @@ ensure_opened_deleted_files_dir_exist(SpaceId) ->
 
 -spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
-    new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, false).
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope) ->
+    new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, false).
 
 
 -spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id(), boolean()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, IgnoreInChanges) ->
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -818,9 +846,15 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, IgnoreIn
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
         },
-        scope = SpaceId,
+        scope = Scope,
         ignore_in_changes = IgnoreInChanges
     }.
+
+
+-spec new_special_dir_doc(uuid(), name(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
+new_special_dir_doc(FileUuid, FileName, Mode, Owner, ParentUuid, Scope) ->
+    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+    new_doc(FileUuid, FileName, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, Scope).
 
 
 -spec new_share_root_dir_doc(uuid(), od_space:id()) -> doc().
@@ -1118,28 +1152,6 @@ fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
     Doc#document{key = datastore_key:new_adjacent_to(ParentUuid)};
 fill_uuid(Doc, _ParentUuid) ->
     Doc.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if given term is valid path()
-%% @end
-%%--------------------------------------------------------------------
--spec is_valid_filename(term()) -> boolean().
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<".">>) ->
-    false;
-is_valid_filename(<<"..">>) ->
-    false;
-is_valid_filename(FileName) when not is_binary(FileName) ->
-    false;
-is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-        [] -> true;
-        _ -> false
-    end.
 
 
 %% @private

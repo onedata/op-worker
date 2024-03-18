@@ -73,7 +73,7 @@ struct HelpersNIF {
                         entry.second.second)));
         }
 
-        SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
+        SHCreator = std::make_unique<one::helpers::StorageHelperCreator<void>>(
             executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
             executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
             executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
@@ -100,11 +100,11 @@ struct HelpersNIF {
         }
     }
 
-    bool bufferingEnabled = false;
+    bool bufferingEnabled{false};
     std::unordered_map<folly::fbstring,
         std::shared_ptr<folly::IOThreadPoolExecutor>>
         executors;
-    std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
+    std::unique_ptr<one::helpers::StorageHelperCreator<void>> SHCreator;
 };
 
 std::unique_ptr<HelpersNIF> application;

@@ -10,6 +10,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
+-include("modules/fslogic/file_attr.hrl").
+
 -ifndef(BULK_DOWNLOAD_HRL).
 -define(BULK_DOWNLOAD_HRL, 1).
 
@@ -24,5 +26,7 @@
 -define(MSG_ABORT, abort).
 
 -define(LOOP_TIMEOUT, timer:seconds(5)).
+
+-define(BULK_DOWNLOAD_ATTRS, [?attr_guid, ?attr_type, ?attr_mode, ?attr_mtime, ?attr_size, ?attr_name]).
 
 -endif.

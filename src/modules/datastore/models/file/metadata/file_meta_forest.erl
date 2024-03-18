@@ -138,17 +138,29 @@ delete(ParentUuid, Scope, FileName, FileUuid) ->
             case lists:filter(fun(#link{target = Uuid}) -> Uuid == FileUuid end, Links) of
                 [#link{tree_id = TreeId, name = FileName, rev = Rev}] ->
                     % pass Rev to ensure that link with the same Rev is deleted
-                    case oneprovider:is_self(TreeId) of
-                        true ->
-                            ok = delete_local(ParentUuid, Scope, FileName, Rev);
-                        false ->
-                            ok = delete_remote(ParentUuid, Scope, TreeId, FileName, Rev)
-                    end;
+                    delete_link(TreeId, ParentUuid, Scope, FileName, Rev);
+                [_ | _] = Links ->
+                    % possible in case of special dirs
+                    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+                    lists:foreach(fun(#link{tree_id = TreeId, name = FileName, rev = Rev}) ->
+                        % pass Rev to ensure that link with the same Rev is deleted
+                        delete_link(TreeId, ParentUuid, Scope, FileName, Rev)
+                    end, Links);
                 [] ->
                     ok
             end;
         {error, not_found} ->
             ok
+    end.
+
+
+-spec delete_link(tree_id(), forest(), scope(), link_name(), link_revision()) -> ok.
+delete_link(TreeId, ParentUuid, Scope, FileName, Rev) ->
+    case oneprovider:is_self(TreeId) of
+        true ->
+            ok = delete_local(ParentUuid, Scope, FileName, Rev);
+        false ->
+            ok = delete_remote(ParentUuid, Scope, TreeId, FileName, Rev)
     end.
 
 

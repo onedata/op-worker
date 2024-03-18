@@ -37,7 +37,7 @@
     lfm_basic_rdwr_after_file_delete_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
-    lfm_get_details_test/1,
+    lfm_get_attrs_test/1,
     lfm_synch_stat_test/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
@@ -86,12 +86,12 @@
     readdir_should_work_with_api_token_not_full_batch/1,
     readdir_should_work_with_startid/1,
     readdir_plus_should_read_xattrs/1,
-    get_children_details_should_return_empty_result_for_empty_dir/1,
-    get_children_details_should_return_empty_result_zero_size/1,
-    get_children_details_should_work_with_zero_offset/1,
-    get_children_details_should_work_with_non_zero_offset/1,
-    get_children_details_should_work_with_size_greater_than_dir_size/1,
-    get_children_details_should_work_with_startid/1,
+    get_children_attrs_should_return_empty_result_for_empty_dir/1,
+    get_children_attrs_should_return_empty_result_zero_size/1,
+    get_children_attrs_should_work_with_zero_offset/1,
+    get_children_attrs_should_work_with_non_zero_offset/1,
+    get_children_attrs_should_work_with_size_greater_than_dir_size/1,
+    get_children_attrs_should_work_with_startid/1,
     get_recursive_file_list/1,
     get_recursive_file_list_prefix_test/1,
     get_recursive_file_list_inaccessible_paths_test/1,
@@ -134,7 +134,7 @@
     lfm_basic_rdwr_after_file_delete_test,
     lfm_write_test,
     lfm_stat_test,
-    lfm_get_details_test,
+    lfm_get_attrs_test,
     lfm_synch_stat_test,
     lfm_cp_file,
     lfm_cp_empty_dir,
@@ -183,12 +183,12 @@
     readdir_should_work_with_api_token_not_full_batch,
     readdir_should_work_with_startid,
     readdir_plus_should_read_xattrs,
-    get_children_details_should_return_empty_result_for_empty_dir,
-    get_children_details_should_return_empty_result_zero_size,
-    get_children_details_should_work_with_zero_offset,
-    get_children_details_should_work_with_non_zero_offset,
-    get_children_details_should_work_with_size_greater_than_dir_size,
-    get_children_details_should_work_with_startid,
+    get_children_attrs_should_return_empty_result_for_empty_dir,
+    get_children_attrs_should_return_empty_result_zero_size,
+    get_children_attrs_should_work_with_zero_offset,
+    get_children_attrs_should_work_with_non_zero_offset,
+    get_children_attrs_should_work_with_size_greater_than_dir_size,
+    get_children_attrs_should_work_with_startid,
     get_recursive_file_list,
     get_recursive_file_list_prefix_test,
     get_recursive_file_list_inaccessible_paths_test,
@@ -273,8 +273,8 @@ lfm_stat_test(Config) ->
     lfm_files_test_base:lfm_stat(Config).
 
 
-lfm_get_details_test(Config) ->
-    lfm_files_test_base:lfm_get_details(Config).
+lfm_get_attrs_test(Config) ->
+    lfm_files_test_base:lfm_stat2(Config).
 
 
 lfm_synch_stat_test(Config) ->
@@ -469,28 +469,28 @@ get_recursive_file_list_internal_multibatch(Config) ->
     lfm_files_test_base:get_recursive_file_list_internal_multibatch(Config).
 
 
-get_children_details_should_return_empty_result_for_empty_dir(Config) ->
-    lfm_files_test_base:get_children_details_should_return_empty_result_for_empty_dir(Config).
+get_children_attrs_should_return_empty_result_for_empty_dir(Config) ->
+    lfm_files_test_base:get_children_attrs_should_return_empty_result_for_empty_dir(Config).
 
 
-get_children_details_should_return_empty_result_zero_size(Config) ->
-    lfm_files_test_base:get_children_details_should_return_empty_result_zero_size(Config).
+get_children_attrs_should_return_empty_result_zero_size(Config) ->
+    lfm_files_test_base:get_children_attrs_should_return_empty_result_zero_size(Config).
 
 
-get_children_details_should_work_with_zero_offset(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_zero_offset(Config).
+get_children_attrs_should_work_with_zero_offset(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_zero_offset(Config).
 
 
-get_children_details_should_work_with_non_zero_offset(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_non_zero_offset(Config).
+get_children_attrs_should_work_with_non_zero_offset(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_non_zero_offset(Config).
 
 
-get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_size_greater_than_dir_size(Config).
+get_children_attrs_should_work_with_size_greater_than_dir_size(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_size_greater_than_dir_size(Config).
 
 
-get_children_details_should_work_with_startid(Config) ->
-    lfm_files_test_base:get_children_details_should_work_with_startid(Config).
+get_children_attrs_should_work_with_startid(Config) ->
+    lfm_files_test_base:get_children_attrs_should_work_with_startid(Config).
 
 
 get_recursive_file_list(Config) ->
@@ -595,7 +595,7 @@ rename_removed_opened_file_test(Config) ->
     RenamedStorageId = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
     ?assertMatch({ok, #file_location{file_id = RenamedStorageId}},
         lfm_proxy:get_file_location(Worker, SessId(User), ?FILE_REF(Guid1))),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), ?FILE_REF(Guid1))),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:get_file_location(Worker, SessId(User2), ?FILE_REF(Guid1))),
 
     lfm_proxy:close_all(Worker),
     {ok, ListAns4} = ?assertMatch({ok, _},
@@ -885,7 +885,7 @@ lfm_create_and_read_symlink(Config) ->
 
     % Create symlink and check its times
     {ok, LinkAttrs} = ?assertMatch(
-        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, is_fully_replicated = undefined, parent_guid = DirGuid}},
         lfm_proxy:make_symlink(W, SessId, Path, LinkTarget)),
     ?assert(LinkAttrs#file_attr.atime > 0),
     ?assert(LinkAttrs#file_attr.mtime > 0),
@@ -896,7 +896,7 @@ lfm_create_and_read_symlink(Config) ->
     time_test_utils:simulate_seconds_passing(2), % ensure time change
     ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
     {ok, LinkAttrs2} = ?assertMatch(
-        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, is_fully_replicated = undefined, parent_guid = DirGuid}},
         lfm_proxy:stat(W, SessId, {path, Path})),
     ?assert(LinkAttrs2#file_attr.atime > LinkAttrs#file_attr.atime),
     ?assertMatch({ok, [LinkAttrs2], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),

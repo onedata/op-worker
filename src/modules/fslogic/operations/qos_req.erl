@@ -28,6 +28,11 @@
     check_status/3
 ]).
 
+%% Protected API - for use only by *_req.erl modules
+-export([
+    get_effective_file_qos_insecure/1
+]).
+
 -type eff_file_qos() :: {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}.
 
 -export_type([eff_file_qos/0]).

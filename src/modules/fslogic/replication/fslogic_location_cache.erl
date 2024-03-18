@@ -50,7 +50,7 @@
 -export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
     set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2]).
 %% Blocks API
--export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
+-export([get_location_size/2, get_blocks_range/1, get_blocks_range/2, is_fully_replicated/2]).
 
 %% Max hole in sequence - see get_overlapping_blocks_sequence/2 function doc
 -define(MAX_HOLE, op_worker:get_env(overlapping_seqiences_max_hole, 5)).
@@ -465,6 +465,18 @@ get_blocks_range(Location, RequestRange) ->
                     {min(Start1, Start2), max(Stop1, Stop2)}
             end
     end.
+
+
+-spec is_fully_replicated(location(), non_neg_integer()) -> boolean().
+is_fully_replicated(#document{} = FLDoc, Size) ->
+    case get_blocks(FLDoc, #{count => 2}) of
+        [#file_block{offset = 0, size = Size}] -> true;
+        [] when Size =:= 0 -> true;
+        _ -> false
+    end;
+is_fully_replicated(undefined, _Size) ->
+    true.
+    
 
 %%%===================================================================
 %%% Internal functions

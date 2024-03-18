@@ -65,7 +65,10 @@
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), opts()) ->
     {cowboy_rest, cowboy_req:req(), state()}.
-init(#{method := MethodBin} = Req, Opts) ->
+init(#{method := MethodBin} = InitialReq, Opts) ->
+    % The REST API accepts only tokens (rather than session cookies) so
+    % it's safe to allow it to be called from other origins.
+    Req = http_cors:allow_origin(<<"*">>, InitialReq),
     Method = http_utils:binary_to_method(MethodBin),
     % If given method is not allowed, it is not in the map. Such request
     % will stop execution on allowed_methods/2 callback. Use undefined if
@@ -135,10 +138,14 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 %%--------------------------------------------------------------------
 -spec is_authorized(cowboy_req:req(), state()) ->
     {true | {false, binary()}, cowboy_req:req(), state()}.
-is_authorized(Req, State) ->
-    % The data access caveats policy depends on requested resource,
-    % which is not known yet - it is checked later in specific handler.
-    case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
+is_authorized(Req, State = #state{rest_req = RestReq}) ->
+    AuthCtx = #http_auth_ctx{
+        interface = rest,
+        % The data access caveats policy depends on requested resource,
+        % which is not known yet - it is checked later in specific handler.
+        data_access_caveats_policy = allow_data_access_caveats
+    },
+    case http_auth:authenticate(Req, AuthCtx) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};
@@ -146,7 +153,7 @@ is_authorized(Req, State) ->
             % The user presented some authentication, but he is not supported
             % by this Oneprovider. Still, if the request concerned a shared
             % file, the user should be treated as a guest and served.
-            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req)) of
+            case (catch resolve_gri_bindings(?GUEST_SESS_ID, RestReq#rest_req.b_gri, Req)) of
                 #gri{scope = public} ->
                     {true, Req, State#state{auth = ?GUEST}};
                 _ ->
@@ -357,5 +364,12 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
     (Operation == delete andalso As == file_at_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);
+
+route_to_proper_handler(#op_req{operation = get, gri = #gri{
+    type = op_atm_store,
+    aspect = dump
+}} = OpReq, Req) ->
+    atm_store_dump_download_handler:handle(OpReq, Req);
+
 route_to_proper_handler(OpReq, Req) ->
     middleware_rest_handler:handle_request(OpReq, Req).

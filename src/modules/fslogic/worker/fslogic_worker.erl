@@ -23,14 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_effective_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
-
-% exported for RPC
--export([
-    schedule_init_effective_caches/1
-]).
 
 %%%===================================================================
 %%% Types
@@ -60,7 +54,6 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_EFFECTIVE_CACHES(Space), {init_effective_caches, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
@@ -113,11 +106,9 @@
     read_symlink,
 
     get_file_attr,
-    get_file_details,
     get_file_children,
     get_child_attr,
-    get_file_children_attrs,
-    get_file_children_details
+    get_file_children_attrs
 ]).
 -define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
     % Necessary operations for direct-io to work (contains private information
@@ -154,17 +145,6 @@ supervisor_children_spec() ->
         transfer_onf_stats_aggregator:spec()
     ].
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes effective caches on all nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec init_effective_caches(od_space:id() | all) -> ok.
-init_effective_caches(Space) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_effective_caches, [Space]),
-    ok.
-
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
 %%%===================================================================
@@ -177,8 +157,6 @@ init_effective_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    permissions_cache:init(),
-    init_effective_caches(),
     transfer:init(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
@@ -257,13 +235,6 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
     ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
-handle({bounded_cache_timer, Msg}) ->
-    bounded_cache:check_cache_size(Msg);
-handle(?INIT_EFFECTIVE_CACHES(Space)) ->
-    paths_cache:init(Space),
-    dataset_eff_cache:init(Space),
-    archive_recall_cache:init(Space),
-    file_meta_sync_status_cache:init(Space);
 handle(Request) ->
     ?log_bad_request(Request),
     {error, wrong_request}.
@@ -328,16 +299,6 @@ init_report() ->
 %%% Internal functions
 %%%===================================================================
 
--spec init_effective_caches() -> ok.
-init_effective_caches() ->
-    % TODO VFS-7412 refactor effective_value cache
-    paths_cache:init_group(),
-    dataset_eff_cache:init_group(),
-    file_meta_sync_status_cache:init_group(),
-    archive_recall_cache:init_group(),
-    schedule_init_effective_caches(all).
-
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -347,63 +308,54 @@ init_effective_caches() ->
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
     try
-        UserCtx = user_ctx:new(SessId),
-        FilePartialCtx = fslogic_request:get_file_partial_ctx(UserCtx, Request),
-        Providers = fslogic_request:get_target_providers(UserCtx,
-            FilePartialCtx, Request),
+        OriginalUserCtx = user_ctx:new(SessId),
+        FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
+
+        EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
+        Providers = fslogic_request:get_target_providers(EffLocalUserCtx, FilePartialCtx, Request),
+
         case lists:member(oneprovider:get_id(), Providers) of
             true ->
-                handle_request_and_process_response_locally(UserCtx, Request,
-                    FilePartialCtx);
+                OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
+                handle_request_and_process_response_locally(
+                    OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
+                );
             false ->
-                handle_request_remotely(UserCtx, Request, Providers)
+                handle_request_remotely(OriginalUserCtx, Request, Providers)
         end
     catch
         Type2:Error2:Stacktrace ->
             fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
     end.
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%% Handle request locally and do postprocessing of the response
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
-    file_partial_ctx:ctx() | undefined) -> response().
-handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) ->
-    {FileCtx1, ShareId} = case FilePartialCtx of
-        undefined ->
-            {undefined, undefined};
-        _ ->
-            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
-            {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
+-spec infer_eff_user_ctx(user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined) ->
+    user_ctx:ctx().
+infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
+    ShareId = case FilePartialCtx of
+        undefined -> undefined;
+        _ -> file_partial_ctx:get_share_id_const(FilePartialCtx)
     end,
-    ok = fslogic_log:report_file_access_operation(Request, user_ctx:get_user_id(UserCtx0), FileCtx1),
-    try
-        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
-            {false, undefined} ->
-                UserCtx0;
-            {IsInOpenHandleMode, _} ->
-                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
-                    true -> ok;
-                    false -> throw(?EPERM)
-                end,
-                case IsInOpenHandleMode of
-                    true ->
-                        UserCtx0;
-                    false ->
-                        % Operations concerning shares must be carried with GUEST auth
-                        case user_ctx:is_guest(UserCtx0) of
-                            true -> UserCtx0;
-                            false -> user_ctx:new(?GUEST_SESS_ID)
-                        end
-                end
-        end,
-        handle_request_locally(UserCtx1, Request, FileCtx1)
-    catch
-        Type:Error:Stacktrace ->
-            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+
+    case {user_ctx:is_in_open_handle_mode(UserCtx), ShareId} of
+        {false, undefined} ->
+            UserCtx;
+        {IsInOpenHandleMode, _} ->
+            case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
+                true -> ok;
+                false -> throw(?EPERM)
+            end,
+            case IsInOpenHandleMode of
+                true ->
+                    UserCtx;
+                false ->
+                    % Operations concerning shares must be carried with GUEST auth
+                    case user_ctx:is_guest(UserCtx) of
+                        true -> UserCtx;
+                        false -> user_ctx:new(?GUEST_SESS_ID)
+                    end
+            end
     end.
 
 
@@ -438,6 +390,33 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle request locally and do postprocessing of the response
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_request_and_process_response_locally(
+    od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
+) ->
+    response().
+handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+    FileCtx1 = case FilePartialCtx of
+        undefined ->
+            undefined;
+        _ ->
+            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            FileCtx0
+    end,
+    ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
+    try
+        handle_request_locally(EffUserCtx, Request, FileCtx1)
+    catch
+        Type:Error:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -545,14 +524,12 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{optional_attrs = OptionalAttrs}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, OptionalAttrs);
+handle_file_request(UserCtx, #get_file_attr{attributes = Attributes}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, Attributes);
 handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
     attr_req:get_file_references(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
-    attr_req:get_file_details(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_child_attr{name = Name, optional_attrs = OptionalAttrs}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, OptionalAttrs);
+handle_file_request(UserCtx, #get_child_attr{name = Name, attributes = Attributes}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, Attributes);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -564,14 +541,12 @@ handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) 
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
-    dir_req:get_children(UserCtx, FileCtx, ListingOpts);
+    dir_req:list_children(UserCtx, FileCtx, ListingOpts);
 handle_file_request(UserCtx, #get_file_children_attrs{
     listing_options = ListingOpts,
-    optional_attrs = OptionalAttrs
+    attributes = Attributes
 }, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, OptionalAttrs);
-handle_file_request(UserCtx, #get_file_children_details{listing_options = ListingOpts}, FileCtx) ->
-    dir_req:get_children_details(UserCtx, FileCtx, ListingOpts);
+    dir_req:list_children_attrs(UserCtx, FileCtx, ListingOpts, Attributes);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -641,11 +616,11 @@ handle_file_request(UserCtx, #report_file_read{offset = Offset, size = Size}, Fi
     file_req:report_file_read(UserCtx, FileCtx, Offset, Size);
 handle_file_request(UserCtx, #get_recursive_file_list{
     listing_options = Options,
-    optional_attrs = OptionalAttrs
+    attributes = Attributes
 }, FileCtx) ->
-    dir_req:list_recursively(UserCtx, FileCtx, Options, OptionalAttrs);
-handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, optional_attrs = OptionalAttrs}, RootFileCtx) ->
-    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, OptionalAttrs);
+    dir_req:list_recursively(UserCtx, FileCtx, Options, Attributes);
+handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, attributes = Attributes}, RootFileCtx) ->
+    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, Attributes);
 handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
     dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
 
@@ -725,9 +700,6 @@ schedule_restart_autocleaning_runs() ->
 -spec schedule_periodical_spaces_autocleaning_check() -> ok.
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
-
-schedule_init_effective_caches(Space) ->
-    schedule(?INIT_EFFECTIVE_CACHES(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

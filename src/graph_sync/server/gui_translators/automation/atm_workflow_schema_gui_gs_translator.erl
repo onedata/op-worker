@@ -30,7 +30,8 @@ translate_resource(#gri{aspect = instance, scope = private}, #od_atm_workflow_sc
     name = AtmWorkflowSchemaName,
     summary = AtmWorkflowSchemaSummary,
     revision_registry = RevisionRegistry,
-    compatible = IsCompatible
+    compatible = IsCompatible,
+    atm_inventory = AtmInventoryId
 }) ->
     #{
         <<"name">> => AtmWorkflowSchemaName,
@@ -38,5 +39,9 @@ translate_resource(#gri{aspect = instance, scope = private}, #od_atm_workflow_sc
         <<"revisionRegistry">> => jsonable_record:to_json(
             RevisionRegistry, atm_workflow_schema_revision_registry
         ),
-        <<"isCompatible">> => IsCompatible
+        <<"isCompatible">> => IsCompatible,
+        <<"atmInventory">> => gri:serialize(#gri{
+            type = op_atm_inventory, id = AtmInventoryId,
+            aspect = instance, scope = private
+        })
     }.

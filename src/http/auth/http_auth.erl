@@ -1,7 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2023 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -14,13 +14,24 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
+-include("http/http_auth.hrl").
 -include("middleware/middleware.hrl").
--include("proto/common/handshake_messages.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
--export([authenticate/1, authenticate/3]).
+-export([authenticate/2, authenticate_by_token/1]).
+
+-type ctx() :: #http_auth_ctx{}.
+
+-export_type([ctx/0]).
+
+
+-define(catch_auth_exceptions(__EXPR),
+    try
+        __EXPR
+    catch Class:Reason:Stacktrace ->
+        ?ERROR_UNAUTHORIZED(?examine_exception(Class, Reason, Stacktrace))
+    end
+).
 
 
 %%%===================================================================
@@ -28,13 +39,12 @@
 %%%===================================================================
 
 
--spec authenticate(
-    cowboy_req:req(),
-    cv_interface:interface(),
-    data_access_caveats:policy()
-) ->
+-spec authenticate(cowboy_req:req(), ctx()) ->
     {ok, aai:auth()} | errors:unauthorized_error().
-authenticate(Req, Interface, DataAccessCaveatsPolicy) ->
+authenticate(Req, #http_auth_ctx{
+    interface = Interface,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
             {ok, ?GUEST};
@@ -44,24 +54,14 @@ authenticate(Req, Interface, DataAccessCaveatsPolicy) ->
                 SubjectAccessToken, tokens:parse_consumer_token_header(Req),
                 PeerIp, Interface, DataAccessCaveatsPolicy
             ),
-            authenticate(TokenCredentials)
+            authenticate_by_token(TokenCredentials)
     end.
 
 
--spec authenticate(auth_manager:token_credentials()) ->
+-spec authenticate_by_token(auth_manager:token_credentials()) ->
     {ok, aai:auth()} | errors:unauthorized_error().
-authenticate(TokenCredentials) ->
-    try
-        authenticate_insecure(TokenCredentials)
-    catch
-        throw:Error ->
-            ?ERROR_UNAUTHORIZED(Error);
-        Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
-                ?MODULE, ?FUNCTION_NAME, Type, Message
-            ], Stacktrace),
-            ?ERROR_UNAUTHORIZED(?ERROR_INTERNAL_SERVER_ERROR)
-    end.
+authenticate_by_token(TokenCredentials) ->
+    ?catch_auth_exceptions(do_authenticate_by_token(TokenCredentials)).
 
 
 %%%===================================================================
@@ -70,9 +70,9 @@ authenticate(TokenCredentials) ->
 
 
 %% @private
--spec authenticate_insecure(auth_manager:token_credentials()) ->
+-spec do_authenticate_by_token(auth_manager:token_credentials()) ->
     {ok, aai:auth()} | errors:unauthorized_error() | no_return().
-authenticate_insecure(TokenCredentials) ->
+do_authenticate_by_token(TokenCredentials) ->
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity} = Auth, _TokenValidUntil} ->
             Interface = auth_manager:get_interface(TokenCredentials),

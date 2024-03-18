@@ -166,7 +166,7 @@ credentials_to_gs_auth_override(#token_credentials{
     }.
 
 
--spec infer_access_token_ttl(token_credentials()) -> time:seconds().
+-spec infer_access_token_ttl(token_credentials()) -> undefined | time:seconds().
 infer_access_token_ttl(#token_credentials{access_token = AccessToken}) ->
     caveats:infer_ttl(tokens:get_caveats(try_to_deserialize_token(AccessToken))).
 

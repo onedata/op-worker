@@ -42,19 +42,22 @@
 
 %% API
 -export([get_allow_all_constraints/0, get/1]).
--export([has_no_constraints/1]).
+-export([assert_no_constraints/1, has_no_constraints/1]).
 -export([assert_not_readonly_mode/1, inspect/4]).
+-export([filter_available_spaces/2]).
 
 
 % Specific file relation to files specified in constraints set by token caveats
 -type constraint_relation() :: {ancestor, ordsets:ordset(file_meta:name())} | equal_or_descendant.
 
+-type allowed_spaces() :: any | [od_space:id()].
 -type allowed_paths() :: any | [file_meta:path()].
 
 -type guid_whitelist() :: [file_id:file_guid()].
 -type guid_constraints() :: any | [guid_whitelist()].
 
 -record(constraints, {
+    spaces :: allowed_spaces(),
     paths :: allowed_paths(),
     guids :: guid_constraints(),
     readonly = false :: boolean()
@@ -66,6 +69,7 @@
 -export_type([constraints/0, ancestor_policy/0]).
 
 
+-define(CV_INTERFACE_ONECLIENT, #cv_interface{interface = oneclient}).
 -define(CV_READONLY, #cv_data_readonly{}).
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
@@ -78,11 +82,20 @@
 
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
-    #constraints{paths = any, guids = any, readonly = false}.
+    #constraints{spaces = any, paths = any, guids = any, readonly = false}.
+
+
+-spec assert_no_constraints(user_ctx:ctx()) -> ok | no_return().
+assert_no_constraints(UserCtx) ->
+    DataConstraints = user_ctx:get_data_constraints(UserCtx),
+    case has_no_constraints(DataConstraints) of
+        true -> ok;
+        false -> throw(?EACCES)
+    end.
 
 
 -spec has_no_constraints(constraints()) -> boolean().
-has_no_constraints(#constraints{paths = any, guids = any, readonly = false}) ->
+has_no_constraints(#constraints{spaces = any, paths = any, guids = any, readonly = false}) ->
     true;
 has_no_constraints(_) ->
     false.
@@ -91,6 +104,7 @@ has_no_constraints(_) ->
 -spec get([caveats:caveat()]) ->
     {ok, constraints()} | {error, invalid_constraints}.
 get(Caveats) ->
+    DataAccessCaveats = data_access_caveats:filter(Caveats),
     DataConstraints = lists:foldl(fun
         (?CV_READONLY, Acc) ->
             Acc#constraints{readonly = true};
@@ -116,9 +130,9 @@ get(Caveats) ->
                     GuidWhiteList -> [GuidWhiteList | GuidConstraints]
                 end
             };
-        (_, Acc) ->
+        (?CV_INTERFACE_ONECLIENT, Acc) ->
             Acc
-    end, #constraints{paths = any, guids = any}, Caveats),
+    end, get_allow_all_constraints(), DataAccessCaveats),
 
     case DataConstraints of
         #constraints{paths = []} ->
@@ -126,7 +140,12 @@ get(Caveats) ->
         #constraints{guids = []} ->
             {error, invalid_constraints};
         _ ->
-            {ok, DataConstraints}
+            {ok, DataConstraints#constraints{
+                spaces = case data_access_caveats:match_available_spaces(DataAccessCaveats, [<<"*">>]) of
+                    [<<"*">>] -> any;
+                    Whitelist -> Whitelist
+                end
+            }}
     end.
 
 
@@ -176,6 +195,10 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     case DataConstraints of
         #constraints{paths = any, guids = any} ->
             {undefined, FileCtx0};
+        #constraints{spaces = []} ->
+            % no available spaces means that the caveats are cancelling each other out
+            % and no data can effectively be accessed with the constraints; save some calculations
+            throw(?EACCES);
         _ ->
             CheckResult = check_and_cache_data_constraints(
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy
@@ -190,6 +213,13 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
                     {CanonicalChildrenWhiteList2, FileCtx1}
             end
     end.
+
+
+-spec filter_available_spaces(constraints(), [od_space:id()]) -> [od_space:id()].
+filter_available_spaces(#constraints{spaces = any}, AllSpaceIds) ->
+    AllSpaceIds;
+filter_available_spaces(#constraints{spaces = Whitelist}, AllSpaceIds) ->
+    lists_utils:intersect(Whitelist, AllSpaceIds).
 
 
 %%%===================================================================

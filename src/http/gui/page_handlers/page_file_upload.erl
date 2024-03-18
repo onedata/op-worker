@@ -44,15 +44,19 @@
 %%--------------------------------------------------------------------
 -spec handle(gui:method(), cowboy_req:req()) -> cowboy_req:req().
 handle(<<"OPTIONS">>, Req) ->
-    gui_cors:options_response(
+    http_cors:options_response(
         oneprovider:get_oz_url(),
         [<<"POST">>],
         [?HDR_X_AUTH_TOKEN, ?HDR_CONTENT_TYPE],
         Req
     );
 handle(<<"POST">>, InitialReq) ->
-    Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
-    case http_auth:authenticate(Req, graphsync, disallow_data_access_caveats) of
+    Req = http_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
+    AuthCtx = #http_auth_ctx{
+        interface = graphsync,
+        data_access_caveats_policy = disallow_data_access_caveats
+    },
+    case http_auth:authenticate(Req, AuthCtx) of
         {ok, ?USER(UserId) = Auth} ->
             try
                 Req2 = handle_multipart_req(Req, Auth, #{}),

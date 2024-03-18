@@ -205,7 +205,11 @@ allowed_methods(Req, State) ->
 -spec is_authorized(cowboy_req:req(), map()) ->
     {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    case http_auth:authenticate(Req, rest, disallow_data_access_caveats) of
+    AuthCtx = #http_auth_ctx{
+        interface = rest,
+        data_access_caveats_policy = disallow_data_access_caveats
+    },
+    case http_auth:authenticate(Req, AuthCtx) of
         {ok, ?USER(UserId, SessionId) = Auth} ->
             case authorize(Req, Auth) of
                 ok ->
@@ -831,7 +835,7 @@ get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
 -spec notify(pid(), reference(), triggers(),
     {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
-notify(Pid, Ref, Triggers, {ok, #document{} = Doc}) ->
+notify(Pid, Ref, Triggers, {ok, {change, #document{} = Doc}}) ->
     case is_observed_doc(Doc, Triggers) of
         true ->
             call_changes_stream_handler(Pid, Ref, [Doc]);
@@ -840,7 +844,12 @@ notify(Pid, Ref, Triggers, {ok, #document{} = Doc}) ->
     end,
     ok;
 notify(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
-    case lists:filter(fun(Doc) -> is_observed_doc(Doc, Triggers) end, Docs) of
+    case lists:filtermap(fun({change, Doc}) ->
+        case is_observed_doc(Doc, Triggers) of
+            true -> {true, Doc};
+            false -> false
+        end
+    end, Docs) of
         [] ->
             ok;
         RelevantDocs ->

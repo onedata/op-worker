@@ -8,7 +8,6 @@
 %%% @doc
 %%% This module provides basic functionality for navigating through Oneprovider's
 %%% files tree. The structure of it is presented and described below.
-%%%
 %%%                       +----------+
 %%%                       |  !ROOT   |_______________________
 %%%                       +----------+                \      \
@@ -31,29 +30,29 @@
 %%%  ===============================================================|  | ^share1  |   |       \
 %%%         |                  |            |    |     \            |  +----------+   |        |
 %%%        ...                ...           |    |      \___________|_______/         |        |
-%%%                                         |    |                  |                 |        |
-%%%            _____________________________/    |                  |                 |        |
-%%%           /                                  |                  |           +----------+   |
-%%%          /                                   |                  |           | ^share2  |   |
-%%%    +----------+                        +----------+             |           +----------+   |
-%%%    |   file1  |                        |  *dir1   |_____________|_________________/        |
-%%%    +----------+                        +----------+             |                          |
+%%%    +---------------+                    |    |                  |                 |        |
+%%%    | &trash_space1 |            _______/     |                  |                 |        |
+%%%    +---------------+           /             |                  |           +----------+   |
+%%%                               /              |                  |           | ^share2  |   |
+%%%  +------------------+    +----------+   +----------+            |           +----------+   |
+%%%  | &archives_space1 |    |   file1  |   |  *dir1   |____________|_________________/        |
+%%%  +------------------+    +----------+   +----------+            |                          |
 %%%                                          /       \              |                    +----------+
-%%%                                         /         \             |                    | ^share3  |
-%%%                             +----------+          +----------+  |                    +----------+
-%%%                             |   dir2   |          |  *file2  |__|__________________________/
-%%%                             +----------+          +----------+  |
-%%%                             /    |    \                         |
-%%%                            ...  ...   ...                       |
-%%%                                                                 |
+%%%    +-------------+                      /         \             |                    | ^share3  |
+%%%    | &tmp_space1 |            +----------+        +----------+  |                    +----------+
+%%%    +-------------+            |   dir2   |        |  *file2  |__|__________________________/
+%%%         |                     +----------+        +----------+  |
+%%%  +-----------------------+    /    |    \                       |
+%%%  | &opened_deleted_files |   ...  ...   ...                     |
+%%%  +-----------------------+                                      |
 %%%
 %%% Description:
-%%% 1) !ROOT - directory marked as parent for all user_root and space directories.
-%%%            It is used internally by Oneprovider (it is local for each provider)
-%%%            and as such cannot be modified nor listed.
-%%% 2) @user - user root directory (mount root after mounting Oneclient).
-%%%            Listing it returns all spaces that user belongs to.
-%%%            Similarly to !ROOT it is local to each provider and cannot be modified.
+%%% 1) !ROOT -  directory marked as parent for all user_root and space directories.
+%%%             It is used internally by Oneprovider (it is local for each provider)
+%%%             and as such cannot be modified nor listed.
+%%% 2) @user -  user root directory (mount root after mounting Oneclient).
+%%%             Listing it returns all spaces that user belongs to.
+%%%             Similarly to !ROOT it is local to each provider and cannot be modified.
 %%% 3) #space - space directory. It is treated as normal directory and as such it's
 %%%             modification is controlled by access rights.
 %%%             All documents associated with it (and files/dirs inside of it)
@@ -66,9 +65,18 @@
 %%%             In the future it will be used as mount root when mounting Oneclient
 %%%             for share with open handle (in such case it will be treated as root
 %%%             dir with no parent).
-%%% 5) *file - share root file. It is directly shared file or directory or space and
-%%%            the only child of share root dir (in 'open_handle' mode)
-%%% 6) file/dir - regular file/directory.
+%%% 5) *file -  share root file. It is directly shared file or directory or space and
+%%%             the only child of share root dir (in 'open_handle' mode)
+%%% 6) &special_space_directory - special directory that is created for each space, however
+%%%             is not part of this space file_tree. There are 3 types of special directories:
+%%%                 * trash - space trash directory, to which deleted files are temporarily moved
+%%%                   for deletion in the background. For more details consult trash.erl;
+%%%                 * archives_root - space archives root directory, which contains all archives
+%%%                   created in the space. For more details consult archives_tree.erl;
+%%%                 * tmp - directory which content is NOT synchronized between providers.
+%%%                 * opened_deleted_files - child of tmp, contains files that were deleted, but at
+%%%                   least one of theirs handles is still in use (have not been closed).
+%%% 7) file/dir - regular file/directory.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_tree).
@@ -85,7 +93,7 @@
     get_original_parent/2,
     get_parent/2,
 
-    get_child/3, list_children/3, list_children/4
+    get_child/3, list_children/3
 ]).
 
 -type children_whitelist() :: undefined | [file_meta:name()].
@@ -103,19 +111,32 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns 'undefined' if file is root file (either userRootDir or share root)
-%% or proper ParentGuid otherwise.
+%% Returns 'undefined' if file is root file (either userRootDir, share root, archive root, trash, tmp dir or shared
+%% file accessed in share ctx) or proper ParentGuid otherwise.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent_guid_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
 get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
-
-    case file_ctx:get_logical_guid_const(ParentCtx) of
-        FileGuid -> {undefined, FileCtx2};
-        ParentGuid -> {ParentGuid, FileCtx2}
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    IsRootDir = lists:any(fun(F) -> F(FileUuid) end, [
+        fun fslogic_file_id:is_user_root_dir_uuid/1,
+        fun fslogic_file_id:is_share_root_dir_uuid/1,
+        fun archivisation_tree:is_archives_root_dir_uuid/1,
+        fun fslogic_file_id:is_trash_dir_uuid/1,
+        fun fslogic_file_id:is_tmp_dir_uuid/1
+    ]),
+    
+    case IsRootDir of
+        true ->
+            {undefined, FileCtx};
+        false ->
+            % get_parent/2 returns the same file_ctx when file is shared and accessed in share ctx.
+            {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
+            case file_ctx:equals(ParentCtx, FileCtx2) of
+                true -> {undefined, FileCtx2};
+                false -> {file_ctx:get_logical_guid_const(ParentCtx), FileCtx2}
+            end
     end.
 
 
@@ -187,32 +208,19 @@ get_child(FileCtx, Name, UserCtx) ->
 -spec list_children(file_ctx:ctx(), user_ctx:ctx(), file_listing:options()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
 list_children(FileCtx, UserCtx, ListOpts) ->
-    list_children(FileCtx, UserCtx, ListOpts, undefined).
-
-
--spec list_children(
-    file_ctx:ctx(),
-    user_ctx:ctx(),
-    file_listing:options(),
-    children_whitelist()
-) ->
-    {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_children(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            get_user_root_dir_children(UserCtx, FileCtx, ListOpts, ChildrenWhiteList);
+            get_user_root_dir_children(UserCtx, FileCtx, ListOpts);
         false ->
             case file_ctx:is_share_root_dir_const(FileCtx) of
                 true ->
-                    list_share_root_dir_children(UserCtx, FileCtx, ChildrenWhiteList);
+                    list_share_root_dir_children(UserCtx, FileCtx, maps:get(whitelist, ListOpts, undefined));
                 false ->
                     case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
                         true ->
-                            get_space_open_handle_shares(
-                                UserCtx, FileCtx, ListOpts, ChildrenWhiteList
-                            );
+                            get_space_open_handle_shares(UserCtx, FileCtx, ListOpts);
                         false ->
-                            list_file_children(FileCtx, ListOpts, ChildrenWhiteList)
+                            list_file_children(FileCtx, ListOpts)
                     end
             end
     end.
@@ -318,11 +326,11 @@ get_user_root_dir_child(UserCtx, UserRootDirCtx, Name) ->
 -spec get_user_root_dir_children(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    file_listing:options(),
-    children_whitelist()
+    file_listing:options()
 ) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
+get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts) ->
+    SpaceWhiteList = maps:get(whitelist, ListOpts, undefined),
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
@@ -357,11 +365,10 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 -spec get_space_open_handle_shares(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    file_listing:options(),
-    children_whitelist()
+    file_listing:options()
 ) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
+get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
@@ -376,7 +383,7 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
             _ -> false
         end
     end,
-
+    ShareWhiteList = maps:get(whitelist, ListOpts, undefined),
     FilteredShares = case ShareWhiteList of
         undefined ->
             lists:filter(IsOpenHandleShare, AllSpaceShares);
@@ -464,9 +471,9 @@ get_dir_child(FileCtx, Name) ->
 
 
 %% @private
--spec list_file_children(file_ctx:ctx(), file_listing:options(), children_whitelist()) ->
+-spec list_file_children(file_ctx:ctx(), file_listing:options()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
+list_file_children(FileCtx, ListOpts) ->
     {#document{} = FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
 
@@ -476,7 +483,7 @@ list_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
             {_FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
             {ok, ChildrenLinks, ListingToken} = 
-                file_listing:list(FileUuid, ListOpts#{whitelist => ChildrenWhiteList}),
+                file_listing:list(FileUuid, ListOpts),
             Children = lists:map(fun({Name, Uuid}) ->
                 file_ctx:new_by_uuid(Uuid, SpaceId, ShareId, Name)
             end, ChildrenLinks),

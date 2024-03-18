@@ -708,7 +708,7 @@ register_file(Worker, User, Body) ->
     rest_test_utils:request(Worker, <<"data/register">>, post, Headers, json_utils:encode(Body)).
 
 perms_to_allow_ace(Perms) ->
-    ?ALLOW_ACE(?owner, ?no_flags_mask, permissions_test_utils:perms_to_bitmask(Perms)).
+    ?ALLOW_ACE(?owner, ?no_flags_mask, authz_test_utils:perms_to_bitmask(Perms)).
 
 mock_traverse_finished(Worker, TestProcess) ->
     ok = test_utils:mock_new(Worker, tree_deletion_traverse),

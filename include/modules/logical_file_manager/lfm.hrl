@@ -16,19 +16,6 @@
 
 -define(lfm_check(__FunctionCall), lfm:check_result(__FunctionCall)).
 
--define(PRIVATE_BASIC_ATTRIBUTES, [
-    <<"file_id">>, <<"parent_id">>, <<"name">>, <<"mode">>,
-    <<"storage_user_id">>, <<"storage_group_id">>,
-    <<"atime">>, <<"mtime">>, <<"ctime">>,
-    <<"type">>, <<"size">>, <<"shares">>,
-    <<"provider_id">>, <<"owner_id">>, <<"hardlinks_count">>, <<"index">>
-]).
--define(PUBLIC_BASIC_ATTRIBUTES, [
-    <<"file_id">>, <<"parent_id">>, <<"name">>, <<"mode">>,
-    <<"atime">>, <<"mtime">>, <<"ctime">>,
-    <<"type">>, <<"size">>, <<"shares">>, <<"index">>
-]).
-
 -record(file_ref, {
     guid :: file_id:file_guid(),
     % Indicates whether the operation should be performed on the symlink itself

@@ -85,7 +85,7 @@
 -type encoded_pagination_token() :: binary().
 -type entry() :: file_meta_forest:link().
 
--export_type([offset/0, limit/0, index/0, pagination_token/0, whitelist/0, options/0]).
+-export_type([offset/0, limit/0, index/0, pagination_token/0, options/0, whitelist/0]).
 
 -define(DEFAULT_LS_BATCH_LIMIT, op_worker:get_env(default_ls_batch_limit, 5000)).
 
@@ -137,7 +137,9 @@ decode_pagination_token(Token) ->
     end.
 
 
--spec encode_index(index()) -> binary().
+-spec encode_index(index() | undefined) -> binary().
+encode_index(undefined) ->
+    undefined;
 encode_index(#list_index{} = Index) ->
     mochiweb_base64url:encode(term_to_binary(Index)).
 

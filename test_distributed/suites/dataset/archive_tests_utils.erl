@@ -224,14 +224,13 @@ assert_archives_root_dir_exists(Node, SessionId, SpaceId, Attempts) ->
     ArchivesRootUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
     ArchivesRootGuid = file_id:pack_guid(ArchivesRootUuid, SpaceId),
     ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     ?assertMatch({ok, #file_attr{
         guid = ArchivesRootGuid,
         name = ArchivesRootDirName,
         mode = ?ARCHIVES_ROOT_DIR_PERMS,
         owner_id = ?SPACE_OWNER_ID(SpaceId),
-        parent_guid = SpaceGuid
+        parent_guid = undefined
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchivesRootGuid)), Attempts).
 
 

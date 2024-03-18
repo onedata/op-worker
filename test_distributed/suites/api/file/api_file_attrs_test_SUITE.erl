@@ -76,7 +76,7 @@ groups() -> [
 
         get_symlink_distribution_test,
         get_reg_file_distribution_test,
-    
+
         get_reg_file_storage_locations_test_posix,
         get_reg_file_storage_locations_test_s3,
 
@@ -114,11 +114,10 @@ get_file_attrs_test(Config) ->
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
-    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
     DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
         FileGuid, undefined, get_attrs_data_spec(normal_mode)
     ),
-    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs).
 
 
 get_file_attrs_with_xattrs_test(Config) ->
@@ -129,17 +128,16 @@ get_file_attrs_with_xattrs_test(Config) ->
     ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name">>, <<"xattr_value">>),
     ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name2">>, <<"xattr_value2">>),
     file_test_utils:await_xattr(P2Node, FileGuid, [<<"xattr_name">>, <<"xattr_name2">>], ?ATTEMPTS),
+    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
     
-    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, ?ROOT_SESS_ID, FileGuid, [<<"xattr_name">>]),
-    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
     DataSpec = #data_spec{
-        optional = [<<"attribute">>],
-        correct_values = #{<<"attribute">> => [<<"xattr.xattr_name">>]}
+        optional = [<<"attributes">>],
+        correct_values = #{<<"attributes">> => [<<"xattr.xattr_name">>]}
     },
-    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs#file_attr{xattrs = #{<<"xattr_name">> => <<"xattr_value">>}}).
 
 
-get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs) ->
+get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -162,13 +160,13 @@ get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs) ->
                     name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(FileAttrs, undefined)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using gs private api">>,
                     type = gs,
                     prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = build_get_attrs_validate_gs_call_fun(JsonAttrs, undefined)
+                    validate_result_fun = build_get_attrs_validate_gs_call_fun(FileAttrs, undefined)
                 }
             ],
             randomly_select_scenarios = true,
@@ -217,7 +215,6 @@ get_shared_file_attrs_test(_Config) ->
         file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
-    JsonAttrs = api_test_utils:file_attrs_to_json(ShareId1, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -228,13 +225,13 @@ get_shared_file_attrs_test(_Config) ->
                     name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
                     prepare_args_fun = build_get_attrs_prepare_rest_args_fun(ShareObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(FileAttrs, ShareId1)
                 },
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using gs public api">>,
                     type = gs,
                     prepare_args_fun = build_get_attrs_prepare_gs_args_fun(ShareGuid, public),
-                    validate_result_fun = build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId1)
+                    validate_result_fun = build_get_attrs_validate_gs_call_fun(FileAttrs, ShareId1)
                 }
             ],
             randomly_select_scenarios = true,
@@ -371,24 +368,26 @@ test_for_hardlink_between_files_test(_Config) ->
 %% @private
 -spec get_attrs_data_spec(TestMode :: normal_mode | share_mode) -> onenv_api_test_runner:data_spec().
 get_attrs_data_spec(normal_mode) ->
+    AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS],
     #data_spec{
-        optional = [<<"attribute">>],
-        correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
+        optional = [<<"attributes">>],
+        correct_values = #{<<"attributes">> => AllowedAttrsJson},
         bad_values = [
-            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}},
-            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}
+            {<<"attributes">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
+            {<<"attributes">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}},
+            {<<"attributes">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}
         ]
     };
 get_attrs_data_spec(share_mode) ->
+    AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_API_ATTRS],
     #data_spec{
-        optional = [<<"attribute">>],
-        correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
+        optional = [<<"attributes">>],
+        correct_values = #{<<"attributes">> => AllowedAttrsJson},
         bad_values = [
-            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}},
-            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
-            {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}
+            {<<"attributes">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
+            {<<"attributes">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}},
+            {<<"attributes">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
+            {<<"attributes">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}
         ]
     }.
 
@@ -407,7 +406,7 @@ build_get_attrs_prepare_rest_args_fun(ValidId) ->
             method = get,
             path = http_utils:append_url_parameters(
                 RestPath,
-                maps:with([<<"attribute">>], Data2)
+                maps:with([<<"attributes">>], Data2)
             )
         }
     end.
@@ -422,7 +421,7 @@ build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
 
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
+            gri = #gri{type = op_file, id = GriId, aspect = instance, scope = Scope},
             data = Data1
         }
     end.
@@ -467,30 +466,30 @@ build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
 
 
 %% @private
--spec build_get_attrs_validate_rest_call_fun(AllFileAttrs :: map(), undefined | od_share:id()) ->
+-spec build_get_attrs_validate_rest_call_fun(#file_attr{}, undefined | od_share:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId) ->
+build_get_attrs_validate_rest_call_fun(FileAttr, ShareId) ->
     fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
+        case get_attrs_exp_result(TestCtx, FileAttr, ShareId, rest) of
             {ok, ExpAttrs} ->
                 ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
             {error, _} = Error ->
-                ExpRestError = {errors:to_http_code(Error), ?REST_ERROR(Error)},
-                ?assertEqual(ExpRestError, {RespCode, RespBody})
+                ?assertEqual({?HTTP_400_BAD_REQUEST, #{<<"error">> => errors:to_json(Error)}}, {RespCode, RespBody})
         end
     end.
 
 
 %% @private
--spec build_get_attrs_validate_gs_call_fun(AllFileAttrs :: map(), undefined | od_share:id()) ->
+-spec build_get_attrs_validate_gs_call_fun(#file_attr{}, undefined | od_share:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId) ->
+build_get_attrs_validate_gs_call_fun(FileAttr, ShareId) ->
     fun(TestCtx, Result) ->
-        case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
+        case get_attrs_exp_result(TestCtx, FileAttr, ShareId, gs) of
             {ok, ExpAttrs} ->
-                ?assertEqual({ok, #{<<"attributes">> => ExpAttrs}}, Result);
-            {error, _} = ExpError ->
-                ?assertEqual(ExpError, Result)
+                {ok, ResultMap} = ?assertMatch({ok, _}, Result),
+                ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap));
+            {error, _} = Error ->
+                ?assertEqual(Error, Result)
         end
     end.
 
@@ -498,27 +497,54 @@ build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId) ->
 %% @private
 -spec get_attrs_exp_result(
     onenv_api_test_runner:api_test_ctx(),
-    AllFileAttrs :: map(),
-    undefined | od_share:id()
+    file_attr:record(),
+    undefined | od_share:id(),
+    Format :: gs | rest
 ) ->
     {ok, ExpectedFileAttrs :: map()}.
-get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
-    RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
-        undefined ->
-            case ShareId of
-                undefined -> ?PRIVATE_BASIC_ATTRIBUTES;
-                _ -> ?PUBLIC_BASIC_ATTRIBUTES
-            end;
-        Attr ->
-            [Attr]
-    end,
-    {ok, maps:with(RequestedAttributes, JsonAttrs)}.
+get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #file_attr{acl = Acl} = FileAttr, ShareId, Format) ->
+    User4Id = oct_background:get_user_id(user4),
+    case {Client, is_acl_requested(Data), Acl} of
+        {?USER(UserId), true, [_|_]} when UserId == User4Id ->
+            ?ERROR_POSIX(?EACCES);
+        _ ->
+            ProviderId = case ShareId of
+                undefined -> opw_test_rpc:get_provider_id(Node);
+                _ -> undefined
+            end,
+            JsonAttrs = api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, FileAttr),
+            {AttrType, RequestedAttributesJson} = case maps:get(<<"attributes">>, Data, undefined) of
+                undefined ->
+                    case ShareId of
+                        %% @TODO VFS-11377 change defaults after deprecated attrs are removed
+                        undefined ->
+                            {deprecated, lists:flatmap(fun(A) ->
+                                [file_attr_translator:attr_name_to_json(deprecated, A), file_attr_translator:attr_name_to_json(A)]
+                            end, ?DEPRECATED_ALL_ATTRS)};
+                        _ ->
+                            {deprecated, lists:flatmap(fun(A) ->
+                                [file_attr_translator:attr_name_to_json(deprecated, A), file_attr_translator:attr_name_to_json(A)]
+                            end, ?DEPRECATED_PUBLIC_ATTRS)}
+                    end;
+                Attr ->
+                    {current, utils:ensure_list(Attr)}
+            end,
+            JsonAttrs2 = case AttrType of
+                deprecated -> maps:merge(JsonAttrs, api_test_utils:replace_attrs_with_deprecated(JsonAttrs));
+                current -> JsonAttrs
+            end,
+            {ok, maps:with(RequestedAttributesJson, JsonAttrs2)}
+    end.
+
+
+%% @private
+is_acl_requested(Data) ->
+    lists:member(<<"acl">>, utils:ensure_list(maps:get(<<"attributes">>, Data, maps:get(<<"attribute">>, Data, [])))).
 
 
 %%%===================================================================
 %%% Get shares test functions
 %%%===================================================================
-
 
 get_file_shares_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -597,7 +623,6 @@ build_get_shares_prepare_gs_args_fun(FileGuid, Scope) ->
 %%%===================================================================
 %%% Set mode test functions
 %%%===================================================================
-
 
 set_file_mode_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
@@ -773,7 +798,7 @@ build_set_mode_prepare_rest_args_fun(ValidId) ->
             method = put,
             path = http_utils:append_url_parameters(
                 RestPath,
-                maps:with([<<"attribute">>], Data1)
+                maps:with([<<"attributes">>], Data1)
             ),
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
@@ -799,7 +824,6 @@ build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
 %%%===================================================================
 %%% Get file distribution test functions
 %%%===================================================================
-
 
 get_reg_file_distribution_test(Config) ->
     P1Id = oct_background:get_provider_id(krakow),
@@ -1780,7 +1804,6 @@ gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
@@ -1789,7 +1812,7 @@ init_per_suite(Config) ->
             User3Id = oct_background:get_user_id(user3),
             lists:foreach(fun(SpacePlaceholder) ->
                 SpaceId = oct_background:get_space_id(SpacePlaceholder),
-                ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                ozt_spaces:set_privileges(SpaceId, User3Id, [
                     ?SPACE_MANAGE_SHARES | privileges:space_member()
                 ])
             end, [space_krk_par, space_s3]),

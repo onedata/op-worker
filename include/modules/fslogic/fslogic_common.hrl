@@ -123,4 +123,18 @@
 % Separator between space name and its id added in case of duplicated name.
 -define(SPACE_NAME_ID_SEPARATOR, <<"@">>).
 
+-define(catch_not_found(_Code), ?catch_not_found_as(not_found, _Code)).
+-define(catch_not_found_as(ReturnValue, _Code),
+    try
+        _Code
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found ->
+                ReturnValue;
+            _ ->
+                erlang:apply(erlang, Class, [Reason])
+        end
+    end
+).
+
 -endif.

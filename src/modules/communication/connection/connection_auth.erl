@@ -70,7 +70,7 @@ get_handshake_error_msg({badmatch, {error, Error}}) ->
 get_handshake_error_msg({Code, Error, _Description}) when is_integer(Code) ->
     #server_message{
         message_body = #handshake_response{
-            status = clproto_translator:translate_handshake_error(Error)
+            status = clproto_translator:handshake_error_to_protobuf(Error)
         }
     };
 get_handshake_error_msg(_) ->

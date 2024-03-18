@@ -83,7 +83,7 @@ describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs)};
+        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)};
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
@@ -101,7 +101,7 @@ transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Value, AtmDataSpec =
 
     maps:with(
         lists:map(fun str_utils:to_binary/1, Attrs),
-        file_attr_translator:to_json(FileAttrs)
+        file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)
     ).
 
 
@@ -137,25 +137,13 @@ list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     {[automation:item()], recursive_listing:pagination_token() | undefined}.
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
-    FileCtx0 = file_ctx:new_by_guid(CompressedRoot),
+    FileCtx = file_ctx:new_by_guid(CompressedRoot),
     try
-        {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-        AccessRequirements = case IsDir of
-            true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
-            false -> [?TRAVERSE_ANCESTORS]
-        end,
-        {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-            UserCtx, FileCtx1, AccessRequirements
-        ),
-
-        #recursive_listing_result{
+        #fuse_response{fuse_response = #file_recursive_listing_result{
             entries = Entries,
             pagination_token = PaginationToken
-        } = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx2, kv_utils:move_found(
-            include_directories, include_branching_nodes, Opts
-        )),
-        MappedEntries = lists:map(fun({_, ChildFileCtx}) ->
-            ChildGuid = file_ctx:get_logical_guid_const(ChildFileCtx),
+        }} = dir_req:list_recursively(UserCtx, FileCtx, Opts, [file_id]),
+        MappedEntries = lists:map(fun(#file_attr{guid = ChildGuid}) ->
             {ok, ChildObjectId} = file_id:guid_to_objectid(ChildGuid),
             #{<<"file_id">> => ChildObjectId}
         end, Entries),

@@ -12,9 +12,11 @@
 -module(opt).
 -author("Michal Stanisz").
 
+-include("graph_sync/provider_graph_sync.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
--type entity() :: od_space.
+-type entity() :: od_space | od_user.
 
 -export([
     force_fetch_entity/2,
@@ -29,10 +31,14 @@
 
 -spec force_fetch_entity(entity(), binary()) -> ok.
 force_fetch_entity(Entity, Id) ->
-    Providers = oct_background:get_provider_ids(),
-    lists:foreach(fun(P) ->
-        ?assertMatch({ok, _}, opw_test_rpc:call(P, entity_to_logic_module(Entity), force_fetch, [Id]))
-    end, Providers).
+    GRI = #gri{type = Entity, id = Id, aspect = instance},
+
+    lists:foreach(fun(ProviderId) ->
+        SessionId = get_session_id_required_to_force_fetch_entity(Entity, Id, ProviderId),
+        ?assertMatch({ok, _}, opw_test_rpc:call(ProviderId, gs_client_worker, force_fetch_entity, [
+            SessionId, GRI
+        ]))
+    end, oct_background:get_provider_ids()).
 
 
 -spec invalidate_cache(gs_protocol:entity_type(), binary()) -> ok.
@@ -48,5 +54,7 @@ invalidate_cache(Entity, Id) ->
 
 
 %% @private
--spec entity_to_logic_module(entity()) -> module().
-entity_to_logic_module(od_space) -> space_logic.
+get_session_id_required_to_force_fetch_entity(od_user, UserId, ProviderId) ->
+    oct_background:get_user_session_id(UserId, ProviderId);
+get_session_id_required_to_force_fetch_entity(od_space, _, _) ->
+    ?ROOT_SESS_ID.

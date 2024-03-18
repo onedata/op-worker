@@ -81,10 +81,7 @@
     assert_synchronization_enabled/1, assert_synchronization_disabled/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
-
-%% Functions that do not modify context but do not have _const suffix and return context.
-% TODO VFS-6119 missing _const suffix in function name
--export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
+-export([get_local_file_location_doc_const/1, get_local_file_location_doc_const/2]).
 
 %% Functions modifying context
 -export([
@@ -101,7 +98,7 @@
     get_or_create_local_regular_file_location_doc/3, get_or_create_local_regular_file_location_doc/4,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/2,
-    get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
+    get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1, ensure_synced/1
 ]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
@@ -551,21 +548,21 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
                             {StorageFileId, FileCtx1#file_ctx{storage_file_id = StorageFileId}}
                     end;
                 false ->
-                    case get_local_file_location_doc(FileCtx1, false) of
-                        {#document{
+                    case get_local_file_location_doc_const(FileCtx1, false) of
+                        #document{
                             value = #file_location{file_id = StorageFileId, storage_file_created = SFC}
-                        }, FileCtx2}
+                        }
                             when StorageFileId =/= undefined
                             andalso (SFC or Generate)
                         ->
-                            {StorageFileId, FileCtx2#file_ctx{storage_file_id = StorageFileId}};
-                        {_, FileCtx2} ->
+                            {StorageFileId, FileCtx1#file_ctx{storage_file_id = StorageFileId}};
+                        _ ->
                             % Check if id should be generated
                             case Generate of
                                 true ->
-                                    get_new_storage_file_id(FileCtx2);
+                                    get_new_storage_file_id(FileCtx1);
                                 _ ->
-                                    {undefined, FileCtx2}
+                                    {undefined, FileCtx1}
                             end
                     end
             end
@@ -714,10 +711,15 @@ get_times(
 %% Returns storage id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
+-spec get_storage_id(ctx()) -> {storage:id() | undefined, ctx()}.
 get_storage_id(FileCtx) ->
-    {Storage, FileCtx2} = get_storage(FileCtx),
-    {storage:get_id(Storage), FileCtx2}.
+    case get_storage(FileCtx) of
+        {undefined, FileCtx2} ->
+            % can happen for user root dir or space dir accessed via provider proxy
+            {undefined, FileCtx2};
+        {Storage, FileCtx2} ->
+            {storage:get_id(Storage), FileCtx2}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -812,27 +814,25 @@ get_or_create_local_file_location_doc(FileCtx, GetDocOpts) ->
 %% @equiv get_local_file_location_doc(FileCtx, true)
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_doc(ctx()) ->
-    {file_location:doc() | undefined, ctx()}.
-get_local_file_location_doc(FileCtx) ->
-    % TODO VFS-6119 missing _const suffix in function name
-    get_local_file_location_doc(FileCtx, true).
+-spec get_local_file_location_doc_const(ctx()) ->
+    file_location:doc() | undefined.
+get_local_file_location_doc_const(FileCtx) ->
+    get_local_file_location_doc_const(FileCtx, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts()) ->
-    {file_location:doc() | undefined, ctx()}.
-get_local_file_location_doc(FileCtx, GetDocOpts) ->
-    % TODO VFS-6119 missing _const suffix in function name
+-spec get_local_file_location_doc_const(ctx(), fslogic_location_cache:get_doc_opts()) ->
+    file_location:doc() | undefined.
+get_local_file_location_doc_const(FileCtx, GetDocOpts) ->
     FileUuid = get_logical_uuid_const(FileCtx),
     case fslogic_location_cache:get_local_location(FileUuid, GetDocOpts) of
         {ok, Location} ->
-            {Location, FileCtx};
+            Location;
         {error, not_found} ->
-            {undefined, FileCtx}
+            undefined
     end.
 
 -spec get_dir_location_doc_const(ctx()) -> dir_location:doc() | undefined.
@@ -941,10 +941,10 @@ is_storage_file_created(FileCtx) ->
                     {dir_location:is_storage_file_created(DirLocation), FileCtx2}
             end;
         {false, FileCtx2} ->
-            case get_local_file_location_doc(FileCtx2, false) of
-                {undefined, _} ->
+            case get_local_file_location_doc_const(FileCtx2, false) of
+                undefined ->
                     {false, FileCtx2};
-                {FileLocation, _} ->
+                FileLocation ->
                     {file_location:is_storage_file_created(FileLocation), FileCtx2}
             end
     end.
@@ -986,18 +986,14 @@ get_mode(FileCtx) ->
 -spec get_file_size(ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), ctx()}.
 get_file_size(FileCtx) ->
-    case get_local_file_location_doc(FileCtx, false) of
-        {#document{
-            value = #file_location{
-                size = undefined
-            }
-        }, FileCtx2} ->
-            {FL, _} = get_local_file_location_doc(FileCtx, true),
-            {fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)), FileCtx2};
-        {#document{value = #file_location{size = Size}}, FileCtx2} ->
-            {Size, FileCtx2};
-        {undefined, FileCtx2} ->
-            get_file_size_from_remote_locations(FileCtx2)
+    case get_local_file_location_doc_const(FileCtx, false) of
+        #document{value = #file_location{size = undefined}} ->
+            FL = get_local_file_location_doc_const(FileCtx, true),
+            {fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)), FileCtx};
+        #document{value = #file_location{size = Size}} ->
+            {Size, FileCtx};
+        undefined ->
+            get_file_size_from_remote_locations(FileCtx)
     end.
 
 
@@ -1007,41 +1003,13 @@ prepare_file_size_summary(FileCtx, create_missing_location) ->
     {LocationDoc, FileCtx2} = get_or_create_local_regular_file_location_doc(FileCtx, true, true),
     {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2};
 prepare_file_size_summary(FileCtx, throw_on_missing_location) ->
-    case get_local_file_location_doc(FileCtx, true) of
-        {undefined, _FileCtx2} ->
+    case get_local_file_location_doc_const(FileCtx, true) of
+        undefined ->
             throw({error, file_location_missing});
-        {LocationDoc, FileCtx2} ->
-            {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx2}
+        LocationDoc ->
+            {prepare_file_size_summary_from_existing_doc(LocationDoc), FileCtx}
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns information if file is fully replicated and size of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_replication_status_and_size(ctx() | file_meta:uuid()) ->
-    {FullyReplicated :: boolean(), Size :: non_neg_integer(), ctx()}.
-get_replication_status_and_size(FileCtx) ->
-    case get_local_file_location_doc(FileCtx, {blocks_num, 2}) of
-        {#document{value = #file_location{size = SizeInDoc}} = FLDoc, FileCtx2} ->
-            Size = case SizeInDoc of
-                undefined ->
-                    {FLDocWithBlocks, _} = get_local_file_location_doc(FileCtx2, true),
-                    fslogic_blocks:upper(fslogic_location_cache:get_blocks(FLDocWithBlocks));
-                _ ->
-                    SizeInDoc
-            end,
-
-            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
-                [#file_block{offset = 0, size = Size}] -> {true, Size, FileCtx2};
-                [] when Size =:= 0 -> {true, Size, FileCtx2};
-                _ -> {false, Size, FileCtx2}
-            end;
-        {undefined, FileCtx2} ->
-            {RemoteSize, FileCtx3} = get_file_size_from_remote_locations(FileCtx2),
-            {RemoteSize =:= 0, RemoteSize, FileCtx3}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1054,6 +1022,7 @@ get_local_storage_file_size(FileCtx) ->
     FileUuid = get_logical_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
     {fslogic_location_cache:get_location_size(LocalLocationId, FileUuid), FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1462,11 +1431,11 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, CheckLocation
 -spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
     boolean(), non_neg_integer()) -> {file_location:doc(), ctx()}.
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true, QoSCheckSizeLimit) ->
-    case get_local_file_location_doc(FileCtx, GetDocOpts) of
-        {undefined, FileCtx2} ->
-            get_or_create_local_regular_file_location_doc(FileCtx2, GetDocOpts, false, QoSCheckSizeLimit);
-        {Location, FileCtx2} ->
-            {Location, FileCtx2}
+    case get_local_file_location_doc_const(FileCtx, GetDocOpts) of
+        undefined ->
+            get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, false, QoSCheckSizeLimit);
+        Location ->
+            {Location, FileCtx}
     end;
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists, QoSCheckSizeLimit) ->
     case fslogic_location:create_doc(FileCtx, false, false, QoSCheckSizeLimit) of
@@ -1475,7 +1444,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocatio
             lists:foreach(fun(ChangedLocation) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation, QoSCheckSizeLimit)
             end, LocationDocs),
-            get_local_file_location_doc(FileCtx3, GetDocOpts);
+            {get_local_file_location_doc_const(FileCtx3, GetDocOpts), FileCtx3};
         {{error, already_exists}, FileCtx2} ->
             % Possible race with file deletion - get including deleted
             {ok, Location} = fslogic_location_cache:get_local_location_including_deleted(FileCtx2, GetDocOpts),
@@ -1496,7 +1465,7 @@ get_file_size_from_remote_locations(FileCtx) ->
         [] ->
             {0, FileCtx2};
         [First | DocsTail] ->
-            ChocenDoc = lists:foldl(fun(
+            ChosenDoc = lists:foldl(fun(
                 New = #document{value = #file_location{
                     version_vector = NewVV
                 }},
@@ -1512,7 +1481,7 @@ get_file_size_from_remote_locations(FileCtx) ->
                 end
             end, First, DocsTail),
 
-            case ChocenDoc of
+            case ChosenDoc of
                 #document{
                     value = #file_location{
                         size = undefined
@@ -1536,10 +1505,10 @@ get_synced_gid(FileCtx) ->
 
 -spec get_file_synced_gid_const(ctx()) -> luma:gid() | undefined.
 get_file_synced_gid_const(FileCtx) ->
-    case get_local_file_location_doc(FileCtx, skip_local_blocks) of
-        {undefined, _} ->
+    case get_local_file_location_doc_const(FileCtx, skip_local_blocks) of
+        undefined ->
             undefined;
-        {FileLocation, _} ->
+        FileLocation ->
             file_location:get_synced_gid(FileLocation)
     end.
 

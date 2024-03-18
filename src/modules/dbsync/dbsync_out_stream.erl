@@ -165,11 +165,11 @@ handle_call(Request, _From, #state{} = State) ->
 handle_cast({change, {ok, Docs}}, State = #state{
     filter = Filter
 }) when is_list(Docs)->
-    FinalState = lists:foldl(fun(Doc, TmpState) ->
+    FinalState = lists:foldl(fun({change, Doc}, TmpState) ->
         handle_doc_change(Doc, Filter, TmpState)
     end, State, Docs),
     {noreply, FinalState};
-handle_cast({change, {ok, #document{} = Doc}}, State = #state{
+handle_cast({change, {ok, {change, #document{} = Doc}}}, State = #state{
     filter = Filter
 }) ->
     {noreply, handle_doc_change(Doc, Filter, State)};

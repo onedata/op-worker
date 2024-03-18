@@ -50,8 +50,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([ensure_archives_root_dir_exists/1, create_archive_dir/4,
-    is_special_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
+-export([ensure_archives_root_dir_exists/1,
+    ensure_dataset_archives_dir_exists/2, ensure_dataset_root_link_exists/2,
+    create_archive_dir/4, is_special_uuid/1, is_archives_root_dir_uuid/1, is_archive_dir_uuid/1, is_in_archive/1,
     uuid_to_archive_id/1, extract_archive_id/1, get_filename_for_download/1, get_root_dir_uuid/1]).
 
 %%%===================================================================
@@ -62,13 +63,40 @@
 ensure_archives_root_dir_exists(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
-    ArchivesRootDirDoc = file_meta:new_doc(
-        ArchivesRootDirUuid, ?ARCHIVES_ROOT_DIR_NAME,
-        ?DIRECTORY_TYPE, ?ARCHIVES_ROOT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
+    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+    ArchivesRootDirDoc = file_meta:new_special_dir_doc(
+        ArchivesRootDirUuid, ?ARCHIVES_ROOT_DIR_NAME, ?ARCHIVES_ROOT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
         SpaceUuid, SpaceId
     ),
     ok = ?ok_if_exists(create_file_meta(SpaceUuid, ArchivesRootDirDoc)),
+    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
+        ?ARCHIVES_ROOT_DIR_NAME, ?ARCHIVES_ROOT_DIR_UUID(SpaceId)))),
     {ok, ArchivesRootDirUuid}.
+
+
+-spec ensure_dataset_archives_dir_exists(dataset:id(), od_space:id()) -> {ok, file_meta:uuid()}.
+ensure_dataset_archives_dir_exists(DatasetId, SpaceId) ->
+    ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
+    DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
+    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+    DatasetArchivesDirDoc = file_meta:new_special_dir_doc(
+        DatasetArchivesDirUuid, ?DATASET_ARCHIVES_DIR_NAME(DatasetId),
+        ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId), ArchivesRootDirUuid, SpaceId
+    ),
+    case create_file_meta(ArchivesRootDirUuid, DatasetArchivesDirDoc) of
+        ok -> ok;
+        ?ERROR_NOT_FOUND ->
+            {ok, _} = ensure_archives_root_dir_exists(SpaceId),
+            ok = create_file_meta(ArchivesRootDirUuid, DatasetArchivesDirDoc)
+    end,
+    ensure_dataset_root_link_exists(DatasetId, SpaceId),
+    {ok, DatasetArchivesDirUuid}.
+
+
+-spec ensure_dataset_root_link_exists(dataset:id(), od_space:id()) -> ok.
+ensure_dataset_root_link_exists(DatasetId, SpaceId) ->
+    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId,
+        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId)))).
 
 
 -spec create_archive_dir(archive:id(), dataset:id(), od_space:id(), od_user:id()) ->
@@ -85,7 +113,7 @@ create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
         ok ->
             ok;
         ?ERROR_NOT_FOUND ->
-            {ok, _} = create_dataset_archives_dir(DatasetId, SpaceId),
+            {ok, _} = ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
             ok = create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc)
     end,
     {ok, ArchiveDirUuid}.
@@ -97,6 +125,13 @@ is_special_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
 is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(_) ->
+    false.
+
+
+-spec is_archives_root_dir_uuid(file_meta:uuid()) -> boolean().
+is_archives_root_dir_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
+    true;
+is_archives_root_dir_uuid(_) ->
     false.
 
 
@@ -159,24 +194,6 @@ get_root_dir_uuid(SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec create_dataset_archives_dir(dataset:id(), od_space:id()) -> {ok, file_meta:uuid()}.
-create_dataset_archives_dir(DatasetId, SpaceId) ->
-    ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
-    DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
-    DatasetArchivedDirDoc = file_meta:new_doc(
-        DatasetArchivesDirUuid, ?DATASET_ARCHIVES_DIR_NAME(DatasetId),
-        ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
-        ArchivesRootDirUuid, SpaceId
-    ),
-    case create_file_meta(ArchivesRootDirUuid, DatasetArchivedDirDoc) of
-        ok -> ok;
-        ?ERROR_NOT_FOUND ->
-            {ok, _} = ensure_archives_root_dir_exists(SpaceId),
-            ok = create_file_meta(ArchivesRootDirUuid, DatasetArchivedDirDoc)
-    end,
-    {ok, DatasetArchivesDirUuid}.
-
 
 -spec create_file_meta(file_meta:uuid(), file_meta:doc()) -> ok | {error, term()}.
 create_file_meta(ParentUuid, FileDoc) ->

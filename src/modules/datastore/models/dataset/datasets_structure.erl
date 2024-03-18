@@ -47,7 +47,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/4, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, move/5, pack_entry_index/2]).
+-export([add/4, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, apply_to_all_datasets/3,
+    move/5, pack_entry_index/2]).
 
 %% Test API
 -export([list_all_unsafe/2, delete_all_unsafe/2]).
@@ -100,6 +101,8 @@
 -define(FOREST_SEP, <<"###">>).
 -define(VALUE_SEP, <<"///">>).
 
+-define(FOLD_LINKS_BATCH_SIZE, 1000).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -146,6 +149,11 @@ list_top_datasets(SpaceId, ForestType, Opts) ->
 -spec list_children_datasets(od_space:id(), forest_type(), link_name(), opts()) -> {ok, entries(), IsLast :: boolean()}.
 list_children_datasets(SpaceId, ForestType, DatasetPath, Opts) ->
     list_internal(SpaceId, ForestType, {children, DatasetPath}, Opts).
+
+
+-spec apply_to_all_datasets(od_space:id(), forest_type(), fun((dataset:id()) -> any())) -> ok.
+apply_to_all_datasets(SpaceId, ForestType, Fun) ->
+    apply_to_all_datasets(SpaceId, ForestType, Fun, #{}).
 
 
 -spec move(od_space:id(), forest_type(), link_name(), link_name(), dataset:name()) -> ok.
@@ -378,8 +386,37 @@ is_prefix(Prefix, String) ->
     str_utils:binary_starts_with(String, Prefix).
 
 
+-spec apply_to_all_datasets(od_space:id(), forest_type(), fun((dataset:id()) -> any()), datastore_model:fold_opts()) ->
+    ok.
+apply_to_all_datasets(SpaceId, ForestType, Fun, Opts) ->
+    {NextBatch, NextBatchOpts, IsFinished} = list_next_batch(SpaceId, ForestType, Opts),
+    lists:foreach(Fun, NextBatch),
+    case IsFinished of
+        true -> ok;
+        false -> apply_to_all_datasets(SpaceId, ForestType, Fun, NextBatchOpts)
+    end.
+
+
+-spec list_next_batch(od_space:id(), forest_type(), datastore_model:fold_opts()) ->
+    {[dataset:id()], datastore_model:fold_opts(), boolean()}.
+list_next_batch(SpaceId, ForestType, Opts) ->
+    Token = maps:get(token, Opts, #link_token{}),
+    {{ok, Res}, NextBatchToken} = fold(
+        SpaceId,
+        ForestType,
+        fun(#link{name = DatasetPath}, Acc) -> {ok, [filename:basename(DatasetPath) | Acc]} end,
+        [],
+        Opts#{size => ?FOLD_LINKS_BATCH_SIZE, token => Token}
+    ),
+    NextBatchOpts = case Res of
+        [] -> #{token => NextBatchToken};
+        _ -> #{token => NextBatchToken, prev_link_name => lists:last(Res)}
+    end,
+    {Res, NextBatchOpts, NextBatchToken#link_token.is_last}.
+
+
 -spec fold(od_space:id(), forest_type(), fold_fun(), fold_acc(), datastore_model:fold_opts()) ->
-    {ok, fold_acc()} | {error, term()}.
+    {ok, fold_acc()} | {{ok, fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold(SpaceId, ForestType, Fun, AccIn, Opts) ->
     datastore_model:fold_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, Fun, AccIn, Opts).
 

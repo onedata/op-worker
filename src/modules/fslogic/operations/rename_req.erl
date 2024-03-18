@@ -248,8 +248,8 @@ rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx
 ) ->
-    {#document{key = FileLocationId, value = #file_location{uuid = TargetFileUuid}}, _} =
-        file_ctx:get_local_file_location_doc(TargetFileCtx),
+    #document{key = FileLocationId, value = #file_location{uuid = TargetFileUuid}} =
+        file_ctx:get_local_file_location_doc_const(TargetFileCtx),
     fslogic_location_cache:update_location(TargetFileUuid, FileLocationId, fun
         (FileLocation) -> {ok, FileLocation#file_location{storage_file_created = false}}
     end, false),
@@ -692,7 +692,7 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
             ok;
         false ->
             {RenamedFileCtx, _} = file_tree:get_child(TargetParentFileCtx, TargetName, UserCtx),
-            qos_bounded_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(RenamedFileCtx)),
+            qos_eff_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(RenamedFileCtx)),
             qos_logic:reconcile_qos(file_ctx:reset(RenamedFileCtx))
     end,
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
@@ -707,10 +707,8 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
 %% @private
 -spec validate_target_name(file_meta:name()) -> ok | no_return().
 validate_target_name(TargetName) ->
-    case re:run(TargetName, <<"/">>, [{capture, none}]) of
-        match -> throw(?EINVAL);
-        nomatch -> ok
-    end.
+    file_meta:is_valid_filename(TargetName) orelse throw(?EINVAL),
+    ok.
 
 
 %% @private

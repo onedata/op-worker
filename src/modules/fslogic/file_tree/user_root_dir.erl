@@ -316,7 +316,8 @@ emit_space_dir_created(SpaceId, SpaceName) ->
     #fuse_response{fuse_response = FileAttr} =
         attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
             allow_deleted_files => false,
-            name_conflicts_resolution_policy => resolve_name_conflicts
+            name_conflicts_resolution_policy => resolve_name_conflicts,
+            attributes => ?ONECLIENT_ATTRS
         }),
     FileAttr2 = FileAttr#file_attr{size = 0, name = SpaceName},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).

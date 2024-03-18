@@ -1,0 +1,7 @@
+# MACHINE GENERATED FILE. DO NOT MODIFY.
+
+## Name of the node
+-name nonode@nohost
+
+## Cookie for distributed erlang
+-setcookie cluster_node
