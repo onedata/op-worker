@@ -87,6 +87,8 @@ list() ->
 
 -spec handle_space_deleted(id()) -> ok.
 handle_space_deleted(Id) ->
+    ok = main_harvesting_stream:space_removed(Id),
+    ok = auto_storage_import_worker:notify_space_deleted(Id),
     run_in_critical_section(Id, fun() ->
         case get_from_cache(Id) of
             {ok, #document{value = #od_space{eff_users = UsersMap} = Space}} ->

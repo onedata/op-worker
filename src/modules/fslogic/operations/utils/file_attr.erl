@@ -519,31 +519,6 @@ count_bytes(undefined) -> 0;
 count_bytes(FileLocationDoc) -> file_location:count_bytes(FileLocationDoc).
 
 
-
-resolve_file_name(UserCtx, FileDoc, FileCtx0, <<_/binary>> = ParentGuid, resolve_name_conflicts) ->
-    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
-    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
-        true ->
-            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(user_ctx:get_session_id(UserCtx),
-                user_ctx:get_user_id(UserCtx), FileName, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
-            {Name, Conflicts, FileCtx1};
-        false ->
-            ParentUuid = file_id:guid_to_uuid(ParentGuid),
-            ProviderId = file_meta:get_provider_id(FileDoc),
-            Scope = file_meta:get_scope(FileDoc),
-            case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
-                {conflicting, ExtendedName, ConflictingFiles} ->
-                    {ExtendedName, ConflictingFiles, FileCtx1};
-                _ ->
-                    {FileName, [], FileCtx1}
-            end
-    end;
-resolve_file_name(UserCtx, _FileDoc, FileCtx0, _ParentGuid, _NameConflictResolutionPolicy) ->
-    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
-    {FileName, [], FileCtx1}.
-
-
 %% @private
 -spec resolve_name_attrs_internal(state()) -> {state(), record()}.
 resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
@@ -572,8 +547,8 @@ resolve_name_attrs_conflicts(State) ->
     case fslogic_file_id:is_space_dir_uuid(FileUuid) of
         true ->
             #state{user_ctx = UserCtx} = UpdatedState,
-            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(user_ctx:get_session_id(UserCtx),
-                user_ctx:get_user_id(UserCtx), FileName, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, FileName,
+                fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
             {UpdatedState#state{file_ctx = file_ctx:cache_name(Name, FileCtx)}, #file_attr{
                 name = Name,
                 conflicting_name = FileName,

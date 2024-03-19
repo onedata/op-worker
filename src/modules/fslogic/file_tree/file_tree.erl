@@ -334,9 +334,7 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
-    SessId = user_ctx:get_session_id(UserCtx),
-    UserId = user_ctx:get_user_id(UserCtx),
-    SpacesChunk = user_root_dir:list_spaces(SessId, UserId, Offset, Limit, SpaceWhiteList),
+    SpacesChunk = user_root_dir:list_spaces(UserCtx, Offset, Limit, SpaceWhiteList),
     Children = lists:map(fun({SpaceName, SpaceId}) ->
         SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
         file_ctx:new_by_uuid(SpaceDirUuid, SpaceId, undefined, SpaceName)

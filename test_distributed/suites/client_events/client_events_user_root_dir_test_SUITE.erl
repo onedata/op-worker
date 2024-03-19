@@ -201,10 +201,11 @@ rename_duplicated_space_name_proxy_during_broken_zone_connection(_Config) ->
 %%%===================================================================
 
 add_space_test_base(ClientProvider) ->
+    % this test checks adding new space to an environment with existing spaces (because there exist spaces created during environment setup)
     test_base(ClientProvider, #test_config{
         test_fun = fun(_) ->
             SpaceName = str_utils:rand_hex(8),
-            #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)}
+            #space{name = SpaceName, id = create_and_support_space(?SUPPORTING_PROVIDER, SpaceName)}
         end,
         expected_events_fun = fun(Space) ->
             [{file_attr_changed, guid(Space), Space#space.name}]
@@ -216,7 +217,7 @@ add_space_duplicate_name_test_base(ClientProvider) ->
     test_base(ClientProvider, #test_config{
         setup_fun = fun setup_space/0,
         test_fun = fun(PreexistingSpace) ->
-            SpaceId2 = create_supported_space(?SUPPORTING_PROVIDER, PreexistingSpace#space.name),
+            SpaceId2 = create_and_support_space(?SUPPORTING_PROVIDER, PreexistingSpace#space.name),
             {PreexistingSpace, #space{name = PreexistingSpace#space.name, id = SpaceId2}}
         end,
         expected_events_fun = fun({PreexistingSpace, AddedSpace}) -> [
@@ -381,7 +382,7 @@ setup_space() ->
 
 
 setup_space(SpaceName) ->
-    Space = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)},
+    Space = #space{name = SpaceName, id = create_and_support_space(?SUPPORTING_PROVIDER, SpaceName)},
     assert_event_received({file_attr_changed, guid(Space), Space#space.name}),
     Space.
 
@@ -391,16 +392,17 @@ setup_space_without_support(SpaceName) ->
     Space = #space{name = SpaceName, id = ozw_test_rpc:create_space(UserId, SpaceName)},
     lists:foreach(fun(Provider) ->
         SessId = oct_background:get_user_session_id(UserId, Provider),
-        ?assertMatch({ok, _}, opw_test_rpc:call(Provider, space_logic, get, [SessId, Space#space.id]))
+        % ensure providers know about this space (otherwise adding support to this space will be indistinguishable from adding a new space)
+        {ok, _} = opw_test_rpc:call(Provider, space_logic, get, [SessId, Space#space.id])
     end, oct_background:get_provider_ids()),
     Space.
 
 
 setup_2_spaces_with_conflicting_names() ->
     SpaceName = str_utils:rand_hex(8),
-    Space1 = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)},
+    Space1 = #space{name = SpaceName, id = create_and_support_space(?SUPPORTING_PROVIDER, SpaceName)},
     assert_event_received({file_attr_changed, guid(Space1), SpaceName}),
-    Space2 = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName)},
+    Space2 = #space{name = SpaceName, id = create_and_support_space(?SUPPORTING_PROVIDER, SpaceName)},
     assert_events_received([
         {file_renamed, guid(Space1), extended_name(Space1)},
         {file_attr_changed, guid(Space2), extended_name(Space2)}
@@ -466,7 +468,7 @@ extract_event_data(#'FileRemovedEvent'{file_uuid = Guid}) ->
     {file_removed, Guid}.
 
 
-create_supported_space(NodeSelector, Name) ->
+create_and_support_space(NodeSelector, Name) ->
     create_supported_space(NodeSelector, Name, ?CLIENT_USER).
     
 create_supported_space(NodeSelector, Name, UserPlaceholder) ->

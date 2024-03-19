@@ -16,17 +16,17 @@
 %%% Events production should be checked as follows:
 %%%     * file_attr_changed (represents new file for Oneclient):
 %%%         - for each new space for given user (as user might have been added to an already supported space);
-%%%         - for each new space support (as users with mounted oneclient could belong to such a space);
+%%%         - for each new space support (as users with mounted Oneclient could belong to such a space);
 %%%     * file_removed:
 %%%         - when space was deleted;
 %%%         - when space support was removed;
 %%%     * file_renamed:
-%%%         - always alongside file_attr_changed/file_removed events check - new space may have name conflicting
+%%%         - always when file_attr_changed is considered (see above) - the new space may have a name that conflicts
 %%%           with one of already existing spaces, which results in rename of this preexisting space to disambiguated name;
-%%%           similarly space removal may cause such a conflict to disappear
+%%%         - always when file_removed is considered (see above) - it may cause an existing conflict to cease existing;
 %%%           @TODO VFS-10923 currently not working properly in case of space removal, as user can not fetch name of space he no longer belongs to
-%%%         - when any user space changes name - this also may cause new name conflict with rest of user spaces,
-%%%           as well as end conflict if it existed before.
+%%%         - when any user space changes name - this may cause new name conflict with the rest of user spaces,
+%%%           as well as cause an existing conflict to cease existing.
 %%% @TODO VFS-11415 - cleanup user root dir docs after user deletion
 %%% @end
 %%%-------------------------------------------------------------------
@@ -41,8 +41,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([
-    list_spaces/5,
-    get_space_name_and_conflicts/4
+    list_spaces/4,
+    get_space_name_and_conflicts/3, get_space_name_and_conflicts/4
 ]).
 
 -export([
@@ -72,10 +72,10 @@
 %%% API
 %%%===================================================================
 
--spec list_spaces(session:id(), od_user:id(), file_listing:offset(), file_listing:limit(),
+-spec list_spaces(user_ctx:ctx(), file_listing:offset(), file_listing:limit(),
     file_listing:whitelist() | undefined) -> [{file_meta:name(), od_space:id()}].
-list_spaces(SessId, UserId, Offset, Limit, WhiteList) ->
-    SpaceIdsWithSupport = get_user_supported_spaces(SessId, UserId),
+list_spaces(UserCtx, Offset, Limit, WhiteList) ->
+    SpaceIdsWithSupport = get_user_supported_spaces(UserCtx),
     
     FilteredSpaceIds = case WhiteList of
         undefined -> SpaceIdsWithSupport;
@@ -84,39 +84,46 @@ list_spaces(SessId, UserId, Offset, Limit, WhiteList) ->
     
     case Offset < length(FilteredSpaceIds) of
         true ->
-            lists:sublist(resolve_unambiguous_names_for_spaces(group_spaces_by_name(SessId, FilteredSpaceIds)),
-                Offset + 1, Limit);
+            lists:sublist(resolve_unambiguous_names_for_spaces(group_spaces_by_name(
+                user_ctx:get_session_id(UserCtx), FilteredSpaceIds)), Offset + 1, Limit);
         false ->
             []
     end.
 
 
+-spec get_space_name_and_conflicts(user_ctx:ctx(), file_meta:name() | file_meta:disambiguated_name(), od_space:id()) ->
+    {file_meta:name(), file_meta:conflicts()}.
+get_space_name_and_conflicts(UserCtx, PossiblyDisambiguatedName, SpaceId) ->
+    get_space_name_and_conflicts(user_ctx:get_session_id(UserCtx), user_ctx:get_user_id(UserCtx),
+        PossiblyDisambiguatedName, SpaceId).
+
+
 -spec get_space_name_and_conflicts(session:id(), od_user:id(), file_meta:name() | file_meta:disambiguated_name(),
     od_space:id()) -> {file_meta:name(), file_meta:conflicts()}.
-get_space_name_and_conflicts(SessId, UserId, Name, SpaceId) ->
+get_space_name_and_conflicts(SessId, UserId, PossiblyDisambiguatedName, SpaceId) ->
     SpaceIdsWithSupport = get_user_supported_spaces(SessId, UserId),
     SpaceIdsByName = group_spaces_by_name(SessId, SpaceIdsWithSupport),
-    [BaseFileName | _] = binary:split(Name, ?SPACE_NAME_ID_SEPARATOR),
-    case maps:get(BaseFileName, SpaceIdsByName, []) of
+    [BaseSpaceName | _] = binary:split(PossiblyDisambiguatedName, ?SPACE_NAME_ID_SEPARATOR),
+    case maps:get(BaseSpaceName, SpaceIdsByName, []) of
         [_] ->
-            {BaseFileName, []};
+            {BaseSpaceName, []};
         SpaceIds ->
-            Conflicts = [{BaseFileName, fslogic_file_id:spaceid_to_space_dir_uuid(Sid)} || Sid <- SpaceIds, Sid /= SpaceId],
-            ExtendedName = disambiguate_conflicted_space_name(BaseFileName, SpaceId),
+            Conflicts = [{BaseSpaceName, fslogic_file_id:spaceid_to_space_dir_uuid(Sid)} || Sid <- SpaceIds, Sid /= SpaceId],
+            ExtendedName = disambiguate_conflicted_space_name(BaseSpaceName, SpaceId),
             {ExtendedName, Conflicts}
     end.
 
 
 -spec report_new_spaces_appeared([od_user:id()], [od_space:id()]) -> ok.
 report_new_spaces_appeared(UserIds, NewSpaceIds) ->
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, SpaceId, SpaceIdsByName) ->
+    apply_for_spaces_of_users_with_active_fuse_sessions(fun(SessId, UserRootDirGuid, SpaceId, SpaceIdsByName) ->
         SpaceName = maps_utils:fold_while(fun(Name, SpacesWithName, _Acc) ->
             case lists:member(SpaceId, SpacesWithName) of
                 true -> {halt, Name};
                 false -> {cont, undefined}
             end
         end, undefined, SpaceIdsByName),
-        handle_space_name_appeared_events(SpaceId, SpaceName, UserRootDirGuid, maps:get(SpaceName, SpaceIdsByName), create)
+        handle_space_name_appeared_events(SessId, SpaceId, SpaceName, UserRootDirGuid, maps:get(SpaceName, SpaceIdsByName), create)
     end, UserIds, NewSpaceIds).
 
 
@@ -135,19 +142,19 @@ report_spaces_removed(UserIds, RemovedSpaceIds) ->
     NewName :: od_space:name() | undefined) -> ok.
 report_space_name_change(UserIds, SpaceId, undefined, NewName) ->
     % first appearance of this space in provider
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
-        handle_space_name_appeared_events(SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), create)
+    apply_for_spaces_of_users_with_active_fuse_sessions(fun(SessId, UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
+        handle_space_name_appeared_events(SessId, SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), create)
     end, UserIds, [SpaceId]);
 report_space_name_change(UserIds, SpaceId, PrevName, undefined) ->
     % space was deleted
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
+    apply_for_spaces_of_users_with_active_fuse_sessions(fun(_SessId, UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
         handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpaceIdsByName, []))
     end, UserIds, [SpaceId]);
 report_space_name_change(UserIds, SpaceId, PrevName, NewName) ->
     % space was renamed
-    apply_for_users_with_fuse_session_spaces(fun(UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
+    apply_for_spaces_of_users_with_active_fuse_sessions(fun(SessId, UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
         handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpaceIdsByName, [])),
-        handle_space_name_appeared_events(SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), {rename, PrevName})
+        handle_space_name_appeared_events(SessId, SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), {rename, PrevName})
     end, UserIds, [SpaceId]).
 
 
@@ -174,7 +181,7 @@ ensure_cache_updated() ->
             ?ERROR_TOKEN_INVALID ->
                 ok;
             {error, _} = Error ->
-                ?warning("Could not fetch spaces for user ~s. ~nError: ~p", [UserId, Error])
+                ?warning("Could not fetch spaces~ts", [?autoformat([UserId, Error])])
         end
     end, find_fuse_sessions_of_all_users()).
 
@@ -183,9 +190,9 @@ ensure_cache_updated() ->
 %%%===================================================================
 
 %% @private
--spec handle_space_name_appeared_events(od_space:id(), od_space:name(), file_id:file_guid(), [od_space:id()],
+-spec handle_space_name_appeared_events(session:id(), od_space:id(), od_space:name(), file_id:file_guid(), [od_space:id()],
     create | {rename, od_space:name()}) -> ok.
-handle_space_name_appeared_events(SpaceId, Name, UserRootDirGuid, SpaceIdsWithSameName, Operation) ->
+handle_space_name_appeared_events(SessId, SpaceId, Name, UserRootDirGuid, SpaceIdsWithSameName, Operation) ->
     FinalNewName = case SpaceIdsWithSameName of
         [SpaceId] ->
             Name;
@@ -197,7 +204,7 @@ handle_space_name_appeared_events(SpaceId, Name, UserRootDirGuid, SpaceIdsWithSa
             disambiguate_conflicted_space_name(Name, SpaceId)
     end,
     case Operation of
-        create -> emit_space_dir_created(SpaceId, FinalNewName);
+        create -> emit_space_dir_created(SessId, SpaceId, FinalNewName);
         {rename, PrevName} -> emit_renamed_event(SpaceId, UserRootDirGuid, FinalNewName, PrevName)
     end.
 
@@ -211,15 +218,15 @@ handle_space_name_disappeared_events(_SpaceName, _UserRootDirGuid, _SpaceIdsWith
 
 
 %% @private
--spec apply_for_users_with_fuse_session_spaces(fun((file_id:file_guid(), od_space:id(), [od_space:id()]) -> ok),
+-spec apply_for_spaces_of_users_with_active_fuse_sessions(fun((file_id:file_guid(), od_space:id(), [od_space:id()]) -> ok),
     [od_user:id()], [od_space:id()]) -> ok.
-apply_for_users_with_fuse_session_spaces(Fun, UserIds, SpaceIds) ->
+apply_for_spaces_of_users_with_active_fuse_sessions(Fun, UserIds, SpaceIds) ->
     % user to session mapping is done only to fetch space name in user context (as provider may not have access to such space)
     maps:foreach(fun(UserId, [SessId | _]) ->
         UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
         SpaceIdsByName = group_spaces_by_name(SessId, get_user_supported_spaces(SessId, UserId)),
         lists:foreach(fun(SpaceId) ->
-            Fun(UserRootDirGuid, SpaceId, SpaceIdsByName)
+            Fun(SessId, UserRootDirGuid, SpaceId, SpaceIdsByName)
         end, lists_utils:intersect(lists:merge(maps:values(SpaceIdsByName)), SpaceIds))
     end, maps:with(UserIds, find_fuse_sessions_of_all_users())).
 
@@ -229,13 +236,19 @@ apply_for_users_with_fuse_session_spaces(Fun, UserIds, SpaceIds) ->
 find_fuse_sessions_of_all_users() ->
     {ok, SessList} = session:list(),
     lists:foldl(fun
-        % NOTE: as events are only produced for Oneclient, only fuse sessions or of interest.
+        % NOTE: as events are only produced for Oneclient, only fuse sessions are of interest.
         (#document{key = SessId, value = #session{type = fuse, identity = ?SUB(user, UserId)}}, Acc) ->
             Acc#{UserId => [SessId | maps:get(UserId, Acc, [])]};
         (_, Acc) ->
             Acc
     end, #{}, SessList).
 
+
+%% @private
+-spec get_user_supported_spaces(user_ctx:ctx()) -> [od_space:id()].
+get_user_supported_spaces(UserCtx) ->
+    get_user_supported_spaces(user_ctx:get_session_id(UserCtx), user_ctx:get_user_id(UserCtx)).
+    
 
 %% @private
 -spec get_user_supported_spaces(session:id(), od_user:id()) -> [od_space:id()].
@@ -310,14 +323,13 @@ emit_renamed_event(SpaceId, UserRootDirGuid, NewName, PrevName) ->
 
 
 %% @private
--spec emit_space_dir_created(od_space:id(), od_space:name()) -> ok.
-emit_space_dir_created(SpaceId, SpaceName) ->
+-spec emit_space_dir_created(session:id(), od_space:id(), od_space:name()) -> ok.
+emit_space_dir_created(SessId, SpaceId, SpaceName) ->
     FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+        attr_req:get_file_attr_insecure(user_ctx:new(SessId), FileCtx, #{
             allow_deleted_files => false,
-            name_conflicts_resolution_policy => resolve_name_conflicts,
-            attributes => ?ONECLIENT_ATTRS
+            attributes => ?ONECLIENT_ATTRS -- [?attr_name]
         }),
     FileAttr2 = FileAttr#file_attr{size = 0, name = SpaceName},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
