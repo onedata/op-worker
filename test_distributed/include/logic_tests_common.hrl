@@ -172,6 +172,7 @@ end).
 -define(HANDLE_PUBLIC_HANDLE(__Handle), __Handle).
 -define(HANDLE_RESOURCE_TYPE(__Handle), <<"Share">>).
 -define(HANDLE_RESOURCE_ID(__Handle), ?SHARE_1).
+-define(HANDLE_METADATA_PREFIX(__Handle), <<"oai_dc">>).
 -define(HANDLE_METADATA(__Handle), __Handle).
 -define(HANDLE_H_SERVICE(__Handle), ?HANDLE_SERVICE_1).
 -define(HANDLE_EFF_USERS_VALUE(__Handle), ?USER_PERMS_IN_HANDLE_VALUE_BINARIES).

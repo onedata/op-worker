@@ -26,6 +26,8 @@
 -type resource_type() :: binary().
 -type resource_id() :: binary().
 -type public_handle() :: binary().
+% short literal (e.g. <<"oai_dc">>) that identifies the metadata format, allowed values depend on Onezone config
+-type metadata_prefix() :: binary().
 -type metadata() :: binary().
 -type timestamp() :: calendar:datetime().
 

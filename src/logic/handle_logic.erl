@@ -24,7 +24,7 @@
 
 -export([get/2, get_public_data/2]).
 -export([has_eff_user/2, has_eff_user/3]).
--export([create/5]).
+-export([create/6]).
 
 %%%===================================================================
 %%% API
@@ -80,11 +80,12 @@ has_eff_user(SessionId, HandleId, UserId) ->
     gs_client_worker:client(), 
     od_handle_service:id(),
     od_handle:resource_type(), 
-    od_handle:resource_id(), 
+    od_handle:resource_id(),
+    od_handle:metadata_prefix(),
     od_handle:metadata()
 ) ->
     {ok, od_handle:id()} | errors:error().
-create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
+create(SessionId, HandleServiceId, ResourceType, ResourceId, MetadataPrefix, Metadata) ->
     {ok, UserId} = session:get_user_id(SessionId),
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
@@ -94,6 +95,7 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
             <<"handleServiceId">> => HandleServiceId,
             <<"resourceType">> => ResourceType,
             <<"resourceId">> => ResourceId,
+            <<"metadataPrefix">> => MetadataPrefix,
             <<"metadata">> => Metadata
         },
         subscribe = true
