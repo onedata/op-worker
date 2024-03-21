@@ -169,10 +169,12 @@ get(#op_req{gri = #gri{aspect = instance, scope = private}}, Handle) ->
     {ok, Handle};
 get(#op_req{gri = #gri{aspect = instance, scope = public}}, #od_handle{
     public_handle = PublicHandle,
+    metadata_prefix = MetadataPrefix,
     metadata = Metadata
 }) ->
     {ok, #{
         <<"url">> => utils:undefined_to_null(PublicHandle),
+        <<"metadataPrefix">> => MetadataPrefix,
         <<"metadataString">> => utils:undefined_to_null(Metadata)
     }}.
 

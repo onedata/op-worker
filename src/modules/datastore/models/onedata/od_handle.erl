@@ -26,14 +26,14 @@
 -type resource_type() :: binary().
 -type resource_id() :: binary().
 -type public_handle() :: binary().
-% short literal (e.g. <<"oai_dc">>) that identifies the metadata format, allowed values depend on Onezone config
+% short literal (e.g. <<"oai_dc">>) that identifies a metadata format, allowed values depend on Onezone config
 -type metadata_prefix() :: binary().
 -type metadata() :: binary().
 -type timestamp() :: calendar:datetime().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([resource_type/0, resource_id/0, public_handle/0, metadata/0,
-    timestamp/0]).
+-export_type([resource_type/0, resource_id/0, public_handle/0]).
+-export_type([metadata_prefix/0, metadata/0, timestamp/0]).
 
 -define(CTX, #{
     model => ?MODULE,

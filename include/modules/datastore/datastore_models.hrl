@@ -189,6 +189,7 @@
     public_handle :: od_handle:public_handle(),
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
+    metadata_prefix :: od_handle:metadata_prefix() | undefined,
     metadata :: od_handle:metadata() | undefined,
 
     % Direct relations to other entities

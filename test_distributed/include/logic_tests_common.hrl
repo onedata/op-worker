@@ -584,6 +584,7 @@ end).
     public_handle = ?HANDLE_PUBLIC_HANDLE(__Handle),
     resource_type = ?HANDLE_RESOURCE_TYPE(__Handle),
     resource_id = ?HANDLE_RESOURCE_ID(__Handle),
+    metadata_prefix = ?HANDLE_METADATA_PREFIX(__Handle),
     metadata = ?HANDLE_METADATA(__Handle),
     handle_service = ?HANDLE_H_SERVICE(__Handle),
     eff_users = ?HANDLE_EFF_USERS_MATCHER(__HService),
@@ -593,6 +594,7 @@ end).
     public_handle = ?HANDLE_PUBLIC_HANDLE(__Handle),
     resource_type = undefined,
     resource_id = undefined,
+    metadata_prefix = ?HANDLE_METADATA_PREFIX(__Handle),
     metadata = ?HANDLE_METADATA(__Handle),
     handle_service = undefined,
     eff_users = #{},
@@ -775,6 +777,7 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
+    <<"metadataPrefix">> => ?HANDLE_METADATA_PREFIX(__HandleId),
     <<"metadata">> => ?HANDLE_METADATA(__HandleId)
 }).
 -define(HANDLE_PRIVATE_DATA_VALUE(__HandleId), begin
