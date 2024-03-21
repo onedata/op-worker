@@ -63,7 +63,8 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"shareId">> => {binary, non_empty},
-        <<"handleServiceId">> => {binary, non_empty}
+        <<"handleServiceId">> => {binary, non_empty},
+        <<"metadataPrefix">> => {binary, non_empty}
     },
     optional => #{<<"metadataString">> => {binary, any}}
 };
