@@ -85,7 +85,7 @@ create_dir_at_path(SessId, ParentGuid0, Path) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), [file_attr:attribute()]) ->
+-spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), [onedata_file:attr_name()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
 get_children_attrs(SessId, FileKey, ListingOpts, Attributes) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
@@ -104,7 +104,7 @@ get_children_attrs(SessId, FileKey, ListingOpts, Attributes) ->
 
 
 
--spec get_child_attr(session:id(), file_id:file_guid(), file_meta:name(), [file_attr:attribute()]) ->
+-spec get_child_attr(session:id(), file_id:file_guid(), file_meta:name(), [onedata_file:attr_name()]) ->
     {ok, #file_attr{}} | lfm:error_reply().
 get_child_attr(SessId, ParentGuid0, ChildName, Attributes)  ->
     ParentGuid1 = lfm_file_key:resolve_file_key(
@@ -131,7 +131,7 @@ get_children_count(SessId, FileKey) ->
     session:id(), 
     lfm:file_key(), 
     dir_req:recursive_listing_opts(),
-    [file_attr:attribute()]
+    [onedata_file:attr_name()]
 ) ->
     {ok, [file_attr:record()], [file_meta:path()], recursive_listing:pagination_token()}.
 get_files_recursively(SessId, FileKey, Options, Attributes) ->

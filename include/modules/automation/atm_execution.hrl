@@ -261,6 +261,10 @@
     function :: append | extend
 }).
 
+-define(ATM_FILE_VALUE_DESCRIBE_ATTRS, [
+    ?attr_guid, ?attr_name, ?attr_type, ?attr_size
+]).
+
 
 %% Atm status and phase related macros
 

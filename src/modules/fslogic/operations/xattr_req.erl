@@ -37,7 +37,7 @@ list_xattr(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
     ?FUSE_OK_RESP(#xattr_list{names = Xattrs}).
 
 
--spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:name(), boolean()) ->
+-spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name(), boolean()) ->
     fslogic_worker:fuse_response().
 get_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
@@ -51,7 +51,7 @@ set_xattr(UserCtx, FileCtx, Xattr, Create, Replace) ->
     set_xattr_internal(UserCtx, FileCtx, Xattr, Create, Replace).
 
 
--spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:name()) ->
+-spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name()) ->
     fslogic_worker:fuse_response().
 remove_xattr(UserCtx, FileCtx, XattrName) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
@@ -67,7 +67,7 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 -spec get_xattr_internal(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    custom_metadata:name(),
+    onedata_file:xattr_name(),
     Inherited :: boolean()
 ) ->
     fslogic_worker:fuse_response().
@@ -194,7 +194,7 @@ set_xattr_internal(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Rep
 
 
 %% @private
--spec remove_xattr_internal(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:name()) ->
+-spec remove_xattr_internal(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name()) ->
     fslogic_worker:fuse_response().
 remove_xattr_internal(UserCtx, FileCtx, ?ACL_KEY) ->
     provider_response_to_fuse_response(acl_req:remove_acl(UserCtx, FileCtx));
@@ -239,7 +239,7 @@ operation_result_to_fuse_response(?ERROR_POSIX(Errno)) ->
 
 
 %% @private
--spec assert_is_allowed_to_operate_on_xattr(user_ctx:ctx(), custom_metadata:name()) -> ok.
+-spec assert_is_allowed_to_operate_on_xattr(user_ctx:ctx(), onedata_file:xattr_name()) -> ok.
 assert_is_allowed_to_operate_on_xattr(UserCtx, XattrName) ->
     case (not is_special_key(XattrName)) orelse user_ctx:is_root(UserCtx)  of
         true -> ok;
@@ -248,7 +248,7 @@ assert_is_allowed_to_operate_on_xattr(UserCtx, XattrName) ->
 
 
 %% @private
--spec is_special_key(custom_metadata:name()) -> boolean().
+-spec is_special_key(onedata_file:xattr_name()) -> boolean().
 is_special_key(<<?ONEDATA_PREFIX_STR, _/binary>>) -> true;
 is_special_key(<<?CDMI_PREFIX_STR, _/binary>>) -> true;
 is_special_key(_) -> false.

@@ -165,7 +165,10 @@ example_data_spec(atm_dataset_type) ->
     #atm_dataset_data_spec{};
 
 example_data_spec(atm_file_type) ->
-    #atm_file_data_spec{file_type = 'ANY', attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)};
+    #atm_file_data_spec{
+        file_type = 'ANY',
+        attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES, 1, all)
+    };
 
 example_data_spec(atm_number_type) ->
     #atm_number_data_spec{integers_only = false, allowed_values = undefined};
@@ -227,7 +230,7 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_file_data_spec{}
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
 
     #{
-        <<"file_id">> => ObjectId,
+        <<"fileId">> => ObjectId,
         <<"type">> => str_utils:to_binary(FileType)
     };
 
@@ -410,7 +413,7 @@ randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecution
     case rand:uniform(5) of
         1 ->
             SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-            {ok, FileGuid} = file_id:objectid_to_guid(maps:get(<<"file_id">>, Item)),
+            {ok, FileGuid} = file_id:objectid_to_guid(maps:get(<<"fileId">>, Item)),
             FileRef = ?FILE_REF(FileGuid),
 
             ?rpc(ProviderSelector, lfm:rm_recursive(SessionId, FileRef)),

@@ -25,7 +25,7 @@
     % path to file which is a root of a dataset (a file to which dataset is attached)
     root_file_path :: file_meta:path(),
     % type of a root file
-    root_file_type :: file_meta:type(),
+    root_file_type :: onedata_file:type(),
     % flags are stored so that they can be restored when dataset is reattached
     protection_flags :: data_access_control:bitmask(),
     detachment_reason :: dataset:detachment_reason()
@@ -38,7 +38,7 @@
 %%% API functions
 %%%===================================================================
 
--spec create_info(dataset:path(), file_meta:path(), file_meta:type(), 
+-spec create_info(dataset:path(), file_meta:path(), onedata_file:type(),
     data_access_control:bitmask(), dataset:detachment_reason()) -> info().
 create_info(DatasetPath, RootFilePath, RootFileType, ProtectionFlags, Reason) ->
     #info{
@@ -60,7 +60,7 @@ get_root_file_path(#info{root_file_path = RootFilePath}) ->
     RootFilePath.
 
 
--spec get_root_file_type(info()) -> file_meta:type().
+-spec get_root_file_type(info()) -> onedata_file:type().
 get_root_file_type(#info{root_file_type = RootFileType}) ->
     RootFileType.
 

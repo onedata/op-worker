@@ -45,7 +45,7 @@
 %%%===================================================================
 
 -spec report_file_archivisation_finished(id(), file_meta:path(),
-    file_meta:type(), time:millis()) -> ok | {error, term()}.
+    onedata_file:type(), time:millis()) -> ok | {error, term()}.
 report_file_archivisation_finished(Id, FilePath, FileType, StartTimestamp) ->
     DescriptionPrefix = string:titlecase(type_to_human_readable_str(FileType)),
 
@@ -60,7 +60,7 @@ report_file_archivisation_finished(Id, FilePath, FileType, StartTimestamp) ->
     }).
 
 
--spec report_file_archivisation_failed(id(), file_meta:path(), file_meta:type(),
+-spec report_file_archivisation_failed(id(), file_meta:path(), onedata_file:type(),
     time:millis(), {error, term()}) -> ok | {error, term()}.
 report_file_archivisation_failed(Id, FilePath, FileType, StartTimestamp, Error) ->
     ErrorJson = errors:to_json(Error),
@@ -78,7 +78,7 @@ report_file_archivisation_failed(Id, FilePath, FileType, StartTimestamp, Error) 
     }).
 
 
--spec report_file_verification_failed(id(), file_meta:path(), file_meta:type()) ->
+-spec report_file_verification_failed(id(), file_meta:path(), onedata_file:type()) ->
     ok | {error, term()}.
 report_file_verification_failed(Id, FilePath, FileType) ->
     Description = <<"Verification of the archived ", (type_to_human_readable_str(FileType))/binary, " failed.">>,
@@ -110,14 +110,14 @@ browse(Id, Opts) ->
 
 
 %% @private
--spec type_to_human_readable_str(file_meta:type()) -> binary().
+-spec type_to_human_readable_str(onedata_file:type()) -> binary().
 type_to_human_readable_str(?REGULAR_FILE_TYPE) -> <<"regular file">>;
 type_to_human_readable_str(?DIRECTORY_TYPE) -> <<"directory">>;
 type_to_human_readable_str(?SYMLINK_TYPE) -> <<"symbolic link">>.
 
 
 %% @private
--spec type_to_binary(file_meta:type()) -> binary().
+-spec type_to_binary(onedata_file:type()) -> binary().
 type_to_binary(?REGULAR_FILE_TYPE) -> <<"REG">>;
 type_to_binary(?DIRECTORY_TYPE) -> <<"DIR">>;
 type_to_binary(?SYMLINK_TYPE) -> <<"SYMLNK">>.

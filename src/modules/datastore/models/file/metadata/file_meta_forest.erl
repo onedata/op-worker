@@ -142,9 +142,9 @@ delete(ParentUuid, Scope, FileName, FileUuid) ->
                 [_ | _] = Links ->
                     % possible in case of special dirs
                     %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
-                    lists:foreach(fun(#link{tree_id = TreeId, name = FileName, rev = Rev}) ->
+                    lists:foreach(fun(#link{tree_id = TreeId, name = CurrentFileName, rev = Rev}) ->
                         % pass Rev to ensure that link with the same Rev is deleted
-                        delete_link(TreeId, ParentUuid, Scope, FileName, Rev)
+                        delete_link(TreeId, ParentUuid, Scope, CurrentFileName, Rev)
                     end, Links);
                 [] ->
                     ok

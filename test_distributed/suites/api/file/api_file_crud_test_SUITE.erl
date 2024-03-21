@@ -242,8 +242,8 @@ file_attrs_to_gs_json(Node, ShareId, #file_attr{guid = FileGuid} = FileAttr) ->
     CurrentJson = api_test_utils:file_attr_to_json(ShareId, gs, ProviderId, FileAttr),
     DeprecatedFileAttr = api_test_utils:replace_attrs_with_deprecated(CurrentJson),
     JsonFileAttr = maps:with(
-        [file_attr_translator:attr_name_to_json(A) || A <- ?DEPRECATED_ALL_ATTRS] ++
-        [file_attr_translator:attr_name_to_json(deprecated, A) || A <- ?DEPRECATED_ALL_ATTRS],
+        [onedata_file:attr_name_to_json(A) || A <- ?DEPRECATED_ALL_FILE_ATTRS] ++
+        [onedata_file:attr_name_to_json(deprecated, A) || A <- ?DEPRECATED_ALL_FILE_ATTRS],
     maps:merge(CurrentJson, DeprecatedFileAttr)),
     JsonFileAttr#{
         <<"gri">> => gri:serialize(#gri{

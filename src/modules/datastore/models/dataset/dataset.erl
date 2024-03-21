@@ -135,7 +135,7 @@ get(DatasetId) ->
     datastore_model:get(?CTX, DatasetId).
 
 
--spec mark_detached(id(), path(), file_meta:path(), file_meta:type(), data_access_control:bitmask(), 
+-spec mark_detached(id(), path(), file_meta:path(), onedata_file:type(), data_access_control:bitmask(),
     detachment_reason()) -> ok | error().
 mark_detached(DatasetId, DatasetPath, RootFilePath, RootFileType, ProtectionFlags, Reason) ->
     update(DatasetId, fun
