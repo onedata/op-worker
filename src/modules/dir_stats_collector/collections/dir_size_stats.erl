@@ -57,7 +57,8 @@
 %% API - generic stats
 -export([get_stats/1, get_stats/2, browse_historical_stats_collection/2, delete_stats/1]).
 %% API - reporting file size changes
--export([report_virtual_size_changed/2, report_logical_size_changed/2, report_physical_size_changed/3]).
+-export([report_virtual_size_changed/2, report_virtual_size_changed/3, report_logical_size_changed/2,
+    report_physical_size_changed/3]).
 %% API - reporting file count changes
 -export([report_file_created/2, report_file_created_without_state_check/2, report_file_deleted/2]).
 %% API - hooks
@@ -125,6 +126,12 @@ end).
     removed_main_refs = [] :: file_meta_hardlinks:references_list()
 }).
 
+% opened file deletion (closing last handle of opened file) require special handling
+% (see get_conflict_protected_reference_list/2) - this is due to logical size NOT being counted for deleted opened files.
+-type update_reason() :: opened_file_deletion | other.
+
+-export_type([update_reason/0]).
+
 %%%===================================================================
 %%% API - generic stats
 %%%===================================================================
@@ -175,13 +182,17 @@ delete_stats(Guid) ->
 %%% API - reporting file size changes
 %%%===================================================================
 
-
 -spec report_virtual_size_changed(file_id:file_guid(), integer()) -> ok.
-report_virtual_size_changed(_Guid, 0) ->
-    ok;
 report_virtual_size_changed(Guid, SizeDiff) ->
+    report_virtual_size_changed(Guid, SizeDiff, other).
+
+
+-spec report_virtual_size_changed(file_id:file_guid(), integer(), update_reason()) -> ok.
+report_virtual_size_changed(_Guid, 0, _) ->
+    ok;
+report_virtual_size_changed(Guid, SizeDiff, UpdateReason) ->
     {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    case get_conflict_protected_reference_list(Uuid) of
+    case get_conflict_protected_reference_list(Uuid, UpdateReason) of
         [?OPENED_DELETED_FILE_LINK_PATTERN = MainRef] ->
             ok = dir_stats_collector:update_stats_of_parent(file_id:pack_guid(MainRef, SpaceId),
                 ?MODULE, #{?VIRTUAL_SIZE => SizeDiff});
@@ -222,21 +233,21 @@ report_physical_size_changed(Guid, StorageId, SizeDiff) ->
 %%% API - reporting file count changes
 %%%===================================================================
 
--spec report_file_created(file_meta:type(), file_id:file_guid()) -> ok.
+-spec report_file_created(onedata_file:type(), file_id:file_guid()) -> ok.
 report_file_created(?DIRECTORY_TYPE, Guid) ->
     update_stats(Guid, #{?DIR_COUNT => 1});
 report_file_created(_, Guid) ->
     update_stats(Guid, #{?REG_FILE_AND_LINK_COUNT => 1}).
 
 
--spec report_file_created_without_state_check(file_meta:type(), file_id:file_guid()) -> ok.
+-spec report_file_created_without_state_check(onedata_file:type(), file_id:file_guid()) -> ok.
 report_file_created_without_state_check(?DIRECTORY_TYPE, Guid) ->
     ok = dir_stats_collector:update_stats_of_dir_without_state_check(Guid, ?MODULE, #{?DIR_COUNT => 1});
 report_file_created_without_state_check(_, Guid) ->
     ok = dir_stats_collector:update_stats_of_dir_without_state_check(Guid, ?MODULE, #{?REG_FILE_AND_LINK_COUNT => 1}).
 
 
--spec report_file_deleted(file_meta:type(), file_id:file_guid()) -> ok.
+-spec report_file_deleted(onedata_file:type(), file_id:file_guid()) -> ok.
 report_file_deleted(?DIRECTORY_TYPE, Guid) ->
     update_stats(Guid, #{?DIR_COUNT => -1});
 report_file_deleted(_, Guid) ->
@@ -507,6 +518,20 @@ delete(Guid) ->
 
 -spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
 init_dir(Guid) ->
+    %%  This function is called both for the first dir stats initiation, as well as any successive re-initialization (disabling and re-enabling).
+    %%  However, the previous statistics are not cleared upon disabling, so we need to clear them, apart from the incarnation info.
+    StatsToRetain = #{?INCARNATION_TIME_SERIES => [?CURRENT_METRIC]},
+    Uuid = file_id:guid_to_uuid(Guid),
+    case datastore_time_series_collection:get_slice(?CTX, Uuid, StatsToRetain, #{window_limit => 1}) of
+        {ok, Slice} ->
+            Incarnation = internal_stats_to_incarnation(Slice),
+            ok = delete(Guid),
+            ok = datastore_time_series_collection:create(?CTX, Uuid, internal_stats_config(Guid)),
+            datastore_time_series_collection:consume_measurements(?CTX, Uuid,
+                #{?INCARNATION_TIME_SERIES => #{?CURRENT_METRIC => [{?NOW(), Incarnation}]}});
+        {error, not_found} ->
+            ok
+    end,
     gen_empty_current_stats(Guid).
 
 
@@ -816,6 +841,11 @@ decode_stat_name(6) -> ?LOGICAL_SIZE.
 %% @private
 -spec get_conflict_protected_reference_list(file_meta:uuid()) -> file_meta_hardlinks:references_list().
 get_conflict_protected_reference_list(Uuid) ->
+    get_conflict_protected_reference_list(Uuid, other).
+
+%% @private
+-spec get_conflict_protected_reference_list(file_meta:uuid(), update_reason()) -> file_meta_hardlinks:references_list().
+get_conflict_protected_reference_list(Uuid, UpdateReason) ->
     ReferencesList = case file_meta_hardlinks:list_references(Uuid) of
         {ok, List} ->
             List;
@@ -823,13 +853,17 @@ get_conflict_protected_reference_list(Uuid) ->
             [Uuid] % Storage import creates location before file_meta
     end,
 
-    #reference_list_changes{added = Added, removed = Removed, removed_main_refs = First} =
+    #reference_list_changes{added = Added, removed = Removed, removed_main_refs = RemovedMainRefs} =
         node_cache:get({?MODULE, Uuid}, #reference_list_changes{}),
-    case First ++ ReferencesList -- Added ++ Removed of
+    case (RemovedMainRefs ++ ReferencesList ++ Removed) -- Added of
         [] ->
-            case file_handles:is_file_opened(Uuid) of
-                true -> [];
-                false -> [Uuid] % Race on dbsync (file_meta deleted before size change is handled)
+            case UpdateReason of
+                % stats of deleted opened files are handled specially (see on_opened_file_delete/2 and on_deleted_file_close/2);
+                % note that for opened deleted file there is maximally one hardlink so this case means that the file was closed
+                % before stats were calculated.
+                opened_file_deletion -> [];
+                % race on dbsync (file_meta remotely deleted before local size change is handled)
+                other -> [Uuid]
             end;
         FinalList ->
             FinalList

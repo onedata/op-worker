@@ -20,18 +20,18 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
-    get_custom_metadata/1,
-    set_custom_metadata/1,
-    remove_custom_metadata/1,
+    test_get_custom_metadata/1,
+    test_set_custom_metadata/1,
+    test_remove_custom_metadata/1,
 
-    get_xattr/1,
-    list_xattr/1,
-    set_xattr/1,
-    remove_xattr/1,
+    test_get_xattr/1,
+    test_list_xattr/1,
+    test_set_xattr/1,
+    test_remove_xattr/1,
 
-    get_file_distribution/1,
-    get_historical_dir_size_stats/1,
-    get_file_storage_locations/1
+    test_get_file_distribution/1,
+    test_get_historical_dir_size_stats/1,
+    test_get_file_storage_locations/1
 ]).
 
 
@@ -40,7 +40,7 @@
 %%%===================================================================
 
 
-get_custom_metadata(SpaceId) ->
+test_get_custom_metadata(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -71,7 +71,7 @@ get_custom_metadata(SpaceId) ->
     }).
 
 
-set_custom_metadata(SpaceId) ->
+test_set_custom_metadata(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -96,7 +96,7 @@ set_custom_metadata(SpaceId) ->
     }).
 
 
-remove_custom_metadata(SpaceId) ->
+test_remove_custom_metadata(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -127,7 +127,7 @@ remove_custom_metadata(SpaceId) ->
     }).
 
 
-get_xattr(SpaceId) ->
+test_get_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -156,7 +156,7 @@ get_xattr(SpaceId) ->
     }).
 
 
-list_xattr(SpaceId) ->
+test_list_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -182,7 +182,7 @@ list_xattr(SpaceId) ->
     }).
 
 
-set_xattr(SpaceId) ->
+test_set_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -206,7 +206,7 @@ set_xattr(SpaceId) ->
     }).
 
 
-remove_xattr(SpaceId) ->
+test_remove_xattr(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -235,7 +235,7 @@ remove_xattr(SpaceId) ->
     }).
 
 
-get_file_distribution(SpaceId) ->
+test_get_file_distribution(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -260,7 +260,7 @@ get_file_distribution(SpaceId) ->
     }).
 
 
-get_historical_dir_size_stats(SpaceId) ->
+test_get_historical_dir_size_stats(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -295,7 +295,7 @@ get_historical_dir_size_stats(SpaceId) ->
     }).
 
 
-get_file_storage_locations(SpaceId) ->
+test_get_file_storage_locations(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,

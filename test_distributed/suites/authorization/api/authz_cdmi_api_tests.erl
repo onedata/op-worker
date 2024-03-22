@@ -17,12 +17,12 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
-    get_transfer_encoding/1,
-    set_transfer_encoding/1,
-    get_cdmi_completion_status/1,
-    set_cdmi_completion_status/1,
-    get_mimetype/1,
-    set_mimetype/1
+    test_get_transfer_encoding/1,
+    test_set_transfer_encoding/1,
+    test_get_cdmi_completion_status/1,
+    test_set_cdmi_completion_status/1,
+    test_get_mimetype/1,
+    test_set_mimetype/1
 ]).
 
 
@@ -31,7 +31,7 @@
 %%%===================================================================
 
 
-get_transfer_encoding(SpaceId) ->
+test_get_transfer_encoding(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -58,7 +58,7 @@ get_transfer_encoding(SpaceId) ->
     }).
 
 
-set_transfer_encoding(SpaceId) ->
+test_set_transfer_encoding(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -83,7 +83,7 @@ set_transfer_encoding(SpaceId) ->
     }).
 
 
-get_cdmi_completion_status(SpaceId) ->
+test_get_cdmi_completion_status(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -110,7 +110,7 @@ get_cdmi_completion_status(SpaceId) ->
     }).
 
 
-set_cdmi_completion_status(SpaceId) ->
+test_set_cdmi_completion_status(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -135,7 +135,7 @@ set_cdmi_completion_status(SpaceId) ->
     }).
 
 
-get_mimetype(SpaceId) ->
+test_get_mimetype(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -162,7 +162,7 @@ get_mimetype(SpaceId) ->
     }).
 
 
-set_mimetype(SpaceId) ->
+test_set_mimetype(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,

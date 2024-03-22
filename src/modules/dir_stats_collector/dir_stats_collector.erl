@@ -96,7 +96,7 @@
 
     % Field used during collections initialization - multiple collection types for dir are initialized together so
     % progress data cannot be stored in dir_stats_cache and must be stored in separate map
-    % NOTE: values of statistics are kept in dir_stats_cache during initialization - this filed contains only
+    % NOTE: values of statistics are kept in dir_stats_cache during initialization - this field contains only
     %       information about progress (children of directory already used and children to be used)
     initialization_progress_map = #{} ::
         #{file_id:file_guid() => dir_stats_collections_initializer:initialization_progress()},
@@ -315,7 +315,7 @@ initialize_collections(Guid) ->
     call_designated_node(Guid, submit_and_await, [?MODULE, Guid, ?INITIALIZE_COLLECTIONS(Guid, self())]).
 
 
--spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
+-spec report_file_moved(onedata_file:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
 report_file_moved(?DIRECTORY_TYPE, FileGuid, _SourceParentGuid, TargetParentGuid) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
         true ->

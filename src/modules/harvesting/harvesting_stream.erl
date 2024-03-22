@@ -488,7 +488,7 @@ start_changes_stream(SpaceId, Since, Until) ->
 changes_stream_start_link(SpaceId, Callback, Since, Until) ->
     couchbase_changes_stream:start_link(
         couchbase_changes:design(), SpaceId, Callback,
-        [{since, Since}, {until, Until}], [self()]
+        [{since, Since}, {until, Until}, {ignored_policy, include_ignored}], [self()]
     ).
 
 -spec stop_changes_stream(state()) -> state().
@@ -503,24 +503,26 @@ stop_changes_stream(State = #hs_state{stream_pid = StreamPid}) ->
             State
     end.
 
--spec maybe_add_docs_to_batch(state(), [datastore:doc()]) -> state().
+-spec maybe_add_docs_to_batch(state(), [{change | ignored, datastore:doc()}]) -> state().
 maybe_add_docs_to_batch(State, []) ->
     State;
 maybe_add_docs_to_batch(State, [Doc | Docs]) ->
     maybe_add_docs_to_batch(maybe_add_doc_to_batch(State, Doc), Docs).
 
 
--spec maybe_add_doc_to_batch(state(), datastore:doc()) -> state().
+-spec maybe_add_doc_to_batch(state(), {change | ignored, datastore:doc()}) -> state().
+maybe_add_doc_to_batch(State, {ignored, #document{seq = Seq}}) ->
+    State#hs_state{last_seen_seq = Seq};
 maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = true
-}, Doc = #document{
+}, {change, Doc = #document{
     deleted = false,
     value = ModelRecord,
     seq = Seq
-}) ->
+}}) ->
     case is_harvested_model(ModelRecord) of
         true ->
-            maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, Doc);
+            maybe_add_doc_to_batch(State#hs_state{ignoring_deleted = false}, {change, Doc});
         false ->
             State#hs_state{last_seen_seq = Seq}
     end;
@@ -528,10 +530,10 @@ maybe_add_doc_to_batch(State = #hs_state{
     ignoring_deleted = false,
     batch = Batch,
     provider_id = ProviderId
-}, Doc = #document{
+}, {change, Doc = #document{
     seq = Seq,
     mutators = [ProviderId | _]
-}) ->
+}}) ->
     case should_doc_be_harvested(Doc) of
         true ->
             Batch2 = harvesting_batch:accumulate(Doc, Batch),
@@ -539,7 +541,7 @@ maybe_add_doc_to_batch(State = #hs_state{
         false ->
             State#hs_state{last_seen_seq = Seq}
     end;
-maybe_add_doc_to_batch(State, #document{seq = Seq}) ->
+maybe_add_doc_to_batch(State, {change, #document{seq = Seq}}) ->
     State#hs_state{last_seen_seq = Seq}.
 
 -spec maybe_persist_last_seen_seq(state()) -> state().

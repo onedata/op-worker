@@ -2,6 +2,10 @@ scenario: "scenario-1oz-1op"
 
 sources: true
 
+groups:
+  - &group1
+    name: group1
+
 users:
   - &space_owner
     name: space_owner
@@ -12,6 +16,8 @@ users:
   - &user2
     name: user2
     password: password
+    groups:
+      - group: *group1
   - &user3
     name: user3
     password: password
