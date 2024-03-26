@@ -50,7 +50,7 @@
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(SessId :: session:id(), lfm:file_key(), [file_attr:attribute()]) ->
+-spec stat(SessId :: session:id(), lfm:file_key(), [onedata_file:attr_name()]) ->
     {ok, file_attributes()} | lfm:error_reply().
 stat(SessId, FileKey, Attributes) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
@@ -123,7 +123,7 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 
 
 -spec list_xattr(session:id(), lfm:file_key(), boolean(), boolean()) ->
-    {ok, [custom_metadata:name()]} | lfm:error_reply().
+    {ok, [onedata_file:xattr_name()]} | lfm:error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     call_xattr(
         SessId, FileKey,
@@ -142,7 +142,7 @@ set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
     ).
 
 
--spec get_xattr(session:id(), lfm:file_key(), custom_metadata:name(), boolean()) ->
+-spec get_xattr(session:id(), lfm:file_key(), onedata_file:xattr_name(), boolean()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     call_xattr(
@@ -152,7 +152,7 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ).
 
 
--spec remove_xattr(session:id(), lfm:file_key(), custom_metadata:name()) ->
+-spec remove_xattr(session:id(), lfm:file_key(), onedata_file:xattr_name()) ->
     ok | lfm:error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     call_xattr(SessId, FileKey, #remove_xattr{name = XattrName}, fun(_) -> ok end).

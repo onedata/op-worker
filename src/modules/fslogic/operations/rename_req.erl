@@ -200,8 +200,8 @@ rename_into_itself(FileGuid) ->
 %%--------------------------------------------------------------------
 -spec rename_into_different_place_within_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
-    TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type() | undefined, TargetParentFileCtx :: file_ctx:ctx() | undefined) ->
+    TargetName :: file_meta:name(), SourceFileType :: onedata_file:type(),
+    TargetFileType :: onedata_file:type() | undefined, TargetParentFileCtx :: file_ctx:ctx() | undefined) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
@@ -227,8 +227,8 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
 %%--------------------------------------------------------------------
 -spec rename_into_different_place_within_posix_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
-    TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type() | undefined, TargetFileCtx :: file_ctx:ctx() | undefined) ->
+    TargetName :: file_meta:name(), SourceFileType :: onedata_file:type(),
+    TargetFileType :: onedata_file:type() | undefined, TargetFileCtx :: file_ctx:ctx() | undefined) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?DIRECTORY_TYPE, undefined, _
@@ -277,7 +277,7 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 -spec rename_file_on_flat_storage(
     user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(),
-    FileType :: file_meta:type(),
+    FileType :: onedata_file:type(),
     TargetParentFileCtx :: file_ctx:ctx(),
     TargetName :: file_meta:name(),
     TargetGuid :: undefined | fslogic_worker:file_guid()
@@ -357,8 +357,8 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
 %%--------------------------------------------------------------------
 -spec rename_into_different_place_within_non_posix_space(user_ctx:ctx(),
     SourceFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(),
-    TargetName :: file_meta:name(), SourceFileType :: file_meta:type(),
-    TargetFileType :: file_meta:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
+    TargetName :: file_meta:name(), SourceFileType :: onedata_file:type(),
+    TargetFileType :: onedata_file:type(), TargetParentFileCtx :: file_ctx:ctx()) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, SourceFileType, undefined, _
@@ -632,7 +632,7 @@ ensure_subtree_synced(UserCtx, FileCtx, ListOpts) ->
 %% Returns type of file, together with updated file context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_type(file_ctx:ctx()) -> {file_meta:type(), file_ctx:ctx()}.
+-spec get_type(file_ctx:ctx()) -> {onedata_file:type(), file_ctx:ctx()}.
 get_type(FileCtx) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
@@ -649,7 +649,7 @@ get_type(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_type(ParentFileCtx :: file_ctx:ctx(), ChildName :: file_meta:name(), user_ctx:ctx()) ->
-    {file_meta:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
+    {onedata_file:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
     {undefined, undefined, ParentFileCtx :: file_ctx:ctx()}.
 get_child_type(ParentFileCtx, ChildName, UserCtx) ->
     try file_tree:get_child(ParentFileCtx, ChildName, UserCtx) of
@@ -670,7 +670,7 @@ get_child_type(ParentFileCtx, ChildName, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec remotely_get_child_type(session:id(), ParentGuid :: fslogic_worker:file_guid(),
     ChildName :: file_meta:name()) ->
-    {file_meta:type(), ChildGuid :: fslogic_worker:file_guid()} |
+    {onedata_file:type(), ChildGuid :: fslogic_worker:file_guid()} |
     {undefined, undefined}.
 remotely_get_child_type(SessId, ParentGuid, ChildName) ->
     case lfm:get_child_attr(SessId, ParentGuid, ChildName) of
@@ -707,10 +707,8 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
 %% @private
 -spec validate_target_name(file_meta:name()) -> ok | no_return().
 validate_target_name(TargetName) ->
-    case re:run(TargetName, <<"/">>, [{capture, none}]) of
-        match -> throw(?EINVAL);
-        nomatch -> ok
-    end.
+    file_meta:is_valid_filename(TargetName) orelse throw(?EINVAL),
+    ok.
 
 
 %% @private

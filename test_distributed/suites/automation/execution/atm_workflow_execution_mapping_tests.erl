@@ -375,14 +375,14 @@ map_results_to_time_series_store() ->
 map_results_to_tree_forest_store() ->
     IteratedItemDataSpec = #atm_file_data_spec{
         file_type = 'ANY',
-        attributes = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
+        attributes = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)])
     },
     FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
     IteratedItems = lists:map(fun(#object{guid = Guid}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{<<"file_id">> => ObjectId}
+        #{<<"fileId">> => ObjectId}
     end, FileObjects),
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
@@ -435,7 +435,7 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
 map_from_file_list_to_object_list_store() ->
     UserSessionId = oct_background:get_user_session_id(user1, ?PROVIDER_SELECTOR),
 
-    FileAttrsToResolve = lists:usort([file_id | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)]),
+    FileAttrsToResolve = lists:usort([?attr_guid | ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES)]),
     AtmFileDataSpec = #atm_file_data_spec{file_type = 'ANY', attributes = FileAttrsToResolve},
 
     FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
@@ -443,18 +443,17 @@ map_from_file_list_to_object_list_store() ->
     ),
     InputItems = lists:map(fun(#object{guid = Guid}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{<<"file_id">> => ObjectId}
+        #{<<"fileId">> => ObjectId}
     end, FileObjects),
     ExpOutputItems = lists:map(fun(#object{guid = Guid}) ->
-        {ok, FileAttrs} = ?rpc(?PROVIDER_SELECTOR, lfm:stat(UserSessionId, ?FILE_REF(Guid))),
-        maps:with(
-            lists:map(fun str_utils:to_binary/1, FileAttrsToResolve),
-            file_attr_translator:to_json(FileAttrs, deprecated, ?DEPRECATED_ALL_ATTRS)
-        )
+        {ok, FileAttrs} = ?rpc(?PROVIDER_SELECTOR, lfm:stat(
+            UserSessionId, ?FILE_REF(Guid), FileAttrsToResolve
+        )),
+        file_attr_translator:to_json(FileAttrs, current, FileAttrsToResolve)
     end, FileObjects),
 
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(
-        AtmFileDataSpec#atm_file_data_spec{attributes = []},
+        AtmFileDataSpec#atm_file_data_spec{attributes = undefined},
         InputItems
     ),
 
@@ -882,7 +881,7 @@ verify_browsed_exp_target_store_content(tree_forest, SrcListStoreContent, #{
     <<"isLast">> := true
 }) ->
     TreeRootFileIds = lists:sort(lists:map(
-        fun(TreeRootValue) -> maps:with([<<"file_id">>], TreeRootValue) end,
+        fun(TreeRootValue) -> maps:with([<<"fileId">>], TreeRootValue) end,
         extract_value_from_infinite_log_entry(TreeRoots))
     ),
     ?assertEqual(lists:sort(SrcListStoreContent), TreeRootFileIds).

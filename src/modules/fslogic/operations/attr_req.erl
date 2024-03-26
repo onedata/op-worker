@@ -32,7 +32,7 @@
     chmod_attrs_only_insecure/2
 ]).
 
--type attribute() :: file_attr:attribute().
+-type attribute() :: onedata_file:attr_name().
 
 
 %%%===================================================================

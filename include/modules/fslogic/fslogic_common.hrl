@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/onedata_file.hrl").
 
 -define(MAX_SINT32, 2_147_483_647).
 -define(MAX_UINT32, 4_294_967_295).

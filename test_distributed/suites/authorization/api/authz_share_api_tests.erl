@@ -19,9 +19,9 @@
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
-    create_share/1,
-    remove_share/1,
-    share_perms_are_checked_only_up_to_share_root/1
+    test_create_share/1,
+    test_remove_share/1,
+    test_share_perms_are_checked_only_up_to_share_root/1
 ]).
 
 
@@ -30,7 +30,7 @@
 %%%===================================================================
 
 
-create_share(SpaceId) ->
+test_create_share(SpaceId) ->
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),
         space_id = SpaceId,
@@ -53,7 +53,7 @@ create_share(SpaceId) ->
     }).
 
 
-remove_share(SpaceId) ->
+test_remove_share(SpaceId) ->
     SpaceOwnerSessionId = oct_background:get_user_session_id(space_owner, krakow),
 
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
@@ -85,7 +85,7 @@ remove_share(SpaceId) ->
     }).
 
 
-share_perms_are_checked_only_up_to_share_root(SpaceId) ->
+test_share_perms_are_checked_only_up_to_share_root(SpaceId) ->
     SpaceOwnerUserId = oct_background:get_user_id(space_owner),
     SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 

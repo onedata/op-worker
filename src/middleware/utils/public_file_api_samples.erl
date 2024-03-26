@@ -95,7 +95,7 @@ resolve_file_path_in_share(SessionId, ShareGuid) ->
 %% are prepared in a JSON-ready format.
 %% @end
 %%--------------------------------------------------------------------
--spec xrootd_api(file_meta:type(), binary(), od_space:id(), od_share:id(), file_meta:path()) ->
+-spec xrootd_api(onedata_file:type(), binary(), od_space:id(), od_share:id(), file_meta:path()) ->
     [json_utils:json_map()].
 xrootd_api(?DIRECTORY_TYPE, Domain, SpaceId, ShareId, FilePath) ->
     FullDataPath = str_utils:format_bin("/data/~s/~s/~s~s", [SpaceId, SpaceId, ShareId, FilePath]),
@@ -138,7 +138,7 @@ xrootd_api(_, Domain, SpaceId, ShareId, FilePath) ->
 %% It redirects to a REST endpoint in one of the supporting providers.
 %% @end
 %%--------------------------------------------------------------------
--spec rest_api(file_meta:type(), file_id:objectid()) -> rest_api_samples:record().
+-spec rest_api(onedata_file:type(), file_id:objectid()) -> rest_api_samples:record().
 rest_api(FileType, FileId) ->
     #rest_api_samples{
         api_root = oneprovider:get_oz_url(oz_plugin:get_oz_rest_api_prefix()),
@@ -147,7 +147,7 @@ rest_api(FileType, FileId) ->
 
 
 %% @private
--spec rest_api_endpoints(file_meta:type(), file_id:objectid()) -> [rest_api_request_sample:record()].
+-spec rest_api_endpoints(onedata_file:type(), file_id:objectid()) -> [rest_api_request_sample:record()].
 rest_api_endpoints(?DIRECTORY_TYPE, FileId) -> [
     download_directory_endpoint(FileId),
     list_directory_endpoint(FileId),

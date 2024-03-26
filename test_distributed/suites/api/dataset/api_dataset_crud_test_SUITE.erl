@@ -331,7 +331,7 @@ get_dataset_test(Config) ->
 %% @private
 -spec get_dataset_test_base(
     dataset:id(), dataset:id(), dataset:state(), [binary()],
-    file_id:file_guid(), file_meta:type(), file_meta:path(), boolean()
+    file_id:file_guid(), onedata_file:type(), file_meta:path(), boolean()
 ) ->
     map().
 get_dataset_test_base(
@@ -548,7 +548,7 @@ build_update_dataset_prepare_gs_args_fun(DatasetId) ->
 %% @private
 -spec build_verify_update_dataset_fun(
     api_test_memory:mem_ref(), [oct_background:entity_selector()], od_space:id(),
-    dataset:state(), file_id:file_guid(), file_meta:type(), file_meta:path(),
+    dataset:state(), file_id:file_guid(), onedata_file:type(), file_meta:path(),
     test_config:config()
 ) ->
     onenv_api_test_runner:verify_fun().
@@ -787,7 +787,7 @@ build_test_file_tree_spec(DatasetSpecs) ->
 %% @private
 -spec build_dataset_gs_instance(
     dataset:state(), dataset:id(), dataset:id(), [binary()], time:seconds(),
-    file_id:file_guid(), file_meta:type(), file_meta:path(), boolean()
+    file_id:file_guid(), onedata_file:type(), file_meta:path(), boolean()
 ) ->
     map().
 build_dataset_gs_instance(
@@ -818,7 +818,7 @@ build_dataset_gs_instance(
 %% @private
 -spec verify_dataset(
     od_user:id(), [oct_background:entity_selector()], od_space:id(), dataset:id(), dataset:state(),
-    dataset:id(), [binary()], time:seconds(), file_id:file_guid(), file_meta:type(), file_meta:path()
+    dataset:id(), [binary()], time:seconds(), file_id:file_guid(), onedata_file:type(), file_meta:path()
 ) ->
     ok.
 verify_dataset(

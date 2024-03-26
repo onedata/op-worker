@@ -596,7 +596,7 @@ fsync(SDHandle, DataOnly) ->
 %% (hardlinks and symlinks are metadata-only structures).
 %% @end
 %%--------------------------------------------------------------------
--spec infer_type(Mode :: non_neg_integer()) -> {ok, file_meta:type()} | ?ERROR_NOT_SUPPORTED.
+-spec infer_type(Mode :: non_neg_integer()) -> {ok, onedata_file:type()} | ?ERROR_NOT_SUPPORTED.
 infer_type(Mode) ->
     IsRegFile = (Mode band 8#100000) =/= 0,
     IsDir = (Mode band 8#40000) =/= 0,
@@ -760,6 +760,13 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
             IsSpaceDir = fslogic_file_id:is_space_dir_uuid(FileUuid),
             IsSpaceOwner = session:is_space_owner(SessionId, SpaceId),
 
+            % TODO VFS-11852 Consider fallback to ROOT for other users than space owner.
+            % This may prevent EACCES errors in situations like:
+            % 1. user created empty file - it was created in metadata but not on storage
+            %    (lazy file creation)
+            % 2. user change permissions for file and its parent directory to read only.
+            % 3. user wants to read the file - file creation on storage (necessary to
+            %    open file in read mode) will fail due to read only permissions.
             case IsSpaceOwner andalso not IsSpaceDir of
                 true ->
                     FallbackResult = helpers_runner:run_and_handle_error(

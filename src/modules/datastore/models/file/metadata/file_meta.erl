@@ -23,6 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
+-export([is_valid_filename/1]).
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
@@ -60,7 +61,6 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?LINK_TYPE.
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
@@ -73,7 +73,7 @@
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
-    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     conflicts/0, path_type/0, link/0
 ]).
 
@@ -99,6 +99,27 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if given term is valid path()
+%% @end
+%%--------------------------------------------------------------------
+-spec is_valid_filename(term()) -> boolean().
+is_valid_filename(FileName) when not is_binary(FileName) ->
+    false;
+is_valid_filename(<<"">>) ->
+    false;
+is_valid_filename(<<?CURRENT_DIRECTORY>>) ->
+    false;
+is_valid_filename(<<?PARENT_DIRECTORY>>) ->
+    false;
+is_valid_filename(FileName) when is_binary(FileName) ->
+    % Ensure name contains no POSIX forbidden characters (/ or \0)
+    case binary:matches(FileName, [<<?DIRECTORY_SEPARATOR>>, <<0>>]) of
+        [] -> true;
+        _ -> false
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -651,14 +672,14 @@ get_scope_id(Entry) ->
     end).
 
 
--spec get_type(file_meta() | doc()) -> type().
+-spec get_type(file_meta() | doc()) -> onedata_file:type().
 get_type(#file_meta{type = Type}) ->
     Type;
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
 
 
--spec get_effective_type(file_meta() | doc()) -> type().
+-spec get_effective_type(file_meta() | doc()) -> onedata_file:type().
 get_effective_type(#file_meta{type = ?LINK_TYPE}) ->
     ?REGULAR_FILE_TYPE;
 get_effective_type(#file_meta{type = Type}) ->
@@ -864,13 +885,13 @@ make_opened_deleted_files_dir_exist(SpaceId) ->
     end.
 
 
--spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
+-spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope) ->
     new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, false).
 
 
--spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
+-spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id(), boolean()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInChanges) ->
     #document{
@@ -1190,28 +1211,6 @@ fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if given term is valid path()
-%% @end
-%%--------------------------------------------------------------------
--spec is_valid_filename(term()) -> boolean().
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<".">>) ->
-    false;
-is_valid_filename(<<"..">>) ->
-    false;
-is_valid_filename(FileName) when not is_binary(FileName) ->
-    false;
-is_valid_filename(FileName) when is_binary(FileName) ->
-    case binary:matches(FileName, <<?DIRECTORY_SEPARATOR>>) of
-        [] -> true;
-        _ -> false
-    end.
-
-
 %% @private
 -spec get_child_uuid_and_tree_id_for_name_without_suffix(uuid(), name()) ->
     {ok, uuid(), file_meta_forest:tree_ids()} | {error, term()}.
@@ -1245,7 +1244,7 @@ emit_space_dir_created(DirUuid, SpaceId) ->
         attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
             allow_deleted_files => false,
             name_conflicts_resolution_policy => allow_name_conflicts,
-            attributes => ?ONECLIENT_ATTRS
+            attributes => ?ONECLIENT_FILE_ATTRS
         }),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).

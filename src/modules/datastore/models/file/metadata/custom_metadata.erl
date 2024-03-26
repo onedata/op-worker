@@ -43,8 +43,7 @@
 -type mimetype() :: binary().
 -type cdmi_metadata() :: transfer_encoding() | cdmi_completion_status() | mimetype().
 
--type name() :: binary().
--type value() :: binary() | rdf() | json_utils:json_term().
+-type value() :: onedata_file:xattr_value() | rdf() | json_utils:json_term().
 
 -type record() :: #custom_metadata{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -53,7 +52,7 @@
 -export_type([
     type/0, rdf/0, query/0,
     transfer_encoding/0, cdmi_completion_status/0, mimetype/0, cdmi_metadata/0,
-    name/0, value/0,
+    value/0,
     record/0, doc/0, diff/0
 ]).
 
@@ -100,7 +99,7 @@ create_or_update(#document{key = Key, value = Default, scope = Scope}, Diff) ->
     ).
 
 
--spec list_xattrs(file_meta:uuid()) -> {ok, [name()]} | {error, term()}.
+-spec list_xattrs(file_meta:uuid()) -> {ok, [onedata_file:xattr_name()]} | {error, term()}.
 list_xattrs(FileUuid) ->
     case datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, #document{value = #custom_metadata{value = Metadata}}} ->
@@ -112,7 +111,7 @@ list_xattrs(FileUuid) ->
     end.
 
 
--spec get_xattr(file_meta:uuid(), name()) -> {ok, value()} | {error, term()}.
+-spec get_xattr(file_meta:uuid(), onedata_file:xattr_name()) -> {ok, onedata_file:xattr_value()} | {error, term()}.
 get_xattr(FileUuid, Name) ->
     case datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, #document{value = #custom_metadata{value = Metadata}}} ->
@@ -127,7 +126,7 @@ get_xattr(FileUuid, Name) ->
     end.
 
 
--spec get_all_xattrs(file_meta:uuid()) -> {ok, #{name() => value()}} | {error, term()}.
+-spec get_all_xattrs(file_meta:uuid()) -> {ok, #{onedata_file:xattr_name() => onedata_file:xattr_value()}} | {error, term()}.
 get_all_xattrs(FileUuid) ->
     case datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, #document{value = #custom_metadata{value = Metadata}}} ->
@@ -142,8 +141,8 @@ get_all_xattrs(FileUuid) ->
 -spec set_xattr(
     file_meta:uuid(),
     od_space:id(),
-    name(),
-    value(),
+    onedata_file:xattr_name(),
+    onedata_file:xattr_value(),
     Create :: boolean(),
     Replace :: boolean(),
     SyncPolicy :: synchronization_enabled | synchronization_disabled
@@ -188,7 +187,7 @@ set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace, SyncPolicy) ->
     end.
 
 
--spec remove_xattr(file_meta:uuid(), name()) -> ok | {error, term()}.
+-spec remove_xattr(file_meta:uuid(), onedata_file:xattr_name()) -> ok | {error, term()}.
 remove_xattr(FileUuid, Name) ->
     Diff = fun(#custom_metadata{value = Metadata} = Record) ->
         case maps:take(Name, Metadata) of
