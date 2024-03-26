@@ -9,8 +9,6 @@
 %%% Definitions of macros and records used in file tests.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Bartosz Walkowicz").
-
 -ifndef(ONENV_TEST_UTILS_HRL).
 -define(ONENV_TEST_UTILS_HRL, 1).
 

@@ -3,6 +3,8 @@
 %%% @copyright (C) 2024 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% This module contains base test functions for testing storage import.
 %%% @end
@@ -10,50 +12,81 @@
 -module(storage_import_oct_test_base).
 -author("Katarzyna Such").
 
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("space_setup_utils.hrl").
--include_lib("storage_import_oct_test.hrl").
--include("modules/fslogic/file_attr.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("onenv_test_utils.hrl").
+-include("storage_import_oct_test.hrl").
 
--type import_config() :: #import_config{}.
-
--define(RANDOM_PROVIDER(), ?RAND_ELEMENT([krakow, paris])).
-
--export([assert_monitoring_state/4]).
+% API
+-export([
+    clean_up_after_previous_run/2
+]).
 
 %% tests
 -export([
-    % tests of import
     empty_import_test/1,
     create_directory_import_test/1
 ]).
 
+-type storage_import_test_suite_ctx() :: #storage_import_test_suite_ctx{}.
+
+-record(storage_import_test_case_ctx, {
+    suite_ctx :: storage_import_test_suite_ctx(),
+    imported_storage_id :: storage:id(),
+    other_storage_id :: storage:id(),
+    space_id :: od_space:id(),
+    space_path :: file_meta:path()
+}).
+-type storage_import_test_case_ctx() :: #storage_import_test_case_ctx{}.
+
+-export_type([storage_import_test_suite_ctx/0]).
+
+-define(ATTEMPTS, 30).
+
+
 %%%===================================================================
-%%% Tests of import
+%%% API
 %%%===================================================================
 
-empty_import_test(Config) ->
-    Krakow =  oct_background:get_random_provider_node(krakow),
-    Paris =  oct_background:get_random_provider_node(paris),
-    SessionIdKrakow = oct_background:get_user_session_id(user1, krakow),
-    SessionIdParis = oct_background:get_user_session_id(user1, paris),
 
-    #storage_import_test_config{space_id = SpaceId} = Config,
+-spec clean_up_after_previous_run([atom()], storage_import_test_suite_ctx()) -> ok.
+clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
+    lists_utils:pforeach(fun(SpaceId) ->
+        delete_space_with_supporting_storages(SpaceId, SuiteCtx)
+    end, filter_spaces_from_previous_run(AllTestCases)).
 
-    enable_initial_scan(Config, Krakow, SpaceId),
-    assert_initial_scan_finished(Krakow, SpaceId),
 
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(Krakow, SessionIdKrakow, {path, ?SPACE_PATH(?FUNCTION_NAME)}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(Krakow, SessionIdKrakow, {path, ?SPACE_PATH(?FUNCTION_NAME)}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(Paris, SessionIdParis, {path, ?SPACE_PATH(?FUNCTION_NAME)}), ?ATTEMPTS),
+%%%===================================================================
+%%% Tests
+%%%===================================================================
 
-    ?assertMonitoring(Krakow, #{
+
+empty_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector,
+    other_provider_selector = OtherProviderSelector,
+    space_owner_selector = SpaceOwnerSelector
+}) ->
+    TestCaseCtx = init_testcase(?FUNCTION_NAME, undefined, TestSuiteCtx),
+    SpaceId = TestCaseCtx#storage_import_test_case_ctx.space_id,
+    await_initial_scan_finished(ImportingProviderSelector, SpaceId),
+
+    NodeImportingProvider = oct_background:get_random_provider_node(ImportingProviderSelector),
+    NodeOtherProvider = oct_background:get_random_provider_node(OtherProviderSelector),
+    SessionIdImportingProvider = oct_background:get_user_session_id(SpaceOwnerSelector, ImportingProviderSelector),
+    SessionIdOtherProvider = oct_background:get_user_session_id(SpaceOwnerSelector, OtherProviderSelector),
+
+    SpacePath = {path, TestCaseCtx#storage_import_test_case_ctx.space_path},
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePath, 0, 10)
+    ),
+    ?assertMatch(
+        {ok, #file_attr{}},
+        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, SpacePath)
+    ),
+    ?assertMatch(
+        {ok, #file_attr{}},
+        lfm_proxy:stat(NodeOtherProvider, SessionIdOtherProvider, SpacePath), ?ATTEMPTS
+    ),
+
+    assert_import_monitoring_state(NodeImportingProvider, SpaceId, #{
         <<"scans">> => 1,
         <<"created">> => 0,
         <<"deleted">> => 0,
@@ -67,38 +100,40 @@ empty_import_test(Config) ->
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
-    }, SpaceId).
+    }).
 
 
-create_directory_import_test(Config) ->
-    Krakow =  oct_background:get_random_provider_node(krakow),
-    Paris =  oct_background:get_random_provider_node(paris),
-    SessionIdKrakow = oct_background:get_user_session_id(user1, krakow),
-    SessionIdParis = oct_background:get_user_session_id(user1, paris),
+create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector,
+    other_provider_selector = OtherProviderSelector,
+    space_owner_selector = SpaceOwnerSelector
+}) ->
+    DirName = ?RAND_STR(),
 
-    #storage_import_test_config{
-        space_id = SpaceId,
-        imported_storage_id = ImportedStorageId,
-        not_imported_storage_id = NotImportedStorageId
-    } = Config,
+    TestCaseCtx = init_testcase(?FUNCTION_NAME, #dir_spec{name = DirName}, TestSuiteCtx),
+    SpaceId = TestCaseCtx#storage_import_test_case_ctx.space_id,
+    await_initial_scan_finished(ImportingProviderSelector, SpaceId),
 
-    DirName = generator:gen_name(),
-    StorageTestDirPath = filename:join([<<"/">>, DirName]),
-
-    SDHandle = sd_test_utils:new_handle(Krakow, SpaceId, StorageTestDirPath, ImportedStorageId),
-    ok = sd_test_utils:mkdir(Krakow, SDHandle, ?DEFAULT_DIR_PERMS),
-    enable_initial_scan(Config, Krakow, SpaceId),
-    assert_initial_scan_finished(Krakow, SpaceId),
+    NodeImportingProvider = oct_background:get_random_provider_node(ImportingProviderSelector),
+    NodeOtherProvider = oct_background:get_random_provider_node(OtherProviderSelector),
+    SessionIdImportingProvider = oct_background:get_user_session_id(SpaceOwnerSelector, ImportingProviderSelector),
+    SessionIdOtherProvider = oct_background:get_user_session_id(SpaceOwnerSelector, OtherProviderSelector),
 
     %% Check if dir was imported
-    ?assertMatch({ok, [{_, DirName}]},
-        lfm_proxy:get_children(Krakow, SessionIdKrakow, {path, ?SPACE_PATH(?FUNCTION_NAME)}, 0, 10), ?ATTEMPTS),
+    SpacePath = {path, TestCaseCtx#storage_import_test_case_ctx.space_path},
+    ?assertMatch(
+        {ok, [{_, DirName}]},
+        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePath, 0, 10),
+        ?ATTEMPTS
+    ),
 
     SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, DirName]),
-    StorageSDHandleKrakow = sd_test_utils:get_storage_mountpoint_handle(Krakow, SpaceId, ImportedStorageId),
-    StorageSDHandleParis = sd_test_utils:get_storage_mountpoint_handle(Krakow, SpaceId, NotImportedStorageId),
-    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(Krakow, StorageSDHandleKrakow),
-    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(Paris, StorageSDHandleParis),
+    StorageSDHandleKrakow = sd_test_utils:get_storage_mountpoint_handle(NodeImportingProvider, SpaceId,
+        TestCaseCtx#storage_import_test_case_ctx.imported_storage_id),
+    StorageSDHandleParis = sd_test_utils:get_storage_mountpoint_handle(NodeImportingProvider, SpaceId,
+        TestCaseCtx#storage_import_test_case_ctx.other_storage_id),
+    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(NodeImportingProvider, StorageSDHandleKrakow),
+    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(NodeOtherProvider, StorageSDHandleParis),
 
     SpaceOwner = ?SPACE_OWNER_ID(SpaceId),
 
@@ -106,38 +141,15 @@ create_directory_import_test(Config) ->
         owner_id = SpaceOwner,
         uid = MountUid1,
         gid = 0
-    }}, lfm_proxy:stat(Krakow, SessionIdKrakow, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    }}, lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{
         owner_id = SpaceOwner,
         uid = MountUid2,
         gid = MountGid2
-    }}, lfm_proxy:stat(Paris, SessionIdParis, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    }}, lfm_proxy:stat(NodeOtherProvider, SessionIdOtherProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
-%%    TODO VFS-11780 adjust when it will be researched how statistics work
-%%     this is original, not working
-%%    ?assertMonitoring(Krakow, #{
-%%        <<"scans">> => 1,
-%%        <<"created">> => 1,
-%%        <<"modified">> => 1,
-%%        <<"deleted">> => 0,
-%%        <<"failed">> => 0,
-%%        <<"unmodified">> => 0,
-%%        <<"createdMinHist">> => 1,
-%%        <<"createdHourHist">> => 1,
-%%        <<"createdDayHist">> => 1,
-%%        <<"modifiedMinHist">> => 1,
-%%        <<"modifiedHourHist">> => 1,
-%%        <<"modifiedDayHist">> => 1,
-%%        <<"deletedMinHist">> => 0,
-%%        <<"deletedHourHist">> => 0,
-%%        <<"deletedDayHist">> => 0,
-%%        <<"queueLengthMinHist">> => 0,
-%%        <<"queueLengthHourHist">> => 0,
-%%        <<"queueLengthDayHist">> => 0
-%%    }, SpaceId).
-
-    ?assertMonitoring(Krakow, #{
+    assert_import_monitoring_state(NodeImportingProvider, SpaceId, #{
         <<"scans">> => 1,
         <<"created">> => 1,
         <<"modified">> => 0,
@@ -156,30 +168,161 @@ create_directory_import_test(Config) ->
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
-    }, SpaceId).
+    }).
 
 
 %%%===================================================================
-%%% Util functions
+%%% Internal functions
 %%%===================================================================
 
-%% @private
-enable_initial_scan(Config, Worker, SpaceId) ->
-    ImportConfig = Config#storage_import_test_config.import_config,
-    MaxDepth = maps:get(max_depth, ImportConfig, ?MAX_DEPTH),
-    SyncAcl = maps:get(sync_acl, ImportConfig, ?SYNC_ACL),
-    ?assertMatch(ok, ?rpc(Worker, storage_import:set_or_configure_auto_mode(
-        SpaceId, #{max_depth => MaxDepth, sync_acl => SyncAcl}))).
-
 
 %% @private
-assert_initial_scan_finished(Worker, SpaceId) ->
-    ?assertEqual(true, catch(?rpc(Worker, storage_import_monitoring:is_initial_scan_finished(SpaceId))), ?ATTEMPTS).
+-spec filter_spaces_from_previous_run([atom()]) -> [od_space:id()].
+filter_spaces_from_previous_run(AllTestCases) ->
+    lists:filter(fun(SpaceId) ->
+        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
+        SpaceName = maps:get(<<"name">>, SpaceDetails),
+        lists:member(binary_to_atom(SpaceName), AllTestCases)
+    end, ozw_test_rpc:list_spaces()).
 
 
 %% @private
-assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
-    SSM = monitoring_describe(Worker, SpaceId),
+-spec delete_space_with_supporting_storages(od_space:id(), storage_import_test_suite_ctx()) ->
+    ok.
+delete_space_with_supporting_storages(SpaceId, #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector,
+    other_provider_selector = OtherProviderSelector
+}) ->
+    [StorageKrakow] = opw_test_rpc:get_space_local_storages(ImportingProviderSelector, SpaceId),
+    [StorageParis] = opw_test_rpc:get_space_local_storages(OtherProviderSelector, SpaceId),
+
+    ozw_test_rpc:delete_space(SpaceId),
+
+    delete_storage(ImportingProviderSelector, StorageKrakow),
+    delete_storage(OtherProviderSelector, StorageParis).
+
+
+%% @private
+-spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
+delete_storage(NodeSelector, StorageId) ->
+    ?assertEqual(ok, opw_test_rpc:call(NodeSelector, storage, delete, [StorageId]), ?ATTEMPTS).
+
+
+%% @private
+-spec init_testcase(
+    atom(),
+    undefined | onenv_file_test_utils:object_spec(),
+    storage_import_test_suite_ctx()
+) ->
+    storage_import_test_case_ctx().
+init_testcase(TestCaseName, FileDesc, TestSuiteCtx = #storage_import_test_suite_ctx{
+    storage_type = StorageType,
+    importing_provider_selector = ImportingProviderSelector,
+    other_provider_selector = OtherProviderSelector,
+    space_owner_selector = SpaceOwnerSelector,
+    other_space_member_selector = OtherSpaceMemberSelector
+}) ->
+    ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
+    create_file_tree_on_storage(ImportingProviderSelector, ImportedStorageId, FileDesc),
+
+    OtherStorageId = create_storage(StorageType, OtherProviderSelector, false),
+
+    SpaceId = space_setup_utils:set_up_space(#space_spec{
+        name = TestCaseName,
+        owner = SpaceOwnerSelector,
+        users = [OtherSpaceMemberSelector],
+        supports = [
+            #support_spec{
+                provider = ImportingProviderSelector,
+                storage_spec = ImportedStorageId,
+                size = 1000000000
+            },
+            #support_spec{
+                provider = OtherProviderSelector,
+                storage_spec = OtherStorageId,
+                size = 1000000000
+            }
+        ]
+    }),
+    SpaceNameBin = str_utils:to_binary(TestCaseName),
+
+    #storage_import_test_case_ctx{
+        suite_ctx = TestSuiteCtx,
+        imported_storage_id = ImportedStorageId,
+        other_storage_id = OtherStorageId,
+        space_id = SpaceId,
+        space_path = <<"/", SpaceNameBin/binary>>
+    }.
+
+
+%% @private
+-spec create_storage(posix, oct_background:entity_selector(), boolean()) -> storage:id().
+create_storage(posix, ProviderSelector, IsImported) ->
+    space_setup_utils:create_storage(ProviderSelector, #posix_storage_params{
+        mount_point = <<"/mnt/st_", (generator:gen_name())/binary>>,
+        imported_storage = IsImported
+    }).
+
+
+%% @private
+-spec create_file_tree_on_storage(
+    oct_background:entity_selector(),
+    storage:id(),
+    undefined | onenv_file_test_utils:object_spec()
+) ->
+    storage:id().
+create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
+    ok;
+
+create_file_tree_on_storage(ProviderSelector, StorageId, FileDesc) ->
+    HelperHandle = get_admin_helper_handle(ProviderSelector, StorageId),
+    create_file_tree_on_storage(ProviderSelector, HelperHandle, <<"/">>, FileDesc).
+
+
+%% @private
+-spec get_admin_helper_handle(oct_background:node_selector(), storage:id()) ->
+    helpers:helper_handle().
+get_admin_helper_handle(Node, StorageId) ->
+    Helper = ?rpc(Node, storage:get_helper(StorageId)),
+    ?rpc(Node, helpers:get_helper_handle(Helper, Helper#helper.admin_ctx)).
+
+
+%% @private
+-spec create_file_tree_on_storage(
+    oct_background:entity_selector(),
+    helpers:helper_handle(),
+    storage:id(),
+    undefined | onenv_file_test_utils:object_spec()
+) ->
+    storage:id().
+create_file_tree_on_storage(ProviderSelector, HelperHandle, ParentPath, #dir_spec{
+    name = NameOrUndefined,
+    mode = DirMode
+}) ->
+    DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
+    StorageDirId = filepath_utils:join([ParentPath, DirName]),
+    ?assertEqual(ok, ?rpc(ProviderSelector, helpers:mkdir(HelperHandle, StorageDirId, DirMode))).
+
+
+
+%% @private
+-spec await_initial_scan_finished(oct_background:node_selector(), od_space:id()) -> true.
+await_initial_scan_finished(NodeSelector, SpaceId) ->
+    ?assertEqual(
+        true,
+        catch(?rpc(NodeSelector, storage_import_monitoring:is_initial_scan_finished(SpaceId))),
+        ?ATTEMPTS
+    ).
+
+
+%% @private
+assert_import_monitoring_state(Node, SpaceId, ExpectedSSM) ->
+    assert_import_monitoring_state(Node, SpaceId, ExpectedSSM, 1).
+
+
+%% @private
+assert_import_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts) ->
+    SSM = monitoring_describe(Node, SpaceId),
     SSM2 = flatten_histograms(SSM),
     try
         assert(ExpectedSSM, SSM2),
@@ -189,7 +332,7 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
             case Attempts == 0 of
                 false ->
                     timer:sleep(timer:seconds(1)),
-                    assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts - 1);
+                    assert_import_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts - 1);
                 true ->
                     {Format, Args} = storage_import_monitoring_description(SSM),
                     ct:pal(

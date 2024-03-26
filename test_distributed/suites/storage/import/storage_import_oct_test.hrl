@@ -3,34 +3,28 @@
 %%% @copyright (C) 2024 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% Macros used in tests of storage import.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(STORAGE_IMPORT_OCT_TEST_HRL).
+-define(STORAGE_IMPORT_OCT_TEST_HRL, 1).
 
--define(SYNC_ACL, true).
--define(MAX_DEPTH, 9999999999999999999999).
 
--define(ATTEMPTS, 30).
--define(SPACE_PATH(SpaceName), <<"/", (atom_to_binary(SpaceName))/binary>>).
+-include("onenv_test_utils.hrl").
+-include("space_setup_utils.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
--define(assertMonitoring(Worker, ExpectedSSM, SpaceId, Attempts),
-    storage_import_oct_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).
 
--define(assertMonitoring(Worker, ExpectedSSM, SpaceId),
-    ?assertMonitoring(Worker, ExpectedSSM, SpaceId, 1)).
-
--record(import_config, {
-    max_depth :: atom(),
-    sync_acl :: integer()
+-record(storage_import_test_suite_ctx, {
+    storage_type :: posix,
+    importing_provider_selector :: oct_background:entity_selector(),
+    other_provider_selector :: oct_background:entity_selector(),
+    space_owner_selector :: oct_background:entity_selector(),
+    other_space_member_selector :: oct_background:entity_selector()
 }).
 
--record(storage_import_test_config, {
-    space_id :: od_space:id(),
-    imported_storage_id :: storage:id(),
-    not_imported_storage_id :: storage:id(),
-    import_config = #{} :: storage_import_oct_test_base:import_config()
-}).
 
 -endif.
