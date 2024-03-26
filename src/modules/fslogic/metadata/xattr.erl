@@ -36,7 +36,7 @@
     IncludeInherited :: boolean(),
     ShowInternal :: boolean()
 ) ->
-    {ok, [custom_metadata:name()]}.
+    {ok, [onedata_file:xattr_name()]}.
 list(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -48,10 +48,10 @@ list(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
 -spec get(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    custom_metadata:name(),
+    onedata_file:xattr_name(),
     Inherited :: boolean()
 ) ->
-    {ok, custom_metadata:value()} | {error, term()}.
+    {ok, onedata_file:xattr_value()} | {error, term()}.
 get(UserCtx, FileCtx, XattrName, false) ->
     get_xattr(UserCtx, FileCtx, XattrName);
 get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
@@ -71,8 +71,8 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
 -spec set(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    custom_metadata:name(),
-    custom_metadata:value(),
+    onedata_file:xattr_name(),
+    onedata_file:xattr_value(),
     Create :: boolean(),
     Replace :: boolean()
 ) ->
@@ -93,7 +93,7 @@ set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
     ).
 
 
--spec remove(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:name()) ->
+-spec remove(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name()) ->
     ok | {error, term()}.
 remove(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -105,13 +105,13 @@ remove(UserCtx, FileCtx0, XattrName) ->
 
 
 -spec get_all_direct_insecure(file_ctx:ctx()) ->
-    {ok, #{custom_metadata:name() => custom_metadata:value()}} | {error, term()}.
+    {ok, #{onedata_file:xattr_name() => onedata_file:xattr_value()}} | {error, term()}.
 get_all_direct_insecure(FileCtx) ->
     custom_metadata:get_all_xattrs(file_ctx:get_logical_uuid_const(FileCtx)).
 
 
--spec filter_internal([custom_metadata:name()]) ->
-    [custom_metadata:name()].
+-spec filter_internal([onedata_file:xattr_name()]) ->
+    [onedata_file:xattr_name()].
 filter_internal(XattrsKeys) ->
     lists:filter(fun(Key) -> not is_internal_xattr(Key) end, XattrsKeys).
 
@@ -127,7 +127,7 @@ filter_internal(XattrsKeys) ->
     IncludeInherited :: boolean(),
     ShowInternal :: boolean()
 ) ->
-    {ok, [custom_metadata:name()]}.
+    {ok, [onedata_file:xattr_name()]}.
 list_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
     {ok, DirectXattrNames} = list_direct_xattrs(FileCtx),
     XattrNames = case IncludeInherited of
@@ -154,7 +154,7 @@ list_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_direct_xattrs(file_ctx:ctx()) ->
-    {ok, [custom_metadata:name()]} | {error, term()}.
+    {ok, [onedata_file:xattr_name()]} | {error, term()}.
 list_direct_xattrs(FileCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     custom_metadata:list_xattrs(FileUuid).
@@ -166,8 +166,8 @@ list_direct_xattrs(FileCtx) ->
 %% Traverses file ancestors to gather inherited extended attributes.
 %% @end
 %%--------------------------------------------------------------------
--spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [custom_metadata:name()]) ->
-    {ok, [custom_metadata:name()]} | {error, term()}.
+-spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [onedata_file:xattr_name()]) ->
+    {ok, [onedata_file:xattr_name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
     {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
@@ -186,8 +186,8 @@ list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
 
 
 %% @private
--spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:name()) ->
-    {ok, custom_metadata:value()} | {error, term()}.
+-spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name()) ->
+    {ok, onedata_file:xattr_value()} | {error, term()}.
 get_xattr(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -198,7 +198,7 @@ get_xattr(UserCtx, FileCtx0, XattrName) ->
 
 
 %% @private
--spec is_internal_xattr(custom_metadata:name()) -> boolean().
+-spec is_internal_xattr(onedata_file:xattr_name()) -> boolean().
 is_internal_xattr(XattrName) ->
     lists:any(fun(InternalPrefix) ->
         str_utils:binary_starts_with(XattrName, InternalPrefix)
@@ -206,14 +206,14 @@ is_internal_xattr(XattrName) ->
 
 
 %% @private
--spec is_cdmi_xattr(custom_metadata:name()) -> boolean().
+-spec is_cdmi_xattr(onedata_file:xattr_name()) -> boolean().
 is_cdmi_xattr(XattrName) ->
     str_utils:binary_starts_with(XattrName, ?CDMI_PREFIX).
 
 
 %% @private
--spec prepend_acl(file_ctx:ctx(), [custom_metadata:name()]) -> 
-    [custom_metadata:name()].
+-spec prepend_acl(file_ctx:ctx(), [onedata_file:xattr_name()]) ->
+    [onedata_file:xattr_name()].
 prepend_acl(FileCtx, XattrsKeys) ->
     % acl is kept in file_meta instead of custom_metadata
     % but is still treated as metadata so ?ACL_KEY

@@ -268,7 +268,7 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
 %%%===================================================================
 
 %% @private
--spec exp_operation_list(public | private, file_meta:type()) -> rest_api_samples_test_utils:operation_listing().
+-spec exp_operation_list(public | private, onedata_file:type()) -> rest_api_samples_test_utils:operation_listing().
 exp_operation_list(public, ?DIRECTORY_TYPE) -> [
     {'GET', <<"get_shared_data">>, <<"Download directory (tar)">>},
     {'GET', <<"get_shared_data">>, <<"List directory files and subdirectories">>},

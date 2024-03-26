@@ -35,9 +35,9 @@ from_protobuf(#'FileRequest'{
         file_request = from_protobuf(Record)
     };
 from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC, xattrs = Xattrs}) ->
-    #get_file_attr{attributes = ?ONECLIENT_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)};
+    #get_file_attr{attributes = ?ONECLIENT_FILE_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)};
 from_protobuf(#'GetFileAttrByPath'{path = Path, xattrs = Xattrs}) ->
-    #get_file_attr_by_path{path = Path, attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs)};
+    #get_file_attr_by_path{path = Path, attributes = ?ONECLIENT_FILE_ATTRS ++ xattrs_to_attrs_list(Xattrs)};
 from_protobuf(#'GetChildAttr'{
     name = Name,
     include_replication_status = IRS,
@@ -46,7 +46,7 @@ from_protobuf(#'GetChildAttr'{
 }) ->
     #get_child_attr{
         name = Name,
-        attributes = ?ONECLIENT_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
+        attributes = ?ONECLIENT_FILE_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
     };
 from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -94,7 +94,7 @@ from_protobuf(#'GetFileChildrenAttrs'{
         listing_options = maps_utils:remove_undefined(BaseListingOpts#{
             limit => Size
         }),
-        attributes = ?ONECLIENT_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
+        attributes = ?ONECLIENT_FILE_ATTRS ++ attrs_flags_to_attrs_list(IRS, ILC) ++ xattrs_to_attrs_list(Xattrs)
     };
 from_protobuf(#'CreateDir'{
     name = Name,
@@ -280,7 +280,7 @@ from_protobuf(#'ListFilesRecursively'{
     xattrs = Xattrs
 }) ->
     #get_recursive_file_list{
-        attributes = ?ONECLIENT_ATTRS ++ xattrs_to_attrs_list(Xattrs),
+        attributes = ?ONECLIENT_FILE_ATTRS ++ xattrs_to_attrs_list(Xattrs),
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
             start_after_path => StartAfter,
@@ -543,7 +543,7 @@ open_flag_translate_from_protobuf('WRITE') -> write;
 open_flag_translate_from_protobuf(_) -> rdwr.
 
 
--spec attributes_to_attrs_flags([file_attr:attribute()]) ->
+-spec attributes_to_attrs_flags([onedata_file:attr_name()]) ->
     {boolean(), boolean()}.
 attributes_to_attrs_flags(AttributesList) ->
     IRS = lists:member(?attr_is_fully_replicated, AttributesList),
@@ -552,7 +552,7 @@ attributes_to_attrs_flags(AttributesList) ->
 
 
 -spec attrs_flags_to_attrs_list(boolean() | undefined, boolean() | undefined) ->
-    [file_attr:attribute()].
+    [onedata_file:attr_name()].
 attrs_flags_to_attrs_list(true = _IRS, true = _ILC) ->
     [?attr_is_fully_replicated, ?attr_hardlink_count];
 attrs_flags_to_attrs_list(true = _IRS, _ILC) ->
@@ -562,6 +562,6 @@ attrs_flags_to_attrs_list(_IRS, true = _ILC) ->
 attrs_flags_to_attrs_list(_IRS, _ILC) ->
     [].
 
--spec xattrs_to_attrs_list([custom_metadata:name()]) -> [file_attr:attribute()].
+-spec xattrs_to_attrs_list([onedata_file:xattr_name()]) -> [onedata_file:attr_name()].
 xattrs_to_attrs_list([])     -> [];
 xattrs_to_attrs_list(Xattrs) -> [?attr_xattrs(Xattrs)].

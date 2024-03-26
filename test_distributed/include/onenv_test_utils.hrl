@@ -120,7 +120,7 @@ end)).
 -record(object, {
     guid :: file_id:file_guid(),
     name :: binary(),
-    type :: file_meta:type(),
+    type :: onedata_file:type(),
     mode :: file_meta:mode(),
     shares :: [od_share:id()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_object(),

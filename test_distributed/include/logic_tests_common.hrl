@@ -281,7 +281,7 @@ end).
             type = list,
             config = #atm_list_store_config{item_data_spec = #atm_file_data_spec{
                 file_type = 'ANY',
-                attributes = [file_id]
+                attributes = [?attr_guid]
             }},
             requires_initial_content = true
         },

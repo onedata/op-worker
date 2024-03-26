@@ -37,7 +37,7 @@
 
 -include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/onedata.hrl").
+-include_lib("ctool/include/onedata_file.hrl").
 
 
 %% API

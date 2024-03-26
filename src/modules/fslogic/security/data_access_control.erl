@@ -502,7 +502,7 @@ has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
 
 
 %% @private
--spec get_posix_allowed_ops(0..7, file_meta:type()) -> bitmask().
+-spec get_posix_allowed_ops(0..7, onedata_file:type()) -> bitmask().
 get_posix_allowed_ops(2#000, _) ->
     ?POSIX_ALWAYS_ALLOWED_OPS;
 get_posix_allowed_ops(2#001, _) ->

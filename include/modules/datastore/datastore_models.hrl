@@ -414,7 +414,7 @@
 
 -record(file_meta, {
     name :: undefined | file_meta:name(),
-    type :: undefined | file_meta:type(),
+    type :: undefined | onedata_file:type(),
     mode = 0 :: file_meta:posix_permissions(),
     protection_flags = 0 :: data_access_control:bitmask(),
     acl = [] :: acl:acl(), % VFS-7437 Handle conflict resolution similarly to hardlinks

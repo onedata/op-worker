@@ -251,7 +251,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    RequestedAttrs = maps:get(<<"responseAttributes">>, Data, ?API_ATTRS),
+    RequestedAttrs = maps:get(<<"responseAttributes">>, Data, ?API_FILE_ATTRS),
     {ok, FileAttr} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid), RequestedAttrs)),
     {ok, resource, {GRI#gri{id = Guid}, file_attr_translator:to_json(FileAttr, current, RequestedAttrs)}};
 
@@ -350,7 +350,7 @@ delete(_) ->
     SessionId :: session:id(),
     ParentGuid :: file_id:file_guid(),
     Name :: file_meta:name(),
-    Type :: file_meta:type(),
+    Type :: onedata_file:type(),
     Target :: undefined | file_id:file_guid() | file_meta:path(),
     Counter :: non_neg_integer(),
     Attempts :: non_neg_integer()
@@ -389,7 +389,7 @@ maybe_add_file_suffix(OriginalName, Counter) ->
     SessionId :: session:id(),
     ParentGuid :: file_id:file_guid(),
     Name :: file_meta:name(),
-    Type :: file_meta:type(),
+    Type :: onedata_file:type(),
     Target :: undefined | file_id:file_guid() | file_meta:path()
 ) ->
     {ok, file_id:file_guid() | lfm_attrs:file_attributes()} | {error, term()}.
