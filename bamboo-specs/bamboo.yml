@@ -215,6 +215,7 @@ stages:
         - storage_import
         - storage_import_delete_and_links
         - storage_import_deletion
+        - storage_import_oct
         - storage_import_s3
         - storage_import_update
         - storage_import_update_s3
@@ -1645,6 +1646,13 @@ storage_import_deletion:
     - <<: *ct_logs
       name: ct_logs_storage_import_deletion.tar.gz
 
+storage_import_oct:
+  <<: *ct-onenv-job
+  key: STORIMPOCT
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_oct.tar.gz
+
 storage_import_s3:
   <<: *ct-job
   key: STORIMPS3
@@ -1997,6 +2005,7 @@ Coverage report:
     - artifact: ct_logs_storage_import.tar.gz
     - artifact: ct_logs_storage_import_delete_and_links.tar.gz
     - artifact: ct_logs_storage_import_deletion.tar.gz
+    - artifact: ct_logs_storage_import_oct.tar.gz
     - artifact: ct_logs_storage_import_s3.tar.gz
     - artifact: ct_logs_storage_import_update.tar.gz
     - artifact: ct_logs_storage_import_update_s3.tar.gz
