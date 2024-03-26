@@ -28,6 +28,8 @@ helpers_test_() ->
         [
             fun get_handle/0,
             fun readdir/0,
+            fun blocksize_posix/0,
+            fun blocksize_cephrados/0,
             fun refresh_params/0
         ]}.
 
@@ -52,6 +54,39 @@ readdir() ->
         end,
 
     ?assertEqual({ok, BinaryResult}, NifResult).
+
+blocksize_posix() ->
+    {ok, HelperHandle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>,
+        <<"skipStorageDetection">> => <<"true">>
+    }),
+    {ok, Guard} = helpers_nif:blocksize_for_path(HelperHandle, <<"">>),
+    NifResult =
+        receive
+            {Guard, Res} ->
+                Res
+        after 2500 ->
+            {error, nif_timeout}
+        end,
+    ?assertEqual({ok, 0}, NifResult).
+
+blocksize_cephrados() ->
+    {ok, HelperHandle} = helpers_nif:get_handle(?CEPHRADOS_HELPER_NAME, #{
+        <<"clusterName">> => <<"test">>,
+        <<"monitorHostname">> => <<"localhost">>,
+        <<"poolName">> => <<"test">>,
+        <<"username">> => <<"test">>,
+        <<"key">> => <<"test">>
+    }),
+    {ok, Guard} = helpers_nif:blocksize_for_path(HelperHandle, <<"">>),
+    NifResult =
+        receive
+            {Guard, Res} ->
+                Res
+        after 2500 ->
+            {error, nif_timeout}
+        end,
+    ?assertEqual({ok, 10*1024*1024}, NifResult).
 
 refresh_params() ->
     %%% List contents of /tmp for comparison with helper output
