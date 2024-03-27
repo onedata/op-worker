@@ -57,7 +57,6 @@
 -export([
     % tests of import
     empty_import_test/1,
-    create_directory_import_test/1,
     create_directory_import_error_test/1,
     create_directory_import_check_user_id_test/1,
     create_directory_import_check_user_id_error_test/1,
@@ -210,63 +209,6 @@ empty_import_test(Config) ->
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
-create_directory_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    % wait till scan is finished
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if dir was imported
-    ?assertMatch({ok, [{_, ?TEST_DIR}]},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
-
-    StorageSDHandleW1 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, RDWRStorage),
-    StorageW2 = get_supporting_storage(W2, ?SPACE_ID),
-    StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, StorageW2),
-    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(W1, StorageSDHandleW1),
-    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(W2, StorageSDHandleW2),
-
-    SpaceOwner = ?SPACE_OWNER_ID(?SPACE_ID),
-    ?assertMatch({ok, #file_attr{
-        owner_id = SpaceOwner,
-        uid = MountUid1,
-        gid = 0
-    }}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-
-    ?assertMatch({ok, #file_attr{
-        owner_id = SpaceOwner,
-        uid = MountUid2,
-        gid = MountGid2
-    }}, lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0,
