@@ -95,7 +95,7 @@ test_stat(SpaceId) ->
         ?attr_xattrs([<<"cdmi_mimetype">>]),
         ?attr_xattrs([<<"onedata_json">>])]
     ),
-    Attributes = ?RAND_SUBLIST([Xattrs | ?ALL_ATTRS]),
+    Attributes = ?RAND_SUBLIST([Xattrs | ?ALL_FILE_ATTRS]),
     RequiredPerms = lists:usort(lists:flatmap(fun get_attr_required_perms/1, Attributes)),
     RequiredSpacePrivs = case lists:member(?read_metadata, RequiredPerms) of
         true -> [?SPACE_READ_DATA];
