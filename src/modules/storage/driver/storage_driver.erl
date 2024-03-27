@@ -417,7 +417,7 @@ read(SDHandle, Offset, MaxSize) ->
                                 Error
                         end
                 end;
-            {error, ?ENOENT} when Offset > 0 ->
+            {error, Error} when Error == ?ENOENT orelse Error == ?EIO, Offset > 0 ->
                 % some object storages return enoent when trying to read bytes
                 % out of file's range we must ensure that file exists
                 case stat(SDHandle) of
