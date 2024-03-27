@@ -67,6 +67,7 @@ empty_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     SpaceId = TestCaseCtx#storage_import_test_case_ctx.space_id,
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
 
+    % TODO VFS-11902 implement generic verification of imported files structure/data
     NodeImportingProvider = oct_background:get_random_provider_node(ImportingProviderSelector),
     NodeOtherProvider = oct_background:get_random_provider_node(OtherProviderSelector),
     SessionIdImportingProvider = oct_background:get_user_session_id(SpaceOwnerSelector, ImportingProviderSelector),
@@ -86,7 +87,7 @@ empty_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         lfm_proxy:stat(NodeOtherProvider, SessionIdOtherProvider, SpacePath), ?ATTEMPTS
     ),
 
-    assert_import_monitoring_state(NodeImportingProvider, SpaceId, #{
+    assert_storage_sync_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
         <<"created">> => 0,
         <<"deleted">> => 0,
@@ -114,6 +115,7 @@ create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     SpaceId = TestCaseCtx#storage_import_test_case_ctx.space_id,
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
 
+    % TODO VFS-11902 implement generic verification of imported files structure/data
     NodeImportingProvider = oct_background:get_random_provider_node(ImportingProviderSelector),
     NodeOtherProvider = oct_background:get_random_provider_node(OtherProviderSelector),
     SessionIdImportingProvider = oct_background:get_user_session_id(SpaceOwnerSelector, ImportingProviderSelector),
@@ -149,7 +151,7 @@ create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         gid = MountGid2
     }}, lfm_proxy:stat(NodeOtherProvider, SessionIdOtherProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
-    assert_import_monitoring_state(NodeImportingProvider, SpaceId, #{
+    assert_storage_sync_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
         <<"created">> => 1,
         <<"modified">> => 0,
@@ -223,7 +225,9 @@ init_testcase(TestCaseName, FileDesc, TestSuiteCtx = #storage_import_test_suite_
     other_space_member_selector = OtherSpaceMemberSelector
 }) ->
     ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
-    create_file_tree_on_storage(ImportingProviderSelector, ImportedStorageId, FileDesc),
+    FileDesc =/= undefined andalso ?rpc(ImportingProviderSelector, create_file_tree_on_storage(
+        ImportedStorageId, FileDesc
+    )),
 
     OtherStorageId = create_storage(StorageType, OtherProviderSelector, false),
 
@@ -265,44 +269,29 @@ create_storage(posix, ProviderSelector, IsImported) ->
 
 
 %% @private
--spec create_file_tree_on_storage(
-    oct_background:entity_selector(),
-    storage:id(),
-    undefined | onenv_file_test_utils:object_spec()
-) ->
+-spec create_file_tree_on_storage(storage:id(), onenv_file_test_utils:object_spec()) ->
     storage:id().
-create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
-    ok;
+create_file_tree_on_storage(StorageId, FileDesc) ->
+    Helper = storage:get_helper(StorageId),
+    HelperHandle = helpers:get_helper_handle(Helper, Helper#helper.admin_ctx),
 
-create_file_tree_on_storage(ProviderSelector, StorageId, FileDesc) ->
-    HelperHandle = get_admin_helper_handle(ProviderSelector, StorageId),
-    create_file_tree_on_storage(ProviderSelector, HelperHandle, <<"/">>, FileDesc).
-
-
-%% @private
--spec get_admin_helper_handle(oct_background:node_selector(), storage:id()) ->
-    helpers:helper_handle().
-get_admin_helper_handle(Node, StorageId) ->
-    Helper = ?rpc(Node, storage:get_helper(StorageId)),
-    ?rpc(Node, helpers:get_helper_handle(Helper, Helper#helper.admin_ctx)).
+    create_file_tree_on_storage(HelperHandle, <<"/">>, FileDesc).
 
 
 %% @private
 -spec create_file_tree_on_storage(
-    oct_background:entity_selector(),
     helpers:helper_handle(),
-    storage:id(),
-    undefined | onenv_file_test_utils:object_spec()
+    file_meta:path(),
+    onenv_file_test_utils:object_spec()
 ) ->
     storage:id().
-create_file_tree_on_storage(ProviderSelector, HelperHandle, ParentPath, #dir_spec{
+create_file_tree_on_storage(HelperHandle, ParentPath, #dir_spec{
     name = NameOrUndefined,
     mode = DirMode
 }) ->
     DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     StorageDirId = filepath_utils:join([ParentPath, DirName]),
-    ?assertEqual(ok, ?rpc(ProviderSelector, helpers:mkdir(HelperHandle, StorageDirId, DirMode))).
-
+    helpers:mkdir(HelperHandle, StorageDirId, DirMode).
 
 
 %% @private
@@ -316,66 +305,45 @@ await_initial_scan_finished(NodeSelector, SpaceId) ->
 
 
 %% @private
-assert_import_monitoring_state(Node, SpaceId, ExpectedSSM) ->
-    assert_import_monitoring_state(Node, SpaceId, ExpectedSSM, 1).
+-spec assert_storage_sync_monitoring_state(oct_background:node_selector(), od_space:id(), map()) ->
+    ok.
+assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM) ->
+    assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, 1).
 
 
 %% @private
-assert_import_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts) ->
-    SSM = monitoring_describe(Node, SpaceId),
-    SSM2 = flatten_histograms(SSM),
+-spec assert_storage_sync_monitoring_state(
+    oct_background:node_selector(),
+    od_space:id(),
+    map(),
+    non_neg_integer()
+) ->
+    ok.
+assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts) ->
+    SSM = ?rpc(Node, storage_import_monitoring:describe(SpaceId)),
+
     try
-        assert(ExpectedSSM, SSM2),
-        SSM2
+        assert(ExpectedSSM, flatten_import_histograms(SSM))
     catch
-        throw:{assertion_error, Key, ExpectedValue, Value}:Stacktrace ->
-            case Attempts == 0 of
-                false ->
-                    timer:sleep(timer:seconds(1)),
-                    assert_import_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts - 1);
-                true ->
-                    {Format, Args} = storage_import_monitoring_description(SSM),
-                    ct:pal(
-                        "Assertion of field \"~p\" in storage_import_monitoring for space ~p failed.~n"
-                        "    Expected: ~p~n"
-                        "    Value: ~p~n"
-                        ++ Format ++
-                            "~nStacktrace:~n~p",
-                        [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [Stacktrace]),
-                    ct:fail("assertion failed")
-            end
+        throw:{assertion_error, _} when Attempts > 0 ->
+            timer:sleep(timer:seconds(1)),
+            assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts - 1);
+
+        throw:{assertion_error, {Key, ExpectedValue, Value}}:Stacktrace ->
+            {Format, Args} = storage_import_monitoring_description(SSM),
+            ct:pal(
+                "Assertion of field \"~p\" in storage_import_monitoring for space ~p failed.~n"
+                "    Expected: ~p~n"
+                "    Value: ~p~n"
+                ++ Format ++
+                    "~nStacktrace:~n~p",
+                [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [Stacktrace]),
+            ct:fail("assertion failed")
     end.
 
 
 %% @private
-assert(ExpectedSSM, SSM) ->
-    maps:fold(fun(Key, Value, _AccIn) ->
-        assert_for_key(Key, Value, SSM)
-    end, ok, ExpectedSSM).
-
-
-%% @private
-assert_for_key(Key, ExpectedValue, SSM) ->
-    case maps:get(Key, SSM) of
-        ExpectedValue -> ok;
-        Value -> throw({assertion_error, Key, ExpectedValue, Value})
-    end.
-
-
-%% @private
-monitoring_describe(Worker, SpaceId) ->
-    ?rpc(Worker, storage_import_monitoring:describe(SpaceId)).
-
-
-%% @private
-storage_import_monitoring_description(SSM) ->
-    maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
-        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
-    end, {"~n#storage_import_monitoring fields values:~n", []}, SSM).
-
-
-%% @private
-flatten_histograms(SSM) ->
+flatten_import_histograms(SSM) ->
     SSM#{
         % flatten beginnings of histograms for assertions
         <<"createdMinHist">> => lists:sum(lists:sublist(maps:get(<<"createdMinHist">>, SSM), 2)),
@@ -393,3 +361,25 @@ flatten_histograms(SSM) ->
         <<"deletedDayHist">> => lists:sum(lists:sublist(maps:get(<<"deletedDayHist">>, SSM), 1)),
         <<"queueLengthDayHist">> => hd(maps:get(<<"queueLengthDayHist">>, SSM))
     }.
+
+
+%% @private
+assert(ExpectedSSM, SSM) ->
+    maps:fold(fun(Key, Value, _AccIn) ->
+        assert_for_key(Key, Value, SSM)
+    end, ok, ExpectedSSM).
+
+
+%% @private
+assert_for_key(Key, ExpectedValue, SSM) ->
+    case maps:get(Key, SSM) of
+        ExpectedValue -> ok;
+        Value -> throw({assertion_error, {Key, ExpectedValue, Value}})
+    end.
+
+
+%% @private
+storage_import_monitoring_description(SSM) ->
+    maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
+        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
+    end, {"~n#storage_import_monitoring fields values:~n", []}, SSM).
