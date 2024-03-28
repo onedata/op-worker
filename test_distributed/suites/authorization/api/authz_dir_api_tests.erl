@@ -22,7 +22,6 @@
 
 -export([
     test_mkdir/1,
-    test_get_children/1,
     test_get_children_attrs/1,
     test_get_child_attr/1,
     test_mv_dir/1,
@@ -60,30 +59,6 @@ test_mkdir(SpaceId) ->
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
-        end
-    }).
-
-
-test_get_children(SpaceId) ->
-    authz_api_test_runner:run_suite(#authz_test_suite_spec{
-        name = str_utils:to_binary(?FUNCTION_NAME),
-        space_id = SpaceId,
-        files = [#ct_authz_dir_spec{
-            name = <<"dir1">>,
-            required_perms = [?list_container]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
-        available_in_readonly_mode = true,
-        available_for_share_guid = true,
-        available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:get_children(Node, SessionId, DirKey, 0, 100)
-        end,
-        final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end
     }).
 

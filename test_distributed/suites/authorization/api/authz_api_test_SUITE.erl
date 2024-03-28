@@ -27,8 +27,9 @@
 ]).
 
 -export([
+    test_all_operations_are_checked/1,
+
     test_mkdir/1,
-    test_get_children/1,
     test_get_children_attrs/1,
     test_get_child_attr/1,
     test_mv_dir/1,
@@ -89,7 +90,6 @@
 groups() -> [
     {authz_dir_api_tests, [], [
         test_mkdir,
-        test_get_children,
         test_get_children_attrs,
         test_get_child_attr,
         test_mv_dir,
@@ -165,6 +165,7 @@ groups() -> [
 ].
 
 all() -> [
+    test_all_operations_are_checked,
     {group, authz_dir_api_tests},
     {group, authz_reg_file_api_tests},
     {group, authz_file_common_api_tests},
@@ -176,6 +177,70 @@ all() -> [
     {group, authz_qos_api_tests}
 ].
 
+
+-define(NOT_YET_TESTED_OPERATIONS, [
+    {lfm, abort_multipart_upload, 2},
+    {lfm, check_result, 1},
+    {lfm, check_size_and_read, 3},
+    {lfm, complete_multipart_upload, 2},
+    {lfm, cp, 4},
+    {lfm, create_dir_at_path, 3},
+    {lfm, create_multipart_upload, 3},
+    {lfm, ensure_dir, 4},
+    {lfm, fsync, 1},
+    {lfm, fsync, 3},
+    {lfm, get_children_count, 2},
+    {lfm, get_file_location, 2},
+    {lfm, get_file_references, 2},
+    {lfm, get_files_recursively, 4},
+    {lfm, get_fs_stats, 2},
+    {lfm, has_custom_metadata, 2},
+    {lfm, is_dir, 2},
+    {lfm, list_multipart_parts, 4},
+    {lfm, list_multipart_uploads, 4},
+    {lfm, make_link, 4},
+    {lfm, make_symlink, 4},
+    {lfm, monitored_open, 3},
+    {lfm, monitored_release, 1},
+    {lfm, read, 3},
+    {lfm, read_symlink, 2},
+    {lfm, release, 1},
+    {lfm, resolve_guid_by_relative_path, 3},
+    {lfm, resolve_symlink, 2},
+    {lfm, rm_recursive, 2},
+    {lfm, silent_read, 3},
+    {lfm, sync_block, 4},
+    {lfm, update_times, 5},
+    {lfm, upload_multipart_part, 3},
+    {lfm, write, 3},
+    {mi_archives, archive_dataset, 6},
+    {mi_archives, browse_recall_log, 3},
+    {mi_archives, cancel_archivisation, 3},
+    {mi_archives, cancel_recall, 2},
+    {mi_archives, delete, 3},
+    {mi_archives, get_info, 2},
+    {mi_archives, get_recall_details, 2},
+    {mi_archives, get_recall_progress, 2},
+    {mi_archives, list, 4},
+    {mi_archives, recall, 4},
+    {mi_archives, update, 3},
+    {mi_atm, discard_workflow_execution, 3},
+    {mi_atm, force_continue_workflow_execution, 2},
+    {mi_atm, init_cancel_workflow_execution, 2},
+    {mi_atm, init_pause_workflow_execution, 2},
+    {mi_atm, repeat_workflow_execution, 4},
+    {mi_atm, resume_workflow_execution, 2},
+    {mi_atm, schedule_workflow_execution, 7},
+    {mi_datasets, establish, 3},
+    {mi_datasets, get_file_eff_summary, 2},
+    {mi_datasets, get_info, 2},
+    {mi_datasets, list_children_datasets, 4},
+    {mi_datasets, list_top_datasets, 5},
+    {mi_datasets, remove, 2},
+    {mi_datasets, update, 5},
+    {mi_transfers, schedule_file_transfer, 5},
+    {mi_transfers, schedule_view_transfer, 7}
+]).
 
 -define(RUN_AUTHZ_DIR_API_TEST(__CONFIG),
     authz_dir_api_tests:?FUNCTION_NAME(?config(space_id, Config))
@@ -213,198 +278,313 @@ all() -> [
 %%%===================================================================
 
 
+test_all_operations_are_checked(_Config) ->
+    AllAvailableOperations = lists:usort(lists:flatmap(fun(Module) ->
+        lists:filtermap(fun
+            ({module_info, _}) -> false;
+            ({FunName, Arity}) -> {true, {Module, FunName, Arity}}
+        end, Module:module_info(exports))
+    end, [
+        lfm,
+        mi_archives, mi_atm, mi_cdmi, mi_datasets, mi_file_metadata, mi_qos, mi_shares, mi_transfers
+    ])),
+
+    TestedOperations = lists:flatten(lists:filtermap(fun({FunName, _Arity}) ->
+        case str_utils:to_binary(FunName) of
+            <<"test_", _/binary>> when FunName =/= ?FUNCTION_NAME ->
+                {true, erlang:apply(?MODULE, FunName, [tested_operations])};
+            _ ->
+                false
+        end
+    end, module_info(exports))),
+
+    ?assertEqual([], (AllAvailableOperations -- ?NOT_YET_TESTED_OPERATIONS) -- TestedOperations).
+
+
+test_mkdir(tested_operations) ->
+    [{lfm, mkdir, 3}, {lfm, mkdir, 4}];
 test_mkdir(Config) ->
     ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
-test_get_children(Config) ->
-    ?RUN_AUTHZ_DIR_API_TEST(Config).
-
-
+test_get_children_attrs(tested_operations) ->
+    [{lfm, get_children_attrs, 3}, {lfm, get_children_attrs, 4}];
 test_get_children_attrs(Config) ->
     ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
+test_get_child_attr(tested_operations) ->
+    [{lfm, get_child_attr, 3}];
 test_get_child_attr(Config) ->
     ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
+test_mv_dir(tested_operations) ->
+    [{lfm, mv, 4}];
 test_mv_dir(Config) ->
     ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
+test_rm_dir(tested_operations) ->
+    [{lfm, unlink, 3}];
 test_rm_dir(Config) ->
     ?RUN_AUTHZ_DIR_API_TEST(Config).
 
 
+test_create_file(tested_operations) ->
+    [{lfm, create, 2}, {lfm, create, 3}, {lfm, create, 4}];
 test_create_file(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_open_for_read(tested_operations) ->
+    [{lfm, open, 3}];
 test_open_for_read(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_open_for_write(tested_operations) ->
+    [{lfm, open, 3}];
 test_open_for_write(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_open_for_rdwr(tested_operations) ->
+    [{lfm, open, 3}];
 test_open_for_rdwr(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_create_and_open(tested_operations) ->
+    [{lfm, create_and_open, 4}, {lfm, create_and_open, 5}];
 test_create_and_open(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_truncate(tested_operations) ->
+    [{lfm, truncate, 3}];
 test_truncate(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_mv_file(tested_operations) ->
+    [{lfm, mv, 4}];
 test_mv_file(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_rm_file(tested_operations) ->
+    [{lfm, unlink, 3}];
 test_rm_file(Config) ->
     ?RUN_AUTHZ_REG_FILE_API_TEST(Config).
 
 
+test_get_parent(tested_operations) ->
+    [{lfm, get_parent, 2}];
 test_get_parent(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
+test_get_file_path(tested_operations) ->
+    [{lfm, get_file_path, 2}];
 test_get_file_path(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
+test_resolve_guid(tested_operations) ->
+    [{lfm, get_file_guid, 2}];
 test_resolve_guid(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
+test_stat(tested_operations) ->
+    [{lfm, stat, 2}, {lfm, stat, 3}];
 test_stat(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
+test_set_perms(tested_operations) ->
+    [{lfm, set_perms, 3}];
 test_set_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
+test_check_read_perms(tested_operations) ->
+    [{lfm, check_perms, 3}];
 test_check_read_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
+test_check_write_perms(tested_operations) ->
+    [{lfm, check_perms, 3}];
 test_check_write_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
+test_check_rdwr_perms(tested_operations) ->
+    [{lfm, check_perms, 3}];
 test_check_rdwr_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
+test_create_share(tested_operations) ->
+    [{mi_shares, create, 4}];
 test_create_share(Config) ->
     ?RUN_AUTHZ_SHARE_API_TEST(Config).
 
 
+test_remove_share(tested_operations) ->
+    [{mi_shares, remove, 2}];
 test_remove_share(Config) ->
     ?RUN_AUTHZ_SHARE_API_TEST(Config).
 
 
+test_share_perms_are_checked_only_up_to_share_root(tested_operations) ->
+    [];
 test_share_perms_are_checked_only_up_to_share_root(Config) ->
     ?RUN_AUTHZ_SHARE_API_TEST(Config).
 
 
+test_get_acl(tested_operations) ->
+    [{lfm, get_acl, 2}];
 test_get_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
+test_set_acl(tested_operations) ->
+    [{lfm, set_acl, 3}];
 test_set_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
+test_remove_acl(tested_operations) ->
+    [{lfm, remove_acl, 2}];
 test_remove_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
+test_get_transfer_encoding(tested_operations) ->
+    [{mi_cdmi, get_transfer_encoding, 2}];
 test_get_transfer_encoding(Config) ->
     ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
+test_set_transfer_encoding(tested_operations) ->
+    [{mi_cdmi, set_transfer_encoding, 3}];
 test_set_transfer_encoding(Config) ->
     ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
+test_get_cdmi_completion_status(tested_operations) ->
+    [{mi_cdmi, get_cdmi_completion_status, 2}];
 test_get_cdmi_completion_status(Config) ->
     ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
+test_set_cdmi_completion_status(tested_operations) ->
+    [{mi_cdmi, set_cdmi_completion_status, 3}];
 test_set_cdmi_completion_status(Config) ->
     ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
+test_get_mimetype(tested_operations) ->
+    [{mi_cdmi, get_mimetype, 2}];
 test_get_mimetype(Config) ->
     ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
+test_set_mimetype(tested_operations) ->
+    [{mi_cdmi, set_mimetype, 3}];
 test_set_mimetype(Config) ->
     ?RUN_AUTHZ_CDMI_API_TEST(Config).
 
 
+test_get_custom_metadata(tested_operations) ->
+    [{mi_file_metadata, get_custom_metadata, 5}];
 test_get_custom_metadata(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_set_custom_metadata(tested_operations) ->
+    [{mi_file_metadata, set_custom_metadata, 5}];
 test_set_custom_metadata(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_remove_custom_metadata(tested_operations) ->
+    [{mi_file_metadata, remove_custom_metadata, 3}];
 test_remove_custom_metadata(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_get_xattr(tested_operations) ->
+    [{lfm, get_xattr, 4}];
 test_get_xattr(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_list_xattr(tested_operations) ->
+    [{lfm, list_xattr, 4}];
 test_list_xattr(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_set_xattr(tested_operations) ->
+    [{lfm, set_xattr, 3}, {lfm, set_xattr, 5}];
 test_set_xattr(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_remove_xattr(tested_operations) ->
+    [{lfm, remove_xattr, 3}];
 test_remove_xattr(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_get_file_distribution(tested_operations) ->
+    [{mi_file_metadata, gather_distribution, 2}];
 test_get_file_distribution(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_get_historical_dir_size_stats(tested_operations) ->
+    [{mi_file_metadata, get_historical_dir_size_stats, 4}];
 test_get_historical_dir_size_stats(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_get_file_storage_locations(tested_operations) ->
+    [{mi_file_metadata, get_storage_locations, 2}];
 test_get_file_storage_locations(Config) ->
     ?RUN_AUTHZ_FILE_METADATA_API_TEST(Config).
 
 
+test_add_qos_entry(tested_operations) ->
+    [{mi_qos, add_qos_entry, 4}, {mi_qos, add_qos_entry, 5}];
 test_add_qos_entry(Config) ->
     ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
+test_get_qos_entry(tested_operations) ->
+    [{mi_qos, get_qos_entry, 2}];
 test_get_qos_entry(Config) ->
     ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
+test_remove_qos_entry(tested_operations) ->
+    [{mi_qos, remove_qos_entry, 2}];
 test_remove_qos_entry(Config) ->
     ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
+test_get_effective_file_qos(tested_operations) ->
+    [{mi_qos, get_effective_file_qos, 2}];
 test_get_effective_file_qos(Config) ->
     ?RUN_AUTHZ_QOS_API_TEST(Config).
 
 
+test_check_qos_status(tested_operations) ->
+    [{mi_qos, check_qos_status, 2}, {mi_qos, check_qos_status, 3}];
 test_check_qos_status(Config) ->
     ?RUN_AUTHZ_QOS_API_TEST(Config).
 
