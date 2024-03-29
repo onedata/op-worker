@@ -531,6 +531,7 @@ flushbuffer(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
         case helpers:flushbuffer(HelperHandle, FileId, CurrentSize) of
             ok -> ok;
             {error, ?ENOENT} -> ok;
+            {error, ?EIO} -> ok;
             {error, __} = Error -> Error
         end
     end, ?READWRITE).
