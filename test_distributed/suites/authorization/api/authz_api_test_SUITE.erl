@@ -178,6 +178,8 @@ all() -> [
 ].
 
 
+%% TODO VFS-10945 Assign tickets to add missing authz api tests
+%% WARNING!!! DO NOT ADD ANY MORE CASES HERE _ IMPLEMENT TEST FOR ANY NEW OPERATION!!!
 -define(NOT_YET_TESTED_OPERATIONS, [
     {lfm, abort_multipart_upload, 2},
     {lfm, check_result, 1},
