@@ -9,7 +9,7 @@
 %%% This module tests storage import on POSIX storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_oct_test_SUITE).
+-module(storage_import_posix_oct_test_SUITE).
 -author("Katarzyna Such").
 
 -include("storage_import_oct_test.hrl").
@@ -35,9 +35,8 @@ all() -> [
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
     storage_type = posix,
     importing_provider_selector = krakow,
-    other_provider_selector = paris,
-    space_owner_selector = user1,
-    other_space_member_selector = user2
+    non_importing_provider_selector = paris,
+    space_owner_selector = user1
 }).
 -define(run_test(), storage_import_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 

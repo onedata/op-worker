@@ -60,7 +60,7 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
 
 empty_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector,
-    other_provider_selector = OtherProviderSelector,
+    non_importing_provider_selector = NonImportingProviderSelector,
     space_owner_selector = SpaceOwnerSelector
 }) ->
     TestCaseCtx = init_testcase(?FUNCTION_NAME, undefined, TestSuiteCtx),
@@ -69,25 +69,30 @@ empty_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     % TODO VFS-11902 implement generic verification of imported files structure/data
     NodeImportingProvider = oct_background:get_random_provider_node(ImportingProviderSelector),
-    NodeOtherProvider = oct_background:get_random_provider_node(OtherProviderSelector),
-    SessionIdImportingProvider = oct_background:get_user_session_id(SpaceOwnerSelector, ImportingProviderSelector),
-    SessionIdOtherProvider = oct_background:get_user_session_id(SpaceOwnerSelector, OtherProviderSelector),
+    NodeNonImportingProvider = oct_background:get_random_provider_node(NonImportingProviderSelector),
+    SessionIdImportingProvider = oct_background:get_user_session_id(
+        SpaceOwnerSelector, ImportingProviderSelector
+    ),
+    SessionIdNonImportingProvider = oct_background:get_user_session_id(
+        SpaceOwnerSelector, NonImportingProviderSelector
+    ),
 
-    SpacePath = {path, TestCaseCtx#storage_import_test_case_ctx.space_path},
+    SpacePathFileKey = {path, TestCaseCtx#storage_import_test_case_ctx.space_path},
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePath, 0, 10)
+        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, 0, 10)
     ),
     ?assertMatch(
         {ok, #file_attr{}},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, SpacePath)
+        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey)
     ),
     ?assertMatch(
         {ok, #file_attr{}},
-        lfm_proxy:stat(NodeOtherProvider, SessionIdOtherProvider, SpacePath), ?ATTEMPTS
+        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, SpacePathFileKey),
+        ?ATTEMPTS
     ),
 
-    assert_storage_sync_monitoring_state(ImportingProviderSelector, SpaceId, #{
+    assert_storage_import_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
         <<"created">> => 0,
         <<"deleted">> => 0,
@@ -106,7 +111,7 @@ empty_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
 create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector,
-    other_provider_selector = OtherProviderSelector,
+    non_importing_provider_selector = NonImportingProviderSelector,
     space_owner_selector = SpaceOwnerSelector
 }) ->
     DirName = ?RAND_STR(),
@@ -117,41 +122,63 @@ create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     % TODO VFS-11902 implement generic verification of imported files structure/data
     NodeImportingProvider = oct_background:get_random_provider_node(ImportingProviderSelector),
-    NodeOtherProvider = oct_background:get_random_provider_node(OtherProviderSelector),
-    SessionIdImportingProvider = oct_background:get_user_session_id(SpaceOwnerSelector, ImportingProviderSelector),
-    SessionIdOtherProvider = oct_background:get_user_session_id(SpaceOwnerSelector, OtherProviderSelector),
+    NodeNonImportingProvider = oct_background:get_random_provider_node(NonImportingProviderSelector),
+    SessionIdImportingProvider = oct_background:get_user_session_id(
+        SpaceOwnerSelector, ImportingProviderSelector
+    ),
+    SessionIdNonImportingProvider = oct_background:get_user_session_id(
+        SpaceOwnerSelector, NonImportingProviderSelector
+    ),
 
     %% Check if dir was imported
-    SpacePath = {path, TestCaseCtx#storage_import_test_case_ctx.space_path},
+    SpacePathFileKey = {path, TestCaseCtx#storage_import_test_case_ctx.space_path},
     ?assertMatch(
         {ok, [{_, DirName}]},
-        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePath, 0, 10),
+        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, 0, 10),
         ?ATTEMPTS
     ),
 
     SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, DirName]),
-    StorageSDHandleKrakow = sd_test_utils:get_storage_mountpoint_handle(NodeImportingProvider, SpaceId,
-        TestCaseCtx#storage_import_test_case_ctx.imported_storage_id),
-    StorageSDHandleParis = sd_test_utils:get_storage_mountpoint_handle(NodeImportingProvider, SpaceId,
-        TestCaseCtx#storage_import_test_case_ctx.other_storage_id),
-    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(NodeImportingProvider, StorageSDHandleKrakow),
-    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(NodeOtherProvider, StorageSDHandleParis),
+    StorageSDHandleKrakow = sd_test_utils:get_storage_mountpoint_handle(
+        NodeImportingProvider,
+        SpaceId,
+        TestCaseCtx#storage_import_test_case_ctx.imported_storage_id
+    ),
+    StorageSDHandleParis = sd_test_utils:get_storage_mountpoint_handle(
+        NodeImportingProvider,
+        SpaceId,
+        TestCaseCtx#storage_import_test_case_ctx.other_storage_id
+    ),
+    {ok, #statbuf{st_uid = MountUidImportingProvider}} = sd_test_utils:stat(
+        NodeImportingProvider, StorageSDHandleKrakow
+    ),
+    {ok, #statbuf{
+        st_uid = MountUidNonImportingProvider,
+        st_gid = MountGidNonImportingProvider
+    }} = sd_test_utils:stat(NodeNonImportingProvider, StorageSDHandleParis),
 
     SpaceOwner = ?SPACE_OWNER_ID(SpaceId),
 
-    ?assertMatch({ok, #file_attr{
-        owner_id = SpaceOwner,
-        uid = MountUid1,
-        gid = 0
-    }}, lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    ?assertMatch(
+        {ok, #file_attr{
+            owner_id = SpaceOwner,
+            uid = MountUidImportingProvider,
+            gid = 0
+        }},
+        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}),
+        ?ATTEMPTS
+    ),
+    ?assertMatch(
+        {ok, #file_attr{
+            owner_id = SpaceOwner,
+            uid = MountUidNonImportingProvider,
+            gid = MountGidNonImportingProvider
+        }},
+        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}),
+        ?ATTEMPTS
+    ),
 
-    ?assertMatch({ok, #file_attr{
-        owner_id = SpaceOwner,
-        uid = MountUid2,
-        gid = MountGid2
-    }}, lfm_proxy:stat(NodeOtherProvider, SessionIdOtherProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
-
-    assert_storage_sync_monitoring_state(ImportingProviderSelector, SpaceId, #{
+    assert_storage_import_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
         <<"created">> => 1,
         <<"modified">> => 0,
@@ -193,15 +220,15 @@ filter_spaces_from_previous_run(AllTestCases) ->
     ok.
 delete_space_with_supporting_storages(SpaceId, #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector,
-    other_provider_selector = OtherProviderSelector
+    non_importing_provider_selector = NonImportingProviderSelector
 }) ->
     [StorageKrakow] = opw_test_rpc:get_space_local_storages(ImportingProviderSelector, SpaceId),
-    [StorageParis] = opw_test_rpc:get_space_local_storages(OtherProviderSelector, SpaceId),
+    [StorageParis] = opw_test_rpc:get_space_local_storages(NonImportingProviderSelector, SpaceId),
 
     ozw_test_rpc:delete_space(SpaceId),
 
     delete_storage(ImportingProviderSelector, StorageKrakow),
-    delete_storage(OtherProviderSelector, StorageParis).
+    delete_storage(NonImportingProviderSelector, StorageParis).
 
 
 %% @private
@@ -220,21 +247,20 @@ delete_storage(NodeSelector, StorageId) ->
 init_testcase(TestCaseName, FileDesc, TestSuiteCtx = #storage_import_test_suite_ctx{
     storage_type = StorageType,
     importing_provider_selector = ImportingProviderSelector,
-    other_provider_selector = OtherProviderSelector,
-    space_owner_selector = SpaceOwnerSelector,
-    other_space_member_selector = OtherSpaceMemberSelector
+    non_importing_provider_selector = NonImportingProviderSelector,
+    space_owner_selector = SpaceOwnerSelector
 }) ->
     ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
     FileDesc =/= undefined andalso ?rpc(ImportingProviderSelector, create_file_tree_on_storage(
         ImportedStorageId, FileDesc
     )),
 
-    OtherStorageId = create_storage(StorageType, OtherProviderSelector, false),
+    OtherStorageId = create_storage(StorageType, NonImportingProviderSelector, false),
 
     SpaceId = space_setup_utils:set_up_space(#space_spec{
         name = TestCaseName,
         owner = SpaceOwnerSelector,
-        users = [OtherSpaceMemberSelector],
+        users = [],
         supports = [
             #support_spec{
                 provider = ImportingProviderSelector,
@@ -242,7 +268,7 @@ init_testcase(TestCaseName, FileDesc, TestSuiteCtx = #storage_import_test_suite_
                 size = 1000000000
             },
             #support_spec{
-                provider = OtherProviderSelector,
+                provider = NonImportingProviderSelector,
                 storage_spec = OtherStorageId,
                 size = 1000000000
             }
@@ -305,32 +331,32 @@ await_initial_scan_finished(NodeSelector, SpaceId) ->
 
 
 %% @private
--spec assert_storage_sync_monitoring_state(oct_background:node_selector(), od_space:id(), map()) ->
+-spec assert_storage_import_monitoring_state(oct_background:node_selector(), od_space:id(), map()) ->
     ok.
-assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM) ->
-    assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, 1).
+assert_storage_import_monitoring_state(Node, SpaceId, ExpectedSIM) ->
+    assert_storage_import_monitoring_state(Node, SpaceId, ExpectedSIM, 1).
 
 
 %% @private
--spec assert_storage_sync_monitoring_state(
+-spec assert_storage_import_monitoring_state(
     oct_background:node_selector(),
     od_space:id(),
     map(),
     non_neg_integer()
 ) ->
     ok.
-assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts) ->
-    SSM = ?rpc(Node, storage_import_monitoring:describe(SpaceId)),
+assert_storage_import_monitoring_state(Node, SpaceId, ExpectedSIM, Attempts) ->
+    SIM = ?rpc(Node, storage_import_monitoring:describe(SpaceId)),
 
     try
-        assert(ExpectedSSM, flatten_import_histograms(SSM))
+        assert_storage_import_monitoring_state(ExpectedSIM, flatten_storage_import_histograms(SIM))
     catch
         throw:{assertion_error, _} when Attempts > 0 ->
             timer:sleep(timer:seconds(1)),
-            assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts - 1);
+            assert_storage_import_monitoring_state(Node, SpaceId, ExpectedSIM, Attempts - 1);
 
         throw:{assertion_error, {Key, ExpectedValue, Value}}:Stacktrace ->
-            {Format, Args} = storage_import_monitoring_description(SSM),
+            {Format, Args} = build_storage_import_monitoring_description(SIM),
             ct:pal(
                 "Assertion of field \"~p\" in storage_import_monitoring for space ~p failed.~n"
                 "    Expected: ~p~n"
@@ -343,43 +369,38 @@ assert_storage_sync_monitoring_state(Node, SpaceId, ExpectedSSM, Attempts) ->
 
 
 %% @private
-flatten_import_histograms(SSM) ->
-    SSM#{
+assert_storage_import_monitoring_state(ExpectedSIM, SIM) ->
+    maps:foreach(fun(Key, ExpectedValue) ->
+        case maps:get(Key, SIM) of
+            ExpectedValue -> ok;
+            Value -> throw({assertion_error, {Key, ExpectedValue, Value}})
+        end
+    end, ExpectedSIM).
+
+
+%% @private
+flatten_storage_import_histograms(SIM) ->
+    SIM#{
         % flatten beginnings of histograms for assertions
-        <<"createdMinHist">> => lists:sum(lists:sublist(maps:get(<<"createdMinHist">>, SSM), 2)),
-        <<"modifiedMinHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedMinHist">>, SSM), 2)),
-        <<"deletedMinHist">> => lists:sum(lists:sublist(maps:get(<<"deletedMinHist">>, SSM), 2)),
-        <<"queueLengthMinHist">> => hd(maps:get(<<"queueLengthMinHist">>, SSM)),
+        <<"createdMinHist">> => lists:sum(lists:sublist(maps:get(<<"createdMinHist">>, SIM), 2)),
+        <<"modifiedMinHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedMinHist">>, SIM), 2)),
+        <<"deletedMinHist">> => lists:sum(lists:sublist(maps:get(<<"deletedMinHist">>, SIM), 2)),
+        <<"queueLengthMinHist">> => hd(maps:get(<<"queueLengthMinHist">>, SIM)),
 
-        <<"createdHourHist">> => lists:sum(lists:sublist(maps:get(<<"createdHourHist">>, SSM), 3)),
-        <<"modifiedHourHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedHourHist">>, SSM), 3)),
-        <<"deletedHourHist">> => lists:sum(lists:sublist(maps:get(<<"deletedHourHist">>, SSM), 3)),
-        <<"queueLengthHourHist">> => hd(maps:get(<<"queueLengthHourHist">>, SSM)),
+        <<"createdHourHist">> => lists:sum(lists:sublist(maps:get(<<"createdHourHist">>, SIM), 3)),
+        <<"modifiedHourHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedHourHist">>, SIM), 3)),
+        <<"deletedHourHist">> => lists:sum(lists:sublist(maps:get(<<"deletedHourHist">>, SIM), 3)),
+        <<"queueLengthHourHist">> => hd(maps:get(<<"queueLengthHourHist">>, SIM)),
 
-        <<"createdDayHist">> => lists:sum(lists:sublist(maps:get(<<"createdDayHist">>, SSM), 1)),
-        <<"modifiedDayHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedDayHist">>, SSM), 1)),
-        <<"deletedDayHist">> => lists:sum(lists:sublist(maps:get(<<"deletedDayHist">>, SSM), 1)),
-        <<"queueLengthDayHist">> => hd(maps:get(<<"queueLengthDayHist">>, SSM))
+        <<"createdDayHist">> => lists:sum(lists:sublist(maps:get(<<"createdDayHist">>, SIM), 1)),
+        <<"modifiedDayHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedDayHist">>, SIM), 1)),
+        <<"deletedDayHist">> => lists:sum(lists:sublist(maps:get(<<"deletedDayHist">>, SIM), 1)),
+        <<"queueLengthDayHist">> => hd(maps:get(<<"queueLengthDayHist">>, SIM))
     }.
 
 
 %% @private
-assert(ExpectedSSM, SSM) ->
-    maps:fold(fun(Key, Value, _AccIn) ->
-        assert_for_key(Key, Value, SSM)
-    end, ok, ExpectedSSM).
-
-
-%% @private
-assert_for_key(Key, ExpectedValue, SSM) ->
-    case maps:get(Key, SSM) of
-        ExpectedValue -> ok;
-        Value -> throw({assertion_error, {Key, ExpectedValue, Value}})
-    end.
-
-
-%% @private
-storage_import_monitoring_description(SSM) ->
+build_storage_import_monitoring_description(SIM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
         {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
-    end, {"~n#storage_import_monitoring fields values:~n", []}, SSM).
+    end, {"~n#storage_import_monitoring fields values:~n", []}, SIM).

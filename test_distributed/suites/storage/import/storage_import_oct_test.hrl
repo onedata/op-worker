@@ -21,9 +21,8 @@
 -record(storage_import_test_suite_ctx, {
     storage_type :: posix,
     importing_provider_selector :: oct_background:entity_selector(),
-    other_provider_selector :: oct_background:entity_selector(),
-    space_owner_selector :: oct_background:entity_selector(),
-    other_space_member_selector :: oct_background:entity_selector()
+    non_importing_provider_selector :: oct_background:entity_selector(),
+    space_owner_selector :: oct_background:entity_selector()
 }).
 
 

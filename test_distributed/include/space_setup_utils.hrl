@@ -4,8 +4,9 @@
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions concerning storage import tests.
+%%% Common definitions concerning space setup in tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(STORAGE_IMPORT_HRL).
