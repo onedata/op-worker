@@ -182,7 +182,7 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             Logger = get_logger(UserCtx, AtmWorkflowExecutionEnv),
             ?atm_workflow_notice(Logger, #atm_workflow_log_schema{
                 selector = {lane_run, AtmLaneRunSelector},
-                description = ?fmt_bin("Scheduled manual ~s.", [Type]),
+                description = ?fmt_bin("Scheduled manual ~ts.", [Type]),
                 details = #{
                     <<"repeatType">> => Type,
                     <<"scheduledLaneRunSelector">> => ?lane_run_selector_json(
@@ -608,7 +608,7 @@ handle_workflow_abruptly_stopped(
         utils:ensure_defined(OriginalAbruptStoppingReason, crash)
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Emergency atm workflow execution components finalization failed due to ~p:~p",
+            "Emergency atm workflow execution components finalization failed due to ~tp:~tp",
             [Type, Reason],
             Stacktrace
         ),
@@ -901,7 +901,7 @@ notify_stopped(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_exe
     ok.
 try_to_notify(AtmWorkflowExecutionId, CallbackUrl, _Headers, _Payload, _Interval, 0) ->
     ?error(
-        "Failed to send atm workflow execution (~s) notification to '~s' (no retries left)",
+        "Failed to send atm workflow execution (~ts) notification to '~ts' (no retries left)",
         [AtmWorkflowExecutionId, CallbackUrl]
     );
 try_to_notify(AtmWorkflowExecutionId, CallbackUrl, Headers, Payload, Interval, RetriesLeft) ->
@@ -910,8 +910,8 @@ try_to_notify(AtmWorkflowExecutionId, CallbackUrl, Headers, Payload, Interval, R
             ok;
         {error, _} = Error ->
             ?warning(
-                "Failed to send atm workflow execution (~s) notification to ~s due to ~p.~n"
-                "Next retry in ~p seconds. Number of retries left: ~p",
+                "Failed to send atm workflow execution (~ts) notification to ~ts due to ~tp.~n"
+                "Next retry in ~tp seconds. Number of retries left: ~tp",
                 [AtmWorkflowExecutionId, CallbackUrl, Error, Interval / 1000, RetriesLeft - 1]
             ),
             timer:sleep(Interval),

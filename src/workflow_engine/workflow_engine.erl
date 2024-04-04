@@ -207,7 +207,7 @@ finish_cancel_procedure(ExecutionId) ->
         ?WF_ERROR_WORKFLOW_INTERRUPTED ->
             ok;
         ?WF_ERROR_CANCEL_NOT_INITIALIZED ->
-            ?warning("Finishing not initialized cancel procedure for execution ~s", [ExecutionId]),
+            ?warning("Finishing not initialized cancel procedure for execution ~ts", [ExecutionId]),
             ok
     end.
 
@@ -304,7 +304,7 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, Context,
-                "~s", [?autoformat([Function, Args])],
+                "~ts", [?autoformat([Function, Args])],
                 Error, Reason, Stacktrace
             ),
             error
@@ -346,7 +346,7 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
         ?END_EXECUTION ->
             ok;
         Other ->
-            ?error("Wrong return of handle_lane_execution_stopped for cancelled lane ~p of execution ~p: ~p",
+            ?error("Wrong return of handle_lane_execution_stopped for cancelled lane ~tp of execution ~tp: ~tp",
                 [LaneId, ExecutionId, Other])
     end.
 
@@ -355,7 +355,7 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
 handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, Class, Reason, Stacktrace) ->
     try
         ?error_exception(
-            "workflow_handler ~w, execution ~s: " ++ Message,
+            "workflow_handler ~w, execution ~ts: " ++ Message,
             [Handler, ExecutionId | MessageArgs],
             Class, Reason, Stacktrace
         ),
@@ -363,7 +363,7 @@ handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, Class, Rea
     catch
         Class2:Reason2:Stacktrace2  ->
             ?critical_exception(
-                "Unexpected error handling exception for workflow_handler ~w (execution ~s)", [Handler, ExecutionId],
+                "Unexpected error handling exception for workflow_handler ~w (execution ~ts)", [Handler, ExecutionId],
                 Class2, Reason2, Stacktrace2
             )
     end.
@@ -376,7 +376,7 @@ execute_exception_handler(ExecutionId, Context, Handler, Class, Reason, Stacktra
     catch
         Class2:Reason2:Stacktrace2  ->
             ?critical_exception(
-                "Unexpected error handling exception for workflow_handler ~w (execution ~s)", [Handler, ExecutionId],
+                "Unexpected error handling exception for workflow_handler ~w (execution ~ts)", [Handler, ExecutionId],
                 Class2, Reason2, Stacktrace2
             ),
             undefined
@@ -471,7 +471,7 @@ schedule_next_job(EngineId) ->
     catch
         Error:Reason:Stacktrace  ->
             ?error_stacktrace(
-                "Unexpected error scheduling next job for engine ~s~nError was: ~w:~p",
+                "Unexpected error scheduling next job for engine ~ts~nError was: ~w:~tp",
                 [EngineId, Error, Reason],
                 Stacktrace
             ),
@@ -636,15 +636,15 @@ put_value_in_cache(Id, Name, Value) ->
         [] ->
             ok;
         _ ->
-            ?error("Engine ~p: setting value for ~p failed on nodes: ~p (RPC error)", [Id, Name, BadNodes])
+            ?error("Engine ~tp: setting value for ~tp failed on nodes: ~tp (RPC error)", [Id, Name, BadNodes])
     end,
 
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Engine ~p: setting value for ~p failed.~n"
-                "Reason: ~p", [Id, Name, Error]
+                "Engine ~tp: setting value for ~tp failed.~n"
+                "Reason: ~tp", [Id, Name, Error]
             )
     end, Res).
 
@@ -692,7 +692,7 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error handling task ~s", [?autoformat([TaskId, ItemId])],
+                "Unexpected error handling task ~ts", [?autoformat([TaskId, ItemId])],
                 Error, Reason, Stacktrace
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -720,7 +720,7 @@ process_item(ExecutionId, #execution_spec{
             % TODO VFS-7788 - use callbacks to get human readable information about item and task
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error handling task ~s", [?autoformat([TaskId, ItemId, Item])],
+                "Unexpected error handling task ~ts", [?autoformat([TaskId, ItemId, Item])],
                 Error, Reason, Stacktrace
             ),
             error
@@ -746,7 +746,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
                 % TODO VFS-7788 - use callbacks to get human readable information about task
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    "Unexpected error processing task result ~s",
+                    "Unexpected error processing task result ~ts",
                     [?autoformat([TaskId, CachedResultId, CachedResult, ItemId, CachedItem])],
                     Error, Reason, Stacktrace
                 ),
@@ -757,7 +757,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error getting item or result to process task result ~s",
+                "Unexpected error getting item or result to process task result ~ts",
                 [?autoformat([TaskId, CachedResultId])],
                 Error2, Reason2, Stacktrace2
             ),
@@ -782,7 +782,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
             Error:Reason:Stacktrace  ->
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    "Unexpected error processing task data ~s", [?autoformat([TaskId, CachedTaskDataId])],
+                    "Unexpected error processing task data ~ts", [?autoformat([TaskId, CachedTaskDataId])],
                     Error, Reason, Stacktrace
                 ),
                 trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -791,7 +791,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error getting data for task ~s", [?autoformat([CachedTaskDataId, TaskId])],
+                "Unexpected error getting data for task ~ts", [?autoformat([CachedTaskDataId, TaskId])],
                 Error2, Reason2, Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -819,7 +819,7 @@ prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, Preparati
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error preparing lane ~p", [LaneId],
+                "Unexpected error preparing lane ~tp", [LaneId],
                 Error, Reason, Stacktrace
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)

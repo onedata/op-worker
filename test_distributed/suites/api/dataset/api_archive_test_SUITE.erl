@@ -84,7 +84,7 @@ all() -> [
 -define(ARCHIVE_DELETED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_DELETED_PATH)).
 -define(CALLBACK_URL(Path), begin
     {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
-    str_utils:format_bin(<<"http://~s:~p~s">>, [IpAddressBin, ?HTTP_SERVER_PORT, Path])
+    str_utils:format_bin(<<"http://~ts:~tp~ts">>, [IpAddressBin, ?HTTP_SERVER_PORT, Path])
 end).
 
 -define(CREATE_TEST_PROCESS, create_test_process).
@@ -339,7 +339,7 @@ await_archive_preserved_callback_called(ArchiveId, DatasetId) ->
         ?ARCHIVE_PERSISTED(ArchiveId, DatasetId) -> ok
     after
         Timeout ->
-            ct:fail("Archive ~p not created", [ArchiveId])
+            ct:fail("Archive ~tp not created", [ArchiveId])
     end.
 
 %%%===================================================================
@@ -889,7 +889,7 @@ await_archive_deleted_callback_called(ArchiveId, DatasetId) ->
         ?ARCHIVE_DELETED(ArchiveId, DatasetId) -> ok
     after
         Timeout ->
-            ct:fail("Archive ~p not deleted", [ArchiveId])
+            ct:fail("Archive ~tp not deleted", [ArchiveId])
     end.
 
 

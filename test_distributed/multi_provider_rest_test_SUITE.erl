@@ -889,7 +889,7 @@ list_transfers_via_rest(Config, Worker, Space, State, StartId, LimitOrUndef) ->
         Int when is_integer(Int) ->
             <<"&limit=", (integer_to_binary(Int))/binary>>
     end,
-    Url = str_utils:format_bin("spaces/~s/transfers?state=~s~s~s", [
+    Url = str_utils:format_bin("spaces/~ts/transfers?state=~ts~ts~ts", [
         Space, State, TokenParam, LimitParam
     ]),
     case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of

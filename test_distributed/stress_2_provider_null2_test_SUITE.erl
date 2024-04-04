@@ -101,7 +101,7 @@ random_read_test_base(Config, SeparateBlocks) ->
       {ans, Num, {RT1_2, RT2_2, OT_2, CT_2}} ->
         {RT1+RT1_2, RT2+RT2_2, OT+OT_2, CT+CT_2};
       {ans, Num, Error} ->
-        ct:print("Error: ~p", [Error]),
+        ct:print("Error: ~tp", [Error]),
         timer:sleep(5000),
         Acc
     after timer:minutes(5) ->
@@ -111,7 +111,7 @@ random_read_test_base(Config, SeparateBlocks) ->
     end
   end, {0,0,0,0}, Names),
 
-  ct:print("Repeat: ~p, many blocks: ~p, read remote: ~p, read local: ~p, open: ~p, close: ~p", [
+  ct:print("Repeat: ~tp, many blocks: ~tp, read remote: ~tp, read local: ~tp, open: ~tp, close: ~tp", [
     RepNum, SeparateBlocks, ReadTime1 / Num, ReadTime2 / Num, OpenTime / Num, CloseTime / Num]),
   ok.
 

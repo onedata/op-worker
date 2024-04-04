@@ -227,7 +227,7 @@ randomly_choose_file_type_for_test() ->
 -spec randomly_choose_file_type_for_test(boolean()) -> file_type().
 randomly_choose_file_type_for_test(LogSelectedFileType) ->
     FileType = ?RANDOM_FILE_TYPE(),
-    LogSelectedFileType andalso ct:pal("Chosen file type for test: ~s", [FileType]),
+    LogSelectedFileType andalso ct:pal("Chosen file type for test: ~ts", [FileType]),
     FileType.
 
 

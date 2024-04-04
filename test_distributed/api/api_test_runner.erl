@@ -65,7 +65,7 @@ run_suite(Config, SuiteSpec) ->
         throw:fail ->
             false;
         Type:Reason:Stacktrace ->
-            ct:pal("Unexpected error while running test suite ~w:~p~nStacktrace: ~s", [
+            ct:pal("Unexpected error while running test suite ~w:~tp~nStacktrace: ~ts", [
                 Type, Reason, lager:pr_stacktrace(Stacktrace)
             ]),
             false
@@ -518,14 +518,14 @@ validate_error_result(Type, ExpError, Result) when
 
 %% @private
 log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, ErrType, ErrReason, Stacktrace) ->
-    ct:pal("~s test case failed:~n"
-    "Node: ~p~n"
-    "Client: ~p~n"
-    "Args: ~s~n"
-    "Expected: ~p~n"
-    "Got: ~p~n"
-    "Error: ~p:~p~n"
-    "Stacktrace: ~s~n", [
+    ct:pal("~ts test case failed:~n"
+    "Node: ~tp~n"
+    "Client: ~tp~n"
+    "Args: ~ts~n"
+    "Expected: ~tp~n"
+    "Got: ~tp~n"
+    "Error: ~tp:~tp~n"
+    "Stacktrace: ~ts~n", [
         ScenarioName,
         TargetNode,
         aai:auth_to_printable(Client),

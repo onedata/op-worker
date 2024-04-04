@@ -67,11 +67,11 @@ init(all) ->
         {ok, SpaceIds} ->
             lists:foreach(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize QoS effective cache.~nError: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize QoS effective cache.~nError: ~tp", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize QoS effective cache.~nError: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize QoS effective cache.~nError: ~tp", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize QoS effective cache.~nError: ~p", [Error])
+            ?critical("Unable to initialize QoS effective cache.~nError: ~tp", [Error])
     catch
         Class:Reason:Stacktrace ->
             ?critical_exception("Unable to initialize QoS effective cache", Class, Reason, Stacktrace)
@@ -87,14 +87,14 @@ init(SpaceId) ->
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize QoS effective cache for space ~p.~nError ~p",
+                        ?critical("Unable to initialize QoS effective cache for space ~tp.~nError ~tp",
                             [SpaceId, Error])
                 end
         end
     catch
         Class:Reason:Stacktrace ->
             ?critical_exception(
-                "Unable to initialize QoS effective cache for space ~p", [SpaceId],
+                "Unable to initialize QoS effective cache for space ~tp", [SpaceId],
                 Class, Reason, Stacktrace
             )
     end.
@@ -115,7 +115,7 @@ invalidate_on_all_nodes(SpaceId) ->
             ok;
         _ ->
             ?error(
-                "Invalidation of QoS bounded cache for space ~p failed on nodes: ~p (RPC error)",
+                "Invalidation of QoS bounded cache for space ~tp failed on nodes: ~tp (RPC error)",
                 [BadNodes]
             )
     end,
@@ -124,8 +124,8 @@ invalidate_on_all_nodes(SpaceId) ->
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Invalidation of QoS bounded cache for space ~p failed.~n"
-                "Reason: ~p", [SpaceId, Error]
+                "Invalidation of QoS bounded cache for space ~tp failed.~n"
+                "Reason: ~tp", [SpaceId, Error]
             )
     end, Res).
 
@@ -148,7 +148,7 @@ ensure_non_neg_integer(Value, _, _) when is_integer(Value) andalso Value >= 0 ->
 
 ensure_non_neg_integer(Value, ParamName, DefaultVal) ->
     ?warning(
-        "Got ~p value for ~p parameter. ~p should be a non-negative integer. "
-        "Using default value instead (~p)", [Value, ParamName, ParamName, DefaultVal]
+        "Got ~tp value for ~tp parameter. ~tp should be a non-negative integer. "
+        "Using default value instead (~tp)", [Value, ParamName, ParamName, DefaultVal]
     ),
     DefaultVal.

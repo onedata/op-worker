@@ -299,25 +299,25 @@ wait_for_qos_fulfilment(Node, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
                     ?FULFILLED_QOS_STATUS ->
                         str_utils:format(
                             "QoS is not fulfilled while it should be. ~n"
-                            "Node: ~p ~n"
-                            "QosName: ~p ~n"
-                            "ProviderId: ~p ~n"
-                            "TraverseReqs: ~p ~n",
+                            "Node: ~tp ~n"
+                            "QosName: ~tp ~n"
+                            "ProviderId: ~tp ~n"
+                            "TraverseReqs: ~tp ~n",
                             [Node, QosName, PossibilityCheck, TraverseReqs]
                         );
                     ?IMPOSSIBLE_QOS_STATUS ->
                         str_utils:format(
                             "QoS is fulfilled while it shouldn't be. ~n"
-                            "Node: ~p ~n"
-                            "QosName: ~p ~n", [Node, QosName]
+                            "Node: ~tp ~n"
+                            "QosName: ~tp ~n", [Node, QosName]
                         )
                 end;
             {error, _} = Error ->
                 str_utils:format(
                     "Error when checking QoS status. ~n"
-                    "Node: ~p~n"
-                    "QosName: ~p~n"
-                    "Error: ~p~n", [Node, QosName, Error]
+                    "Node: ~tp~n"
+                    "QosName: ~tp~n"
+                    "Error: ~tp~n", [Node, QosName, Error]
                 )
         end,
         {opt_qos:check_qos_status(Node, ?ROOT_SESS_ID, QosEntryId), ErrMsg}
@@ -396,7 +396,7 @@ finish_transfers(Files, Mode, IgnoredMsgs) ->
         resend_msgs(IgnoredMsgs),
         case Mode of
             strict ->
-                ct:print("Transfers not started: ~p", [Files]),
+                ct:print("Transfers not started: ~tp", [Files]),
                 {error, transfers_not_started};
             non_strict ->
                 ok
@@ -486,9 +486,9 @@ assert_qos_entry_document(Node, QosEntryId, FileUuid, Expression, ReplicasNum, A
         % do not assert traverse reqs
         QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
         ErrMsg = str_utils:format(
-            "Node: ~p ~n"
-            "Expected qos_entry: ~p ~n"
-            "Got: ~p", [Node, ExpectedQosEntry, QosEntryWithoutTraverseReqs]
+            "Node: ~tp ~n"
+            "Expected qos_entry: ~tp ~n"
+            "Got: ~tp", [Node, ExpectedQosEntry, QosEntryWithoutTraverseReqs]
         ),
         {QosEntryWithoutTraverseReqs, ErrMsg}
     end,
@@ -571,10 +571,10 @@ assert_file_qos_document(
         ),
         FileQosSorted = sort_file_qos(FileQos),
         ErrMsg = str_utils:format(
-            "Node: ~p~n"
-            "File: ~p~n"
-            "Sorted file_qos: ~p~n"
-            "Expected file_qos: ~p~n",
+            "Node: ~tp~n"
+            "File: ~tp~n"
+            "Sorted file_qos: ~tp~n"
+            "Expected file_qos: ~tp~n",
             [Node, FilePath, FileQosSorted, ExpectedFileQos]
         ),
         {FileQosSorted, ErrMsg}
@@ -631,10 +631,10 @@ assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssi
         {ok, EffQos} = get_effective_qos_by_lfm(Node, ?SESS_ID(Provider), FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
-            "Node: ~p~n"
-            "File: ~p~n"
-            "Sorted effective QoS: ~p~n"
-            "Expected effective QoS: ~p~n",
+            "Node: ~tp~n"
+            "File: ~tp~n"
+            "Sorted effective QoS: ~tp~n"
+            "Expected effective QoS: ~tp~n",
             [Node, FilePath, EffQosSorted, ExpectedEffectiveQos]
         ),
         {EffQosSorted, ErrMsg}
@@ -720,9 +720,9 @@ assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribu
                 false;
             {false, true} ->
                 ct:pal(
-                    "Wrong file distribution for ~p on node ~p. ~n"
-                    "Expected: ~p~n"
-                    "Got: ~p~n",
+                    "Wrong file distribution for ~tp on node ~tp. ~n"
+                    "Expected: ~tp~n"
+                    "Got: ~tp~n",
                     [FilePath, Node, ExpectedDistributionSorted, FileDistributionSorted]),
                     false;
             {true, _} ->

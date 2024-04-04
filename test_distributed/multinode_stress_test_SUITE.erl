@@ -113,10 +113,10 @@ single_dir_creation_test_base(Config) ->
                     {slave_ans, SaveAns} ->
                         SaveAns + Acc;
                     {slave_ans_error, SaveAns, SaveAnsErrors, ErrorsList} ->
-                        ct:print("Slave errors num ~p~nerror list: ~p", [SaveAnsErrors, ErrorsList]),
+                        ct:print("Slave errors num ~tp~nerror list: ~tp", [SaveAnsErrors, ErrorsList]),
                         SaveAns + Acc;
                     {slave_error, SlaveError} ->
-                        ct:print("Slave error ~p", [SlaveError]),
+                        ct:print("Slave error ~tp", [SlaveError]),
                         Acc
                 after
                     ?TIMEOUT ->
@@ -134,7 +134,7 @@ single_dir_creation_test_base(Config) ->
             end,
             NewSum = Sum + OkSum,
             put(ok_sum, NewSum),
-            ct:print("Save num ~p, sum ~p, time ~p", [OkSum, NewSum, Time]),
+            ct:print("Save num ~tp, sum ~tp, time ~tp", [OkSum, NewSum, Time]),
             ok;
         _ ->
             timer:sleep(timer:seconds(60)),

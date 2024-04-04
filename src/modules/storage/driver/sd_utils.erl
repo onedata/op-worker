@@ -125,7 +125,7 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
 %%
 %%            case storage_driver:stat(TargetHandle) of
 %%                {ok, _} ->
-%%                    ?warning("Moving file into existing one, source ~p, target ~p",
+%%                    ?warning("Moving file into existing one, source ~tp, target ~tp",
 %%                        [SourceFileId, TargetFileId]),
 %%                    NewTargetFileId = ?CONFLICTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
 %%                    storage_driver:mv(SourceHandle, NewTargetFileId);
@@ -212,7 +212,7 @@ restore_storage_file(FileCtx, UserCtx) ->
         try
             case fslogic_location:is_file_created(FileUuid, FileLocationId) of
                 true ->
-                    ?info("restoring storage file ~p", [file_ctx:get_logical_guid_const(FileCtx2)]),
+                    ?info("restoring storage file ~tp", [file_ctx:get_logical_guid_const(FileCtx2)]),
                     {ok, _} = sd_utils:generic_create_deferred(UserCtx, FileCtx2, true);
                 _ ->
                     ok
@@ -220,7 +220,7 @@ restore_storage_file(FileCtx, UserCtx) ->
             ok
         catch
             Type:Error:Stacktrace ->
-                ?error_stacktrace("restore_storage_file failed for file ~p due to: ~p:~p", [
+                ?error_stacktrace("restore_storage_file failed for file ~tp due to: ~tp:~tp", [
                     file_ctx:get_logical_guid_const(FileCtx2), Type, Error
                 ], Stacktrace),
                 ok
@@ -246,7 +246,7 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
             FileCtx4 = create_missing_parent_dirs(UserCtx, FileCtx3),
             case create_storage_file(SDHandle, FileCtx4) of
                 {error, ?ENOENT} ->
-                    ?warning("Missing dirs on storage path to file ~p", [file_ctx:get_logical_guid_const(FileCtx4)]),
+                    ?warning("Missing dirs on storage path to file ~tp", [file_ctx:get_logical_guid_const(FileCtx4)]),
                     % Fallback because of inconsistencies in metadata caused by rename.
                     % This function cannot be used by default, as it does not chown created directories.
                     FileCtx5 = create_missing_parent_dirs_by_location(UserCtx, FileCtx4),
@@ -357,14 +357,14 @@ rmdir(DirCtx, UserCtx) ->
                     dir_location:mark_deleted_from_storage(FileUuid),
                     {ok, DirCtx3};
                 {error, ?ENOTEMPTY} = Error ->
-                    ?debug("sd_utils:rmdir failed with ~p", [Error]),
+                    ?debug("sd_utils:rmdir failed with ~tp", [Error]),
                     Error;
                 {error,'Function not implemented'} = Error ->
                     % Some helpers do not support rmdir
-                    ?debug("sd_utils:rmdir failed with ~p", [Error]),
+                    ?debug("sd_utils:rmdir failed with ~tp", [Error]),
                     {ok, DirCtx3};
                 Error ->
-                    ?error("sd_utils:rmdir ~p ~p failed with ~p", [DirCtx, SDHandle, Error]),
+                    ?error("sd_utils:rmdir ~tp ~tp failed with ~tp", [DirCtx, SDHandle, Error]),
                     Error
             end
     end.
@@ -421,7 +421,7 @@ truncate_created_file(FileCtx) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            ?warning_exception("Error truncating newly created storage file ~p",
+            ?warning_exception("Error truncating newly created storage file ~tp",
                 [file_ctx:get_logical_guid_const(FileCtx)], Class, Reason, Stacktrace),
             {ok, FileCtx}
     end.
@@ -469,7 +469,7 @@ create_missing_parent_dirs_by_location(UserCtx, FileCtx) ->
             ok -> ok;
             {error, already_exists} -> ok;
             Error ->
-                ?error("Error when recreating missing storage directory ~p: ~p", [Path, Error])
+                ?error("Error when recreating missing storage directory ~tp: ~tp", [Path, Error])
         end,
         Path
     end, filepath_utils:join([<<"/">>, SpaceId]), PathTokens),
@@ -509,7 +509,7 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
             case file_ctx:get_logical_uuid_const(FileCtx) =:= file_ctx:get_logical_uuid_const(ParentCtx) of
                 true ->
                     {Doc, _} = file_ctx:get_file_doc(FileCtx2),
-                    ?info("Infinite loop detected on parent dirs creation for file ~p", [Doc]),
+                    ?info("Infinite loop detected on parent dirs creation for file ~tp", [Doc]),
                     lists:foreach(fun(Ctx) ->
                         % create missing directories going down the file tree
                         case create_missing_parent_dir(UserCtx, Ctx) of
@@ -633,7 +633,7 @@ handle_conflicting_directory(FileCtx) ->
 create_storage_file_with_suffix(#sd_handle{file_uuid = Uuid, file = FileId} = SDHandle, Mode) ->
     NewName = ?CONFLICTING_STORAGE_FILE_NAME(FileId, Uuid),
     SDHandle1 = SDHandle#sd_handle{file = NewName},
-    ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),
+    ?debug("File ~tp exists on storage, creating ~tp instead", [FileId, NewName]),
     case storage_driver:create(SDHandle1, Mode) of
         ok -> {ok, NewName};
         Error -> Error

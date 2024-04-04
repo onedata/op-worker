@@ -64,7 +64,7 @@ update_version_info(Release, Build, GuiHash) ->
 upload_op_worker_gui(PackagePath) ->
     GuiPrefix = onedata:gui_prefix(?OP_WORKER_GUI),
     ClusterId = oneprovider:get_id(),
-    Url = oneprovider:get_oz_url(str_utils:format_bin("/~s/~s/gui-upload", [GuiPrefix, ClusterId])),
+    Url = oneprovider:get_oz_url(str_utils:format_bin("/~ts/~ts/gui-upload", [GuiPrefix, ClusterId])),
     {ok, ProviderAccessToken} = provider_auth:acquire_access_token(),
     Headers = #{?HDR_X_AUTH_TOKEN => ProviderAccessToken},
     Body = {multipart, [{file, str_utils:to_binary(PackagePath)}]},

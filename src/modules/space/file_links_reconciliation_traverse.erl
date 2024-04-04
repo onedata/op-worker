@@ -102,12 +102,12 @@ get_job(DocOrID) ->
 
 -spec task_started(id(), traverse:pool()) -> ok.
 task_started(TaskId, _PoolName) ->
-    ?notice("File tree links reconciliation traverse started for space ~p.", [TaskId]).
+    ?notice("File tree links reconciliation traverse started for space ~tp.", [TaskId]).
 
 
 -spec task_finished(id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    ?notice("File tree links reconciliation traverse finished for space ~p.", [TaskId]).
+    ?notice("File tree links reconciliation traverse finished for space ~tp.", [TaskId]).
 
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),

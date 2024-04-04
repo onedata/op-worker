@@ -93,4 +93,4 @@ format_log_message(SessionId, RequestTerm) ->
         false ->
             ?autoformat([SessionId])
     end,
-    str_utils:format("Cannot process request~s", [AutoformattedDetails]).
+    str_utils:format("Cannot process request~ts", [AutoformattedDetails]).

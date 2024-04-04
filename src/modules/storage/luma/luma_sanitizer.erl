@@ -44,7 +44,7 @@ sanitize_storage_user(StorageUserMap, HelperName) when is_map(StorageUserMap) ->
         })}
     catch
         throw:Error:Stacktrace ->
-            ?error_stacktrace("Sanitizing LUMA storage user failed due to ~p", [Error], Stacktrace),
+            ?error_stacktrace("Sanitizing LUMA storage user failed due to ~tp", [Error], Stacktrace),
             Error
     end.
 
@@ -60,7 +60,7 @@ sanitize_posix_credentials(PosixCredentials) ->
         })}
     catch
         throw:Error:Stacktrace ->
-            ?error_stacktrace("Sanitizing POSIX compatible credentials failed due to ~p", [Error], Stacktrace),
+            ?error_stacktrace("Sanitizing POSIX compatible credentials failed due to ~tp", [Error], Stacktrace),
             Error
     end.
 
@@ -75,7 +75,7 @@ sanitize_onedata_user(OnedataUserMap) ->
         {ok, SanitizedData}
     catch
         throw:Error:Stacktrace   ->
-            ?error_stacktrace("Sanitizing LUMA onedata user failed due to ~p: ~p", [Error, OnedataUserMap], Stacktrace),
+            ?error_stacktrace("Sanitizing LUMA onedata user failed due to ~tp: ~tp", [Error, OnedataUserMap], Stacktrace),
             Error
     end.
 
@@ -90,7 +90,7 @@ sanitize_onedata_group(OnedataGroupMap) ->
         {ok, SanitizedData}
     catch
         throw:Error:Stacktrace   ->
-            ?error_stacktrace("Sanitizing LUMA onedata group failed due to ~p", [Error], Stacktrace),
+            ?error_stacktrace("Sanitizing LUMA onedata group failed due to ~tp", [Error], Stacktrace),
             Error
     end.
 

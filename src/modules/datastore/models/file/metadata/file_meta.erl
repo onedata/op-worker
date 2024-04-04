@@ -711,7 +711,7 @@ get_mode(#file_meta{mode = Mode}) ->
 %%--------------------------------------------------------------------
 -spec setup_onedata_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
 setup_onedata_user(UserId, EffSpaces) ->
-    ?debug("Setting up user: ~p", [UserId]),
+    ?debug("Setting up user: ~tp", [UserId]),
     critical_section:run([od_user, UserId], fun() ->
         try
             CTime = global_clock:timestamp_seconds(),
@@ -745,7 +745,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                     ok
             end
         catch Type:Message:Stacktrace ->
-            ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
+            ?error_stacktrace("Failed to setup user ~ts - ~tp:~tp", [
                 UserId, Type, Message
             ], Stacktrace)
         end
@@ -1065,7 +1065,7 @@ validate_protection_flags(ProtectionFlags) when
     ?has_all_flags(ProtectionFlags, ?METADATA_PROTECTION),
     ?has_no_flags(ProtectionFlags, ?DATA_PROTECTION)
 ->
-    ?ERROR_BAD_DATA(<<"protectionFLags">>, str_utils:format_bin("Cannot set ~s without ~s", [
+    ?ERROR_BAD_DATA(<<"protectionFLags">>, str_utils:format_bin("Cannot set ~ts without ~ts", [
         ?METADATA_PROTECTION_BIN, ?DATA_PROTECTION_BIN
     ]));
 validate_protection_flags(_) ->

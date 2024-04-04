@@ -106,7 +106,7 @@ websocket_handle({ping, _Payload}, State) ->
     {ok, State};
 
 websocket_handle(Msg, SessionData) ->
-    ?warning("Unexpected frame in ~p: ~p", [?MODULE, Msg]),
+    ?warning("Unexpected frame in ~tp: ~tp", [?MODULE, Msg]),
     {ok, SessionData}.
 
 
@@ -176,7 +176,7 @@ is_authorized(Req) ->
     case op_worker:get_env(?AUTHORIZATION_SECRET_ENV_NAME, undefined) of
         undefined ->
             utils:throttle(3600, fun() ->
-                ?alert("The ~p env variable is not set, the OpenFaaS activity feed will decline all requests", [
+                ?alert("The ~tp env variable is not set, the OpenFaaS activity feed will decline all requests", [
                     ?AUTHORIZATION_SECRET_ENV_NAME
                 ])
             end),

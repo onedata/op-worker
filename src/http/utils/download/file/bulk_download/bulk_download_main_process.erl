@@ -214,7 +214,7 @@ stream_file(State, SessionId, FileAttrs, FileRelativePath) ->
         ignored ->
             State;
         {error, _} = Error ->
-            ?warning("Unexpected error during bulk download: ~p. File ~p will be ignored", [Error, Guid]),
+            ?warning("Unexpected error during bulk download: ~tp. File ~tp will be ignored", [Error, Guid]),
             State
     end.
 
@@ -230,7 +230,7 @@ stream_symlink(State, SessionId, FileAttrs, Path) ->
         ignored ->
             State;
         {error, _} = Error ->
-            ?warning("Unexpected error during bulk download: ~p. File ~p will be ignored", [Error, Guid]),
+            ?warning("Unexpected error during bulk download: ~tp. File ~tp will be ignored", [Error, Guid]),
             State
     end.
 

@@ -213,7 +213,7 @@ cleanup_opened_files() ->
                 ok = file_handles:delete(FileUuid)
             end, Docs);
         Error ->
-            ?error("Cannot clean open files descriptors - ~p", [Error])
+            ?error("Cannot clean open files descriptors - ~tp", [Error])
     end.
 
 
@@ -726,11 +726,11 @@ log_storage_file_deletion_error(FileCtx, ErrorDetails) ->
     {StorageFileId, FileCtx2} = get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx3),
-    Format = "Deleting file ~p on storage ~s with guid ~s",
+    Format = "Deleting file ~tp on storage ~ts with guid ~ts",
     Args = [StorageFileId, StorageId, FileGuid],
     case ErrorDetails of
         {error, _} ->
-            ?error(Format ++ "~s", Args ++ [?autoformat([ErrorDetails])]);
+            ?error(Format ++ "~ts", Args ++ [?autoformat([ErrorDetails])]);
         {Class, Reason, Stacktrace} ->
             ?error_exception(Format, Args, Class, Reason, Stacktrace)
     end.

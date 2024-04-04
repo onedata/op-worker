@@ -175,7 +175,7 @@ auth_request(TransferData, ProviderId) ->
         {StorageId, FileId, FileGuid}
     catch
         _:Err:Stacktrace ->
-            ?error_stacktrace("Auth providerid=~p failed due to ~p", [ProviderId, Err], Stacktrace),
+            ?error_stacktrace("Auth providerid=~tp failed due to ~tp", [ProviderId, Err], Stacktrace),
             false
     end.
 
@@ -214,7 +214,7 @@ add_storage(StorageId) ->
                                   [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
     BadNodes =/= [] andalso
-        ?error("Failed to call some nodes to add storage to rtransfer~s", [
+        ?error("Failed to call some nodes to add storage to rtransfer~ts", [
             ?autoformat([StorageId, BadNodes])
         ]),
 
@@ -222,7 +222,7 @@ add_storage(StorageId) ->
         [] ->
             ok;
         _ErrorResults ->
-            ?error("There were errors while adding storage to rtransfer~s", [
+            ?error("There were errors while adding storage to rtransfer~ts", [
                 ?autoformat([StorageId, AllNodes, GatheredResults])
             ])
     end,
@@ -253,14 +253,14 @@ generate_secret(ProviderId, PeerSecret) ->
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p on nodes ~w",
+        ?error("Failed to allow rtransfer connection from ~tp on nodes ~w",
                [ProviderId, BadNodes]),
     FilteredNodesAns = lists:filter(fun
         (#{<<"done">> := true}) -> false;
         (_) -> true
     end, NodesAns),
     FilteredNodesAns =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p~nrpc answer: ~p", [ProviderId, NodesAns]),
+        ?error("Failed to allow rtransfer connection from ~tp~nrpc answer: ~tp", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------
@@ -340,7 +340,7 @@ make_cert_bundle() ->
         case file:read_file(ChainFile) of
             {ok, Chain} -> [Cert, Chain];
             Error ->
-                ?warning("Error reading certificate chain in path ~p: ~p. "
+                ?warning("Error reading certificate chain in path ~tp: ~tp. "
                          "rtransfer will use cert only", [ChainFile, Error]),
                 [Cert]
         end,
@@ -442,7 +442,7 @@ get_storages(Retries) ->
                 _ when Retries > 0 ->
                     retry;
                 [FirstBadStorage | _] ->
-                    ?critical("Cannot find local configuration for storage ~s", [FirstBadStorage]),
+                    ?critical("Cannot find local configuration for storage ~ts", [FirstBadStorage]),
                     ?ERROR_INTERNAL_SERVER_ERROR
             end;
         {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->
@@ -450,7 +450,7 @@ get_storages(Retries) ->
         {?ERROR_NO_CONNECTION_TO_ONEZONE, 0} ->
             {ok, []}; % will be called again when connection is established
         {{error, _} = Error, 0} ->
-            ?critical("Unexpected error when fetching the list of storages: ~p", [Error]),
+            ?critical("Unexpected error when fetching the list of storages: ~tp", [Error]),
             Error;
         _ ->
             retry

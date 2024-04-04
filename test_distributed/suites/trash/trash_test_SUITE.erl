@@ -727,5 +727,5 @@ await_traverse_finished(TaskId, Attempts) ->
     receive {traverse_finished, TaskId} -> ok
     after
         timer:seconds(Attempts) ->
-            ct:fail("Traverse ~s not finished in expected time", [TaskId])
+            ct:fail("Traverse ~ts not finished in expected time", [TaskId])
     end.

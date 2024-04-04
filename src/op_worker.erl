@@ -29,7 +29,7 @@ get_env(Key) ->
         {ok, Value} ->
             Value;
         undefined ->
-            ?alert("Could not find required env variable for op-worker: ~p", [Key]),
+            ?alert("Could not find required env variable for op-worker: ~tp", [Key]),
             error({missing_env_variable, Key})
     end.
 

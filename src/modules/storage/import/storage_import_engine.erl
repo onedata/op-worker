@@ -600,7 +600,7 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-            ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
+            ?error_stacktrace("importing file ~tp on storage ~tp in space ~tp failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason], Stacktrace),
             rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
@@ -620,7 +620,7 @@ create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-            ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
+            ?error_stacktrace("importing file ~tp on storage ~tp in space ~tp failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason], Stacktrace),
             rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
@@ -819,7 +819,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                             % which means that it is a stalled link because file_meta should be created
                             % before adding the link.
                             ?warning(
-                                "Stalled file_meta link ~p from parent ~p pointing to uuid ~p detected. "
+                                "Stalled file_meta link ~tp from parent ~tp pointing to uuid ~tp detected. "
                                 "The link will be deleted", [FileName, ParentUuid, FileUuid2]),
                             ok = file_meta_forest:delete(ParentUuid, SpaceId, FileName, FileUuid2),
                             stalled_link;
@@ -981,7 +981,7 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             ?error_stacktrace(
-                "storage_sync_engine:maybe_update_file file for file ~p in space ~p"
+                "storage_sync_engine:maybe_update_file file for file ~tp in space ~tp"
                 " failed due to ~w:~w",
                 [FileName, SpaceId, Error, Reason], Stacktrace),
             {error, Reason}

@@ -117,7 +117,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    ?debug("Archivisation job ~p started", [TaskId]).
+    ?debug("Archivisation job ~tp started", [TaskId]).
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
@@ -306,7 +306,7 @@ report_error(TaskId, Job, Reason, Stacktrace) ->
     lists:foreach(fun(ArchiveDoc) ->
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
         archive:mark_file_failed(ArchiveDoc),
-        LogMessage = str_utils:format("Unexpected error during archivisation: ~s",
+        LogMessage = str_utils:format("Unexpected error during archivisation: ~ts",
             [?autoformat([TaskId, FileGuid, ArchiveId, Reason])]),
         case Stacktrace of
             undefined -> ?error(LogMessage);

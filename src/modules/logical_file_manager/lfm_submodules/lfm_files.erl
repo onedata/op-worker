@@ -371,7 +371,7 @@ monitored_open(SessId, FileKey, OpenType) ->
         ok ->
             {ok, FileHandle};
         {error, _} = Error ->
-            ?error("Failed to perform 'monitored_open' due to ~p", [Error]),
+            ?error("Failed to perform 'monitored_open' due to ~tp", [Error]),
             monitored_release(FileHandle),
             {error, ?EAGAIN}
     end.
@@ -590,7 +590,7 @@ write(FileHandle, Offset, Buffer, GenerateEvents) ->
         {ok, Size} ->
             {ok, FileHandle, Size};
         {ok, 0} ->
-            ?warning("File ~p write operation failed (0 bytes written), offset ~p, buffer size ~p",
+            ?warning("File ~tp write operation failed (0 bytes written), offset ~tp, buffer size ~tp",
                 [FileHandle, Offset, Size]),
             {error, ?EAGAIN};
         {ok, Written} ->
@@ -740,7 +740,7 @@ sync_block_internal(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) -
         ok ->
             ok;
         {error, Reason} = Error ->
-            ?error("Error during synchronization requested by lfm, error code: ~p", [Reason]),
+            ?error("Error during synchronization requested by lfm, error code: ~tp", [Reason]),
 
             case RetryNum >= ?SYNC_MAX_RETRIES of
                 true ->

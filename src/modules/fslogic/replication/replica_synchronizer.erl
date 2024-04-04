@@ -653,7 +653,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         end
     catch
         Class:Reason:Stacktrace ->
-            ?error_exception("Unable to start transfer ~p", [TransferId], Class, Reason, Stacktrace),
+            ?error_exception("Unable to start transfer ~tp", [TransferId], Class, Reason, Stacktrace),
             {reply, {error, Reason}, State0, ?DIE_AFTER}
     end;
 
@@ -680,7 +680,7 @@ handle_cast({cancel, TransferId}, State) ->
         {noreply, NewState, ?DIE_AFTER}
     catch
         Class:Reason:Stacktrace ->
-            ?error_exception("Unable to cancel transfer ~p", [TransferId], Class, Reason, Stacktrace),
+            ?error_exception("Unable to cancel transfer ~tp", [TransferId], Class, Reason, Stacktrace),
             {noreply, State, ?DIE_AFTER}
     end;
 
@@ -693,7 +693,7 @@ handle_cast(Msg, State) ->
     {noreply, State, ?DIE_AFTER}.
 
 handle_info(timeout, #state{in_progress = []} = State) ->
-    ?debug("Exiting due to inactivity with state: ~p", [State]),
+    ?debug("Exiting due to inactivity with state: ~tp", [State]),
     {stop, {shutdown, timeout}, State};
 
 handle_info(timeout, State) ->
@@ -788,11 +788,11 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
 
         case Block of
             undefined ->
-                ?error("Failed transfer ~p not found in state", [FailedRef]),
+                ?error("Failed transfer ~tp not found in state", [FailedRef]),
                 {noreply, State1};
             _ ->
                 NewTransfers = start_transfers([Block], undefined, State1, Priority),
-                ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
+                ?warning("Replaced failed transfer ~tp (~tp) with new transfers ~tp", [
                     FailedRef, Block, NewTransfers
                 ]),
                 NewRefs = jobs_to_refs(NewTransfers),
@@ -808,14 +808,14 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
         end
     catch
         Class:Reason:Stacktrace ->
-            ?error_exception("Unable to restart transfers associated with ~p", [FailedRef], Class, Reason, Stacktrace),
+            ?error_exception("Unable to restart transfers associated with ~tp", [FailedRef], Class, Reason, Stacktrace),
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
 handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
     ref_to_froms = RTFs
 } = State) ->
-    ?debug("Transfer ~p cancelled", [Ref]),
+    ?debug("Transfer ~tp cancelled", [Ref]),
 
     State2 = case maps:get(Ref, RTFs, undefined) of
         undefined ->
@@ -829,7 +829,7 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             try
                 cancel_froms(AffectedFroms, State)
             catch Class:Reason:Stacktrace ->
-                ?error_exception("Unable to cancel transfers associated with ~p", [Ref], Class, Reason, Stacktrace),
+                ?error_exception("Unable to cancel transfers associated with ~tp", [Ref], Class, Reason, Stacktrace),
                 State
             end
     end,
@@ -837,7 +837,7 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
 
 handle_info({FailedRef, complete, {error, {connection, <<"No such file or directory">>}} = ErrorStatus},
     #state{file_ctx = FileCtx} = State) ->
-    ?info("restoring storage file ~p", [file_ctx:get_logical_guid_const(FileCtx)]),
+    ?info("restoring storage file ~tp", [file_ctx:get_logical_guid_const(FileCtx)]),
     sd_utils:restore_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     NewState = handle_retry(FailedRef, ErrorStatus, State),
     {noreply, NewState, ?DIE_AFTER};
@@ -922,7 +922,7 @@ restart_inactive_job(#job{ref = InactiveRef, restarts_left = RestartsLeft}, Stat
         InactiveRef, State
     ),
     NewTransfers = start_transfers([Block], undefined, State1, Priority, RestartsLeft - 1),
-    ?warning("Replaced inactive transfer with new transfers~s", [
+    ?warning("Replaced inactive transfer with new transfers~ts", [
         ?autoformat([InactiveRef, Block, NewTransfers])
     ]),
     NewRefs = jobs_to_refs(NewTransfers),
@@ -934,7 +934,7 @@ restart_inactive_job(#job{ref = InactiveRef, restarts_left = RestartsLeft}, Stat
 -spec cancel_stale_job(job(), #state{}) -> #state{}.
 cancel_stale_job(#job{ref = StaleRef}, State) ->
     ErrorStatus = {error, stale_job},
-    ?error("Cancelling stale transfer ~p", [StaleRef]),
+    ?error("Cancelling stale transfer ~tp", [StaleRef]),
 
     {_Block, _Priority, AffectedFroms, FinishedFroms, State1} = disassociate_ref(
         StaleRef, State
@@ -954,7 +954,7 @@ cancel_stale_job(#job{ref = StaleRef}, State) ->
 %% @private
 -spec handle_error(fetch_ref(), Error :: term(), #state{}) -> #state{}.
 handle_error(Ref, ErrorStatus, State) ->
-    ?error("Transfer ~p failed:~s", [Ref, ?autoformat([ErrorStatus])]),
+    ?error("Transfer ~tp failed:~ts", [Ref, ?autoformat([ErrorStatus])]),
     {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} =
@@ -978,7 +978,7 @@ handle_retry(FailedRef, ErrorStatus, #state{retries_number = Retries} = State) -
             handle_error(FailedRef, ErrorStatus, State);
         false ->
             Delay = min(round(?MIN_BACKOFF * math:pow(?BACKOFF_RATE, RetriesNum)), ?MAX_BACKOFF),
-            ?warning("Failed transfer ~p, replacing with new transfers after ~p seconds", [
+            ?warning("Failed transfer ~tp, replacing with new transfers after ~tp seconds", [
                 FailedRef, Delay
             ]),
             erlang:send_after(round(Delay), self(), {replace_failed_transfer, FailedRef}),
@@ -1117,7 +1117,7 @@ cancel_session(SessionId, State) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            ?error_exception("Unable to cancel transfers of session ~p", [SessionId], Class, Reason, Stacktrace),
+            ?error_exception("Unable to cancel transfers of session ~tp", [SessionId], Class, Reason, Stacktrace),
             State
     end.
 
@@ -1701,14 +1701,14 @@ flush_stats(#state{
                 ok -> ok;
                 {error, Error} ->
                     ?error(
-                        "Failed to update transfer statistics using callback module ~p
-                        for ~p transfer due to ~p", [StatsCallbackModule, TransferId, Error]
+                        "Failed to update transfer statistics using callback module ~tp
+                        for ~tp transfer due to ~tp", [StatsCallbackModule, TransferId, Error]
                     )
             end
         catch _:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Failed to update transfer statistics using callback module ~p for ~p transfer "
-                "due to ~p", [StatsCallbackModule, TransferId, Reason], Stacktrace
+                "Failed to update transfer statistics using callback module ~tp for ~tp transfer "
+                "due to ~tp", [StatsCallbackModule, TransferId, Reason], Stacktrace
             )
         end
     end, maps:to_list(State#state.cached_stats)),
@@ -1893,7 +1893,7 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
         end
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
+            ?error_stacktrace("Deletion of replica of file ~tp failed due to ~tp",
                 [FileUuid, {Error, Reason}], Stacktrace),
             {error, Reason}
     end.
@@ -1913,7 +1913,7 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
         catch
             Class:Reason:Stacktrace ->
                 FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-                ?error_exception("Unexpected error when truncating file ~p", [FileUuid], Class, Reason, Stacktrace),
+                ?error_exception("Unexpected error when truncating file ~tp", [FileUuid], Class, Reason, Stacktrace),
                 {error, {Class, Reason}}
         end,
         Master ! {file_truncated, Ans, EmitEvents, RequestedBy}

@@ -96,7 +96,7 @@ single_dir_creation_test_base(Config, CreateDeleteLoop) ->
                                 ok ->
                                     {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
                                 _ ->
-                                    ct:print("Unlink error: ~p", [A]),
+                                    ct:print("Unlink error: ~tp", [A]),
                                     {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
                             end
                         end, {0,0,0,0}, lists:seq(1,FilesNum));
@@ -113,7 +113,7 @@ single_dir_creation_test_base(Config, CreateDeleteLoop) ->
             % Print statistics
             case CreateDeleteLoop of
                 true ->
-                    ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]);
+                    ct:print("Save num ~tp, del num ~tp", [SaveOk, DelOk]);
                 _ ->
                     Sum = case get(ok_sum) of
                         undefined ->
@@ -140,13 +140,13 @@ single_dir_creation_test_base(Config, CreateDeleteLoop) ->
                                         ls(Worker, SessId, Dir, undefined)
                                     end),
 
-                                    ct:print("Save num ~p, sum ~p, ls time ~p",
+                                    ct:print("Save num ~tp, sum ~tp, ls time ~tp",
                                         [SaveOk, NewSum, LsTime]);
                                 _ ->
-                                    ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+                                    ct:print("Save num ~tp, sum ~tp", [SaveOk, NewSum])
                             end;
                         false ->
-                            ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+                            ct:print("Save num ~tp, sum ~tp", [SaveOk, NewSum])
                     end
             end,
 
@@ -396,7 +396,7 @@ many_files_creation_tree_test_base(Config, Options) ->
             NewSum = Sum + FilesSaved + DirsSaved,
             put(ok_sum, NewSum),
 
-            ct:print("Files num ~p, dirs num ~p, agg ~p", [FilesSaved, DirsSaved, NewSum]),
+            ct:print("Files num ~tp, dirs num ~tp, agg ~tp", [FilesSaved, DirsSaved, NewSum]),
             ?assertEqual(ok, TimeoutCheck),
             ?assertEqual(0, OtherAns),
 
@@ -495,7 +495,7 @@ gather_answers(Answers, 0, _, _) ->
 gather_answers(Answers, Num, Gathered, LastReport) ->
     NewLastReport = case (Gathered - LastReport) >= 1000 of
         true ->
-            ct:print("Gather answers num ~p", [Gathered]),
+            ct:print("Gather answers num ~tp", [Gathered]),
             Gathered;
         _ ->
             LastReport
@@ -517,7 +517,7 @@ gather_answers(Answers, Num, Gathered, LastReport) ->
                     {K, {V1_2, V2_2}} ->
                         {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
 %%                    {K, {V1_2, V2_2, V3_2}} ->
-%%                        ct:print("Error ~p", [V3_2]),
+%%                        ct:print("Error ~tp", [V3_2]),
 %%                        {{K, {V1 + V1_2, V2 + V2_2}}, V1_2};
                     none ->
                         {CurrentV, 0}
@@ -550,7 +550,7 @@ get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, CreatedBa
         _ ->
             -1
     end,
-%%    ct:print("Repeat log: ~p", [{FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, Mem, InitFailed, Timeout}]),
+%%    ct:print("Repeat log: ~tp", [{FilesSaved, FilesTime, DirsSaved, DirsTime, OtherAns, OtherTime, Mem, InitFailed, Timeout}]),
     [
         #parameter{name = files_saved, value = FilesSaved, description = "Number of files saved"},
         #parameter{name = file_save_avg_time, value = FilesTime, unit = "us",
@@ -568,7 +568,7 @@ get_final_ans_tree(Worker, FilesSaved, FilesTime, DirsSaved, DirsTime, CreatedBa
     ].
 
 get_final_ans(Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed) ->
-%%    ct:print("Repeat log: ~p", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
+%%    ct:print("Repeat log: ~tp", [{Saved, SaveTime, SErrors, SErrorsTime, Deleted, DelTime, DErrors, DErrorsTime, InitFailed}]),
     [
         #parameter{name = saved, value = Saved, description = "Number of save operations that succed"},
         #parameter{name = save_avg_time, value = SaveTime, unit = "us",
@@ -596,7 +596,7 @@ create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
             {ok, _} ->
                 {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
             _ ->
-                ?error("Create error: ~p", [A]),
+                ?error("Create error: ~tp", [A]),
                 {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
         end
     end, {0,0,0,0}, lists:seq(1,FilesNum)).
@@ -650,7 +650,7 @@ create_many(Worker, SessId, Dir, FilesNum, ProcNum, NameExtBin) ->
                 Master ! {create_single_call, RpcAns}
             catch
                 Error:Reason:Stacktrace ->
-                    ct:print("Error: ~p:~p~n~p", [Error, Reason, Stacktrace]),
+                    ct:print("Error: ~tp:~tp~n~tp", [Error, Reason, Stacktrace]),
                     Master ! {create_single_call, {0, 0, 0, 0}}
             end
         end)

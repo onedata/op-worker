@@ -85,7 +85,7 @@ get_view_id(ViewName, TreeIds, SpaceId) ->
         {ok, [#link{target = ViewId}]} ->
             {ok, ViewId};
         {ok, [#link{} | _]} ->
-            ?error("More than one link associated with view name ~p ", [ViewName]),
+            ?error("More than one link associated with view name ~tp ", [ViewName]),
             {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}

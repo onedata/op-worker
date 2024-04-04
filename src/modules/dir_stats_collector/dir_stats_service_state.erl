@@ -341,7 +341,7 @@ disable(SpaceId) ->
         {error, no_action_needed} ->
             ok;
         ?ERROR_NOT_FOUND ->
-            ?warning("Disabling space ~p without dir stats service state document", [SpaceId]);
+            ?warning("Disabling space ~tp without dir stats service state document", [SpaceId]);
         ?ERROR_FORBIDDEN ->
             ?ERROR_FORBIDDEN
     end.
@@ -373,9 +373,9 @@ report_collections_initialization_finished(SpaceId) ->
         {ok, #document{value = #dir_stats_service_state{status = stopping}}} ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
-            ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
+            ?warning("Reporting space ~tp enabling finished when space has status ~tp", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
-            ?warning("Reporting space ~p enabling finished when space has no dir stats service state document", [SpaceId])
+            ?warning("Reporting space ~tp enabling finished when space has no dir stats service state document", [SpaceId])
     end.
 
 
@@ -412,9 +412,9 @@ report_collectors_stopped(SpaceId) ->
             ok;
         % Log errors on debug as they can appear at node restart
         {error, {wrong_status, WrongStatus}} ->
-            ?debug("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
+            ?debug("Reporting space ~tp disabling finished when space has status ~tp", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
-            ?debug("Reporting space ~p disabling finished when space has no dir stats service state document", [SpaceId])
+            ?debug("Reporting space ~tp disabling finished when space has no dir stats service state document", [SpaceId])
     end.
 
 
@@ -437,7 +437,7 @@ enable_for_new_support(_SpaceId, _SupportParameters) ->
 reinitialize_stats_for_space(SpaceId) ->
     case is_active(SpaceId) of
         true ->
-            ?info("Reinitializing stats for space '~s'.", [SpaceId]),
+            ?info("Reinitializing stats for space '~ts'.", [SpaceId]),
             ok = disable(SpaceId),
             % Wait until status is not active - otherwise when initialization is in progress,
             % disable/enable sequence may not result in initialization restart (pending initialization
@@ -549,10 +549,10 @@ run_initialization_traverse(SpaceId, Incarnation) ->
                         dir_stats_service_status = disabled
                     });
                 {error, {wrong_status, WrongStatus}} ->
-                    ?warning("Reporting space ~p initialization traverse failure when space has status ~p",
+                    ?warning("Reporting space ~tp initialization traverse failure when space has status ~tp",
                         [SpaceId, WrongStatus]);
                 ?ERROR_NOT_FOUND ->
-                    ?warning("Reporting space ~p initialization traverse failure when "
+                    ?warning("Reporting space ~tp initialization traverse failure when "
                     "space has no dir stats service state document", [SpaceId])
             end,
             ?ERROR_INTERNAL_SERVER_ERROR

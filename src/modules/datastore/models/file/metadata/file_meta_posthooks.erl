@@ -148,7 +148,7 @@ add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs) ->
                     ok
             end;
         Error ->
-            ?error("~p:~p error adding file meta posthook for file ~p (identifier ~p, hook module ~p, hook fun ~p): ~p",
+            ?error("~tp:~tp error adding file meta posthook for file ~tp (identifier ~tp, hook module ~tp, hook fun ~tp): ~tp",
                 [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Error]),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.

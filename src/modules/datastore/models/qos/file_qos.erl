@@ -319,7 +319,7 @@ cleanup_reference_related_documents(FileCtx, OriginalParentCtx) ->
             % original parent is already deleted or not yet synchronized; nothing to clean up
             ok;
         {error, _} = Error ->
-            ?warning("Error during QoS clean up procedure:~p", [Error]),
+            ?warning("Error during QoS clean up procedure:~tp", [Error]),
             ok
     end.
 

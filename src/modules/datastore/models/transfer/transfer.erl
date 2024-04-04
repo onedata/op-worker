@@ -219,7 +219,7 @@ rerun_not_ended_transfers(SpaceId) ->
             {ok, NewTransferId} ->
                 CurrReruns#{TransferId => NewTransferId};
             {error, Reason} ->
-                ?error("Failed to rerun transfer ~p due to: ~p", [
+                ?error("Failed to rerun transfer ~tp due to: ~tp", [
                     TransferId, Reason
                 ]),
                 CurrReruns
@@ -230,7 +230,7 @@ rerun_not_ended_transfers(SpaceId) ->
         0 ->
             ok;
         RerunsNum ->
-            ?info("Space ~p - ~p unfinished transfers has been rerun:~n~p", [
+            ?info("Space ~tp - ~tp unfinished transfers has been rerun:~n~tp", [
                 SpaceId, RerunsNum, Reruns
             ])
     end,
@@ -709,7 +709,7 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
         ok ->
             ok;
         {error, _} = Error ->
-            ?error("Failed to update collective trasfer stats in space ~s due to ~p", [SpaceId, Error])
+            ?error("Failed to update collective trasfer stats in space ~ts due to ~tp", [SpaceId, Error])
     end,
     
     BytesTransferred = maps:fold(

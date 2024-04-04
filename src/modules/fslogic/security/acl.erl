@@ -105,7 +105,7 @@ from_json(JsonAcl, Format) ->
     try
         [ace:from_json(JsonAce, Format) || JsonAce <- JsonAcl]
     catch Class:Reason:Stacktrace ->
-        ?debug_exception("Failed to translate json (~p) to acl", [Format], Class, Reason, Stacktrace),
+        ?debug_exception("Failed to translate json (~tp) to acl", [Format], Class, Reason, Stacktrace),
         throw({error, ?EINVAL})
     end.
 
@@ -115,7 +115,7 @@ to_json(Acl, Format) ->
     try
         [ace:to_json(Ace, Format) || Ace <- Acl]
     catch Class:Reason:Stacktrace ->
-        ?debug_exception("Failed to convert acl to json (~p)", [Format], Class, Reason, Stacktrace),
+        ?debug_exception("Failed to convert acl to json (~tp)", [Format], Class, Reason, Stacktrace),
         throw({error, ?EINVAL})
     end.
 

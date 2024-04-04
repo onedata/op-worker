@@ -314,7 +314,7 @@ overall_test(Config) ->
     % (sending message mocked in init_per_testcase)
     lists:foldl(fun(Stage, CallNum) ->
         receive {Stage, Num} ->
-            ct:pal("Stage: ~p - ~p", [Stage, Num]),
+            ct:pal("Stage: ~tp - ~tp", [Stage, Num]),
             ?assertEqual(CallNum, Num)
         end,
         CallNum + 1
@@ -487,7 +487,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
                 ({ok, _, #document{mutators = [M]}}, AccIn) when M =/= ProviderId-> AccIn; %% @TODO VFS-6135 Remove when stopping dbsync during unsupport is implemented
                 ({ok, _, #document{ignore_in_changes = true}}, AccIn) -> AccIn; %% @TODO VFS-10672 Handle tmp dir unsupport
                 ({ok, _, Doc}, _) ->
-                    ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
+                    ct:pal("Document not cleaned up in model ~tp:~n ~tp", [Model, Doc]),
                     false
             end, true, Result)
     end, true, Models)).

@@ -46,7 +46,7 @@ log_apply(Docs, BatchRange, Ans, SpaceId, ProviderId) ->
             ok;
         MaxSize ->
             Seqs = lists:map(fun(#document{seq = Seq}) -> Seq end, Docs),
-            Log = "Seqs range ~p applied with ans: ~p~nSeqs in range: ~w",
+            Log = "Seqs range ~tp applied with ans: ~tp~nSeqs in range: ~w",
             Args = [BatchRange, Ans, Seqs],
             onedata_logger:log_with_rotation(get_changes_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
     end.
@@ -61,7 +61,7 @@ log_batch_received(Since, Until, CurrentSeq, SpaceId, ProviderId) ->
         0 ->
             ok;
         MaxSize ->
-            Log = "Seqs range ~p received, current seq ~p",
+            Log = "Seqs range ~tp received, current seq ~tp",
             Args = [{Since, Until}, CurrentSeq],
             onedata_logger:log_with_rotation(get_changes_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
     end.
@@ -73,7 +73,7 @@ log_batch_requested(Since, Until, SpaceId, ProviderId) ->
         0 ->
             ok;
         MaxSize ->
-            Log = "Seqs range ~p requested",
+            Log = "Seqs range ~tp requested",
             Args = [{Since, Until}],
             onedata_logger:log_with_rotation(get_changes_log_file(SpaceId, ProviderId), Log, Args, MaxSize)
     end.
@@ -87,7 +87,7 @@ log_batch_sending(Since, Until, ProviderId, SpaceId) ->
         MaxSize ->
             LogFile = ?OUT_STREAM_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ ".log",
 
-            Log = "Seqs range ~p sent to ~p",
+            Log = "Seqs range ~tp sent to ~tp",
             Args = [{Since, Until}, ProviderId],
             onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize)
     end.

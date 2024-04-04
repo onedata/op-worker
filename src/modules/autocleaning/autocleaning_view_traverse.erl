@@ -120,7 +120,7 @@ process_row(Row, #{
             Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo),
-            ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
+            ?error_stacktrace("Filtering preselected file with uuid ~tp in space ~tp failed due to ~tp:~tp",
                 [Uuid, SpaceId, Error, Reason], Stacktrace),
             ok
     end.

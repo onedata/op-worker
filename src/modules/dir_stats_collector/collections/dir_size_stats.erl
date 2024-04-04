@@ -786,7 +786,7 @@ gen_empty_historical_stats(Guid) ->
 handle_init_error(Guid, Error, Reason, Stacktrace) ->
     case ?ERROR_HANDLING_MODE of
         ignore ->
-            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+            ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
                 [Guid, Error, Reason], Stacktrace);
         silent_ignore ->
             ok;
@@ -797,7 +797,7 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
                 no_connection_to_onezone ->
                     ok;
                 _ ->
-                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                    ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
                         [Guid, Error, Reason], Stacktrace)
             end,
             throw(dir_size_stats_init_error);
@@ -810,7 +810,7 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
                     % Collector handles problems with zone connection
                     throw(no_connection_to_onezone);
                 _ ->
-                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                    ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
                         [Guid, Error, Reason], Stacktrace)
             end
     end.

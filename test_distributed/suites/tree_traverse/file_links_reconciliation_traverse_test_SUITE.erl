@@ -132,9 +132,9 @@ op_worker_service_operation(Config, ProviderSelector, ServiceOperation) ->
         case shell_utils:execute([OnenvScript, "service", ServiceOperation, Pod, "-s", "worker"]) of
             {0, Stdout, _} ->
                 % propagate output of onenv service command
-                ct:pal("~s", [Stdout]);
+                ct:pal("~ts", [Stdout]);
             {ExitCode, Stdout, Stderr} ->
-                ct:pal("Error in op worker operation ~s", [?autoformat([ServiceOperation, ExitCode, Stdout, Stderr])]),
+                ct:pal("Error in op worker operation ~ts", [?autoformat([ServiceOperation, ExitCode, Stdout, Stderr])]),
                 throw(service_operation_failed)
         end
     end, oct_background:get_provider_nodes(ProviderSelector)).

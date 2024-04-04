@@ -101,7 +101,7 @@ start_replication_file_tree_traverse(#document{key = TransferId, value = #transf
             transfer:mark_traverse_finished(TransferId);
         Class:Reason:Stacktrace ->
             ?error_exception(
-                "Failed to start transfer file tree traverse ~p", [TransferId],
+                "Failed to start transfer file tree traverse ~tp", [TransferId],
                 Class, Reason, Stacktrace
             ),
             replication_status:handle_aborting(TransferId)
@@ -138,7 +138,7 @@ start_replication_view_traverse(#document{key = TransferId, value = #transfer{
             transfer:mark_traverse_finished(TransferId);
         Class:Reason:Stacktrace ->
             ?error_exception(
-                "Failed to start transfer view traverse ~p", [TransferId],
+                "Failed to start transfer view traverse ~tp", [TransferId],
                 Class, Reason, Stacktrace
             ),
             replication_status:handle_aborting(TransferId)

@@ -235,7 +235,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
                             ok -> ok;
                             {error, ?EEXIST} -> ok;
                             ParentError ->
-                                ?error("Cannot create parent for file ~p, error ~p",
+                                ?error("Cannot create parent for file ~tp, error ~tp",
                                     [FileId, ParentError]),
                                 throw(ParentError)
                         end

@@ -37,11 +37,11 @@ response(#op_req{operation = Operation, gri = GRI} = OpReq, Result) ->
         response_insecure(OpReq, Result)
     catch Type:Message:Stacktrace ->
         ?error_stacktrace("Cannot translate REST result for:~n"
-                          "Operation: ~p~n"
-                          "GRI: ~p~n"
-                          "Result: ~p~n"
+                          "Operation: ~tp~n"
+                          "GRI: ~tp~n"
+                          "Result: ~tp~n"
                           "---------~n"
-                          "Error was: ~w:~p", [
+                          "Error was: ~w:~tp", [
             Operation, GRI, Result, Type, Message
         ], Stacktrace),
         error_response(?ERROR_INTERNAL_SERVER_ERROR)

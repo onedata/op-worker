@@ -94,7 +94,7 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
                             end;
                         false ->
                             {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx3),
-                            ?warning("Cannot truncate file ~p on storage because it does not exist", [StorageFileId])
+                            ?warning("Cannot truncate file ~tp on storage because it does not exist", [StorageFileId])
                     end
             end
     end.
@@ -111,7 +111,7 @@ log_warning(Module, Function, Error, FileCtx) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
     Guid = file_ctx:get_logical_guid_const(FileCtx3),
-    ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p", [
+    ?warning("~tp:~tp on file {~tp, ~tp} with file_id ~tp returned ~tp", [
         Module, Function, Path, Guid, StorageFileId, Error
     ]).
 

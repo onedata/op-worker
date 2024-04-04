@@ -103,7 +103,7 @@ start_process(#{id := ChildId} = ChildSpec) ->
         {ok, _} ->
             ok;
         Error ->
-            ?critical("Failed to start ~p due to: ~p", [ChildId, Error]),
+            ?critical("Failed to start ~tp due to: ~tp", [ChildId, Error]),
             abort
     end.
 

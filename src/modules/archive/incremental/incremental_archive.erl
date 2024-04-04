@@ -81,7 +81,7 @@ has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) ->
             CurrentFileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
             BaseArchiveFileGuid = file_ctx:get_logical_guid_const(BaseArchiveFileCtx),
             ?error_stacktrace(
-                "Error ~p:~p occured when comparing file ~s with its archived version ~s.",
+                "Error ~tp:~tp occured when comparing file ~ts with its archived version ~ts.",
                 [Class, Reason, CurrentFileGuid, BaseArchiveFileGuid],
                 Stacktrace
             ),

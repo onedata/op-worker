@@ -123,15 +123,15 @@ handle_client_handshake(#client_handshake_request{
         {error, _} = Error ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
-                    ?debug("Cannot authorize subject ~w based on token (id: ~s) "
-                           "with caveats: ~p due to ~w", [
+                    ?debug("Cannot authorize subject ~w based on token (id: ~ts) "
+                           "with caveats: ~tp due to ~w", [
                         Subject,
                         TokenId,
                         tokens:get_caveats(Token),
                         Error
                     ]);
                 _ ->
-                    ?debug("Cannot authorize user based on token ~s due to ~w", [
+                    ?debug("Cannot authorize user based on token ~ts due to ~w", [
                         AccessToken, Error
                     ])
             end,
@@ -156,8 +156,8 @@ handle_provider_handshake(#provider_handshake_request{
         {ok, _} ->
             throw(invalid_provider);
         {error, _} = Error ->
-            ?debug("Discarding provider connection from ~ts @ ~s as its "
-                   "identity cannot be verified: ~p", [
+            ?debug("Discarding provider connection from ~ts @ ~ts as its "
+                   "identity cannot be verified: ~tp", [
                 provider_logic:to_printable(ProviderId),
                 inet_parse:ntoa(IpAddress), Error
             ]),
@@ -180,10 +180,10 @@ assert_client_compatibility(#client_handshake_request{
         true ->
             ok;
         {false, CompatibleOcVersions} ->
-            ?debug("Discarding connection from oneclient @ ~s because of "
+            ?debug("Discarding connection from oneclient @ ~ts because of "
             "incompatible version.~n"
-            "Oneclient version: ~s~n"
-            "Oneprovider version: ~s, supports clients: ~s", [
+            "Oneclient version: ~ts~n"
+            "Oneprovider version: ~ts, supports clients: ~ts", [
                 inet_parse:ntoa(IpAddress),
                 OcVersion,
                 OpVersion, str_utils:join_binary(CompatibleOcVersions, <<", ">>)

@@ -238,7 +238,7 @@ register_async_job_finish(Jobs = #workflow_jobs{
             end,
             {ok, NewJobs};
         false ->
-            ?debug("Result for unknown job ~p", [JobIdentifier]),
+            ?debug("Result for unknown job ~tp", [JobIdentifier]),
             ?WF_ERROR_JOB_NOT_FOUND
     end.
 

@@ -109,7 +109,7 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
                         catch
                             Class:Reason ->
                                 % Race with file/link deletion can result in error logged here
-                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~p~nguid: ~s",
+                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~tp~nguid: ~ts",
                                     [Class, Reason, Guid])
                         end
                     end, WithoutStatusSessIdsProplist),
@@ -120,7 +120,7 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
                         catch
                             Class:Reason ->
                                 % Race with file/link deletion can result in error logged here
-                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~p~nguid: ~s",
+                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~tp~nguid: ~ts",
                                     [Class, Reason, Guid])
                         end
                     end, WithStatusSessIdsProplist -- WithoutStatusSessIdsProplist);
@@ -282,10 +282,10 @@ emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName, Pre
 emit_quota_exceeded() ->
     case space_quota:get_disabled_spaces() of
         {ok, BlockedSpaces} ->
-            ?debug("Sending disabled spaces event ~p", [BlockedSpaces]),
+            ?debug("Sending disabled spaces event ~tp", [BlockedSpaces]),
             event:emit(#quota_exceeded_event{spaces = BlockedSpaces});
         {error, _} = Error ->
-            ?debug("Cannot send disabled spaces event due to ~p", [Error])
+            ?debug("Cannot send disabled spaces event due to ~tp", [Error])
     end.
 
 %%--------------------------------------------------------------------
@@ -329,7 +329,7 @@ clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, {guid, NewGu
     },
     Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
 clone_event(Event, Context) ->
-    ?error("Trying to clone event ~p of type that cannot be cloned. Context ~p.", [Event, Context]),
+    ?error("Trying to clone event ~tp of type that cannot be cloned. Context ~tp.", [Event, Context]),
     throw(not_supported_event_cloning).
 
 

@@ -79,8 +79,8 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
             true;
         false ->
             ct:pal("Wrong response code: ~n"
-            "    Expected: ~p~n"
-            "    Got: ~p~n", [ExpectedCode, RespCode]),
+            "    Expected: ~tp~n"
+            "    Got: ~tp~n", [ExpectedCode, RespCode]),
             print_request(Node, URL, Method, Headers, Body),
             false
     end,
@@ -97,8 +97,8 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
             true;
         false ->
             ct:pal("Wrong response body: ~n"
-            "Expected: ~p~n"
-            "Got: ~p~n", [ExpectedBody, RespBody]),
+            "Expected: ~tp~n"
+            "Got: ~tp~n", [ExpectedBody, RespBody]),
             print_request(Node, URL, Method, Headers, Body),
             false
     end,
@@ -128,10 +128,10 @@ rest_endpoint(Node) ->
 
 print_request(URL, Method, Headers, Body, Opts) ->
     ct:pal("Failed for request: ~n"
-    "   ReqMethod: ~p~n"
-    "   URL: ~p~n"
-    "   Headers: ~p~n"
-    "   ReqBody: ~p~n"
-    "   Opts: ~p~n", [
+    "   ReqMethod: ~tp~n"
+    "   URL: ~tp~n"
+    "   Headers: ~tp~n"
+    "   ReqBody: ~tp~n"
+    "   Opts: ~tp~n", [
         Method, URL, Headers, Body, Opts
     ]).

@@ -231,7 +231,7 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
             schedule_session_activity_checkup(RemainingTime),
             {noreply, State, hibernate};
         {false, {error, Reason}} ->
-            ?error("Checking session ~p activity failed with error~s", [
+            ?error("Checking session ~tp activity failed with error~ts", [
                 SessionId, ?autoformat([Reason])
             ]),
             async_terminate_session(SessionId),
@@ -462,12 +462,12 @@ check_auth_validity(TokenCredentials, #state{
         {ok, #auth{subject = Identity}, TokenValidUntil} ->
             {true, max(0, TokenValidUntil - global_clock:timestamp_seconds())};
         {ok, #auth{subject = Subject}, _} ->
-            ?warning("[SESSION ~s] Token identity verification failure~s", [
+            ?warning("[SESSION ~ts] Token identity verification failure~ts", [
                 SessionId, ?autoformat([Identity, Subject])
             ]),
             false;
         {error, Reason} ->
-            ?warning("[SESSION ~s] Token auth verification failure:~s", [
+            ?warning("[SESSION ~ts] Token auth verification failure:~ts", [
                 SessionId, ?autoformat([Reason])]
             ),
             false

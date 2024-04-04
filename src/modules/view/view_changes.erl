@@ -62,7 +62,7 @@ create_or_update_db_view(#document{
         true ->
             ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options);
         false ->
-            ?warning("Creation of view ~p with id ~p requested within not supported space ~p",
+            ?warning("Creation of view ~tp with id ~tp requested within not supported space ~tp",
                 [ViewName, Id, SpaceId])
     end.
 
@@ -77,6 +77,6 @@ remove_db_view(#document{key = Id}) ->
         {error, {<<"not_found">>, <<"deleted">>}} ->
             ok;
         {error, Error} = Err ->
-            ?error("Removal of db view ~p from provider failed due to ~p", [Id, Error]),
+            ?error("Removal of db view ~tp from provider failed due to ~tp", [Id, Error]),
             Err
     end.

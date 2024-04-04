@@ -295,14 +295,14 @@ get_dataset_test(Config) ->
 
     case State == ?ATTACHED_DATASET orelse lists:member(?DATA_PROTECTION_BIN, ProtectionFlags) of
         true ->
-            ct:pal(?FMT("Test get ~p dataset", [State])),
+            ct:pal(?FMT("Test get ~tp dataset", [State])),
 
             get_dataset_test_base(
                 DatasetId, OriginalParentId, State, ProtectionFlags,
                 FileGuid, FileType, OriginalFilePath, false
             );
         false ->
-            ct:pal(?FMT("Test get ~p dataset after moving root file", [State])),
+            ct:pal(?FMT("Test get ~tp dataset after moving root file", [State])),
 
             NewFilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
             onenv_file_test_utils:mv_and_sync_file(user3, FileGuid, NewFilePath),
@@ -317,7 +317,7 @@ get_dataset_test(Config) ->
                 FileGuid, FileType, DatasetRecordedFilePath, false
             ),
 
-            ct:pal(?FMT("Test get ~p dataset after removing root file", [State])),
+            ct:pal(?FMT("Test get ~tp dataset after removing root file", [State])),
 
             onenv_file_test_utils:rm_and_sync_file(user3, FileGuid),
 

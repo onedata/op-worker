@@ -313,7 +313,7 @@ handle_call({send_msg, Msg}, _From, #state{status = ready} = State) ->
             {stop, Error, Error, State}
     end;
 handle_call({send_msg, _Msg}, _From, #state{status = Status, socket = Socket} = State) ->
-    ?warning("Attempt to send msg via not ready connection ~p", [Socket]),
+    ?warning("Attempt to send msg via not ready connection ~tp", [Socket]),
     {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT};
 handle_call(?REBUILD_RIB_MSG, _From, #state{session_id = SessId} = State) ->
     {reply, ok, State#state{rib = router:build_rib(SessId)}, ?PROTO_CONNECTION_TIMEOUT};
@@ -383,12 +383,12 @@ handle_info({Ok, Socket, Data}, #state{
             {stop, normal, State}
     catch
         throw:{error, _} = Error ->
-            ?THROTTLE_ERROR(SessId, "Protocol upgrade failed~s", [?autoformat(SessId, Error)]),
+            ?THROTTLE_ERROR(SessId, "Protocol upgrade failed~ts", [?autoformat(SessId, Error)]),
             {stop, normal, State};
         Class:Reason:Stacktrace ->
             ?THROTTLE_ERROR_EXCEPTION(
                 SessId,
-                "Unexpected error during protocol upgrade~s", [?autoformat(SessId)],
+                "Unexpected error during protocol upgrade~ts", [?autoformat(SessId)],
                 Class, Reason, Stacktrace
             ),
             {stop, normal, State}
@@ -433,14 +433,14 @@ handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok}
     end;
 
 handle_info({Error, Socket, Reason}, State = #state{error = Error}) ->
-    ?warning("Connection ~p error: ~p", [Socket, Reason]),
+    ?warning("Connection ~tp error: ~tp", [Socket, Reason]),
     {stop, Reason, State};
 
 handle_info({Closed, _}, State = #state{closed = Closed}) ->
     {stop, normal, State};
 
 handle_info(timeout, State = #state{socket = Socket}) ->
-    ?warning("Connection ~p timeout", [Socket]),
+    ?warning("Connection ~tp timeout", [Socket]),
     {stop, timeout, State};
 
 handle_info(Info, State) ->
@@ -531,7 +531,7 @@ upgrade(Req, Env, _Handler, HandlerOpts, _Opts) ->
             }, Req),
             {stop, NewReq}
     catch Type:Reason ->
-        ?debug("Invalid protocol upgrade request - ~p:~p", [Type, Reason]),
+        ?debug("Invalid protocol upgrade request - ~tp:~tp", [Type, Reason]),
         cowboy_req:reply(?HTTP_400_BAD_REQUEST, Req),
         {stop, Req}
     end.
@@ -592,10 +592,10 @@ connect_with_provider(ProviderId, SessId, Domain,
     Host, Port, Transport, Timeout, ConnManager
 ) ->
     DomainAndIpInfo = case Domain of
-        Host -> str_utils:format("@ ~s:~b", [Host, Port]);
-        _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
+        Host -> str_utils:format("@ ~ts:~b", [Host, Port]);
+        _ -> str_utils:format("@ ~ts:~b (~ts)", [Host, Port, Domain])
     end,
-    ?debug("Connecting to provider ~ts ~s", [
+    ?debug("Connecting to provider ~ts ~ts", [
         provider_logic:to_printable(ProviderId), DomainAndIpInfo
     ]),
 
@@ -668,7 +668,7 @@ open_socket_to_provider(SessId, ProviderId, Domain,
 handle_protocol_upgrade_response(#state{session_id = SessId} = State, Data) ->
     case connection_utils:verify_protocol_upgrade_response(Data) of
         false ->
-            ?THROTTLE_ERROR(SessId, "Received invalid protocol upgrade response~s", [?autoformat(SessId, Data)]),
+            ?THROTTLE_ERROR(SessId, "Received invalid protocol upgrade response~ts", [?autoformat(SessId, Data)]),
             {error, invalid_protocol_upgrade_response};
         true ->
             #state{
@@ -719,7 +719,7 @@ handle_handshake_request(#state{peer_ip = IpAddress} = State, Data) ->
             message_body = #handshake_response{status = 'OK'}
         })
     catch Type:Reason ->
-        ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
+        ?debug("Invalid handshake request - ~tp:~tp", [Type, Reason]),
         ErrorMsg = connection_auth:get_handshake_error_msg(Reason),
         socket_send(State, ErrorMsg),
         {error, handshake_failed}
@@ -742,14 +742,14 @@ handle_handshake_response(#state{
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
             ?THROTTLE_ERROR(
                 SessId,
-                "Handshake refused by peer provider, closing connection~s",
+                "Handshake refused by peer provider, closing connection~ts",
                 [?autoformat(ProviderInfo, Error)]
             ),
             {error, handshake_failed};
         Response ->
             ?THROTTLE_ERROR(
                 SessId,
-                "Received invalid handshake response from peer provider, closing connection~s",
+                "Received invalid handshake response from peer provider, closing connection~ts",
                 [?autoformat(ProviderInfo, Response)]
             ),
             {error, handshake_failed}
@@ -757,7 +757,7 @@ handle_handshake_response(#state{
         DataSample = str_utils:truncate_overflow(Data, ?MAX_LOGGED_DATA_SIZE),
         ?THROTTLE_ERROR_EXCEPTION(
             SessId,
-            "Error decoding handshake response from peer provider~s",
+            "Error decoding handshake response from peer provider~ts",
             [?autoformat(ProviderInfo, DataSample)],
             Class, Reason, Stacktrace
         ),
@@ -791,7 +791,7 @@ handle_client_message(#state{
                 MsgStr = clproto_utils:msg_to_string(Msg),
                 ?THROTTLE_ERROR(
                     SessId,
-                    "Failed to create proxied session while handling message~s",
+                    "Failed to create proxied session while handling message~ts",
                     [?autoformat(Error, MsgStr)]
                 ),
                 % Respond with eacces error if request has msg_id
@@ -809,15 +809,15 @@ handle_client_message(#state{
         end
     catch
         throw:{translation_failed, Reason, undefined} ->
-            ?THROTTLE_ERROR(SessId, "Client message deserialization error~s", [?autoformat(SessId, Reason)]),
+            ?THROTTLE_ERROR(SessId, "Client message deserialization error~ts", [?autoformat(SessId, Reason)]),
             {ok, State};
         throw:{translation_failed, Reason, MsgId} ->
             Code = case Reason of
                 {unrecognized_message, Message} ->
-                    ?THROTTLE_WARNING(SessId, "Unrecognized client message~s", [?autoformat(SessId, Message)]),
+                    ?THROTTLE_WARNING(SessId, "Unrecognized client message~ts", [?autoformat(SessId, Message)]),
                     ?EBADMSG;
                 _ ->
-                    ?THROTTLE_ERROR(SessId, "Client message deserialization error~s", [?autoformat(SessId, Reason)]),
+                    ?THROTTLE_ERROR(SessId, "Client message deserialization error~ts", [?autoformat(SessId, Reason)]),
                     ?EINVAL
             end,
             send_response(State, #server_message{
@@ -828,7 +828,7 @@ handle_client_message(#state{
             DataSample = str_utils:truncate_overflow(Data, 1000),
             ?THROTTLE_ERROR_EXCEPTION(
                 SessId,
-                "Client message handling error~s", [?autoformat(SessId, DataSample)],
+                "Client message handling error~ts", [?autoformat(SessId, DataSample)],
                 Class, Reason, Stacktrace
             ),
             {ok, State}
@@ -859,7 +859,7 @@ route_message(#state{session_id = SessId, rib = RIB} = State, Msg) ->
             send_response(State, ServerMsg);
         {error, _} = Error ->
             MsgStr = clproto_utils:msg_to_string(Msg),
-            ?THROTTLE_ERROR(SessId, "Message routing error~s", [?autoformat(Error, MsgStr)]),
+            ?THROTTLE_ERROR(SessId, "Message routing error~ts", [?autoformat(Error, MsgStr)]),
             {ok, State}
     end.
 
@@ -894,7 +894,7 @@ send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
     socket_send(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
     MsgStr = clproto_utils:msg_to_string(Msg),
-    ?error("Attempt to send msg via wrong connection~s", [?autoformat(ConnType, MsgStr)]),
+    ?error("Attempt to send msg via wrong connection~ts", [?autoformat(ConnType, MsgStr)]),
     {error, sending_msg_via_wrong_conn_type}.
 
 
@@ -920,7 +920,7 @@ socket_send(#state{
                         Bin when is_binary(Bin) -> Bin;
                         _ -> clproto_utils:msg_to_string(DataOrMsg)
                     end,
-                    ?THROTTLE_ERROR(SessId, "Unable to send message via socket~s", [
+                    ?THROTTLE_ERROR(SessId, "Unable to send message via socket~ts", [
                         ?autoformat(Socket, Error, MsgStr)
                     ]),
                     Error
@@ -937,7 +937,7 @@ to_serialized_data(#state{session_id = SessId} = State, Msg) ->
         serialize_message_unsafe(State, Msg)
     catch Class:Reason:Stacktrace ->
         MsgStr = clproto_utils:msg_to_string(Msg),
-        ?THROTTLE_ERROR_EXCEPTION(SessId, "Unable to serialize message: ~s", [MsgStr], Class, Reason, Stacktrace),
+        ?THROTTLE_ERROR_EXCEPTION(SessId, "Unable to serialize message: ~ts", [MsgStr], Class, Reason, Stacktrace),
         {error, serialization_failed}
     end.
 
@@ -981,25 +981,25 @@ call_connection_process(ConnPid, Msg) ->
         gen_server2:call(ConnPid, Msg, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
-            ?debug("Connection process ~p does not exist", [ConnPid]),
+            ?debug("Connection process ~tp does not exist", [ConnPid]),
             {error, no_connection};
         exit:{{nodedown, Node}, _} ->
-            ?debug("Node ~p with connection process ~p is down", [Node, ConnPid]),
+            ?debug("Node ~tp with connection process ~tp is down", [Node, ConnPid]),
             {error, no_connection};
         exit:{normal, _} ->
-            ?debug("Exit of connection process ~p for message ~s", [
+            ?debug("Exit of connection process ~tp for message ~ts", [
                 ConnPid, maybe_stringify_msg(Msg)
             ]),
             {error, no_connection};
         exit:{timeout, _} ->
-            ?debug("Timeout of connection process ~p for message ~s", [
+            ?debug("Timeout of connection process ~tp for message ~ts", [
                 ConnPid, maybe_stringify_msg(Msg)
             ]),
             ?ERROR_TIMEOUT;
         Class:Reason:Stacktrace ->
             MsgStr = maybe_stringify_msg(Msg),
             ?error_exception(
-                "Cannot send message via the connection process~s", [?autoformat(ConnPid, MsgStr)],
+                "Cannot send message via the connection process~ts", [?autoformat(ConnPid, MsgStr)],
                 Class, Reason, Stacktrace
             ),
             {error, Reason}

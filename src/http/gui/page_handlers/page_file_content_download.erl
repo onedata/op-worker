@@ -54,7 +54,7 @@ gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
             file_guids = FileGuids,
             follow_symlinks = FollowSymlinks
         }),
-        URL = str_utils:format_bin("https://~s~s/~s", [
+        URL = str_utils:format_bin("https://~ts~ts/~ts", [
             Hostname, ?GUI_FILE_CONTENT_DOWNLOAD_PATH, Code
         ]),
 

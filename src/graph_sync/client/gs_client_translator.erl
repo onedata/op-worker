@@ -340,7 +340,7 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
     };
 
 translate(GRI, Result) ->
-    ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p", [
+    ?error("Cannot translate graph sync response body for:~nGRI: ~tp~nResult: ~tp", [
         GRI, Result
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

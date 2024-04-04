@@ -83,25 +83,25 @@ do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescriptio
                         ok;
                     false ->
                         ?warning(
-                            "Calling URL callback ~s, after ~s of "
-                            "archive ~s created from dataset ~s failed with ~p response code.~n"
-                            "Next retry in ~p seconds. Number of retries left: ~p",
+                            "Calling URL callback ~ts, after ~ts of "
+                            "archive ~ts created from dataset ~ts failed with ~tp response code.~n"
+                            "Next retry in ~tp seconds. Number of retries left: ~tp",
                             [CallbackUrl, Operation, ArchiveId, DatasetId, ResponseCode, Sleep / 1000, RetriesLeft - 1]),
                         wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
                 end;
             {error, _} = Error ->
                 ?warning(
-                    "Calling URL callback ~s, after ~s of "
-                    "archive ~s created from dataset ~s failed due to ~w.~n"
-                    "Next retry in ~p seconds. Number of retries left: ~p",
+                    "Calling URL callback ~ts, after ~ts of "
+                    "archive ~ts created from dataset ~ts failed due to ~w.~n"
+                    "Next retry in ~tp seconds. Number of retries left: ~tp",
                     [CallbackUrl, Operation, ArchiveId, DatasetId, Error, Sleep / 1000, RetriesLeft - 1]),
                 wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
         end
     catch
         Class:Reason:Stacktrace ->
             ?warning_exception(
-                "When calling URL callback ~s, after ~s of archive ~s created from dataset ~s.~n"
-                "Next retry in ~p seconds. Number of retries left: ~p",
+                "When calling URL callback ~ts, after ~ts of archive ~ts created from dataset ~ts.~n"
+                "Next retry in ~tp seconds. Number of retries left: ~tp",
                 [CallbackUrl, Operation, ArchiveId, DatasetId, Sleep / 1000, RetriesLeft - 1],
                 Class, Reason, Stacktrace
             ),

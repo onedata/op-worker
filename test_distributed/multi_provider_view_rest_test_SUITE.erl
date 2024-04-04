@@ -1239,7 +1239,7 @@ list_views_via_rest(Config, Worker, Space, StartId, LimitOrUndef) ->
         Int when is_integer(Int) ->
             <<"&limit=", (integer_to_binary(Int))/binary>>
     end,
-    Url = str_utils:format_bin("spaces/~s/views?~s~s", [
+    Url = str_utils:format_bin("spaces/~ts/views?~ts~ts", [
         Space, TokenParam, LimitParam
     ]),
     case rest_test_utils:request(Worker, Url, get, ?USER_1_AUTH_HEADERS(Config), <<>>) of

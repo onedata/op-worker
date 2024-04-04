@@ -881,7 +881,7 @@ run_posix_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
             RequiredPerms = format_posix_perms_per_file(PosixTestCaseCtx),
 
             ?ct_pal_exception(
-                "POSIX test case failure ~s",
+                "POSIX test case failure ~ts",
                 [?autoformat(TestCaseRootDirPath, RequiredPerms)],
                 Class, Reason, Stacktrace
             ),
@@ -1371,7 +1371,7 @@ assert_operation(ActualPermsPerFile, ExpResult, TestCaseCtx = #authz_test_case_c
         ok
     catch Class:Reason:Stacktrace ->
         ?ct_pal_exception(
-            "OPERATION EXECUTION ASSERT FAILED!!!~n~s",
+            "OPERATION EXECUTION ASSERT FAILED!!!~n~ts",
             [format_additional_log_data(ActualPermsPerFile, TestCaseCtx)],
             Class, Reason, Stacktrace
         ),

@@ -51,10 +51,10 @@ get() ->
 
     AdminUsername = get_env(openfaas_admin_username),
     AdminPassword = get_env(openfaas_admin_password),
-    Hash = base64:encode(str_utils:format_bin("~s:~s", [AdminUsername, AdminPassword])),
+    Hash = base64:encode(str_utils:format_bin("~ts:~ts", [AdminUsername, AdminPassword])),
 
     #atm_openfaas_config{
-        url = str_utils:format_bin("http://~s:~B", [Host, Port]),
+        url = str_utils:format_bin("http://~ts:~B", [Host, Port]),
         basic_auth = <<"Basic ", Hash/binary>>,
         function_namespace = str_utils:to_binary(get_env(openfaas_function_namespace)),
         activity_feed_secret = str_utils:to_binary(get_env(openfaas_activity_feed_secret))
@@ -63,7 +63,7 @@ get() ->
 
 -spec get_endpoint(record(), binary()) -> binary().
 get_endpoint(#atm_openfaas_config{url = OpenfaasUrl}, Path) ->
-    str_utils:format_bin("~s~s", [OpenfaasUrl, Path]).
+    str_utils:format_bin("~ts~ts", [OpenfaasUrl, Path]).
 
 
 -spec get_basic_auth_header(record()) -> map().

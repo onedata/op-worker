@@ -531,7 +531,7 @@ on_remote_doc_created(_Ctx, #document{
         end
     catch
         Class:Reason:Stacktrace ->
-            ?critical_exception("Cannot apply file_meta:on_remote_doc_created ~s", [?autoformat([Doc])],
+            ?critical_exception("Cannot apply file_meta:on_remote_doc_created ~ts", [?autoformat([Doc])],
                 Class, Reason, Stacktrace)
     end.
 

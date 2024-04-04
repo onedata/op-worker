@@ -161,7 +161,7 @@ get_async(Key, Model, RoutingKey, ProviderId) ->
         end
     catch
         _:Reason2:Stacktrace ->
-            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason2], Stacktrace),
+            ?error_stacktrace("Datastore remote get failed due to: ~tp", [Reason2], Stacktrace),
             {error, Reason2}
     end.
 
@@ -211,7 +211,7 @@ wait_on_provider_future({{error, {badmatch, {error, internal_call}}}, SessId}) -
     end),
     {error, interrupted_call};
 wait_on_provider_future({{error, Reason}, _}) ->
-    ?debug("Remote driver error ~p", [Reason]),
+    ?debug("Remote driver error ~tp", [Reason]),
     {error, interrupted_call};
 wait_on_provider_future({error, _Reason} = Error) ->
     Error.

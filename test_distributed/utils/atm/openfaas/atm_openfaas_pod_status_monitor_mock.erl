@@ -55,5 +55,5 @@ handle_push_message(ClientRef, <<"Internal server error while processing the req
     node_cache:put({internal_server_error_received, ClientRef}, true),
     no_reply;
 handle_push_message(_ClientRef, Message) ->
-    ct:print("Unexpected message in ~p: ~s", [?MODULE, Message]),
+    ct:print("Unexpected message in ~tp: ~ts", [?MODULE, Message]),
     error(unexpected_message).

@@ -473,7 +473,7 @@ run_test_for_all_storage_configs(Testcase, TestFun, Args, StorageConfigs) ->
         run_test(TestFun, StorageConfig, Args)
     end, StorageConfigs),
     case lists:all(fun(E) -> E =:= ok end, Results) of
-        false -> ct:fail("Testcase ~p failed", [Testcase]);
+        false -> ct:fail("Testcase ~tp failed", [Testcase]);
         true -> ok
     end.
 
@@ -488,8 +488,8 @@ run_test(TestFun, StorageConfig = {StorageType, IsImportedStorage}, [Config | Ot
         ok
     catch
         E:R:Stacktrace ->
-            ct:pal("Testcase ~p failed due to ~p for storage config ~p~n"
-            "Stacktrace: ~p", [TestFun, {E, R}, StorageConfig, Stacktrace]),
+            ct:pal("Testcase ~tp failed due to ~tp for storage config ~tp~n"
+            "Stacktrace: ~tp", [TestFun, {E, R}, StorageConfig, Stacktrace]),
             error
     after
         [W | _] = ?config(op_worker_nodes, Config),

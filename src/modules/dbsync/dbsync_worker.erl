@@ -143,7 +143,7 @@ start_streams() ->
 start_streams(Spaces) ->
     case whereis(?MODULE) of
         undefined ->
-            ?warning("Ignoring request to start streams for spaces: ~p - ~p is not running", [
+            ?warning("Ignoring request to start streams for spaces: ~tp - ~tp is not running", [
                 Spaces, ?MODULE
             ]);
         _ ->
@@ -336,19 +336,19 @@ handle_changes_request(ProviderId, #changes_request2{
                     ok
                 catch
                     Error:Reason ->
-                        ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
+                        ?error("Error when starting stream on demand ~tp:~tp", [Error, Reason])
                 end;
             _ ->
                 case dbsync_out_stream:try_terminate(Name, Since) of
                     ok ->
                         ?info(
-                            "Received a changes request while processing the previous request. Terminating previous stream.~s",
+                            "Received a changes request while processing the previous request. Terminating previous stream.~ts",
                             [?autoformat([Request, ProviderId])]
                         ),
                         handle_changes_request(ProviderId, Request);
                     ignore ->
                         ?info(
-                            "Received a changes request while processing the previous request. Ignoring.~s",
+                            "Received a changes request while processing the previous request. Ignoring.~ts",
                             [?autoformat([Request, ProviderId])]
                         ),
                         ok

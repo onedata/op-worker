@@ -125,7 +125,7 @@ handle(#op_req{} = OpReq, VersionedEntity) ->
         % Unexpected errors are logged and internal server error is returned
         % to client instead
         Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [?MODULE, Type, Reason], Stacktrace),
+            ?error_stacktrace("Unexpected error in ~tp - ~tp:~tp", [?MODULE, Type, Reason], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
@@ -160,7 +160,7 @@ is_authorized(#op_req{gri = GRI} = OpReq, VersionedEntity) ->
 -spec client_to_string(aai:auth()) -> string().
 client_to_string(?GUEST) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
-client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
+client_to_string(?USER(UId)) -> str_utils:format("user:~ts", [UId]).
 
 
 %%--------------------------------------------------------------------
@@ -356,7 +356,7 @@ process_request(#req_ctx{
                 {#gri{type = Type, id = Id}, _} -> {Type, Id};
                 {#gri{type = Type, id = Id}, _, _} -> {Type, Id}
             end,
-            ?debug("~s has been created by client: ~s", [
+            ?debug("~ts has been created by client: ~ts", [
                 EntType,
                 client_to_string(Cl)
             ]),
@@ -406,7 +406,7 @@ process_request(#req_ctx{
         {ok, #gri{type = Type, id = Id, aspect = instance}} ->
             % If an entity instance is deleted, log an information about it
             % (it's a significant operation and this information might be useful).
-            ?debug("~s(~p) has been deleted by client: ~s", [
+            ?debug("~ts(~tp) has been deleted by client: ~ts", [
                 Type, Id,
                 client_to_string(Cl)
             ]),

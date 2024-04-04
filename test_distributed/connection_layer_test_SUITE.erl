@@ -728,7 +728,7 @@ spawn_ssl_echo_client(NodeToConnect) ->
                     %loop back
                     Loop();
                 {error, closed} -> ok;
-                Error -> ?error("ssl_echo_client error: ~p", [Error])
+                Error -> ?error("ssl_echo_client error: ~tp", [Error])
             end
         end,
     spawn_link(SslEchoClient),
@@ -780,7 +780,7 @@ await_status_answer(ExpStatus, MsgId, MinHeartbeatsNum, HeartbeatsNum) ->
         } ->
             ?assert(MinHeartbeatsNum =< HeartbeatsNum);
         UnExpectedMsg ->
-            ct:pal("Receive unexpected msg ~p while waiting for ~p", [
+            ct:pal("Receive unexpected msg ~tp while waiting for ~tp", [
                 UnExpectedMsg, ExpStatus
             ]),
             erlang:error(assertMatch)

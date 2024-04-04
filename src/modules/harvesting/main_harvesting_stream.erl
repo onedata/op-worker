@@ -90,7 +90,7 @@ revise_all_spaces() ->
                     {ok, HarvesterIds} ->
                         revise_space_harvesters(SpaceId, HarvesterIds);
                     Error ->
-                        ?error("Couldn't fetch list of space ~p harvesters due to ~w", [SpaceId, Error])
+                        ?error("Couldn't fetch list of space ~tp harvesters due to ~w", [SpaceId, Error])
                 end
             end, SpaceIds);
         Error2 ->
@@ -229,7 +229,7 @@ custom_error_handling(State = #hs_state{
                 ok ->
                     ErrorLog = str_utils:format_bin(
                         "Unexpected errors occurred when applying batch of changes. "
-                        "Last successful sequence number was: ~p", [MaxSuccessfulSeq]
+                        "Last successful sequence number was: ~tp", [MaxSuccessfulSeq]
                     ),
                     {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
                         error_log = ErrorLog,
@@ -275,7 +275,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
         (?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName), ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
                 ?warning(
-                    "An error occured for harvester ~p due to a failed external service (~ts) operation. "
+                    "An error occured for harvester ~tp due to a failed external service (~ts) operation. "
                     "Starting aux_harvesting_streams", [HarvesterId, ServiceName]
                 ),
                 lists:foreach(fun(IndexId) ->
@@ -287,7 +287,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
 
         (?ERROR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
-                ?warning("Harvester ~p is temporarily unavailable. "
+                ?warning("Harvester ~tp is temporarily unavailable. "
                 "Starting aux_harvesting_streams", [HarvesterId]),
                 lists:foreach(fun(IndexId) ->
                     harvesting_stream_sup:start_aux_stream(SpaceId,
@@ -298,7 +298,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
 
         (Error = {error, _}, ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
-                ?error("Unexpected error ~p occurred for harvester ~p. "
+                ?error("Unexpected error ~tp occurred for harvester ~tp. "
                 "Starting aux_harvesting_stream", [Error, HarvesterId]),
                 lists:foreach(fun(IndexId) ->
                     harvesting_stream_sup:start_aux_stream(SpaceId,
@@ -374,7 +374,7 @@ call(SpaceId, Request) ->
         ok = gen_server2:call({global, Name}, Request, infinity)
     catch
         exit:{Reason, _} when Reason =:= noproc orelse Reason =:= normal ->
-            ?debug("Stream ~p was stopped, retrying with a new one", [Name]),
+            ?debug("Stream ~tp was stopped, retrying with a new one", [Name]),
             ServiceOptions = #{
                 start_function => start_service,
                 stop_function => stop_service,

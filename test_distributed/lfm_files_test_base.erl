@@ -2469,7 +2469,7 @@ print_mem_and_disc_docs_diff(Worker, MemEntriesBefore, CacheEntriesBefore,
         MemEntriesBefore),
     CacheDiff = pool_utils:get_documents_diff(Worker, CacheEntriesAfter,
         CacheEntriesBefore),
-    ct:pal("~n MemRes: ~p ~n~n CacheRes: ~p ~n", [MemDiff, CacheDiff]).
+    ct:pal("~n MemRes: ~tp ~n~n CacheRes: ~tp ~n", [MemDiff, CacheDiff]).
 
 get_mem_and_disc_entries(Worker) ->
     {MemEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, memory),

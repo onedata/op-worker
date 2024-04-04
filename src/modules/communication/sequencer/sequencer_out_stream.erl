@@ -91,7 +91,7 @@ send(Manager, Message) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SeqMan, StmId, SessId]) ->
-    ?debug("Initializing sequencer out stream for session ~p", [SessId]),
+    ?debug("Initializing sequencer out stream for session ~tp", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
     {ok, #state{
@@ -392,7 +392,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
             resend_messages(LowerSeqNum, UpperSeqNum, queue:drop(Msgs), StmId, SessId);
         _ ->
             ?warning("Received request for messages unavailable in sequencer stream "
-            "queue. Stream ID: ~p, range: [~p,~p].", [StmId, LowerSeqNum, UpperSeqNum])
+            "queue. Stream ID: ~tp, range: [~tp,~tp].", [StmId, LowerSeqNum, UpperSeqNum])
     end.
 
 %%--------------------------------------------------------------------
@@ -413,7 +413,7 @@ maybe_log_failure(_, {badmatch, {error, not_found}}, _, _) ->
 maybe_log_failure(Request, Reason, AttemptNumber, RetryInMillis) ->
     case AttemptNumber > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
         true ->
-            ?THROTTLE_LOG(Request, ?error("Cannot process request in ~p~s",
+            ?THROTTLE_LOG(Request, ?error("Cannot process request in ~tp~ts",
                 [?MODULE, ?autoformat([Request, Reason, AttemptNumber, RetryInMillis])]
             ));
         false ->

@@ -186,8 +186,8 @@ get_manual_example(SpaceId) ->
         Domain = oneprovider:get_domain(),
         {ok, str_utils:format_bin(
             "curl -X POST -H \"X-Auth-Token:$TOKEN\" -H \"content-type:application/json\" \ "
-            "-d '{\"storageId\":\"~s\", \"spaceId\":\"~s\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
-            "https://~s/api/v3/oneprovider/data/register",
+            "-d '{\"storageId\":\"~ts\", \"spaceId\":\"~ts\", \"storageFileId\":\"$STORAGE_FILE_ID\", \"destinationPath\":\"'$DESTINATION_PATH'\"}' \ "
+            "https://~ts/api/v3/oneprovider/data/register",
             [StorageId, SpaceId, Domain]
         )}
     end).
@@ -228,16 +228,16 @@ migrate_space_strategies() ->
                     StorageImportConfigV1 ->
                         case storage_import_config:create(SpaceId, StorageImportConfigV1) of
                             ok ->
-                                ?info("space_strategies migration procedure for space ~s finished succesfully.", [SpaceId]),
+                                ?info("space_strategies migration procedure for space ~ts finished succesfully.", [SpaceId]),
                                 ok;
                             {error, already_exists} ->
                                 ?warning(
-                                    "space_strategies migration procedure failed for space ~s because storage_import_config documenr already exists.",
+                                    "space_strategies migration procedure failed for space ~ts because storage_import_config documenr already exists.",
                                     [SpaceId]),
                                 ok;
                             Error ->
                                 ?error(
-                                    "space_strategies migration procedure unexpectedly failed for space ~s due to ~p.",
+                                    "space_strategies migration procedure unexpectedly failed for space ~ts due to ~tp.",
                                     [SpaceId, Error]),
                                 throw(Error)
                         end
@@ -264,16 +264,16 @@ migrate_storage_sync_monitoring() ->
                         {_, SIM} = datastore_versions:upgrade_record(1, storage_import_monitoring, SIMV1),
                         case storage_import_monitoring:create(SpaceId, SIM) of
                             {ok, _} ->
-                                ?info("storage_sync_monitoring migration procedure for space ~s finished succesfully.", [SpaceId]),
+                                ?info("storage_sync_monitoring migration procedure for space ~ts finished succesfully.", [SpaceId]),
                                 ok;
                             {error, already_exists} ->
                                 ?warning(
-                                    "storage_sync_monitoring migration procedure failed for space ~s because storage_import_monitoring document already exists.",
+                                    "storage_sync_monitoring migration procedure failed for space ~ts because storage_import_monitoring document already exists.",
                                     [SpaceId]),
                                 ok;
                             Error ->
                                 ?error(
-                                    "storage_sync_monitoring migration procedure unexpectedly failed for space ~s due to ~p.",
+                                    "storage_sync_monitoring migration procedure unexpectedly failed for space ~ts due to ~tp.",
                                     [SpaceId, Error]),
                                 throw(Error)
                         end,

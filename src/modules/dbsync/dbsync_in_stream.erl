@@ -281,11 +281,11 @@ resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
                 resynchronize ->
                     case ?RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE of
                         0 ->
-                            ?error("Possible dbsync errors in stream {~p, ~p} due to node closing problems: ~p",
+                            ?error("Possible dbsync errors in stream {~tp, ~tp} due to node closing problems: ~tp",
                                 [SpaceId, ProviderId, Error]),
                             ok;
                         Seq ->
-                            ?info("Resynchronizing ~p sequences on dbsync in stream {~p, ~p} due to:~s",
+                            ?info("Resynchronizing ~tp sequences on dbsync in stream {~tp, ~tp} due to:~ts",
                                 [Seq, SpaceId, ProviderId, ?autoformat([Error])]),
                             ok = dbsync_state:resynchronize_stream(
                                 SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER, -1 * Seq, current)

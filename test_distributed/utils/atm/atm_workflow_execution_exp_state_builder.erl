@@ -838,12 +838,12 @@ expect_lane_run_created(
 
                 case is_binary(AtmTaskAuditLogStoreId) of
                     true -> ok;
-                    false -> crash("ERROR - task (id: ~s) audit log not created", [AtmTaskExecutionId])
+                    false -> crash("ERROR - task (id: ~ts) audit log not created", [AtmTaskExecutionId])
                 end,
                 case {AtmTaskSchema#atm_task_schema.time_series_store_config, is_binary(AtmTaskTSStoreId)} of
                     {undefined, false} -> ok;
                     {_, true} -> ok;
-                    _ -> crash("ERROR - task (id: ~s) time series store not created", [AtmTaskExecutionId])
+                    _ -> crash("ERROR - task (id: ~ts) time series store not created", [AtmTaskExecutionId])
                 end,
 
                 InnerAcc#{AtmTaskExecutionId => #exp_task_execution_state_ctx{
@@ -1324,7 +1324,7 @@ assert_workflow_execution_expectations(ExpStateCtx = #exp_workflow_execution_sta
             true andalso assert_workflow_execution_in_proper_links_tree(ExpStateCtx, LogFun);
         badmatch ->
             LogFun(
-                "Error: mismatch between exp workflow execution state: ~n~p~n~nand model stored in op: ~n~p",
+                "Error: mismatch between exp workflow execution state: ~n~tp~n~nand model stored in op: ~n~tp",
                 [ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState]
             ),
             false
@@ -1344,7 +1344,7 @@ assert_workflow_execution_in_proper_links_tree(#exp_workflow_execution_state_ctx
         true ->
             true;
         false ->
-            LogFun("Error: workflow execution (id: ~s) not present in expected links tree: ~p", [
+            LogFun("Error: workflow execution (id: ~ts) not present in expected links tree: ~tp", [
                 AtmWorkflowExecutionId, Phase
             ]),
             false
@@ -1391,7 +1391,7 @@ assert_task_execution_expectations(#exp_workflow_execution_state_ctx{
                 {cont, true};
             badmatch ->
                 LogFun(
-                    "Error: mismatch between exp task execution state: ~n~p~n~nand model stored in op: ~n~p",
+                    "Error: mismatch between exp task execution state: ~n~tp~n~nand model stored in op: ~n~tp",
                     [ExpAtmTaskExecutionState, AtmTaskExecutionState]
                 ),
                 {halt, false}
@@ -1435,7 +1435,7 @@ assert_workflow_related_docs_deleted(#exp_workflow_execution_state_ctx{
             end, AtmLaneRuns)
         end, ExpAtmLaneExecutionStates)
     catch Type:Reason ->
-        ct:pal("ERROR: workflow (id: ~s) related docs are not deleted.", [AtmWorkflowExecutionId]),
+        ct:pal("ERROR: workflow (id: ~ts) related docs are not deleted.", [AtmWorkflowExecutionId]),
         erlang:Type(Reason)
     end.
 
@@ -1475,7 +1475,7 @@ assert_task_related_docs_deleted(#exp_workflow_execution_state_ctx{
             assert_store_related_docs_deleted(ProviderSelector, AtmTaskAuditLogStoreId),
             assert_store_related_docs_deleted(ProviderSelector, AtmTaskTSStoreId)
         catch Type:Reason ->
-            ct:pal("ERROR: task (id: ~s) related docs are not deleted.", [AtmTaskExecutionId]),
+            ct:pal("ERROR: task (id: ~ts) related docs are not deleted.", [AtmTaskExecutionId]),
             erlang:Type(Reason)
         end
     end, ExpAtmTaskExecutionsRegistry).
@@ -1580,7 +1580,7 @@ assert_json_expectations(Path, Expected, Value, LogFun) when is_map(Expected), i
         true ->
             ok;
         false ->
-            LogFun("Error: unmatching keys in objects at '~p'.~nExpected: ~p~nGot: ~p", [
+            LogFun("Error: unmatching keys in objects at '~tp'.~nExpected: ~tp~nGot: ~tp", [
                 Path, Expected, Value
             ]),
             throw(badmatch)
@@ -1596,14 +1596,14 @@ assert_json_expectations(Path, Expected, Value, LogFun) when is_list(Expected), 
         true ->
             lists:foreach(fun({Index, {ExpectedItem, ValueItem}}) ->
                 assert_json_expectations(
-                    str_utils:format_bin("~s.[~B]", [Path, Index - 1]),
+                    str_utils:format_bin("~ts.[~B]", [Path, Index - 1]),
                     ExpectedItem,
                     ValueItem,
                     LogFun
                 )
             end, lists_utils:enumerate(lists:zip(Expected, Value)));
         false ->
-            LogFun("Error: unmatching arrays at '~p'.~nExpected: ~p~nGot: ~p", [
+            LogFun("Error: unmatching arrays at '~tp'.~nExpected: ~tp~nGot: ~tp", [
                 Path, Expected, Value
             ]),
             throw(badmatch)
@@ -1614,7 +1614,7 @@ assert_json_expectations(Path, Expected, Value, LogFun) when is_function(Expecte
         true ->
             ok;
         false ->
-            LogFun("Error: predicate for '~p' failed.~nGot: ~p", [Path, Value]),
+            LogFun("Error: predicate for '~tp' failed.~nGot: ~tp", [Path, Value]),
             throw(badmatch)
     end;
 
@@ -1623,7 +1623,7 @@ assert_json_expectations(Path, Expected, Value, LogFun) ->
         true ->
             ok;
         false ->
-            LogFun("Error: unmatching items at '~p'.~nExpected: ~p~nGot: ~p", [
+            LogFun("Error: unmatching items at '~tp'.~nExpected: ~tp~nGot: ~tp", [
                 Path, Expected, Value
             ]),
             throw(badmatch)

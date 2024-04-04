@@ -57,11 +57,11 @@ init(all) ->
         {ok, SpaceIds} ->
             lists:foreach(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize archive recall caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize archive recall caches due to: ~tp", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize archive recall caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize archive recall caches due to: ~tp", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize archive recall caches due to: ~p", [Error])
+            ?critical("Unable to initialize archive recall caches due to: ~tp", [Error])
     catch
         Class:Reason:Stacktrace ->
             ?critical_exception("Unable to initialize archive recall caches", Class, Reason, Stacktrace)
@@ -77,14 +77,14 @@ init(SpaceId) ->
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize archive recall effective cache for space ~p due to: ~p",
+                        ?critical("Unable to initialize archive recall effective cache for space ~tp due to: ~tp",
                             [SpaceId, Error])
                 end
         end
     catch
         Class:Reason:Stacktrace ->
             ?critical_exception(
-                "Unable to initialize archive recall effective cache for space ~p", [SpaceId],
+                "Unable to initialize archive recall effective cache for space ~tp", [SpaceId],
                 Class, Reason, Stacktrace
             )
     end.
@@ -99,15 +99,15 @@ invalidate_on_all_nodes(SpaceId) ->
         [] ->
             ok;
         _ ->
-            ?error("Invalidation of archive recall caches for space ~p failed on nodes: ~p (RPC error)", [SpaceId, BadNodes])
+            ?error("Invalidation of archive recall caches for space ~tp failed on nodes: ~tp (RPC error)", [SpaceId, BadNodes])
     end,
     
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Invalidation of archive recall caches for space ~p failed.~n"
-                "Reason: ~p", [SpaceId, Error]
+                "Invalidation of archive recall caches for space ~tp failed.~n"
+                "Reason: ~tp", [SpaceId, Error]
             )
     end, Res).
 

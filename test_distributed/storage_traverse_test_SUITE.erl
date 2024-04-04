@@ -311,7 +311,7 @@ traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
     Stopwatch = stopwatch:start(),
     run_traverse(W, SpaceId, StorageId, {CSPid, undefined, FilesCounterRef}, Opts),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
-    ct:pal("Traverse took ~p seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Traverse took ~tp seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
     ?assertEqual(lists:usort(CreatedFiles), lists:usort(ReceivedFiles)).
 
 traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
@@ -336,7 +336,7 @@ traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
         Opts#{execute_slave_on_dir => true}),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
     ReceivedDirs = countdown_server:await(W, DirsCounterRef, ?TIMEOUT),
-    ct:pal("Traverse took ~p seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Traverse took ~tp seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
     ?assertEqual(lists:usort(CreatedFiles), lists:usort(ReceivedFiles)),
     ?assertEqual(lists:usort(CreatedDirs2), lists:usort(ReceivedDirs)).
 
@@ -364,7 +364,7 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
         }),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
     countdown_server:await(W, ComputeCounterRef, ?TIMEOUT),
-    ct:pal("Traverse took ~p seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Traverse took ~tp seconds.", [stopwatch:read_seconds(Stopwatch, float)]),
     ?assertEqual(lists:usort(CreatedFiles), lists:usort(ReceivedFiles)).
 
 %===================================================================

@@ -272,7 +272,7 @@ check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx :=
             Error:Reason ->
                 % It is possible that some documents for additional keys are not found
                 % (e.g. race with delete)
-                ?debug("error getting parent connected key ~p:~p for uuid ~p", [Error, Reason, Uuid]),
+                ?debug("error getting parent connected key ~tp:~tp for uuid ~tp", [Error, Reason, Uuid]),
                 Acc
         end
     end, [], References -- [file_ctx:get_logical_uuid_const(FileCtx)]),

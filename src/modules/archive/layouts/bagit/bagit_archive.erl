@@ -203,8 +203,8 @@ create_bag_declaration(ParentCtx, UserCtx) ->
         SessionId, ParentGuid, ?BAG_DECLARATION_FILE_NAME, ?DEFAULT_FILE_MODE, write),
 
     Content = str_utils:format_bin(
-        "BagIt-Version: ~s~n"
-        "Tag-File-Character-Encoding: ~s", [?VERSION, ?ENCODING]
+        "BagIt-Version: ~ts~n"
+        "Tag-File-Character-Encoding: ~ts", [?VERSION, ?ENCODING]
     ),
     {ok, _, _} = lfm:write(Handle, 0, Content),
     ok = lfm:fsync(Handle),

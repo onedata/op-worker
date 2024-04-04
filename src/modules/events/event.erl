@@ -113,7 +113,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
                 catch
                     Class:Reason ->
                         % Race with file/link deletion can result in error logged here
-                        ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
+                        ?warning("Error emitting event for additional guid - ~w:~tp~ncontext: ~ts~noriginal event: ~tp",
                             [Class, Reason, Context, Evt])
                 end
             end, SessIdsForLinks);
@@ -131,7 +131,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
                 catch
                     Class:Reason ->
                         % Race with file/link deletion can result in error logged here
-                        ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
+                        ?warning("Error emitting event for additional guid - ~w:~tp~ncontext: ~ts~noriginal event: ~tp",
                             [Class, Reason, Context, Evt])
                 end
             end, SessIdsForLinks);
@@ -276,7 +276,7 @@ get_event_manager(MgrRef) ->
         {error, not_found = Reason} ->
             {error, Reason};
         {error, Reason} ->
-            ?warning("Cannot get event manager for session ~p due to: ~p",
+            ?warning("Cannot get event manager for session ~tp due to: ~tp",
                 [MgrRef, Reason]),
             {error, Reason}
     end.
@@ -324,9 +324,9 @@ send_to_event_manager(Manager, Message, RetryCounter) ->
         ok = event_manager:handle(Manager, Message)
     catch
         exit:{timeout, _} ->
-            ?debug("Timeout of event manager for message ~p, retry", [Message]),
+            ?debug("Timeout of event manager for message ~tp, retry", [Message]),
             send_to_event_manager(Manager, Message, RetryCounter - 1);
         Reason1:Reason2:Stacktrace ->
-            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}], Stacktrace),
+            ?error_stacktrace("Cannot process event ~tp due to: ~tp", [Message, {Reason1, Reason2}], Stacktrace),
             send_to_event_manager(Manager, Message, RetryCounter - 1)
     end.

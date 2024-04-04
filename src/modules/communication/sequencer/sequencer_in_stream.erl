@@ -100,7 +100,7 @@ send(Manager, Message) ->
     {ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([SeqMan, StmId, SessId]) ->
-    ?debug("Initializing sequencer in stream for session ~p", [SessId]),
+    ?debug("Initializing sequencer in stream for session ~tp", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
     {ok, #document{value = #session{type = SessionType, proxy_via = ProxyVia}}} = session:get(SessId),

@@ -1416,14 +1416,14 @@ run(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
 
 run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
     try
-        ct:pal("Starting test \"~p\" for space ~p and setup no. ~p", [TestName, SpaceId, TestNo]),
+        ct:pal("Starting test \"~tp\" for space ~tp and setup no. ~tp", [TestName, SpaceId, TestNo]),
         TestBaseFun(TestName, Config, SpaceId, TestArgs),
-        ct:pal("Test \"~p\" for space ~p and setup no. ~p PASSED.", [TestName, SpaceId, TestNo]),
+        ct:pal("Test \"~tp\" for space ~tp and setup no. ~tp PASSED.", [TestName, SpaceId, TestNo]),
         true
     catch
         Error:Reason:Stacktrace ->
-            ct:pal("Test ~p for space ~p and setup no. ~p FAILED.~nError: ~p.~n"
-            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, Stacktrace]),
+            ct:pal("Test ~tp for space ~tp and setup no. ~tp FAILED.~nError: ~tp.~n"
+            "Stacktrace:~n~tp", [TestName, SpaceId, TestNo, {Error, Reason}, Stacktrace]),
             false
     end.
 

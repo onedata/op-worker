@@ -200,13 +200,13 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
 %% @private
 -spec start_internal(file_ctx:ctx(), tree_traverse:run_options(), non_neg_integer()) -> ok.
 start_internal(_FileCtx, #{task_id := TaskId}, 0) ->
-    ?error("Reached max repeats on QoS traverse task id conflict: ~p", [TaskId]);
+    ?error("Reached max repeats on QoS traverse task id conflict: ~tp", [TaskId]);
 start_internal(FileCtx, #{task_id := TaskId} = Options, Repeats) ->
     try tree_traverse:run(?POOL_NAME, FileCtx, Options) of
         {ok, _} -> ok
     catch _:{badmatch, [{error,already_exists}]} ->
         timer:sleep(timer:seconds(1)), % sleep to ensure different timestamp for traverse link
-        ?warning("Conflict on QoS traverse task id ~p. Reapeting...", [TaskId]),
+        ?warning("Conflict on QoS traverse task id ~tp. Reapeting...", [TaskId]),
         start_internal(FileCtx, Options, Repeats - 1)
     end.
 
@@ -283,7 +283,7 @@ synchronize_file_for_entries(TaskId, #tree_traverse_slave{file_ctx = FileCtx} = 
     try
         synchronize_file_for_entries_insecure(TaskId, Job, QosEntries)
     catch Class:Reason:Stacktrace ->
-        ?error_exception("Unexpected error during QoS synchronization for file ~p",
+        ?error_exception("Unexpected error during QoS synchronization for file ~tp",
             [file_ctx:get_logical_uuid_const(FileCtx)], Class, Reason, Stacktrace),
         ok = report_file_failed_for_entries(QosEntries, FileCtx, Reason)
     end.
@@ -308,7 +308,7 @@ synchronize_file_for_entries_insecure(TaskId, #tree_traverse_slave{file_ctx = Fi
             ?debug("QoS file synchronization failed due to cancellation");
         {{error, _} = Error, FileCtx2} ->
             NormalizedError = normalize_error(Error),
-            ?error("Error during QoS file synchronization: ~p", [NormalizedError]),
+            ?error("Error during QoS file synchronization: ~tp", [NormalizedError]),
             ok = report_file_failed_for_entries(QosEntries, FileCtx2, NormalizedError)
     end,
     
@@ -388,7 +388,7 @@ cancel_traverses(QosEntryId) ->
     qos_entry:fold_traverses(QosEntryId, fun({TaskId, _TraverseRootUuid}, _Acc) ->
         case ?ok_if_not_found(tree_traverse:cancel(?POOL_NAME, TaskId)) of
             ok -> ok;
-            Error -> ?error("Error when cancelling traverse: ~p", [Error])
+            Error -> ?error("Error when cancelling traverse: ~tp", [Error])
         end
     end, ok).
 

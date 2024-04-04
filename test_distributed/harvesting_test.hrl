@@ -128,7 +128,7 @@
                             {line, ?LINE},
                             {expected, {__SpaceId, __Destination, __Batch, __ProviderId, __Timeout}},
                             {value, timeout}],
-                        ct:print("assertReceivedHarvestMetadata_failed: ~p~n", [__Args]),
+                        ct:print("assertReceivedHarvestMetadata_failed: ~tp~n", [__Args]),
                         erlang:error({assertReceivedHarvestMetadata_failed, __Args})
                 end
         end)(ExpSpaceId, ExpDestination, ExpBatch, [], ExpProviderId, Timeout)
@@ -162,7 +162,7 @@
                                 {line, ?LINE}
                             ],
                             ct:print("assertNotReceivedHarvestMetadata_failed: ~lp~n"
-                                "Unexpectedly received: ~p~n", [__Args, __HM]),
+                                "Unexpectedly received: ~tp~n", [__Args, __HM]),
                             erlang:error({assertNotReceivedHarvestMetadata_failed, __Args})
                     end
             after

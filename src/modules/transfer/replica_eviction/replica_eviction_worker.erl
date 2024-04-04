@@ -43,22 +43,22 @@
 -spec process_replica_deletion_result(replica_deletion:result(), od_space:id(), file_meta:uuid(),
     transfer:id()) -> ok.
 process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p in space ~p released ~p bytes.", [
+    ?debug("Replica eviction of file ~tp in transfer ~tp in space ~tp released ~tp bytes.", [
         FileUuid, TransferId, SpaceId, ReleasedBytes
     ]),
     {ok, _} = transfer:increment_files_evicted_and_processed_counters(TransferId),
     ok;
 process_replica_deletion_result({error, canceled}, SpaceId, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p in space ~p was canceled.", [FileUuid, TransferId, SpaceId]),
+    ?debug("Replica eviction of file ~tp in transfer ~tp in space ~tp was canceled.", [FileUuid, TransferId, SpaceId]),
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
 process_replica_deletion_result({error, file_opened}, SpaceId, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p in space ~p skipped because the file is opened.",
+    ?debug("Replica eviction of file ~tp in transfer ~tp in space ~tp skipped because the file is opened.",
         [FileUuid, TransferId, SpaceId]),
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
 process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
-    ?error("Error during replica eviction ~s", [?autoformat([
+    ?error("Error during replica eviction ~ts", [?autoformat([
         Error, FileUuid, TransferId, SpaceId
     ])]),
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),

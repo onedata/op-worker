@@ -42,7 +42,7 @@ get_provider_to_route([ProviderId | _]) ->
 -spec route(user_ctx:ctx(), oneprovider:id(), fslogic_worker:request()) ->
     fslogic_worker:response().
 route(UserCtx, ProviderId, Request) ->
-    ?debug("Rerouting ~p ~p", [ProviderId, Request]),
+    ?debug("Rerouting ~tp ~tp", [ProviderId, Request]),
     
     EffSessionId = user_ctx:get_session_id(UserCtx),
     Credentials = user_ctx:get_credentials(UserCtx),
