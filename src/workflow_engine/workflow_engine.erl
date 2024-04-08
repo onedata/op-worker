@@ -33,7 +33,7 @@
 -export([get_async_call_pools/1, trigger_job_scheduling/1,
     call_handler/5, call_handle_task_execution_stopped_for_all_tasks/4,
     call_handle_task_results_processed_for_all_items_for_all_tasks/4, call_handlers_for_cancelled_lane/5,
-    handle_exception/8, execute_exception_handler/6, get_enqueuing_timeout/1]).
+    handle_exception/7, execute_exception_handler/6, get_enqueuing_timeout/1]).
 %% Test API
 -export([set_enqueuing_timeout/2]).
 
@@ -351,12 +351,12 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
     end.
 
 -spec handle_exception(execution_id(), workflow_handler:handler(), execution_context(),
-    string(), list(), throw | error | exit, term(), list()) -> ok.
-handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, Class, Reason, Stacktrace) ->
+    string(), throw | error | exit, term(), list()) -> ok.
+handle_exception(ExecutionId, Handler, Context, Message, Class, Reason, Stacktrace) ->
     try
         ?error_exception(
             "workflow_handler ~w, execution ~ts: " ++ Message,
-            [Handler, ExecutionId | MessageArgs],
+            [Handler, ExecutionId],
             Class, Reason, Stacktrace
         ),
         workflow_execution_state:handle_exception(ExecutionId, Context, Class, Reason, Stacktrace)
@@ -758,7 +758,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
                 ?error(?autoformat_with_msg("Unexpected error getting item or result to process task result ",
-                [TaskId, CachedResultId]),
+                [TaskId, CachedResultId])),
                 Error2, Reason2, Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -819,7 +819,7 @@ prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, Preparati
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                "Unexpected error preparing lane ~tp", [LaneId],
+                ?info(?autoformat_with_msg("Unexpected error preparing lane ~tp", [LaneId], [])),
                 Error, Reason, Stacktrace
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
