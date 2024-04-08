@@ -156,8 +156,8 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
-        ?error_exception("Unexpected error during verification of archive ~ts",
-            [?autoformat([TaskId])], error, Reason, Stacktrace),
+        ?error_exception(
+            ?autoformat_with_msg("Unexpected error during verification of archive", TaskId), error, Reason, Stacktrace),
         {ok, #{}} % unexpected error - no jobs can be created
     end,
     case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
@@ -167,8 +167,9 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
             handle_verification_error(TaskId, InitialJob),
             {FileCtx, FilePath} = job_to_error_info(InitialJob),
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error_exception("Unexpected error in archive verification traverse during listing of directory ~ts",
-                [?autoformat([TaskId, FileGuid, FilePath])], error, Reason, Stacktrace),
+            ?error_exception(?autoformat_with_msg(
+                "Unexpected error in archive verification traverse during listing of directory ",
+                [TaskId, FileGuid, FilePath]), error, Reason, Stacktrace),
             {ok, #{}}
     end.
 

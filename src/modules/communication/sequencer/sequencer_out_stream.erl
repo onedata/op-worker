@@ -413,9 +413,9 @@ maybe_log_failure(_, {badmatch, {error, not_found}}, _, _) ->
 maybe_log_failure(Request, Reason, AttemptNumber, RetryInMillis) ->
     case AttemptNumber > ?LOG_FAILED_ATTEMPTS_THRESHOLD of
         true ->
-            ?THROTTLE_LOG(Request, ?error("Cannot process request in ~tp~ts",
-                [?MODULE, ?autoformat([Request, Reason, AttemptNumber, RetryInMillis])]
-            ));
+            ?THROTTLE_LOG(Request, ?error(?autoformat_with_msg("Cannot process request in ~tp",
+                [?MODULE], [Request, Reason, AttemptNumber, RetryInMillis]
+            )));
         false ->
             ok
     end.

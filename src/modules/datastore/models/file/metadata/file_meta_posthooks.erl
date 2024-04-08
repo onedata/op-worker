@@ -185,7 +185,7 @@ execute_hook(Key, Identifier, Module, Function, EncodedArgs) ->
             repeat -> error
         end
     catch Class:Reason:Stacktrace ->
-        ?debug_exception(?autoformat([Identifier, Key]), Class, Reason, Stacktrace),
+        ?debug_exception(?autoformat(Identifier, Key), Class, Reason, Stacktrace),
         error
     end.
 

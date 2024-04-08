@@ -306,8 +306,8 @@ report_error(TaskId, Job, Reason, Stacktrace) ->
     lists:foreach(fun(ArchiveDoc) ->
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
         archive:mark_file_failed(ArchiveDoc),
-        LogMessage = str_utils:format("Unexpected error during archivisation: ~ts",
-            [?autoformat([TaskId, FileGuid, ArchiveId, Reason])]),
+        LogMessage = ?autoformat_with_msg("Unexpected error during archivisation: ",
+            [TaskId, FileGuid, ArchiveId, Reason]),
         case Stacktrace of
             undefined -> ?error(LogMessage);
             _ -> ?error_stacktrace(LogMessage, Stacktrace)

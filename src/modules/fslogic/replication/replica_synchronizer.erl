@@ -922,9 +922,8 @@ restart_inactive_job(#job{ref = InactiveRef, restarts_left = RestartsLeft}, Stat
         InactiveRef, State
     ),
     NewTransfers = start_transfers([Block], undefined, State1, Priority, RestartsLeft - 1),
-    ?warning("Replaced inactive transfer with new transfers~ts", [
-        ?autoformat([InactiveRef, Block, NewTransfers])
-    ]),
+    ?warning(?autoformat_with_msg("Replaced inactive transfer with new transfers",
+        [InactiveRef, Block, NewTransfers])),
     NewRefs = jobs_to_refs(NewTransfers),
     State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
     add_in_progress(NewTransfers, State2).
@@ -954,7 +953,7 @@ cancel_stale_job(#job{ref = StaleRef}, State) ->
 %% @private
 -spec handle_error(fetch_ref(), Error :: term(), #state{}) -> #state{}.
 handle_error(Ref, ErrorStatus, State) ->
-    ?error("Transfer ~tp failed:~ts", [Ref, ?autoformat([ErrorStatus])]),
+    ?error(?autoformat_with_msg("Transfer ~tp failed:", [Ref], ErrorStatus)),
     {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} =

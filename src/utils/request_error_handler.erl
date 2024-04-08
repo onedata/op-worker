@@ -89,8 +89,8 @@ format_log_message(SessionId, RequestTerm) ->
     AutoformattedDetails = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->
             Request = lager:pr(RequestTerm, ?MODULE),
-            ?autoformat([SessionId, Request]);
+            ?notice(?autoformat(SessionId, Request));
         false ->
-            ?autoformat([SessionId])
+            ?notice(?autoformat(SessionId))
     end,
     str_utils:format("Cannot process request~ts", [AutoformattedDetails]).

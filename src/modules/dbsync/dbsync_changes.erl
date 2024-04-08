@@ -114,12 +114,12 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
             dbsync_events:change_replicated(SpaceId, DocToHandle)
         catch
             Class:Reason:Stacktrace ->
-                ?error_exception("when post-processing change:~ts", [?autoformat([Doc])], Class, Reason, Stacktrace)
+                ?error_exception(?autoformat_with_msg("when post-processing change:", Doc), Class, Reason, Stacktrace)
         end,
         ok
     catch
         Class2:Reason2:Stacktrace2 ->
-            ?error_exception(?autoformat([Doc]), Class2, Reason2, Stacktrace2),
+            ?error_exception(?autoformat(Doc), Class2, Reason2, Stacktrace2),
             {error, Seq, Reason2}
     end.
 

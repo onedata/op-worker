@@ -214,17 +214,16 @@ add_storage(StorageId) ->
                                   [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
     BadNodes =/= [] andalso
-        ?error("Failed to call some nodes to add storage to rtransfer~ts", [
-            ?autoformat([StorageId, BadNodes])
-        ]),
+        ?error(?autoformat_with_msg("Failed to call some nodes to add storage to rtransfer",
+            [StorageId, BadNodes])),
 
     case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
         [] ->
             ok;
         _ErrorResults ->
-            ?error("There were errors while adding storage to rtransfer~ts", [
-                ?autoformat([StorageId, AllNodes, GatheredResults])
-            ])
+            ?error(?autoformat_with_msg("There were errors while adding storage to rtransfer",
+                [StorageId, AllNodes, GatheredResults]
+            ))
     end,
 
     ok.

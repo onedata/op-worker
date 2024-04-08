@@ -134,7 +134,8 @@ op_worker_service_operation(Config, ProviderSelector, ServiceOperation) ->
                 % propagate output of onenv service command
                 ct:pal("~ts", [Stdout]);
             {ExitCode, Stdout, Stderr} ->
-                ct:pal("Error in op worker operation ~ts", [?autoformat([ServiceOperation, ExitCode, Stdout, Stderr])]),
+                ?dump(?autoformat_with_msg("Error in op worker operation ",
+                    [ServiceOperation, ExitCode, Stdout, Stderr])),
                 throw(service_operation_failed)
         end
     end, oct_background:get_provider_nodes(ProviderSelector)).

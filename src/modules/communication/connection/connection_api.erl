@@ -135,4 +135,4 @@ log_sending_msg_error(SessionId, _Msg, ?ERROR_NOT_FOUND) ->
 
 log_sending_msg_error(SessionId, Msg, Error) ->
     MsgStr = clproto_utils:msg_to_string(Msg),
-    ?error("Failed to send msg to peer~ts", [?autoformat(SessionId, Error, MsgStr)]).
+    ?error(?autoformat_with_msg("Failed to send msg to peer", [SessionId, Error, MsgStr])).

@@ -881,8 +881,8 @@ run_posix_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
             RequiredPerms = format_posix_perms_per_file(PosixTestCaseCtx),
 
             ?ct_pal_exception(
-                "POSIX test case failure ~ts",
-                [?autoformat(TestCaseRootDirPath, RequiredPerms)],
+                ?notice(?autoformat_with_msg("POSIX test case failure ",
+                [TestCaseRootDirPath, RequiredPerms])),
                 Class, Reason, Stacktrace
             ),
             error(posix_perms_test_failed)
@@ -1418,7 +1418,7 @@ format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
     {ok, ExecutionerSessionMode} = session:get_mode(ExecutionerSession),
     ExecutionerSessionConstraints = session:get_data_constraints(ExecutionerSession),
 
-    ?autoformat(
+    ?info(?autoformat(
         TestCaseName,
         TestCaseRootDirPath,
         RootDirProtectionFlags,
@@ -1428,7 +1428,7 @@ format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
         ExecutionerSpacePrivs,
         ExecutionerSessionMode,
         ExecutionerSessionConstraints
-    ).
+    )).
 
 
 %% @private

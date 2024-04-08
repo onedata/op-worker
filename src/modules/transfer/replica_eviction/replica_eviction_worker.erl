@@ -58,9 +58,9 @@ process_replica_deletion_result({error, file_opened}, SpaceId, FileUuid, Transfe
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
 process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
-    ?error("Error during replica eviction ~ts", [?autoformat([
+    ?error(?autoformat_with_msg("Error during replica eviction", [
         Error, FileUuid, TransferId, SpaceId
-    ])]),
+    ])),
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.
 

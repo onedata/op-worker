@@ -341,16 +341,16 @@ handle_changes_request(ProviderId, #changes_request2{
             _ ->
                 case dbsync_out_stream:try_terminate(Name, Since) of
                     ok ->
-                        ?info(
-                            "Received a changes request while processing the previous request. Terminating previous stream.~ts",
-                            [?autoformat([Request, ProviderId])]
-                        ),
+                        ?info(?autoformat_with_msg(
+                            "Received a changes request while processing the previous request. Terminating previous stream.",
+                            [Request, ProviderId]
+                        )),
                         handle_changes_request(ProviderId, Request);
                     ignore ->
-                        ?info(
-                            "Received a changes request while processing the previous request. Ignoring.~ts",
-                            [?autoformat([Request, ProviderId])]
-                        ),
+                        ?info(?autoformat_with_msg(
+                            "Received a changes request while processing the previous request. Ignoring.",
+                            [Request, ProviderId]
+                        )),
                         ok
                 end
         end

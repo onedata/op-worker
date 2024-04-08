@@ -383,12 +383,12 @@ handle_info({Ok, Socket, Data}, #state{
             {stop, normal, State}
     catch
         throw:{error, _} = Error ->
-            ?THROTTLE_ERROR(SessId, "Protocol upgrade failed~ts", [?autoformat(SessId, Error)]),
+            ?THROTTLE_ERROR(SessId, ?error(?autoformat_with_msg("Protocol upgrade failed", [SessId, Error]))),
             {stop, normal, State};
         Class:Reason:Stacktrace ->
             ?THROTTLE_ERROR_EXCEPTION(
                 SessId,
-                "Unexpected error during protocol upgrade~ts", [?autoformat(SessId)],
+                ?error(?autoformat_with_msg("Unexpected error during protocol upgrade", SessId)),
                 Class, Reason, Stacktrace
             ),
             {stop, normal, State}
@@ -668,7 +668,8 @@ open_socket_to_provider(SessId, ProviderId, Domain,
 handle_protocol_upgrade_response(#state{session_id = SessId} = State, Data) ->
     case connection_utils:verify_protocol_upgrade_response(Data) of
         false ->
-            ?THROTTLE_ERROR(SessId, "Received invalid protocol upgrade response~ts", [?autoformat(SessId, Data)]),
+            ?THROTTLE_ERROR(SessId, ?error(?autoformat_with_msg(
+                "Received invalid protocol upgrade response", [SessId, Data]))),
             {error, invalid_protocol_upgrade_response};
         true ->
             #state{
@@ -742,23 +743,24 @@ handle_handshake_response(#state{
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
             ?THROTTLE_ERROR(
                 SessId,
-                "Handshake refused by peer provider, closing connection~ts",
-                [?autoformat(ProviderInfo, Error)]
-            ),
+                ?error(?autoformat_with_msg("Handshake refused by peer provider, closing connection",
+                [ProviderInfo, Error]
+            ))),
             {error, handshake_failed};
         Response ->
             ?THROTTLE_ERROR(
                 SessId,
-                "Received invalid handshake response from peer provider, closing connection~ts",
-                [?autoformat(ProviderInfo, Response)]
-            ),
+                ?error(?autoformat_with_msg(
+                    "Received invalid handshake response from peer provider, closing connection",
+                [ProviderInfo, Response]
+            ))),
             {error, handshake_failed}
     catch Class:Reason:Stacktrace ->
         DataSample = str_utils:truncate_overflow(Data, ?MAX_LOGGED_DATA_SIZE),
         ?THROTTLE_ERROR_EXCEPTION(
             SessId,
-            "Error decoding handshake response from peer provider~ts",
-            [?autoformat(ProviderInfo, DataSample)],
+            ?error(?autoformat_with_msg("Error decoding handshake response from peer provider",
+            [ProviderInfo, DataSample])),
             Class, Reason, Stacktrace
         ),
         {error, handshake_failed}
@@ -791,9 +793,9 @@ handle_client_message(#state{
                 MsgStr = clproto_utils:msg_to_string(Msg),
                 ?THROTTLE_ERROR(
                     SessId,
-                    "Failed to create proxied session while handling message~ts",
-                    [?autoformat(Error, MsgStr)]
-                ),
+                    ?error(?autoformat_with_msg("Failed to create proxied session while handling message",
+                        [Error, MsgStr]
+                    ))),
                 % Respond with eacces error if request has msg_id
                 % (msg_id means that peer awaits answer)
                 case Msg#client_message.message_id of
@@ -809,15 +811,18 @@ handle_client_message(#state{
         end
     catch
         throw:{translation_failed, Reason, undefined} ->
-            ?THROTTLE_ERROR(SessId, "Client message deserialization error~ts", [?autoformat(SessId, Reason)]),
+            ?THROTTLE_ERROR(SessId, ?error(?autoformat_with_msg(
+                "Client message deserialization error", [SessId, Reason]))),
             {ok, State};
         throw:{translation_failed, Reason, MsgId} ->
             Code = case Reason of
                 {unrecognized_message, Message} ->
-                    ?THROTTLE_WARNING(SessId, "Unrecognized client message~ts", [?autoformat(SessId, Message)]),
+                    ?THROTTLE_WARNING(SessId, ?error(?autoformat_with_msg(
+                        "Unrecognized client message", [SessId, Message]))),
                     ?EBADMSG;
                 _ ->
-                    ?THROTTLE_ERROR(SessId, "Client message deserialization error~ts", [?autoformat(SessId, Reason)]),
+                    ?THROTTLE_ERROR(SessId, ?error(?autoformat_with_msg(
+                        "Client message deserialization error", [SessId, Reason]))),
                     ?EINVAL
             end,
             send_response(State, #server_message{
@@ -828,7 +833,7 @@ handle_client_message(#state{
             DataSample = str_utils:truncate_overflow(Data, 1000),
             ?THROTTLE_ERROR_EXCEPTION(
                 SessId,
-                "Client message handling error~ts", [?autoformat(SessId, DataSample)],
+                ?error(?autoformat_with_msg("Client message handling error", [SessId, DataSample])),
                 Class, Reason, Stacktrace
             ),
             {ok, State}
@@ -843,7 +848,7 @@ handle_server_message(#state{session_id = SessId} = State, Data) ->
         route_message(State, Msg)
     catch Class:Reason:Stacktrace ->
         DataSample = str_utils:truncate_overflow(Data, ?MAX_LOGGED_DATA_SIZE),
-        ?THROTTLE_ERROR_EXCEPTION(SessId, ?autoformat(SessId, DataSample), [], Class, Reason, Stacktrace),
+        ?THROTTLE_ERROR_EXCEPTION(SessId, ?error(?autoformat(SessId, DataSample)), [], Class, Reason, Stacktrace),
         {ok, State}
     end.
 
@@ -859,7 +864,7 @@ route_message(#state{session_id = SessId, rib = RIB} = State, Msg) ->
             send_response(State, ServerMsg);
         {error, _} = Error ->
             MsgStr = clproto_utils:msg_to_string(Msg),
-            ?THROTTLE_ERROR(SessId, "Message routing error~ts", [?autoformat(Error, MsgStr)]),
+            ?THROTTLE_ERROR(SessId, ?error(?autoformat_with_msg("Message routing error", [Error, MsgStr]))),
             {ok, State}
     end.
 
@@ -894,7 +899,7 @@ send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
     socket_send(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
     MsgStr = clproto_utils:msg_to_string(Msg),
-    ?error("Attempt to send msg via wrong connection~ts", [?autoformat(ConnType, MsgStr)]),
+    ?error(?autoformat_with_msg("Attempt to send msg via wrong connection", [ConnType, MsgStr])),
     {error, sending_msg_via_wrong_conn_type}.
 
 
@@ -920,9 +925,9 @@ socket_send(#state{
                         Bin when is_binary(Bin) -> Bin;
                         _ -> clproto_utils:msg_to_string(DataOrMsg)
                     end,
-                    ?THROTTLE_ERROR(SessId, "Unable to send message via socket~ts", [
-                        ?autoformat(Socket, Error, MsgStr)
-                    ]),
+                    ?THROTTLE_ERROR(SessId, ?error(?autoformat_with_msg("Unable to send message via socket", [
+                        Socket, Error, MsgStr
+                    ]))),
                     Error
             end
     end.
@@ -999,7 +1004,7 @@ call_connection_process(ConnPid, Msg) ->
         Class:Reason:Stacktrace ->
             MsgStr = maybe_stringify_msg(Msg),
             ?error_exception(
-                "Cannot send message via the connection process~ts", [?autoformat(ConnPid, MsgStr)],
+                ?autoformat_with_msg("Cannot send message via the connection process", [ConnPid, MsgStr]),
                 Class, Reason, Stacktrace
             ),
             {error, Reason}

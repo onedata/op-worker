@@ -205,7 +205,7 @@ cleanup_opened_files() ->
                     handle_release_of_deleted_file(FileCtx, RemovalStatus)
                 catch
                     Class:Reason:Stacktrace ->
-                        ?warning_exception(?autoformat([FileUuid, RemovalStatus]), Class, Reason, Stacktrace)
+                        ?warning_exception(?autoformat(FileUuid, RemovalStatus), Class, Reason, Stacktrace)
                 end
             end, RemovedUuidsWithStatus),
 
@@ -730,7 +730,7 @@ log_storage_file_deletion_error(FileCtx, ErrorDetails) ->
     Args = [StorageFileId, StorageId, FileGuid],
     case ErrorDetails of
         {error, _} ->
-            ?error(Format ++ "~ts", Args ++ [?autoformat([ErrorDetails])]);
+            ?error(?autoformat_with_msg(Format, Args, ErrorDetails));
         {Class, Reason, Stacktrace} ->
             ?error_exception(Format, Args, Class, Reason, Stacktrace)
     end.

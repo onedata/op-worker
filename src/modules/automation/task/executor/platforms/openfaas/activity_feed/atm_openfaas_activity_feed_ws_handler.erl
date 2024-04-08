@@ -201,7 +201,7 @@ handle_text_message(Payload, #state{handler_module = HandlerModule, handler_stat
         handle_activity_report(ActivityReport, State)
     catch Class:Reason:Stacktrace ->
         PayloadSample = str_utils:truncate_overflow(Payload, ?MAX_LOGGED_REQUEST_SIZE),
-        ?error_exception(?autoformat([PayloadSample]), Class, Reason, Stacktrace),
+        ?error_exception(?autoformat(PayloadSample), Class, Reason, Stacktrace),
         HandlerModule:handle_error(self(), ?ERROR_BAD_MESSAGE(PayloadSample), HandlerState),
         {reply, [{text, <<"Bad request: ", Payload/binary>>}], State}
     end.
@@ -227,7 +227,7 @@ handle_activity_report(ActivityReport, #state{handler_module = HandlerModule, ha
                 {reply, ReplyFrames, State#state{handler_state = FinalHandlerState}}
         end
     catch Class:Reason:Stacktrace ->
-        ?error_exception(?autoformat([HandlerModule, ActivityReport, HandlerState]), Class, Reason, Stacktrace),
+        ?error_exception(?autoformat(HandlerModule, ActivityReport, HandlerState), Class, Reason, Stacktrace),
         HandlerModule:handle_error(self(), ?ERROR_INTERNAL_SERVER_ERROR, HandlerState),
         {reply, [{text, <<"Internal server error while processing the request">>}], State}
     end.

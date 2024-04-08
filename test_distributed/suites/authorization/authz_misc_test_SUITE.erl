@@ -160,8 +160,8 @@ run_multi_provider_perm_test(AssertNodes, User, Guid, PermsSet, TestedPerms, Exp
                 ?assertEqual(ExpResult, check_perms(Node, User, Guid, [TestedPerm]), ?ATTEMPTS)
             catch Class:Reason:Stacktrace ->
                 ?ct_pal_exception(
-                    "Multi provider permission cache test case failure ~ts",
-                    [?autoformat(Scenario, Node, PermsSet, TestedPerm)],
+                    ?info(?autoformat_with_msg("Multi provider permission cache test case failure",
+                    [Scenario, Node, PermsSet, TestedPerm])),
                     Class, Reason, Stacktrace
                 ),
                 error(assert_multi_provider_perms_cache_failed)

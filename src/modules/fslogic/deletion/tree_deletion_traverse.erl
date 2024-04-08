@@ -179,8 +179,8 @@ do_master_job(Job = #tree_traverse{
         {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error_exception("Error when listing directory during tree deletion: ~ts",
-                [?autoformat([FileUuid])], error, Reason, Stacktrace),
+            ?error_exception(?autoformat_with_msg("Error when listing directory during tree deletion:",
+                FileUuid), error, Reason, Stacktrace),
             tree_traverse_progress:delete(TaskId, FileUuid),
             tree_traverse:cancel(?POOL_NAME, TaskId),
             traverse_task:update_additional_data(traverse_task:get_ctx(), ?POOL_NAME, TaskId, fun(AdditionalData) ->

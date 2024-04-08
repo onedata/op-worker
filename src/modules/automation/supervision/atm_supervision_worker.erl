@@ -89,10 +89,9 @@ try_to_gracefully_stop_atm_workflow_executions() ->
                     stop_atm_workflow_executions(RootUserCtx, SpaceIds, interrupt)
             end;
         {error, _} = Error ->
-            ?warning(
-                "Skipping automation workflow executions graceful stop procedure:~ts",
-                [?autoformat([Error])]
-            )
+            ?warning(?autoformat_with_msg(
+                "Skipping automation workflow executions graceful stop procedure:", Error
+            ))
     end.
 
 
