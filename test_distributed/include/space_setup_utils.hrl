@@ -12,6 +12,15 @@
 -ifndef(STORAGE_IMPORT_HRL).
 
 
+-record(s3_storage_params, {
+    hostname :: binary(),
+    bucket_name :: binary(),
+    block_size = 10485760 :: integer(),
+    storage_path_type = <<"flat">> :: binary(),
+    imported_storage = false :: boolean()
+}).
+
+
 -record(posix_storage_params, {
     mount_point :: binary(),
     imported_storage = false :: boolean()
@@ -19,7 +28,8 @@
 
 -record(support_spec, {
     provider :: oct_background:entity_selector(),
-    storage_spec :: space_setup_utils:posix_storage_params() | storage:id(),
+    storage_spec :: space_setup_utils:posix_storage_params() | space_setup_utils:s3_storage_params()
+    | storage:id(),
     size :: integer()
 }).
 

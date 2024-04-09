@@ -14,11 +14,12 @@
 -include_lib("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
+-type s3_storage_params() :: #s3_storage_params{}.
 -type posix_storage_params() :: #posix_storage_params{}.
 -type support_spec() :: #support_spec{}.
 -type space_spec() :: #space_spec{}.
 
--export_type([posix_storage_params/0, support_spec/0]).
+-export_type([posix_storage_params/0, s3_storage_params/0, support_spec/0]).
 
 %% API
 -export([create_storage/2, set_up_space/1]).
@@ -29,7 +30,22 @@
 %%%===================================================================
 
 
--spec create_storage(oct_background:node_selector(), posix_storage_params()) -> od_storage:id().
+-spec create_storage(oct_background:node_selector(), s3_storage_params() | posix_storage_params())
+        -> od_storage:id().
+create_storage(Provider, #s3_storage_params{hostname = Hostname, bucket_name = BucketName,
+    block_size = BlockSize, storage_path_type = StoragePathType, imported_storage = Imported}) ->
+    panel_test_rpc:add_storage(Provider,
+        #{?RAND_STR() => #{
+            <<"type">> => <<"s3">>,
+            <<"accessKey">> => <<"accessKey">>,
+            <<"secretKey">> => <<"verySecretKey">>,
+            <<"hostname">> => Hostname,
+            <<"bucketName">> => BucketName,
+            <<"blockSize">> => BlockSize,
+            <<"storagePathType">> => StoragePathType,
+            <<"importedStorage">> => Imported
+        }}
+    );
 create_storage(Provider, #posix_storage_params{mount_point = MountPoint, imported_storage = Imported}) ->
     ?assertMatch(ok, opw_test_rpc:call(Provider, filelib, ensure_path, [MountPoint])),
     panel_test_rpc:add_storage(Provider,
@@ -56,7 +72,6 @@ set_up_space(SpaceSpec = #space_spec{
 
     add_users_to_space(Users, SpaceId),
     force_fetch_entities(SpaceId, SpaceSpec),
-
     SpaceId.
 
 
@@ -98,3 +113,8 @@ force_fetch_entities(SpaceId, #space_spec{
         UserId = oct_background:get_user_id(User),
         opt:force_fetch_entity(od_user, UserId)
     end, [OwnerSelector | Users]).
+
+
+
+%%storagePathType: canonical
+%%importedStorage: true
