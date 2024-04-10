@@ -11,8 +11,8 @@
 -author("Katarzyna Such").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("space_setup_utils.hrl").
 
 -type s3_storage_params() :: #s3_storage_params{}.
 -type posix_storage_params() :: #posix_storage_params{}.
@@ -32,18 +32,20 @@
 
 -spec create_storage(oct_background:node_selector(), s3_storage_params() | posix_storage_params())
         -> od_storage:id().
-create_storage(Provider, #s3_storage_params{hostname = Hostname, bucket_name = BucketName,
-    block_size = BlockSize, storage_path_type = StoragePathType, imported_storage = Imported}) ->
+create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
+    imported_storage = Imported, hostname = Hostname, bucket_name = BucketName,
+    access_key = AccessKey, secret_key = SecretKey,block_size = BlockSize
+}) ->
     panel_test_rpc:add_storage(Provider,
         #{?RAND_STR() => #{
             <<"type">> => <<"s3">>,
-            <<"accessKey">> => <<"accessKey">>,
-            <<"secretKey">> => <<"verySecretKey">>,
+            <<"storagePathType">> => StoragePathType,
+            <<"importedStorage">> => Imported,
             <<"hostname">> => Hostname,
             <<"bucketName">> => BucketName,
-            <<"blockSize">> => BlockSize,
-            <<"storagePathType">> => StoragePathType,
-            <<"importedStorage">> => Imported
+            <<"accessKey">> => AccessKey,
+            <<"secretKey">> => SecretKey,
+            <<"blockSize">> => BlockSize
         }}
     );
 create_storage(Provider, #posix_storage_params{mount_point = MountPoint, imported_storage = Imported}) ->
@@ -108,9 +110,7 @@ force_fetch_entities(SpaceId, #space_spec{
     users = Users,
     supports = Supports
 }) ->
-    ProviderSelectors = lists:map(fun(#support_spec{
-        provider = ProviderSelector
-    }) -> ProviderSelector end, Supports),
+    ProviderSelectors = lists:map(fun(SupportSpec) -> SupportSpec#support_spec.provider end, Supports),
     opt:force_fetch_entity(od_space, SpaceId, ProviderSelectors),
     lists:foreach(fun(User) ->
         UserId = oct_background:get_user_id(User),

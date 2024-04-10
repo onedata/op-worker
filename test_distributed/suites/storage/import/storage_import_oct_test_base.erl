@@ -296,14 +296,23 @@ create_storage(posix, ProviderSelector, IsImported) ->
         mount_point = <<"/mnt/st_", (generator:gen_name())/binary>>,
         imported_storage = IsImported
     });
-create_storage(s3, ProviderSelector, IsImported) ->
-    HostName = <<"dev-volume-s3-", (atom_to_binary(ProviderSelector))/binary, ".default:9000">>,
+create_storage(s3, ProviderSelector, true) ->
+    HostName = <<"dev-volume-s3-",
+        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
+        ".default:9000"
+    >>,
     space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
+        storage_path_type = <<"canonical">>,
+        imported_storage = true,
         hostname = HostName,
         bucket_name = <<"test">>,
-        storage_path_type = <<"canonical">>,
-        block_size = 0,
-        imported_storage = IsImported
+        block_size = 0
+    });
+create_storage(s3, ProviderSelector, false) ->
+    HostName = <<"dev-volume-s3-", (atom_to_binary(ProviderSelector))/binary, ".default:9000">>,
+    space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
+        storage_path_type = <<"flat">>,
+        hostname = HostName
     }).
 
 

@@ -9,36 +9,16 @@ sourcesRoot: ".."
 # On bamboo all required sources will be pulled automatically.
 # NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources
 # (by default cluster_manager provided as op_worker dependency will be used).
-sources:
-  onezone:
-    node-1:
-      - oz-panel
-      - oz-worker
-      - cluster-manager
-  oneprovider-1:
-    node-1:
-      - op-panel
-      - op-worker
-      - cluster-manager
-  oneprovider-2:
-    node-1:
-      - op-panel
-      - op-worker
-      - cluster-manager
+sources: true
 
 users:
-  - &user1
-    name: user1
-    password: password
-  - &user2
-    name: user2
+  - &space_owner
+    name: space_owner
     password: password
 
 spaces:
   - name: space1
-    user: *user1
-    users:
-      - user: *user2
+    user: *space_owner
     supports:
       - provider: "oneprovider-1"
         storage_name: "ImportedNullStorage"
@@ -47,9 +27,7 @@ spaces:
         storage_name: "IdealNullStorage"
         size: '1000000000'
   - name: space_krk_par_p
-    user: *user1
-    users:
-      - user: *user2
+    user: *space_owner
     supports:
       - provider: "oneprovider-1"
         storage_name: "s3"

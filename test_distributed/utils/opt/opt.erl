@@ -32,17 +32,10 @@
 
 -spec force_fetch_entity(entity(), binary()) -> ok.
 force_fetch_entity(Entity, Id) ->
-    GRI = #gri{type = Entity, id = Id, aspect = instance},
-
-    lists:foreach(fun(ProviderId) ->
-        SessionId = get_session_id_required_to_force_fetch_entity(Entity, Id, ProviderId),
-        ?assertMatch({ok, _}, opw_test_rpc:call(ProviderId, gs_client_worker, force_fetch_entity, [
-            SessionId, GRI
-        ]))
-    end, oct_background:get_provider_ids()).
+    force_fetch_entity(Entity, Id, oct_background:get_provider_ids()).
 
 
--spec force_fetch_entity(entity(), binary(), list()) -> ok.
+-spec force_fetch_entity(entity(), binary(), [oct_background:entity_selector()]) -> ok.
 force_fetch_entity(Entity, Id, ProviderSelectors) ->
     GRI = #gri{type = Entity, id = Id, aspect = instance},
     lists:foreach(fun(ProviderSelector) ->

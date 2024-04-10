@@ -34,7 +34,7 @@ all() -> [
     storage_type = s3,
     importing_provider_selector = krakow,
     non_importing_provider_selector = paris,
-    space_owner_selector = user1
+    space_owner_selector = space_owner
 }).
 -define(run_test(), storage_import_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
