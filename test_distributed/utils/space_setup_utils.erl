@@ -34,7 +34,7 @@
         -> od_storage:id().
 create_storage(Provider, #s3_storage_params{storage_path_type = StoragePathType,
     imported_storage = Imported, hostname = Hostname, bucket_name = BucketName,
-    access_key = AccessKey, secret_key = SecretKey,block_size = BlockSize
+    access_key = AccessKey, secret_key = SecretKey, block_size = BlockSize
 }) ->
     panel_test_rpc:add_storage(Provider,
         #{?RAND_STR() => #{

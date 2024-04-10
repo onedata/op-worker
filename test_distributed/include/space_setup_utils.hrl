@@ -21,7 +21,6 @@
     access_key = ?S3_KEY_ID :: binary(),
     secret_key = ?S3_ACCESS_KEY :: binary(),
     block_size = ?S3_DEFAULT_BLOCK_SIZE :: integer()
-
 }).
 
 

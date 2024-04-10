@@ -297,23 +297,27 @@ create_storage(posix, ProviderSelector, IsImported) ->
         imported_storage = IsImported
     });
 create_storage(s3, ProviderSelector, true) ->
-    HostName = <<"dev-volume-s3-",
-        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
-        ".default:9000"
-    >>,
     space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
         storage_path_type = <<"canonical">>,
         imported_storage = true,
-        hostname = HostName,
+        hostname = get_hostname_with_provider_selector(ProviderSelector),
         bucket_name = <<"test">>,
         block_size = 0
     });
 create_storage(s3, ProviderSelector, false) ->
-    HostName = <<"dev-volume-s3-", (atom_to_binary(ProviderSelector))/binary, ".default:9000">>,
     space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
         storage_path_type = <<"flat">>,
-        hostname = HostName
+        hostname = get_hostname_with_provider_selector(ProviderSelector)
     }).
+
+
+%% @private
+get_hostname_with_provider_selector(ProviderSelector) ->
+    <<
+        "dev-volume-s3-",
+        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
+        ".default:9000"
+    >>.
 
 
 %% @private

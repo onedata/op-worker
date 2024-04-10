@@ -17,15 +17,6 @@ users:
     password: password
 
 spaces:
-  - name: space1
-    user: *space_owner
-    supports:
-      - provider: "oneprovider-1"
-        storage_name: "ImportedNullStorage"
-        size: '1000000000'
-      - provider: "oneprovider-2"
-        storage_name: "IdealNullStorage"
-        size: '1000000000'
   - name: space_krk_par_p
     user: *space_owner
     supports:
