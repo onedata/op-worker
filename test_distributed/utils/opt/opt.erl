@@ -20,6 +20,7 @@
 
 -export([
     force_fetch_entity/2,
+    force_fetch_entity/3,
     invalidate_cache/2
 ]).
 
@@ -39,6 +40,17 @@ force_fetch_entity(Entity, Id) ->
             SessionId, GRI
         ]))
     end, oct_background:get_provider_ids()).
+
+
+-spec force_fetch_entity(entity(), binary(), list()) -> ok.
+force_fetch_entity(Entity, Id, ProviderSelectors) ->
+    GRI = #gri{type = Entity, id = Id, aspect = instance},
+    lists:foreach(fun(ProviderSelector) ->
+        SessionId = get_session_id_required_to_force_fetch_entity(Entity, Id, ProviderSelector),
+        ?assertMatch({ok, _}, opw_test_rpc:call(ProviderSelector, gs_client_worker, force_fetch_entity, [
+            SessionId, GRI
+        ]))
+    end, ProviderSelectors).
 
 
 -spec invalidate_cache(gs_protocol:entity_type(), binary()) -> ok.

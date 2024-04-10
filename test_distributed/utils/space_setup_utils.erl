@@ -105,16 +105,14 @@ add_users_to_space(Users, SpaceId) ->
 -spec force_fetch_entities(od_space:id(), space_spec()) -> ok.
 force_fetch_entities(SpaceId, #space_spec{
     owner = OwnerSelector,
-    users = Users
+    users = Users,
+    supports = Supports
 }) ->
-    opt:force_fetch_entity(od_space, SpaceId),
-
+    ProviderSelectors = lists:map(fun(#support_spec{
+        provider = ProviderSelector
+    }) -> ProviderSelector end, Supports),
+    opt:force_fetch_entity(od_space, SpaceId, ProviderSelectors),
     lists:foreach(fun(User) ->
         UserId = oct_background:get_user_id(User),
-        opt:force_fetch_entity(od_user, UserId)
+        opt:force_fetch_entity(od_user, UserId, ProviderSelectors)
     end, [OwnerSelector | Users]).
-
-
-
-%%storagePathType: canonical
-%%importedStorage: true
