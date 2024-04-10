@@ -98,7 +98,7 @@ subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWo
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     EventProducingWorkerSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(EventProducingWorker)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, SpaceName),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, SpaceName),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(EventProducingWorker, <<"0">>, SpaceGuid,
         generator:gen_name(), ?DEFAULT_DIR_PERMS)),
@@ -162,7 +162,7 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
@@ -199,7 +199,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {DomainUser, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name", SpaceNum/binary>>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name", SpaceNum/binary>>),
     SpaceDirUuid = file_id:guid_to_uuid(SpaceGuid),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
@@ -231,7 +231,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 events_on_conflicts_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
@@ -288,7 +288,7 @@ subscribe_on_replication_info_test(Config) ->
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
     Filename = generator:gen_name(),
@@ -368,7 +368,7 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     SessionIdWorker2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name2">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name2">>),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
     Filename = generator:gen_name(),
@@ -452,7 +452,7 @@ events_for_hardlinks_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
@@ -515,7 +515,7 @@ attr_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file and link
@@ -589,7 +589,7 @@ location_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
@@ -621,7 +621,7 @@ remove_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
@@ -655,7 +655,7 @@ rename_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
@@ -699,7 +699,7 @@ proxy_connection_error_test(Config) ->
     SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId1, <<"/space_name4">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId1, <<"/space_name4">>),
     {ok, {Sock1, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId1, AccessToken),
     {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker2, [{active, true}], SessionId2, AccessToken),
 

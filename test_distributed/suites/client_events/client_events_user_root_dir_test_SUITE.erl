@@ -365,7 +365,7 @@ setup_client_connection(ClientProvider) ->
     {ok, {Sock, ConnSessId}} = fuse_test_utils:connect_via_token(oct_background:get_random_provider_node(ClientProvider),
         [{active, true}], GetSessionId(ClientProvider), oct_background:get_user_access_token(?CLIENT_USER)),
     UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
-    client_simulation_test_base:create_new_file_subscriptions(Sock, UserRootDirGuid, 0),
+    client_simulation_test_utils:create_new_file_subscriptions(Sock, UserRootDirGuid, 0),
     lists:foreach(fun(Sub) ->
         assert_subscribed(ClientProvider, ConnSessId, Sub)
     end, [
@@ -541,7 +541,7 @@ end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config),
     ssl:close(get(conn)),
     clean_message_queue(),
-    client_simulation_test_base:reset_sequence_counter(),
+    client_simulation_test_utils:reset_sequence_counter(),
     test_utils:mock_unload(Nodes).
 
 

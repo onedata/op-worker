@@ -115,85 +115,6 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-
--spec map_sessions_to_managers([session:id()], [pid()]) -> #{session:id() => pid()}.
-map_sessions_to_managers(SessionIds, ExcludedManagers) ->
-    lists:foldl(fun(SessionId, Acc) ->
-        case get_event_manager(SessionId) of
-            {ok, Mgr} ->
-                case lists:member(Mgr, ExcludedManagers) of
-                    true ->
-                        Acc;
-                    false ->
-                        Acc#{SessionId => Mgr}
-                end;
-            {error, _} ->
-                Acc
-        end
-    end, #{}, SessionIds).
-
-
--spec emit_for_file_links(base() | aggregated() | type(), subscription_manager:event_subscribers()) -> ok.
-emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLinks}) ->
-    lists:foreach(fun({Context, AdditionalSessIds}) ->
-        try
-            emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
-        catch
-            Class:Reason:Stacktrace ->
-                % Race with file/link deletion can result in error logged here
-                ?warning_exception("Error emitting event for additional guid ~s",
-                    [?autoformat([Context, Evt])], Class, Reason, Stacktrace)
-        end
-    end, SessIdsForLinks).
-
-
--spec extend_event_for_space_dir(base() | aggregated() | type(), [session:id()]) -> #{type() => [session:id()]}.
-extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid = Guid} = Attr} = Evt, SessionIds) ->
-    case fslogic_file_id:is_space_dir_guid(Guid) of
-        true ->
-            SpaceId = file_id:guid_to_space_id(Guid),
-            lists:foldl(fun(SessionId, Acc) ->
-                % file_attr can contain invalid values when fetched with root sess id for space dir. Fill proper values here.
-                case get_space_dir_event_details(SpaceId, SessionId) of
-                    {ok, Name, UserRootDirGuid} ->
-                        FilledAttr = Attr#file_attr{name = Name, parent_guid = UserRootDirGuid},
-                        FinalEvent = Evt#file_attr_changed_event{file_attr = FilledAttr},
-                        Acc#{FinalEvent => [SessionId | maps:get(FinalEvent, Acc, [])]};
-                    not_applicable ->
-                        Acc
-                end
-            end, #{}, SessionIds);
-        false ->
-            #{Evt => SessionIds}
-    end;
-extend_event_for_space_dir(#event{type = Type}, SessionIds) ->
-    extend_event_for_space_dir(Type, SessionIds);
-extend_event_for_space_dir({aggregated, Evts}, SessionIds) ->
-    lists:foldl(fun(Evt, Acc) ->
-        maps:merge(Acc, extend_event_for_space_dir(Evt, SessionIds))
-    end, #{}, Evts);
-extend_event_for_space_dir(Evt, SessionIds) ->
-    #{Evt => SessionIds}.
-
-
--spec get_space_dir_event_details(od_space:id(), session:id()) ->
-    {ok, file_meta:name(), file_id:file_guid()} | not_applicable.
-get_space_dir_event_details(SpaceId, SessionId) ->
-    case space_logic:get_protected_data(SessionId, SpaceId) of
-        {ok, #document{value = #od_space{name = Name, providers = Providers}}} when map_size(Providers) > 0 ->
-            case session:get_user_id(SessionId) of
-                {ok, UserId} ->
-                    {FinalName, _} = user_root_dir:get_space_name_and_conflicts(SessionId, UserId, Name, SpaceId),
-                    {ok, FinalName, fslogic_file_id:user_root_dir_guid(UserId)};
-                {error, not_found} ->
-                    not_applicable
-            end;
-        {ok, #document{value = #od_space{providers = Providers}}} when map_size(Providers) == 0 ->
-            not_applicable;
-        ?ERROR_FORBIDDEN ->
-            not_applicable
-    end.
     
 
 %%--------------------------------------------------------------------
@@ -373,4 +294,87 @@ send_to_event_manager(Manager, Message, RetryCounter) ->
         Reason1:Reason2:Stacktrace ->
             ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}], Stacktrace),
             send_to_event_manager(Manager, Message, RetryCounter - 1)
+    end.
+
+
+%% @private
+-spec map_sessions_to_managers([session:id()], [pid()]) -> #{session:id() => pid()}.
+map_sessions_to_managers(SessionIds, ExcludedManagers) ->
+    lists:foldl(fun(SessionId, Acc) ->
+        case get_event_manager(SessionId) of
+            {ok, Mgr} ->
+                case lists:member(Mgr, ExcludedManagers) of
+                    true ->
+                        Acc;
+                    false ->
+                        Acc#{SessionId => Mgr}
+                end;
+            {error, _} ->
+                Acc
+        end
+    end, #{}, SessionIds).
+
+
+%% @private
+-spec emit_for_file_links(base() | aggregated() | type(), subscription_manager:event_subscribers()) -> ok.
+emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLinks}) ->
+    lists:foreach(fun({Context, AdditionalSessIds}) ->
+        try
+            emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
+        catch
+            Class:Reason:Stacktrace ->
+                % Race with file/link deletion can result in error logged here
+                ?warning_exception("Error emitting event for additional guid ~s",
+                    [?autoformat([Context, Evt])], Class, Reason, Stacktrace)
+        end
+    end, SessIdsForLinks).
+
+
+%% @private
+-spec extend_event_for_space_dir(base() | aggregated() | type(), [session:id()]) -> #{type() => [session:id()]}.
+extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid = Guid} = Attr} = Evt, SessionIds) ->
+    case fslogic_file_id:is_space_dir_guid(Guid) of
+        true ->
+            SpaceId = file_id:guid_to_space_id(Guid),
+            lists:foldl(fun(SessionId, Acc) ->
+                % file_attr can contain invalid values when fetched with root sess id for space dir. Fill proper values here.
+                case get_space_dir_event_details(SpaceId, SessionId) of
+                    {ok, Name, UserRootDirGuid} ->
+                        FilledAttr = Attr#file_attr{name = Name, parent_guid = UserRootDirGuid},
+                        FinalEvent = Evt#file_attr_changed_event{file_attr = FilledAttr},
+                        Acc#{FinalEvent => [SessionId | maps:get(FinalEvent, Acc, [])]};
+                    not_applicable ->
+                        Acc
+                end
+            end, #{}, SessionIds);
+        false ->
+            #{Evt => SessionIds}
+    end;
+extend_event_for_space_dir(#event{type = Type}, SessionIds) ->
+    extend_event_for_space_dir(Type, SessionIds);
+extend_event_for_space_dir({aggregated, Evts}, SessionIds) ->
+    lists:foldl(fun(Evt, Acc) ->
+        maps:merge(Acc, extend_event_for_space_dir(Evt, SessionIds))
+    end, #{}, Evts);
+extend_event_for_space_dir(Evt, SessionIds) ->
+    #{Evt => SessionIds}.
+
+
+%% @private
+-spec get_space_dir_event_details(od_space:id(), session:id()) ->
+    {ok, file_meta:name(), file_id:file_guid()} | not_applicable.
+get_space_dir_event_details(SpaceId, SessionId) ->
+    case space_logic:get_protected_data(SessionId, SpaceId) of
+        {ok, #document{value = #od_space{name = Name, providers = Providers}}} when map_size(Providers) > 0 ->
+            case session:get_user_id(SessionId) of
+                {ok, UserId} ->
+                    {FinalName, _} = user_root_dir:get_space_name_and_conflicts(SessionId, UserId, Name, SpaceId),
+                    {ok, FinalName, fslogic_file_id:user_root_dir_guid(UserId)};
+                {error, not_found} ->
+                    not_applicable
+            end;
+        {ok, #document{value = #od_space{providers = Providers}}} when map_size(Providers) == 0 ->
+            not_applicable;
+        ?ERROR_FORBIDDEN ->
+            not_applicable
     end.

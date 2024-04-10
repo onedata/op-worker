@@ -5,10 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module provides base for testing cleanup of memory pools
+%%% @doc This module provides utils for testing oneclient related functionality.
 %%% @end
 %%%--------------------------------------------------------------------
--module(client_simulation_test_base).
+-module(client_simulation_test_utils).
 -author("Michal Wrzeszcz").
 
 -include("fuse_test_utils.hrl").
@@ -32,9 +32,8 @@
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
 
 
--define(SEQ_COUNTER_KEY, client_simulation_test_base_seq_id).
-% Event sequence ids must be monotonic integers and start from 0
--define(SeqID(), element(2, node_cache:update(?SEQ_COUNTER_KEY, fun(PrevValue) -> {ok, PrevValue + 1, infinity} end, -1))).
+-define(SEQ_COUNTER_KEY, client_simulation_test_utils_seq_id).
+-define(SeqID(), get_seq_id()).
 
 %%%===================================================================
 %%% API
@@ -210,6 +209,13 @@ cancel_subscriptions(Sock, StreamId, Subs) ->
         ok = ssl:send(Sock, fuse_test_utils:generate_subscription_cancellation_message(StreamId, ?SeqID(), SubId))
     end, Subs).
 
+% Event sequence ids must be monotonic integers and start from 0
+get_seq_id() ->
+    {ok, Seq} = node_cache:update(?SEQ_COUNTER_KEY, fun(PrevValue) ->
+        {ok, PrevValue + 1, infinity}
+    end, -1),
+    Seq.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -235,6 +241,6 @@ init_per_testcase(Config) ->
 end_per_testcase(Config) ->
     lfm_proxy:teardown(Config),
     ssl:stop(),
-    client_simulation_test_base:reset_sequence_counter(),
+    client_simulation_test_utils:reset_sequence_counter(),
     initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).

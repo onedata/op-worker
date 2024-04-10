@@ -924,7 +924,7 @@ client_events_user_root_dir:
   key: EVENTSUSERDIR
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_client_user_root_dir_events.tar.gz
+      name: ct_logs_client_events_user_root_dir.tar.gz
 
 cluster_upgrade:
   <<: *ct-job
@@ -1912,7 +1912,7 @@ Coverage report:
     - artifact: ct_logs_ceph_helper.tar.gz
     - artifact: ct_logs_cephrados_helper.tar.gz
     - artifact: ct_logs_client_events.tar.gz
-    - artifact: ct_logs_client_user_root_dir_events.tar.gz
+    - artifact: ct_logs_client_events_user_root_dir.tar.gz
     - artifact: ct_logs_cluster_upgrade.tar.gz
     - artifact: ct_logs_connection.tar.gz
     - artifact: ct_logs_connection_layer.tar.gz
