@@ -23,18 +23,18 @@
 %%% API
 %%%===================================================================
 
--spec build_attributes_param_spec(middleware:scope(), file_attr_translator:attr_type() | deprecated_recursive, binary()) ->
+-spec build_attributes_param_spec(middleware:scope(), onedata_file:attr_generation() | deprecated_recursive, binary()) ->
     middleware_sanitizer:param_spec().
-build_attributes_param_spec(public, current = AttrType, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrType, ?PUBLIC_API_ATTRS)};
-build_attributes_param_spec(private, current = AttrType, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrType, ?API_ATTRS)};
-build_attributes_param_spec(public, deprecated = AttrType, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrType, ?DEPRECATED_PUBLIC_ATTRS)};
-build_attributes_param_spec(private, deprecated = AttrType, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, AttrType, ?DEPRECATED_ALL_ATTRS)};
+build_attributes_param_spec(public, current = AttrGeneration, Key) ->
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?PUBLIC_API_FILE_ATTRS)};
+build_attributes_param_spec(private, current = AttrGeneration, Key) ->
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?API_FILE_ATTRS)};
+build_attributes_param_spec(public, deprecated = AttrGeneration, Key) ->
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_PUBLIC_FILE_ATTRS)};
+build_attributes_param_spec(private, deprecated = AttrGeneration, Key) ->
+    {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_ALL_FILE_ATTRS)};
 build_attributes_param_spec(private, deprecated_recursive, Key) ->
-    {any, build_parse_requested_attrs_fun(Key, deprecated, [path | ?DEPRECATED_ALL_ATTRS])}.
+    {any, build_parse_requested_attrs_fun(Key, deprecated, [path | ?DEPRECATED_ALL_FILE_ATTRS])}.
 
 
 %%%===================================================================
@@ -42,12 +42,9 @@ build_attributes_param_spec(private, deprecated_recursive, Key) ->
 %%%===================================================================
 
 %% @private
--spec build_parse_requested_attrs_fun(binary(), file_attr_translator:attr_type(), [file_attr:attribute()]) ->
-    fun((binary() | [binary()]) -> {true, [atom()]} | no_return()).
-build_parse_requested_attrs_fun(Key, AttrType, AllowedValues) ->
-    fun(Attributes) ->
-        case file_attr_translator:sanitize_requested_attrs(Attributes, AttrType, AllowedValues) of
-            {ok, FinalAttrs} -> {true, FinalAttrs};
-            {error, AllowedValuesJson} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValuesJson))
-        end
+-spec build_parse_requested_attrs_fun(binary(), onedata_file:attr_generation(), [onedata_file:attr_name()]) ->
+    fun((binary() | [binary()]) -> {true, [onedata_file:attr_name()]} | no_return()).
+build_parse_requested_attrs_fun(Key, AttrGeneration, AllowedValues) ->
+    fun(AttrNames) ->
+        {true, onedata_file:sanitize_attr_names(Key, AttrNames, AttrGeneration, AllowedValues)}
     end.

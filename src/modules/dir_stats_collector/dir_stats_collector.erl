@@ -315,7 +315,7 @@ initialize_collections(Guid) ->
     call_designated_node(Guid, submit_and_await, [?MODULE, Guid, ?INITIALIZE_COLLECTIONS(Guid, self())]).
 
 
--spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
+-spec report_file_moved(onedata_file:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
 report_file_moved(?DIRECTORY_TYPE, FileGuid, _SourceParentGuid, TargetParentGuid) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
         true ->

@@ -21,8 +21,6 @@
 %% tests
 -export([
     % tests of import
-    empty_import_test/1,
-    create_directory_import_test/1,
     create_directory_import_error_test/1,
     create_directory_import_check_user_id_test/1,
     create_directory_import_check_user_id_error_test/1,
@@ -79,8 +77,6 @@
 
 -define(TEST_CASES, [
     % tests of import
-    empty_import_test,
-    create_directory_import_test,
     create_directory_import_error_test,
     create_directory_import_check_user_id_test,
     create_directory_import_check_user_id_error_test,
@@ -140,12 +136,6 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-empty_import_test(Config) ->
-    storage_import_test_base:empty_import_test(Config).
-
-create_directory_import_test(Config) ->
-    storage_import_test_base:create_directory_import_test(Config).
 
 create_directory_import_error_test(Config) ->
     storage_import_test_base:create_directory_import_error_test(Config).

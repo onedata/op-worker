@@ -472,7 +472,7 @@ get_user_root_dir_children_test(_Config) ->
     #file_attr{}.
 get_space_dir_attrs(Node, SpaceDirGuid) ->
     {ok, SpaceAttr} = ?assertMatch(
-        {ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), ?API_ATTRS), ?ATTEMPTS
+        {ok, _}, lfm_proxy:stat(Node, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), ?API_FILE_ATTRS), ?ATTEMPTS
     ),
     SpaceAttr#file_attr{parent_guid = undefined}.
 
@@ -532,9 +532,9 @@ get_children_data_spec(Api, Scope) ->
 -spec get_children_data_spec(gs | rest, public | private, boolean()) -> onenv_api_test_runner:data_spec().
 get_children_data_spec(gs, Scope, _IsSpace) ->
     CorrectValuesAttributes = case Scope of
-        public -> [file_attr_translator:attr_name_to_json(A) || A <- ?PUBLIC_API_ATTRS];
+        public -> [onedata_file:attr_name_to_json(A) || A <- ?PUBLIC_API_FILE_ATTRS];
         % do not check acl as it messes with privileges
-        private -> [file_attr_translator:attr_name_to_json(A) || A <- ?API_ATTRS] -- [<<"acl">>]
+        private -> [onedata_file:attr_name_to_json(A) || A <- ?API_FILE_ATTRS] -- [<<"acl">>]
     end,
     #data_spec{
         optional = [<<"limit">>, <<"offset">>, <<"attributes">>],
@@ -553,10 +553,10 @@ get_children_data_spec(gs, Scope, _IsSpace) ->
     };
 get_children_data_spec(rest, Scope, IsSpace) ->
     AllowedAttrs = case Scope of
-        public -> ?PUBLIC_API_ATTRS;
-        private -> ?API_ATTRS
+        public -> ?PUBLIC_API_FILE_ATTRS;
+        private -> ?API_FILE_ATTRS
     end,
-    AllowedAttrsJson = [file_attr_translator:attr_name_to_json(A) || A <- AllowedAttrs] ++ [<<"xattr.*">>],
+    AllowedAttrsJson = [onedata_file:attr_name_to_json(A) || A <- AllowedAttrs] ++ [<<"xattr.*">>],
     % do not check acl, as it messes with privileges
     AttributesCorrectValues = lists_utils:random_sublist(AllowedAttrsJson -- [<<"acl">>, <<"xattr.*">>]),
     % do not check localReplicationRate for space dirs as it might be difficult to determine actual correct value

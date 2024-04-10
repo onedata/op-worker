@@ -4,15 +4,17 @@
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions concerning storage import tests.
+%%% Common definitions concerning space setup in tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -ifndef(STORAGE_IMPORT_HRL).
 
 
 -record(posix_storage_params, {
-    mount_point :: binary()
+    mount_point :: binary(),
+    imported_storage = false :: boolean()
 }).
 
 -record(support_spec, {

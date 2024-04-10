@@ -1309,12 +1309,12 @@ assert_not_dir(FileCtx) ->
     end.
 
 
--spec get_type(ctx()) -> {file_meta:type(), ctx()}.
+-spec get_type(ctx()) -> {onedata_file:type(), ctx()}.
 get_type(FileCtx) ->
     get_type(FileCtx, fun file_meta:get_type/1).
 
 
--spec get_effective_type(ctx()) -> {file_meta:type(), ctx()}.
+-spec get_effective_type(ctx()) -> {onedata_file:type(), ctx()}.
 get_effective_type(FileCtx) ->
     get_type(FileCtx, fun file_meta:get_effective_type/1).
 
@@ -1522,7 +1522,7 @@ get_dir_synced_gid_const(FileCtx) ->
     end.
 
 
--spec get_type(ctx(), fun((file_meta:doc()) -> file_meta:type())) -> {file_meta:type(), ctx()}.
+-spec get_type(ctx(), fun((file_meta:doc()) -> onedata_file:type())) -> {onedata_file:type(), ctx()}.
 get_type(FileCtx = #file_ctx{is_dir = true}, _) ->
     {?DIRECTORY_TYPE, FileCtx};
 get_type(FileCtx, FileMetaFun) ->

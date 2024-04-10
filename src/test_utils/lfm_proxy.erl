@@ -152,7 +152,7 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
--spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), [file_attr:attribute()]) ->
+-spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), [onedata_file:attr_name()]) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey, Attributes) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), Attributes)).
@@ -572,7 +572,7 @@ get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_listing:options(), [file_attr:attribute()]) ->
+    file_listing:options(), [onedata_file:attr_name()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts, Attributes) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts, Attributes)).
@@ -589,7 +589,7 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     session:id(),
     lfm:file_key(),
     dir_req:recursive_listing_opts(),
-    [file_attr:attribute()]
+    [onedata_file:attr_name()]
 ) ->
     {ok, [file_attr:record()], [file_meta:path()], recursive_listing:pagination_token()} | lfm:error_reply().
 get_files_recursively(Worker, SessId, FileKey, Options, Attributes) ->
@@ -601,13 +601,13 @@ get_files_recursively(Worker, SessId, FileKey, Options, Attributes) ->
 %%%===================================================================
 
 
--spec get_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), custom_metadata:name()) ->
+-spec get_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), onedata_file:xattr_name()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
     get_xattr(Worker, SessId, FileKey, XattrKey, false).
 
 
--spec get_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), custom_metadata:name(), boolean()) ->
+-spec get_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), onedata_file:xattr_name(), boolean()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey, Inherited) ->
     ?EXEC(Worker, lfm:get_xattr(SessId, uuid_to_file_ref(Worker, FileKey), XattrKey, Inherited)).
@@ -626,14 +626,14 @@ set_xattr(Worker, SessId, FileKey, Xattr, Create, Replace) ->
     ?EXEC(Worker, lfm:set_xattr(SessId, uuid_to_file_ref(Worker, FileKey), Xattr, Create, Replace)).
 
 
--spec remove_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), custom_metadata:name()) ->
+-spec remove_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), onedata_file:xattr_name()) ->
     ok | lfm:error_reply().
 remove_xattr(Worker, SessId, FileKey, XattrKey) ->
     ?EXEC(Worker, lfm:remove_xattr(SessId, uuid_to_file_ref(Worker, FileKey), XattrKey)).
 
 
 -spec list_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), boolean(), boolean()) ->
-    {ok, [custom_metadata:name()]} | lfm:error_reply().
+    {ok, [onedata_file:xattr_name()]} | lfm:error_reply().
 list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_file_ref(Worker, FileKey), Inherited, ShowInternal)).
 

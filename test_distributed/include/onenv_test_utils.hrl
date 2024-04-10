@@ -9,8 +9,6 @@
 %%% Definitions of macros and records used in file tests.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Bartosz Walkowicz").
-
 -ifndef(ONENV_TEST_UTILS_HRL).
 -define(ONENV_TEST_UTILS_HRL, 1).
 
@@ -120,7 +118,7 @@ end)).
 -record(object, {
     guid :: file_id:file_guid(),
     name :: binary(),
-    type :: file_meta:type(),
+    type :: onedata_file:type(),
     mode :: file_meta:mode(),
     shares :: [od_share:id()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_object(),

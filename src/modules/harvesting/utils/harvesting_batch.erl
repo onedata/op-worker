@@ -20,7 +20,7 @@
 %%%      <<"fileId">> => file_id:objectid(),
 %%%      <<"spaceId">> => od_space:id(),
 %%%      <<"fileName">> => file_meta:name(),
-%%%      <<"fileType">> => str_utils:to_binary(file_meta:type()),
+%%%      <<"fileType">> => str_utils:to_binary(onedata_file:type()),
 %%%      <<"datasetId">> => dataset:id(), // optional, passed only if dataset is attached
 %%%      <<"operation">> => ?SUBMIT | ?DELETE,
 %%%      <<"seq">> => couchbase_changes:seq(),

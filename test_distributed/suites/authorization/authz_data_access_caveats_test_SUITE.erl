@@ -733,13 +733,11 @@ init_per_suite(Config) ->
         onenv_scenario = "2op",
         posthook = fun(NewConfig) ->
             % clean space
-            lists:foreach(fun(SpaceSelector) ->
-                {ok, FileEntries} = onenv_file_test_utils:ls(user1, SpaceSelector, 0, 10000),
+            {ok, FileEntries} = onenv_file_test_utils:ls(user1, space_krk_par_p, 0, 10000),
 
-                lists_utils:pforeach(fun({Guid, _}) ->
-                    onenv_file_test_utils:rm_and_sync_file(user1, Guid)
-                end, FileEntries)
-            end, [space1, space_krk_par_p]),
+            lists_utils:pforeach(fun({Guid, _}) ->
+                onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+            end, FileEntries),
 
             NewConfig
         end
