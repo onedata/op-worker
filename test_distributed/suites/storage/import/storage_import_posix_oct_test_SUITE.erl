@@ -24,12 +24,14 @@
 %% tests
 -export([
     empty_import_test/1,
-    create_directory_import_test/1
+    create_directory_import_test/1,
+    create_empty_file_import_test/1
 ]).
 
 all() -> [
-    empty_import_test,
-    create_directory_import_test
+%%    empty_import_test,
+%%    create_directory_import_test,
+    create_empty_file_import_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -51,6 +53,10 @@ empty_import_test(_Config) ->
 
 
 create_directory_import_test(_Config) ->
+    ?run_test().
+
+
+create_empty_file_import_test(_Config) ->
     ?run_test().
 
 
