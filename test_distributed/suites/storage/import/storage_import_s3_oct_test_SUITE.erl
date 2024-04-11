@@ -23,11 +23,17 @@
 
 %% tests
 -export([
-    empty_import_test/1
+    import_empty_storage_test/1,
+    import_empty_file_test/1,
+    import_file_with_content_test/1
 ]).
 
 all() -> [
-    empty_import_test
+    import_empty_storage_test
+%%    TODO VFS-12062 works alone, but after another test or with
+%%    --no_clean option value of <<"modified">> = 1 when expected is 0
+%%    import_empty_file_test,
+%%    import_file_with_content_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -44,7 +50,15 @@ all() -> [
 %%%===================================================================
 
 
-empty_import_test(_Config) ->
+import_empty_storage_test(_Config) ->
+    ?run_test().
+
+
+import_empty_file_test(_Config) ->
+    ?run_test().
+
+
+import_file_with_content_test(_Config) ->
     ?run_test().
 
 
@@ -74,7 +88,7 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    Config.
+    lfm_proxy:init(Config).
 
 
 end_per_testcase(_Case, _Config) ->

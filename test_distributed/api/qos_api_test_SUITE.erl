@@ -963,7 +963,7 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
         {ok, #time_series_slice_get_result{
             slice = #{
                 ?QOS_TOTAL_TIME_SERIES_NAME := #{
-                    ?QOS_MINUTE_METRIC_NAME := [{_, _}]}
+                    ?QOS_MINUTE_METRIC_NAME := [{_, _, _, _, _}]}
             }
         }},
         opw_test_rpc:call(TransferringProvider, qos_transfer_stats, browse, [
