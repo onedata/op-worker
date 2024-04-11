@@ -82,11 +82,6 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    % gs_client requires successful setting of subdomain delegation IPs, but it cannot
-    % be achieved in test environment
-    ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun() ->
-        ok
-    end),
     % mock Onezone version and compatibility registry to be the same as provider's
     ok = test_utils:mock_expect(Nodes, provider_logic, get_service_configuration, fun(onezone) ->
         Resolver = compatibility:build_resolver([node()], []),
