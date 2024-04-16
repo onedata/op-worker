@@ -5,15 +5,15 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests storage import.
+%%% @doc
+%%% This module tests storage import on S3 storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_oct_test_SUITE).
+-module(storage_import_s3_oct_test_SUITE).
 -author("Katarzyna Such").
 
+-include("storage_import_oct_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("space_setup_utils.hrl").
 
 -export([
     all/0,
@@ -23,49 +23,49 @@
 
 %% tests
 -export([
-    create_storage_test/1,
-    set_up_space_test/1
+    empty_import_test/1
 ]).
 
--define(TEST_CASES, [
-    create_storage_test,
-    set_up_space_test
-]).
+all() -> [
+    empty_import_test
+].
 
--define(RANDOM_PROVIDER(), ?RAND_ELEMENT([krakow, paris])).
+-define(SUITE_CTX, #storage_import_test_suite_ctx{
+    storage_type = s3,
+    importing_provider_selector = krakow,
+    non_importing_provider_selector = paris,
+    space_owner_selector = space_owner
+}).
+-define(run_test(), storage_import_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
-all() -> ?ALL(?TEST_CASES).
 
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
 
-create_storage_test(_Config) ->
-    Data =  #posix_storage_params{mount_point = <<"/tmp/a/b/c/d">>},
-    space_setup_utils:create_storage(?RANDOM_PROVIDER(), Data).
 
+empty_import_test(_Config) ->
+    ?run_test().
 
-set_up_space_test(_Config) ->
-    Data = #space_spec{name = space_test, owner = user1, users = [user2],
-        supports = [
-            #support_spec{
-                provider = ?RANDOM_PROVIDER(),
-                storage_spec = #posix_storage_params{mount_point = <<"/tmp/a/b/c">>},
-                size = 1000000
-             }
-    ]},
-    space_setup_utils:set_up_space(Data).
 
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "2op",
+    ModulesToLoad = [?MODULE, sd_test_utils, storage_import_oct_test_base],
+    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+        onenv_scenario = "2op_s3",
         envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60}
-        ]}]
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
+            {datastore_links_tree_order, 100},
+            {cache_to_disk_delay_ms, timer:seconds(1)},
+            {cache_to_disk_force_delay_ms, timer:seconds(2)}
+        ]}],
+        posthook = fun(NewConfig) ->
+            storage_import_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+            NewConfig
+        end
     }).
 
 
