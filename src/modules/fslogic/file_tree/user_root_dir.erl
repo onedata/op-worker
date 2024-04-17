@@ -68,6 +68,8 @@
     }
 }).
 
+-type apply_fun() :: fun((session:id(), file_id:file_guid(), od_space:id(), #{od_space:name() => [od_space:id()]}) -> ok).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -123,7 +125,8 @@ report_new_spaces_appeared(UserIds, NewSpaceIds) ->
                 false -> {cont, undefined}
             end
         end, undefined, SpaceIdsByName),
-        handle_space_name_appeared_events(SessId, SpaceId, SpaceName, UserRootDirGuid, maps:get(SpaceName, SpaceIdsByName), create)
+        handle_space_name_appeared_events(
+            SessId, SpaceId, SpaceName, UserRootDirGuid, maps:get(SpaceName, SpaceIdsByName), create)
     end, UserIds, NewSpaceIds).
 
 
@@ -154,7 +157,8 @@ report_space_name_change(UserIds, SpaceId, PrevName, NewName) ->
     % space was renamed
     apply_for_spaces_of_users_with_active_fuse_sessions(fun(SessId, UserRootDirGuid, _SpaceId, SpaceIdsByName) ->
         handle_space_name_disappeared_events(PrevName, UserRootDirGuid, maps:get(PrevName, SpaceIdsByName, [])),
-        handle_space_name_appeared_events(SessId, SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), {rename, PrevName})
+        handle_space_name_appeared_events(
+            SessId, SpaceId, NewName, UserRootDirGuid, maps:get(NewName, SpaceIdsByName), {rename, PrevName})
     end, UserIds, [SpaceId]).
 
 
@@ -190,15 +194,16 @@ ensure_cache_updated() ->
 %%%===================================================================
 
 %% @private
--spec handle_space_name_appeared_events(session:id(), od_space:id(), od_space:name(), file_id:file_guid(), [od_space:id()],
-    create | {rename, od_space:name()}) -> ok.
+-spec handle_space_name_appeared_events(session:id(), od_space:id(), od_space:name(), file_id:file_guid(),
+    [od_space:id()], create | {rename, od_space:name()}) -> ok.
 handle_space_name_appeared_events(SessId, SpaceId, Name, UserRootDirGuid, SpaceIdsWithSameName, Operation) ->
     FinalNewName = case SpaceIdsWithSameName of
         [SpaceId] ->
             Name;
         [_S1, _S2] = L ->
             [OtherSpaceId] = L -- [SpaceId],
-            emit_renamed_event(OtherSpaceId, UserRootDirGuid, disambiguate_conflicted_space_name(Name, OtherSpaceId), Name),
+            emit_renamed_event(
+                OtherSpaceId, UserRootDirGuid, disambiguate_conflicted_space_name(Name, OtherSpaceId), Name),
             disambiguate_conflicted_space_name(Name, SpaceId);
         _ ->
             disambiguate_conflicted_space_name(Name, SpaceId)
@@ -218,8 +223,7 @@ handle_space_name_disappeared_events(_SpaceName, _UserRootDirGuid, _SpaceIdsWith
 
 
 %% @private
--spec apply_for_spaces_of_users_with_active_fuse_sessions(fun((file_id:file_guid(), od_space:id(), [od_space:id()]) -> ok),
-    [od_user:id()], [od_space:id()]) -> ok.
+-spec apply_for_spaces_of_users_with_active_fuse_sessions(apply_fun(), [od_user:id()], [od_space:id()]) -> ok.
 apply_for_spaces_of_users_with_active_fuse_sessions(Fun, UserIds, SpaceIds) ->
     % user to session mapping is done only to fetch space name in user context (as provider may not have access to such space)
     maps:foreach(fun(UserId, [SessId | _]) ->
@@ -293,7 +297,8 @@ group_spaces_by_name(SessId, SpaceIds) ->
 
 
 %% @private
--spec resolve_unambiguous_names_for_spaces(#{od_space:name() => [od_space:id()]}) -> [{file_meta:name(), od_space:id()}].
+-spec resolve_unambiguous_names_for_spaces(#{od_space:name() => [od_space:id()]}) ->
+    [{file_meta:name(), od_space:id()}].
 resolve_unambiguous_names_for_spaces(SpaceIdsByName) ->
     lists:sort(lists:flatmap(
         fun

@@ -60,6 +60,7 @@ file_links_reconciliation_traverse_test(Config) ->
     ChildrenGuids = [Guid || #object{guid = Guid} <- ChildrenObjects],
     ExpectedChildren = lists:sort(ChildrenGuids),
     
+    % eagain is expected when fetching remote doc fails
     ?assertEqual({error, ?EAGAIN}, get_children(KrakowNode, DirGuid)),
     
     ?assertEqual(ok, opw_test_rpc:call(KrakowNode, file_links_reconciliation_traverse, start_for_space,
