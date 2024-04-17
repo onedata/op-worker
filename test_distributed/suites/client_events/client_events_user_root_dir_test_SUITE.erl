@@ -232,7 +232,7 @@ add_user_to_existing_space_test_base(ClientProvider) ->
         setup_fun = fun() ->
             SpaceName = str_utils:rand_hex(8),
             Space = #space{name = SpaceName, id = create_supported_space(?SUPPORTING_PROVIDER, SpaceName, ?OTHER_USER)},
-            % ensure that space doc is already created
+            % ensure that the space doc is already created before the test starts
             ?assertMatch({ok, _}, opw_test_rpc:call(ClientProvider,
                 space_logic, get, [oct_background:get_user_session_id(?OTHER_USER, ClientProvider), Space#space.id])),
             ?assertMatch({ok, _}, opw_test_rpc:call(ClientProvider,
