@@ -174,7 +174,7 @@ ensure_docs_exist(UserId) ->
 
 -spec ensure_cache_updated() -> ok.
 ensure_cache_updated() ->
-    maps:fold(fun(UserId, [SessId | _], FetchedSpaces) ->
+    maps:fold(fun(UserId, [SessId | _], AlreadyFetchedSpaces) ->
         case user_logic:get(SessId, UserId) of
             {ok, #document{value = #od_user{eff_spaces = SpaceIds}}} ->
                 lists:foldl(fun(SpaceId, AccFetchedSpaces) ->
@@ -185,13 +185,14 @@ ensure_cache_updated() ->
                             {ok, _} = space_logic:get(SessId, SpaceId),
                             gb_sets:add(SpaceId, AccFetchedSpaces)
                     end
-                end, FetchedSpaces, SpaceIds);
+                end, AlreadyFetchedSpaces, SpaceIds);
             ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
-                ok;
+                AlreadyFetchedSpaces;
             ?ERROR_TOKEN_INVALID ->
-                ok;
+                AlreadyFetchedSpaces;
             {error, _} = Error ->
-                ?warning("Could not fetch spaces~ts", [?autoformat([UserId, Error])])
+                ?warning("Could not fetch spaces~ts", [?autoformat([UserId, Error])]),
+                AlreadyFetchedSpaces
         end
     end, gb_sets:new(), find_fuse_sessions_of_all_users()),
     ok.
