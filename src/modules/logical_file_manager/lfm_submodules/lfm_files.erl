@@ -42,7 +42,6 @@
 
 -compile({no_auto_import, [unlink/1]}).
 
--define(DEFAULT_SYNC_PRIORITY, op_worker:get_env(default_sync_priority, 32)).
 -define(SYNC_MAX_RETRIES, op_worker:get_env(lfm_sync_max_retries, 5)).
 -define(SYNC_MIN_BACKOFF, op_worker:get_env(lfm_sync_min_backoff, timer:seconds(1))).
 -define(SYNC_BACKOFF_RATE, op_worker:get_env(lfm_sync_backoff_rate, 2)).
@@ -480,7 +479,7 @@ write_without_events(FileHandle, Offset, Buffer) ->
     lfm:error_reply().
 read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
+        {priority, ?DEFAULT_ON_THE_FLY_SYNC_PRIORITY}, ignore_size).
 
 
 %%--------------------------------------------------------------------
@@ -504,7 +503,7 @@ read(FileHandle, Offset, MaxSize, SyncOptions) ->
     lfm:error_reply().
 check_size_and_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, verify_size).
+        {priority, ?DEFAULT_ON_THE_FLY_SYNC_PRIORITY}, verify_size).
 
 
 %%--------------------------------------------------------------------
@@ -517,7 +516,7 @@ check_size_and_read(FileHandle, Offset, MaxSize) ->
     lfm:error_reply().
 read_without_events(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, true,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
+        {priority, ?DEFAULT_ON_THE_FLY_SYNC_PRIORITY}, ignore_size).
 
 
 %%--------------------------------------------------------------------
@@ -541,7 +540,7 @@ read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
     lfm:error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
+        {priority, ?DEFAULT_ON_THE_FLY_SYNC_PRIORITY}, ignore_size).
 
 
 %%--------------------------------------------------------------------
