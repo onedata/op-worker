@@ -1,0 +1,31 @@
+# Name of the scenario to run
+scenario: "scenario-1oz-2op"
+
+# Path or list of paths in which look for sources (can be either relative to
+# cwd or absolute path)
+sourcesRoot: ".."
+
+# Sources are expected to be found in CWD (from where the 'up' script was run) or one dir above.
+# On bamboo all required sources will be pulled automatically.
+# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources
+# (by default cluster_manager provided as op_worker dependency will be used).
+sources: true
+
+users:
+  - &space_owner
+    name: space_owner
+    password: password
+
+spaces:
+  - name: space_krk_par_p
+    user: *space_owner
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "s3"
+        size: '10000000000'
+      - provider: "oneprovider-2"
+        storage_name: "s3"
+        size: '10000000000'
+
+storages:
+  - s3
