@@ -54,7 +54,8 @@
     {3, ?LINE_20_02(<<"1">>)},
     {4, ?LINE_21_02(<<"2">>)},
     {5, ?LINE_21_02(<<"3">>)},
-    {6, op_worker:get_release_version()}
+    {6, ?LINE_21_02(<<"5">>)},
+    {7, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -290,7 +291,17 @@ upgrade_cluster(5) ->
         end, SpaceIds),
         lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
     end),
-    {ok, 6}.
+    {ok, 6};
+upgrade_cluster(6) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        % Allow for file links reconciliation traverses to be run again - due to a bug in previous versions it
+        % could have been accidentally cancelled.
+        lists:foreach(fun(SpaceId) -> traverse_task:delete_ended(qos_traverse:pool_name(), SpaceId) end, SpaceIds)
+    end),
+    {ok, 7}.
 
 
 %%--------------------------------------------------------------------
