@@ -423,7 +423,11 @@ upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
     
     % Assert upgrade is idempotent
     ?assertEqual({ok, 7}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [6])),
-    ?assertMatch({error, not_found}, rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID])).
+    ?assertMatch({error, not_found}, rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID])),
+    
+    rpc:call(Worker, file_links_reconciliation_traverse, start_for_space, [?SPACE1_ID]),
+    ?assertMatch({ok, #document{value = #traverse_task{status = finished}}},
+        rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID]), 10).
 
 
 %%%===================================================================
