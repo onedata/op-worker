@@ -504,7 +504,8 @@ traverse_restart_test(Config) ->
         [{workers, 3}, {queue_type, lifo}]])),
     ?assertMatch({ok, _}, rpc:call(Worker, worker_pool, start_sup_pool, [?SLAVE_POOL_NAME,
         [{workers, 3}, {queue_type, lifo}]])),
-    ?assertEqual(ok, rpc:call(Worker, traverse, restart_tasks, [PoolName, #{executor => ExecutorID}, Worker])),
+    ?assertEqual(ok, rpc:call(Worker, traverse, restart_tasks,
+        [PoolName, #{executor => ExecutorID, callback_modules => [?MODULE]}, Worker])),
 
     get_slave_ans(),
 
