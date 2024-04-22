@@ -27,7 +27,8 @@
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
     listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
-    flushbuffer/3, readdir/4, listobjects/5, blocksize_for_path/2]).
+    flushbuffer/3, readdir/4, listobjects/5, blocksize_for_path/2,
+     check_storage_availability/1]).
 -export([init_counters/0, init_report/0]).
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
@@ -92,6 +93,15 @@ refresh_params(#helper_handle{} = Handle, Args) ->
     ?MODULE:apply_helper_nif(Handle, refresh_params, [Args]);
 refresh_params(#file_handle{} = Handle, Args) ->
     ?MODULE:apply_helper_nif(Handle, refresh_helper_params, [Args]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:check_storage_availability/1} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_storage_availability(helper_handle()) -> ok | {error, Reason :: term()}.
+check_storage_availability(Handle) ->
+    ?MODULE:apply_helper_nif(Handle, check_storage_availability, []).
 
 %%--------------------------------------------------------------------
 %% @doc
