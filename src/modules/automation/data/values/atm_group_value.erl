@@ -102,15 +102,7 @@ transform_to_data_spec_conformant(
 ) ->
     case describe_store_item(AtmWorkflowExecutionAuth, GroupId, AtmDataSpec) of
         {ok, FullItem} ->
-            maps:with(lists:map(fun attribute_name_to_json/1, Attributes), FullItem);
+            maps:with(lists:map(fun atm_group_data_spec:attribute_name_to_json/1, Attributes), FullItem);
         {error, _} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_group_type, ?ATM_ACCESS_CONSTRAINT))
     end.
-
-
-%% TODO use the one in ctool
-%% @private
-%%-spec attribute_name_to_json(attribute_name()) -> json_utils:json_term().
-attribute_name_to_json(group_id) -> <<"groupId">>;
-attribute_name_to_json(name) -> <<"name">>;
-attribute_name_to_json(type) -> <<"type">>.

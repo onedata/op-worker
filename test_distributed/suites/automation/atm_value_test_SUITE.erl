@@ -1166,14 +1166,7 @@ resolve_group(SessionId, GroupId, SpaceId, Attributes) ->
         <<"name">> => GroupRecord#od_group.name,
         <<"type">> => GroupRecord#od_group.type
     },
-    maps:with(lists:map(fun attribute_name_to_json/1, Attributes), FullGroupJson).
-
-
-%% TODO use the one in ctool
-%% @private
-attribute_name_to_json(group_id) -> <<"groupId">>;
-attribute_name_to_json(name) -> <<"name">>;
-attribute_name_to_json(type) -> <<"type">>.
+    maps:with(lists:map(fun atm_group_data_spec:attribute_name_to_json/1, Attributes), FullGroupJson).
 
 
 %===================================================================
