@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm/atm_test_schema_drafts.hrl").
+-include("graph_sync/provider_graph_sync.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
@@ -46,6 +47,10 @@
     atm_file_value_validation_test/1,
     atm_file_value_to_from_store_item_test/1,
     atm_file_value_describe_test/1,
+
+    atm_group_value_validation_test/1,
+    atm_group_value_to_from_store_item_test/1,
+    atm_group_value_describe_test/1,
 
     atm_number_value_validation_test/1,
     atm_number_value_to_from_store_item_test/1,
@@ -85,6 +90,10 @@ groups() -> [
         atm_file_value_validation_test,
         atm_file_value_to_from_store_item_test,
         atm_file_value_describe_test,
+
+        atm_group_value_validation_test,
+        atm_group_value_to_from_store_item_test,
+        atm_group_value_describe_test,
 
         atm_number_value_validation_test,
         atm_number_value_to_from_store_item_test,
@@ -587,6 +596,110 @@ atm_file_value_describe_test(_Config) ->
     }).
 
 
+atm_group_value_validation_test(_Config) ->
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+
+    SpaceKrkGroup1Id = oct_background:get_group_id(space_krk_group_1),
+    SpaceKrkGroup2Id = oct_background:get_group_id(space_krk_group_2),
+    NonSpaceGroupId = oct_background:get_group_id(non_space_group),
+
+    GroupAttrsToResolve = ?RAND_SUBLIST(atm_group_data_spec:allowed_group_attributes()),
+
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_group_data_spec{
+            attributes = GroupAttrsToResolve
+        },
+        valid_values = lists:map(fun(GroupId) ->
+            {#{<<"groupId">> => GroupId}, resolve_group(SessionId, GroupId, SpaceKrkId, GroupAttrsToResolve)}
+        end, [
+            SpaceKrkGroup1Id,
+            % comment user can view group he does not belong to if the group belongs to space
+            SpaceKrkGroup2Id
+        ]),
+        invalid_values_with_exp_errors = lists:flatten([
+            lists:map(fun(Value) ->
+                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_group_type)} end,
+                [5.5, <<"NaN">>, [5], #{<<"datasetId">> => 5}]
+            ),
+
+            lists:map(fun({GroupId, UnverifiedConstraint}) ->
+                Value = #{<<"groupId">> => GroupId},
+                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    Value, atm_group_type, UnverifiedConstraint
+                )}
+            end, [
+                % no access due to group not in space (even though user himself belongs to group)
+                {NonSpaceGroupId, #{<<"hasAccess">> => true}},
+
+                % no access due to file not existing
+                {<<"NonExistentGroupId">>, #{<<"hasAccess">> => true}}
+            ])
+        ])
+    }).
+
+
+atm_group_value_to_from_store_item_test(_Config) ->
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGroup1Id = oct_background:get_group_id(space_krk_group_1),
+    SpaceKrkGroup2Id = oct_background:get_group_id(space_krk_group_2),
+
+    atm_value_to_from_store_item_test_base(#atm_value_to_from_store_item_testcase{
+        data_spec = #atm_group_data_spec{
+            % attributes shouldn't have any impact on compress/expand functionality
+            attributes = ?RAND_SUBLIST(atm_group_data_spec:allowed_group_attributes())
+        },
+        values = lists:flatten([
+            #{<<"groupId">> => <<"RemovedGroupId">>},
+
+            lists:map(fun(GroupId) ->
+                GroupInfo = resolve_group(SessionId, GroupId, SpaceKrkId),
+
+                % atm_dataset_type is but a reference to underlying file entity -
+                % as such expanding it should fetch all current file attributes
+                {different, GroupInfo, #{<<"groupId">> => GroupId}}
+            end, [
+                SpaceKrkGroup1Id,
+                % comment user can view group he does not belong to if the group belongs to space
+                SpaceKrkGroup2Id
+            ])
+        ])
+    }).
+
+
+atm_group_value_describe_test(_Config) ->
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGroup1Id = oct_background:get_group_id(space_krk_group_1),
+    SpaceKrkGroup2Id = oct_background:get_group_id(space_krk_group_2),
+
+    atm_value_describe_test_base(#atm_value_describe_testcase{
+        data_spec = #atm_group_data_spec{
+            % attributes shouldn't have any impact on describe functionality
+            attributes = ?RAND_SUBLIST(atm_group_data_spec:allowed_group_attributes())
+        },
+        values = lists:flatten([
+            {error, #{<<"groupId">> => <<"RemovedGroupId">>}, ?ERROR_NOT_FOUND},
+
+            lists:map(fun(GroupId) ->
+                GroupInfo = resolve_group(SessionId, GroupId, SpaceKrkId),
+
+                % atm_dataset_type is but a reference to underlying file entity -
+                % as such expanding it should fetch all current file attributes
+                {different, #{<<"groupId">> => GroupId}, GroupInfo}
+            end, [
+                SpaceKrkGroup1Id,
+                % comment user can view group he does not belong to if the group belongs to space
+                SpaceKrkGroup2Id
+            ])
+        ])
+    }).
+
+
 atm_number_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_number_data_spec{
@@ -1028,6 +1141,39 @@ build_rand_ts_measurement(TSName) ->
         <<"timestamp">> => ?RAND_INT(10000),
         <<"value">> => ?RAND_ELEMENT([1, -1]) * ?RAND_INT(10000)
     }.
+
+
+%% @private
+-spec resolve_group(session:id(), od_group:id(), od_space:id()) -> json_utils:json_map().
+resolve_group(SessionId, GroupId, SpaceId) ->
+    resolve_group(SessionId, GroupId, SpaceId, [group_id, name, type]).
+
+
+%% @private
+-spec resolve_group(
+    session:id(),
+    od_group:id(),
+    od_space:id(),
+    [atm_group_data_spec:attribute_name()]
+) ->
+    json_utils:json_map().
+resolve_group(SessionId, GroupId, SpaceId, Attributes) ->
+    {ok, #document{value = GroupRecord}} = ?rpc(group_logic:get_shared_data(
+        SessionId, GroupId, ?THROUGH_SPACE(SpaceId)
+    )),
+    FullGroupJson = #{
+        <<"groupId">> => GroupId,
+        <<"name">> => GroupRecord#od_group.name,
+        <<"type">> => GroupRecord#od_group.type
+    },
+    maps:with(lists:map(fun attribute_name_to_json/1, Attributes), FullGroupJson).
+
+
+%% TODO use the one in ctool
+%% @private
+attribute_name_to_json(group_id) -> <<"groupId">>;
+attribute_name_to_json(name) -> <<"name">>;
+attribute_name_to_json(type) -> <<"type">>.
 
 
 %===================================================================
