@@ -56,7 +56,7 @@
     ensure_docs_exist/1
 ]).
 
--define(FM_DOC(UserId), #document{
+-define(FILE_META_DOC(UserId), #document{
     key = fslogic_file_id:user_root_dir_uuid(UserId),
     value = #file_meta{
         name = UserId,
@@ -164,7 +164,7 @@ report_space_name_change(UserIds, SpaceId, PrevName, NewName) ->
 
 -spec ensure_docs_exist(od_user:id()) -> ok.
 ensure_docs_exist(UserId) ->
-    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?FM_DOC(UserId)) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?FILE_META_DOC(UserId)) of
         {ok, #document{key = Uuid}} ->
             ?extract_ok(times:save_with_current_times(Uuid));
         {error, already_exists} ->

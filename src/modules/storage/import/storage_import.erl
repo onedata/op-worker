@@ -97,7 +97,7 @@ set_or_configure_auto_mode(SpaceId, ScanConfigMap) ->
     ?RUN_AND_HANDLE_EXCEPTION(fun() ->
         assert_auto_storage_import_supported(SpaceId),
 
-        file_meta:ensure_space_docs_exist(SpaceId),
+        space_logic:ensure_required_docs_exist(SpaceId), % TODO VFS-11954 analyze whether still needed
         case storage_import_config:configure_auto_mode(SpaceId, ScanConfigMap) of
             ok ->
                 storage_import_monitoring:ensure_created(SpaceId),

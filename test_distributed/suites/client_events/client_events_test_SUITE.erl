@@ -215,7 +215,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
     ?assertMatch({ok, [_]},
         rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
     
-    ok = rpc:call(Worker1, file_meta, ensure_space_docs_exist, [<<"space_id", SpaceNum/binary>>]),
+    ok = rpc:call(Worker1, space_logic, ensure_required_docs_exist, [<<"space_id", SpaceNum/binary>>]),
     ok = rpc:call(Worker1, user_root_dir, report_new_spaces_appeared, [[User], [<<"space_id", SpaceNum/binary>>]]),
     receive_events_and_check(ExpectedAns, SpaceGuid),
 

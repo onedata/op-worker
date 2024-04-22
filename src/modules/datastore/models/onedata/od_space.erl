@@ -87,6 +87,7 @@ list() ->
 
 -spec handle_space_deleted(id()) -> ok.
 handle_space_deleted(Id) ->
+    % TODO VFS-11955 Cleanup file meta docs on space deletion
     main_harvesting_stream:notify_space_deleted(Id),
     auto_storage_import_worker:notify_space_deleted(Id),
     run_in_critical_section(Id, fun() ->
@@ -199,7 +200,7 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
         {0, 0} ->
             ok;
         {0, _} ->
-            ok = file_meta:ensure_space_docs_exist(SpaceId),
+            ok = space_logic:ensure_required_docs_exist(SpaceId),
             user_root_dir:report_new_spaces_appeared(Users, [SpaceId]);
         {_, 0} ->
             user_root_dir:report_spaces_removed(Users, [SpaceId]);

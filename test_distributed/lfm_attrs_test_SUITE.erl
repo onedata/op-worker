@@ -882,7 +882,7 @@ do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test(Config) ->
     ),
 
     lists:foreach(fun(_) ->
-        ?assertEqual(ok, rpc:call(Worker, file_meta, ensure_space_docs_exist, [SpaceId])),
+        ?assertEqual(ok, rpc:call(Worker, space_logic, ensure_required_docs_exist, [SpaceId])),
         ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid)))
     end, lists:seq(1, 10)).
 

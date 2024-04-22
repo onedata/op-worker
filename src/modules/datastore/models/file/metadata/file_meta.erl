@@ -41,7 +41,7 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    ensure_space_docs_exist/1, ensure_tmp_dir_exist/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exist/1,
+    ensure_space_doc_exist/1, ensure_tmp_dir_exists/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exists/1,
     new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
@@ -329,8 +329,9 @@ get_including_deleted(Uuid, Ctx) ->
                         true ->
                             % Until space doc creation is finally properly handled on space creation
                             % create space document here if it was requested before any user login.
+                            % TODO VFS-11954 analyze whether still needed
                             ?debug("ensure_space_docs_exist called in file_meta:get_including_deleted"),
-                            ensure_space_docs_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
+                            space_logic:ensure_required_docs_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
                             datastore_model:get(Ctx#{include_deleted => true}, Uuid);
                         false ->
                             {error, not_found}
@@ -771,19 +772,18 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
--spec ensure_space_docs_exist(SpaceId :: od_space:id()) -> ok | no_return().
-ensure_space_docs_exist(SpaceId) ->
+-spec ensure_space_doc_exist(SpaceId :: od_space:id()) -> ok | no_return().
+ensure_space_doc_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
         {ok, #document{key = SpaceDirUuid}} ->
             ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false));
         {error, already_exists} ->
             ok
-    end,
-    space_logic:on_space_dir_created(SpaceId).
+    end.
 
 
--spec ensure_tmp_dir_exist(od_space:id()) -> created | already_exists.
-ensure_tmp_dir_exist(SpaceId) ->
+-spec ensure_tmp_dir_exists(od_space:id()) -> created | already_exists.
+ensure_tmp_dir_exists(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     TmpDirDoc = new_special_dir_doc(
@@ -807,8 +807,8 @@ ensure_tmp_dir_link_exists(SpaceId) ->
         ?TMP_DIR_NAME, fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId)))).
 
 
--spec ensure_opened_deleted_files_dir_exist(od_space:id()) -> ok.
-ensure_opened_deleted_files_dir_exist(SpaceId) ->
+-spec ensure_opened_deleted_files_dir_exists(od_space:id()) -> ok.
+ensure_opened_deleted_files_dir_exists(SpaceId) ->
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     Doc = new_special_dir_doc(
         ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DEFAULT_DIR_MODE,
