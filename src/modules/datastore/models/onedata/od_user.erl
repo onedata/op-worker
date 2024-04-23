@@ -58,7 +58,21 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
-    datastore_model:update(?CTX, Id, Diff, Default).
+    run_in_critical_section(Id, fun() ->
+        PrevVal = case get_from_cache(Id) of
+            {ok, #document{value = V}} -> V;
+            {error, not_found} -> #od_user{}
+        end,
+        case datastore_model:update(?CTX, Id, Diff, Default) of
+            {ok, #document{value = NewVal}} = Res ->
+                ok = handle_new_doc(Id, PrevVal, NewVal),
+                ok = handle_new_spaces(Id, PrevVal, NewVal),
+                ok = handle_spaces_removed(Id, PrevVal, NewVal),
+                Res;
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -68,7 +82,9 @@ get_from_cache(Key) ->
 
 -spec invalidate_cache(id()) -> ok | {error, term()}.
 invalidate_cache(Key) ->
-    datastore_model:delete(?CTX, Key).
+    run_in_critical_section(Key, fun() ->
+        datastore_model:delete(?CTX, Key)
+    end).
 
 
 -spec list() -> {ok, [id()]} | {error, term()}.
@@ -90,8 +106,7 @@ run_after(_Function, _Args, Result) ->
     Result.
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = UserId, value = Record = #od_user{eff_spaces = EffSpaces}}) ->
-    ok = file_meta:setup_onedata_user(UserId, EffSpaces),
+run_after(Doc = #document{key = UserId, value = Record}) ->
     ok = permissions_cache:invalidate(),
     ok = files_to_chown:chown_deferred_files(UserId),
     case Record of
@@ -126,3 +141,41 @@ get_ctx() ->
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
     [fun run_after/3].
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec run_in_critical_section(id(), fun (() -> Result)) -> Result.
+run_in_critical_section(UserId, Fun) ->
+    critical_section:run({od_user, UserId}, Fun).
+
+
+%% @private
+-spec handle_new_spaces(id(), PrevVal :: record(), NewVal :: record()) -> ok.
+handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
+    case NewSpaces -- PrevSpaces of
+        [] -> ok;
+        SpacesDiff -> user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
+    end.
+
+
+%% @private
+-spec handle_spaces_removed(id(), PrevVal :: record(), NewVal :: record()) -> ok.
+handle_spaces_removed(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
+    case PrevSpaces -- NewSpaces of
+        [] -> ok;
+        SpacesDiff -> user_root_dir:report_spaces_removed([UserId], SpacesDiff)
+    end.
+
+
+%% @private
+-spec handle_new_doc(id(), PrevVal :: record(), NewVal :: record()) -> ok.
+handle_new_doc(UserId, #od_user{username = undefined}, _) ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
+    user_root_dir:ensure_docs_exist(UserId);
+handle_new_doc(_, _, _) ->
+    ok.

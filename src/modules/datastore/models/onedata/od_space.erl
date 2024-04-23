@@ -40,7 +40,7 @@
 }).
 
 %% API
--export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3, handle_space_deleted/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -52,22 +52,52 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
-    datastore_model:update(?CTX, Id, Diff, Default).
+    run_in_critical_section(Id, fun() ->
+        PrevVal = case get_from_cache(Id) of
+            {ok, #document{value = V}} -> V;
+            {error, not_found} -> #od_space{}
+        end,
+        case datastore_model:update(?CTX, Id, Diff, Default) of
+            {ok, #document{value = #od_space{eff_users = UsersMap} = NewVal}} = Res ->
+                handle_name_change(Id, PrevVal, NewVal, maps:keys(UsersMap)),
+                handle_support_change(Id, PrevVal, NewVal, maps:keys(UsersMap)),
+                Res;
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
-get_from_cache(Key) ->
-    datastore_model:get(?CTX, Key).
+get_from_cache(Id) ->
+    datastore_model:get(?CTX, Id).
 
 
 -spec invalidate_cache(id()) -> ok | {error, term()}.
-invalidate_cache(Key) ->
-    datastore_model:delete(?CTX, Key).
+invalidate_cache(Id) ->
+    run_in_critical_section(Id, fun() ->
+        datastore_model:delete(?CTX, Id)
+    end).
 
 
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
-    datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+    datastore_model:fold_keys(?CTX, fun(Id, Acc) -> {ok, [Id | Acc]} end, []).
+
+
+-spec handle_space_deleted(id()) -> ok.
+handle_space_deleted(Id) ->
+    % TODO VFS-11955 Cleanup file meta docs on space deletion
+    main_harvesting_stream:notify_space_deleted(Id),
+    auto_storage_import_worker:notify_space_deleted(Id),
+    run_in_critical_section(Id, fun() ->
+        case get_from_cache(Id) of
+            {ok, #document{value = #od_space{eff_users = UsersMap} = Space}} ->
+                handle_name_change(Id, Space, #od_space{}, maps:keys(UsersMap));
+            {error, not_found} ->
+                ok
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,6 +145,7 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
     end,
     {ok, Doc}.
 
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -142,6 +173,40 @@ get_posthooks() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec run_in_critical_section(id(), fun (() -> Result)) -> Result.
+run_in_critical_section(SpaceId, Fun) ->
+    critical_section:run({od_space, SpaceId}, Fun).
+
+
+%% @private
+-spec handle_name_change(id(), PrevVal :: record(), NewVal :: record(), [od_user:id()]) -> ok.
+handle_name_change(SpaceId, #od_space{name = PrevName}, #od_space{name = NewName}, Users) when PrevName =/= NewName ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
+    user_root_dir:report_space_name_change(Users, SpaceId, PrevName, NewName);
+handle_name_change(_, _, _, _) ->
+    ok.
+
+
+%% @private
+-spec handle_support_change(id(), PrevVal :: record(), NewVal :: record(), [od_user:id()]) -> ok.
+handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{providers = NewProviders}, Users) ->
+    % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
+    ProviderId = oneprovider:get_id(),
+    PrevSupport = maps:get(ProviderId, PrevProviders, 0),
+    NewSupport = maps:get(ProviderId, NewProviders, 0),
+    case {PrevSupport, NewSupport} of
+        {0, 0} ->
+            ok;
+        {0, _} ->
+            ok = space_logic:ensure_required_docs_exist(SpaceId),
+            user_root_dir:report_new_spaces_appeared(Users, [SpaceId]);
+        {_, 0} ->
+            user_root_dir:report_spaces_removed(Users, [SpaceId]);
+        _ ->
+            ok
+    end.
 
 
 %% @private

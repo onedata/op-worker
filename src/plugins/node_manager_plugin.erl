@@ -251,7 +251,7 @@ upgrade_cluster(4) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
         lists:foreach(fun(SpaceId) ->
-            case file_meta:make_tmp_dir_exist(SpaceId) of
+            case file_meta:ensure_tmp_dir_exists(SpaceId) of
                 created -> ?info("Created tmp dir for space '~s'.", [SpaceId]);
                 already_exists -> ok
             end
@@ -286,7 +286,7 @@ upgrade_cluster(5) ->
         lists:foreach(fun(SpaceId) ->
             % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
             ?info("Creating directory for opened deleted files for space '~s'...", [SpaceId]),
-            file_meta:make_opened_deleted_files_dir_exist(SpaceId)
+            file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
         end, SpaceIds),
         lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
     end),

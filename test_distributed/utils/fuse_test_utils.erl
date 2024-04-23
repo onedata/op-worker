@@ -51,8 +51,7 @@
 
 %% Fuse request messages
 -export([generate_create_file_message/3, generate_create_file_message/4,
-    generate_make_link_message/4,
-    generate_create_dir_message/3, generate_delete_file_message/2,
+    generate_make_link_message/4, generate_create_dir_message/3, generate_delete_file_message/2,
     generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3,
     generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
 
@@ -315,7 +314,7 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
 
 connect_and_upgrade_proto(Hostname, Port) ->
     {ok, Sock} = (catch ssl:connect(Hostname, Port, [binary,
-        {active, once}, {reuse_sessions, false}
+        {active, once}, {reuse_sessions, false}, {verify, verify_none}
     ], timer:minutes(1))),
     ssl:send(Sock, connection_utils:protocol_upgrade_request(list_to_binary(Hostname))),
     receive {ssl, Sock, Data} ->

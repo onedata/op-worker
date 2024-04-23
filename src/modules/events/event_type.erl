@@ -296,10 +296,10 @@ get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx, parent
             Uuid = file_id:guid_to_uuid(FileGuid),
             #event_routing_keys{file_ctx = FileCtx, main_key = <<Prefix/binary, Uuid/binary>>};
         {_, true} ->
-            Uuid = file_id:guid_to_uuid(Parent),
+            ParentUuid = file_id:guid_to_uuid(Parent),
             #event_routing_keys{
                 file_ctx = FileCtx,
-                main_key = <<Prefix/binary, Uuid/binary>>,
+                main_key = <<Prefix/binary, ParentUuid/binary>>,
                 space_id_filter = file_ctx:get_space_id_const(FileCtx)
             };
         _ ->
