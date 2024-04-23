@@ -367,8 +367,8 @@ atm_dataset_value_to_from_store_item_test(_Config) ->
             lists:map(fun(DatasetId) ->
                 DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
 
-                % atm_dataset_type is but a reference to underlying file entity -
-                % as such expanding it should fetch all current file attributes
+                % atm_dataset_type is but a reference to underlying dataset entity -
+                % as such expanding it should fetch all current dataset attributes
                 {
                     different,
                     dataset_utils:dataset_info_to_json(DatasetInfo),
@@ -410,8 +410,8 @@ atm_dataset_value_describe_test(_Config) ->
             lists:map(fun(DatasetId) ->
                 DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
 
-                % atm_dataset_type is but a reference to underlying file entity -
-                % as such expanding it should fetch all current file attributes
+                % atm_dataset_type is but a reference to underlying dataset entity -
+                % as such expanding it should fetch all current dataset attributes
                 {
                     different,
                     #{<<"datasetId">> => DatasetId},
@@ -612,7 +612,7 @@ atm_group_value_validation_test(_Config) ->
             attributes = GroupAttrsToResolve
         },
         valid_values = lists:map(fun(GroupId) ->
-            {#{<<"groupId">> => GroupId}, resolve_group(SessionId, GroupId, SpaceKrkId, GroupAttrsToResolve)}
+            {#{<<"groupId">> => GroupId}, resolve_group_attrs(SessionId, GroupId, SpaceKrkId, GroupAttrsToResolve)}
         end, [
             SpaceKrkGroup1Id,
             % comment user can view group he does not belong to if the group belongs to space
@@ -658,8 +658,8 @@ atm_group_value_to_from_store_item_test(_Config) ->
             lists:map(fun(GroupId) ->
                 GroupInfo = resolve_group(SessionId, GroupId, SpaceKrkId),
 
-                % atm_dataset_type is but a reference to underlying file entity -
-                % as such expanding it should fetch all current file attributes
+                % atm_dataset_type is but a reference to underlying group entity -
+                % as such expanding it should fetch all current group attributes
                 {different, GroupInfo, #{<<"groupId">> => GroupId}}
             end, [
                 SpaceKrkGroup1Id,
@@ -688,8 +688,8 @@ atm_group_value_describe_test(_Config) ->
             lists:map(fun(GroupId) ->
                 GroupInfo = resolve_group(SessionId, GroupId, SpaceKrkId),
 
-                % atm_dataset_type is but a reference to underlying file entity -
-                % as such expanding it should fetch all current file attributes
+                % atm_dataset_type is but a reference to underlying group entity -
+                % as such expanding it should fetch all current group attributes
                 {different, #{<<"groupId">> => GroupId}, GroupInfo}
             end, [
                 SpaceKrkGroup1Id,
@@ -1146,18 +1146,18 @@ build_rand_ts_measurement(TSName) ->
 %% @private
 -spec resolve_group(session:id(), od_group:id(), od_space:id()) -> json_utils:json_map().
 resolve_group(SessionId, GroupId, SpaceId) ->
-    resolve_group(SessionId, GroupId, SpaceId, [group_id, name, type]).
+    resolve_group_attrs(SessionId, GroupId, SpaceId, [group_id, name, type]).
 
 
 %% @private
--spec resolve_group(
+-spec resolve_group_attrs(
     session:id(),
     od_group:id(),
     od_space:id(),
     [atm_group_data_spec:attribute_name()]
 ) ->
     json_utils:json_map().
-resolve_group(SessionId, GroupId, SpaceId, Attributes) ->
+resolve_group_attrs(SessionId, GroupId, SpaceId, Attributes) ->
     {ok, #document{value = GroupRecord}} = ?rpc(group_logic:get_shared_data(
         SessionId, GroupId, ?THROUGH_SPACE(SpaceId)
     )),
