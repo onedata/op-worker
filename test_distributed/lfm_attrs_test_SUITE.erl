@@ -1071,7 +1071,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10, [?MODULE]])),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) when Case =:= effective_value_test ;
     Case =:= multiple_references_effective_value_simple_test ;
