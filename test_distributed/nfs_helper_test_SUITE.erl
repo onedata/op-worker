@@ -26,7 +26,7 @@
     chown_test/1, flush_test/1, fsync_test/1, write_test/1,
     multipart_write_test/1, truncate_test/1, write_read_test/1,
     multipart_read_test/1, write_unlink_test/1,
-    write_read_truncate_unlink_test/1]).
+    write_read_truncate_unlink_test/1, check_storage_availability_test/1]).
 
 %% test_bases
 -export([create_test_base/1, write_test_base/1, multipart_write_test_base/1,
@@ -46,7 +46,7 @@
 
 -define(TEST_CASES, [
     flush_test, getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test,
-    rename_test, chmod_test, chown_test, fsync_test
+    rename_test, chmod_test, chown_test, fsync_test, check_storage_availability_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
@@ -98,6 +98,10 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+check_storage_availability_test(Config) ->
+    ?assertMatch(ok, call(Config, check_storage_availability, [])).
+
 create_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},

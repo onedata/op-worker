@@ -23,7 +23,8 @@
 -export([write_test/1, multipart_write_test/1,
     truncate_test/1, write_read_test/1, multipart_read_test/1,
     write_unlink_test/1, write_read_truncate_unlink_test/1,
-    setxattr_test/1, listxattr_test/1, removexattr_test/1]).
+    setxattr_test/1, listxattr_test/1, removexattr_test/1,
+    check_storage_availability_test/1]).
 
 %% test_bases
 -export([write_test_base/1, multipart_write_test_base/1,
@@ -33,7 +34,7 @@
 -define(PERF_TEST_CASES, [
     write_test, multipart_write_test, truncate_test,
     write_read_test, multipart_read_test, write_unlink_test,
-    write_read_truncate_unlink_test
+    write_read_truncate_unlink_test, check_storage_availability_test
 ]).
 
 -define(XATTR_TEST_CASES, [
@@ -90,6 +91,9 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+check_storage_availability_test(Config) ->
+    ?assertMatch(ok, call(Config, check_storage_availability, [])).
 
 write_test(Config) ->
     ?PERFORMANCE(Config, [

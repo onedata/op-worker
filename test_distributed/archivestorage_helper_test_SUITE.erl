@@ -22,11 +22,12 @@
 %% tests
 -export([mknod_test/1, truncate_new_test/1, truncate_increase_size_test/1,
          truncate_decrease_size_test/1, sequential_write_test/1,
-         read_write_test/1, unlink_test/1]).
+         read_write_test/1, unlink_test/1, check_storage_availability_test/1]).
 
 -define(TEST_CASES, [
     mknod_test, truncate_new_test, truncate_increase_size_test,
-    truncate_decrease_size_test, sequential_write_test, read_write_test, unlink_test
+    truncate_decrease_size_test, sequential_write_test, read_write_test, unlink_test,
+    check_storage_availability_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
@@ -41,6 +42,10 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+check_storage_availability_test(Config) ->
+    ?assertMatch(ok, call(Config, check_storage_availability, [])).
+
 mknod_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
