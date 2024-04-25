@@ -28,6 +28,7 @@ namespace {
  */
 nifpp::str_atom ok {"ok"};
 nifpp::str_atom error {"error"};
+nifpp::str_atom unknown_error {"unknown_error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
@@ -308,6 +309,29 @@ thread_local std::default_random_engine NifCTX::gen {NifCTX::rd()};
 thread_local std::uniform_int_distribution<int> NifCTX::dist {};
 
 /**
+ * Convert std::system_error to Erlang tuple
+ */
+std::tuple<nifpp::str_atom, nifpp::str_atom, std::string> to_error(
+    const std::system_error &e)
+{
+    auto it = error_to_atom.find(e.code());
+    nifpp::str_atom reason {e.code().message()};
+    if (it != error_to_atom.end())
+        reason = it->second;
+
+    return std::make_tuple(error, reason, e.what());
+}
+
+/**
+ * Convert std::exception to Erlang tuple
+ */
+std::tuple<nifpp::str_atom, nifpp::str_atom, std::string> to_error(
+    const std::exception &e)
+{
+    return std::make_tuple(error, unknown_error, e.what());
+}
+
+/**
  * Runs given function and returns result or error term.
  */
 template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
@@ -319,12 +343,10 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
         return enif_make_badarg(env);
     }
     catch (const std::system_error &e) {
-        return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom {e.code().message()}));
+        return nifpp::make(env, to_error(e));
     }
     catch (const std::exception &e) {
-        return nifpp::make(
-            env, std::make_tuple(error, folly::fbstring {e.what()}));
+        return nifpp::make(env, to_error(e));
     }
 }
 
@@ -406,18 +428,9 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
         .thenValue(
             [ctx](T &&value) { handle_value(ctx, std::forward<T>(value)); })
         .thenError(folly::tag_t<std::system_error> {},
-            [ctx](auto &&e) {
-                auto it = error_to_atom.find(e.code());
-                nifpp::str_atom reason {e.code().message()};
-                if (it != error_to_atom.end())
-                    reason = it->second;
-
-                ctx.send(std::make_tuple(error, reason));
-            })
-        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
-            nifpp::str_atom reason {e.what()};
-            ctx.send(std::make_tuple(error, reason));
-        });
+            [ctx](auto &&e) { ctx.send(to_error(e)); })
+        .thenError(folly::tag_t<std::exception> {},
+            [ctx](auto &&e) { ctx.send(to_error(e)); });
 }
 
 /**
@@ -431,18 +444,9 @@ void handle_result(NifCTX ctx, file_handle_ptr handle, folly::Future<T> future)
             handle_value(ctx, std::forward<T>(value));
         })
         .thenError(folly::tag_t<std::system_error> {},
-            [ctx](auto &&e) {
-                auto it = error_to_atom.find(e.code());
-                nifpp::str_atom reason {e.code().message()};
-                if (it != error_to_atom.end())
-                    reason = it->second;
-
-                ctx.send(std::make_tuple(error, reason));
-            })
-        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
-            nifpp::str_atom reason {e.what()};
-            ctx.send(std::make_tuple(error, reason));
-        });
+            [ctx](auto &&e) { ctx.send(to_error(e)); })
+        .thenError(folly::tag_t<std::exception> {},
+            [ctx](auto &&e) { ctx.send(to_error(e)); });
 }
 
 /**

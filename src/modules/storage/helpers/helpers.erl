@@ -454,7 +454,12 @@ apply_helper_nif(Handle, Timeout, Function, Args) ->
     ?update_counter(?EXOMETER_NAME(Function)),
     Stopwatch = stopwatch:start(),
     {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
-    Ans = receive_loop(ResponseRef, Timeout),
+    Ans = case receive_loop(ResponseRef, Timeout) of
+        {error, Reason, _Description} ->
+            {error, Reason};
+        Other ->
+            Other
+    end,
     ?update_counter(?EXOMETER_TIME_NAME(Function), stopwatch:read_micros(Stopwatch)),
     Ans.
 
