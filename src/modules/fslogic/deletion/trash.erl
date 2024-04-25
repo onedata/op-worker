@@ -35,7 +35,7 @@
 
 
 %% API
--export([create/1, ensure_exists/1]).
+-export([ensure_exists/1]).
 -export([move_to_trash/2, schedule_deletion_from_trash/5]).
 
 
@@ -46,20 +46,12 @@
 %%% API functions
 %%%===================================================================
 
--spec create(od_space:id()) -> ok.
-create(SpaceId) ->
-    TrashDoc = prepare_doc(SpaceId),
-    % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added
-    %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
-    %  * maybe there should be option passed to file_meta_forest:list that would exclude trash from the result
-    %% {ok, _} = file_meta:create({uuid, SpaceUuid}, TrashDoc),
-    {ok, _} = file_meta:save(TrashDoc),
-    ok.
-
-
 -spec ensure_exists(od_space:id()) -> ok.
 ensure_exists(SpaceId) ->
     #document{key = Key} = TrashDoc = prepare_doc(SpaceId),
+    % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added
+    %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
+    %  * maybe there should be option passed to file_meta_forest:list that would exclude trash from the result
     ok = ?ok_if_exists(?extract_ok(file_meta:update(Key, fun(_) -> {error, already_exists} end, TrashDoc))).
 
 

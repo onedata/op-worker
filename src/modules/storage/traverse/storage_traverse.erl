@@ -27,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/4, stop/1, run/5, run/6, get_iterator/1, list_ongoing_tasks/1]).
+-export([init/5, stop/1, run/5, run/6, get_iterator/1, list_ongoing_tasks/1]).
 
 %% @formatter:off
 %% Traverse callbacks
@@ -110,11 +110,11 @@
 %%% API functions
 %%%===================================================================
 
--spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
-init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) when is_atom(Pool) ->
-    init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit);
-init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
-    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit).
+-spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer(), module()) -> ok.
+init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModule) when is_atom(Pool) ->
+    init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModule);
+init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModule) ->
+    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, #{callback_modules => [CallbackModule]}).
 
 -spec stop(pool() | atom()) -> any().
 stop(Pool) when is_atom(Pool) ->

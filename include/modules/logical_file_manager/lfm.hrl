@@ -9,8 +9,6 @@
 %%% Common definitions and macros for logical file manager.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Bartosz Walkowicz").
-
 -ifndef(LFM_HRL).
 -define(LFM_HRL, 1).
 
@@ -33,5 +31,7 @@
     guid = __GUID,
     follow_symlink = __FOLLOW_SYMLINK
 }).
+
+-define(DEFAULT_ON_THE_FLY_SYNC_PRIORITY, op_worker:get_env(default_on_the_fly_sync_priority, 32)).
 
 -endif.

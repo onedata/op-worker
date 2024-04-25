@@ -135,13 +135,13 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args) ->
     memory_pools_cleared_after_disconnection_test_base(Config, Args, true).
 
 memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
-    client_simulation_test_base:verify_streams(Config),
+    client_simulation_test_utils:verify_streams(Config),
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceGuid,
         generator:gen_name(), ?DEFAULT_FILE_PERMS)),
@@ -151,7 +151,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
 
     {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
 
-    client_simulation_test_base:simulate_client(Config, Args, Sock, SpaceGuid, Close),
+    client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceGuid, Close),
     timer:sleep(timer:seconds(30)),
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -159,20 +159,20 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
     Res = pool_utils:get_documents_diff(Worker1, After, Before, Close),
     ?assertEqual([], Res),
 
-    client_simulation_test_base:verify_streams(Config, Close).
+    client_simulation_test_utils:verify_streams(Config, Close).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    client_simulation_test_base:init_per_suite(Config).
+    client_simulation_test_utils:init_per_suite(Config).
 
 init_per_testcase(_Case, Config) ->
-    client_simulation_test_base:init_per_testcase(Config).
+    client_simulation_test_utils:init_per_testcase(Config).
 
 end_per_testcase(_Case, Config) ->
-    client_simulation_test_base:end_per_testcase(Config).
+    client_simulation_test_utils:end_per_testcase(Config).
 
 end_per_suite(_Case) ->
     ok.
