@@ -93,7 +93,8 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 %%%===================================================================
 
 check_storage_availability_test(Config) ->
-    ?assertMatch(ok, call(Config, check_storage_availability, [])).
+    Helper = new_helper(Config),
+    ?assertMatch(ok, call(Helper, check_storage_availability, [])).
 
 write_test(Config) ->
     ?PERFORMANCE(Config, [
