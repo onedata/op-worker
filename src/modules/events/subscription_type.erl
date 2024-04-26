@@ -140,8 +140,12 @@ get_context(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_routing_key_for_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
-gen_routing_key_for_guid(Prefix, FileGuid) ->
+
+gen_routing_key_for_guid(<<"file_attr_changed.">> = Prefix, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
+    % Clients are subscribed on ?GLOBAL_ROOT_DIR_UUID instead of individual user root directories, so there is
+    % no need to generate all those directories each time this event is emitted.
+    % This event is later properly filtered (consult subscription_manager:apply_space_id_filter).
     case fslogic_file_id:is_user_root_dir_uuid(Uuid) of
         true ->
             % Change user's root uuid to main root dir uuid
@@ -149,4 +153,7 @@ gen_routing_key_for_guid(Prefix, FileGuid) ->
             <<Prefix/binary, RootUuid/binary>>;
         _ ->
             <<Prefix/binary, Uuid/binary>>
-    end.
+    end;
+gen_routing_key_for_guid(Prefix, FileGuid) ->
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    <<Prefix/binary, Uuid/binary>>.

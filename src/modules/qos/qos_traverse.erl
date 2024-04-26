@@ -99,8 +99,10 @@ init_pool() ->
     MasterJobsLimit = op_worker:get_env(qos_traverse_master_jobs_limit, 10),
     SlaveJobsLimit = op_worker:get_env(qos_traverse_slave_jobs_limit, 20),
 
-    % set parallelism limit equal to master jobs limit
-    tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, MasterJobsLimit).
+    % NOTE: parallelism limit is set equal to master jobs limit
+    % NOTE: all callback modules operating on this pool must be specified for traverse restart to work properly
+    tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, MasterJobsLimit,
+        [qos_traverse, file_links_reconciliation_traverse]).
 
 
 -spec stop_pool() -> ok.

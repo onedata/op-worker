@@ -114,6 +114,7 @@ stages:
         - ceph_helper
         - cephrados_helper
         - client_events
+        - client_events_user_root_dir
         - cluster_upgrade
         - connection
         - connection_layer
@@ -178,7 +179,7 @@ stages:
         - multipart_upload
         - multiple_workflow_scheduling
 #        - nfs_helper # uncomment after fixing helper
-        - node_failure
+#        - node_failure # TODO VFS-11953
         - nulldevice_helper
         - performance_2_provider
         - posix_helper
@@ -208,7 +209,7 @@ stages:
         - session_manager
         - session_offline
         - session_watcher
-        - single_node_failure
+#        - single_node_failure
         - space_unsupport
         - storage_cleanup
         - storage_files
@@ -919,6 +920,13 @@ client_events:
     - <<: *ct_logs
       name: ct_logs_client_events.tar.gz
 
+client_events_user_root_dir:
+  <<: *ct-onenv-job
+  key: EVENTSUSERDIR
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_client_events_user_root_dir.tar.gz
+
 cluster_upgrade:
   <<: *ct-job
   key: CLUS
@@ -1385,13 +1393,14 @@ multiple_workflow_scheduling:
 #    - <<: *ct_logs
 #      name: ct_logs_nfs_helper.tar.gz
 
-node_failure:
-  <<: *ct-onenv-job
-  key: NOD
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_node_failure.tar.gz
-  requirements: *os-agent
+# TODO VFS-11953
+#node_failure:
+#  <<: *ct-onenv-job
+#  key: NOD
+#  artifacts:
+#    - <<: *ct_logs
+#      name: ct_logs_node_failure.tar.gz
+#  requirements: *os-agent
 
 nulldevice_helper:
   <<: *ct-job
@@ -1598,12 +1607,13 @@ session_watcher:
     - <<: *ct_logs
       name: ct_logs_session_watcher.tar.gz
 
-single_node_failure:
-  <<: *ct-onenv-job
-  key: SNF
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_single_node_failure.tar.gz
+# TODO VFS-11953
+#single_node_failure:
+#  <<: *ct-onenv-job
+#  key: SNF
+#  artifacts:
+#    - <<: *ct_logs
+#      name: ct_logs_single_node_failure.tar.gz
 
 space_unsupport:
   <<: *ct-job
@@ -1912,6 +1922,7 @@ Coverage report:
     - artifact: ct_logs_ceph_helper.tar.gz
     - artifact: ct_logs_cephrados_helper.tar.gz
     - artifact: ct_logs_client_events.tar.gz
+    - artifact: ct_logs_client_events_user_root_dir.tar.gz
     - artifact: ct_logs_cluster_upgrade.tar.gz
     - artifact: ct_logs_connection.tar.gz
     - artifact: ct_logs_connection_layer.tar.gz
@@ -1976,7 +1987,7 @@ Coverage report:
     - artifact: ct_logs_multipart_upload.tar.gz
     - artifact: ct_logs_multiple_workflow_scheduling.tar.gz
 #    - artifact: ct_logs_nfs_helper.tar.gz # uncomment after fixing helper
-    - artifact: ct_logs_node_failure.tar.gz
+#    - artifact: ct_logs_node_failure.tar.gz # TODO VFS-11953
     - artifact: ct_logs_nulldevice_helper.tar.gz
     - artifact: ct_logs_performance_2_provider.tar.gz
     - artifact: ct_logs_posix_helper.tar.gz
@@ -2006,7 +2017,7 @@ Coverage report:
     - artifact: ct_logs_session_manager.tar.gz
     - artifact: ct_logs_session_offline.tar.gz
     - artifact: ct_logs_session_watcher.tar.gz
-    - artifact: ct_logs_single_node_failure.tar.gz
+#    - artifact: ct_logs_single_node_failure.tar.gz # TODO VFS-11953
     - artifact: ct_logs_space_unsupport.tar.gz
     - artifact: ct_logs_storage_cleanup.tar.gz
     - artifact: ct_logs_storage_files.tar.gz

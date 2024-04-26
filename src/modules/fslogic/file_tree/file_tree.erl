@@ -314,6 +314,7 @@ get_user_root_dir_child(UserCtx, UserRootDirCtx, Name) ->
             fslogic_file_id:spaceid_to_space_dir_guid(SpaceId);
         false ->
             case user_ctx:is_root(UserCtx) of
+                %% @TODO VFS-11416 - Analyze whether listing user root dir as provider root is needed
                 true -> fslogic_file_id:spaceid_to_space_dir_guid(Name);
                 false -> throw(?ENOENT)
             end
@@ -333,45 +334,11 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
-
-    AllUserSpaces = user_ctx:get_eff_spaces(UserCtx),
-
-    FilteredSpaces = case SpaceWhiteList of
-        undefined ->
-            AllUserSpaces;
-        _ ->
-            lists:filter(fun(Space) ->
-                lists:member(Space, SpaceWhiteList)
-            end, AllUserSpaces)
-    end,
-    SessId = user_ctx:get_session_id(UserCtx),
-
-    Children = case Offset < length(FilteredSpaces) of
-        true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            
-            GroupedSpaces = lists:foldl(fun(SpaceId, Acc) ->
-                {ok, SpaceName} = space_logic:get_name(SessId, SpaceId),
-                Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]}
-            end, #{}, FilteredSpaces),
-
-            SpacesChunk = lists:sublist(
-                lists:sort(maps:fold(
-                    fun (Name, [SpaceId], Acc) -> [{Name, SpaceId} | Acc];
-                        (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
-                            {<<Name/binary, (?SPACE_NAME_ID_SEPARATOR)/binary, SpaceId/binary>>, SpaceId}
-                        end, Spaces)
-                end, [], GroupedSpaces)),
-                Offset + 1,
-                Limit
-            ),
-            lists:map(fun({SpaceName, SpaceId}) ->
-                SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-                file_ctx:new_by_uuid(SpaceDirUuid, SpaceId, undefined, SpaceName)
-            end, SpacesChunk);
-        false ->
-            []
-    end,
+    SpacesChunk = user_root_dir:list_spaces(UserCtx, Offset, Limit, SpaceWhiteList),
+    Children = lists:map(fun({SpaceName, SpaceId}) ->
+        SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+        file_ctx:new_by_uuid(SpaceDirUuid, SpaceId, undefined, SpaceName)
+    end, SpacesChunk),
     build_listing_result(UserCtx, Children, Limit, UserRootDirCtx).
 
 

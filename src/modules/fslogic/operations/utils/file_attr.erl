@@ -322,7 +322,7 @@ resolve_symlink_value(#document{key = Uuid} = FileDoc) ->
 build_index(FileCtx, FileDoc) ->
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
-            % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`)
+            % As provider id in space doc is random (depends on which provider called `file_meta:ensure_space_docs_exist/0`)
             % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
             file_listing:build_index(file_meta:get_name(FileDoc));
         false ->
@@ -534,15 +534,27 @@ resolve_name_attrs_conflicts(State) ->
     ProviderId = file_meta:get_provider_id(FileDoc),
     Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
-        {conflicting, ExtendedName, ConflictingFiles} ->
-            {UpdatedState#state{file_ctx = file_ctx:cache_name(ExtendedName, FileCtx)}, #file_attr{
-                name = ExtendedName,
+    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+        true ->
+            #state{user_ctx = UserCtx} = UpdatedState,
+            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, FileName,
+                fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+            {UpdatedState#state{file_ctx = file_ctx:cache_name(Name, FileCtx)}, #file_attr{
+                name = Name,
                 conflicting_name = FileName,
-                conflicting_files = ConflictingFiles
+                conflicting_files = Conflicts
             }};
-        _ ->
-            {UpdatedState, #file_attr{name = FileName}}
+        false ->
+            case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
+                {conflicting, ExtendedName, ConflictingFiles} ->
+                    {UpdatedState#state{file_ctx = file_ctx:cache_name(ExtendedName, FileCtx)}, #file_attr{
+                        name = ExtendedName,
+                        conflicting_name = FileName,
+                        conflicting_files = ConflictingFiles
+                    }};
+                _ ->
+                    {UpdatedState, #file_attr{name = FileName}}
+            end
     end.
 
 
