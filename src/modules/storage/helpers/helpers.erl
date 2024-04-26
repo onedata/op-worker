@@ -470,7 +470,7 @@ apply_helper_nif(Handle, Timeout, Function, Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec receive_loop(helpers_nif:response_ref(), timeout()) ->
-    ok | {ok, term()} | {error, Reason :: term()}.
+    ok | {ok, term()} | {error, Reason :: term(), Description :: binary()}.
 receive_loop(ResponseRef, Timeout) ->
     receive
         {ResponseRef, heartbeat} ->
