@@ -46,6 +46,8 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, instance, public) -> ?MODULE;
 
+resolve_handler(update, instance, private) -> ?MODULE;
+
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -70,7 +72,13 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    undefined.
+    undefined;
+
+data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
+    required => #{
+        <<"metadataString">> => {binary, any}
+    }
+}.
 
 
 %%--------------------------------------------------------------------
@@ -120,6 +128,10 @@ authorize(#op_req{operation = create, gri = #gri{aspect = instance}}, _) ->
 
 authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
+    true;
+
+authorize(#op_req{operation = update, gri = #gri{aspect = instance}}, _) ->
+    % authorization will be checked by oz in during handle update
     true.
 
 
@@ -133,6 +145,8 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}}, _) ->
     ok;
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % validation was checked by oz in `fetch_entity`
+    ok;
+validate(#op_req{operation = update, gri = #gri{aspect = instance}}, _) ->
     ok.
 
 
@@ -185,8 +199,9 @@ get(#op_req{gri = #gri{aspect = instance, scope = public}}, #od_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
-update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+update(#op_req{auth = #auth{session_id = SessionId}, data = Data, gri = #gri{id = HandleId, aspect = instance}}) ->
+    Metadata = maps:get(<<"metadataString">>, Data, <<"">>),
+    handle_logic:update(SessionId, HandleId, Metadata).
 
 
 %%--------------------------------------------------------------------

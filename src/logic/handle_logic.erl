@@ -23,8 +23,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/2, get_public_data/2]).
+-export([force_fetch/1]).
 -export([has_eff_user/2, has_eff_user/3]).
--export([create/6]).
+-export([create/6, update/3]).
 
 %%%===================================================================
 %%% API
@@ -58,6 +59,11 @@ get_public_data(SessionId, HandleId) ->
         gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = public},
         subscribe = true
     }).
+
+
+-spec force_fetch(od_handle:id()) -> {ok, od_handle:doc()} | errors:error().
+force_fetch(HandleId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_handle, id = HandleId, aspect = instance}).
 
 
 -spec has_eff_user(od_handle:doc(), od_user:id()) -> boolean().
@@ -107,4 +113,18 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, MetadataPrefix, Met
             _ ->
                 ok
         end
+    end).
+
+
+-spec update(gs_client_worker:client(), od_handle:id(), od_handle:metadata()) ->
+    ok | errors:error().
+update(SessionId, HandleId, NewMetadata) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = private},
+        data = #{<<"metadata">> => NewMetadata}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        force_fetch(HandleId),
+        ok
     end).
