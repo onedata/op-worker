@@ -28,6 +28,9 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = infer_accessible_eff_groups}, Result) ->
+    Result;
+
 translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
     #{<<"list">> => lists:map(fun(TransferId) -> gri:serialize(#gri{
         type = op_transfer,
