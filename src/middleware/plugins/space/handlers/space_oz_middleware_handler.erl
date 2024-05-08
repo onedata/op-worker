@@ -133,7 +133,7 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) whe
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = ?USER(_, SessionId), gri = #gri{id = SpaceId, aspect = infer_accessible_eff_groups}}) ->
-    space_logic:infer_accessible_eff_groups(SessionId, SpaceId).
+    {ok, value, ?check(space_logic:infer_accessible_eff_groups(SessionId, SpaceId))}.
 
 
 %%--------------------------------------------------------------------
