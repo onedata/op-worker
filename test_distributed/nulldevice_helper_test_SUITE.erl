@@ -27,7 +27,7 @@
     removexattr_test/1, listxattr_test/1, write_test/1,
     multipart_write_test/1, truncate_test/1, write_read_test/1,
     multipart_read_test/1, write_unlink_test/1,
-    write_read_truncate_unlink_test/1]).
+    write_read_truncate_unlink_test/1, check_storage_availability_test/1]).
 
 %% test_bases
 -export([create_test_base/1, write_test_base/1, multipart_write_test_base/1,
@@ -43,7 +43,8 @@
 -define(TEST_CASES, [
     getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test,
     rename_test, chmod_test, chown_test, flush_test, fsync_test,
-    setxattr_test, listxattr_test, removexattr_test
+    setxattr_test, listxattr_test, removexattr_test,
+    check_storage_availability_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
@@ -89,6 +90,11 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+check_storage_availability_test(Config) ->
+    Helper = new_helper(Config),
+    ?assertMatch(ok, call(Helper, check_storage_availability, [])).
+
 create_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, 10},
