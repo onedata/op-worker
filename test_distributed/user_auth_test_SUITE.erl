@@ -786,8 +786,8 @@ unmock_token_logic(Config) ->
 % (it is triggered by simulating od_user record changes)
 mock_file_meta(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, file_meta),
-    test_utils:mock_expect(Workers, file_meta, setup_onedata_user, fun(_, _) ->
+    test_utils:mock_new(Workers, user_root_dir),
+    test_utils:mock_expect(Workers, user_root_dir, report_new_spaces_appeared, fun(_, _) ->
         ok
     end).
 

@@ -40,6 +40,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
+data_spec(#op_req{operation = create, gri = #gri{aspect = infer_accessible_eff_groups}}) ->
+    undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     As =:= list;
     As =:= instance;
@@ -69,6 +71,12 @@ fetch_entity(_) ->
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
+
+authorize(#op_req{operation = create, auth = Auth, gri = #gri{
+    id = SpaceId,
+    aspect = infer_accessible_eff_groups
+}}, _) ->
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User is always authorized to list his spaces
@@ -100,6 +108,9 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{id = SpaceId, aspect = infer_accessible_eff_groups}}, _) ->
+    middleware_utils:assert_space_supported_locally(SpaceId);
+
 validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User spaces are listed by fetching information from zone,
     % whether they are supported locally is irrelevant.
@@ -121,8 +132,8 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) whe
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+create(#op_req{auth = ?USER(_, SessionId), gri = #gri{id = SpaceId, aspect = infer_accessible_eff_groups}}) ->
+    space_logic:infer_accessible_eff_groups(SessionId, SpaceId).
 
 
 %%--------------------------------------------------------------------

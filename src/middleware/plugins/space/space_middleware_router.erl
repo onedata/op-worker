@@ -46,6 +46,8 @@ resolve_handler(create, {view_reduce_function, _}, private) -> ?SPACE_VIEWS_MIDD
 
 resolve_handler(create, evaluate_qos_expression, private) -> ?SPACE_QOS_MIDDLEWARE_HANDLER;
 
+resolve_handler(create, infer_accessible_eff_groups, private) -> ?SPACE_OZ_MIDDLEWARE_HANDLER;
+
 resolve_handler(get, views, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
 resolve_handler(get, {view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
 resolve_handler(get, {query_view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;

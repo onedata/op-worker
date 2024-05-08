@@ -24,7 +24,7 @@
 
 %% API
 -export([get_or_default/1, get/1, create_or_update/3, delete/1,
-    save/1, save/5, save_with_current_times/3, ensure_synced/1]).
+    save/1, save/5, save_with_current_times/1, save_with_current_times/3, ensure_synced/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -92,6 +92,12 @@ save(FileUuid, SpaceId, ATime, MTime, CTime) ->
 save(#document{key = Key} = Doc) ->
     datastore_model:save(?CTX#{generated_key => true},
         Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
+
+
+-spec save_with_current_times(file_meta:uuid()) -> {ok, time()} | {error, term()}.
+save_with_current_times(FileUuid) ->
+    save_with_current_times(FileUuid, <<>>, false).
+
 
 -spec save_with_current_times(file_meta:uuid(), od_space:id(), boolean()) -> {ok, time()} | {error, term()}.
 save_with_current_times(FileUuid, SpaceId, IgnoreInChanges) ->

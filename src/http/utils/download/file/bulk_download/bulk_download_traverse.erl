@@ -66,7 +66,7 @@ init_pool() ->
     SlaveJobsLimit = op_worker:get_env(tarball_streaming_traverse_slave_jobs_limit, 50),
     ParallelismLimit = op_worker:get_env(tarball_streaming_traverse_parallelism_limit, 50),
 
-    ok = tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
+    ok = tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit, [?MODULE]).
 
 
 -spec stop_pool() -> ok.

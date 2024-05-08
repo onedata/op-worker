@@ -41,7 +41,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% Main API
--export([init/4, init/5, stop/1, run/3, run/4, cancel/2]).
+-export([init/5, stop/1, run/3, run/4, cancel/2]).
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
@@ -145,14 +145,6 @@
 %%%===================================================================
 %%% Main API
 %%%===================================================================
-
--spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok | no_return().
-init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) when is_atom(Pool) ->
-    init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit);
-init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
-    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
-        #{executor => oneprovider:get_id_or_undefined()}).
-
 
 -spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer(),
     [traverse:callback_module()]) -> ok  | no_return().

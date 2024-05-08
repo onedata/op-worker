@@ -57,7 +57,7 @@
     concurent_multiple_references_effective_value_parent_critical_section_test/1,
     traverse_test/1,
     file_traverse_job_test/1,
-    do_not_overwrite_space_dir_attrs_on_make_space_exist_test/1,
+    do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test/1,
     listing_file_attrs_should_work_properly_in_open_handle_mode/1
 ]).
 
@@ -91,7 +91,7 @@ all() ->
         concurent_multiple_references_effective_value_parent_critical_section_test,
         traverse_test,
         file_traverse_job_test,
-        do_not_overwrite_space_dir_attrs_on_make_space_exist_test,
+        do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test,
         listing_file_attrs_should_work_properly_in_open_handle_mode
     ]).
 
@@ -868,7 +868,7 @@ create_and_query_view_mapping_one_file_to_many_rows(Config) ->
     end,
     ?assertEqual(ok, FinalCheck(), 10, timer:seconds(3)).
 
-do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
+do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
@@ -882,7 +882,7 @@ do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
     ),
 
     lists:foreach(fun(_) ->
-        ?assertEqual(ok, rpc:call(Worker, file_meta, make_space_exist, [SpaceId])),
+        ?assertEqual(ok, rpc:call(Worker, space_logic, ensure_required_docs_exist, [SpaceId])),
         ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid)))
     end, lists:seq(1, 10)).
 
@@ -1071,7 +1071,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_traverse_job_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10, [?MODULE]])),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) when Case =:= effective_value_test ;
     Case =:= multiple_references_effective_value_simple_test ;
@@ -1085,7 +1085,7 @@ init_per_testcase(Case, Config) when Case =:= effective_value_test ;
         #{check_frequency => timer:minutes(5), size => 100}) end),
     init_per_testcase(?DEFAULT_CASE(Case), [{cache_pid, CachePid} | Config]);
 init_per_testcase(Case, Config) when
-    Case == do_not_overwrite_space_dir_attrs_on_make_space_exist_test;
+    Case == do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test;
     Case == listing_file_attrs_should_work_properly_in_open_handle_mode
 ->
     initializer:mock_share_logic(Config),
@@ -1115,7 +1115,7 @@ end_per_testcase(Case, Config) when Case =:= effective_value_test ;
              1000 -> timeout
          end,
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(do_not_overwrite_space_dir_attrs_on_make_space_exist_test = Case, Config) ->
+end_per_testcase(do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test = Case, Config) ->
     initializer:unmock_share_logic(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
