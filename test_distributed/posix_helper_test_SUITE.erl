@@ -38,7 +38,7 @@
     rmdir_test/1, symlink_test/1, rename_test/1, chmod_test/1, chown_test/1,
     truncate_test/1, open_test/1, read_test/1, write_test/1, big_write_test/1,
     release_test/1, flush_test/1, fsync_test/1, setxattr_test/1,
-    removexattr_test/1, listxattr_test/1
+    removexattr_test/1, listxattr_test/1, check_storage_availability_test/1
 ]).
 
 all() ->
@@ -47,13 +47,16 @@ all() ->
         rmdir_test, symlink_test, rename_test, chmod_test, chown_test,
         truncate_test, open_test, read_test, write_test, release_test,
         flush_test, fsync_test, setxattr_test, removexattr_test,
-        listxattr_test
+        listxattr_test, check_storage_availability_test
     ]).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+check_storage_availability_test(Config) ->
+    ?assertMatch(ok, call(Config, check_storage_availability, [])).
 
 getattr_test(Config) ->
     File = gen_filename(),
