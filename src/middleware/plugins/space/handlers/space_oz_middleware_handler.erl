@@ -108,7 +108,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = infer_accessible_eff_groups}}, _) ->
+validate(#op_req{operation = create, gri = #gri{id = SpaceId, aspect = infer_accessible_eff_groups}}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
