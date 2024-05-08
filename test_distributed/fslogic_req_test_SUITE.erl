@@ -106,7 +106,7 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     FilePath = <<"/space_name1/", FileName/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _},
         lfm_proxy:create(Worker, SessId1, FilePath)),
-    Space1Guid = client_simulation_test_base:get_guid(Worker, SessId1, <<"/space_name1">>),
+    Space1Guid = client_simulation_test_utils:get_guid(Worker, SessId1, <<"/space_name1">>),
     {{FileUid, _}, _} = rpc:call(Worker, file_ctx, get_display_credentials, [file_ctx:new_by_guid(FileGuid)]),
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path, ParentGuid, Type}) ->
@@ -165,7 +165,7 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
     FileName =  generator:gen_name(),
     FilePath = <<"/space_name4/", FileName/binary>>,
     ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker, SessId, <<"/space_name4">>),
+    SpaceGuid = client_simulation_test_utils:get_guid(Worker, SessId, <<"/space_name4">>),
 
     #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,

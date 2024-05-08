@@ -102,11 +102,12 @@ init_node_iterator(FileCtx, StartFileName, Limit) ->
     BaseOpts = #{limit => Limit, tune_for_large_continuous_listing => Limit =/= 1},
     ListingOpts = case file_meta:get_child_uuid_and_tree_id(Uuid, StartFileName) of
         {ok, _, TreeId} ->
+            %% @TODO VFS-11436 secure for space name conflicts
             StartingIndex = file_listing:build_index(
-                file_meta:trim_filename_tree_id(StartFileName, TreeId), TreeId),
+                file_meta:trim_disambiguated_name_provider_suffix(StartFileName, TreeId), TreeId),
             #{index => StartingIndex, inclusive => true};
         _ ->
-            StartingIndex = file_listing:build_index(file_meta:trim_filename_tree_id(
+            StartingIndex = file_listing:build_index(file_meta:trim_disambiguated_name_provider_suffix(
                 StartFileName, {all, Uuid})),
             #{index => StartingIndex}
     end,

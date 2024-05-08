@@ -34,7 +34,8 @@
     upgrade_from_20_02_1_space_strategies/1,
     upgrade_from_20_02_1_storage_sync_monitoring/1,
     upgrade_from_21_02_2_tmp_dir/1,
-    upgrade_from_21_02_3_missing_dirs/1
+    upgrade_from_21_02_3_missing_dirs/1,
+    upgrade_from_21_02_5_links_reconciliation_traverses/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -50,7 +51,8 @@ all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
     upgrade_from_20_02_1_storage_sync_monitoring,
     upgrade_from_21_02_2_tmp_dir,
-    upgrade_from_21_02_3_missing_dirs
+    upgrade_from_21_02_3_missing_dirs,
+    upgrade_from_21_02_5_links_reconciliation_traverses
 ]).
 
 %%%===================================================================
@@ -400,7 +402,6 @@ upgrade_from_21_02_3_missing_dirs(Config) ->
     DirExistsFun = fun(Uuid) -> rpc:call(Worker, file_meta, exists, [Uuid]) end,
     
     ?assertNot(lists:any(DirExistsFun, DirUuids)),
-    
     % Assert dirs are created on upgrade
     ?assertEqual({ok, 6}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [5])),
     ?assert(lists:all(DirExistsFun, DirUuids)),
@@ -408,6 +409,25 @@ upgrade_from_21_02_3_missing_dirs(Config) ->
     % Assert upgrade is idempotent
     ?assertEqual({ok, 6}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [5])),
     ?assert(lists:all(DirExistsFun, DirUuids)).
+
+
+upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    rpc:call(Worker, file_links_reconciliation_traverse, start_for_space, [?SPACE1_ID]),
+    ?assertMatch({ok, #document{value = #traverse_task{status = finished}}},
+        rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID]), 10),
+    
+    ?assertEqual({ok, 7}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [6])),
+    ?assertMatch({error, not_found}, rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID])),
+    
+    % Assert upgrade is idempotent
+    ?assertEqual({ok, 7}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [6])),
+    ?assertMatch({error, not_found}, rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID])),
+    
+    rpc:call(Worker, file_links_reconciliation_traverse, start_for_space, [?SPACE1_ID]),
+    ?assertMatch({ok, #document{value = #traverse_task{status = finished}}},
+        rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID]), 10).
 
 
 %%%===================================================================
@@ -456,6 +476,16 @@ init_per_testcase(Case = upgrade_from_21_02_3_missing_dirs, Config) ->
     
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
+    end),
+    
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
@@ -464,6 +494,16 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(Case = upgrade_from_21_02_2_tmp_dir, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = upgrade_from_21_02_3_missing_dirs, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic, space_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [provider_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);

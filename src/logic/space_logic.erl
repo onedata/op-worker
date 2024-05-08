@@ -46,7 +46,7 @@
 -export([can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
--export([on_space_supported/1]).
+-export([on_space_supported/1, ensure_required_docs_exist/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -500,3 +500,10 @@ on_space_supported(SpaceId) ->
     ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
+-spec ensure_required_docs_exist(od_space:id()) -> ok.
+ensure_required_docs_exist(SpaceId) ->
+    file_meta:ensure_space_doc_exist(SpaceId),
+    trash:ensure_exists(SpaceId),
+    archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
+    file_meta:ensure_tmp_dir_exists(SpaceId),
+    file_meta:ensure_opened_deleted_files_dir_exists(SpaceId).
