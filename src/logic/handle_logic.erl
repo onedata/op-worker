@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/2, get_public_data/2]).
--export([force_fetch/1]).
+-export([force_fetch/2]).
 -export([has_eff_user/2, has_eff_user/3]).
 -export([create/6, update/3]).
 
@@ -61,9 +61,9 @@ get_public_data(SessionId, HandleId) ->
     }).
 
 
--spec force_fetch(od_handle:id()) -> {ok, od_handle:doc()} | errors:error().
-force_fetch(HandleId) ->
-    gs_client_worker:force_fetch_entity(#gri{type = od_handle, id = HandleId, aspect = instance}).
+-spec force_fetch(gs_client_worker:client(), od_handle:id()) -> {ok, od_handle:doc()} | errors:error().
+force_fetch(SessionId, HandleId) ->
+    gs_client_worker:force_fetch_entity(SessionId, #gri{type = od_handle, id = HandleId, aspect = instance}).
 
 
 -spec has_eff_user(od_handle:doc(), od_user:id()) -> boolean().
@@ -125,6 +125,5 @@ update(SessionId, HandleId, NewMetadata) ->
         data = #{<<"metadata">> => NewMetadata}
     }),
     ?ON_SUCCESS(Res, fun(_) ->
-        force_fetch(HandleId),
-        ok
+        ?check(force_fetch(SessionId, HandleId))  % fixme add checks everywhere
     end).
