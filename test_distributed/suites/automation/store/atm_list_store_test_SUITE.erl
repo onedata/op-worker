@@ -128,6 +128,7 @@ example_configs() ->
         atm_boolean_type,
         atm_dataset_type,
         atm_file_type,
+        atm_group_type,
         atm_number_type,
         atm_object_type,
         atm_range_type,
