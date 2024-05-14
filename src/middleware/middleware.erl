@@ -267,11 +267,9 @@ sanitize_request(#req_ctx{handler = Handler, req = #op_req{
 -spec maybe_fetch_entity(req_ctx()) -> req_ctx().
 maybe_fetch_entity(#req_ctx{versioned_entity = {Entity, _}} = ReqCtx) when Entity /= undefined ->
     ReqCtx;
-maybe_fetch_entity(#req_ctx{req = #op_req{operation = create, gri = #gri{id = undefined}}} = ReqCtx) ->
+maybe_fetch_entity(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = ReqCtx) ->
     % Skip when creating an instance with predefined Id, set revision to 1
     ReqCtx#req_ctx{versioned_entity = {undefined, 1}};
-maybe_fetch_entity(#req_ctx{req = #op_req{operation = get, gri = #gri{id = undefined, aspect = instance}}}) ->
-    throw(?ERROR_NOT_FOUND);
 maybe_fetch_entity(#req_ctx{handler = Handler, req = Req} = ReqCtx) ->
     case Handler:fetch_entity(Req) of
         {ok, {_Entity, _Revision} = VersionedEntity} ->
