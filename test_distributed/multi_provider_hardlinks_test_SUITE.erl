@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -24,13 +25,15 @@
 -export([
     basic_test/1,
     first_access_performed_via_link_test/1,
-    create_link_to_link_test/1
+    create_link_to_link_test/1,
+    hardlink_reference_file_meta_race_test/1
 ]).
 
 -define(TEST_CASES, [
     basic_test,
     first_access_performed_via_link_test,
-    create_link_to_link_test
+    create_link_to_link_test,
+    hardlink_reference_file_meta_race_test
 ]).
 
 all() ->
@@ -233,6 +236,32 @@ create_link_to_link_test(Config0) ->
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link2}), Attempts),
     ?assertEqual({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), {path, File}), Attempts).
 
+
+hardlink_reference_file_meta_race_test(Config) ->
+    SessIdFun = ?config(session, Config),
+    SpaceId = ?config(first_space_id, Config),
+    Worker1 = ?config(worker1, Config),
+    [Worker2, _] = Workers2 = ?config(workers2, Config),
+    Attempts = ?config(attempts, Config),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessIdFun(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_MODE),
+    {ok, #file_attr{guid = HardlinkGuid}} = lfm_proxy:make_link(Worker1, SessIdFun(Worker1), ?FILE_REF(FileGuid),
+        ?FILE_REF(SpaceGuid), generator:gen_name()),
+    
+    ?assertMatch({ok, _}, rpc:call(Worker1, file_meta, get, [file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
+    ?assertMatch({ok, _}, rpc:call(Worker1, datastore_model, get, [file_meta:get_ctx(), file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
+    ?assertMatch({error, not_found}, rpc:call(Worker2, file_meta, get, [file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
+    Doc = wait_for_dbsynced_doc(file_id:guid_to_uuid(FileGuid), Attempts),
+    
+    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_events, hardlink_replicated, 2, 0),
+
+    test_utils:mock_unload(Worker2, dbsync_changes),
+    ok = rpc:call(Worker2, dbsync_changes, apply, [Doc]),
+    
+    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_events, hardlink_replicated, 2, 1, Attempts).
+    
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -244,10 +273,17 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
+init_per_testcase(hardlink_reference_file_meta_race_test = Case, Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, 60),
+    mock_dbsync_file_meta(?config(workers2, Config)),
+    test_utils:mock_new(?config(workers2, Config), dbsync_events, [passthrough]),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
 
+end_per_testcase(hardlink_reference_file_meta_race_test, Config) ->
+    test_utils:mock_unload(?config(workers2, Config));
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 
@@ -340,3 +376,22 @@ write(Worker, SessId, Link, FileContent, Attempts) ->
                 {error, {E1, E2}}
         end, Attempts),
     Ans.
+
+mock_dbsync_file_meta(Workers) ->
+    test_utils:mock_new(Workers, dbsync_changes),
+    Self = self(),
+    test_utils:mock_expect(Workers, dbsync_changes, apply, fun
+        (#document{value = #file_meta{type = ?REGULAR_FILE_TYPE}} = Doc) ->
+            Self ! {?MODULE, dbsync_mock, Doc},
+            ok;
+        (Doc) ->
+            meck:passthrough([Doc])
+    end).
+
+wait_for_dbsynced_doc(Key, Attempts) ->
+    receive
+        {?MODULE, dbsync_mock, #document{key = Key} = Doc} ->
+            Doc
+    after timer:seconds(Attempts) ->
+        throw({mocked_document_not_received, Key})
+    end.
