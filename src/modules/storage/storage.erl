@@ -45,7 +45,7 @@
     fetch_provider_id_of_remote_storage/2,
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2
 ]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
+-export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 -export([verify_configuration/3]).
@@ -304,11 +304,6 @@ fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
 -spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
 fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
     ?check(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)).
-
-
--spec should_skip_storage_detection(data() | id()) -> boolean().
-should_skip_storage_detection(StorageDataOrId) ->
-    storage_config:should_skip_storage_detection(StorageDataOrId).
 
 
 -spec is_imported(id() | data()) -> boolean().
