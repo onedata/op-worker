@@ -107,9 +107,9 @@ get_attr_as_json(?attr_symlink_value, #file_attr{symlink_value = SymlinkValue}) 
 get_attr_as_json(?attr_has_custom_metadata, #file_attr{has_custom_metadata = HasMetadata}) ->
     HasMetadata;
 get_attr_as_json(?attr_eff_protection_flags, #file_attr{eff_protection_flags = EffProtectionFlags}) ->
-    file_meta:protection_flags_to_json(EffProtectionFlags);
+    protection_flags_to_json(EffProtectionFlags);
 get_attr_as_json(?attr_eff_dataset_protection_flags, #file_attr{eff_dataset_protection_flags = EffDatasetProtectionFlags}) ->
-    file_meta:protection_flags_to_json(EffDatasetProtectionFlags);
+    protection_flags_to_json(EffDatasetProtectionFlags);
 get_attr_as_json(?attr_eff_dataset_inheritance_path, #file_attr{eff_dataset_inheritance_path = EffDatasetInheritancePath}) ->
     inheritance_path_to_json(EffDatasetInheritancePath);
 get_attr_as_json(?attr_eff_qos_inheritance_path, #file_attr{eff_qos_inheritance_path = EffQosInheritancePath}) ->
@@ -121,11 +121,19 @@ get_attr_as_json(?attr_recall_root_id, #file_attr{recall_root_id = RecallRootId}
 
 
 %% @private
--spec inheritance_path_to_json(file_qos:inheritance_path() | dataset:inheritance_path()) -> json_utils:json_term().
+-spec inheritance_path_to_json(file_qos:inheritance_path() | dataset:inheritance_path() | undefined) ->
+    json_utils:json_term().
+inheritance_path_to_json(undefined)                             -> null; % possible for user root dir
 inheritance_path_to_json(?none_inheritance_path)                -> <<"none">>;
 inheritance_path_to_json(?direct_inheritance_path)              -> <<"direct">>;
 inheritance_path_to_json(?ancestor_inheritance)                 -> <<"ancestor">>;
 inheritance_path_to_json(?direct_and_ancestor_inheritance_path) -> <<"directAndAncestor">>.
+
+
+%% @private
+-spec protection_flags_to_json(undefined | data_access_control:bitmask()) -> json_utils:json_term().
+protection_flags_to_json(undefined) -> null; % possible for user root dir
+protection_flags_to_json(ProtectionFlags) -> file_meta:protection_flags_to_json(ProtectionFlags).
 
 
 %% @private

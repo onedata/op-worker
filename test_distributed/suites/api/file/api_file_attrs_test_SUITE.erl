@@ -401,13 +401,22 @@ build_get_attrs_prepare_rest_args_fun(ValidId) ->
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = <<"data/", Id/binary>>,
+    
+        {FinalPath, FinalBody} = case rand:uniform(2) of
+            1 -> {
+                RestPath,
+                json_utils:encode(maps:with([<<"attributes">>], Data2))
+            };
+            2 -> {
+                http_utils:append_url_parameters(RestPath, maps:with([<<"attributes">>], Data2)),
+                <<>>
+            }
+        end,
 
         #rest_args{
             method = get,
-            path = http_utils:append_url_parameters(
-                RestPath,
-                maps:with([<<"attributes">>], Data2)
-            )
+            path = FinalPath,
+            body = FinalBody
         }
     end.
 

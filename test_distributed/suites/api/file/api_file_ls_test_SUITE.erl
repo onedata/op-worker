@@ -595,16 +595,31 @@ build_get_children_prepare_rest_args_fun(ValidId) ->
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = <<"data/", Id/binary, "/children">>,
-        RestPathWithAttributes = lists:foldl(fun(Attr, TmpRestPath) ->
-            http_utils:append_url_parameters(TmpRestPath, #{<<"attributes">> => Attr})
-        end, RestPath, utils:ensure_list(maps:get(<<"attributes">>, Data2, []))),
+    
+        {FinalPath, FinalBody} = case rand:uniform(2) of
+            1 ->
+                Data3 = case maps:get(<<"attributes">>, Data2, []) of
+                    [] -> maps:remove(<<"attributes">>, Data2);
+                    _ -> Data2
+                end,
+                {
+                    RestPath,
+                    json_utils:encode(maps:with([<<"attributes">>, <<"limit">>], Data3))
+                };
+            2 ->
+                RestPathWithAttributes = lists:foldl(fun(Attr, TmpRestPath) ->
+                    http_utils:append_url_parameters(TmpRestPath, #{<<"attributes">> => Attr})
+                end, RestPath, utils:ensure_list(maps:get(<<"attributes">>, Data2, []))),
+                {
+                    http_utils:append_url_parameters(RestPathWithAttributes, maps:with([<<"limit">>], Data2)),
+                    <<>>
+                }
+        end,
 
         #rest_args{
             method = get,
-            path = http_utils:append_url_parameters(
-                RestPathWithAttributes,
-                maps:with([<<"limit">>], Data2)
-            )
+            path = FinalPath,
+            body = FinalBody
         }
     end.
 
