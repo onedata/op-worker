@@ -539,7 +539,6 @@ on_space_unsupported(SpaceId, StorageId) ->
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     rtransfer_config:add_storage(StorageId),
-    utils:rpc_multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
