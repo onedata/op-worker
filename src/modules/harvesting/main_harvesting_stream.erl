@@ -32,7 +32,7 @@
 
 %% API
 -export([propose_takeover/2, revise_harvester/3,
-    revise_space_harvesters/2, space_removed/1, space_unsupported/1, revise_all_spaces/0]).
+    revise_space_harvesters/2, notify_space_deleted/1, space_unsupported/1, revise_all_spaces/0]).
 
 %% harvesting_stream callbacks
 -export([init/1, name/1, handle_call/3, handle_cast/2, terminate/2, custom_error_handling/2,
@@ -73,8 +73,8 @@ revise_harvester(SpaceId, HarvesterId, Indices) ->
 revise_space_harvesters(SpaceId, Harvesters) ->
     call(SpaceId, ?REVISE_SPACE_HARVESTERS(Harvesters)).
 
--spec space_removed(od_space:id()) -> ok.
-space_removed(SpaceId) ->
+-spec notify_space_deleted(od_space:id()) -> ok.
+notify_space_deleted(SpaceId) ->
     gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?SPACE_REMOVED).
 
 -spec space_unsupported(od_space:id()) -> ok.

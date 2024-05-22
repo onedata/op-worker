@@ -83,7 +83,7 @@ many_files_test_base(Config, TestScenario) ->
     SlavePids = case get(slave_pids) of
         undefined ->
             SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-            SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+            SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
             {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceGuid,
                 generator:gen_name(), ?DEFAULT_FILE_PERMS)),
@@ -118,7 +118,7 @@ many_files_test_base(Config, TestScenario) ->
                 end
             end, Pids),
 
-            client_simulation_test_base:verify_streams(Config),
+            client_simulation_test_utils:verify_streams(Config),
             {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
             put(memory_pools, Before),
             put(slave_pids, Pids),
@@ -154,7 +154,7 @@ many_files_test_base(Config, TestScenario) ->
     Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore, false),
     ?assertEqual([], Res),
 %%    ct:print("Docs number ~tp", [{length(Res), Res}]),
-    client_simulation_test_base:verify_streams(Config, false).
+    client_simulation_test_utils:verify_streams(Config, false).
 
 %%%===================================================================
 %%% Internal functions
@@ -165,7 +165,7 @@ start_slave(Config, Sock, SpaceGuid, Master, test_many) ->
     many_files_slave_loop(Config, Sock, SpaceGuid, Master);
 start_slave(Config, Sock, SpaceGuid, Master, test_long_usage) ->
     {FileGuid, HandleId, SubId} =
-        client_simulation_test_base:prepare_file(Sock, SpaceGuid),
+        client_simulation_test_utils:prepare_file(Sock, SpaceGuid),
     timer:sleep(5000),
     Master ! {start_ans, ok},
     long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master).
@@ -177,7 +177,7 @@ many_files_slave_loop(Config, Sock, SpaceGuid, Master) ->
                 Args = [write, read, release, unsub],
                 Repeats = ?config(proc_repeats_num, Config),
                 lists:foreach(fun(_) ->
-                    client_simulation_test_base:simulate_client(Config, Args, Sock, SpaceGuid, false)
+                    client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceGuid, false)
                 end, lists:seq(1, Repeats)),
                 Master ! {test_ans, ok}
             catch
@@ -193,7 +193,7 @@ long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master) ->
             try
                 Repeats = ?config(proc_repeats_num, Config),
                 lists:foreach(fun(_) ->
-                    client_simulation_test_base:use_file(Sock, FileGuid, HandleId, SubId)
+                    client_simulation_test_utils:use_file(Sock, FileGuid, HandleId, SubId)
                 end, lists:seq(1, Repeats)),
                 Master ! {test_ans, ok}
             catch
@@ -208,15 +208,15 @@ long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    client_simulation_test_base:init_per_suite(Config).
+    client_simulation_test_utils:init_per_suite(Config).
 
 init_per_testcase(stress_test, Config) ->
-    client_simulation_test_base:init_per_testcase(Config);
+    client_simulation_test_utils:init_per_testcase(Config);
 init_per_testcase(_Case, Config) ->
     Config.
 
 end_per_testcase(stress_test, Config) ->
-    client_simulation_test_base:end_per_testcase(Config);
+    client_simulation_test_utils:end_per_testcase(Config);
 end_per_testcase(_Case, Config) ->
     Config.
 

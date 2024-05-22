@@ -307,7 +307,7 @@ example_configs() ->
     lists:flatten([
         #atm_audit_log_store_config{log_content_data_spec = #atm_array_data_spec{
             item_data_spec = atm_store_test_utils:example_data_spec(?RAND_ELEMENT(
-                    SupportedStaticBasicTypes
+                SupportedStaticBasicTypes
             ))
         }},
 

@@ -31,7 +31,7 @@
 -export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1, get_scope/1]).
 -export([
-    get_uuid/1, get_child/2, trim_filename_tree_id/2,
+    get_uuid/1, get_child/2, trim_disambiguated_name_provider_suffix/2,
     get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3
 ]).
 -export([get_name/1, set_name/2]).
@@ -40,12 +40,12 @@
     update_protection_flags/3, validate_protection_flags/1,
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
--export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    make_space_exist/1, make_tmp_dir_exist/1, ensure_tmp_dir_link_exists/1, make_opened_deleted_files_dir_exist/1,
+-export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
+    ensure_space_doc_exist/1, ensure_tmp_dir_exists/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exists/1,
     new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
--export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, has_suffix/1, is_deleted/1]).
+-export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
 -export([get_ctx_with_remote_set/2]).
 
 
@@ -59,6 +59,9 @@
 -type path() :: binary().
 -type uuid_based_path() :: binary(). % similar to canonical, but path elements are uuids instead of filenames/dirnames
 -type name() :: binary().
+% disambiguated name in case of name conflicts between providers/space name conflicts;
+% it is name@PROVIDER_ID for conflicts between providers or space_name@SPACE_ID in case of space name conflicts.
+-type disambiguated_name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
 -type size() :: non_neg_integer().
@@ -72,8 +75,8 @@
 -type link() :: file_meta_forest:link().
 
 -export_type([
-    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
-    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, disambiguated_name/0,
+    uuid_or_path/0, entry/0,  size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     conflicts/0, path_type/0, link/0
 ]).
 
@@ -95,6 +98,19 @@
 % For root directory and users' root directories we use "special" scope
 % as they don't belong to any space
 -define(ROOT_DIR_SCOPE, <<>>).
+
+
+-define(SPACE_ROOT_DOC(SpaceId), #document{
+    key = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    value = #file_meta{
+        name = SpaceId,
+        type = ?DIRECTORY_TYPE,
+        mode = ?DEFAULT_DIR_MODE,
+        owner = ?SPACE_OWNER_ID(SpaceId),
+        is_scope = true,
+        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
+    }
+}).
 
 %%%===================================================================
 %%% API
@@ -139,7 +155,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, doc()} | {error, term()}.
 save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
     % Spaces are handled specially so as to not overwrite file_meta if it already
-    % exists ('make_space_exist' may be called several times for each space)
+    % exists ('ensure_space_docs_exist' may be called several times for each space)
     case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
         ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
         Result -> Result
@@ -313,8 +329,9 @@ get_including_deleted(Uuid, Ctx) ->
                         true ->
                             % Until space doc creation is finally properly handled on space creation
                             % create space document here if it was requested before any user login.
-                            ?debug("make_space_exist called in file_meta:get_including_deleted"),
-                            make_space_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
+                            % TODO VFS-11954 analyze whether still needed
+                            ?debug("ensure_space_docs_exist called in file_meta:get_including_deleted"),
+                            space_logic:ensure_required_docs_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
                             datastore_model:get(Ctx#{include_deleted => true}, Uuid);
                         false ->
                             {error, not_found}
@@ -446,19 +463,20 @@ get_child(ParentUuid, Name) ->
     end.
 
 
--spec trim_filename_tree_id(name(), {all, uuid()} | file_meta_forest:tree_id()) -> name().
-trim_filename_tree_id(Name, {all, ParentUuid}) ->
+-spec trim_disambiguated_name_provider_suffix(disambiguated_name() | name(), {all, uuid()} | file_meta_forest:tree_id()) ->
+    name().
+trim_disambiguated_name_provider_suffix(Name, {all, ParentUuid}) ->
     TreeIds = case file_meta_forest:get_trees(ParentUuid) of
         {ok, T} -> T;
         ?ERROR_NOT_FOUND -> []
     end,
     lists_utils:foldl_while(fun(TreeId, NameAcc) ->
-        case trim_filename_tree_id(NameAcc, TreeId) of
+        case trim_disambiguated_name_provider_suffix(NameAcc, TreeId) of
             NameAcc -> {cont, NameAcc};
             TrimmedName -> {halt, TrimmedName}
         end
     end, Name, TreeIds);
-trim_filename_tree_id(Name, TreeId) ->
+trim_disambiguated_name_provider_suffix(Name, TreeId) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
         [TreeId | NameTokens] -> str_utils:join_binary(NameTokens, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR);
@@ -704,56 +722,6 @@ get_mode(#file_meta{mode = Mode}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes files metadata for onedata user.
-%% This function can and should be used to ensure that user's FS is fully synchronised. Normally
-%% this function is called asynchronously automatically after user's document is updated.
-%% @end
-%%--------------------------------------------------------------------
--spec setup_onedata_user(UserId :: od_user:id(), EffSpaces :: [od_space:id()]) -> ok.
-setup_onedata_user(UserId, EffSpaces) ->
-    ?debug("Setting up user: ~tp", [UserId]),
-    critical_section:run([od_user, UserId], fun() ->
-        try
-            CTime = global_clock:timestamp_seconds(),
-
-            lists:foreach(fun(SpaceId) ->
-                make_space_exist(SpaceId)
-            end, EffSpaces),
-
-            FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
-            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
-                #document{
-                    key = FileUuid,
-                    value = #file_meta{
-                        name = UserId,
-                        type = ?DIRECTORY_TYPE,
-                        mode = 8#1755,
-                        owner = ?ROOT_USER_ID,
-                        is_scope = true,
-                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-                    }
-                })
-            of
-                {ok, _} ->
-                    {ok, _} = times:save(#document{
-                        key = FileUuid,
-                        value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-                        scope = ?ROOT_DIR_SCOPE
-                    }),
-                    ok;
-                {error, already_exists} ->
-                    ok
-            end
-        catch Type:Message:Stacktrace ->
-            ?error_stacktrace("Failed to setup user ~ts - ~tp:~tp", [
-                UserId, Type, Message
-            ], Stacktrace)
-        end
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
@@ -804,45 +772,18 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file meta entry for space if not exists
-%% @end
-%%--------------------------------------------------------------------
--spec make_space_exist(SpaceId :: od_space:id()) -> ok | no_return().
-make_space_exist(SpaceId) ->
-    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    FileDoc = #document{
-        key = SpaceDirUuid,
-        value = #file_meta{
-            name = SpaceId,
-            type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_DIR_MODE,
-            owner = ?SPACE_OWNER_ID(SpaceId),
-            is_scope = true,
-            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-        }
-    },
-    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
-        {ok, _} ->
-            case times:save_with_current_times(SpaceDirUuid, SpaceId, false) of
-                {ok, _} -> ok;
-                {error, already_exists} -> ok
-            end,
-
-            emit_space_dir_created(SpaceDirUuid, SpaceId);
+-spec ensure_space_doc_exist(SpaceId :: od_space:id()) -> ok | no_return().
+ensure_space_doc_exist(SpaceId) ->
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
+        {ok, #document{key = SpaceDirUuid}} ->
+            ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false));
         {error, already_exists} ->
             ok
-    end,
-    
-    trash:create(SpaceId),
-    archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
-    make_tmp_dir_exist(SpaceId),
-    make_opened_deleted_files_dir_exist(SpaceId).
+    end.
 
 
--spec make_tmp_dir_exist(od_space:id()) -> created | already_exists.
-make_tmp_dir_exist(SpaceId) ->
+-spec ensure_tmp_dir_exists(od_space:id()) -> created | already_exists.
+ensure_tmp_dir_exists(SpaceId) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     TmpDirDoc = new_special_dir_doc(
@@ -866,8 +807,8 @@ ensure_tmp_dir_link_exists(SpaceId) ->
         ?TMP_DIR_NAME, fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId)))).
 
 
--spec make_opened_deleted_files_dir_exist(od_space:id()) -> ok.
-make_opened_deleted_files_dir_exist(SpaceId) ->
+-spec ensure_opened_deleted_files_dir_exists(od_space:id()) -> ok.
+ensure_opened_deleted_files_dir_exists(SpaceId) ->
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     Doc = new_special_dir_doc(
         ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DEFAULT_DIR_MODE,
@@ -1136,10 +1077,11 @@ check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProvide
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if file has suffix. Returns name without suffix if true.
+%% @TODO VFS-11506 properly handle names containing `@`
 %% @end
 %%--------------------------------------------------------------------
--spec has_suffix(name()) -> {true, NameWithoutSuffix :: name()} | false.
-has_suffix(Name) ->
+-spec is_disambiguated(name() | disambiguated_name()) -> {true, NameWithoutSuffix :: name()} | false.
+is_disambiguated(Name) ->
     case binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR) of
         [BaseName | _] -> {true, BaseName};
         _ -> false
@@ -1229,25 +1171,6 @@ get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Sends event about space dir creation
-%% @end
-%%--------------------------------------------------------------------
--spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: od_space:id()) -> ok | no_return().
-emit_space_dir_created(DirUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
-    #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
-            allow_deleted_files => false,
-            name_conflicts_resolution_policy => allow_name_conflicts,
-            attributes => ?ONECLIENT_FILE_ATTRS
-        }),
-    FileAttr2 = FileAttr#file_attr{size = 0},
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 
 
 %%%===================================================================

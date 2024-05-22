@@ -26,7 +26,6 @@
 %% tests
 -export([
     % tests of import
-    empty_import_test/1,
     create_empty_file_import_test/1,
     create_file_import_test/1,
     create_delete_import_test/1,
@@ -82,7 +81,6 @@
 
 -define(TEST_CASES, [
     % tests of import
-    empty_import_test,
     create_empty_file_import_test,
     create_file_import_test,
     create_delete_import_test,
@@ -141,9 +139,6 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-empty_import_test(Config) ->
-    storage_import_test_base:empty_import_test(Config).
 
 create_empty_file_import_test(Config) ->
     storage_import_test_base:create_empty_file_import_test(Config).

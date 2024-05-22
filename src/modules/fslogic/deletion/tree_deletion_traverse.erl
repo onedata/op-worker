@@ -65,7 +65,7 @@ init_pool() ->
     MasterJobsLimit = op_worker:get_env(tree_deletion_traverse_master_jobs_limit, 10),
     SlaveJobsLimit = op_worker:get_env(tree_deletion_traverse_slave_jobs_limit, 10),
     ParallelismLimit = op_worker:get_env(tree_deletion_traverse_parallelism_limit, 10),
-    tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
+    tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit, [?MODULE]).
 
 
 -spec stop_pool() -> ok.

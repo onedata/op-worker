@@ -1151,7 +1151,7 @@ get_next_iterator(Handler, Context, Iterator, ExecutionId) ->
         Error:Reason:Stacktrace ->
             workflow_engine:handle_exception(
                 ExecutionId, Handler, Context,
-                "Unexpected error getting next iterator", [],
+                ?autoformat_with_msg("Unexpected error getting next iterator", []),
                 Error, Reason, Stacktrace
             ),
             undefined

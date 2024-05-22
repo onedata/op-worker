@@ -43,6 +43,7 @@
 %% Function executed by wpool - do not call directly
 -export([process_job_or_result/3, process_streamed_task_data/3, prepare_lane/7]).
 
+-type autoformat_spec() :: #autoformat_spec{}.
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
@@ -304,7 +305,7 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, Context,
-                ?notice(?autoformat(Function, Args)),
+                ?autoformat(Function, Args),
                 Error, Reason, Stacktrace
             ),
             error
@@ -351,7 +352,7 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
     end.
 
 -spec handle_exception(execution_id(), workflow_handler:handler(), execution_context(),
-    string(), throw | error | exit, term(), list()) -> ok.
+    string() | autoformat_spec(), throw | error | exit, term(), list()) -> ok.
 handle_exception(ExecutionId, Handler, Context, Message, Class, Reason, Stacktrace) ->
     try
         ?error_exception(
@@ -746,8 +747,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
                 % TODO VFS-7788 - use callbacks to get human readable information about task
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    ?error(?autoformat_with_msg("Unexpected error processing task result",
-                    [TaskId, CachedResultId, CachedResult, ItemId, CachedItem])),
+                    ?autoformat_with_msg("Unexpected error processing task result",
+                    [TaskId, CachedResultId, CachedResult, ItemId, CachedItem]),
                     Error, Reason, Stacktrace
                 ),
                 error
@@ -757,8 +758,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                ?error(?autoformat_with_msg("Unexpected error getting item or result to process task result ",
-                [TaskId, CachedResultId])),
+                ?autoformat_with_msg("Unexpected error getting item or result to process task result ",
+                [TaskId, CachedResultId]),
                 Error2, Reason2, Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -782,7 +783,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
             Error:Reason:Stacktrace  ->
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    ?error(?autoformat_with_msg("Unexpected error processing task data ", [TaskId, CachedTaskDataId])),
+                    ?autoformat_with_msg("Unexpected error processing task data ", [TaskId, CachedTaskDataId]),
                     Error, Reason, Stacktrace
                 ),
                 trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -791,7 +792,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                ?error(?autoformat_with_msg("Unexpected error getting data for task ", [CachedTaskDataId, TaskId])),
+                ?autoformat_with_msg("Unexpected error getting data for task ", [CachedTaskDataId, TaskId]),
                 Error2, Reason2, Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -819,7 +820,7 @@ prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, Preparati
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, ExecutionContext,
-                ?info(?autoformat_with_msg("Unexpected error preparing lane ~tp", [LaneId], [])),
+                ?autoformat_with_msg("Unexpected error preparing lane ~tp", [LaneId], []),
                 Error, Reason, Stacktrace
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)

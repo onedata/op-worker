@@ -139,29 +139,29 @@ create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     ),
 
     SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, DirName]),
-    StorageSDHandleKrakow = sd_test_utils:get_storage_mountpoint_handle(
+    StorageSDHandleImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
         NodeImportingProvider,
         SpaceId,
         TestCaseCtx#storage_import_test_case_ctx.imported_storage_id
     ),
-    StorageSDHandleParis = sd_test_utils:get_storage_mountpoint_handle(
+    StorageSDHandleNonImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
         NodeImportingProvider,
         SpaceId,
         TestCaseCtx#storage_import_test_case_ctx.other_storage_id
     ),
     {ok, #statbuf{st_uid = MountUidImportingProvider}} = sd_test_utils:stat(
-        NodeImportingProvider, StorageSDHandleKrakow
+        NodeImportingProvider, StorageSDHandleImportingProvider
     ),
     {ok, #statbuf{
         st_uid = MountUidNonImportingProvider,
         st_gid = MountGidNonImportingProvider
-    }} = sd_test_utils:stat(NodeNonImportingProvider, StorageSDHandleParis),
+    }} = sd_test_utils:stat(NodeNonImportingProvider, StorageSDHandleNonImportingProvider),
 
-    SpaceOwner = ?SPACE_OWNER_ID(SpaceId),
+    SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
 
     ?assertMatch(
         {ok, #file_attr{
-            owner_id = SpaceOwner,
+            owner_id = SpaceOwnerId,
             uid = MountUidImportingProvider,
             gid = 0
         }},
@@ -170,7 +170,7 @@ create_directory_import_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     ),
     ?assertMatch(
         {ok, #file_attr{
-            owner_id = SpaceOwner,
+            owner_id = SpaceOwnerId,
             uid = MountUidNonImportingProvider,
             gid = MountGidNonImportingProvider
         }},
@@ -222,13 +222,17 @@ delete_space_with_supporting_storages(SpaceId, #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector,
     non_importing_provider_selector = NonImportingProviderSelector
 }) ->
-    [StorageKrakow] = opw_test_rpc:get_space_local_storages(ImportingProviderSelector, SpaceId),
-    [StorageParis] = opw_test_rpc:get_space_local_storages(NonImportingProviderSelector, SpaceId),
+    [StorageImportingProvider] = opw_test_rpc:get_space_local_storages(
+        ImportingProviderSelector, SpaceId
+    ),
+    [StorageNonImportingProvider] = opw_test_rpc:get_space_local_storages(
+        NonImportingProviderSelector, SpaceId
+    ),
 
     ozw_test_rpc:delete_space(SpaceId),
 
-    delete_storage(ImportingProviderSelector, StorageKrakow),
-    delete_storage(NonImportingProviderSelector, StorageParis).
+    delete_storage(ImportingProviderSelector, StorageImportingProvider),
+    delete_storage(NonImportingProviderSelector, StorageNonImportingProvider).
 
 
 %% @private
@@ -291,7 +295,29 @@ create_storage(posix, ProviderSelector, IsImported) ->
     space_setup_utils:create_storage(ProviderSelector, #posix_storage_params{
         mount_point = <<"/mnt/st_", (generator:gen_name())/binary>>,
         imported_storage = IsImported
+    });
+create_storage(s3, ProviderSelector, true) ->
+    space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
+        storage_path_type = <<"canonical">>,
+        imported_storage = true,
+        hostname = build_s3_hostname(ProviderSelector),
+        bucket_name = <<"test">>,
+        block_size = 0
+    });
+create_storage(s3, ProviderSelector, false) ->
+    space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
+        storage_path_type = <<"flat">>,
+        hostname = build_s3_hostname(ProviderSelector)
     }).
+
+
+%% @private
+build_s3_hostname(ProviderSelector) ->
+    <<
+        "dev-volume-s3-",
+        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
+        ".default:9000"
+    >>.
 
 
 %% @private

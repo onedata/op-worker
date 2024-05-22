@@ -519,7 +519,7 @@ on_storage_created(StorageId) ->
 %% @private
 -spec on_space_supported(od_space:id(), id()) -> ok.
 on_space_supported(SpaceId, StorageId) ->
-    % remove possible remnants of previous support 
+    % remove possible remnants of previous support
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     space_logic:on_space_supported(SpaceId).

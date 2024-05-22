@@ -170,6 +170,11 @@ example_data_spec(atm_file_type) ->
         attributes = ?RAND_SUBLIST(?ATM_FILE_ATTRIBUTES, 1, all)
     };
 
+example_data_spec(atm_group_type) ->
+    #atm_group_data_spec{
+        attributes = ?RAND_SUBLIST(atm_group_data_spec:allowed_group_attributes(), 1, all)
+    };
+
 example_data_spec(atm_number_type) ->
     #atm_number_data_spec{integers_only = false, allowed_values = undefined};
 
@@ -233,6 +238,14 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_file_data_spec{}
         <<"fileId">> => ObjectId,
         <<"type">> => str_utils:to_binary(FileType)
     };
+
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_group_data_spec{}) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+    SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+    {ok, EffGroups} = ?rpc(ProviderSelector, space_logic:get_eff_groups(SessionId, SpaceId)),
+
+    % TODO VFS-11951 create random group
+    #{<<"groupId">> => ?RAND_ELEMENT(maps:keys(EffGroups))};
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_number_data_spec{
     integers_only = true,
@@ -434,6 +447,7 @@ randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecution
             false
     end;
 
+% TODO VFS-11951 remove group
 randomly_remove_entity_referenced_by_item(_ProviderSelector, _AtmWorkflowExecutionAuth, _Item, _AtmDataSpec) ->
     false.
 
@@ -473,6 +487,7 @@ basic_data_types() -> [
     atm_boolean_type,
     atm_dataset_type,
     atm_file_type,
+    atm_group_type,
     atm_number_type,
     atm_object_type,
     atm_range_type,

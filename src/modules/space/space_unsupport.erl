@@ -63,14 +63,15 @@ init_pools() ->
     MasterJobsLimit = op_worker:get_env(space_unsupport_master_jobs_limit, 1),
     SlaveJobsLimit = op_worker:get_env(space_unsupport_slave_jobs_limit, 5),
     ParallelismLimit = op_worker:get_env(space_unsupport_parallelism_limit, 5),
-    traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
+    traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit, #{callback_modules => [?MODULE]}),
     unsupport_cleanup_traverse:init_pool().
 
 -spec run(od_space:id(), storage:id()) -> ok.
 run(SpaceId, StorageId) ->
     % ensure that file_meta doc for space is created, so it is not needed to always 
     % check if it exists when doing operations on files
-    file_meta:make_space_exist(SpaceId),
+    % TODO VFS-11954 analyze whether still needed
+    space_logic:ensure_required_docs_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init})).
 

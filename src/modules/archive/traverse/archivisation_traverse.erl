@@ -79,7 +79,7 @@ init_pool() ->
     MasterJobsLimit = op_worker:get_env(archivisation_traverse_master_jobs_limit, 10),
     SlaveJobsLimit = op_worker:get_env(archivisation_traverse_slave_jobs_limit, 20),
     ParallelismLimit = op_worker:get_env(archivisation_traverse_parallelism_limit, 10),
-    tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
+    tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit, [?MODULE]),
     archive_verification_traverse:init_pool(),
     archive_recall_traverse:init_pool().
 

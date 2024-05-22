@@ -47,7 +47,7 @@
 
 -spec init_pool() -> ok | no_return().
 init_pool() ->
-    tree_traverse:init(?MODULE, ?POOL_WORKERS, 0, 5).
+    tree_traverse:init(?MODULE, ?POOL_WORKERS, 0, 5, [?MODULE]).
 
 
 -spec stop_pool() -> ok.

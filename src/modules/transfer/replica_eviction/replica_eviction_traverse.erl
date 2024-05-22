@@ -39,7 +39,7 @@ init_pool() ->
     MasterJobsLimit = ?MASTER_JOBS_LIMIT,
 
     % set parallelism limit equal to master jobs limit
-    tree_traverse:init(?MODULE, MasterJobsLimit, ?SLAVE_JOBS_LIMIT, MasterJobsLimit).
+    tree_traverse:init(?MODULE, MasterJobsLimit, ?SLAVE_JOBS_LIMIT, MasterJobsLimit, [?MODULE]).
 
 
 -spec stop_pool() -> ok.

@@ -250,7 +250,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{name = AnsName} = FileAttr
 }, Name) ->
-    case file_meta:has_suffix(Name) of
+    case file_meta:is_disambiguated(Name) of
         {true, AnsName} -> FuseResponse;
         _ -> FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}}
     end.

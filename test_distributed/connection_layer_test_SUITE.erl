@@ -835,7 +835,7 @@ get_cp_settings(CP_Pid) ->
 apply_helper(Handle, Timeout, Function, Args, CP_Pid) ->
     case get_cp_settings(CP_Pid) of
         helper_timeout ->
-            helpers:receive_loop(make_ref(), Timeout);
+            await_helper_response(make_ref(), Timeout);
         helper_delay ->
             configure_cp(CP_Pid, ok),
             Master = self(),
@@ -843,16 +843,24 @@ apply_helper(Handle, Timeout, Function, Args, CP_Pid) ->
                 {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
                 Master ! {ref, ResponseRef},
                 send_helpers_heartbeats_with_delay(10, Master, ResponseRef),
-                Ans = helpers:receive_loop(ResponseRef, Timeout),
+                Ans = await_helper_response(ResponseRef, Timeout),
                 Master ! {ResponseRef, Ans}
             end),
             receive
                 {ref, ResponseRef} ->
-                    helpers:receive_loop(ResponseRef, Timeout)
+                    await_helper_response(ResponseRef, Timeout)
             end;
         _ ->
             {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
-            helpers:receive_loop(ResponseRef, Timeout)
+            await_helper_response(ResponseRef, Timeout)
+    end.
+
+await_helper_response(Ref, Timeout) ->
+    case helpers:receive_loop(Ref, Timeout) of
+        {error, Reason, _Description} ->
+            {error, Reason};
+        Other ->
+            Other
     end.
 
 handle_file_written_events(CP_Pid) ->

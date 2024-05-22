@@ -33,6 +33,7 @@
 -export([has_eff_privilege/3, has_eff_privileges/3, get_eff_privileges/2]).
 -export([assert_has_eff_privilege/3]).
 -export([is_owner/2]).
+-export([infer_accessible_eff_groups/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1,
     get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
@@ -42,10 +43,10 @@
 -export([is_supported_by_storage/2]).
 -export([has_readonly_support_from/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
--export([can_view_group_through_space/3, can_view_group_through_space/4]).
+-export([can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
--export([on_space_supported/1]).
+-export([on_space_supported/1, ensure_required_docs_exist/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -190,6 +191,15 @@ is_owner(SpaceId, UserId) when is_binary(SpaceId) ->
     end;
 is_owner(#document{value = #od_space{owners = Owners}}, UserId) ->
     lists:member(UserId, Owners).
+
+
+-spec infer_accessible_eff_groups(gs_client_worker:client(), od_space:id()) ->
+    {ok, middleware:data()} | errors:error().
+infer_accessible_eff_groups(SessionId, SpaceId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_space, id = SpaceId, aspect = infer_accessible_eff_groups, scope = private}
+    }).
 
 
 -spec get_eff_groups(gs_client_worker:client(), od_space:id()) ->
@@ -422,17 +432,11 @@ can_view_user_through_space(SpaceDoc, ClientUserId, TargetUserId) ->
 can_view_group_through_space(SessionId, SpaceId, ClientUserId, GroupId) ->
     case get(SessionId, SpaceId) of
         {ok, SpaceDoc = #document{}} ->
-            can_view_group_through_space(SpaceDoc, ClientUserId, GroupId);
+            (has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso has_eff_group(SpaceDoc, GroupId))
+                orelse user_logic:has_eff_group(SessionId, ClientUserId, GroupId);
         _ ->
             false
     end.
-
-
--spec can_view_group_through_space(od_space:doc(), ClientUserId :: od_user:id(),
-    od_group:id()) -> boolean().
-can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
-    has_eff_privilege(SpaceDoc, ClientUserId, ?SPACE_VIEW) andalso
-        has_eff_group(SpaceDoc, GroupId).
 
 
 %%--------------------------------------------------------------------
@@ -496,3 +500,10 @@ on_space_supported(SpaceId) ->
     ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
+-spec ensure_required_docs_exist(od_space:id()) -> ok.
+ensure_required_docs_exist(SpaceId) ->
+    file_meta:ensure_space_doc_exist(SpaceId),
+    trash:ensure_exists(SpaceId),
+    archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
+    file_meta:ensure_tmp_dir_exists(SpaceId),
+    file_meta:ensure_opened_deleted_files_dir_exists(SpaceId).

@@ -56,7 +56,6 @@
 %% tests
 -export([
     % tests of import
-    empty_import_test/1,
     create_directory_import_error_test/1,
     create_directory_import_check_user_id_test/1,
     create_directory_import_check_user_id_error_test/1,
@@ -185,37 +184,6 @@
 %%%===================================================================
 %%% Tests of import
 %%%===================================================================
-
-empty_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    % wait till scan is finished
-    assertInitialScanFinished(W1, ?SPACE_ID),
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_PATH}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
 
 create_directory_import_error_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),

@@ -126,6 +126,8 @@
 
 %% Atm data types related macros
 
+-define(ATM_ACCESS_CONSTRAINT, #{<<"hasAccess">> => true}).
+
 -define(ATM_ARRAY_DATA_SPEC(__ITEM_DATA_TYPE_SPEC), #atm_array_data_spec{
     item_data_spec = __ITEM_DATA_TYPE_SPEC
 }).
