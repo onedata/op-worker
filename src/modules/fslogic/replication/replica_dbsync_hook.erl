@@ -412,13 +412,13 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSi
                             {ok, Handle} ->
                                 case storage_driver:truncate(Handle, NewSize, OldSize) of
                                     ok -> ok;
-                                    {error, ?ENOENT} -> ok;
+                                    {error, ?ENOENT} -> ok; % file not yet created on storage
                                     {error, Error} ->
                                         % NOTE: can happen on flat storages, which do not check anything during open.
-                                        ?warning("File truncate after location dbsync failed.~n~s", [?autoformat([Error])])
+                                        ?warning("File truncation failed when executing a location dbsync hook~n~s", [?autoformat([Error])])
                                 end;
                             {error, ?ENOENT} ->
-                                ok
+                                ok % local file metadata not yet synchronized
                         end
                     end),
                     {ok, FileCtx3}
