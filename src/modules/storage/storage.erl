@@ -538,6 +538,7 @@ on_space_unsupported(SpaceId, StorageId) ->
 -spec on_helper_changed(StorageId :: id()) -> ok.
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
+    % TODO VFS-11947 consider error handling here and error propagation / rollback
     rtransfer_config:add_storage(StorageId),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
