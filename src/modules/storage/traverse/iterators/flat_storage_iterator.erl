@@ -59,21 +59,18 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case storage_driver:listobjects(Handle, Marker, Offset, BatchSize) of
-        {ok, []} ->
-            {ok, [], undefined};
-        {ok, ChildrenIdsAndStats} ->
+        {ok, {NextMarker, ChildrenIdsAndStats}} ->
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ParentTokens = filename:split(ParentStorageFileId),
             ChildrenBatch = lists:map(fun({ChildId, ChildStat}) ->
                 ChildCtx = storage_file_ctx:new_with_stat(ChildId, SpaceId, StorageId, ChildStat),
                 {ChildCtx, depth(ChildId, ParentTokens)}
             end, ChildrenIdsAndStats),
-            case length(ChildrenBatch) < BatchSize of
-                true ->
+            case NextMarker of
+                <<>> ->
                     {ok, ChildrenBatch, undefined};
-                false ->
+                _ ->
                     NextOffset = Offset + length(ChildrenIdsAndStats),
-                    {NextMarker, _} = lists:last(ChildrenIdsAndStats),
                     {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{
                         offset = NextOffset,
                         marker = NextMarker

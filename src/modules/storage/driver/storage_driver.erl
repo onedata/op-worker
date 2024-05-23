@@ -331,8 +331,6 @@ exists(SDHandle) ->
     {ok, [helpers:file_id()]} | error_reply().
 readdir(SDHandle = #sd_handle{file = FileId}, Offset, Count) ->
     run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
-        % TODO VFS-11999 helpers return indication if listing has ended
-        % see the changes in listobjects
         helpers:readdir(HelperHandle, FileId, Offset, Count)
     end).
 
@@ -343,35 +341,12 @@ readdir(SDHandle = #sd_handle{file = FileId}, Offset, Count) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec listobjects(FileHandle :: handle(), Marker :: binary(), Offset :: non_neg_integer(),
-    Count :: non_neg_integer()) -> {ok, [{helpers:file_id(), helpers:stat()}]} | error_reply().
+    Count :: non_neg_integer()) ->
+    {ok, {helpers:marker(), [{helpers:file_id(), helpers:stat()}]}} | error_reply().
 listobjects(SDHandle = #sd_handle{file = FileId}, Marker, Offset, Count) ->
     run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
-        listobjects_continue(HelperHandle, FileId, Marker, Offset, Count, [])
+        helpers:listobjects(HelperHandle, FileId, Marker, Offset, Count)
     end).
-
-
-%% @private
-% TODO VFS-11999 helpers return indication if listing has ended
-% for now, if the returned batch is not full, make sure that this is actually the last batch
-listobjects_continue(HelperHandle, FileId, Marker, Offset, Count, Acc) ->
-    AccLength = length(Acc),
-    case helpers:listobjects(HelperHandle, FileId, Marker, Offset, Count - AccLength) of
-        {error, _} = Error ->
-            Error;
-        {ok, []} ->
-            {ok, Acc};
-        {ok, ListedBatch} ->
-            NewAcc = Acc ++ ListedBatch,
-            NewBatchLength = length(ListedBatch),
-            case AccLength + NewBatchLength < Count of
-                true ->
-                    {NextMarker, _} = lists:last(ListedBatch),
-                    NextOffset = Offset + NewBatchLength,
-                    listobjects_continue(HelperHandle, FileId, NextMarker, NextOffset, Count, NewAcc);
-                false ->
-                    {ok, NewAcc}
-            end
-    end.
 
 
 %%--------------------------------------------------------------------
