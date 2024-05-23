@@ -21,10 +21,26 @@ sources:
       - cluster-manager
       - op-panel
 
+
+groups:
+  - &space_krk_group_1
+    name: space_krk_group_1
+    type: organization
+  - &space_krk_group_2
+    name: space_krk_group_2
+    type: unit
+  - &non_space_group
+    name: non_space_group
+    type: team
+
+
 users:
   - &user1
     name: user1
     password: password
+    groups:
+      - group: *space_krk_group_1
+      - group: *non_space_group
   - &user2
     name: user2
     password: password
@@ -39,6 +55,9 @@ spaces:
     users:
       - user: *user2
       - user: *user3
+    groups:
+      - group: *space_krk_group_1
+      - group: *space_krk_group_2
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"

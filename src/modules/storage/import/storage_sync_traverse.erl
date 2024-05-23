@@ -100,7 +100,7 @@ init_pool() ->
     MasterJobsLimit = op_worker:get_env(storage_import_master_jobs_limit, 10),
     SlaveJobsLimit = op_worker:get_env(storage_import_slave_workers_limit, 10),
     ParallelSyncedSpacesLimit = op_worker:get_env(storage_import_parallel_synced_spaces_limit, 10),
-    storage_traverse:init(?POOL, MasterJobsLimit, SlaveJobsLimit, ParallelSyncedSpacesLimit).
+    storage_traverse:init(?POOL, MasterJobsLimit, SlaveJobsLimit, ParallelSyncedSpacesLimit, ?MODULE).
 
 -spec stop_pool() -> ok.
 stop_pool() ->

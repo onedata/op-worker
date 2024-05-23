@@ -28,6 +28,7 @@ namespace {
  */
 nifpp::str_atom ok {"ok"};
 nifpp::str_atom error {"error"};
+nifpp::str_atom unknown_error {"unknown_error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
@@ -61,8 +62,7 @@ struct HelpersNIF {
                          {"webdav_helper_threads_number", "webdav_t"}},
                      {XROOTD_HELPER_NAME,
                          {"xrootd_helper_threads_number", "xrootd_t"}},
-                     {NFS_HELPER_NAME,
-                         {"nfs_helper_threads_number", "nfs_t"}},
+                     {NFS_HELPER_NAME, {"nfs_helper_threads_number", "nfs_t"}},
                      {NULL_DEVICE_HELPER_NAME,
                          {"nulldevice_helper_threads_number", "nulldev_t"}}})) {
             auto threadNumber =
@@ -100,7 +100,7 @@ struct HelpersNIF {
         }
     }
 
-    bool bufferingEnabled{false};
+    bool bufferingEnabled {false};
     std::unordered_map<folly::fbstring,
         std::shared_ptr<folly::IOThreadPoolExecutor>>
         executors;
@@ -309,6 +309,29 @@ thread_local std::default_random_engine NifCTX::gen {NifCTX::rd()};
 thread_local std::uniform_int_distribution<int> NifCTX::dist {};
 
 /**
+ * Convert std::system_error to Erlang tuple
+ */
+std::tuple<nifpp::str_atom, nifpp::str_atom, std::string> to_error(
+    const std::system_error &e)
+{
+    auto it = error_to_atom.find(e.code());
+    nifpp::str_atom reason {e.code().message()};
+    if (it != error_to_atom.end())
+        reason = it->second;
+
+    return std::make_tuple(error, reason, e.what());
+}
+
+/**
+ * Convert std::exception to Erlang tuple
+ */
+std::tuple<nifpp::str_atom, nifpp::str_atom, std::string> to_error(
+    const std::exception &e)
+{
+    return std::make_tuple(error, unknown_error, e.what());
+}
+
+/**
  * Runs given function and returns result or error term.
  */
 template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
@@ -320,12 +343,10 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
         return enif_make_badarg(env);
     }
     catch (const std::system_error &e) {
-        return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom {e.code().message()}));
+        return nifpp::make(env, to_error(e));
     }
     catch (const std::exception &e) {
-        return nifpp::make(
-            env, std::make_tuple(error, folly::fbstring {e.what()}));
+        return nifpp::make(env, to_error(e));
     }
 }
 
@@ -407,18 +428,9 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
         .thenValue(
             [ctx](T &&value) { handle_value(ctx, std::forward<T>(value)); })
         .thenError(folly::tag_t<std::system_error> {},
-            [ctx](auto &&e) {
-                auto it = error_to_atom.find(e.code());
-                nifpp::str_atom reason {e.code().message()};
-                if (it != error_to_atom.end())
-                    reason = it->second;
-
-                ctx.send(std::make_tuple(error, reason));
-            })
-        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
-            nifpp::str_atom reason {e.what()};
-            ctx.send(std::make_tuple(error, reason));
-        });
+            [ctx](auto &&e) { ctx.send(to_error(e)); })
+        .thenError(folly::tag_t<std::exception> {},
+            [ctx](auto &&e) { ctx.send(to_error(e)); });
 }
 
 /**
@@ -432,18 +444,9 @@ void handle_result(NifCTX ctx, file_handle_ptr handle, folly::Future<T> future)
             handle_value(ctx, std::forward<T>(value));
         })
         .thenError(folly::tag_t<std::system_error> {},
-            [ctx](auto &&e) {
-                auto it = error_to_atom.find(e.code());
-                nifpp::str_atom reason {e.code().message()};
-                if (it != error_to_atom.end())
-                    reason = it->second;
-
-                ctx.send(std::make_tuple(error, reason));
-            })
-        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
-            nifpp::str_atom reason {e.what()};
-            ctx.send(std::make_tuple(error, reason));
-        });
+            [ctx](auto &&e) { ctx.send(to_error(e)); })
+        .thenError(folly::tag_t<std::exception> {},
+            [ctx](auto &&e) { ctx.send(to_error(e)); });
 }
 
 /**
@@ -502,12 +505,10 @@ static void configurePerformanceMonitoring(
                     args["nulldevice_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.xrootd_helper_thread_count",
-                std::stoul(
-                    args["xrootd_helper_threads_number"].toStdString()));
+                std::stoul(args["xrootd_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET(
                 "comp.oneprovider.mod.options.nfs_helper_thread_count",
-                std::stoul(
-                    args["nfs_helper_threads_number"].toStdString()));
+                std::stoul(args["nfs_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
                                    "scheduler_helper_thread_count",
                 std::stoul(
@@ -559,10 +560,13 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
 {
-    handle_result(ctx,
-        helper->refreshParams(
-            one::helpers::StorageHelperParams::create(helper->name(), args)));
+    handle_result(ctx, helper->updateHelper(args));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
 
+ERL_NIF_TERM check_storage_availability(NifCTX ctx, helper_ptr helper)
+{
+    handle_result(ctx, helper->checkStorageAvailability());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -815,6 +819,12 @@ static ERL_NIF_TERM sh_readdir(
     return wrap(readdir, env, argv);
 }
 
+static ERL_NIF_TERM sh_check_storage_availability(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(check_storage_availability, env, argv);
+}
+
 static ERL_NIF_TERM sh_getattr(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -968,6 +978,8 @@ static ErlNifFunc nif_funcs[] = {
     {"stop_monitoring", 0, stop_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"refresh_params", 2, sh_refresh_params, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"refresh_helper_params", 2, sh_refresh_helper_params,
+        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"check_storage_availability", 1, sh_check_storage_availability,
         ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"getattr", 2, sh_getattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"access", 3, sh_access, ERL_NIF_DIRTY_JOB_IO_BOUND},

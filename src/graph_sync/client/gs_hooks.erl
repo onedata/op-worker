@@ -127,7 +127,8 @@ on_connect_to_oz() ->
     ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
     ok = qos_worker:init_retry_failed_files(),
-    ok = qos_worker:init_traverse_pools().
+    ok = qos_worker:init_traverse_pools(),
+    ok = user_root_dir:ensure_cache_updated().
 
 
 %% NOTE: these procedures are run on a single cluster node.
@@ -157,8 +158,7 @@ on_entity_deleted(#gri{type = od_provider, id = ProviderId, aspect = instance}) 
         _ -> ok
     end;
 on_entity_deleted(#gri{type = od_space, id = SpaceId, aspect = instance}) ->
-    ok = main_harvesting_stream:space_removed(SpaceId),
-    ok = auto_storage_import_worker:notify_space_deleted(SpaceId);
+    ok = od_space:handle_space_deleted(SpaceId);
 on_entity_deleted(#gri{type = od_token, id = TokenId, aspect = instance}) ->
     ok = auth_cache:report_token_deletion(TokenId);
 on_entity_deleted(#gri{type = temporary_token_secret, id = UserId, aspect = user}) ->

@@ -78,7 +78,7 @@ from_store_item(_AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     atm_store:item(),
     atm_file_data_spec:record()
 ) ->
-    {ok, automation:item()}.
+    {ok, automation:item()} | errors:error().
 describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
@@ -227,7 +227,7 @@ fetch_attributes(AtmWorkflowExecutionAuth, FileGuid, AttributesToFetch) ->
             FileAttrs;
         {error, Errno} ->
             case fslogic_errors:is_access_error(Errno) of
-                true -> throw({unverified_constraints, #{<<"hasAccess">> => true}});
+                true -> throw({unverified_constraints, ?ATM_ACCESS_CONSTRAINT});
                 false -> throw(?ERROR_POSIX(Errno))
             end
     end.

@@ -456,7 +456,7 @@ get_job(DocOrID) ->
 %===================================================================
 
 init_pool(Worker) ->
-    rpc:call(Worker, storage_traverse, init, [?MODULE, 10, 10, 10]).
+    rpc:call(Worker, storage_traverse, init, [?MODULE, 10, 10, 10, ?MODULE]).
 
 stop_pool(Worker) ->
     rpc:call(Worker, storage_traverse, stop, [?MODULE]).

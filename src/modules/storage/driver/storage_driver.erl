@@ -417,8 +417,8 @@ read(SDHandle, Offset, MaxSize) ->
                                 Error
                         end
                 end;
-            {error, ?ENOENT} when Offset > 0 ->
-                % some object storages return enoent when trying to read bytes
+            {error, Error} when Error == ?ENOENT orelse Error == ?EIO, Offset > 0 ->
+                % some object storages return enoent or eio when trying to read bytes
                 % out of file's range we must ensure that file exists
                 case stat(SDHandle) of
                     {ok, _} ->
@@ -531,6 +531,7 @@ flushbuffer(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
         case helpers:flushbuffer(HelperHandle, FileId, CurrentSize) of
             ok -> ok;
             {error, ?ENOENT} -> ok;
+            {error, ?EIO} -> ok;
             {error, __} = Error -> Error
         end
     end, ?READWRITE).

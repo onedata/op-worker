@@ -82,7 +82,7 @@ get_sync_info(Job) ->
 
 init_pool(Config, Size) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [stress_test_traverse_pool, 5, 30, 10])),
+    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [stress_test_traverse_pool, 5, 30, 10, [?MODULE]])),
 
     CachePid = spawn(Worker, fun() -> stress_test_traverse_pool:cache_proc(#{
         check_frequency => timer:minutes(1),

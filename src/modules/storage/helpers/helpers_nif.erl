@@ -31,7 +31,7 @@
     mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
     listxattr/2, flushbuffer/3, open/3, read/3, write/3, release/1, flush/1,
-    fsync/2, readdir/4, listobjects/5, blocksize_for_path/2]).
+    fsync/2, readdir/4, listobjects/5, blocksize_for_path/2, check_storage_availability/1]).
 -export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
@@ -53,6 +53,12 @@ get_handle(_Name, _Params) ->
 -spec refresh_params(helper_handle(), map()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 refresh_params(_Handle, _Args) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec check_storage_availability(helper_handle()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+check_storage_availability(_Handle) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

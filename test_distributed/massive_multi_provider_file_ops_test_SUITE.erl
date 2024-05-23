@@ -504,7 +504,8 @@ traverse_restart_test(Config) ->
         [{workers, 3}, {queue_type, lifo}]])),
     ?assertMatch({ok, _}, rpc:call(Worker, worker_pool, start_sup_pool, [?SLAVE_POOL_NAME,
         [{workers, 3}, {queue_type, lifo}]])),
-    ?assertEqual(ok, rpc:call(Worker, traverse, restart_tasks, [PoolName, #{executor => ExecutorID}, Worker])),
+    ?assertEqual(ok, rpc:call(Worker, traverse, restart_tasks,
+        [PoolName, #{executor => ExecutorID, callback_modules => [?MODULE]}, Worker])),
 
     get_slave_ans(),
 
@@ -790,7 +791,7 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     clear_callbacks(Workers),
     lists:foreach(fun(Worker) ->
-        ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10]))
+        ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10, [?MODULE]]))
     end, Workers),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
