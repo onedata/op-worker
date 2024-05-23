@@ -55,6 +55,9 @@
     required = [] :: [Key :: binary()],
     optional = [] :: [Key :: binary()],
     at_least_one = [] :: [Key :: binary()],
+    % Each key will be added to every request with one randomly selected value from correct_values,
+    % but no tests will be run to check it presence in request.
+    always_present = [] :: [Key :: binary()],
     correct_values = #{} :: #{Key :: binary() => Values :: [binary()]},
     bad_values = [] :: [{
         Key :: binary(),
