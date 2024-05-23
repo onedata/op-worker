@@ -596,8 +596,12 @@ build_get_children_prepare_rest_args_fun(ValidId) ->
 
         RestPath = <<"data/", Id/binary, "/children">>,
     
+        % randomly pass options in body or in query string
         {FinalPath, FinalBody} = case rand:uniform(2) of
             1 ->
+                % do not pass empty attributes list as it results in empty response (which is not that interesting)
+                % and it also cannot be done in qs, which would result in different responses depending on what was
+                % randomly selected
                 Data3 = case maps:get(<<"attributes">>, Data2, []) of
                     [] -> maps:remove(<<"attributes">>, Data2);
                     _ -> Data2

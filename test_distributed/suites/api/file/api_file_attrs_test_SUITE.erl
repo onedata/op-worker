@@ -402,6 +402,7 @@ build_get_attrs_prepare_rest_args_fun(ValidId) ->
 
         RestPath = <<"data/", Id/binary>>,
     
+        % randomly pass options in body or in query string
         {FinalPath, FinalBody} = case rand:uniform(2) of
             1 -> {
                 RestPath,
