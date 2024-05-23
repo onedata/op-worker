@@ -300,16 +300,12 @@ init([]) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
-        {error, _} = Error ->
-            ?debug("Failed to establish Onezone connection: ~w", [Error]),
-            utils:throttle({?MODULE, ?FUNCTION_NAME, Error}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+        {error, _} = LastError ->
+            ?debug("Failed to establish Onezone connection: ~w", [LastError]),
+            utils:throttle({?MODULE, ?FUNCTION_NAME, LastError}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
                 ?warning(
-                    "Onezone connection cannot be established, is the service online (~ts)?~n"
-                    "Last error was: ~p~n"
-                    "Retrying as long as it takes...", [
-                        oneprovider:get_oz_domain(),
-                        Error
-                    ]
+                    "Onezone connection cannot be established (~ts), is the service online? Retrying as long as it takes...~s",
+                    [oneprovider:get_oz_domain(), ?autoformat(LastError)]
                 )
             end),
             {stop, normal}
