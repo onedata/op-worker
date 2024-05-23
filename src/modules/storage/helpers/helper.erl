@@ -32,7 +32,7 @@
 -export([
     is_posix_compatible/1, is_getting_size_supported/1, is_rename_supported/1,
     is_import_supported/1, is_auto_import_supported/1, is_file_registration_supported/1,
-    is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2,
+    is_nfs4_acl_supported/1, supports_storage_access_type/2,
     is_object/1, is_archive_storage/1
 ]).
 -export([get_args_with_user_ctx/2]).
@@ -224,14 +224,6 @@ get_timeout(#helper{args = Args}) ->
             erlang:binary_to_integer(Value);
         error ->
             get_timeout(undefined)
-    end.
-
--spec should_skip_storage_detection(helpers:helper()) -> boolean().
-should_skip_storage_detection(#helper{args = Args}) ->
-    case maps:get(<<"skipStorageDetection">>, Args, false) of
-        false -> false;
-        <<"false">> -> false;
-        <<"true">> -> true
     end.
 
 -spec is_posix_compatible(helpers:helper() | name()) -> boolean().
