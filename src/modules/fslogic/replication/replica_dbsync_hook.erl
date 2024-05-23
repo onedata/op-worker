@@ -415,7 +415,7 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSi
                                     {error, ?ENOENT} -> ok; % file not yet created on storage
                                     {error, Error} ->
                                         % NOTE: can happen on flat storages, which do not check anything during open.
-                                        ?warning("File truncation failed when executing a location dbsync hook~n~s", [?autoformat([Error])])
+                                        ?error("File truncation failed when executing a location dbsync hook~n~s", [?autoformat([Error])])
                                 end;
                             {error, ?ENOENT} ->
                                 ok % local file metadata not yet synchronized
