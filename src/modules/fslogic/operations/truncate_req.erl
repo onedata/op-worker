@@ -94,7 +94,8 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
                             end;
                         false ->
                             {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx3),
-                            ?warning("Cannot truncate file ~p on storage because it does not exist", [StorageFileId])
+                            ?warning("Cannot truncate file ~p on storage because it does not exist", [StorageFileId]),
+                            #fuse_response{status = #status{code = ?OK}}
                     end
             end
     end.

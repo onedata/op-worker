@@ -656,7 +656,7 @@ maybe_open_on_storage(UserCtx, FileCtx, SessId, Flag, _DirectIO, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_on_storage(user_ctx:ctx(), file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
-    handle_id()) -> ok | no_return().
+    handle_id()) -> ok | {error, term()}.
 open_on_storage(UserCtx, FileCtx, SessId, Flag, HandleId) ->
     {SDHandle, FileCtx2} = storage_driver:new_handle(SessId, FileCtx),
     SDHandle2 = storage_driver:set_size(SDHandle),

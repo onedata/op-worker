@@ -28,9 +28,7 @@
 
 %% API
 -export([create/2, create/3, get/1, exists/1, delete/1]).
--export([get_id/1, get_helper/1,
-    get_luma_feed/1, get_luma_config/1,
-    should_skip_storage_detection/1]).
+-export([get_id/1, get_helper/1, get_luma_feed/1, get_luma_config/1]).
 
 -export([update_helper/2, update_luma_config/2, set_luma_config/2]).
 
@@ -129,11 +127,6 @@ get_luma_config(#storage_config{luma_config = LumaConfig}) ->
 get_luma_config(StorageId) ->
     {ok, StorageDoc} = get(StorageId),
     get_luma_config(StorageDoc).
-
--spec should_skip_storage_detection(doc() | record() | storage:id()) -> boolean().
-should_skip_storage_detection(Storage) ->
-    Helper = get_helper(Storage),
-    helper:should_skip_storage_detection(Helper).
 
 
 -spec update_helper(storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
@@ -291,6 +284,8 @@ upgrade_record(1, {?MODULE, Helper, Readonly, LumaConfig, ImportedStorage}) ->
         _ExtendedDirectIO,
         StoragePathType
     } = Helper,
+    % NOTE: we store all available parameters in helper args so there is no need to update the record when one of
+    % them is needed by helpers.
     NewArgs = Args#{
         % readonly field was used to notify that detecting storage should be skipped
         % it was renamed and moved to helper args

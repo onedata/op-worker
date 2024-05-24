@@ -157,9 +157,12 @@ get_storage_file_id(#sd_handle{file = StorageFileId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Opens the file. To used opened descriptor, pass returned handle to other functions.
-%% File may and should be closed with release/1, but file will be closed automatically
+%% Opens the file. To use opened descriptor, pass returned handle to other functions.
+%% File should be closed with release/1, but file will be closed automatically
 %% when handle goes out of scope (term will be released by Erlang's GC).
+%% NOTE: we are checking file access here to ensure the same handling between different
+%% storages types (flat storage helpers do not check anything, even file existence, on the
+%% open operation).
 %% @end
 %%--------------------------------------------------------------------
 -spec open(handle(), OpenFlag :: helpers:open_flag()) ->
@@ -612,7 +615,6 @@ infer_type(Mode) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 -spec read_internal(handle(), non_neg_integer(), non_neg_integer()) ->
     {ok, binary()} | {error, term()}.
