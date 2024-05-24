@@ -23,7 +23,10 @@
 
 
 %% API
--export([start/0, start_for_space/1]).
+-export([
+    start/0, start_for_space/1,
+    mark_traverse_not_needed_for_space/1, mark_traverse_needed_for_space/1
+]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2, task_started/2, task_finished/2,
@@ -47,28 +50,6 @@ start() ->
     ok.
 
 
--spec start_async() -> ok.
-start_async() ->
-    utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
-    utils:wait_until(fun() ->
-        % wait for traverse pool to start
-        case datastore_model:get(traverse_tasks_scheduler:get_ctx(), ?POOL_NAME) of
-            {ok, _} -> true;
-            _ -> false
-        end
-    end, timer:seconds(10), infinity),
-    {ok, Spaces} = provider_logic:get_spaces(),
-    SpacesToStart = lists:filter(fun(SpaceId) ->
-        case space_logic:get_provider_ids(SpaceId) of
-            {ok, [_]} ->
-                false; % no need to execute on spaces supported by just one provider
-            {ok, _} ->
-                true
-        end
-    end, Spaces),
-    lists:foreach(fun start_for_space/1, SpacesToStart).
-
-
 -spec start_for_space(od_space:id()) -> ok.
 start_for_space(SpaceId) ->
     FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
@@ -89,6 +70,23 @@ start_for_space(SpaceId) ->
         end
     end.
 
+
+-spec mark_traverse_not_needed_for_space(od_space:id()) -> ok | {error, term()}.
+mark_traverse_not_needed_for_space(SpaceId) ->
+    % Create a dummy traverse task document, that results in the already_exists error when starting a new traverse
+    % (some fields are filled so that the dialyzer does not complain).
+    ?ok_if_exists(?extract_ok(traverse_task:create_doc(traverse_task:get_ctx(), ?POOL_NAME, SpaceId, #traverse_task{
+        creator = oneprovider:get_id(),
+        executor = oneprovider:get_id(),
+        finish_time = global_clock:timestamp_seconds(),
+        group = <<>>,
+        master_job_mode = all
+    }))).
+
+
+-spec mark_traverse_needed_for_space(od_space:id()) -> ok | {error, term()}.
+mark_traverse_needed_for_space(SpaceId) ->
+    traverse_task:delete_ended(?POOL_NAME, SpaceId).
 
 %%%===================================================================
 %%% Traverse callbacks
@@ -128,3 +126,29 @@ do_master_job(Job, MasterJobArgs) ->
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(#tree_traverse_slave{}, _TaskId) ->
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec start_async() -> ok.
+start_async() ->
+    utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+    utils:wait_until(fun() ->
+        % wait for traverse pool to start
+        case datastore_model:get(traverse_tasks_scheduler:get_ctx(), ?POOL_NAME) of
+            {ok, _} -> true;
+            _ -> false
+        end
+    end, timer:seconds(10), infinity),
+    {ok, Spaces} = provider_logic:get_spaces(),
+    SpacesToStart = lists:filter(fun(SpaceId) ->
+        case space_logic:get_provider_ids(SpaceId) of
+            {ok, [_]} ->
+                false; % no need to execute on spaces supported by just one provider
+            {ok, _} ->
+                true
+        end
+    end, Spaces),
+    lists:foreach(fun start_for_space/1, SpacesToStart).

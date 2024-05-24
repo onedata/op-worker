@@ -27,6 +27,10 @@ sources:
       - cluster-manager
 
 users:
+# TODO VFS-12026 make space_owner actual owner of spaces
+  - &space_owner
+    name: space_owner
+    password: password
   - &user1
     name: user1
     password: password
@@ -39,6 +43,7 @@ spaces:
     user: *user1
     users:
       - user: *user2
+      - user: *space_owner
     supports:
       - provider: "oneprovider-1"
         storage_name: "ImportedNullStorage"
