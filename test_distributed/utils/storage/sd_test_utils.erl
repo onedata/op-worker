@@ -129,10 +129,31 @@ ls(Worker, SDHandle, Offset, Count) ->
 listobjects(Worker, SDHandle, Marker, Offset, Count) ->
     rpc:call(Worker, storage_driver, listobjects, [SDHandle, Marker, Offset, Count]).
 
+listobjects_continuous(Worker, SDHandle, Marker, Offset, Count) ->
+    case listobjects(Worker, SDHandle, Marker, Offset, Count) of
+        {error, _} = Error ->
+            Error;
+        {ok, {?END_OF_LISTING_MARKER, ChildrenWithAttrs}} ->
+            {ok, ChildrenWithAttrs};
+        {ok, {_, ChildrenWithAttrs}} when length(ChildrenWithAttrs) == Count ->
+            {ok, ChildrenWithAttrs};
+        {ok, {NextMarker, ChildrenWithAttrs}} ->
+            case listobjects_continuous(
+                Worker,
+                SDHandle,
+                NextMarker,
+                Offset + length(ChildrenWithAttrs),
+                Count - length(ChildrenWithAttrs)
+            ) of
+                {error, _} = Error2 -> Error2;
+                {ok, Tail} -> {ok, ChildrenWithAttrs ++ Tail}
+            end
+    end.
+
 storage_ls(Worker, SDHandle, Offset, Count, ?POSIX_HELPER_NAME) ->
     ls(Worker, SDHandle, Offset, Count);
 storage_ls(Worker, SDHandle, Offset, Count, ?S3_HELPER_NAME) ->
-    listobjects(Worker, SDHandle, ?DEFAULT_MARKER, Offset, Count).
+    listobjects_continuous(Worker, SDHandle, ?INITIAL_LISTING_MARKER, Offset, Count).
 
 rmdir(Worker, SDHandle) ->
     rpc:call(Worker, storage_driver, rmdir, [SDHandle]).
@@ -176,7 +197,7 @@ recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteR
                 ?POSIX_HELPER_NAME ->
                     recursive_rm_posix(Worker, SDHandle, 0, 1000, DoNotDeleteRoot);
                 ?S3_HELPER_NAME ->
-                    recursive_rm_s3(Worker, SDHandle, ?DEFAULT_MARKER, 0, 1000)
+                    recursive_rm_s3(Worker, SDHandle, ?INITIAL_LISTING_MARKER, 0, 1000)
             end;
         {error, ?ENOENT} ->
             ok
@@ -204,15 +225,12 @@ recursive_rm_posix(Worker, SDHandle, Offset, Count, DoNotDeleteRoot) ->
     end.
 
 recursive_rm_s3(Worker, SDHandle, Marker, Offset, Count) ->
-    {ok, {NextMarker, ChildrenAndStats}} =  listobjects(Worker, SDHandle, Marker, Offset, Count),
+    {ok, {NextMarker, ChildrenAndStats}} = listobjects(Worker, SDHandle, Marker, Offset, Count),
     Children = [ChildId || {ChildId, _} <- ChildrenAndStats],
+    rm_children(Worker, SDHandle, Children),
     case NextMarker of
-        <<>> ->
-            rm_children(Worker, SDHandle, Children),
-            ok;
-        _ ->
-            rm_children(Worker, SDHandle, Children),
-            recursive_rm_s3(Worker, SDHandle, NextMarker, Offset, Count)
+        ?END_OF_LISTING_MARKER -> ok;
+        _ -> recursive_rm_s3(Worker, SDHandle, NextMarker, Offset, Count)
     end.
 
 
