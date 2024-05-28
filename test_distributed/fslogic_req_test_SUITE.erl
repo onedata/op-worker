@@ -717,6 +717,12 @@ update_times_test(Config) ->
             #fuse_response{fuse_response = #file_attr{atime = ATime, mtime = MTime, ctime = CTime}} = FileAttr,
             {ATime, MTime, CTime}
         end,
+    
+    % make sure that updated times are greater than those set at creation
+    CurrentTime = opw_test_rpc:call(Worker, global_clock, timestamp_seconds, []),
+    NewATime = CurrentTime + 1234565,
+    NewMTime = CurrentTime + 9275629,
+    NewCTime = CurrentTime + 7837652,
 
     lists:foreach(
         fun(SessId) ->
@@ -728,10 +734,6 @@ update_times_test(Config) ->
             Guid = get_guid(Worker, SessId, Path),
 
             {_OldATime, OldMTime, OldCTime} = GetTimes(Guid, SessId),
-
-            NewATime = 1234565,
-            NewMTime = 9275629,
-            NewCTime = 7837652,
 
             ?assertMatch(#fuse_response{status = #status{code = ?OK}},
                 ?file_req(Worker, SessId, Guid, #update_times{atime = NewATime})),

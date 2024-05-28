@@ -281,8 +281,8 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    % call via module to mock in tests
-    {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
+    % call via ?MODULE to mock in tests
+    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, Flag, undefined, true, false),
@@ -379,8 +379,8 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    % call via module to mock in tests
-    {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
+    % call via ?MODULE to mock in tests
+    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true, 0),
         fslogic_times:report_change(ParentFileCtx3, [mtime, ctime]), % fixme move to fslogic_times
@@ -397,7 +397,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Class:Reason:Stacktrace ->
             ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            fslogic_times:report_file_deleted(FileCtx),
+%%            fslogic_times:report_file_deleted(FileCtx), % fixme
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             erlang:Class(Reason)
@@ -466,7 +466,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
 
             try
                 FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
-                fslogic_times:report_file_created(FileCtx),
+                fslogic_times:report_file_created(FileCtx, #{event_verbosity => silent}),
                 fslogic_times:report_change(ParentFileCtx3, [mtime, ctime]),
 
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
@@ -764,7 +764,8 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, not IsSyncEnabled),
             {ok, SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
             FileCtx = file_ctx:new_by_doc(SavedFileDoc, SpaceId),
-            fslogic_times:report_file_created(FileCtx),
+            % do not emit event now as it will be produced after successful file creation
+            fslogic_times:report_file_created(FileCtx, #{event_verbosity => silent}),
             {FileCtx, ParentFileCtx3};
         {false, _} ->
             throw(?ENOTDIR)

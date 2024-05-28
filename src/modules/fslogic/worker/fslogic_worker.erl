@@ -67,7 +67,7 @@
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
     op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
 -define(TIMES_CACHE_FLUSH_INTERVAL,
-    op_worker:get_env(times_cache_flush_interval, timer:seconds(10))).
+    op_worker:get_env(times_cache_flush_interval, timer:seconds(8))).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).

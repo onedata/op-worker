@@ -66,7 +66,7 @@
 -type entry() :: uuid_or_path() | doc().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
--type time() :: non_neg_integer().
+-type time() :: non_neg_integer(). % fixme
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
@@ -776,7 +776,7 @@ get_shares(#file_meta{shares = Shares}) ->
 ensure_space_doc_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
         {ok, Doc} ->
-            ok = fslogic_times:report_file_created(file_ctx:new_by_doc(Doc, SpaceId));
+            ok = fslogic_times:report_file_created(file_ctx:new_by_doc(Doc, SpaceId), #{event_verbosity => silent});
         {error, already_exists} ->
             ok
     end.
@@ -792,7 +792,9 @@ ensure_tmp_dir_exists(SpaceId) ->
     ensure_tmp_dir_link_exists(SpaceId),
     case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
         {ok, CreatedDoc} ->
-            ok = ?ok_if_exists(fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))),
+            ok = ?ok_if_exists(
+                fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId), #{event_verbosity => silent})
+            ),
             created;
         {error, already_exists} ->
             already_exists
@@ -815,7 +817,9 @@ ensure_opened_deleted_files_dir_exists(SpaceId) ->
     case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
         {ok, CreatedDoc} ->
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
-            ok = ?ok_if_exists(fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId)));
+            ok = ?ok_if_exists(
+                fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId), #{event_verbosity => silent})
+            );
         {error, already_exists} ->
             ok
     end.

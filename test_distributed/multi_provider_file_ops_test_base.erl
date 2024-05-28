@@ -1978,10 +1978,8 @@ get_locations(W, FileUuid, SpaceId) ->
 create_doc(Doc = #document{value = FileMeta}, #document{key = ParentUuid}, _LocId, _Path) ->
     SpaceId = Doc#document.scope,
     DocWithParentUuid = Doc#document{value = FileMeta#file_meta{parent_uuid = ParentUuid}},
-    {ok, #document{key = FileUuid}} = file_meta:save(DocWithParentUuid),
-    {ok, _} = times:save(#document{key = FileUuid, value = #times{},
-        scope = SpaceId}),
-    ok.
+    {ok, #document{} = CreatedDoc} = file_meta:save(DocWithParentUuid),
+    ok = fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId)).
 
 set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     #document{key = ParentUuid} = ParentDoc,

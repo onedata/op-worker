@@ -21,10 +21,10 @@
 %% API
 -export([init/0, destroy/0]).
 -export([flush/0]).
--export([report_created/3, update/2, get/1, report_deleted/1]).
+-export([report_created/4, update/2, get/2, report_deleted/1]).
 
 
--define(MAX_CACHE_SIZE, 10000).
+-define(MAX_CACHE_SIZE, 10000). % fixme app_config?? and add the variable from fslogic_worker
 
 %%%===================================================================
 %%% API
@@ -56,7 +56,11 @@ check_flush() ->
 
 flush() ->
     ets:safe_fixtable(?MODULE, true),
-    flush_key(ets:first(?MODULE)),
+    try
+        flush_key(ets:first(?MODULE))
+    catch Class:Reason:Stacktrace ->
+        ?error_exception(Class, Reason, Stacktrace)
+    end,
     ets:safe_fixtable(?MODULE, false),
     ok.
 
@@ -66,7 +70,11 @@ flush_key(Key) ->
     run_in_critical_section(Key, fun() ->
         case get_from_cache(Key) of
             {ok, Value} ->
-                flush_value_insecure(Key, Value);
+                try
+                    flush_value_insecure(Key, Value)
+                catch Class:Reason:Stacktrace ->
+                    ?error_exception(Class, Reason, Stacktrace)
+                end;
             ?ERROR_NOT_FOUND ->
                 ok
         end
@@ -91,19 +99,29 @@ flush_value_insecure(Key, Value) ->
     end.
 
 
-report_created(FileGuid, IgnoreInChanges, Times) ->
+report_created(FileGuid, IgnoreInChanges, EventVerbosity, Times) ->
     % fixme explain not caching - creation is once per file so no need
-    times_model_api:create(FileGuid, IgnoreInChanges, Times).
+    times_model_api:create(FileGuid, IgnoreInChanges, EventVerbosity, Times).
     
 update(FileGuid, NewTimes) ->
     ok = put_in_cache(FileGuid, NewTimes),
     check_flush().
 
-get(FileGuid) ->
+get(FileGuid, RequestedTimes) ->
     case get_from_cache(FileGuid) of
-        {ok, Times} ->
-            {ok, Times};
-        ?ERROR_NOT_FOUND ->
+        {ok, CachedTimes} ->
+            case are_times_in_record(RequestedTimes, CachedTimes) of
+                true ->
+                    {ok, CachedTimes};
+                false ->
+                    case times_model_api:get(FileGuid) of
+                        {ok, DBTimes} ->
+                            {ok, times:merge_records(CachedTimes, DBTimes)};
+                        {error, _} = Error ->
+                            Error
+                    end
+            end;
+        {error, not_found} ->
             times_model_api:get(FileGuid)
     end.
 
@@ -115,12 +133,29 @@ report_deleted(FileGuid) ->
 %%% Internal functions
 %%%===================================================================
 
+are_times_in_record(TimesToCheck, TimesRecord) ->
+    are_times_in_record(TimesToCheck, TimesRecord, true).
+
+are_times_in_record(_, _, false) ->
+    false;
+are_times_in_record([], _, true) ->
+    true;
+are_times_in_record([atime | TimesToCheck], #times{atime = ATime} = TimesRecord, _) ->
+    are_times_in_record(TimesToCheck, TimesRecord, ATime =/= 0);
+are_times_in_record([ctime | TimesToCheck], #times{ctime = Ctime} = TimesRecord, _) ->
+    are_times_in_record(TimesToCheck, TimesRecord, Ctime =/= 0);
+are_times_in_record([mtime | TimesToCheck], #times{mtime = MTime} = TimesRecord, _) ->
+    are_times_in_record(TimesToCheck, TimesRecord, MTime =/= 0);
+are_times_in_record([creation_time | TimesToCheck], #times{creation_time = CreationTime} = TimesRecord, _) ->
+    are_times_in_record(TimesToCheck, TimesRecord, CreationTime =/= 0).
+
+
 get_from_cache(Key) ->
     case ets:lookup(?MODULE, Key) of
         [{Key, Times}] ->
             {ok, Times};
         [] ->
-            ?ERROR_NOT_FOUND
+            {error, not_found}
     end.
 
 
@@ -128,15 +163,10 @@ put_in_cache(Key, NewTimes) ->
     run_in_critical_section(Key, fun() ->
         case get_from_cache(Key) of
             {ok, CachedTimes} ->
-                FinalTimes = #times{
-                    atime = max(NewTimes#times.atime, CachedTimes#times.atime),
-                    ctime = max(NewTimes#times.ctime, CachedTimes#times.ctime),
-                    mtime = max(NewTimes#times.mtime, CachedTimes#times.mtime)
-                },
-                case FinalTimes of
+                case times:merge_records(NewTimes, CachedTimes) of
                     CachedTimes ->
                         ok;
-                    _ ->
+                    FinalTimes ->
                         true = ets:insert(?MODULE, {Key, FinalTimes}),
                         ok
                 end;

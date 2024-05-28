@@ -177,7 +177,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        fslogic_times:report_file_created(FileCtx),
+        fslogic_times:report_file_created(FileCtx, #{event_verbosity => silent}),
         fslogic_times:report_change(ParentFileCtx4, [mtime, ctime]),
 
         #fuse_response{fuse_response = FileAttr} =

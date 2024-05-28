@@ -26,10 +26,8 @@
 %% API
 -export([create2/4, update2/2, get2/1, delete2/1, ensure_synced/1]).
 -export([is_deleted/1]).
+-export([merge_records/2]). % fixme
 
-
--export([get/1, % fixme
-    save/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
@@ -65,14 +63,9 @@ create2(Key, Scope, IgnoreInChanges, Times) ->
     
 update2(Key, NewTimes) ->
     ?extract_ok(datastore_model:update(?CTX, Key, fun(PrevTimes) ->
-        FinalTimes = PrevTimes#times{
-            atime = max(PrevTimes#times.atime, NewTimes#times.atime),
-            ctime = max(PrevTimes#times.ctime, NewTimes#times.ctime),
-            mtime = max(PrevTimes#times.mtime, NewTimes#times.mtime)
-        },
-        case FinalTimes of
+        case merge_records(PrevTimes, NewTimes) of
             PrevTimes -> {error, no_change};
-            _ -> {ok, FinalTimes}
+            FinalTimes -> {ok, FinalTimes}
         end
     end)).
 
@@ -107,20 +100,14 @@ is_deleted(Key) ->
             false
     end.
 
-%%%===================================================================
-%%% deprecated API % fixme remove
-%%%===================================================================
 
-
--spec save(doc()) -> {ok, doc()} | {error, term()}. % fixme in tests only, remove
-save(#document{key = Key} = Doc) ->
-    datastore_model:save(?CTX#{generated_key => true},
-        Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
-
-
--spec get(key()) -> {ok, doc()} | {error, term()}.
-get(Uuid) -> % fixme in tests only
-    datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(Uuid)).
+merge_records(TimesA, TimesB) ->
+    #times{
+        atime = max(TimesA#times.atime, TimesB#times.atime),
+        ctime = max(TimesA#times.ctime, TimesB#times.ctime),
+        mtime = max(TimesA#times.mtime, TimesB#times.mtime),
+        creation_time = max(TimesA#times.creation_time, TimesB#times.creation_time)
+    }.
 
 
 %%%===================================================================
@@ -177,11 +164,7 @@ resolve_conflict(_Ctx, RemoteDoc, LocalDoc) ->
     #document{value = LocalValue, revs = [LocalRev | _], deleted = LocalDeleted} = LocalDoc,
     #document{value = RemoteValue, revs = [RemoteRev | _], deleted = RemoteDeleted} = RemoteDoc,
     
-    FinalValue = RemoteValue#times{
-        atime = max(RemoteValue#times.atime, LocalValue#times.atime),
-        ctime = max(RemoteValue#times.ctime, LocalValue#times.ctime),
-        mtime = max(RemoteValue#times.mtime, LocalValue#times.mtime)
-    },
+    FinalValue = merge_records(RemoteValue, LocalValue),
     
     case datastore_rev:is_greater(RemoteRev, LocalRev) of
         true ->

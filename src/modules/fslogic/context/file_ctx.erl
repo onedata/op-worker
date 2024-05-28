@@ -47,7 +47,7 @@
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name(),
     display_credentials :: undefined | luma:display_credentials(),
-    times :: undefined | times:times(),
+    times :: undefined | times:record(),
     file_name :: undefined | file_meta:name(),
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
@@ -90,7 +90,7 @@
     get_cached_parent_const/1, cache_parent/2, cache_name/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
-    get_display_credentials/1, get_times/1,
+    get_display_credentials/1, get_times/1, get_times/2,
     get_logical_path/2, get_path_before_deletion/1,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
@@ -674,13 +674,13 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredent
     {DisplayCredentials, FileCtx}.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's atime, ctime and mtime.
-%% @end
-%%--------------------------------------------------------------------
--spec get_times(ctx()) -> {times:times(), ctx()}.
-get_times(FileCtx = #file_ctx{times = undefined}) ->
+-spec get_times(ctx()) -> {times:record(), ctx()}.
+get_times(FileCtx) ->
+    get_times(FileCtx, [atime, ctime, mtime]).
+
+
+-spec get_times(ctx(), [atom()]) -> {times:record(), ctx()}. % fixme spec
+get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
     FileUuid = get_logical_uuid_const(FileCtx),
     Times = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
@@ -695,19 +695,16 @@ get_times(FileCtx = #file_ctx{times = undefined}) ->
             }} = share_logic:get(?ROOT_SESS_ID, ShareId),
 
             RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
-            {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid)),
+            {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid), RequestedTimes),
             RootFileTimes;
         false ->
-            case fslogic_times:get(FileCtx) of
-                {ok, #times{atime = ATime, ctime = CTime, mtime = MTime}} ->
-                    {ATime, CTime, MTime};
-                {error, not_found} ->
-                    {0,0,0} % fixme
+            case fslogic_times:get(FileCtx, RequestedTimes) of
+                {ok, T} -> T;
+                {error, not_found} -> #times{} % fixme
             end
     end,
-    {Times, FileCtx#file_ctx{times = Times}};
-get_times(
-    FileCtx = #file_ctx{times = Times}) ->
+    {Times, FileCtx}; % fixme cache it in file_ctx
+get_times(FileCtx = #file_ctx{times = Times}, _) -> % fixme
     {Times, FileCtx}.
 
 

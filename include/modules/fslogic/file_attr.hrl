@@ -32,6 +32,7 @@
     atime :: undefined | times:a_time(),
     mtime :: undefined | times:m_time(),
     ctime :: undefined | times:c_time(),
+%%    creation_time :: undefined | % fixme
     size :: undefined | file_meta:size(),
     is_fully_replicated :: undefined | boolean(),
     local_replication_rate :: undefined | float(),

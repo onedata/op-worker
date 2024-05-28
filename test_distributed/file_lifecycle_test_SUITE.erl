@@ -199,7 +199,7 @@ create_open_race_test(Config, Mock) ->
                 end);
         fslogic_times ->
             test_utils:mock_new(W, fslogic_times, [passthrough]),
-            test_utils:mock_expect(W, fslogic_times, update_mtime_ctime,
+            test_utils:mock_expect(W, fslogic_times, report_file_created,
                 fun(FileCtx) ->
                     Master ! {open_file, self()},
                     ok = receive

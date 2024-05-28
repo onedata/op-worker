@@ -700,7 +700,6 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {ok, FileCtx} = file_registration:create_missing_directory(ParentCtx, ParentName, ?SPACE_OWNER_ID(SpaceId)),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    fslogic_times:report_file_created(FileCtx),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
@@ -1073,10 +1072,10 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc, ShouldUpdat
         {ok, SSI} -> SSI
     end,
     {Size, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
-    {{_, _, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
+    {#times{mtime = MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
     NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
     LastReplicationTimestamp = file_location:get_last_replication_timestamp(FileLocationDoc),
-    {FileDoc, FileCtx4} = file_ctx:get_file_doc(FileCtx3),
+    {FileDoc, FileCtx4} = file_ctx:get_file_doc(FileCtx2),
     ProviderId = file_meta:get_provider_id(FileDoc),
     IsLocallyCreatedFile = oneprovider:get_id() =:= ProviderId,
     Result2 = case {IsLocallyCreatedFile, LastReplicationTimestamp, StorageSyncInfo} of
