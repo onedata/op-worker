@@ -7,9 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 % fixme
+% fixme operates on file_guid
 %%% @end
 %%%-------------------------------------------------------------------
--module(over_times). % fixme name (sth with events??) % fixme move
+-module(times_model_api). % fixme name (sth with events??) % fixme move
 -author("Michal Stanisz").
 
 -include_lib("ctool/include/logging.hrl").
@@ -17,7 +18,7 @@
 
 
 %% API
--export([create/3, update/2, get/1, delete/1]).
+-export([create/3, update/2, get/1, delete/1, is_doc_deleted/1]).
 
 % fixme implement
 %%%===================================================================
@@ -37,7 +38,9 @@ update(FileGuid, NewTimes) ->
         ok ->
             fslogic_event_emitter:emit_sizeless_file_attrs_changed(file_ctx:new_by_guid(FileGuid));
         {error, no_change} ->
-            ok
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 get(FileGuid) ->
@@ -45,3 +48,6 @@ get(FileGuid) ->
 
 delete(FileGuid) ->
     times:delete2(file_id:guid_to_uuid(FileGuid)).
+
+is_doc_deleted(FileGuid) ->
+    times:is_deleted(file_id:guid_to_uuid(FileGuid)).

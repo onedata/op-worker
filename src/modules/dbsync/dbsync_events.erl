@@ -101,7 +101,7 @@ change_replicated_internal(SpaceId, #document{
 }) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-    dir_update_time_stats:report_update_of_nearest_dir(file_ctx:get_logical_guid_const(FileCtx), Record),
+    fslogic_times:update(FileCtx, Record),
     (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx));
 change_replicated_internal(_SpaceId, #document{
     key = FileUuid,

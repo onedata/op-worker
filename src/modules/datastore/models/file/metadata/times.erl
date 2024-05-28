@@ -25,13 +25,14 @@
 
 %% API
 -export([create2/4, update2/2, get2/1, delete2/1, ensure_synced/1]).
+-export([is_deleted/1]).
 
 
 -export([get/1, % fixme
     save/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 % fixme
 -type key() :: datastore:key().
@@ -64,12 +65,15 @@ create2(Key, Scope, IgnoreInChanges, Times) ->
     
 update2(Key, NewTimes) ->
     ?extract_ok(datastore_model:update(?CTX, Key, fun(PrevTimes) ->
-        {ok, PrevTimes#times{
+        FinalTimes = PrevTimes#times{
             atime = max(PrevTimes#times.atime, NewTimes#times.atime),
             ctime = max(PrevTimes#times.ctime, NewTimes#times.ctime),
             mtime = max(PrevTimes#times.mtime, NewTimes#times.mtime)
-        }}
-    % fixme handle no_change
+        },
+        case FinalTimes of
+            PrevTimes -> {error, no_change};
+            _ -> {ok, FinalTimes}
+        end
     end)).
 
 get2(Key) -> % fixme name
@@ -94,6 +98,14 @@ ensure_synced(Key) ->
         {error, not_found} -> ok
     end.
 
+
+is_deleted(Key) ->
+    case datastore_model:get(?CTX#{include_deleted => true}, Key) of
+        {ok, #document{deleted = Deleted}} ->
+            Deleted;
+        {error, not_found} ->
+            false
+    end.
 
 %%%===================================================================
 %%% deprecated API % fixme remove
@@ -159,4 +171,41 @@ upgrade_record(1, Times) ->
     }}.
 
 
-% fixme conflict_resolution
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, RemoteDoc, LocalDoc) ->
+    #document{value = LocalValue, revs = [LocalRev | _], deleted = LocalDeleted} = LocalDoc,
+    #document{value = RemoteValue, revs = [RemoteRev | _], deleted = RemoteDeleted} = RemoteDoc,
+    
+    FinalValue = RemoteValue#times{
+        atime = max(RemoteValue#times.atime, LocalValue#times.atime),
+        ctime = max(RemoteValue#times.ctime, LocalValue#times.ctime),
+        mtime = max(RemoteValue#times.mtime, LocalValue#times.mtime)
+    },
+    
+    case datastore_rev:is_greater(RemoteRev, LocalRev) of
+        true ->
+            case {LocalDeleted, FinalValue} of
+                {true, _} ->
+                    case RemoteDeleted of
+                        true -> {false, RemoteDoc};
+                        false -> {true, RemoteDoc#document{deleted = true}}
+                    end;
+                {false, RemoteValue} ->
+                    {false, RemoteDoc};
+                _ ->
+                    {true, RemoteDoc#document{value = FinalValue}}
+            end;
+        false ->
+            case {RemoteDeleted, FinalValue} of
+                {true, _} ->
+                    case LocalDeleted of
+                        true -> ignore;
+                        false -> {true, LocalDoc#document{deleted = true}}
+                    end;
+                {false, LocalValue} ->
+                    ignore;
+                _ ->
+                    {true, LocalDoc#document{value = FinalValue}}
+            end
+    end.

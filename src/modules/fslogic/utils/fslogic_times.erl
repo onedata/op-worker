@@ -6,6 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module provides functions operating on file timestamps % fixme
+% fixme below is on referenced, as times are kept only for referenced
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_times).
@@ -69,7 +70,7 @@ report_file_deleted(FileCtx) ->
         ctime = CurrentTime,
         mtime = CurrentTime
     }),
-    times_cache:report_deleted(FileCtx).
+    times_cache:report_deleted(file_ctx:get_logical_guid_const(FileCtx)).
 
 
 build_times_record(TimesToUpdate, Time) ->

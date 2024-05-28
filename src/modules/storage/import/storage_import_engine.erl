@@ -665,7 +665,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     case create_location(FileUuid, StorageFileCtx2, OwnerId) of
         {ok, StorageFileCtx3} ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
-            {#statbuf{st_mode = Mode} = StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
+            {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
             {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
