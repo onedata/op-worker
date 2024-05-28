@@ -682,7 +682,7 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredent
 -spec get_times(ctx()) -> {times:times(), ctx()}.
 get_times(FileCtx = #file_ctx{times = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
-    {ok, Times} = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
+    Times = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
             % Share root dir is virtual directory which does not have documents
             % like `file_meta` or `times` - in such case get times of share root
@@ -696,9 +696,14 @@ get_times(FileCtx = #file_ctx{times = undefined}) ->
 
             RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
             {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid)),
-            {ok, RootFileTimes};
+            RootFileTimes;
         false ->
-            times:get_or_default(FileUuid)
+            case fslogic_times:get(FileCtx) of
+                {ok, #times{atime = ATime, ctime = CTime, mtime = MTime}} ->
+                    {ATime, CTime, MTime};
+                {error, not_found} ->
+                    {0,0,0} % fixme
+            end
     end,
     {Times, FileCtx#file_ctx{times = Times}};
 get_times(
@@ -1150,6 +1155,7 @@ assert_synchronization_disabled(FileCtx) ->
     end.
 
 
+%% @TODO VFS-12025 - find better place for this function, it does not belong here
 -spec ensure_synced(ctx()) -> ctx().
 ensure_synced(FileCtx) ->
     Uuid = get_logical_uuid_const(FileCtx),

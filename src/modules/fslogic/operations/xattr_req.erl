@@ -189,7 +189,7 @@ set_xattr_internal(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Rep
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = xattr:set(UserCtx, FileCtx1, XattrName, XattrValue, Create, Replace),
 
-    fslogic_times:update_ctime(FileCtx1),
+    fslogic_times:report_change(FileCtx1, [ctime]),
     #fuse_response{status = #status{code = ?OK}}.
 
 
@@ -218,7 +218,7 @@ remove_xattr_internal(_UserCtx, _FileCtx, <<?ONEDATA_PREFIX_STR, _/binary>>) ->
 remove_xattr_internal(UserCtx, FileCtx0, XattrName) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     ok = xattr:remove(UserCtx, FileCtx1, XattrName),
-    fslogic_times:update_ctime(FileCtx1),
+    fslogic_times:report_change(FileCtx1, [ctime]),
     #fuse_response{status = #status{code = ?OK}}.
 
 

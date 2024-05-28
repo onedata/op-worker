@@ -165,8 +165,8 @@ report_space_name_change(UserIds, SpaceId, PrevName, NewName) ->
 -spec ensure_docs_exist(od_user:id()) -> ok.
 ensure_docs_exist(UserId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?FILE_META_DOC(UserId)) of
-        {ok, #document{key = Uuid}} ->
-            ?extract_ok(times:save_with_current_times(Uuid));
+        {ok, #document{}} ->
+            ?extract_ok(fslogic_times:report_file_created(file_ctx:new_by_guid(fslogic_file_id:user_root_dir_guid(UserId))));
         {error, already_exists} ->
             ok
     end.

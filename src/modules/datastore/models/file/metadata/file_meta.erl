@@ -775,8 +775,8 @@ get_shares(#file_meta{shares = Shares}) ->
 -spec ensure_space_doc_exist(SpaceId :: od_space:id()) -> ok | no_return().
 ensure_space_doc_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
-        {ok, #document{key = SpaceDirUuid}} ->
-            ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false));
+        {ok, Doc} ->
+            ok = fslogic_times:report_file_created(file_ctx:new_by_doc(Doc, SpaceId));
         {error, already_exists} ->
             ok
     end.
@@ -791,11 +791,9 @@ ensure_tmp_dir_exists(SpaceId) ->
     ),
     ensure_tmp_dir_link_exists(SpaceId),
     case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
-        {ok, _} ->
-            case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
-                {ok, _} -> created;
-                {error, already_exists} -> created
-            end;
+        {ok, CreatedDoc} ->
+            ok = ?ok_if_exists(fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))),
+            created;
         {error, already_exists} ->
             already_exists
     end.
@@ -815,12 +813,9 @@ ensure_opened_deleted_files_dir_exists(SpaceId) ->
         ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId
     ),
     case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
-        {ok, _} ->
+        {ok, CreatedDoc} ->
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
-            case times:save_with_current_times(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId, true) of
-                {ok, _} -> ok;
-                {error, already_exists} -> ok
-            end;
+            ok = ?ok_if_exists(fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId)));
         {error, already_exists} ->
             ok
     end.

@@ -856,7 +856,8 @@
 -record(times, {
     atime = 0 :: times:time(),
     ctime = 0 :: times:time(),
-    mtime = 0 :: times:time()
+    mtime = 0 :: times:time(),
+    creation_time = 0 :: times:time()
 }).
 
 %% Model that tracks popularity of file

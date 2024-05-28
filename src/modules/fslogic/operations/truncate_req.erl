@@ -125,7 +125,7 @@ on_successful_truncate(FileCtx, Size, UpdateTimes) ->
     ok = file_popularity:update_size(FileCtx, Size),
     case UpdateTimes of
         true ->
-            fslogic_times:update_mtime_ctime(FileCtx);
+            fslogic_times:report_change(FileCtx, [mtime, ctime]);
         false ->
             ok
     end,

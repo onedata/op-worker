@@ -75,7 +75,7 @@ read_symlink(UserCtx, FileCtx0) ->
 
     {Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
     {ok, SymlinkValue} = file_meta_symlinks:readlink(Doc),
-    fslogic_times:update_atime(FileCtx2),
+    fslogic_times:report_change(FileCtx2, [atime]),
 
     SymlinkValue.
 

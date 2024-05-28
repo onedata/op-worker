@@ -54,7 +54,7 @@
 %%%===================================================================
 
 -spec report_update_of_dir(file_id:file_guid(), times:record() | helpers:stat() | times:time()) -> ok.
-report_update_of_dir(Guid, Time) ->
+report_update_of_dir(Guid, Time) -> % fixme do only when updating stats
     ok = dir_stats_collector:update_stats_of_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
 
 
@@ -195,9 +195,8 @@ infer_update_time(Timestamp) when is_integer(Timestamp) ->
 %% @private
 -spec init(file_id:file_guid()) -> dir_stats_collection:collection().
 init(Guid) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    case times:get(Uuid) of
-        {ok, #document{value = Times}} ->
+    case fslogic_times:get(file_ctx:new_by_guid(Guid)) of
+        {ok, Times} ->
             #{?STAT_NAME => infer_update_time(Times)};
         ?ERROR_NOT_FOUND ->
             #{?STAT_NAME => 0} % Race with file deletion - stats will be invalidated by next update

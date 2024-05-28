@@ -185,7 +185,7 @@ get_transfer_encoding_insecure(_UserCtx, FileCtx) ->
 set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
     case set_cdmi_metadata(FileCtx, ?TRANSFER_ENCODING_KEY, Encoding, Create, Replace) of
         {ok, _} ->
-            fslogic_times:update_ctime(FileCtx),
+            fslogic_times:report_change(FileCtx, [ctime]),
             ok;
         {error, not_found} ->
             ?ERROR_POSIX(?ENOATTR)
@@ -262,7 +262,7 @@ get_mimetype_insecure(_UserCtx, FileCtx) ->
 set_mimetype_insecure(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
     case set_cdmi_metadata(FileCtx, ?MIMETYPE_KEY, Mimetype, Create, Replace) of
         {ok, _} ->
-            fslogic_times:update_ctime(FileCtx),
+            fslogic_times:report_change(FileCtx, [ctime]),
             ok;
         {error, not_found} ->
             ?ERROR_POSIX(?ENOATTR)

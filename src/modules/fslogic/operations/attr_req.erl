@@ -267,7 +267,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     sd_utils:chmod(UserCtx, FileCtx, Mode),
     FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx2),
+    fslogic_times:report_change(FileCtx2, [ctime]),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -289,22 +289,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     catch lfm_event_controller:flush_event_queue(
         SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
 
-    TimesDiff1 = fun
-        (Times = #times{}) when ATime == undefined -> Times;
-        (Times = #times{}) -> Times#times{atime = ATime}
-    end,
-    TimesDiff2 = fun
-        (Times = #times{}) when MTime == undefined -> Times;
-        (Times = #times{}) -> Times#times{mtime = MTime}
-    end,
-    TimesDiff3 = fun
-        (Times = #times{}) when CTime == undefined -> Times;
-        (Times = #times{}) -> Times#times{ctime = CTime}
-    end,
-    TimesDiff = fun(Times = #times{}) ->
-        {ok, TimesDiff1(TimesDiff2(TimesDiff3(Times)))}
-    end,
-    fslogic_times:update_times_and_emit(FileCtx, TimesDiff),
+    fslogic_times:update(FileCtx, #times{atime = ATime, ctime = CTime, mtime = MTime}),
     #fuse_response{status = #status{code = ?OK}}.
 
 

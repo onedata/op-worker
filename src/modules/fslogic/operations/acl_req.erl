@@ -122,8 +122,7 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     case file_meta:update_acl(FileUuid, AclWithoutNames) of
         ok ->
             ok = permissions_cache:invalidate(),
-            fslogic_times:update_ctime_without_emit(FileCtx2),
-            fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
+            fslogic_times:report_change(FileCtx2, [ctime]), % fixme possibly synchronous events
             fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
@@ -144,8 +143,7 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
     case file_meta:update_acl(FileUuid, []) of
         ok ->
             ok = permissions_cache:invalidate(),
-            fslogic_times:update_ctime_without_emit(FileCtx),
-            fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
+            fslogic_times:report_change(FileCtx, [ctime]), % fixme possibly synchronous events
             fslogic_event_emitter:emit_file_perm_changed(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
