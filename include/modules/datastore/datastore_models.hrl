@@ -55,7 +55,7 @@
 %           storage                       share     |  |
 %              ^                            ^       |  |
 %              |                            |       |  |
-%            space     handle_service<----handle    |  |
+%            space     handle_service<---|handle    |  |
 %           ^ ^ ^ ^          ^     ^       ^  ^     |  |
 %          /  | |  \         |     |      /   |     |  |
 %         /   | |   \        |     |     /    |    /   |
@@ -71,6 +71,9 @@
 %                    /       \                                ^           \
 %                  user      user                              \           \
 %                                                               '-- atm_lambda
+%
+% NOTE: the handle service - handle relation is unidirectional, handle service
+% not longer stores its handles (it's done using the handle registry).
 
 
 -record(od_user, {
