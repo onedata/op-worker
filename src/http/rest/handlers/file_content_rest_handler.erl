@@ -27,8 +27,7 @@
 -type create_fun() :: fun((session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode()) ->
     {ok, file_id:file_guid()} | {error, term()}).
 
--type create_link_fun() :: fun((session:id(), lfm:file_ref(), file_meta:name()) ->
-    {ok, file_id:file_guid()} | {error, term()}).
+-type create_link_fun() :: fun(() -> {ok, file_id:file_guid()} | {error, term()}).
 
 % timeout after which cowboy returns the data read from socket, regardless of its size
 % the value was decided upon experimentally
@@ -271,14 +270,14 @@ process_request(#op_req{
             end;
         ?LINK_TYPE ->
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
-            CreateFun = fun(SessId, ParentKey, N) ->
-                lfm:make_link(SessId, ?FILE_REF(TargetFileGuid), ParentKey, N)
+            CreateFun = fun() ->
+                lfm:make_link(SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name)
             end,
             {create_link(CreateFun, SessionId, ParentGuid, Name, UpdateExisting), Req};
         ?SYMLINK_TYPE ->
             TargetFilePath = maps:get(<<"target_file_path">>, Params),
-            CreateFun = fun(SessId, ParentKey, N) ->
-                lfm:make_symlink(SessId, ParentKey, N, TargetFilePath)
+            CreateFun = fun() ->
+                lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath)
             end,
             {create_link(CreateFun, SessionId, ParentGuid, Name, UpdateExisting), Req}
     end,
@@ -414,12 +413,12 @@ create(CreateFun, SessionId, ParentGuid, Name, Mode, true) ->
 %% @private
 -spec create_link(create_link_fun(), session:id(), file_id:file_guid(), file_meta:name(), UpdateExisting :: boolean()) ->
     file_id:file_guid() | no_return().
-create_link(CreateFun, SessionId, ParentGuid, Name, false) ->
+create_link(CreateFun, _SessionId, _ParentGuid, _Name, false) ->
     {ok, #file_attr{guid = SymlinkGuid}} =
-        ?lfm_check(CreateFun(SessionId, ?FILE_REF(ParentGuid), Name)),
+        ?lfm_check(CreateFun()),
     SymlinkGuid;
 create_link(CreateFun, SessionId, ParentGuid, Name, true) ->
-    case CreateFun(SessionId, ?FILE_REF(ParentGuid), Name) of
+    case CreateFun() of
         {ok, #file_attr{guid = LinkGuid}} ->
             LinkGuid;
         {error, ?EEXIST} ->

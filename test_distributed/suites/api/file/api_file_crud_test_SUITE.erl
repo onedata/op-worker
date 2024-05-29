@@ -90,7 +90,15 @@ create_file_test(_Config) ->
 create_file_at_path_test(_Config) ->
     MemRef = api_test_memory:init(),
     PathTokens = [N1, N2, N3] = lists_utils:generate(fun(_) -> ?RANDOM_FILE_NAME() end, 3),
-    onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{name = N1, children = [#dir_spec{name = N2, children = [#dir_spec{name = N3}]}]}),
+    onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{
+        name = N1,
+        children = [
+            #dir_spec{
+                name = N2,
+                children = [#dir_spec{name = N3}]
+            }
+        ]
+    }),
     api_test_memory:set(MemRef, path_to_parent, filename:join(PathTokens)),
     create_file_test_base(path, MemRef).
 
@@ -118,7 +126,8 @@ create_file_test_base(CreationType, MemRef) ->
         path -> {[], [<<"name">>]}
     end,
     
-    api_test_memory:set(MemRef, hardlink_target, dummy_id), % put dummy value, so nothing fails when retrieving it even if it doesn't make sense
+    % put dummy value, so nothing fails when retrieving it even if it doesn't make sense
+    api_test_memory:set(MemRef, hardlink_target, dummy_id),
     ScenarioSpecBase =
         #scenario_spec{
             type = rest,
@@ -131,7 +140,8 @@ create_file_test_base(CreationType, MemRef) ->
                 always_present = AlwaysPresentBase,
                 optional = [<<"type">>, <<"mode">>],
                 correct_values = CorrectValuesBase = #{
-                    % name provided only to test that it is required field, actual name is generated in prepare_args_fun in order to avoid conflicts
+                    % name provided only to test that it is required field, actual name is generated in prepare_args_fun
+                    % in order to avoid conflicts
                     <<"name">> => [dummy_name],
                     <<"mode">> => [?DEFAULT_DIR_MODE, ?DEFAULT_FILE_MODE]
                 },
@@ -155,7 +165,8 @@ create_file_test_base(CreationType, MemRef) ->
         ScenarioSpecBase#scenario_spec{
             name = "Create hardlink using rest",
             setup_fun = fun() ->
-                #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #file_spec{}),
+                #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(
+                    user2, space_krk_par, #file_spec{}),
                 api_test_memory:set(MemRef, hardlink_target, file_id:check_guid_to_objectid(Guid))
             end,
             data_spec = DataSpecBase#data_spec{
@@ -188,8 +199,10 @@ build_create_file_rest_args_fun(ParentId, CreationType, MemRef) ->
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ParentId, Data1),
         Name = ?RANDOM_FILE_NAME(),
         api_test_memory:set(MemRef, name, Name),
-        Data3 = maps_utils:update_existing_key(Data2, <<"name">>, Name), % replace name to unique here to avoid conflicts between tests
-        Data4 = maps_utils:update_existing_key(Data3, <<"target_file_id">>, api_test_memory:get(MemRef, hardlink_target)),
+        % replace name to unique here to avoid conflicts between tests
+        Data3 = maps_utils:update_existing_key(Data2, <<"name">>, Name),
+        Data4 = maps_utils:update_existing_key(
+            Data3, <<"target_file_id">>, api_test_memory:get(MemRef, hardlink_target)),
     
         {Method, RestPath, Data5} = case CreationType of
             id ->
@@ -197,7 +210,8 @@ build_create_file_rest_args_fun(ParentId, CreationType, MemRef) ->
             path ->
                 PathToDirectParent = api_test_memory:get(MemRef, path_to_parent),
                 Name = maps:get(<<"name">>, Data4),
-                {put, <<"data/", Id/binary, "/path/", PathToDirectParent/binary, "/", Name/binary>>, maps:without([<<"name">>], Data4)}
+                Path = <<"data/", Id/binary, "/path/", PathToDirectParent/binary, "/", Name/binary>>,
+                {put, Path, maps:without([<<"name">>], Data4)}
         end,
         
         #rest_args{
@@ -469,7 +483,9 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
         {ok, ResultMap} = ?assertMatch({ok, _}, Result),
         % do not compare size in attrs, as stats may not be fully calculated yet (which is normal and expected)
         %% @TODO VFS-11380 analyze why ctime is updated here and whether it should be
-        ?assertEqual(maps:without([<<"size">>, <<"ctime">>], ExpJsonDetailsFun(Node)), maps:without([<<"size">>, <<"ctime">>], ResultMap))
+        ?assertEqual(
+            maps:without([<<"size">>, <<"ctime">>], ExpJsonDetailsFun(Node)),
+            maps:without([<<"size">>, <<"ctime">>], ResultMap))
     end.
 
 
@@ -477,7 +493,9 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
 -spec get_space_dir_attrs(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_attr{}.
 get_space_dir_attrs(ProviderSelector, SpaceDirGuid, SpaceName) ->
     {ok, SpaceAttrs} = ?assertMatch(
-        {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
+        {ok, _},
+        file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid),
+        ?ATTEMPTS
     ),
     SpaceAttrs#file_attr{
         name = SpaceName,
@@ -753,7 +771,8 @@ delete_file_instance_at_path_test(Config) ->
                 #scenario_template{
                     name = str_utils:format("Delete ~s at path instance using rest api", [FileType]),
                     type = rest,
-                    prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, TopDirName),
+                    prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(
+                        MemRef, TopDirGuid, TopDirName),
                     validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
                         ?assertEqual(?HTTP_204_NO_CONTENT, RespCode)
                     end
