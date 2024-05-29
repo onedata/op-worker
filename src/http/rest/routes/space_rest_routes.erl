@@ -30,7 +30,7 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get all user spaces
+    %% List all user spaces
     {<<"/spaces">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -41,7 +41,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get basic space information
+    %% Get space details
     {<<"/spaces/:sid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

@@ -299,7 +299,7 @@ upgrade_cluster(6) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         % Allow for file links reconciliation traverses to be run again - due to a bug in previous versions it
         % could have been accidentally cancelled.
-        lists:foreach(fun(SpaceId) -> traverse_task:delete_ended(qos_traverse:pool_name(), SpaceId) end, SpaceIds)
+        lists:foreach(fun file_links_reconciliation_traverse:mark_traverse_needed_for_space/1, SpaceIds)
     end),
     {ok, 7}.
 

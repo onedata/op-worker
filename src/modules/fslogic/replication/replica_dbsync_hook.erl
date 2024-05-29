@@ -408,11 +408,17 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSi
                     % method of truncating file that does not block synchronizer is preferred.
                     spawn(fun() ->
                         {SDHandle, _FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
-                        case storage_driver:open(SDHandle, write) of
+                        case storage_driver:open_for_write_insecure(SDHandle) of
                             {ok, Handle} ->
-                                ok = storage_driver:truncate(Handle, NewSize, OldSize);
+                                case storage_driver:truncate(Handle, NewSize, OldSize) of
+                                    ok -> ok;
+                                    {error, ?ENOENT} -> ok; % file not yet created on storage
+                                    {error, Error} ->
+                                        % NOTE: can happen on flat storages, which do not check anything during open.
+                                        ?error("File truncation failed when executing a location dbsync hook~n~s", [?autoformat([Error])])
+                                end;
                             {error, ?ENOENT} ->
-                                ok
+                                ok % local file metadata not yet synchronized
                         end
                     end),
                     {ok, FileCtx3}

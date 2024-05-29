@@ -14,6 +14,7 @@
 
 -include("onenv_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -24,10 +25,12 @@
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 -export([
+    newly_supported_space_is_marked_as_not_needing_traverse_test/1,
     file_links_reconciliation_traverse_test/1
 ]).
 
 all() -> [
+    newly_supported_space_is_marked_as_not_needing_traverse_test,
     file_links_reconciliation_traverse_test
 ].
 
@@ -36,6 +39,20 @@ all() -> [
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+newly_supported_space_is_marked_as_not_needing_traverse_test(_Config) ->
+    SpaceId = space_setup_utils:set_up_space(#space_spec{supports = [
+        #support_spec{provider = paris}
+    ]}),
+    opw_test_rpc:call(paris, file_links_reconciliation_traverse, start_for_space, [SpaceId]),
+    timer:sleep(timer:seconds(1)),
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(paris),
+        file_links_reconciliation_traverse, task_started, 2, 0),
+    ok = opw_test_rpc:call(paris, file_links_reconciliation_traverse, mark_traverse_needed_for_space, [SpaceId]),
+    ok = opw_test_rpc:call(paris, file_links_reconciliation_traverse, start_for_space, [SpaceId]),
+    test_utils:mock_assert_num_calls_sum(oct_background:get_provider_nodes(paris),
+        file_links_reconciliation_traverse, task_started, 2, 1, ?ATTEMPTS).
+
 
 file_links_reconciliation_traverse_test(Config) ->
     ChildrenCount = 100,
@@ -63,6 +80,8 @@ file_links_reconciliation_traverse_test(Config) ->
     % eagain is expected when fetching remote doc fails
     ?assertEqual({error, ?EAGAIN}, get_children(KrakowNode, DirGuid)),
     
+    ?assertEqual(ok, opw_test_rpc:call(KrakowNode, file_links_reconciliation_traverse, mark_traverse_needed_for_space,
+        [oct_background:get_space_id(space1)])), % space was marked as not needing traverse after being supported
     ?assertEqual(ok, opw_test_rpc:call(KrakowNode, file_links_reconciliation_traverse, start_for_space,
         [oct_background:get_space_id(space1)])),
     
@@ -167,7 +186,10 @@ init_per_suite(Config) ->
         ]}]
     }).
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(newly_supported_space_is_marked_as_not_needing_traverse_test, Config) ->
+    test_utils:mock_new(oct_background:get_provider_nodes(paris), file_links_reconciliation_traverse, [passthrough]),
+    init_per_testcase(default, Config);
+init_per_testcase(file_links_reconciliation_traverse_test, Config) ->
     % mock dbsync so it does not save link_node documents
     KrakowNodes = oct_background:get_provider_nodes(krakow),
     test_utils:mock_new(KrakowNodes, dbsync_changes, [passthrough]),
@@ -235,10 +257,15 @@ init_per_testcase(_Case, Config) ->
     ),
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     oct_environment:disable_panel_healthcheck(Config),
+    init_per_testcase(default, Config);
+init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_testcase(newly_supported_space_is_marked_as_not_needing_traverse_test, Config) ->
+    test_utils:mock_unload(oct_background:get_provider_nodes(paris)),
+    end_per_testcase(default, Config);
+end_per_testcase(file_links_reconciliation_traverse_test, Config) ->
     % unload only in krakow as paris is stopped
     test_utils:mock_unload(oct_background:get_provider_nodes(krakow)),
     MessageQueueCleanFun = fun F() ->
@@ -249,6 +276,8 @@ end_per_testcase(_Case, Config) ->
         end
     end,
     MessageQueueCleanFun(),
+    end_per_testcase(default, Config);
+end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 
 end_per_suite(_Config) ->

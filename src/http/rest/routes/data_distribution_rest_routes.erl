@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file_distribution REST methods.
+%%% This module contains definitions of data_distribution REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_distribution_rest_routes).
+-module(data_distribution_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,12 +25,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file_distribution REST paths.
+%% Definitions of data_distribution REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get file distribution
+    %% Get data distribution
     {<<"/data/:id/distribution">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

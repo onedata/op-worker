@@ -96,7 +96,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove file xattrs
+    %% Remove file extended attributes
     {<<"/data/:id/metadata/xattrs">>, rest_handler, #rest_req{
         method = 'DELETE',
         parse_body = as_json_params,

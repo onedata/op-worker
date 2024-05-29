@@ -19,6 +19,9 @@
 %% API
 -export([change_replicated/2]).
 
+%% for tests
+-export([hardlink_replicated/2]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -58,11 +61,12 @@ change_replicated_internal(SpaceId, #document{
         {ok, ReferencedDoc} ->
             {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
             FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
-            hardlink_replicated(LinkDoc, FileCtx);
+            % call using ?MODULE for mocking in tests
+            ?MODULE:hardlink_replicated(LinkDoc, FileCtx);
+        {error, not_found} ->
+            file_meta_hardlinks_posthooks:add_posthook(SpaceId, FileUuid);
         Error ->
-            % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
-            ?warning("hardlink replicated ~tp - posthook failed with error ~tp",
-                [FileUuid, Error])
+            ?warning("hardlink replicated ~tp - dbsync posthook failed~n~ts", [FileUuid, ?autoformat([Error])])
     end,
     ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 change_replicated_internal(SpaceId, #document{
