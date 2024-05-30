@@ -286,7 +286,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, Flag, undefined, true, false),
-        fslogic_times:report_change(ParentFileCtx3, [mtime, ctime]),
+        times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
@@ -309,7 +309,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             ?error_stacktrace("create_file_insecure error: ~p:~p", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            fslogic_times:report_file_deleted(FileCtx),
+            times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             case Reason of
@@ -383,7 +383,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true, 0),
-        fslogic_times:report_change(ParentFileCtx3, [mtime, ctime]), % fixme move to fslogic_times
+        times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
             name_conflicts_resolution_policy => allow_name_conflicts,
@@ -397,7 +397,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Class:Reason:Stacktrace ->
             ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-%%            fslogic_times:report_file_deleted(FileCtx), % fixme
+            times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             erlang:Class(Reason)
@@ -429,7 +429,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 hardlink_registry_utils:register(TargetFileCtx, TargetParentGuid, LinkUuid),
 
                 FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
-                fslogic_times:report_change(TargetParentFileCtx3, [mtime, ctime]),
+                times_api:touch(TargetParentFileCtx3, [?attr_mtime, ?attr_ctime]),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     name_conflicts_resolution_policy => allow_name_conflicts,
@@ -466,8 +466,8 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
 
             try
                 FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
-                fslogic_times:report_file_created(FileCtx, #{event_verbosity => silent}),
-                fslogic_times:report_change(ParentFileCtx3, [mtime, ctime]),
+                times_api:report_file_created(FileCtx),
+                times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
 
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
@@ -764,8 +764,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, not IsSyncEnabled),
             {ok, SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
             FileCtx = file_ctx:new_by_doc(SavedFileDoc, SpaceId),
-            % do not emit event now as it will be produced after successful file creation
-            fslogic_times:report_file_created(FileCtx, #{event_verbosity => silent}),
+            times_api:report_file_created(FileCtx),
             {FileCtx, ParentFileCtx3};
         {false, _} ->
             throw(?ENOTDIR)

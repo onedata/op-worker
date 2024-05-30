@@ -66,7 +66,6 @@
 -type entry() :: uuid_or_path() | doc().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
--type time() :: non_neg_integer(). % fixme
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
@@ -76,7 +75,7 @@
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, disambiguated_name/0,
-    uuid_or_path/0, entry/0,  size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    uuid_or_path/0, entry/0,  size/0, mode/0, posix_permissions/0, permissions_type/0,
     conflicts/0, path_type/0, link/0
 ]).
 
@@ -776,7 +775,7 @@ get_shares(#file_meta{shares = Shares}) ->
 ensure_space_doc_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
         {ok, Doc} ->
-            ok = fslogic_times:report_file_created(file_ctx:new_by_doc(Doc, SpaceId), #{event_verbosity => silent});
+            ok = times_api:report_file_created(file_ctx:new_by_doc(Doc, SpaceId));
         {error, already_exists} ->
             ok
     end.
@@ -793,7 +792,7 @@ ensure_tmp_dir_exists(SpaceId) ->
     case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
         {ok, CreatedDoc} ->
             ok = ?ok_if_exists(
-                fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId), #{event_verbosity => silent})
+                times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
             ),
             created;
         {error, already_exists} ->
@@ -818,7 +817,7 @@ ensure_opened_deleted_files_dir_exists(SpaceId) ->
         {ok, CreatedDoc} ->
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
             ok = ?ok_if_exists(
-                fslogic_times:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId), #{event_verbosity => silent})
+                times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
             );
         {error, already_exists} ->
             ok

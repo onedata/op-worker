@@ -146,8 +146,9 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             ok;
         {#document{}, FileCtx2} ->
             RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            % root can't get a space name when provider does not support this space
             Attributes = case file_ctx:is_space_dir_const(FileCtx2) of
-                true -> ?ONECLIENT_FILE_ATTRS -- [?attr_size, ?attr_name]; % fixme cannot get space name as root
+                true -> ?ONECLIENT_FILE_ATTRS -- [?attr_size, ?attr_name];
                 false -> ?ONECLIENT_FILE_ATTRS -- [?attr_size]
             end,
             #fuse_response{

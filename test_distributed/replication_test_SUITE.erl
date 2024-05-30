@@ -105,7 +105,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     ),
     ?assertMatch(
         ok,
-        rpc:call(W1, fslogic_times, report_file_created, [file_ctx:new_by_doc(CreatedFMDoc, SpaceId)])
+        rpc:call(W1, times_api, report_file_created, [file_ctx:new_by_doc(CreatedFMDoc, SpaceId)])
     ),
 
     %when
@@ -147,7 +147,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     ),
     ?assertMatch(
         ok,
-        rpc:call(W1, fslogic_times, report_file_created, [file_ctx:new_by_doc(CreatedFMDoc, SpaceId)])
+        rpc:call(W1, times_api, report_file_created, [file_ctx:new_by_doc(CreatedFMDoc, SpaceId)])
     ),
 
     {ok, FileToCompareGUID} =
@@ -204,7 +204,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ),
     ?assertMatch(
         ok,
-        rpc:call(W1, fslogic_times, report_file_created, [file_ctx:new_by_doc(CreatedFMDoc, SpaceId)])
+        rpc:call(W1, times_api, report_file_created, [file_ctx:new_by_doc(CreatedFMDoc, SpaceId)])
     ),
 
     {ok, FileToCompareGUID} =

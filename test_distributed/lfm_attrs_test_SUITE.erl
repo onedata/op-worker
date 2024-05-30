@@ -629,7 +629,7 @@ remove_file_test(Config) ->
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, Path),
     ?assertEqual({ok, []}, lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(Guid2), false, true)),
     ?assertEqual({error, not_found}, rpc:call(Worker, custom_metadata, get, [Uuid])),
-    ?assertEqual({error, not_found}, rpc:call(Worker, times, get2, [Uuid])).
+    ?assertEqual({error, not_found}, rpc:call(Worker, times, get, [Uuid])).
 
 modify_cdmi_attrs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

@@ -115,9 +115,9 @@ chmod(UserCtx, FileCtx0, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
+    ATime :: times:time() | undefined,
+    MTime :: times:time() | undefined,
+    CTime :: times:time() | undefined) -> fslogic_worker:fuse_response().
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -267,7 +267,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     sd_utils:chmod(UserCtx, FileCtx, Mode),
     FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:report_change(FileCtx2, [ctime]),
+    times_api:touch(FileCtx2, [?attr_ctime]),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -279,9 +279,9 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
+    ATime :: times:time() | undefined,
+    MTime :: times:time() | undefined,
+    CTime :: times:time() | undefined) -> fslogic_worker:fuse_response().
 update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % Flush events queue to prevent race with file_written_event
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
@@ -289,10 +289,10 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     catch lfm_event_controller:flush_event_queue(
         SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
 
-    fslogic_times:update(FileCtx, #times{
+    times_api:update(FileCtx, #times{
         atime = utils:ensure_defined(ATime, 0),
-        ctime = utils:ensure_defined(CTime, 0),
-        mtime = utils:ensure_defined(MTime, 0)
+        mtime = utils:ensure_defined(MTime, 0),
+        ctime = utils:ensure_defined(CTime, 0)
     }),
     #fuse_response{status = #status{code = ?OK}}.
 

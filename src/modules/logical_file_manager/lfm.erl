@@ -215,9 +215,9 @@ is_dir(SessId, FileEntry) ->
 -spec update_times(
     session:id(),
     file_key(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined
+    ATime :: times:time() | undefined,
+    MTime :: times:time() | undefined,
+    CTime :: times:time() | undefined
 ) ->
     ok | error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->

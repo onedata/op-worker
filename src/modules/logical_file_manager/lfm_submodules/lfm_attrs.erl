@@ -107,9 +107,9 @@ resolve_symlink(SessId, FileKey) ->
 -spec update_times(
     session:id(),
     lfm:file_key(),
-    ATime :: file_meta:time(),
-    MTime :: file_meta:time(),
-    CTime :: file_meta:time()
+    ATime :: times:time(),
+    MTime :: times:time(),
+    CTime :: times:time()
 ) ->
     ok | lfm:error_reply().
 update_times(SessId, FileKey, ATime, MTime, CTime) ->

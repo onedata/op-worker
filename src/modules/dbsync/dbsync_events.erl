@@ -92,7 +92,7 @@ change_replicated_internal(SpaceId, #document{
 }) ->
     ?debug("change_replicated_internal: deleted times ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-    dir_update_time_stats:report_update_of_nearest_dir(file_ctx:get_logical_guid_const(FileCtx), Record),
+    dir_update_time_stats:report_update(FileCtx, Record),
     % Emmit event in case of changed times / deleted file_meta propagation race
     (catch fslogic_event_emitter:emit_file_removed(FileCtx, []));
 change_replicated_internal(SpaceId, #document{
@@ -101,7 +101,9 @@ change_replicated_internal(SpaceId, #document{
 }) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-    fslogic_times:update(FileCtx, Record),
+    % although times document is already updated, update values in times_cache so that fetches
+    % from cache include those new values
+    times_api:update(FileCtx, Record),
     (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx));
 change_replicated_internal(_SpaceId, #document{
     key = FileUuid,

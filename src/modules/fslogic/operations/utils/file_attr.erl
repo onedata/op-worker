@@ -164,8 +164,14 @@ resolve_name_attrs(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
 %% @private
 -spec resolve_times_attrs(state()) -> {state(), record()}.
 resolve_times_attrs(#state{file_ctx = FileCtx, current_stage_attrs = RequestedTimes} = State) ->
-    {#times{atime = ATime, ctime = CTime, mtime = MTime}, FileCtx2} = file_ctx:get_times(FileCtx, RequestedTimes),
+    {#times{
+        creation_time = CreationTime,
+        atime = ATime,
+        mtime = MTime,
+        ctime = CTime
+    }, FileCtx2} = file_ctx:get_times(FileCtx, RequestedTimes),
     {State#state{file_ctx = FileCtx2}, #file_attr{
+        creation_time = CreationTime,
         atime = ATime,
         mtime = MTime,
         ctime = CTime

@@ -47,7 +47,7 @@
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name(),
     display_credentials :: undefined | luma:display_credentials(),
-    times :: undefined | times:record(),
+    times :: undefined | #{times_api:times_type() => times:time()},
     file_name :: undefined | file_meta:name(),
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
@@ -679,7 +679,7 @@ get_times(FileCtx) ->
     get_times(FileCtx, [atime, ctime, mtime]).
 
 
--spec get_times(ctx(), [atom()]) -> {times:record(), ctx()}. % fixme spec
+-spec get_times(ctx(), [times_api:times_type()]) -> {times:record(), ctx()}.
 get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
     FileUuid = get_logical_uuid_const(FileCtx),
     Times = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
@@ -698,14 +698,21 @@ get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
             {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid), RequestedTimes),
             RootFileTimes;
         false ->
-            case fslogic_times:get(FileCtx, RequestedTimes) of
-                {ok, T} -> T;
-                {error, not_found} -> #times{} % fixme
-            end
+            {ok, T} = times_api:get(FileCtx, RequestedTimes),
+            T
     end,
-    {Times, FileCtx}; % fixme cache it in file_ctx
-get_times(FileCtx = #file_ctx{times = Times}, _) -> % fixme
-    {Times, FileCtx}.
+    {Times, FileCtx#file_ctx{times = times_record_to_map(Times)}};
+get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
+    case lists_utils:intersect(RequestedTimes, maps:keys(TimesMap)) of
+        RequestedTimes ->
+            {map_to_times_record(TimesMap), FileCtx};
+        NotAllTimes ->
+            MissingTimes = RequestedTimes -- NotAllTimes,
+            {ok, MissingTimesRecord} = times_api:get(FileCtx, MissingTimes),
+            MissingTimesMap = times_record_to_map(MissingTimesRecord),
+            FinalMap = maps:merge(TimesMap, MissingTimesMap),
+            {map_to_times_record(FinalMap), FileCtx#file_ctx{times = FinalMap}}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -1497,6 +1504,7 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 
+%% @private
 -spec get_synced_gid(ctx()) -> {luma:gid() | undefined, ctx()}.
 get_synced_gid(FileCtx) ->
     case is_dir(FileCtx) of
@@ -1506,6 +1514,7 @@ get_synced_gid(FileCtx) ->
             {get_file_synced_gid_const(FileCtx2), FileCtx2}
     end.
 
+%% @private
 -spec get_file_synced_gid_const(ctx()) -> luma:gid() | undefined.
 get_file_synced_gid_const(FileCtx) ->
     case get_local_file_location_doc_const(FileCtx, skip_local_blocks) of
@@ -1515,6 +1524,7 @@ get_file_synced_gid_const(FileCtx) ->
             file_location:get_synced_gid(FileLocation)
     end.
 
+%% @private
 -spec get_dir_synced_gid_const(ctx()) -> luma:gid() | undefined.
 get_dir_synced_gid_const(FileCtx) ->
     case get_dir_location_doc_const(FileCtx) of
@@ -1525,6 +1535,7 @@ get_dir_synced_gid_const(FileCtx) ->
     end.
 
 
+%% @private
 -spec get_type(ctx(), fun((file_meta:doc()) -> onedata_file:type())) -> {onedata_file:type(), ctx()}.
 get_type(FileCtx = #file_ctx{is_dir = true}, _) ->
     {?DIRECTORY_TYPE, FileCtx};
@@ -1536,6 +1547,7 @@ get_type(FileCtx, FileMetaFun) ->
     {Type, FileCtx2#file_ctx{is_dir = IsDir}}.
 
 
+%% @private
 -spec prepare_file_size_summary_from_existing_doc(file_location:doc()) -> file_size_summary().
 prepare_file_size_summary_from_existing_doc(LocationDoc) ->
     case LocationDoc of
@@ -1546,3 +1558,29 @@ prepare_file_size_summary_from_existing_doc(LocationDoc) ->
         #document{value = #file_location{size = Size, storage_id = StorageId}} ->
             [{virtual, Size}, {StorageId, file_location:count_bytes(fslogic_location_cache:get_blocks(LocationDoc))}]
     end.
+
+
+%% @private
+-spec times_record_to_map(times:record()) -> #{times_api:times_type() => times:type()}.
+times_record_to_map(#times{creation_time = CreationTime, atime = ATime, mtime = MTime, ctime = CTime}) ->
+    BaseMap = #{
+        ?attr_creation_time => CreationTime,
+        ?attr_atime => ATime,
+        ?attr_mtime => MTime,
+        ?attr_ctime => CTime
+    },
+    maps:fold(fun
+        (_Time, 0, Acc) -> Acc;
+        (Time, Value, Acc) -> Acc#{Time => Value}
+    end, #{}, BaseMap).
+
+
+%% @private
+-spec map_to_times_record(#{times_api:times_type() => times:type()}) -> times:record().
+map_to_times_record(Map) ->
+    #times{
+        creation_time = maps:get(?attr_creation_time, Map, 0),
+        atime = maps:get(?attr_atime, Map, 0),
+        mtime = maps:get(?attr_mtime, Map, 0),
+        ctime = maps:get(?attr_ctime, Map, 0)
+    }.

@@ -672,7 +672,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.
             file_meta_posthooks:execute_hooks(FileUuid, doc),
             {ok, TimesRecord, StorageFileCtx5} = build_times_from_stat_timestamps(StorageFileCtx4),
-            fslogic_times:report_file_created(FileCtx, TimesRecord),
+            times_api:report_file_created(FileCtx, TimesRecord),
             ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
             {ok, FileType} = storage_driver:infer_type(Mode),
             dir_size_stats:report_file_created(FileType, ParentGuid),
@@ -1209,7 +1209,7 @@ maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, Fil
 
 -spec update_times(file_ctx:ctx(), helpers:stat()) -> ok.
 update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime}) ->
-    ok = fslogic_times:update(FileCtx, #times{
+    ok = times_api:update(FileCtx, #times{
         atime = StorageATime,
         mtime = StorageMTime,
         ctime = StorageCTime

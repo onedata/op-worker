@@ -673,7 +673,7 @@ get_times_changes(#change_req{
     fields = Fields,
     exists = Exists
 }, FileUuid, _, State) ->
-    {ok, Doc} = times:get2(FileUuid),
+    {ok, Doc} = times:get(FileUuid),
     #{<<"times">> => get_record_changes(false, Fields, Exists, Doc, State)};
 get_times_changes(_, _, _, _) ->
     #{}.

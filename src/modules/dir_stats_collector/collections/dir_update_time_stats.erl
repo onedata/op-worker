@@ -21,10 +21,11 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1]).
+-export([report_update/2, get_update_time/1]).
 
 %% dir_stats_collection_behaviour callbacks
 -export([
@@ -53,20 +54,26 @@
 %%% API
 %%%===================================================================
 
--spec report_update_of_dir(file_id:file_guid(), times:record() | helpers:stat() | times:time()) -> ok.
-report_update_of_dir(Guid, Time) -> % fixme do only when updating stats
-    ok = dir_stats_collector:update_stats_of_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks file type and sets time of directory identified by Guid or time of parent if Guid represents regular
-%% file or link.
-%% @end
-%%--------------------------------------------------------------------
--spec report_update_of_nearest_dir(file_id:file_guid(), times:record() | helpers:stat() | times:time()) -> ok.
-report_update_of_nearest_dir(Guid, Time) ->
-    ok = dir_stats_collector:update_stats_of_nearest_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
+-spec report_update(file_ctx:ctx(), times:record() | helpers:stat() | times:time()) -> ok.
+report_update(FileCtx, Time) ->
+    Update = #{?STAT_NAME => infer_update_time(Time)},
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
+    try
+        case file_ctx:get_type(FileCtx) of
+            {?DIRECTORY_TYPE, _} ->
+                ok = dir_stats_collector:update_stats_of_dir(Guid, ?MODULE, Update);
+            _ ->
+                ok = dir_stats_collector:update_stats_of_nearest_dir(Guid, ?MODULE, Update)
+        end
+    catch Class:Reason:Stacktrace ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found ->
+                dir_stats_collector:add_missing_file_meta_on_update_posthook(Guid, ?MODULE, Update);
+            _ ->
+                ?error_exception(Class, Reason, Stacktrace),
+                erlang:Class(Reason)
+        end
+    end.
 
 
 -spec get_update_time(file_id:file_guid()) -> {ok, times:time()} | dir_stats_collector:error().
@@ -195,7 +202,7 @@ infer_update_time(Timestamp) when is_integer(Timestamp) ->
 %% @private
 -spec init(file_id:file_guid()) -> dir_stats_collection:collection().
 init(Guid) ->
-    case fslogic_times:get(file_ctx:new_by_guid(Guid)) of
+    case times_api:get(file_ctx:new_by_guid(Guid)) of
         {ok, Times} ->
             #{?STAT_NAME => infer_update_time(Times)};
         ?ERROR_NOT_FOUND ->
