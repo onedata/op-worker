@@ -121,9 +121,9 @@ create_file_test_base(CreationType, MemRef) ->
         forbidden_not_in_space = [user1]
     },
     
-    {RequiredBase, AlwaysPresentBase} = case CreationType of
-        id -> {[<<"name">>], []};
-        path -> {[], [<<"name">>]}
+    RequiredBase = case CreationType of
+        id -> [<<"name">>];
+        path -> []
     end,
     
     % put dummy value, so nothing fails when retrieving it even if it doesn't make sense
@@ -137,7 +137,6 @@ create_file_test_base(CreationType, MemRef) ->
             validate_result_fun = build_create_file_validate_rest_call_fun(MemRef),
             data_spec = DataSpecBase = #data_spec{
                 required = RequiredBase,
-                always_present = AlwaysPresentBase,
                 optional = [<<"type">>, <<"mode">>],
                 correct_values = CorrectValuesBase = #{
                     % name provided only to test that it is required field, actual name is generated in prepare_args_fun
@@ -171,7 +170,7 @@ create_file_test_base(CreationType, MemRef) ->
             end,
             data_spec = DataSpecBase#data_spec{
                 required = RequiredBase ++ [<<"target_file_id">>],
-                always_present = AlwaysPresentBase ++ [<<"type">>],
+                discriminator = [<<"type">>],
                 correct_values = CorrectValuesBase#{
                     <<"type">> => ["LNK"],
                     <<"target_file_id">> => [dummy_id] % NOTE: substituted in prepare_args_fun
@@ -182,7 +181,7 @@ create_file_test_base(CreationType, MemRef) ->
             name = "Create symlink using rest",
             data_spec = DataSpecBase#data_spec{
                 required = RequiredBase ++ [<<"target_file_path">>],
-                always_present = AlwaysPresentBase ++ [<<"type">>],
+                discriminator = [<<"type">>],
                 correct_values = CorrectValuesBase#{
                     <<"type">> => ["SYMLNK"],
                     <<"target_file_path">> => [<<"dummy_symlink_path">>]
@@ -209,7 +208,6 @@ build_create_file_rest_args_fun(ParentId, CreationType, MemRef) ->
                 {post, <<"data/", Id/binary, "/children">>, Data4};
             path ->
                 PathToDirectParent = api_test_memory:get(MemRef, path_to_parent),
-                Name = maps:get(<<"name">>, Data4),
                 Path = <<"data/", Id/binary, "/path/", PathToDirectParent/binary, "/", Name/binary>>,
                 {put, Path, maps:without([<<"name">>], Data4)}
         end,

@@ -728,12 +728,12 @@ generate_required_data_sets(undefined) ->
 generate_required_data_sets(#data_spec{
     required = Required,
     at_least_one = AtLeastOne,
-    always_present = AlwaysPresent
+    discriminator = Discriminator
 } = DataSpec) ->
     
-    AlwaysPresentWithValue = maps_utils:generate_from_list(fun(Key) ->
+    DiscriminatorWithValue = maps_utils:generate_from_list(fun(Key) ->
         lists_utils:random_element(get_correct_values(Key, DataSpec))
-    end, AlwaysPresent),
+    end, Discriminator),
     
     AtLeastOneWithValues = lists:flatten(lists:map(
         fun(Key) ->
@@ -767,7 +767,7 @@ generate_required_data_sets(#data_spec{
         _ -> RequiredWithAll ++ RequiredWithOne
     end,
     lists:map(fun(Dataset) ->
-        maps:merge(Dataset, AlwaysPresentWithValue)
+        maps:merge(Dataset, DiscriminatorWithValue)
     end, Datasets).
 
 
@@ -812,11 +812,11 @@ generate_bad_data_sets(#data_spec{
     at_least_one = AtLeastOne,
     optional = Optional,
     bad_values = BadValues,
-    always_present = AlwaysPresent
+    discriminator = Discriminator
 } = DataSpec) ->
     CorrectDataSet = lists:foldl(fun(Param, Acc) ->
         Acc#{Param => lists_utils:random_element(get_correct_values(Param, DataSpec))}
-    end, #{}, Required ++ AtLeastOne ++ Optional ++ AlwaysPresent),
+    end, #{}, Required ++ AtLeastOne ++ Optional ++ Discriminator),
 
     lists:map(fun({Param, InvalidValue, ExpError}) ->
         Data = CorrectDataSet#{Param => InvalidValue},
