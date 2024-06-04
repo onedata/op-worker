@@ -344,7 +344,8 @@ readdir(SDHandle = #sd_handle{file = FileId}, Offset, Count) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec listobjects(FileHandle :: handle(), Marker :: binary(), Offset :: non_neg_integer(),
-    Count :: non_neg_integer()) -> {ok, [{helpers:file_id(), helpers:stat()}]} | error_reply().
+    Count :: non_neg_integer()) ->
+    {ok, {helpers:marker(), [{helpers:file_id(), helpers:stat()}]}} | error_reply().
 listobjects(SDHandle = #sd_handle{file = FileId}, Marker, Offset, Count) ->
     run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
         helpers:listobjects(HelperHandle, FileId, Marker, Offset, Count)

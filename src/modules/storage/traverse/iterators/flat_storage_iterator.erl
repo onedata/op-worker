@@ -56,31 +56,36 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     marker = Marker
 }) ->
     Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case storage_driver:listobjects(Handle, Marker, Offset, BatchSize) of
-        {ok, []} ->
-            {ok, [], undefined};
-        {ok, ChildrenIdsAndStats} ->
+        {error, _} = Error ->
+            Error;
+        {ok, {NextMarker, ChildrenIdsAndStats}} ->
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ParentTokens = filename:split(ParentStorageFileId),
-            ChildrenBatch = lists:map(fun({ChildId, ChildStat}) ->
-                ChildCtx = storage_file_ctx:new_with_stat(ChildId, SpaceId, StorageId, ChildStat),
-                {ChildCtx, depth(ChildId, ParentTokens)}
+            % some implementations of S3 can return directories during recursive listing (listobjects)
+            ChildrenBatch = lists:filtermap(fun({ChildId, ChildStat}) ->
+                case storage_driver:infer_type(ChildStat#statbuf.st_mode) of
+                    {ok, ?REGULAR_FILE_TYPE} ->
+                        ChildCtx = storage_file_ctx:new_with_stat(ChildId, SpaceId, StorageId, ChildStat),
+                        {true, {ChildCtx, depth(ChildId, ParentTokens)}};
+                    _ ->
+                        % directories and unsupported types
+                        false
+                end
             end, ChildrenIdsAndStats),
-            case length(ChildrenBatch) < BatchSize of
-                true ->
-                    {ok, ChildrenBatch, undefined};
-                false ->
-                    NextOffset = Offset + length(ChildrenIdsAndStats),
-                    {NextMarker, _} = lists:last(ChildrenIdsAndStats),
-                    {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{
-                        offset = NextOffset,
+
+            NextMasterJob = case NextMarker of
+                ?END_OF_LISTING_MARKER ->
+                    undefined;
+                _ ->
+                    StorageTraverse#storage_traverse_master{
+                        offset = Offset + length(ChildrenBatch),
                         marker = NextMarker
-                    }}
-            end;
-        Error = {error, _} ->
-            Error
+                    }
+            end,
+            {ok, ChildrenBatch, NextMasterJob}
     end.
 
 %%--------------------------------------------------------------------

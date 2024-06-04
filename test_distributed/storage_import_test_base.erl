@@ -813,7 +813,7 @@ create_subfiles_import_many2_test(Config) ->
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
     RootPath = provider_storage_path(?SPACE_ID, <<"">>),
-    DirStructure = [10, 10, 10],
+    DirStructure = [13, 13, 13],  % 2379 items in total (dirs and reg files)
     RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
 
     create_nested_directory_tree(W1, DirStructure, RootSDHandle),
@@ -826,12 +826,12 @@ create_subfiles_import_many2_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"created">> => 1110,
+        <<"created">> => 2379,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
         <<"unmodified">> => 0,
-        <<"createdDayHist">> => 1110,
+        <<"createdDayHist">> => 2379,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
