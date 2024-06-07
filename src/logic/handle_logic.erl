@@ -61,7 +61,7 @@ get_public_data(SessionId, HandleId) ->
     }).
 
 
--spec force_fetch(gs_client_worker:client(), od_handle:id()) -> {ok, od_handle:doc()} | errors:error().
+-spec force_fetch(gs_client_worker:client(), od_handle:id()) -> {ok, od_handle:doc()}.
 force_fetch(SessionId, HandleId) ->
     gs_client_worker:force_fetch_entity(SessionId, #gri{type = od_handle, id = HandleId, aspect = instance}).
 
@@ -125,5 +125,5 @@ update(SessionId, HandleId, NewMetadata) ->
         data = #{<<"metadata">> => NewMetadata}
     }),
     ?ON_SUCCESS(Res, fun(_) ->
-        ?check(force_fetch(SessionId, HandleId))  % fixme add checks everywhere
+        force_fetch(SessionId, HandleId)
     end).

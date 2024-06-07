@@ -206,7 +206,7 @@ request(Client, Req, Timeout) ->
 %% @see force_fetch_entity/2
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(gri:gri()) -> result().
+-spec force_fetch_entity(gri:gri()) -> {ok, datastore_doc:doc()}.
 force_fetch_entity(GRI) ->
     force_fetch_entity(?ROOT_SESS_ID, GRI).
 
@@ -218,15 +218,24 @@ force_fetch_entity(GRI) ->
 %% by Onezone) is fetched and then cached locally. Should be called whenever the
 %% Oneprovider causes an update of an entity to force cache convergence as soon
 %% as possible.
+%%
+%% The force fetch is expected to always succeed, otherwise an internal server
+%% error is thrown.
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(client(), gri:gri()) -> result().
+-spec force_fetch_entity(client(), gri:gri()) -> {ok, datastore_doc:doc()}.
 force_fetch_entity(Client, GRI) ->
-    do_request(Client, #gs_req_graph{
+    Result = do_request(Client, #gs_req_graph{
         operation = get,
         gri = GRI,
         subscribe = true
-    }, ?GS_REQUEST_TIMEOUT, ignore_cached).
+    }, ?GS_REQUEST_TIMEOUT, ignore_cached),
+    case Result of
+        {ok, Doc} ->
+            {ok, Doc};
+        {error, _} = Error ->
+            throw(?report_internal_server_error("Failed to force fetch entity~ts", [?autoformat(GRI, Error)]))
+    end.
 
 
 %%--------------------------------------------------------------------
