@@ -324,8 +324,8 @@ emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLi
         catch
             Class:Reason:Stacktrace ->
                 % Race with file/link deletion can result in error logged here
-                ?warning_exception("Error emitting event for additional guid ~ts",
-                    [?autoformat([Context, Evt])], Class, Reason, Stacktrace)
+                ?warning_exception(?autoformat_with_msg("Error emitting event for additional guid ", [Context, Evt]),
+                    Class, Reason, Stacktrace)
         end
     end, SessIdsForLinks).
 

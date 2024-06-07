@@ -66,7 +66,7 @@ change_replicated_internal(SpaceId, #document{
         {error, not_found} ->
             file_meta_hardlinks_posthooks:add_posthook(SpaceId, FileUuid);
         Error ->
-            ?warning("hardlink replicated ~tp - dbsync posthook failed~n~ts", [FileUuid, ?autoformat([Error])])
+            ?warning(?autoformat_with_msg("hardlink replicated ~tp - dbsync posthook failed", [FileUuid], Error))
     end,
     ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 change_replicated_internal(SpaceId, #document{
