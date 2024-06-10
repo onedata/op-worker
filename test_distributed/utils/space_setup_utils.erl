@@ -11,8 +11,8 @@
 -author("Katarzyna Such").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("space_setup_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("space_setup_utils.hrl").
 
 -type s3_storage_params() :: #s3_storage_params{}.
 -type posix_storage_params() :: #posix_storage_params{}.
@@ -66,8 +66,13 @@ set_up_space(SpaceSpec = #space_spec{
     users = Users,
     supports = SupportSpecs
 }) ->
+    NameBinary = case SpaceName of
+        undefined -> str_utils:rand_hex(8);
+        Binary when is_binary(Binary) -> Binary;
+        Atom when is_atom(Atom) -> atom_to_binary(Atom)
+    end,
     OwnerId = oct_background:get_user_id(OwnerSelector),
-    SpaceId = ozw_test_rpc:create_space(OwnerId, atom_to_binary(SpaceName)),
+    SpaceId = ozw_test_rpc:create_space(OwnerId, NameBinary),
 
     SupportToken = ozw_test_rpc:create_space_support_token(OwnerId, SpaceId),
     support_space(SupportSpecs, SupportToken),
@@ -86,9 +91,10 @@ set_up_space(SpaceSpec = #space_spec{
 -spec support_space([support_spec()], tokens:serialized()) -> ok.
 support_space(SupportSpecs, SupportToken) ->
     lists:foreach(fun(#support_spec{provider = Provider, storage_spec = StorageSpec, size = Size}) ->
-        StorageId = case is_binary(StorageSpec) of
-            true -> StorageSpec;
-            false -> create_storage(Provider, StorageSpec)
+        StorageId = case StorageSpec of
+            any -> lists_utils:random_element(opw_test_rpc:get_storages(Provider));
+            Id when is_binary(Id) -> Id;
+            Spec when is_tuple(Spec) -> create_storage(Provider, Spec)
         end,
         panel_test_rpc:support_space(Provider, StorageId, SupportToken, Size)
     end, SupportSpecs).

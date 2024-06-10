@@ -497,6 +497,8 @@ get_harvesters(SpaceId) ->
 
 -spec on_space_supported(od_space:id()) -> ok.
 on_space_supported(SpaceId) ->
+    % No need to run file links reconciliation traverse on newly supported spaces as it is needed only for legacy ones.
+    ok = file_links_reconciliation_traverse:mark_traverse_not_needed_for_space(SpaceId),
     ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 

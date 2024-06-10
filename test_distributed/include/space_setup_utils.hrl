@@ -23,7 +23,6 @@
     block_size = ?S3_DEFAULT_BLOCK_SIZE :: integer()
 }).
 
-
 -record(posix_storage_params, {
     mount_point :: binary(),
     imported_storage = false :: boolean()
@@ -31,17 +30,18 @@
 
 -record(support_spec, {
     provider :: oct_background:entity_selector(),
-    storage_spec ::
+    storage_spec = any ::
         space_setup_utils:posix_storage_params() |
         space_setup_utils:s3_storage_params() |
-        storage:id(),
-    size :: integer()
+        storage:id() |
+        any, % uses randomly selected storage of given provider
+    size = 123454321 :: integer()
 }).
 
 -record(space_spec, {
-    name :: atom(),
-    owner :: oct_background:entity_selector(),
-    users :: [oct_background:entity_selector()],
+    name :: atom() | binary() | undefined,
+    owner = space_owner :: oct_background:entity_selector(),
+    users = [] :: [oct_background:entity_selector()],
     supports :: [space_setup_utils:support_spec()]
 }).
 
