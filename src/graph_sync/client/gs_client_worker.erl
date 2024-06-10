@@ -206,7 +206,7 @@ request(Client, Req, Timeout) ->
 %% @see force_fetch_entity/2
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(gri:gri()) -> {ok, datastore_doc:doc()}.
+-spec force_fetch_entity(gri:gri()) -> {ok, doc()}.
 force_fetch_entity(GRI) ->
     force_fetch_entity(?ROOT_SESS_ID, GRI).
 
@@ -223,7 +223,7 @@ force_fetch_entity(GRI) ->
 %% error is thrown.
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(client(), gri:gri()) -> {ok, datastore_doc:doc()}.
+-spec force_fetch_entity(client(), gri:gri()) -> {ok, doc()}.
 force_fetch_entity(Client, GRI) ->
     Result = do_request(Client, #gs_req_graph{
         operation = get,
