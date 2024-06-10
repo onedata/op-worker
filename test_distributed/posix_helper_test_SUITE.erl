@@ -295,8 +295,7 @@ helper_handle_server(Config) ->
         ?POSIX_HELPER_NAME,
         #{
             <<"mountPoint">> => ?path(Config, ""),
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
     ),

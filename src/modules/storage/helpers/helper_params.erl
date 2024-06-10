@@ -270,7 +270,6 @@ expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
 -spec expected_generic_helper_args() -> [field() | optional_field()].
 expected_generic_helper_args() -> [
     <<"storagePathType">>,
-    {optional, <<"skipStorageDetection">>},
     {optional, <<"timeout">>},
     {optional, <<"archiveStorage">>}
 ].

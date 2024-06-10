@@ -394,8 +394,7 @@ new_helper(Config) ->
             <<"filter">> => <<"*">>,
             <<"simulatedFilesystemParameters">> => <<"">>,
             <<"simulatedFilesystemGrowSpeed">> => <<"0.0">>,
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
       ),

@@ -404,8 +404,7 @@ new_helper(Config) ->
             <<"transport">> => atom_to_binary(?config(transport, GlusterFSConfig), utf8),
             <<"mountPoint">> => atom_to_binary(?config(mountpoint, GlusterFSConfig), utf8),
             <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>,
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
     ),

@@ -58,5 +58,27 @@ spaces:
         storage_name: "s3-archive-paris"
         size: '10000000000'
 
+oneprovider-1:
+  external-storages:
+    s3-archive-krakow:
+      type: s3
+      hostname: dev-volume-s3-krakow.default:9000
+      bucketName: test
+      accessKey: accessKey
+      secretKey: verySecretKey
+      insecure: true
+      archiveStorage: true
+
+oneprovider-2:
+  external-storages:
+    s3-archive-paris:
+      type: s3
+      hostname: dev-volume-s3-paris.default:9000
+      bucketName: test
+      accessKey: accessKey
+      secretKey: verySecretKey
+      insecure: true
+      archiveStorage: true
+
 storages:
   - s3

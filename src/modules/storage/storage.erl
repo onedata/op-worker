@@ -77,8 +77,7 @@
 %% @formatter:off
 -type config() :: #{
     readonly => readonly(),
-    importedStorage => imported(),
-    skipStorageDetection => boolean()
+    importedStorage => imported()
 }.
 %% @formatter:on
 
@@ -574,17 +573,14 @@ check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
 %% @private
 -spec sanitize_readonly_option(id() | name(), config()) -> ok.
 sanitize_readonly_option(IdOrName, #{
-    skipStorageDetection := SkipStorageDetection,
     readonly := Readonly,
     importedStorage := Imported
 }) ->
     case {
         utils:to_boolean(Readonly),
-        utils:to_boolean(SkipStorageDetection),
         utils:to_boolean(Imported)
     } of
-        {false, _, _} -> ok;
-        {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
-        {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
-        {true, true, true} -> ok
+        {false, _} -> ok;
+        {true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
+        {true, true} -> ok
     end.

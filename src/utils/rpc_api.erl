@@ -57,7 +57,7 @@
     new_helper/3,
     new_luma_config/1,
     new_luma_config_with_external_feed/2,
-    verify_storage_on_all_nodes/2,
+    verify_storage_availability_on_all_nodes/2,
     prepare_helper_args/2,
     prepare_user_ctx_params/2,
     get_helper_args/1,
@@ -355,9 +355,9 @@ new_luma_config_with_external_feed(URL, ApiKey) ->
     luma_config:new_with_external_feed(URL, ApiKey).
 
 
--spec verify_storage_on_all_nodes(helpers:helper(), luma_config:feed()) -> ok | errors:error().
-verify_storage_on_all_nodes(Helper, LumaMode) ->
-    storage_detector:verify_storage_on_all_nodes(Helper, LumaMode).
+-spec verify_storage_availability_on_all_nodes(helpers:helper(), luma_config:feed()) -> ok | errors:error().
+verify_storage_availability_on_all_nodes(Helper, LumaMode) ->
+    storage_detector:verify_storage_availability_on_all_nodes(Helper, LumaMode).
 
 
 -spec prepare_helper_args(helper:name(), helper:args()) -> helper:args().

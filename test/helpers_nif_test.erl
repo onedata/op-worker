@@ -57,8 +57,7 @@ readdir() ->
 
 blocksize_posix() ->
     {ok, HelperHandle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
-        <<"mountPoint">> => <<"/tmp">>,
-        <<"skipStorageDetection">> => <<"true">>
+        <<"mountPoint">> => <<"/tmp">>
     }),
     {ok, Guard} = helpers_nif:blocksize_for_path(HelperHandle, <<"">>),
     NifResult =
