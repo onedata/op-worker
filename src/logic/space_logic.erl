@@ -101,7 +101,7 @@ get_name(SessionId, SpaceId) ->
     end.
 
 
--spec force_fetch(od_space:id()) -> {ok, od_space:doc()} | errors:error().
+-spec force_fetch(od_space:id()) -> {ok, od_space:doc()}.
 force_fetch(SpaceId) ->
     gs_client_worker:force_fetch_entity(#gri{type = od_space, id = SpaceId, aspect = instance}).
 

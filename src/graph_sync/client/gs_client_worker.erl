@@ -206,7 +206,7 @@ request(Client, Req, Timeout) ->
 %% @see force_fetch_entity/2
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(gri:gri()) -> result().
+-spec force_fetch_entity(gri:gri()) -> {ok, doc()}.
 force_fetch_entity(GRI) ->
     force_fetch_entity(?ROOT_SESS_ID, GRI).
 
@@ -218,15 +218,24 @@ force_fetch_entity(GRI) ->
 %% by Onezone) is fetched and then cached locally. Should be called whenever the
 %% Oneprovider causes an update of an entity to force cache convergence as soon
 %% as possible.
+%%
+%% The force fetch is expected to always succeed, otherwise an internal server
+%% error is thrown.
 %% @end
 %%--------------------------------------------------------------------
--spec force_fetch_entity(client(), gri:gri()) -> result().
+-spec force_fetch_entity(client(), gri:gri()) -> {ok, doc()}.
 force_fetch_entity(Client, GRI) ->
-    do_request(Client, #gs_req_graph{
+    Result = do_request(Client, #gs_req_graph{
         operation = get,
         gri = GRI,
         subscribe = true
-    }, ?GS_REQUEST_TIMEOUT, ignore_cached).
+    }, ?GS_REQUEST_TIMEOUT, ignore_cached),
+    case Result of
+        {ok, Doc} ->
+            {ok, Doc};
+        {error, _} = Error ->
+            throw(?report_internal_server_error("Failed to force fetch entity~ts", [?autoformat(GRI, Error)]))
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -300,16 +309,12 @@ init([]) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
-        {error, _} = Error ->
-            ?debug("Failed to establish Onezone connection: ~w", [Error]),
-            utils:throttle({?MODULE, ?FUNCTION_NAME, Error}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+        {error, _} = LastError ->
+            ?debug("Failed to establish Onezone connection: ~w", [LastError]),
+            utils:throttle({?MODULE, ?FUNCTION_NAME, LastError}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
                 ?warning(
-                    "Onezone connection cannot be established, is the service online (~ts)?~n"
-                    "Last error was: ~p~n"
-                    "Retrying as long as it takes...", [
-                        oneprovider:get_oz_domain(),
-                        Error
-                    ]
+                    "Onezone connection cannot be established (~ts), is the service online? Retrying as long as it takes...~s",
+                    [oneprovider:get_oz_domain(), ?autoformat(LastError)]
                 )
             end),
             {stop, normal}
