@@ -234,7 +234,10 @@ force_fetch_entity(Client, GRI) ->
         {ok, Doc} ->
             {ok, Doc};
         {error, _} = Error ->
-            throw(?report_internal_server_error("Failed to force fetch entity~ts", [?autoformat(GRI, Error)]))
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Failed to force fetch entity",
+                [GRI, Error]
+            )))
     end.
 
 
@@ -312,10 +315,11 @@ init([]) ->
         {error, _} = LastError ->
             ?debug("Failed to establish Onezone connection: ~w", [LastError]),
             utils:throttle({?MODULE, ?FUNCTION_NAME, LastError}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
-                ?warning(
-                    "Onezone connection cannot be established (~ts), is the service online? Retrying as long as it takes...~s",
-                    [oneprovider:get_oz_domain(), ?autoformat(LastError)]
-                )
+                ?warning(?autoformat_with_msg(
+                    "Onezone connection cannot be established (~ts), is the service online? Retrying as long as it takes...",
+                    [oneprovider:get_oz_domain()],
+                    LastError
+                ))
             end),
             {stop, normal}
     end.
