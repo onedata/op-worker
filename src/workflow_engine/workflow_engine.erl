@@ -356,7 +356,7 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
 handle_exception(ExecutionId, Handler, Context, Message, Class, Reason, Stacktrace) ->
     try
         ?error_exception(
-            "workflow_handler ~w, execution ~ts: " ++ Message,
+            "workflow_handler ~w, execution ~ts: " ++ onedata_logger:format_generic_log(Message, []),
             [Handler, ExecutionId],
             Class, Reason, Stacktrace
         ),
