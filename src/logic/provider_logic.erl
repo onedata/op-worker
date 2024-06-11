@@ -142,7 +142,7 @@ get_protected_data(SessionId, ProviderId, AuthHint) ->
     }).
 
 
--spec force_fetch() -> {ok, od_provider:doc()} | errors:error().
+-spec force_fetch() -> {ok, od_provider:doc()}.
 force_fetch() ->
     gs_client_worker:force_fetch_entity(#gri{type = od_provider, id = oneprovider:get_id(), aspect = instance}).
 

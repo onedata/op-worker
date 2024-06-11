@@ -322,6 +322,7 @@ create_test(Config) ->
             ?HANDLE_H_SERVICE(<<"newHandle">>),
             ?HANDLE_RESOURCE_TYPE(<<"newHandle">>),
             ?HANDLE_RESOURCE_ID(<<"newHandle">>),
+            ?HANDLE_METADATA_PREFIX(<<"newHandle">>),
             ?HANDLE_METADATA(<<"newHandle">>)
         ])
     ),
@@ -334,6 +335,7 @@ create_test(Config) ->
             <<"badHService">>,
             ?HANDLE_RESOURCE_TYPE(<<"newHandle">>),
             ?HANDLE_RESOURCE_ID(<<"newHandle">>),
+            ?HANDLE_METADATA_PREFIX(<<"newHandle">>),
             ?HANDLE_METADATA(<<"newHandle">>)
         ])
     ),

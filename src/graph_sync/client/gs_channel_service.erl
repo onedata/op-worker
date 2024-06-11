@@ -330,10 +330,10 @@ check_compatibility_with_onezone() ->
                     Code, ResponseBody
                 ])),
             false;
-        {error, _} = Error ->
+        {error, _} = LastError ->
             ?THROTTLE_LOG(?warning(
-                "Onezone is not reachable, is the service online (~ts)? "
-                "Last error was: ~w. Retrying as long as it takes...", [oneprovider:get_oz_domain(), Error]
+                "Onezone is not reachable (~ts), is the service online? Retrying as long as it takes...~s",
+                [oneprovider:get_oz_domain(), ?autoformat(LastError)]
             )),
             false
     end.
