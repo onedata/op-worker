@@ -181,7 +181,6 @@ revoke_space_support(StorageId, SpaceId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = {space, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        space_logic:force_fetch(SpaceId),
         storage_logic:force_fetch(StorageId),
         provider_logic:force_fetch()
     end).
