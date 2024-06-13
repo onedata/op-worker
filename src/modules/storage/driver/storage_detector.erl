@@ -131,7 +131,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
         {error, ?ENOENT} -> ok;
         {error, Reason} ->
             Operation = remove,
-            ?error(?autoformat_with_msg("Storage verification failed: ~ts", [Operation, Reason])),
+            ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
             throw(?ERROR_STORAGE_TEST_FAILED(remove))
     end.
 
@@ -194,11 +194,11 @@ check_call_result(Result, Operation) ->
         ?ERROR_STORAGE_TEST_FAILED(Operation) ->
             throw(?ERROR_STORAGE_TEST_FAILED(Operation));
         {Class, {Reason, Stacktrace}} ->
-            ?error_exception(?autoformat_with_msg("Storage verification failed: ~ts", Operation),
+            ?error_exception(?autoformat_with_msg("Storage verification failed:", Operation),
                 Class, Reason, Stacktrace),
             throw(?ERROR_STORAGE_TEST_FAILED(Operation));
         {_Class, Reason} ->
-            ?error(?autoformat_with_msg("Storage verification failed: ~ts", [Operation, Reason])),
+            ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
             throw(?ERROR_STORAGE_TEST_FAILED(Operation))
     end.
 
