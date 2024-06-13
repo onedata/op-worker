@@ -106,9 +106,10 @@ write_test_file(Helper, UserCtx, FileId) ->
 
 
 -spec check_test_file_content(helpers:helper(), helper:user_ctx(), helpers:file_id(), binary()) ->
-    {ok, binary()}.
+    ok.
 check_test_file_content(Helper, UserCtx, FileId, ExpectedContent) ->
-    {ok, ExpectedContent} = read_test_file(Helper, UserCtx, FileId).
+    {ok, ExpectedContent} = read_test_file(Helper, UserCtx, FileId),
+    ok.
 
 
 -spec read_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
