@@ -29,7 +29,7 @@
 %% API
 -export([
     report_file_created/1, report_file_created/2,
-    touch/2, update/2,
+    touch/2, report_change/2,
     get/1, get/2,
     report_file_deleted/1
 ]).
@@ -61,11 +61,11 @@ report_file_created(FileCtx, TimesRecord) ->
 -spec touch(file_ctx:ctx(), [times_type()]) -> ok.
 touch(FileCtx, TimesToUpdate) ->
     TimesRecord = build_times_record(TimesToUpdate, ?NOW()),
-    update(FileCtx, TimesRecord).
+    report_change(FileCtx, TimesRecord).
 
 
--spec update(file_ctx:ctx(), times:record()) -> ok.
-update(FileCtx, TimesRecord) ->
+-spec report_change(file_ctx:ctx(), times:record()) -> ok.
+report_change(FileCtx, TimesRecord) ->
     dir_update_time_stats:report_update(FileCtx, TimesRecord),
     times_cache:report_change(file_ctx:get_referenced_guid_const(FileCtx), TimesRecord).
 
@@ -98,17 +98,17 @@ build_current_times_record() ->
 
 
 -spec build_times_record([times_type()], times:time()) -> times:record().
-build_times_record(TimesToUpdate, Time) ->
-    build_times_record(TimesToUpdate, Time, #times{}).
+build_times_record(TimesList, Time) ->
+    build_times_record(TimesList, Time, #times{}).
 
 -spec build_times_record([times_type()], times:time(), times:record()) -> times:record().
 build_times_record([], _Time, TimesRecord) ->
     TimesRecord;
-build_times_record([?attr_creation_time | TimesToUpdate], Time, TimesRecord) ->
-    build_times_record(TimesToUpdate, Time, TimesRecord#times{creation_time = Time});
-build_times_record([?attr_atime | TimesToUpdate], Time, TimesRecord) ->
-    build_times_record(TimesToUpdate, Time, TimesRecord#times{atime = Time});
-build_times_record([?attr_mtime | TimesToUpdate], Time, TimesRecord) ->
-    build_times_record(TimesToUpdate, Time, TimesRecord#times{mtime = Time});
-build_times_record([?attr_ctime | TimesToUpdate], Time, TimesRecord) ->
-    build_times_record(TimesToUpdate, Time, TimesRecord#times{ctime = Time}).
+build_times_record([?attr_creation_time | TimesList], Time, TimesRecord) ->
+    build_times_record(TimesList, Time, TimesRecord#times{creation_time = Time});
+build_times_record([?attr_atime | TimesList], Time, TimesRecord) ->
+    build_times_record(TimesList, Time, TimesRecord#times{atime = Time});
+build_times_record([?attr_mtime | TimesList], Time, TimesRecord) ->
+    build_times_record(TimesList, Time, TimesRecord#times{mtime = Time});
+build_times_record([?attr_ctime | TimesList], Time, TimesRecord) ->
+    build_times_record(TimesList, Time, TimesRecord#times{ctime = Time}).

@@ -1209,7 +1209,7 @@ maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, Fil
 
 -spec update_times(file_ctx:ctx(), helpers:stat()) -> ok.
 update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime}) ->
-    ok = times_api:update(FileCtx, #times{
+    ok = times_api:report_change(FileCtx, #times{
         atime = StorageATime,
         mtime = StorageMTime,
         ctime = StorageCTime

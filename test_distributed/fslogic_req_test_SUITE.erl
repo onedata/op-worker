@@ -720,9 +720,9 @@ update_times_test(Config) ->
     
     % make sure that updated times are greater than those set at creation
     CurrentTime = opw_test_rpc:call(Worker, global_clock, timestamp_seconds, []),
-    NewATime = CurrentTime + 1234565,
-    NewMTime = CurrentTime + 9275629,
-    NewCTime = CurrentTime + 7837652,
+    NewATime = CurrentTime + rand:uniform(1000),
+    NewMTime = CurrentTime + rand:uniform(1000),
+    NewCTime = CurrentTime + rand:uniform(1000),
 
     lists:foreach(
         fun(SessId) ->

@@ -54,7 +54,7 @@ destroy() ->
 flush() ->
     ets:safe_fixtable(?MODULE, true),
     try
-        flush_key(ets:first(?MODULE))
+        flush_keys_recursively(ets:first(?MODULE))
     catch Class:Reason:Stacktrace ->
         ?error_exception(Class, Reason, Stacktrace)
     end,
@@ -94,7 +94,9 @@ get(FileGuid, RequestedTimes) ->
                 false ->
                     case get_times_doc(FileGuid) of
                         {ok, DatastoreTimes} ->
-                            {ok, times:merge_records(CachedTimes, DatastoreTimes)};
+                            MergedTimes = times:merge_records(CachedTimes, DatastoreTimes),
+                            put_in_ets(FileGuid, MergedTimes),
+                            {ok, MergedTimes};
                         {error, _} = Error ->
                             Error
                     end
@@ -123,9 +125,9 @@ check_flush() ->
 
 
 %% @private
--spec flush_key(key() | '$end_of_table') -> ok.
-flush_key('$end_of_table') -> ok;
-flush_key(Key) ->
+-spec flush_keys_recursively(key() | '$end_of_table') -> ok.
+flush_keys_recursively('$end_of_table') -> ok;
+flush_keys_recursively(Key) ->
     run_in_critical_section(Key, fun() ->
         case get_from_ets(Key) of
             {ok, Value} ->
@@ -138,7 +140,7 @@ flush_key(Key) ->
                 ok
         end
     end),
-    flush_key(ets:next(?MODULE, Key)).
+    flush_keys_recursively(ets:next(?MODULE, Key)).
 
 
 %% @private

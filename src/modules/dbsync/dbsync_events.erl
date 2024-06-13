@@ -103,7 +103,7 @@ change_replicated_internal(SpaceId, #document{
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     % although times document is already updated, update values in times_cache so that fetches
     % from cache include those new values
-    times_api:update(FileCtx, Record),
+    times_api:report_change(FileCtx, Record),
     (catch fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx));
 change_replicated_internal(_SpaceId, #document{
     key = FileUuid,

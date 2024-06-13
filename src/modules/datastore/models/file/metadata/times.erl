@@ -127,10 +127,10 @@ get_record_struct(1) ->
     ]};
 get_record_struct(2) ->
     {record, [
+        {creation_time, integer}, % new field
         {atime, integer},
-        {ctime, integer},
         {mtime, integer},
-        {creation_time, integer} % new field
+        {ctime, integer}
     ]}.
 
 

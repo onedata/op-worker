@@ -289,7 +289,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     catch lfm_event_controller:flush_event_queue(
         SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
 
-    times_api:update(FileCtx, #times{
+    times_api:report_change(FileCtx, #times{
         atime = utils:ensure_defined(ATime, 0),
         mtime = utils:ensure_defined(MTime, 0),
         ctime = utils:ensure_defined(CTime, 0)

@@ -1561,7 +1561,7 @@ prepare_file_size_summary_from_existing_doc(LocationDoc) ->
 
 
 %% @private
--spec times_record_to_map(times:record()) -> #{times_api:times_type() => times:type()}.
+-spec times_record_to_map(times:record()) -> #{times_api:times_type() => times:time()}.
 times_record_to_map(#times{creation_time = CreationTime, atime = ATime, mtime = MTime, ctime = CTime}) ->
     BaseMap = #{
         ?attr_creation_time => CreationTime,
@@ -1576,7 +1576,7 @@ times_record_to_map(#times{creation_time = CreationTime, atime = ATime, mtime = 
 
 
 %% @private
--spec map_to_times_record(#{times_api:times_type() => times:type()}) -> times:record().
+-spec map_to_times_record(#{times_api:times_type() => times:time()}) -> times:record().
 map_to_times_record(Map) ->
     #times{
         creation_time = maps:get(?attr_creation_time, Map, 0),
