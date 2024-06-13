@@ -163,7 +163,7 @@ discard_expired_atm_workflow_executions() ->
             ?debug("Expired automation workflow executions discarding procedure finished succesfully.");
         {error, _} = Error ->
             ?warning(
-                "Skipping expired automation workflow executions discarding procedure due to: ~p",
+                "Skipping expired automation workflow executions discarding procedure due to: ~tp",
                 [Error]
             )
     end.
@@ -173,7 +173,7 @@ discard_expired_atm_workflow_executions() ->
 -spec discard_expired_atm_workflow_executions(od_space:id()) -> ok.
 discard_expired_atm_workflow_executions(SpaceId) ->
     ?debug(
-        "[Space: ~s] Starting expired automation workflow executions discarding procedure...",
+        "[Space: ~ts] Starting expired automation workflow executions discarding procedure...",
         [SpaceId]
     ),
 
@@ -181,7 +181,7 @@ discard_expired_atm_workflow_executions(SpaceId) ->
     discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE),
 
     ?debug(
-        "[Space: ~s] Expired automation workflow executions discarding procedure finished succesfully.",
+        "[Space: ~ts] Expired automation workflow executions discarding procedure finished succesfully.",
         [SpaceId]
     ).
 
@@ -230,7 +230,7 @@ discard_expired_atm_workflow_executions(SpaceId, Phase, ListingOpts = #{start_in
     ),
     case length(DiscardedAtmWorkflowExecutionIds) of
         0 -> ok;
-        Num -> ?info("[Space: ~s] Atm gc: discarded ~B expired workflow executions", [SpaceId, Num])
+        Num -> ?info("[Space: ~ts] Atm gc: discarded ~B expired workflow executions", [SpaceId, Num])
     end,
 
     case IsLast of
@@ -251,7 +251,7 @@ discard_atm_workflow_execution(AtmWorkflowExecutionId) ->
             true;
         {error, _} = Error ->
             % Log only warning as next gc run will again try to discard this execution
-            ?warning("Failed to discard automation workflow execution (id: ~p) due to: ~p", [
+            ?warning("Failed to discard automation workflow execution (id: ~tp) due to: ~tp", [
                 AtmWorkflowExecutionId, Error
             ]),
             false
@@ -306,7 +306,7 @@ purge_atm_workflow_execution(AtmWorkflowExecutionId) ->
         true
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Failed to purge automation workflow execution (id: ~s) due to ~p:~p",
+            "Failed to purge automation workflow execution (id: ~ts) due to ~tp:~tp",
             [AtmWorkflowExecutionId, Type, Reason],
             Stacktrace
         ),

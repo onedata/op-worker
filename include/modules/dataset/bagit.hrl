@@ -17,11 +17,11 @@
 
 -define(SUPPORTED_CHECKSUM_ALGORITHMS, [?MD5, ?SHA1, ?SHA256, ?SHA512]).
 
--define(CHECKSUM_MANIFEST_FILE_NAME_FORMAT, "manifest-~s.txt").
+-define(CHECKSUM_MANIFEST_FILE_NAME_FORMAT, "manifest-~ts.txt").
 -define(CHECKSUM_MANIFEST_FILE_NAME(Algorithm),
     str_utils:format_bin(?CHECKSUM_MANIFEST_FILE_NAME_FORMAT, [Algorithm])).
 
--define(TAG_MANIFEST_FILE_NAME_FORMAT, "tagmanifest-~s.txt").
+-define(TAG_MANIFEST_FILE_NAME_FORMAT, "tagmanifest-~ts.txt").
 -define(TAG_MANIFEST_FILE_NAME(Algorithm),
     str_utils:format_bin(?TAG_MANIFEST_FILE_NAME_FORMAT, [Algorithm])).
 
@@ -31,7 +31,7 @@
 -define(VERSION, "1.0").
 -define(ENCODING, "UTF-8").
 
--define(MANIFEST_FILE_ENTRY_FORMAT, "~s    ~s~n"). % <CHECKSUM_VALUE>    <FILEPATH>\n
+-define(MANIFEST_FILE_ENTRY_FORMAT, "~ts    ~ts~n"). % <CHECKSUM_VALUE>    <FILEPATH>\n
 -define(MANIFEST_FILE_ENTRY(Checksum, FilePath),
     str_utils:format_bin(?MANIFEST_FILE_ENTRY_FORMAT, [Checksum, FilePath])).
 

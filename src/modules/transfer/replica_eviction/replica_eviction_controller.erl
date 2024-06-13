@@ -185,7 +185,7 @@ handle_cast({replica_eviction_aborting, TransferId, Reason}, State = #state{
     status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_aborting(TransferId),
-    ?error("Could not evict file replica ~p due to ~p", [FileGuid, Reason]),
+    ?error("Could not evict file replica ~tp due to ~tp", [FileGuid, Reason]),
     {noreply, State#state{status = ?ABORTING_STATUS}};
 
 % Due to asynchronous nature of transfer_changes, aborting msg can be
@@ -214,15 +214,15 @@ handle_cast({replica_eviction_failed, TransferId}, State = #state{
 handle_cast(Request, State = #state{status = Status}) ->
     case Request of
         {replica_eviction_completed, TransferId} ->
-            ?debug("Eviction completed message ignored for transfer ~p", TransferId);
+            ?debug("Eviction completed message ignored for transfer ~tp", TransferId);
         {replica_eviction_aborting, TransferId, _Reason} ->
-            ?debug("Eviction aborting message ignored for transfer ~p", TransferId);
+            ?debug("Eviction aborting message ignored for transfer ~tp", TransferId);
         {replica_eviction_failed, TransferId} ->
-            ?debug("Eviction failed message ignored for transfer ~p", TransferId);
+            ?debug("Eviction failed message ignored for transfer ~tp", TransferId);
         {replica_eviction_cancelled, TransferId} ->
-            ?debug("Eviction cancelled message ignored for transfer ~p", TransferId);
+            ?debug("Eviction cancelled message ignored for transfer ~tp", TransferId);
         _ ->
-            ?warning("~p:~p - bad request ~p while in status ~p", [
+            ?warning("~tp:~tp - bad request ~tp while in status ~tp", [
                 ?MODULE, ?LINE, Request, Status
             ])
     end,

@@ -208,10 +208,10 @@ do_master_job(MasterJob = #storage_traverse_master{
         {ok, ChildrenBatch, NextBatchMasterJob} ->
             generate_master_and_slave_jobs(MasterJob, NextBatchMasterJob, ChildrenBatch, Args);
         Error = {error, ?ENOENT} ->
-            ?debug("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
+            ?debug("Getting children of ~tp on storage ~tp failed due to ~w", [StorageFileId, StorageId, Error]),
             Error;
         Error = {error, _} ->
-            ?error("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
+            ?error("Getting children of ~tp on storage ~tp failed due to ~w", [StorageFileId, StorageId, Error]),
             Error
     end.
 

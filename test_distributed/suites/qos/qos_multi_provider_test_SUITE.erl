@@ -107,7 +107,7 @@ effective_qos_for_file_in_directory(_Config) ->
     [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
 
     lists:foreach(fun(ProviderAddingQos) ->
-        ct:pal("Starting for provider: ~p~n", [ProviderAddingQos]),
+        ct:pal("Starting for provider: ~tp~n", [ProviderAddingQos]),
         DirName = generator:gen_name(),
         DirPath = filename:join(?SPACE_PATH1, DirName),
         FilePath = filename:join(DirPath, <<"file1">>),
@@ -147,7 +147,7 @@ effective_qos_for_file_in_nested_directories(_Config) ->
     ],
 
     lists:foreach(fun(ProvidersAddingQos) ->
-        ct:pal("Starting for providers: ~p~n", [ProvidersAddingQos]),
+        ct:pal("Starting for providers: ~tp~n", [ProvidersAddingQos]),
         DirName = generator:gen_name(),
         Dir1Path = filename:join(?SPACE_PATH1, DirName),
         Dir2Path = filename:join(Dir1Path, <<"dir2">>),
@@ -202,7 +202,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(_Config) ->
     ],
 
     lists:foreach(fun(WorkerConf) ->
-        ct:pal("Starting for providers: ~p~n", [WorkerConf]),
+        ct:pal("Starting for providers: ~tp~n", [WorkerConf]),
         DirName = generator:gen_name(),
         Dir1Path = filename:join(?SPACE_PATH1, DirName),
         Dir2Path = filename:join(Dir1Path, <<"dir2">>),

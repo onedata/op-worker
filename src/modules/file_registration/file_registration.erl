@@ -145,14 +145,14 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             false ->
                 % TODO VFS-6508 find better error
                 % this can happen if sync mechanisms decide not to synchronize file
-                ?error("Skipped registration of file ~s located on storage ~s in space ~s under path ~s.",
+                ?error("Skipped registration of file ~ts located on storage ~ts in space ~ts under path ~ts.",
                     [StorageFileId2, StorageId, SpaceId, DestinationPath]),
                 ?ERROR_POSIX(?EINPROGRESS)
         end
     catch
         throw:?ENOTSUP:Stacktrace ->
             ?error_stacktrace(
-                "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
+                "Failed registration of file ~ts located on storage ~ts in space ~ts under path ~ts.~n"
                 "stat (or equivalent) operation is not supported by the storage.",
                 [StorageFileId, StorageId, SpaceId, DestinationPath],
                 Stacktrace
@@ -165,8 +165,8 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             ?ERROR_POSIX(PosixError);
         Error:Reason:Stacktrace2 ->
             ?error_stacktrace(
-                "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
-                "Operation failed due to ~p:~p",
+                "Failed registration of file ~ts located on storage ~ts in space ~ts under path ~ts.~n"
+                "Operation failed due to ~tp:~tp",
                 [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason],
                 Stacktrace2
             ),
@@ -247,7 +247,7 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
     catch
         Error:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Creating missing directories for file being registered has failed with ~p:~p",
+                "Creating missing directories for file being registered has failed with ~tp:~tp",
                 [Error, Reason],
                 Stacktrace
             ),

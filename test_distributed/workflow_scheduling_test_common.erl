@@ -692,7 +692,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
     end,
 
     LaneElementsCount = count_lane_elements(LaneExecutionContext, TaskIds, ExpectedItems, Options),
-    ct:print("Verify ~p history elements", [LaneElementsCount]),
+    ct:print("Verify ~tp history elements", [LaneElementsCount]),
 
     {GatheredForLane, CallsToIgnore} =
         verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext, Options),

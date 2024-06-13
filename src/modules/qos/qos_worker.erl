@@ -75,7 +75,7 @@ handle(?RETRY_FAILED_FILES) ->
                 ok = qos_logic:retry_failed_files(SpaceId)
             end, Spaces);
         Error -> 
-            ?warning("QoS failed files retry failed to fetch provider spaces due to: ~p", [Error])
+            ?warning("QoS failed files retry failed to fetch provider spaces due to: ~tp", [Error])
     end,
     erlang:send_after(timer:seconds(?RETRY_FAILED_FILES_INTERVAL_SECONDS),
         ?MODULE, {sync_timer, ?RETRY_FAILED_FILES});

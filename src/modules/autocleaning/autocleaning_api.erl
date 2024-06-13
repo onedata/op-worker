@@ -208,13 +208,13 @@ restart_autocleaning_run(SpaceId) ->
                 true ->
                     autocleaning_run_controller:restart(ARId, SpaceId, Config);
                 false ->
-                    ?warning("Could not restart auto-cleaning run ~p in space "
+                    ?warning("Could not restart auto-cleaning run ~tp in space "
                     "because auto-cleaning mechanism has been disabled", [ARId])
             end;
         {error, not_found} ->
             ok;
         Error ->
-            ?error("Could not restart auto-cleaning run in space ~p due to ~p",
+            ?error("Could not restart auto-cleaning run in space ~tp due to ~tp",
                 [SpaceId, Error])
     end.
 

@@ -31,7 +31,7 @@
 -export([generate_for/2]).
 
 
--define(XROOTD_URI(Domain, Path), str_utils:format_bin("root://~s~s", [Domain, Path])).
+-define(XROOTD_URI(Domain, Path), str_utils:format_bin("root://~ts~ts", [Domain, Path])).
 
 
 %%%===================================================================
@@ -98,7 +98,7 @@ resolve_file_path_in_share(SessionId, ShareGuid) ->
 -spec xrootd_api(onedata_file:type(), binary(), od_space:id(), od_share:id(), file_meta:path()) ->
     [json_utils:json_map()].
 xrootd_api(?DIRECTORY_TYPE, Domain, SpaceId, ShareId, FilePath) ->
-    FullDataPath = str_utils:format_bin("/data/~s/~s/~s~s", [SpaceId, SpaceId, ShareId, FilePath]),
+    FullDataPath = str_utils:format_bin("/data/~ts/~ts/~ts~ts", [SpaceId, SpaceId, ShareId, FilePath]),
     [
         #{
             <<"name">> => <<"Download directory (recursively)">>,
@@ -118,7 +118,7 @@ xrootd_api(?DIRECTORY_TYPE, Domain, SpaceId, ShareId, FilePath) ->
         }
     ];
 xrootd_api(_, Domain, SpaceId, ShareId, FilePath) ->
-    FullDataPath = str_utils:format_bin("/data/~s/~s/~s~s", [SpaceId, SpaceId, ShareId, FilePath]),
+    FullDataPath = str_utils:format_bin("/data/~ts/~ts/~ts~ts", [SpaceId, SpaceId, ShareId, FilePath]),
     [
         #{
             <<"name">> => <<"Download file">>,
@@ -172,7 +172,7 @@ download_directory_endpoint(FileId) ->
         name = <<"Download directory (tar)">>,
         description = <<"Returns a TAR archive (binary stream) with directory contents.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s/content", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts/content", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>
@@ -186,7 +186,7 @@ download_file_content_endpoint(FileId) ->
         name = <<"Download file content">>,
         description = <<"Returns the binary file content.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s/content", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts/content", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>
@@ -200,7 +200,7 @@ list_directory_endpoint(FileId) ->
         name = <<"List directory files and subdirectories">>,
         description = <<"Returns the list of files and subdirectories that reside in this directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s/children", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts/children", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>
@@ -214,7 +214,7 @@ get_attributes_endpoint(FileId) ->
         name = <<"Get attributes">>,
         description = <<"Returns basic attributes of the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>
@@ -228,7 +228,7 @@ get_extended_attributes_endpoint(FileId) ->
         name = <<"Get extended attributes (xattrs)">>,
         description = <<"Returns custom extended attributes (xattrs) associated with the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s/metadata/xattrs", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts/metadata/xattrs", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>
@@ -242,7 +242,7 @@ get_json_metadata_endpoint(FileId) ->
         name = <<"Get JSON metadata">>,
         description = <<"Returns custom JSON metadata associated with the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s/metadata/json", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts/metadata/json", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>
@@ -257,7 +257,7 @@ get_rdf_metadata_endpoint(FileId) ->
         name = <<"Get RDF metadata">>,
         description = <<"Returns custom RDF metadata associated with the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/shares/data/~s/metadata/rdf", [FileId]),
+        path = str_utils:format_bin("/shares/data/~ts/metadata/rdf", [FileId]),
         requires_authorization = false,
         follow_redirects = true,
         swagger_operation_id = <<"get_shared_data">>

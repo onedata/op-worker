@@ -39,7 +39,7 @@
 
 cdmi_endpoint(Node, Domain) ->
     Port = get_https_server_port_str(Node),
-    str_utils:format("https://~s~s/cdmi/", [Domain, Port]).
+    str_utils:format("https://~ts~ts/cdmi/", [Domain, Port]).
 
 
 user_2_token_header() ->

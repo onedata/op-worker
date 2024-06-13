@@ -620,7 +620,7 @@ set_metadata_test_base(
             verify_fun = VerifyEnvFun,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Set ~s metadata for ~s using rest endpoint", [
+                    name = str_utils:format("Set ~ts metadata for ~ts using rest endpoint", [
                         MetadataType, FileType
                     ]),
                     type = rest,
@@ -630,7 +630,7 @@ set_metadata_test_base(
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
-                    name = str_utils:format("Set ~s metadata for ~s using gs private api", [
+                    name = str_utils:format("Set ~ts metadata for ~ts using gs private api", [
                         MetadataType, FileType
                     ]),
                     type = gs,
@@ -645,7 +645,7 @@ set_metadata_test_base(
         },
 
         #scenario_spec{
-            name = str_utils:format("Set ~s metadata for shared ~s using gs public api", [
+            name = str_utils:format("Set ~ts metadata for shared ~ts using gs public api", [
                 MetadataType, FileType
             ]),
             type = gs_not_supported,

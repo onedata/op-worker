@@ -221,19 +221,19 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
     end,
     schedule_periodical_spaces_autocleaning_check();
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
+    ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
-    ?debug("fuse_response: ~p", [Response]),
+    ?debug("fuse_response: ~tp", [Response]),
     {ok, Response};
 handle({provider_request, SessId, ProviderRequest}) ->
-    ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
+    ?debug("provider_request(~tp): ~tp", [SessId, ProviderRequest]),
     Response = handle_request_and_process_response(SessId, ProviderRequest),
-    ?debug("provider_response: ~p", [Response]),
+    ?debug("provider_response: ~tp", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?debug("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
+    ?debug("proxyio_request(~tp): ~tp", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
-    ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
+    ?debug("proxyio_response: ~tp", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
 handle(Request) ->
     ?log_bad_request(Request),
@@ -723,10 +723,10 @@ periodical_spaces_autocleaning_check() ->
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             ?debug("Skipping spaces cleanup due to no connection to Onezone");
         Error = {error, _} ->
-            ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
+            ?error("Unable to trigger spaces auto-cleaning check due to: ~tp", [Error])
     catch
         Error2:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
+            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~tp", [{Error2, Reason}], Stacktrace)
     end.
 
 -spec rerun_transfers() -> ok.
@@ -737,17 +737,17 @@ rerun_transfers() ->
                 {ok, SpaceIds} ->
                     lists:foreach(fun(SpaceId) ->
                         Restarted = transfer:rerun_not_ended_transfers(SpaceId),
-                        ?debug("Restarted following transfers: ~p", [Restarted])
+                        ?debug("Restarted following transfers: ~tp", [Restarted])
                     end, SpaceIds);
                 ?ERROR_UNREGISTERED_ONEPROVIDER ->
                     schedule_rerun_transfers();
                 ?ERROR_NO_CONNECTION_TO_ONEZONE ->
                     schedule_rerun_transfers();
                 Error = {error, _} ->
-                    ?error("Unable to rerun transfers due to: ~p", [Error])
+                    ?error("Unable to rerun transfers due to: ~tp", [Error])
             catch
                 Error2:Reason:Stacktrace ->
-                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}], Stacktrace)
+                    ?error_stacktrace("Unable to rerun transfers due to: ~tp", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok
@@ -767,10 +767,10 @@ restart_autocleaning_runs() ->
                 ?ERROR_NO_CONNECTION_TO_ONEZONE ->
                     schedule_restart_autocleaning_runs();
                 Error = {error, _} ->
-                    ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
+                    ?error("Unable to restart auto-cleaning runs due to: ~tp", [Error])
             catch
                 Error2:Reason:Stacktrace ->
-                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}], Stacktrace)
+                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~tp", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok

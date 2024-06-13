@@ -261,7 +261,7 @@ renew_connections(#state{
         renew_connections_insecure(State0)
     catch Type:Reason ->
         State1 = schedule_next_renewal(State0),
-        ?debug("Failed to establish connection with provider ~ts due to ~p:~p.~n"
+        ?debug("Failed to establish connection with provider ~ts due to ~tp:~tp.~n"
                "Next retry not sooner than ~B s.", [
             provider_logic:to_printable(PeerId), Type, Reason,
             State1#state.renewal_interval div 1000
@@ -310,7 +310,7 @@ renew_connections_insecure(#state{
             {ok, Pid} ->
                 AccState#state{connecting = ConnsAcc#{Pid => Host}};
             Error2 ->
-                ?warning("Failed to connect to host ~p of provider ~ts due to ~p. ", [
+                ?warning("Failed to connect to host ~tp of provider ~ts due to ~tp. ", [
                     Host, provider_logic:to_printable(ProviderId), Error2
                 ]),
                 schedule_next_renewal(AccState)
@@ -384,14 +384,14 @@ log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOp
     ),
     log_error(State, str_utils:format(
         "peer is of incompatible version.~n"
-        "Local version: ~s, supports providers: ~s~n"
-        "Remote version: ~s, supports providers: ~s", [
+        "Local version: ~ts, supports providers: ~ts~n"
+        "Remote version: ~ts, supports providers: ~ts", [
             Version, str_utils:join_binary(CompatibleOpVersions, <<", ">>),
             PeerOpVersion, str_utils:join_binary(PeerCompOpVersions, <<", ">>)
         ]
     ));
 log_error(State, Type, Reason) ->
-    log_error(State, str_utils:format("~w:~p", [Type, Reason])).
+    log_error(State, str_utils:format("~w:~tp", [Type, Reason])).
 
 
 %% @private

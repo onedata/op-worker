@@ -107,7 +107,7 @@ start_file_upload_manager() ->
         {error, {already_started, _}} ->
             ok;
         Error->
-            ?critical("Failed to start file_upload_manager due to: ~p", [Error]),
+            ?critical("Failed to start file_upload_manager due to: ~tp", [Error]),
             error
     end.
 

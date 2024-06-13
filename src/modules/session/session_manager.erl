@@ -171,14 +171,14 @@ restart_session_if_dead(SessId) ->
             restart_session(SessId, SessType),
             ok;
         {error, internal_call} ->
-            ?THROTTLE_LOG(SessId, ?warning("Internal call cleaning dead connections for session ~p", [SessId])),
+            ?THROTTLE_LOG(SessId, ?warning("Internal call cleaning dead connections for session ~tp", [SessId])),
             % Fix session document async as it cannot be done from the inside of tp process
             spawn(fun() ->
                 restart_session_if_dead(SessId)
             end),
             ok;
         {error, Reason} ->
-            ?error("Unexpected error cleaning dead connections for session ~p: ~p", [SessId, Reason]),
+            ?error("Unexpected error cleaning dead connections for session ~tp: ~tp", [SessId, Reason]),
             ok
     end.
 
@@ -476,7 +476,7 @@ maybe_retry_session_init(
         _ ->
             % Other process is initializing session - wait
             timer:sleep(ErrorSleep),
-            ?debug("Waiting for session ~p init", [SessId]),
+            ?debug("Waiting for session ~tp init", [SessId]),
             reuse_or_create_session(
                 SessId, SessType, SessMode, Identity, Credentials,
                 DataConstraints, ProxyVia, ErrorSleep * 2, RetryNum + 1
@@ -515,7 +515,7 @@ start_session(#document{key = SessId, value = #session{type = SessType}} = Doc) 
         {ok, _} ->
             {ok, SessId};
         Error ->
-            ?error("Session ~p start error: ~p", [SessId, Error]),
+            ?error("Session ~tp start error: ~tp", [SessId, Error]),
             session:delete_doc(SessId),
             Error
     end.
@@ -530,7 +530,7 @@ restart_session(SessId, SessType) ->
         {ok, _} ->
             {ok, SessId};
         Error ->
-            ?error("Session ~p restart error: ~p", [SessId, Error]),
+            ?error("Session ~tp restart error: ~tp", [SessId, Error]),
             Error
     end.
 

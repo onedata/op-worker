@@ -384,11 +384,11 @@ assert_storage_import_monitoring_state(Node, SpaceId, ExpectedSIM, Attempts) ->
         throw:{assertion_error, {Key, ExpectedValue, Value}}:Stacktrace ->
             {Format, Args} = build_storage_import_monitoring_description(SIM),
             ct:pal(
-                "Assertion of field \"~p\" in storage_import_monitoring for space ~p failed.~n"
-                "    Expected: ~p~n"
-                "    Value: ~p~n"
+                "Assertion of field \"~tp\" in storage_import_monitoring for space ~tp failed.~n"
+                "    Expected: ~tp~n"
+                "    Value: ~tp~n"
                 ++ Format ++
-                    "~nStacktrace:~n~p",
+                    "~nStacktrace:~n~tp",
                 [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [Stacktrace]),
             ct:fail("assertion failed")
     end.
@@ -428,5 +428,5 @@ flatten_storage_import_histograms(SIM) ->
 %% @private
 build_storage_import_monitoring_description(SIM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
-        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
+        {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [Key, Value]}
     end, {"~n#storage_import_monitoring fields values:~n", []}, SIM).

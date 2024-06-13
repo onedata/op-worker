@@ -198,7 +198,7 @@ start(SpaceId, Config, CurrentSize) ->
                             {ok, ARId};
                         aborted ->
                             ?error(
-                                "Could not start autocleaning_run_controller in space ~p",
+                                "Could not start autocleaning_run_controller in space ~tp",
                                 [SpaceId]
                             ),
                             ?ERROR_FILE_POPULARITY_DISABLED
@@ -225,7 +225,7 @@ restart(ARId, SpaceId, Config) ->
                     % ensure that there is a link for given autocleaning_run
                     ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
                     ok = start_service(SpaceId, ARId, AR, Config),
-                    ?debug("Restarted auto-cleaning run ~p in space ~p", [ARId, SpaceId]),
+                    ?debug("Restarted auto-cleaning run ~tp in space ~tp", [ARId, SpaceId]),
                     {ok, ARId};
                 Status
                     when Status =:= ?COMPLETED
@@ -234,12 +234,12 @@ restart(ARId, SpaceId, Config) ->
                 ->
                     autocleaning:mark_run_finished(SpaceId);
                 ?CANCELLING ->
-                    ?warning("Could not restart auto-cleaning run ~p in space ~p beceause it is stalled in state ~p",
+                    ?warning("Could not restart auto-cleaning run ~tp in space ~tp beceause it is stalled in state ~tp",
                         [ARId, SpaceId, ?CANCELLING]),
                     autocleaning_run:mark_finished(ARId)
             end;
         Error ->
-            ?error("Could not restart auto-cleaning run ~p in space ~p due to ~p",
+            ?error("Could not restart auto-cleaning run ~tp in space ~tp due to ~tp",
                 [ARId, SpaceId, Error]),
             autocleaning:mark_run_finished(SpaceId)
     end.
@@ -412,7 +412,7 @@ process_replica_deletion_result({error, opened_file}, SpaceId, _FileUuid, BatchI
 process_replica_deletion_result(Error, SpaceId, FileUuid, BatchId) ->
     {ARId, BatchNo} = unpack_batch_id(BatchId),
     {ok, #document{value = #file_meta{name = FileName}}} = file_meta:get_including_deleted(FileUuid),
-    ?error("Error ~p occurred during auto-cleaning of file ~p in run ~p",
+    ?error("Error ~tp occurred during auto-cleaning of file ~tp in run ~tp",
         [Error, {FileUuid, FileName}, ARId]),
     notify_processed_file(SpaceId, ARId, BatchNo).
 
@@ -495,7 +495,7 @@ handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
         handle_cast_internal(MessageType, State)
     catch
         E:R:Stacktrace ->
-            ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p:~p",
+            ?error_stacktrace("autocleaning_run_controller of run ~tp failed unexpectedly due to ~tp:~tp",
                 [ARId, E, R], Stacktrace
             ),
             lists:foreach(fun(BatchNo) ->

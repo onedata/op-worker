@@ -110,7 +110,7 @@ get_handle(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
-            ?debug("Handle not found, session id: ~p, handle id: ~p",
+            ?debug("Handle not found, session id: ~tp, handle id: ~tp",
                 [SessId, HandleId]),
             create_handle(UserCtx, FileCtx, HandleId),
             session_handles:get(SessId, HandleId);

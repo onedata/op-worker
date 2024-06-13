@@ -114,12 +114,12 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
             dbsync_events:change_replicated(SpaceId, DocToHandle)
         catch
             Class:Reason:Stacktrace ->
-                ?error_exception("when post-processing change:~s", [?autoformat([Doc])], Class, Reason, Stacktrace)
+                ?error_exception(?autoformat_with_msg("when post-processing change:", Doc), Class, Reason, Stacktrace)
         end,
         ok
     catch
         Class2:Reason2:Stacktrace2 ->
-            ?error_exception(?autoformat([Doc]), Class2, Reason2, Stacktrace2),
+            ?error_exception(?autoformat(Doc), Class2, Reason2, Stacktrace2),
             {error, Seq, Reason2}
     end.
 
@@ -235,7 +235,7 @@ apply_links_mask(Ctx, #links_mask{key = Key, tree_id = TreeId, links = Links},
         true ->
             ok;
         _ ->
-            ?error("apply_links_mask error: ~p for args: ~p",
+            ?error("apply_links_mask error: ~tp for args: ~tp",
                 [Results, {Ctx, Key, TreeId, Links2}])
     end,
 

@@ -277,7 +277,7 @@ concurrent_create_test(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
 
-%%    ct:print("WMap: ~p", [{W(1), W(2), ProvMap}]),
+%%    ct:print("WMap: ~tp", [{W(1), W(2), ProvMap}]),
 
     Dir0Name = <<"/", SpaceName/binary, "/concurrent_create_test_dir0">>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir0Name)),
@@ -335,7 +335,7 @@ concurrent_create_test(Config) ->
             {N, Files}
         end, lists:seq(1, FileCount)),
 
-    ct:print("AllFiles ~p", [AllFiles]),
+    ct:print("AllFiles ~tp", [AllFiles]),
     {_, IdsPerWorker} = lists:unzip(AllFiles),
     Ids = [GUID || {_, GUID} <- lists:flatten(IdsPerWorker)],
     ExpectedIds = lists:usort(Ids),
@@ -347,8 +347,8 @@ concurrent_create_test(Config) ->
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
 %%                ExpectedChildCount = ProvIdCount * FileCount,
-%%                ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
-%%                ct:print("Check ~p", [{ExpectedChildCount, CL}]),
+%%                ct:print("Check ~tp", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
+%%                ct:print("Check ~tp", [{ExpectedChildCount, CL}]),
 
                 {length(CL), length(lists:usort(FetchedNames)), lists:usort(FetchedIds)}
             end,
@@ -361,7 +361,7 @@ concurrent_create_test(Config) ->
                     LocalGUID = proplists:get_value(WId, lists:flatten(LocalIdsPerWorker)),
                     LocalName = proplists:get_value(LocalGUID, ChildList),
                     ExpectedName = filename:basename(DirName(FileNo)),
-%%                    ct:print("Local name test ~p", [{FileNo, LocalGUID, ExpectedName, LocalName}]),
+%%                    ct:print("Local name test ~tp", [{FileNo, LocalGUID, ExpectedName, LocalName}]),
 
                     ?assertMatch(ExpectedName, LocalName)
                 end, lists:seq(1, FileCount))

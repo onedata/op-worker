@@ -76,7 +76,7 @@ revise() ->
                 ?ERROR_UNREGISTERED_ONEPROVIDER ->
                     ?debug("auto_storage_import_worker was unable to revise its registry due to unregistered provider.");
                 {error, _} = Error ->
-                    ?error("auto_storage_import_worker was unable to revise its registry due to unexpected ~p", [Error])
+                    ?error("auto_storage_import_worker was unable to revise its registry due to unexpected ~tp", [Error])
             end
     end.
 
@@ -136,12 +136,12 @@ init() ->
                 ?debug("auto_storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
                 ?NOT_INITIALIZED;
             {error, _} = Error ->
-                ?error("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~p", [Error]),
+                ?error("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~tp", [Error]),
                 ?NOT_INITIALIZED
         end
     catch
         Error2:Reason:Stacktrace ->
-            ?error_stacktrace("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason], Stacktrace),
+            ?error_stacktrace("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~tp:~tp", [Error2, Reason], Stacktrace),
             catch ets:delete(?REGISTRY),
             ?NOT_INITIALIZED
     end.
@@ -202,11 +202,11 @@ check_if_auto_imported_and_register(SpaceId) ->
             {error, not_found} ->
                 ok;
             {error, _} = Error ->
-                ?error("Could not check if space ~s is auto imported due to ~p", [SpaceId, Error])
+                ?error("Could not check if space ~ts is auto imported due to ~tp", [SpaceId, Error])
         end
     catch
         E:R:Stacktrace ->
-            ?error_stacktrace("Could not check if space ~s is auto imported due to unexpected ~p:~p", [SpaceId, E, R], Stacktrace)
+            ?error_stacktrace("Could not check if space ~ts is auto imported due to unexpected ~tp:~tp", [SpaceId, E, R], Stacktrace)
     end.
 
 

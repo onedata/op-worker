@@ -159,7 +159,7 @@ delete_metadata_test_base(
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~s metadata for ~s using gs private api", [
+                    name = str_utils:format("Delete ~ts metadata for ~ts using gs private api", [
                         MetadataType, FileType
                     ]),
                     type = gs,
@@ -171,7 +171,7 @@ delete_metadata_test_base(
                     end
                 },
                 #scenario_template{
-                    name = str_utils:format("Delete ~s metadata for ~s using rest endpoint", [
+                    name = str_utils:format("Delete ~ts metadata for ~ts using rest endpoint", [
                         MetadataType, FileType
                     ]),
                     type = rest,
@@ -196,7 +196,7 @@ delete_metadata_test_base(
         },
 
         #scenario_spec{
-            name = str_utils:format("Delete ~s metadata for shared ~s using gs public api", [
+            name = str_utils:format("Delete ~ts metadata for shared ~ts using gs public api", [
                 MetadataType, FileType
             ]),
             type = gs_not_supported,

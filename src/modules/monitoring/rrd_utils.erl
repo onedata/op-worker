@@ -162,19 +162,19 @@ export_rrd(MonitoringId, Step, Format) ->
             "; " ++ atom_to_list(SecondarySubjectType) ++ " " ++ binary_to_list(SecondarySubjectId)
     end,
 
-    DescriptionBase = lists:flatten(io_lib:format("\"~s ~s; metric ~s~s; oneprovider ID ~s",
+    DescriptionBase = lists:flatten(io_lib:format("\"~ts ~ts; metric ~ts~ts; oneprovider ID ~ts",
         [atom_to_list(MainSubjectType), binary_to_list(MainSubjectId), atom_to_list(MetricType),
             SecondaryDescription, binary_to_list(ProviderId)])),
 
     Sources = lists:foldl(
         fun({DSName, _, _}, Acc) ->
-            lists:flatten(io_lib:format("~s DEF:~s=~s:~s:~s:step=~b",
+            lists:flatten(io_lib:format("~ts DEF:~ts=~ts:~ts:~ts:step=~b",
                 [Acc, DSName, TmpPath, DSName, atom_to_list(CF), StepInSeconds * PDPsPerCDP]))
         end, "", Datastores),
 
     Exports = lists:foldl(
         fun({DSName, _, _}, Acc) ->
-            lists:flatten(io_lib:format("~s XPORT:~s:~s; ~s[~s]\"",
+            lists:flatten(io_lib:format("~ts XPORT:~ts:~ts; ~ts[~ts]\"",
                 [Acc, DSName, DescriptionBase, DSName, Unit]))
         end, "", Datastores),
 

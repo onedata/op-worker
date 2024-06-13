@@ -256,6 +256,6 @@ query_compatibility_registry(Fun, Args) ->
         {ok, SuccessfulResult} ->
             SuccessfulResult;
         {error, _} = Error ->
-            ?debug("Error querying registry - ~w:~w(~w)~nError was: ~p", [Module, Fun, Args, Error]),
+            ?debug("Error querying registry - ~w:~w(~w)~nError was: ~tp", [Module, Fun, Args, Error]),
             <<"unknown">>
     end.

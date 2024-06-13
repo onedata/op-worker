@@ -187,7 +187,7 @@ all() -> [
             p2_selector = krakow,
             space_selector = space_krk})
     catch __TYPE:__REASON:__STACKTRACE ->
-        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
+        ct:pal("Test failed due to ~tp:~tp.~nStacktrace: ~tp", [__TYPE, __REASON, __STACKTRACE]),
         error(test_failed)
     end
 ).

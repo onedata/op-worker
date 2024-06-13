@@ -306,7 +306,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
         }
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("create_file_insecure error: ~p:~p", [Error, Reason], Stacktrace),
+            ?error_stacktrace("create_file_insecure error: ~tp:~tp", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
@@ -617,13 +617,13 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
         throw:?ENOENT:Stacktrace ->
             % this error is thrown on race between opening the file and deleting it on storage
             ?debug_exception(
-                "Open file error: ENOENT for uuid ~p", [file_ctx:get_logical_uuid_const(FileCtx2)],
+                "Open file error: ENOENT for uuid ~tp", [file_ctx:get_logical_uuid_const(FileCtx2)],
                 throw, ?ENOENT, Stacktrace
             ),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(?ENOENT);
         Error:Reason:Stacktrace2 ->
-            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
+            ?error_stacktrace("Open file error: ~tp:~tp for uuid ~tp",
                 [Error, Reason, file_ctx:get_logical_uuid_const(FileCtx2)], Stacktrace2),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(Reason)

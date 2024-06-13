@@ -117,7 +117,7 @@ ensure_exists_internal(CollectionId) ->
     ok.
 consume_measurements(CollectionId, _ConsumeSpec, 0) ->
     ?warning(
-        "Could not update QoS transfer statistics in collection ~p due to 
+        "Could not update QoS transfer statistics in collection ~tp due to
         exceeded number of retries", [CollectionId]
     );
 consume_measurements(CollectionId, ConsumeSpec, Retries) ->

@@ -205,7 +205,7 @@ get_token_credentials_verification_result(TokenCredentials) ->
         _ ->
             ?ERROR_NOT_FOUND
     catch Type:Reason ->
-        ?warning("Failed to lookup ~p cache (ets table) due to ~p:~p", [
+        ?warning("Failed to lookup ~tp cache (ets table) due to ~tp:~tp", [
             ?CACHE_NAME, Type, Reason
         ]),
         ?ERROR_NOT_FOUND
@@ -233,7 +233,7 @@ save_token_credentials_verification_result(TokenCredentials, TokenRef, Verificat
         maybe_fetch_user_data(TokenCredentials, VerificationResult),
         true
     catch Type:Reason ->
-        ?warning("Failed to save entry in ~p cache (ets table) due to ~p:~p", [
+        ?warning("Failed to save entry in ~tp cache (ets table) due to ~tp:~tp", [
             ?CACHE_NAME, Type, Reason
         ]),
         false
@@ -345,7 +345,7 @@ handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
     {noreply, schedule_cache_purge(State)};
 
 handle_cast(?MONITOR_TOKEN_REQ(TokenCredentials, TokenRef), State) ->
-    ?debug("Received request to monitor token ~p", [TokenRef]),
+    ?debug("Received request to monitor token ~tp", [TokenRef]),
 
     case subscribe_for_token_changes(TokenRef) of
         {ok, IsTokenRevoked} ->
@@ -364,7 +364,7 @@ handle_cast(?MONITOR_TOKEN_REQ(TokenCredentials, TokenRef), State) ->
     {noreply, State};
 
 handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, true), State) ->
-    ?debug("Received user access blocked event for user ~s", [UserId]),
+    ?debug("Received user access blocked event for user ~ts", [UserId]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
@@ -380,7 +380,7 @@ handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, true), State) ->
     {noreply, State};
 
 handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, false), State) ->
-    ?debug("Received user access unblocked event for user ~s", [UserId]),
+    ?debug("Received user access unblocked event for user ~ts", [UserId]),
 
     ets:select_delete(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         verification_result = ?ERROR_USER_BLOCKED,
@@ -391,7 +391,7 @@ handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, false), State) ->
     {noreply, State};
 
 handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId), State) ->
-    ?debug("Received token status changed event for token ~s", [TokenId]),
+    ?debug("Received token status changed event for token ~ts", [TokenId]),
 
     case token_logic:is_token_revoked(TokenId) of
         {ok, IsRevoked} ->
@@ -419,7 +419,7 @@ handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId), State) ->
     {noreply, State};
 
 handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
-    ?debug("Received token deleted event for token ~s", [TokenId]),
+    ?debug("Received token deleted event for token ~ts", [TokenId]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
@@ -434,7 +434,7 @@ handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
     {noreply, State};
 
 handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
-    ?debug("Received temporary tokens generation changed (gen: ~p) event for user ~s", [
+    ?debug("Received temporary tokens generation changed (gen: ~tp) event for user ~ts", [
         UserId, Generation
     ]),
 
@@ -452,7 +452,7 @@ handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
     {noreply, State};
 
 handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
-    ?debug("Received temporary tokens deleted event for user ~s", [UserId]),
+    ?debug("Received temporary tokens deleted event for user ~ts", [UserId]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
@@ -542,7 +542,7 @@ broadcast(Msg) ->
 -spec purge_cache(state()) -> state().
 purge_cache(State) ->
     ets:delete_all_objects(?CACHE_NAME),
-    ?debug("Purged ~p cache", [?CACHE_NAME]),
+    ?debug("Purged ~tp cache", [?CACHE_NAME]),
 
     cancel_cache_purge_timer(State).
 

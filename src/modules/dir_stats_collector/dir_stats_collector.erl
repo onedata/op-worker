@@ -339,7 +339,7 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
         end, dir_stats_collection:list_types())
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Error handling file ~p move from ~p to ~p: ~p:~p",
+            ?error_stacktrace("Error handling file ~tp move from ~tp to ~tp: ~tp:~tp",
                 [FileGuid, SourceParentGuid, TargetParentGuid, Error, Reason], Stacktrace)
     end.
 
@@ -369,7 +369,7 @@ stop_collecting(SpaceId) ->
             {[], []} ->
                 ok;
             _ ->
-                ?error("Dir stats collector ~p error: not ok answers: ~p, bad nodes: ~p",
+                ?error("Dir stats collector ~tp error: not ok answers: ~tp, bad nodes: ~tp",
                     [?FUNCTION_NAME, ErrorAns, BadNodes])
         end,
 
@@ -419,19 +419,19 @@ graceful_terminate(State) ->
 
 -spec forced_terminate(pes:forced_termination_reason(), state()) -> ok.
 forced_terminate(Reason, #state{has_unflushed_changes = false}) ->
-    ?warning("Dir stats collector forced terminate, reason: ~p", [Reason]);
+    ?warning("Dir stats collector forced terminate, reason: ~tp", [Reason]);
 
 forced_terminate(Reason, State) ->
     UpdatedState = flush_all(State),
     case UpdatedState#state.has_unflushed_changes of
         false ->
-            ?error("Dir stats collector emergency flush as a result of forced terminate, terminate reason: ~p",
+            ?error("Dir stats collector emergency flush as a result of forced terminate, terminate reason: ~tp",
                 [Reason]);
         true ->
             NotFlushed = maps:keys(maps:filter(fun(_Key, CachedDirStats) ->
                 get_dir_status(CachedDirStats) =/= flushed
             end, UpdatedState#state.dir_stats_cache)),
-            ?critical("Dir stats collector terminate of process with unflushed changes, lost data for: ~p", [NotFlushed])
+            ?critical("Dir stats collector terminate of process with unflushed changes, lost data for: ~tp", [NotFlushed])
     end.
 
 
@@ -778,7 +778,7 @@ continue_collections_initialization_for_dir(
                 dir_size_stats_init_error ->
                     ok; % Error has been logged by dir_size_stats module
                 _ ->
-                    ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
+                    ?error_stacktrace("Dir stats collector ~tp error for ~tp: ~tp:~tp",
                         [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace)
             end,
             NewRetryInterval = min(2 * RetryInterval, ?MAX_INIT_RETRY_INTERVAL),
@@ -910,10 +910,10 @@ save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
             % There can be a lot of files to save if space has been incorrectly unsupported - log must be throttled
             SpaceId = file_id:guid_to_space_id(Guid),
             ?THROTTLE_LOG(SpaceId, ?warning("Cannot save or propagate cache dir stats for collection type:"
-                " ~p and guid ~p due to space ~p unsupport", [CollectionType, Guid, SpaceId])),
+                " ~tp and guid ~tp due to space ~tp unsupport", [CollectionType, Guid, SpaceId])),
             {CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}}, State2};
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p:~n~p:~p",
+            ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~tp and guid ~tp:~n~tp:~tp",
                 [CollectionType, Guid, Error, Reason], Stacktrace),
             {CachedDirStats, State2}
     end.
@@ -1044,7 +1044,7 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
                 ok ->
                     UpdatedCachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
                 {error, _} = Error ->
-                    ?error("Dir stats collector ~p error for collection type: ~p and guid ~p (parent ~p): ~p",
+                    ?error("Dir stats collector ~tp error for collection type: ~tp and guid ~tp (parent ~tp): ~tp",
                         [?FUNCTION_NAME, CollectionType, Guid, Parent, Error]),
                     UpdatedCachedDirStats
             end
@@ -1147,7 +1147,7 @@ call_designated_node(Guid, Function, Args) ->
         ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
         ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND;
         {error, _} = Error ->
-            ?error("Dir stats collector PES fun ~p error: ~p for guid ~p", [Function, Error, Guid]),
+            ?error("Dir stats collector PES fun ~tp error: ~tp for guid ~tp", [Function, Error, Guid]),
             ?ERROR_INTERNAL_SERVER_ERROR;
         Other ->
             Other

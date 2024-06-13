@@ -23,8 +23,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([get/2, get_public_data/2]).
+-export([force_fetch/2]).
 -export([has_eff_user/2, has_eff_user/3]).
--export([create/5]).
+-export([create/6, update/3]).
 
 %%%===================================================================
 %%% API
@@ -60,6 +61,11 @@ get_public_data(SessionId, HandleId) ->
     }).
 
 
+-spec force_fetch(gs_client_worker:client(), od_handle:id()) -> {ok, od_handle:doc()}.
+force_fetch(SessionId, HandleId) ->
+    gs_client_worker:force_fetch_entity(SessionId, #gri{type = od_handle, id = HandleId, aspect = instance}).
+
+
 -spec has_eff_user(od_handle:doc(), od_user:id()) -> boolean().
 has_eff_user(#document{value = #od_handle{eff_users = EffUsers}}, UserId) ->
     maps:is_key(UserId, EffUsers).
@@ -80,11 +86,12 @@ has_eff_user(SessionId, HandleId, UserId) ->
     gs_client_worker:client(), 
     od_handle_service:id(),
     od_handle:resource_type(), 
-    od_handle:resource_id(), 
+    od_handle:resource_id(),
+    od_handle:metadata_prefix(),
     od_handle:metadata()
 ) ->
     {ok, od_handle:id()} | errors:error().
-create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
+create(SessionId, HandleServiceId, ResourceType, ResourceId, MetadataPrefix, Metadata) ->
     {ok, UserId} = session:get_user_id(SessionId),
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
@@ -94,6 +101,7 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
             <<"handleServiceId">> => HandleServiceId,
             <<"resourceType">> => ResourceType,
             <<"resourceId">> => ResourceId,
+            <<"metadataPrefix">> => MetadataPrefix,
             <<"metadata">> => Metadata
         },
         subscribe = true
@@ -105,4 +113,17 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
             _ ->
                 ok
         end
+    end).
+
+
+-spec update(gs_client_worker:client(), od_handle:id(), od_handle:metadata()) ->
+    ok | errors:error().
+update(SessionId, HandleId, NewMetadata) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = private},
+        data = #{<<"metadata">> => NewMetadata}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        force_fetch(SessionId, HandleId)
     end).

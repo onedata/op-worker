@@ -303,7 +303,7 @@ get_file_instance_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Get instance for ~s using gs private api", [FileType]),
+            name = str_utils:format("Get instance for ~ts using gs private api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpec,
@@ -314,7 +314,7 @@ get_file_instance_test(_Config) ->
             )
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for ~ts using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -372,7 +372,7 @@ get_shared_file_instance_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Get instance for directly shared ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for directly shared ~ts using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -383,7 +383,7 @@ get_shared_file_instance_test(_Config) ->
             )
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for directly shared ~s using gs private api", [FileType]),
+            name = str_utils:format("Get instance for directly shared ~ts using gs private api", [FileType]),
             type = gs_with_shared_guid_and_aspect_private,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -391,7 +391,7 @@ get_shared_file_instance_test(_Config) ->
             validate_result_fun = fun(_, Result) -> ?assertEqual(?ERROR_UNAUTHORIZED, Result) end
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for indirectly shared ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for indirectly shared ~ts using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -422,7 +422,7 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Get instance for ~s on provider not supporting user using gs api", [
+            name = str_utils:format("Get instance for ~ts on provider not supporting user using gs api", [
                 FileType
             ]),
             type = gs,
@@ -526,7 +526,7 @@ update_file_instance_test(Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Update ~s instance using gs private api", [FileType]),
+            name = str_utils:format("Update ~ts instance using gs private api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -551,7 +551,7 @@ update_file_instance_test(Config) ->
             )
         },
         #scenario_spec{
-            name = str_utils:format("Update ~s instance using gs public api", [FileType]),
+            name = str_utils:format("Update ~ts instance using gs public api", [FileType]),
             type = gs_not_supported,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -573,7 +573,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Update ~s instance on provider not supporting user using gs api", [
+            name = str_utils:format("Update ~ts instance on provider not supporting user using gs api", [
                 FileType
             ]),
             type = gs,
@@ -670,7 +670,7 @@ delete_file_instance_test(Config) ->
 
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~s instance using rest api", [FileType]),
+                    name = str_utils:format("Delete ~ts instance using rest api", [FileType]),
                     type = rest,
                     prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({mem_ref, MemRef}),
                     validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
@@ -678,7 +678,7 @@ delete_file_instance_test(Config) ->
                     end
                 },
                 #scenario_template{
-                    name = str_utils:format("Delete ~s instance using gs private api", [FileType]),
+                    name = str_utils:format("Delete ~ts instance using gs private api", [FileType]),
                     type = gs,
                     prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({mem_ref, MemRef}, private),
                     validate_result_fun = fun(_, Result) ->
@@ -696,7 +696,7 @@ delete_file_instance_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete shared ~s instance using rest api", [FileType]),
+                    name = str_utils:format("Delete shared ~ts instance using rest api", [FileType]),
                     type = rest_not_supported,
                     prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({guid, TopDirShareGuid}),
                     validate_result_fun = fun(_TestCaseCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
@@ -705,7 +705,7 @@ delete_file_instance_test(Config) ->
                     end
                 }
                 #scenario_template{
-                    name = str_utils:format("Delete shared ~s instance using gs public api", [FileType]),
+                    name = str_utils:format("Delete shared ~ts instance using gs public api", [FileType]),
                     type = gs_not_supported,
                     prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, TopDirShareGuid}, public),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
@@ -767,7 +767,7 @@ delete_file_instance_at_path_test(Config) ->
 
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~s at path instance using rest api", [FileType]),
+                    name = str_utils:format("Delete ~ts at path instance using rest api", [FileType]),
                     type = rest,
                     prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(
                         MemRef, TopDirGuid, TopDirName),
@@ -842,7 +842,7 @@ delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Delete ~s instance on provider not supporting user using gs api", [
+            name = str_utils:format("Delete ~ts instance on provider not supporting user using gs api", [
                 FileType
             ]),
             type = gs,

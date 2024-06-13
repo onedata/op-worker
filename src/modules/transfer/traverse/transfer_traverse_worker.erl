@@ -115,15 +115,15 @@ process_result(_TransferId, _FileCtx, _RetriesLeft, Error = {error, Reason}) whe
 
 process_result(TransferId, FileCtx, 0, Error = {error, not_found}) ->
     is_file_deleted(FileCtx) orelse ?error(
-        "Data transfer in scope of transfer ~p failed due to ~w~n"
+        "Data transfer in scope of transfer ~tp failed due to ~w~n"
         "No retries left", [TransferId, Error]
     ),
     Error;
 
 process_result(TransferId, FileCtx, Retries, Error = {error, not_found}) ->
     is_file_deleted(FileCtx) orelse ?warning(
-        "Data transfer in scope of transfer ~p failed due to ~w~n"
-        "File transfer will be retried (attempts left: ~p)",
+        "Data transfer in scope of transfer ~tp failed due to ~w~n"
+        "File transfer will be retried (attempts left: ~tp)",
         [TransferId, Error, Retries - 1]
     ),
     {retry, FileCtx};
@@ -132,9 +132,9 @@ process_result(TransferId, FileCtx, 0, Error) ->
     {Path, _FileCtx2} = get_file_path(FileCtx),
 
     ?error(
-        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "Transfer of file ~tp in scope of transfer ~tp failed~n"
         "FilePath: ~ts~n"
-        "Error was: ~p~n"
+        "Error was: ~tp~n"
         "No retries left", [
             file_ctx:get_logical_guid_const(FileCtx), TransferId,
             Path,
@@ -147,10 +147,10 @@ process_result(TransferId, FileCtx, Retries, Error) ->
     {Path, FileCtx2} = get_file_path(FileCtx),
 
     ?warning(
-        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "Transfer of file ~tp in scope of transfer ~tp failed~n"
         "FilePath: ~ts~n"
-        "Error was: ~p~n"
-        "File transfer will be retried (attempts left: ~p)", [
+        "Error was: ~tp~n"
+        "File transfer will be retried (attempts left: ~tp)", [
             file_ctx:get_logical_guid_const(FileCtx), TransferId,
             Path,
             Error,
@@ -218,7 +218,7 @@ transfer_data(TransferId, TraverseInfo, FileCtx0) ->
             Error;
         Class:Reason:Stacktrace ->
             ?error_exception(
-                "Unexpected error during transfer ~p", [TransferId],
+                "Unexpected error during transfer ~tp", [TransferId],
                 Class, Reason, Stacktrace
             ),
             {Class, Reason}

@@ -142,7 +142,7 @@ get_protected_data(SessionId, ProviderId, AuthHint) ->
     }).
 
 
--spec force_fetch() -> {ok, od_provider:doc()} | errors:error().
+-spec force_fetch() -> {ok, od_provider:doc()}.
 force_fetch() ->
     gs_client_worker:force_fetch_entity(#gri{type = od_provider, id = oneprovider:get_id(), aspect = instance}).
 
@@ -150,8 +150,8 @@ force_fetch() ->
 -spec to_printable(od_provider:id()) -> string().
 to_printable(ProviderId) ->
     case provider_logic:get_name(ProviderId) of
-        {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
-        _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
+        {ok, Name} -> str_utils:format("'~ts' (~ts)", [Name, ProviderId]);
+        _ -> str_utils:format("'~ts' (name unknown)", [ProviderId])
     end.
 
 
@@ -405,7 +405,7 @@ get_nodes(ProviderId, Domain) ->
     case inet:parse_ipv4_address(binary_to_list(Domain)) of
         {ok, _} ->
             ?warning("Provider ~ts is using an IP address instead of domain", [to_printable(ProviderId)]),
-            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_printable(ProviderId), Domain]),
+            ?info("Resolved 1 node for connection to provider ~ts: ~ts", [to_printable(ProviderId), Domain]),
             [Domain];
         {error, einval} ->
             {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
@@ -417,14 +417,14 @@ get_nodes(ProviderId, Domain) ->
             end,
             case lists:all(ConfigMatches, IPs) of
                 true ->
-                    ?info("Resolved ~B node(s) for connection to provider ~ts: ~s", [
+                    ?info("Resolved ~B node(s) for connection to provider ~ts: ~ts", [
                         length(IPs), to_printable(ProviderId), IpsString
                     ]),
                     IPs;
                 false ->
                     ?info(
                         "Falling back to domain '~ts' for connection to provider ~ts as "
-                        "IP addresses failed the connectivity check (~s)", [
+                        "IP addresses failed the connectivity check (~ts)", [
                             Domain, to_printable(ProviderId), IpsString
                         ]),
                     [Domain]
@@ -445,7 +445,7 @@ get_rtransfer_port(ProviderId) ->
             {ok, #{<<"rtransferPort">> := RtransferPort}} ->
                 RtransferPort;
             _ ->
-                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p",
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~tp",
                     [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
@@ -511,7 +511,7 @@ update_subdomain_delegation_ips() ->
                 ok
         end
     catch Type:Message ->
-        ?error("Error updating provider IPs: ~p:~p", [Type, Message]),
+        ?error("Error updating provider IPs: ~tp:~tp", [Type, Message]),
         error
     end.
 
@@ -709,7 +709,7 @@ verify_provider_identity(TheirProviderId) ->
         )),
         {ok, Domain} = get_domain(TheirProviderId),
         Headers = tokens:access_token_header(OurIdentityToken),
-        URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
+        URL = str_utils:format_bin("https://~ts~ts", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, Headers, <<>>, SslOpts) of
             {ok, 200, _, TheirIdentityToken} ->
@@ -818,10 +818,10 @@ fetch_service_configuration(onezone) ->
     fetch_configuration(URL, DeprecatedURL, SslOpts);
 
 fetch_service_configuration({oneprovider, Domain, Hostname}) ->
-    URL = str_utils:format_bin("https://~s~s", [
+    URL = str_utils:format_bin("https://~ts~ts", [
         Hostname, ?PROVIDER_CONFIGURATION_PATH
     ]),
-    DeprecatedURL = str_utils:format_bin("https://~s~s", [
+    DeprecatedURL = str_utils:format_bin("https://~ts~ts", [
         Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
     ]),
     SslOpts = provider_connection_ssl_opts(Domain),

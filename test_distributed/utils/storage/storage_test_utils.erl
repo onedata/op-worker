@@ -48,21 +48,21 @@ assert_file_info(ExpectedValues, Worker, FilePath, Line, Attempts) when Attempts
     catch
         throw:(Error = {assertion_error, Field, ExpectedValue, Value}) when Attempts =:= 0 ->
             ct:pal(
-                "Assertion for file ~p failed.~n"
-                "   Field: ~p~n"
-                "   Expected: ~p~n"
-                "   Got: ~p~n"
-                "   Module: ~p~n"
-                "   Line: ~p",
+                "Assertion for file ~tp failed.~n"
+                "   Field: ~tp~n"
+                "   Expected: ~tp~n"
+                "   Got: ~tp~n"
+                "   Module: ~tp~n"
+                "   Line: ~tp",
                 [FilePath, Field, ExpectedValue, Value, ?MODULE, Line]
             ),
             ct:fail(Error);
         Error:Reason when Attempts =:= 0 ->
             ct:pal(
-                "Assertion for file ~p failed.~n"
-                "   Error: {~p, ~p}~n"
-                "   Module: ~p~n"
-                "   Line: ~p",
+                "Assertion for file ~tp failed.~n"
+                "   Error: {~tp, ~tp}~n"
+                "   Module: ~tp~n"
+                "   Line: ~tp",
                 [FilePath, Error, Reason, ?MODULE, Line]
             ),
             ct:fail({Error, Reason});

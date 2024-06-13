@@ -200,7 +200,7 @@ delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
         ok = delegate_request_insecure(WorkerRef, ReqOrHandlerFun, ReqId, RespondVia)
     catch
         Type:Error:Stacktrace ->
-            ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
+            ?error_stacktrace("Failed to delegate request (~tp) due to: ~tp:~tp", [
                 MsgId, Type, Error
             ], Stacktrace),
             {ok, ?ERROR_MSG(MsgId)}
@@ -332,8 +332,8 @@ handle_info(heartbeat, #state{
                 heartbeat_timer = undefined
             };
         Error ->
-            ?error("Async request manager for session ~p failed to send "
-                   "heartbeats due to: ~p", [
+            ?error("Async request manager for session ~tp failed to send "
+                   "heartbeats due to: ~tp", [
                 SessionId, Error
             ]),
             State#state{heartbeat_timer = undefined}
@@ -394,7 +394,7 @@ delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
             ({ok, Response}) ->
                 respond(RespondVia, ReqId, Response);
             ({error, Reason}) ->
-                ?error("Failed to handle delegated request ~p due to ~p", [
+                ?error("Failed to handle delegated request ~tp due to ~tp", [
                     ReqId, Reason
                 ]),
                 respond(RespondVia, ReqId, #processing_status{code = 'ERROR'})
@@ -416,7 +416,7 @@ delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia) ->
             HandlerFun()
         catch
             Type:Error ->
-                ?error("Failed to handle delegated request ~p due to ~p:~p", [
+                ?error("Failed to handle delegated request ~tp due to ~tp:~tp", [
                     ReqId, Type, Error
                 ]),
                 #processing_status{code = 'ERROR'}
@@ -445,7 +445,7 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
                 ok ->
                     report_response_sent(AsyncReqManager, ReqId);
                 Error ->
-                    ?warning("Sending response on request ~p error: ~p", [ReqId, Error]),
+                    ?warning("Sending response on request ~tp error: ~tp", [ReqId, Error]),
                     report_response_sent(AsyncReqManager, ReqId),
                     Error
             end;
@@ -493,18 +493,18 @@ call_async_request_manager(AsyncReqManager, Msg) ->
         gen_server2:call(AsyncReqManager, Msg, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
-            ?debug("Request manager process ~p does not exist", [
+            ?debug("Request manager process ~tp does not exist", [
                 AsyncReqManager
             ]),
             {error, no_async_req_manager};
         exit:{normal, _} ->
-            ?debug("Exit of request manager process ~p", [AsyncReqManager]),
+            ?debug("Exit of request manager process ~tp", [AsyncReqManager]),
             {error, no_async_req_manager};
         exit:{timeout, _} ->
-            ?debug("Timeout of request manager process ~p", [AsyncReqManager]),
+            ?debug("Timeout of request manager process ~tp", [AsyncReqManager]),
             ?ERROR_TIMEOUT;
         Type:Reason ->
-            ?error("Cannot call request manager ~p due to ~p:~p", [
+            ?error("Cannot call request manager ~tp due to ~tp:~tp", [
                 AsyncReqManager, Type, Reason
             ]),
             {error, Reason}
@@ -528,7 +528,7 @@ check_workers_status(Workers, EffSessId, Cons, SendHeartbeats) ->
     maps:fold(
         fun
             ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
-                ?error("Async Request Manager: process ~p handling request ~p died",
+                ?error("Async Request Manager: process ~tp handling request ~tp died",
                     [Pid, ReqId]
                 ),
                 connection_api:send_via_any(?ERROR_MSG(MsgId), EffSessId, Cons),

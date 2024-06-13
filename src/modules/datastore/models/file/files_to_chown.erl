@@ -121,7 +121,7 @@ chown_deferred_file(FileGuid) ->
         chown_file(FileCtx)
     catch
         _:Error:Stacktrace ->
-            ?error_stacktrace("Cannot chown deferred file ~p due to error ~p", [FileGuid, Error], Stacktrace)
+            ?error_stacktrace("Cannot chown deferred file ~tp due to error ~tp", [FileGuid, Error], Stacktrace)
     end.
 
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().

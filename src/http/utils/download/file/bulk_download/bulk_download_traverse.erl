@@ -124,8 +124,8 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId, relative
         ok -> 
             ok;
         error -> 
-            ?debug("Canceling dir streaming traverse ~p due to unexpected exit "
-                   "of download process ~p.", [BulkDownloadId, Pid]),
+            ?debug("Canceling dir streaming traverse ~tp due to unexpected exit "
+                   "of download process ~tp.", [BulkDownloadId, Pid]),
             ok = traverse:cancel(?POOL_NAME, BulkDownloadId)
     end.
 

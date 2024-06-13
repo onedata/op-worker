@@ -133,7 +133,7 @@ create_subfiles_import_many_test(Config) ->
     Stopwatch = stopwatch:start(),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, 60),
-    ct:pal("Import took ~p", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Import took ~tp", [stopwatch:read_seconds(Stopwatch, float)]),
 
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
 
@@ -172,7 +172,7 @@ create_subfiles_import_many2_test(Config) ->
 
     Timeout = 600,
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-    ct:pal("Import took ~p", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Import took ~tp", [stopwatch:read_seconds(Stopwatch, float)]),
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
 
     ?assertMonitoring(W1, #{

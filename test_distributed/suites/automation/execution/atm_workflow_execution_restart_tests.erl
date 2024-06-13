@@ -142,7 +142,7 @@ restart_op_worker_after_graceful_stop(Config) ->
 
     timer:sleep(timer:seconds(1)),
 
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
     SystemPausedAtmWorkflowExecutionExpState1 = expect_workflow_execution_stopping(
         SystemPausedAtmWorkflowExecutionExpState0
     ),
@@ -156,12 +156,12 @@ restart_op_worker_after_graceful_stop(Config) ->
         UserPausedAtmWorkflowExecutionExpState1, SystemPausedAtmWorkflowExecutionExpState1,
         InterruptedAtmWorkflowExecutionExpState1, FailedAtmWorkflowExecutionExpState1
     ]),
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
 
     %% TODO VFS-10266 cleanup ended
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
     AfterCleanupRef = receive {Ref, after_cleanup} -> Ref end,
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
 
     UserPausedAtmWorkflowExecutionExpState2 = expect_workflow_execution_paused(
         UserPausedAtmWorkflowExecutionExpState1
@@ -173,19 +173,19 @@ restart_op_worker_after_graceful_stop(Config) ->
         UserPausedAtmWorkflowExecutionExpState2, SystemPausedAtmWorkflowExecutionExpState2,
         InterruptedAtmWorkflowExecutionExpState1, FailedAtmWorkflowExecutionExpState1
     ]),
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
 
     reply(AfterCleanupRef, proceed),
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
     finalize_op_worker_stop(OpWorkerStopRequestId),
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
     restart_op_worker(Config),
     %% TODO VFS-10266 op_worker restart
 
     % Wait until automation restart procedure finishes
     timer:sleep(timer:seconds(1)),
 
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
     % Workflow paused due to op_worker stopping should be resumed after op_worker restart
     SystemPausedAtmWorkflowExecutionExpState2 = atm_workflow_execution_exp_state_builder:expect(
         SystemPausedAtmWorkflowExecutionExpState2, [
@@ -219,7 +219,7 @@ restart_op_worker_after_graceful_stop(Config) ->
             workflow_failed
         ]
     ),
-    ct:pal("~p", [?LINE]),
+    ct:pal("~tp", [?LINE]),
     assert_all_match_with_backend([
         UserPausedAtmWorkflowExecutionExpState2, SystemPausedAtmWorkflowExecutionExpState2,
         InterruptedAtmWorkflowExecutionExpState2, FailedAtmWorkflowExecutionExpState2

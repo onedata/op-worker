@@ -6469,7 +6469,7 @@ parallel_assert(M, F, A, List, Attempts) ->
                         sets:del_element(Ans, AccIn)
                 after
                     Attempts * timer:seconds(1) ->
-                        ct:pal("Left = ~p", [lists:sort(sets:to_list(AccIn))]),
+                        ct:pal("Left = ~tp", [lists:sort(sets:to_list(AccIn))]),
                         Acc = lists:sort(sets:to_list(AccIn)),
                         ?assertMatch(Acc, [])
                 end
@@ -6588,11 +6588,11 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
                 true ->
                     {Format, Args} = storage_import_monitoring_description(SSM),
                     ct:pal(
-                        "Assertion of field \"~p\" in storage_import_monitoring for space ~p failed.~n"
-                        "    Expected: ~p~n"
-                        "    Value: ~p~n"
+                        "Assertion of field \"~tp\" in storage_import_monitoring for space ~tp failed.~n"
+                        "    Expected: ~tp~n"
+                        "    Value: ~tp~n"
                         ++ Format ++
-                        "~nStacktrace:~n~p",
+                        "~nStacktrace:~n~tp",
                         [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [Stacktrace]),
                     ct:fail("assertion failed")
             end
@@ -6632,7 +6632,7 @@ flatten_histograms(SSM) ->
 
 storage_import_monitoring_description(SSM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
-        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
+        {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [Key, Value]}
     end, {"~n#storage_import_monitoring fields values:~n", []}, SSM).
 
 provider_id(Worker) ->

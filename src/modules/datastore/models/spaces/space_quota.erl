@@ -156,7 +156,7 @@ available_size(SpaceId) ->
         SupSize - CSize
     catch
         _:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to calculate quota due to: ~p", [Reason], Stacktrace),
+            ?error_stacktrace("Unable to calculate quota due to: ~tp", [Reason], Stacktrace),
             throw({unable_to_calc_quota, Reason})
     end.
 

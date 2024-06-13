@@ -257,7 +257,7 @@ build_function_id(AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-    sanitize_binary(str_utils:format_bin("w~s-s~s", [
+    sanitize_binary(str_utils:format_bin("w~ts-s~ts", [
         binary:part(AtmWorkflowExecutionId, 0, 10),
         % Generate random substring to ensure functions are unique for each task
         % despite e.g. using the same lambda
@@ -278,7 +278,7 @@ build_function_id(AtmWorkflowExecutionCtx) ->
 -spec build_function_name(function_id(), atm_lambda_revision:record()) ->
     function_name().
 build_function_name(FunctionId, #atm_lambda_revision{name = AtmLambdaRevisionName}) ->
-    str_utils:format_bin("~s-~s", [
+    str_utils:format_bin("~ts-~ts", [
         FunctionId,
         sanitize_binary(binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 39)))
     ]).

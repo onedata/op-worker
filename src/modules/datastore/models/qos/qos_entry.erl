@@ -535,7 +535,7 @@ resolve_conflict_internal(SpaceId, QosId,
                 case file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosId) of
                     ok -> ok;
                     {error, _} = Error ->
-                        ?error("Could not remove qos_entry ~p from file_qos of file ~p: ~p",
+                        ?error("Could not remove qos_entry ~tp from file_qos of file ~tp: ~tp",
                             [QosId, FileUuid, Error])
                 end
             end),

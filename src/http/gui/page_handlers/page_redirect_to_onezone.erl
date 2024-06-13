@@ -51,7 +51,7 @@ redirect(Req, Path) ->
         ProviderId ->
             OzUrl = oneprovider:get_oz_url(),
             cowboy_req:reply(?HTTP_302_FOUND, #{
-                ?HDR_LOCATION => str_utils:format_bin("~s/~s/~s~s", [
+                ?HDR_LOCATION => str_utils:format_bin("~ts/~ts/~ts~ts", [
                     OzUrl, onedata:gui_prefix(?OP_WORKER_GUI), ProviderId, Path
                 ]),
                 ?HDR_CACHE_CONTROL => <<"max-age=3600">>

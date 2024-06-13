@@ -198,13 +198,13 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
                             rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, NextListingOpts)
                     end;
                 Error ->
-                    ct:print("Error during space cleanup [rm_files]: ~p", [Error]),
+                    ct:print("Error during space cleanup [rm_files]: ~tp", [Error]),
                     Error
             end;
         {error, enoent} -> 
             ok;
         Error2 ->
-            ct:print("Error during space cleanup [get_children]: ~p", [Error2]),
+            ct:print("Error during space cleanup [get_children]: ~tp", [Error2]),
             Error2
     end.
 
@@ -267,6 +267,6 @@ create_files(Worker, SessId, ParentGuid, FilePrefix, FileSize, FilesCount) ->
 
 create_children(ChildPrefix, ChildCount, CreateFun) ->
     lists:map(fun(N) ->
-        ChildName = str_utils:format_bin("~s_~p", [ChildPrefix, N]),
+        ChildName = str_utils:format_bin("~ts_~tp", [ChildPrefix, N]),
         CreateFun(ChildName)
     end, lists:seq(1, ChildCount)).

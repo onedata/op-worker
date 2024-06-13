@@ -84,8 +84,8 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
             conclude(WorkflowExecutionId, TaskExecutionId)
         catch Class:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Unexpected error while concluding task data stream for workflow execution ~s and task execution ~s~n"
-                "Error was: ~w:~p",
+                "Unexpected error while concluding task data stream for workflow execution ~ts and task execution ~ts~n"
+                "Error was: ~w:~tp",
                 [WorkflowExecutionId, TaskExecutionId, Class, Reason],
                 Stacktrace
             ),
@@ -164,13 +164,13 @@ handle_streamed_task_data(ConnRef, ReportId, StreamedTaskData, #result_streamer_
             % ignored - such situation can only happen when there has been an anomaly and the stream will
             % anyway conclude with failure, so no special handling of this situation is required
             ?warning(
-                "Ignoring a stale data from result streamer ~s for workflow execution ~s and task execution ~s~n"
-                "Data: ~s",
+                "Ignoring a stale data from result streamer ~ts for workflow execution ~ts and task execution ~ts~n"
+                "Data: ~ts",
                 [
                     ResultStreamerId,
                     WorkflowExecutionId,
                     TaskExecutionId,
-                    str_utils:truncate_overflow(str_utils:format_bin("~p", [StreamedTaskData]), ?MAX_LOGGED_DATA_SIZE)
+                    str_utils:truncate_overflow(str_utils:format_bin("~tp", [StreamedTaskData]), ?MAX_LOGGED_DATA_SIZE)
                 ]
             );
         duplicate ->
@@ -189,7 +189,7 @@ conclude(WorkflowExecutionId, TaskExecutionId) ->
     case atm_openfaas_result_streamer_registry:claim_conclusion_orchestration(WorkflowExecutionId, TaskExecutionId, self()) of
         no_streamers_ever_registered ->
             ?error(
-                "Conclusion of result stream was triggered for workflow execution ~s and task execution ~s, "
+                "Conclusion of result stream was triggered for workflow execution ~ts and task execution ~ts, "
                 "but no streamers were ever registered",
                 [WorkflowExecutionId, TaskExecutionId]
             ),

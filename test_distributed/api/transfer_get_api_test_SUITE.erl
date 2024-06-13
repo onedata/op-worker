@@ -122,7 +122,7 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ExpStat
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Get transfer (~p) status using rest endpoint", [TransferType]),
+                    name = str_utils:format("Get transfer (~tp) status using rest endpoint", [TransferType]),
                     type = rest,
                     prepare_args_fun = build_get_transfer_status_prepare_rest_args_fun(Env),
                     validate_result_fun = build_get_transfer_status_validate_rest_call_result_fun(
@@ -130,7 +130,7 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ExpStat
                     )
                 },
                 #scenario_template{
-                    name = str_utils:format("Get transfer (~p) status using gs transfer api", [TransferType]),
+                    name = str_utils:format("Get transfer (~tp) status using gs transfer api", [TransferType]),
                     type = gs,
                     prepare_args_fun = build_get_transfer_status_prepare_gs_args_fun(Env),
                     validate_result_fun = build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, Env)
@@ -452,7 +452,7 @@ get_rerun_transfer_status_test_base(Config) ->
         eviction -> <<"evicting">>;
         _ -> <<"replicating">>
     end,
-    ct:pal("TransferType: ~p~nDataSourceType: ~p", [TransferType, DataSourceType]),
+    ct:pal("TransferType: ~tp~nDataSourceType: ~tp", [TransferType, DataSourceType]),
 
     RequiredPrivs = [?SPACE_VIEW_TRANSFERS],
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
@@ -496,7 +496,7 @@ get_rerun_transfer_status(Config, TransferType, Env, RerunId, EffTransferId, Exp
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Get transfer (~p) rerun status using rest endpoint", [TransferType]),
+                    name = str_utils:format("Get transfer (~tp) rerun status using rest endpoint", [TransferType]),
                     type = rest,
                     prepare_args_fun = build_get_transfer_status_prepare_rest_args_fun(Env),
                     validate_result_fun = VerifyResultFun

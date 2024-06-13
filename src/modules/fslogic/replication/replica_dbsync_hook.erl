@@ -86,7 +86,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                     end
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
-                                        ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
+                                        ?debug("~tp file_meta_missing: ~tp", [?FUNCTION_NAME, MissingUuid]),
                                         file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, generator:gen_name(),
                                             SpaceId, ?MODULE, ?FUNCTION_NAME, [FileCtx, ChangedLocationDoc])
                                 end;
@@ -178,7 +178,7 @@ update_outdated_local_location_replica(FileCtx,
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(LocalDoc, #{count => 2}),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    ?debug("Updating outdated replica of file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
+    ?debug("Updating outdated replica of file ~tp, versions: ~tp vs ~tp", [FileGuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
     Changes = replica_changes:get_changes(ExternalDoc, Diff),
@@ -220,7 +220,7 @@ reconcile_replicas(FileCtx,
 ) ->
     LocalBlocks = fslogic_location_cache:get_blocks(LocalDoc),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    ?debug("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
+    ?debug("Conflicting changes detected on file ~tp, versions: ~tp vs ~tp", [FileGuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
     {ExternalChanges, ExternalShrink, ExternalRename} =
@@ -415,7 +415,7 @@ maybe_truncate_file_on_storage(FileCtx, OldSize, NewSize) when OldSize =/= NewSi
                                     {error, ?ENOENT} -> ok; % file not yet created on storage
                                     {error, Error} ->
                                         % NOTE: can happen on flat storages, which do not check anything during open.
-                                        ?error("File truncation failed when executing a location dbsync hook~n~s", [?autoformat([Error])])
+                                        ?error(?autoformat_with_msg("File truncation failed when executing a location dbsync hook~n", Error))
                                 end;
                             {error, ?ENOENT} ->
                                 ok % local file metadata not yet synchronized

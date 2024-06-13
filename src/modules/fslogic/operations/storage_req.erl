@@ -96,7 +96,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
         catch
             error:{invalid_guid, _Guid} ->
             % TODO VFS-6121 log not existing SpaceId here
-            ?error("Detecting storage ~p failed due to not existing space.", [StorageId]),
+            ?error("Detecting storage ~tp failed due to not existing space.", [StorageId]),
             throw(?ENOENT)
     end,
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
@@ -107,7 +107,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     {ok, Storage} = case storage:get(StorageId) of
         {ok, Doc} -> {ok, Doc};
         {error, not_found} ->
-            ?error("Detecting storage ~p failed due to not found storage document.", [StorageId]),
+            ?error("Detecting storage ~tp failed due to not found storage document.", [StorageId]),
             throw(?ENOENT)
     end,
 
@@ -142,11 +142,11 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
                 }
             catch
                 error:{badmatch, {error, Reason}}:Stacktrace ->
-                    ?error_stacktrace("Detecting storage ~p failed due to ~p", [StorageId, Reason], Stacktrace),
+                    ?error_stacktrace("Detecting storage ~tp failed due to ~tp", [StorageId, Reason], Stacktrace),
                     #fuse_response{status = #status{code = Reason}}
             end;
         {error, Reason} ->
-            ?error("Detecting storage ~p failed with error ~p when getting client user context.", [StorageId, Reason]),
+            ?error("Detecting storage ~tp failed with error ~tp when getting client user context.", [StorageId, Reason]),
             #fuse_response{status = #status{code = ?EACCES}}
     end.
 

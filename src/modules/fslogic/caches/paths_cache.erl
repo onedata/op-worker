@@ -52,11 +52,11 @@ init(all) ->
         {ok, SpaceIds} ->
             lists:foreach(fun init/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize paths caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize paths caches due to: ~tp", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize paths caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize paths caches due to: ~tp", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize paths caches due to: ~p", [Error])
+            ?critical("Unable to initialize paths caches due to: ~tp", [Error])
     catch
         Class:Reason:Stacktrace ->
             ?critical_exception("Unable to initialize path caches", Class, Reason, Stacktrace)
@@ -75,15 +75,15 @@ invalidate_on_all_nodes(SpaceId) ->
         [] ->
             ok;
         _ ->
-            ?error("Invalidation of paths caches for space ~p failed on nodes: ~p (RPC error)", [SpaceId, BadNodes])
+            ?error("Invalidation of paths caches for space ~tp failed on nodes: ~tp (RPC error)", [SpaceId, BadNodes])
     end,
 
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Invalidation of paths caches for space ~p failed.~n"
-                "Reason: ~p", [SpaceId, Error]
+                "Invalidation of paths caches for space ~tp failed.~n"
+                "Reason: ~tp", [SpaceId, Error]
             )
     end, Res).
 
@@ -142,13 +142,13 @@ init(Space, Name) ->
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize paths cache for space ~p due to: ~p",
+                        ?critical("Unable to initialize paths cache for space ~tp due to: ~tp",
                             [Space, Error])
                 end
         end
     catch
         Class:Reason:Stacktrace ->
-            ?critical_exception("Unable to initialize path cache for space ~p", [Space], Class, Reason, Stacktrace)
+            ?critical_exception("Unable to initialize path cache for space ~tp", [Space], Class, Reason, Stacktrace)
     end.
 
 

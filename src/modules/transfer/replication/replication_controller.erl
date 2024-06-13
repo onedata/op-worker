@@ -46,7 +46,7 @@
 end).
 
 -define(log_bad_replication_msg(__Req, __Status, __TransferId),
-    ?debug("~p:~p - bad request ~p while in status ~p, transfer: ~p", [
+    ?debug("~tp:~tp - bad request ~tp while in status ~tp, transfer: ~tp", [
         ?MODULE, ?LINE, __Req, __Status, __TransferId
     ])
 ).
@@ -202,15 +202,15 @@ handle_cast(Request, State) ->
 handle_info(Info, State) ->
     case Info of
         {replication_completed, TransferId} ->
-            ?debug("Replication completed message ignored for transfer ~p", TransferId);
+            ?debug("Replication completed message ignored for transfer ~tp", TransferId);
         {replication_active, TransferId} ->
-            ?debug("Replication active message ignored for transfer ~p", TransferId);
+            ?debug("Replication active message ignored for transfer ~tp", TransferId);
         {replication_aborting, TransferId, _Reason} ->
-            ?debug("Replication aborting message ignored for transfer ~p", TransferId);
+            ?debug("Replication aborting message ignored for transfer ~tp", TransferId);
         {replication_failed, TransferId} ->
-            ?debug("Replication failed message ignored for transfer ~p", TransferId);
+            ?debug("Replication failed message ignored for transfer ~tp", TransferId);
         {replication_cancelled, TransferId} ->
-            ?debug("Replication cancelled message ignored for transfer ~p", TransferId);
+            ?debug("Replication cancelled message ignored for transfer ~tp", TransferId);
         _ ->
             ?log_bad_request(Info)
     end,
@@ -270,7 +270,7 @@ handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
             handle_active(TransferId, Callback, EvictSourceReplica);
         {replication_aborting, TransferId, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
-            ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
+            ?error("Replication ~tp aborting due to ~tp", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
             ?log_bad_replication_msg(Msg, ?ENQUEUED_STATUS, TransferId),
@@ -292,7 +292,7 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
             ?catch_exceptions(notify_callback(Callback, EvictSourceReplica, TransferId));
         {replication_aborting, TransferId, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
-            ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
+            ?error("Replication ~tp aborting due to ~tp", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
             ?log_bad_replication_msg(Msg, ?ACTIVE_STATUS, TransferId),

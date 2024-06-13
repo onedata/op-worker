@@ -156,7 +156,7 @@ init_report() ->
 init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
     Key = subscription_type:get_stream_key(Sub),
     Stm = subscription_type:get_stream(Sub),
-    ?debug("Initializing event stream ~p in session ~p", [Key, SessId]),
+    ?debug("Initializing event stream ~tp in session ~tp", [Key, SessId]),
     process_flag(trap_exit, true),
     gen_server2:cast(Mgr, {register_stream, Key, self()}),
     {ok, #state{
@@ -199,7 +199,7 @@ handle_call(Request, From, State) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(#event{type = Evt}, #state{key = Key, session_id = SessId} = State) ->
-    ?debug("Handling event ~p in event stream ~p and session ~p", [Evt, Key, SessId]),
+    ?debug("Handling event ~tp in event stream ~tp and session ~tp", [Evt, Key, SessId]),
     {noreply, process_event(Evt, State)};
 
 handle_cast({remove_subscription, SubId}, #state{} = State) ->
@@ -312,8 +312,8 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         Duration = erlang:monotonic_time(milli_seconds) - Start,
         ?update_counter(?EXOMETER_NAME(events_handler_execution_time_ms),
             Duration),
-        ?debug("Execution of handler on events ~p in event stream ~p and session
-        ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
+        ?debug("Execution of handler on events ~tp in event stream ~tp and session
+        ~tp took ~tp milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
         Error:Reason:Stacktrace ->
             case Ctx of
@@ -321,7 +321,7 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
                 _ -> ok
             end,
 
-            ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
+            ?error_stacktrace("~tp event handler of state ~tp failed with ~tp:~tp",
                 [?MODULE, State, Error, Reason], Stacktrace)
     end;
 
@@ -386,7 +386,7 @@ remove_subscriptions(#state{session_id = SessId, subscriptions = Subs}) ->
                 ok ->
                     ok;
                 Error ->
-                    ?error("Removing subscriptions error: ~p, for key ~p, session ~p",
+                    ?error("Removing subscriptions error: ~tp, for key ~tp, session ~tp",
                         [Error, Key, SessId]),
                     Error
             end

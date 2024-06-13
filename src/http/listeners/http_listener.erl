@@ -56,7 +56,7 @@ port() ->
 %%--------------------------------------------------------------------
 -spec start() -> ok | {error, Reason :: term()}.
 start() ->
-    ?info("Starting '~p' server...", [?HTTP_LISTENER]),
+    ?info("Starting '~tp' server...", [?HTTP_LISTENER]),
 
     Dispatch = cowboy_router:compile([
         {'_', [
@@ -83,9 +83,9 @@ start() ->
     ),
     case Result of
         {ok, _} ->
-            ?info("Server '~p' started successfully", [?HTTP_LISTENER]);
+            ?info("Server '~tp' started successfully", [?HTTP_LISTENER]);
         _ ->
-            ?error("Could not start server '~p' - ~p", [?HTTP_LISTENER, Result]),
+            ?error("Could not start server '~tp' - ~tp", [?HTTP_LISTENER, Result]),
             Result
     end.
 
@@ -97,13 +97,13 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-    ?info("Stopping '~p' server...", [?HTTP_LISTENER]),
+    ?info("Stopping '~tp' server...", [?HTTP_LISTENER]),
 
     case cowboy:stop_listener(?HTTP_LISTENER) of
         ok ->
-            ?info("Server '~p' stopped", [?HTTP_LISTENER]);
+            ?info("Server '~tp' stopped", [?HTTP_LISTENER]);
         {error, Error} ->
-            ?error("Error on stopping server ~p: ~p", [?HTTP_LISTENER, Error]),
+            ?error("Error on stopping server ~tp: ~tp", [?HTTP_LISTENER, Error]),
             {error, redirector_stop_error}
     end.
 

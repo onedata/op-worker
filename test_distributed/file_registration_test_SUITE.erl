@@ -604,7 +604,7 @@ register_many_files_test(Config) ->
 
     % but register it as many logical files
     DestinationPaths = lists:map(fun(I) ->
-        str_utils:format_bin("/~s_~p", [BaseFileName, I])
+        str_utils:format_bin("/~ts_~tp", [BaseFileName, I])
     end, lists:seq(1, LogicalFilesCount)),
 
     TestMaster = self(),
@@ -660,7 +660,7 @@ register_many_nested_files_test(Config) ->
     ParentPath = filename:join([Dir1, Dir2, Dir3]),
     % but register it as many logical files
     DestinationPaths = lists:map(fun(I) ->
-        FileName = str_utils:format_bin("~s_~p", [BaseFileName, I]),
+        FileName = str_utils:format_bin("~ts_~tp", [BaseFileName, I]),
         filename:join(["/", ParentPath, FileName])
     end, lists:seq(1, LogicalFilesCount)),
 
@@ -774,7 +774,7 @@ verification_loop([], _VerifyFun, _TimeoutMillis) ->
 verification_loop(FilePaths, _VerifyFun, TimeoutMillis) when TimeoutMillis < 0 ->
     ct:pal(
         "Verification loop timeout.~n"
-        "Unverified files: ~p", [FilePaths]
+        "Unverified files: ~tp", [FilePaths]
     ),
     ct:fail(verification_loop_timeout);
 verification_loop(FilePaths, VerifyFun, TimeoutMillis) when TimeoutMillis >= 0 ->
@@ -788,7 +788,7 @@ verification_loop(FilePaths, VerifyFun, TimeoutMillis) when TimeoutMillis >= 0 -
         TimeoutMillis ->
             ct:pal(
                 "Verification loop timeout.~n"
-                "Unverified files: ~p", [FilePaths]
+                "Unverified files: ~tp", [FilePaths]
             ),
             ct:fail(verification_loop_timeout)
     end.

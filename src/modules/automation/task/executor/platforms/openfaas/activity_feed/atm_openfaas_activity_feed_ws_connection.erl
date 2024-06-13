@@ -36,5 +36,5 @@ push_json_to_client(ConnRef, JsonMessage) ->
 interpret_info_message({push_json_to_client, JsonMessage}) ->
     {reply, json_utils:encode(JsonMessage)};
 interpret_info_message(Message) ->
-    ?warning("Unexpected message in ~p: ~p", [?MODULE, Message]),
+    ?warning("Unexpected message in ~tp: ~tp", [?MODULE, Message]),
     no_reply.

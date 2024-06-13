@@ -138,7 +138,7 @@ custom_error_handling(State = #hs_state{
         ?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName) ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
             ErrorLog =  str_utils:format_bin(
-                "An error occured for harvester ~p due to a failed external service (~ts) operation.",
+                "An error occured for harvester ~tp due to a failed external service (~ts) operation.",
                 [HarvesterId, ServiceName]
             ),
             {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
@@ -147,7 +147,7 @@ custom_error_handling(State = #hs_state{
             })};
         ?ERROR_TEMPORARY_FAILURE ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
-            ErrorLog =  str_utils:format_bin("Harvester ~p is temporarily unavailable.", [HarvesterId]),
+            ErrorLog =  str_utils:format_bin("Harvester ~tp is temporarily unavailable.", [HarvesterId]),
             {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
                 error_log = ErrorLog,
                 log_level = warning
@@ -155,7 +155,7 @@ custom_error_handling(State = #hs_state{
         Error = {error, _} ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
             ErrorLog =  str_utils:format_bin(
-                "Unexpected error ~w occurred for harvester ~p", [Error, HarvesterId]
+                "Unexpected error ~w occurred for harvester ~tp", [Error, HarvesterId]
             ),
             {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
                 error_log = ErrorLog,
@@ -167,7 +167,7 @@ custom_error_handling(State = #hs_state{
                 ok ->
                     ErrorLog =  str_utils:format_bin(
                         "Unexpected error occurred when applying batch of changes. "
-                        "Last successful sequence number was: ~p",
+                        "Last successful sequence number was: ~tp",
                         [LastSuccessfulSeq]
                     ),
                     {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{

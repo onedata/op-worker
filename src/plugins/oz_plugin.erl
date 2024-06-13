@@ -63,7 +63,7 @@ get_oz_rest_api_prefix() ->
 %%--------------------------------------------------------------------
 -spec get_oz_rest_endpoint(string() | binary()) -> binary().
 get_oz_rest_endpoint(Path) ->
-    str_utils:format_bin("~s:~B~s~s", [
+    str_utils:format_bin("~ts:~B~ts~ts", [
         get_oz_url(),
         get_oz_rest_port(),
         get_oz_rest_api_prefix(),

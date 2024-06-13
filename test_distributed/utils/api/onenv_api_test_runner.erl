@@ -170,7 +170,7 @@ run_tests(SpecTemplates) ->
             throw:fail ->
                 false;
             Type:Reason:Stacktrace ->
-                ct:pal("Unexpected error while running test suite ~w:~p~nStacktrace: ~s", [
+                ct:pal("Unexpected error while running test suite ~w:~tp~nStacktrace: ~ts", [
                     Type, Reason, lager:pr_stacktrace(Stacktrace)
                 ]),
                 false
@@ -675,14 +675,14 @@ log_failure(
     ErrReason,
     Stacktrace
 ) ->
-    ct:pal("~s test case failed:~n"
-    "Node: ~p~n"
-    "Client: ~p~n"
-    "Args: ~s~n"
-    "Expected: ~p~n"
-    "Got: ~p~n"
-    "Error: ~p:~p~n"
-    "Stacktrace: ~s~n", [
+    ct:pal("~ts test case failed:~n"
+    "Node: ~tp~n"
+    "Client: ~tp~n"
+    "Args: ~ts~n"
+    "Expected: ~tp~n"
+    "Got: ~tp~n"
+    "Error: ~tp:~tp~n"
+    "Stacktrace: ~ts~n", [
         ScenarioName,
         TargetNode,
         client_to_placeholder(Client),
@@ -1137,11 +1137,11 @@ get_rest_endpoint(Node, ResourcePath) ->
 %%--------------------------------------------------------------------
 -spec get_rest_api_root(node()) -> URL :: binary().
 get_rest_api_root(?ONEZONE_TARGET_NODE) ->
-    str_utils:format_bin("https://~s/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
+    str_utils:format_bin("https://~ts/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
 get_rest_api_root(Node) ->
     Port = get_https_server_port_str(Node),
     Domain = opw_test_rpc:get_provider_domain(Node),
-    str_utils:format_bin("https://~s~s/api/v3/oneprovider/", [Domain, Port]).
+    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
 
 
 %% @private

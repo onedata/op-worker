@@ -353,10 +353,10 @@ forward_events_event_handler() ->
 notify_event_handler() ->
     fun
         (E, #{notify := NotifyFun}) ->
-            ct:pal("Handler1: ~p", [E]),
+            ct:pal("Handler1: ~tp", [E]),
             NotifyFun(#server_message{message_body = #status{code = ?OK}});
         (E, _) ->
-            ct:pal("Handler2: ~p", [E]),
+            ct:pal("Handler2: ~tp", [E]),
             ok
     end.
 

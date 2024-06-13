@@ -337,8 +337,8 @@ handle_doc_change(#document{seq = Seq} = Doc, _Filter, State = #state{until = Un
             % not been cleaned before restart - ignore errors until first document is handled
             ok;
         LastChange ->
-            ?error("Received change with old sequence ~p. Expected sequences"
-            " greater than or equal to ~p~nDoc: ~p~nLast change: ~p", [Seq, Until, Doc, LastChange]),
+            ?error("Received change with old sequence ~tp. Expected sequences"
+            " greater than or equal to ~tp~nDoc: ~tp~nLast change: ~tp", [Seq, Until, Doc, LastChange]),
             case LastChange of
                 #document{seq = Seq} -> update_doc_seq(Doc);
                 _ -> ok

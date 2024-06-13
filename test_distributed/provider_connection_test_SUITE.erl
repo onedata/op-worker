@@ -223,7 +223,7 @@ configuration_endpoint_is_served(Config) ->
     lists:foreach(fun(Node) ->
         {ok, NodeIpBin} = ip_utils:to_binary(node_ip(Node)),
         ExpectedConfiguration = expected_configuration(Node),
-        URL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [NodeIpBin]),
+        URL = str_utils:format("https://~ts/api/v3/oneprovider/configuration", [NodeIpBin]),
         {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
             http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
         ?assertMatch(ExpectedConfiguration, json_utils:decode(Body))
@@ -234,8 +234,8 @@ deprecated_configuration_endpoint_is_served(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Node) ->
         {ok, NodeIpBin} = ip_utils:to_binary(node_ip(Node)),
-        DeprecatedURL = str_utils:format("https://~s/configuration", [NodeIpBin]),
-        ModernURL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [NodeIpBin]),
+        DeprecatedURL = str_utils:format("https://~ts/configuration", [NodeIpBin]),
+        ModernURL = str_utils:format("https://~ts/api/v3/oneprovider/configuration", [NodeIpBin]),
 
         {_, _, _, OldBody} = ?assertMatch({ok, 200, _, _},
             http_client:get(DeprecatedURL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
@@ -260,7 +260,7 @@ broken_compatibility_file_causes_unknown_entries_in_configuration(Config) ->
 broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes) ->
     lists:foreach(fun(Node) ->
         {ok, NodeIpBin} = ip_utils:to_binary(node_ip(Node)),
-        URL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [NodeIpBin]),
+        URL = str_utils:format("https://~ts/api/v3/oneprovider/configuration", [NodeIpBin]),
         {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
             http_client:get(URL, #{}, <<>>, [{ssl_options, [{secure, false}]}])),
         ?assertMatch(#{
