@@ -36,11 +36,11 @@
 -type operation() :: access | create | write | read | remove.
 
 -define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
--define(TEST_FILE_NAME_LEN, application:get_env(?APP_NAME, storage_test_file_name_size, 32)).
--define(TEST_FILE_CONTENT_LEN, application:get_env(?APP_NAME, storage_test_file_content_size, 100)).
+-define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
+-define(TEST_FILE_CONTENT_LEN, op_worker:get_env(storage_test_file_content_size, 100)).
 
-% flag intended only for testing, should never be used in the production.
--define(SKIP_STORAGE_DETECTION, application:get_env(?APP_NAME, skip_storage_detection, false)).
+% flag intended only for acceptance testing, should never be used in the production.
+-define(SKIP_STORAGE_DETECTION, op_worker:get_env(skip_storage_detection, false)).
 
 %%%===================================================================
 %%% API
@@ -131,7 +131,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
         {error, ?ENOENT} -> ok;
         {error, Reason} ->
             Operation = remove,
-            ?error(?autoformat_with_msg("Storage verification failed: ~ts", Operation, Reason)),
+            ?error(?autoformat_with_msg("Storage verification failed: ~ts", [Operation, Reason])),
             throw(?ERROR_STORAGE_TEST_FAILED(remove))
     end.
 
@@ -198,7 +198,7 @@ check_call_result(Result, Operation) ->
                 Class, Reason, Stacktrace),
             throw(?ERROR_STORAGE_TEST_FAILED(Operation));
         {_Class, Reason} ->
-            ?error(?autoformat_with_msg("Storage verification failed: ~ts", Operation, Reason)),
+            ?error(?autoformat_with_msg("Storage verification failed: ~ts", [Operation, Reason])),
             throw(?ERROR_STORAGE_TEST_FAILED(Operation))
     end.
 
