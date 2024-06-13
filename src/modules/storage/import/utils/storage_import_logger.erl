@@ -26,18 +26,18 @@
 
 -spec log_scan_started(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_started(SpaceId, ScanNum, TaskId) ->
-    ?debug("Auto storage import scan ~s started", [TaskId]),
-    log("Auto storage import scan no. ~p started.", [ScanNum], SpaceId).
+    ?debug("Auto storage import scan ~ts started", [TaskId]),
+    log("Auto storage import scan no. ~tp started.", [ScanNum], SpaceId).
 
 -spec log_scan_finished(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_finished(SpaceId, ScanNum, TaskId) ->
-    ?debug("Auto storage import scan ~s finished", [TaskId]),
-    log("Auto storage import scan no. ~p finished.", [ScanNum], SpaceId).
+    ?debug("Auto storage import scan ~ts finished", [TaskId]),
+    log("Auto storage import scan no. ~tp finished.", [ScanNum], SpaceId).
 
 -spec log_scan_cancelled(od_space:id(), non_neg_integer(), traverse:id()) -> ok.
 log_scan_cancelled(SpaceId, ScanNum, TaskId) ->
-    ?debug("Auto storage import scan ~s canceled", [TaskId]),
-    log("Auto storage import scan no. ~p cancelled.", [ScanNum], SpaceId).
+    ?debug("Auto storage import scan ~ts canceled", [TaskId]),
+    log("Auto storage import scan no. ~tp cancelled.", [ScanNum], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -46,8 +46,8 @@ log_scan_cancelled(SpaceId, ScanNum, TaskId) ->
 %%-------------------------------------------------------------------
 -spec log_creation(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
 log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
-    log("Creation of storage file ~s has been detected.~n"
-    "Corresponding file ~s with uuid ~s has been created.",
+    log("Creation of storage file ~ts has been detected.~n"
+    "Corresponding file ~ts with uuid ~ts has been created.",
         [StorageFileId, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
@@ -58,8 +58,8 @@ log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
 -spec log_modification(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id(),
     [storage_import_engine:file_attr_name()]) -> ok.
 log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) ->
-    log("Modification of storage file ~s has been detected. Updated attrs: ~w.~n"
-    "Corresponding file ~s with uuid ~s has been modified.",
+    log("Modification of storage file ~ts has been detected. Updated attrs: ~w.~n"
+    "Corresponding file ~ts with uuid ~ts has been modified.",
         [StorageFileId, UpdatedAttrs, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
@@ -69,8 +69,8 @@ log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) 
 %%-------------------------------------------------------------------
 -spec log_deletion(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
 log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
-    log("Deletion of storage file ~s has been detected.~n"
-    "Corresponding file ~s with uuid ~s has been deleted",
+    log("Deletion of storage file ~ts has been detected.~n"
+    "Corresponding file ~ts with uuid ~ts has been deleted",
         [StorageFileId, CanonicalPath, FileUuid], SpaceId).
 
 
@@ -81,7 +81,7 @@ log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec log_failure(helpers:file_id(), term(), od_space:id()) -> ok.
 log_failure(StorageFileId, Error, SpaceId) ->
-    log("Processing of storage file ~s has failed due to ~w.~n",
+    log("Processing of storage file ~ts has failed due to ~w.~n",
         [StorageFileId, Error], SpaceId).
 
 %%===================================================================

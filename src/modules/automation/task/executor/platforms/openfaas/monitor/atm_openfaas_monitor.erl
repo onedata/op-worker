@@ -277,12 +277,12 @@ report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
             schedule_openfaas_down_report_to_atm_workflow_execution_layer();
         Error = {error, _} ->
             ?error(
-                "Unable to report OpenFaaS down to atm workflow execution layer due to: ~p",
+                "Unable to report OpenFaaS down to atm workflow execution layer due to: ~tp",
                 [Error]
             )
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Unable to report OpenFaaS down to atm workflow execution layer due to ~w:~p",
+            "Unable to report OpenFaaS down to atm workflow execution layer due to ~w:~tp",
             [Type, Reason],
             Stacktrace
         )

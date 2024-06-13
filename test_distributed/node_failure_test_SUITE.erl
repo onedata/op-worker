@@ -102,7 +102,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     [WorkerToCheckP1] = WorkersP1 -- [WorkerToKillP1],
 
     % TODO VFS-7037 uncomment and make it pass
-%%    ct:pal("Create fuse sessions on nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
+%%    ct:pal("Create fuse sessions on nodes: ~n~tp~n~tp", [WorkerToKillP1, WorkerToKillP2]),
 %%    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(User1),
 %%    {FuseSessIdP1, ConnectionsP1} = setup_fuse_session_with_connections(
 %%        AccessToken, WorkerToKillP1, WorkerToCheckP1, SpaceGuid, Attempts
@@ -111,11 +111,11 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 %%        AccessToken, WorkerToKillP2, WorkerToCheckP2, SpaceGuid, Attempts
 %%    ),
 
-    ct:pal("Init tests using node ~p", [WorkerToKillP1]),
+    ct:pal("Init tests using node ~tp", [WorkerToKillP1]),
     DirsAndFiles = create_dirs_and_files(WorkerToKillP1, SessId(P1), SpaceGuid),
 
     failure_test_utils:kill_nodes(Config, [WorkerToKillP1, WorkerToKillP2]),
-    ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
+    ct:pal("Killed nodes: ~n~tp~n~tp", [WorkerToKillP1, WorkerToKillP2]),
 
     file_ops_test_utils:verify_files_and_dirs(WorkerToCheckP2, SessId(P2), DirsAndFiles, Attempts),
     ct:pal("Files check after node kill: done"),
@@ -124,7 +124,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     ct:pal("New dirs and files created"),
 
     _UpdatedConfig = failure_test_utils:restart_nodes(Config, [WorkerToKillP1, WorkerToKillP2]),
-    ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
+    ct:pal("Started nodes: ~n~tp~n~tp", [WorkerToKillP1, WorkerToKillP2]),
 
     file_ops_test_utils:verify_files_and_dirs(WorkerToKillP1, SessId(P1), DirsAndFiles2, Attempts),
     ct:pal("Files check on P1 after restart: done"),

@@ -38,7 +38,7 @@
 -define(ACL_GROUP_TO_ONEDATA_GROUP_PATH, ?TO_PATH([?STORAGE_IMPORT_POSIX_PATH, <<"acl_group_to_onedata_group">>])).
 
 -define(LUMA_URL(LumaConfig, Path),
-    str_utils:format_bin("~s/~s", [luma_config:get_url(LumaConfig), Path])
+    str_utils:format_bin("~ts/~ts", [luma_config:get_url(LumaConfig), Path])
 ).
 
 -endif.

@@ -174,11 +174,11 @@ successful_replica_deletion_test_base(Config, FilesNum, JobsNum) ->
         request_deletion(W1, Request, ?SPACE_ID, JobId, ?DELETION_TYPE),
         [CounterId | CounterIdsAcc]
     end, [], UuidsAndJobIds),
-    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
+    ct:pal("Scheduled in: ~tp s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
     Stopwatch = stopwatch:start(),
     countdown_server:await_all(W1, CounterIds, timer:seconds(600)),
-    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Finished in: ~tp s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -200,11 +200,11 @@ failed_replica_deletion_test_base(Config, FilesNum, JobsNum) ->
         request_deletion(W1, Request, ?SPACE_ID, JobId, ?DELETION_TYPE),
         [CounterId | CounterIdsAcc]
     end, [], UuidsAndJobIds),
-    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
+    ct:pal("Scheduled in: ~tp s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
     Stopwatch = stopwatch:start(),
     countdown_server:await_all(W1, CounterIds, timer:seconds(600)),
-    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Finished in: ~tp s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -227,11 +227,11 @@ canceled_replica_deletion_test_base(Config, FilesNum, JobsNum) ->
         request_deletion(W1, Request, ?SPACE_ID, JobId, ?DELETION_TYPE),
         [CounterId | CounterIdsAcc]
     end, [], UuidsAndJobIds),
-    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
+    ct:pal("Scheduled in: ~tp s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
     Stopwatch = stopwatch:start(),
     countdown_server:await_all(W1, CounterIds, timer:seconds(600)),
-    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Finished in: ~tp s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -265,11 +265,11 @@ throttling_test_base(Config, FilesNum, JobsNum) ->
         end),
         [ScheduledCounterId | ScheduledCountersAcc]
     end, [], UuidsAndJobIds),
-    ct:pal("Scheduled in: ~p s.", [stopwatch:read_seconds(Stopwatch0, float)]),
+    ct:pal("Scheduled in: ~tp s.", [stopwatch:read_seconds(Stopwatch0, float)]),
 
     Stopwatch = stopwatch:start(),
     throttle_test_loop(W1, #{W1 => ScheduledCounters}, MaxParallelRequests),
-    ct:pal("Finished in: ~p s.", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Finished in: ~tp s.", [stopwatch:read_seconds(Stopwatch, float)]),
 
     ?assertEqual(false, is_replica_deletion_master_alive(W1, ?SPACE_ID), 10).
 
@@ -435,12 +435,12 @@ sort_workers(Config) ->
 run_test(Config, Testcase, TestcaseName, FilesAndJobsNums) ->
     Results = lists:map(fun({FilesNum, JobsNum}) ->
         try
-            ct:print("Starting testcase ~p with FilesNum = ~p and JobsNum = ~p.", [TestcaseName, FilesNum, JobsNum]),
+            ct:print("Starting testcase ~tp with FilesNum = ~tp and JobsNum = ~tp.", [TestcaseName, FilesNum, JobsNum]),
             Testcase(Config, FilesNum, JobsNum),
             ok
         catch
             E:R:Stacktrace ->
-                ct:print("Testcase ~p failed due to ~p for FilesNum = ~p, JobsNum = ~p.~nStacktrace: ~n~p",
+                ct:print("Testcase ~tp failed due to ~tp for FilesNum = ~tp, JobsNum = ~tp.~nStacktrace: ~n~tp",
                     [TestcaseName, {E, R}, FilesNum, JobsNum, Stacktrace]),
                 error
         after

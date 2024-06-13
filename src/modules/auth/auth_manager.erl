@@ -246,7 +246,7 @@ verify_credentials(TokenCredentials) ->
                 ),
                 VerificationResult
             catch Type:Reason:Stacktrace ->
-                ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
+                ?error_stacktrace("Cannot verify user credentials due to ~tp:~tp", [
                     Type, Reason
                 ], Stacktrace),
                 ?ERROR_INTERNAL_SERVER_ERROR

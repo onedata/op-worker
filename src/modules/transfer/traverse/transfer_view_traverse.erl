@@ -103,8 +103,8 @@ resolve_file(TransferId, SpaceId, ViewName, ObjectId) ->
         end
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Resolution of file id ~p returned by querying view ~p in space ~p "
-            "during transfer ~s failed due to:~n~p:~p",
+            "Resolution of file id ~tp returned by querying view ~tp in space ~tp "
+            "during transfer ~ts failed due to:~n~tp:~tp",
             [ObjectId, ViewName, SpaceId, TransferId, Type, Reason],
             Stacktrace
         ),

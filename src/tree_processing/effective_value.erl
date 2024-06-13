@@ -204,7 +204,7 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
                 {false, false, true} ->
                     get_or_calculate_multiple_references(Cache, Key, FileDoc, CalculateCallback, Options, ShouldCache);
                 {false, true, _} ->
-                    ?critical("Incorrect usage of effective_value cache ~p. "
+                    ?critical("Incorrect usage of effective_value cache ~tp. "
                         "Calculation has reached the global root directory.", [Cache]),
                     {error, root_dir_reached};
                 {true, _, _} ->

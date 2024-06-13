@@ -194,7 +194,7 @@ request(Client, Req, Timeout) ->
         throw:{error, _} = Err2 ->
             Err2;
         Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error while processing GS request - ~p:~p", [
+            ?error_stacktrace("Unexpected error while processing GS request - ~tp:~tp", [
                 Type, Reason
             ], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
@@ -234,7 +234,10 @@ force_fetch_entity(Client, GRI) ->
         {ok, Doc} ->
             {ok, Doc};
         {error, _} = Error ->
-            throw(?report_internal_server_error("Failed to force fetch entity~ts", [?autoformat(GRI, Error)]))
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Failed to force fetch entity",
+                [GRI, Error]
+            )))
     end.
 
 
@@ -275,7 +278,7 @@ process_push_message(Message) ->
         try
             process_push_message_async(Message)
         catch Type:Reason:Stacktrace ->
-            ?error_stacktrace("Error processing GS push message from Onezone - ~w:~p", [
+            ?error_stacktrace("Error processing GS push message from Onezone - ~w:~tp", [
                 Type, Reason
             ], Stacktrace),
             force_terminate()
@@ -302,7 +305,7 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
             journal_logger:log("Onezone connection established"),
-            ?notice("Onezone connection established: ~p", [ClientRef]),
+            ?notice("Onezone connection established: ~tp", [ClientRef]),
             yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
             {ok, #state{client_ref = ClientRef}};
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
@@ -312,10 +315,11 @@ init([]) ->
         {error, _} = LastError ->
             ?debug("Failed to establish Onezone connection: ~w", [LastError]),
             utils:throttle({?MODULE, ?FUNCTION_NAME, LastError}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
-                ?warning(
-                    "Onezone connection cannot be established (~ts), is the service online? Retrying as long as it takes...~s",
-                    [oneprovider:get_oz_domain(), ?autoformat(LastError)]
-                )
+                ?warning(?autoformat_with_msg(
+                    "Onezone connection cannot be established (~ts), is the service online? Retrying as long as it takes...",
+                    [oneprovider:get_oz_domain()],
+                    LastError
+                ))
             end),
             {stop, normal}
     end.
@@ -410,7 +414,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     journal_logger:log("Onezone connection lost"),
-    ?warning("Onezone connection lost, reason: ~p", [Reason]),
+    ?warning("Onezone connection lost, reason: ~tp", [Reason]),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -453,7 +457,7 @@ code_change(_OldVsn, State, _Extra) ->
 start_gs_connection() ->
     try
         Port = ?GS_CHANNEL_PORT,
-        Address = str_utils:format("wss://~s:~b~s", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
+        Address = str_utils:format("wss://~ts:~b~ts", [oneprovider:get_oz_domain(), Port, ?GS_CHANNEL_PATH]),
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
         {ok, AccessToken} = provider_auth:acquire_access_token(),
@@ -467,7 +471,7 @@ start_gs_connection() ->
         throw:{error, _} = Error ->
             Error;
         Type:Reason:Stacktrace ->
-            ?error_stacktrace("Cannot start gs connection due to ~p:~p", [
+            ?error_stacktrace("Cannot start gs connection due to ~tp:~tp", [
                 Type, Reason
             ], Stacktrace),
             {error, Reason}
@@ -477,11 +481,11 @@ start_gs_connection() ->
 %% @private
 -spec process_push_message_async(gs_protocol:push()) -> ok.
 process_push_message_async(#gs_push_nosub{gri = GRI}) ->
-    ?debug("Subscription cancelled: ~s", [gri:serialize(GRI)]),
+    ?debug("Subscription cancelled: ~ts", [gri:serialize(GRI)]),
     invalidate_cache(GRI);
 
 process_push_message_async(#gs_push_error{error = Error}) ->
-    ?error("Unexpected graph sync error: ~p", [Error]);
+    ?error("Unexpected graph sync error: ~tp", [Error]);
 
 process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
     gs_hooks:handle_entity_deleted(GRI),
@@ -624,7 +628,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_ONEZONE;
         throw:{error, _} = Err -> Err;
         Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error during call to gs_client_worker - ~p:~p", [
+            ?error_stacktrace("Unexpected error during call to gs_client_worker - ~tp:~tp", [
                 Type, Reason
             ], Stacktrace),
             throw(?ERROR_INTERNAL_SERVER_ERROR)
@@ -702,7 +706,7 @@ coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #
             _ when Rev < CachedRev ->
                 % In case the fetched revision is lower, return 'stale_record'
                 % error, which will cause the request to be repeated
-                ?debug("Stale record ~s: received rev. ~B, but rev. ~B is already cached", [gri:serialize(GRI), Rev, CachedRev]),
+                ?debug("Stale record ~ts: received rev. ~B, but rev. ~B is already cached", [gri:serialize(GRI), Rev, CachedRev]),
                 {error, stale_record};
 
             greater when Rev >= CachedRev ->
@@ -714,7 +718,7 @@ coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #
                         gri = GRI#gri{scope = CachedScope}
                     }, ?GS_REQUEST_TIMEOUT)
                 end),
-                ?debug("Cached ~s (rev. ~B)", [gri:serialize(GRI), Rev]),
+                ?debug("Cached ~ts (rev. ~B)", [gri:serialize(GRI), Rev]),
                 NewRecord = gs_client_translator:overwrite_cached_record(GRI, CachedRecord, Record),
                 {ok, put_cache_state(NewRecord, #{
                     scope => Scope, connection_ref => ConnRef, revision => Rev
@@ -723,7 +727,7 @@ coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #
             _ when Rev > CachedRev ->
                 % A doc arrived that has a greater revision, overwrite the
                 % cache, no matter the scopes
-                ?debug("Cached ~s (rev. ~B)", [gri:serialize(GRI), Rev]),
+                ?debug("Cached ~ts (rev. ~B)", [gri:serialize(GRI), Rev]),
                 NewRecord = gs_client_translator:overwrite_cached_record(GRI, CachedRecord, Record),
                 {ok, put_cache_state(NewRecord, #{
                     scope => Scope, connection_ref => ConnRef, revision => Rev

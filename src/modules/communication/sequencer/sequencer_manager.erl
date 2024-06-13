@@ -73,7 +73,7 @@ start_link(SeqManSup, SessId) ->
 -spec handle(pid(), term()) -> ok.
 handle(Manager, #client_message{message_body = #message_stream_reset{
     stream_id = undefined} = Msg}) ->
-    ?debug("Handling ~p by sequencer manager", [Msg]),
+    ?debug("Handling ~tp by sequencer manager", [Msg]),
     {ok, Stms} = get_streams(Manager, sequencer_out_streams),
     maps:map(fun(_, SeqStm) ->
         sequencer_out_stream:send(SeqStm, Msg)
@@ -82,19 +82,19 @@ handle(Manager, #client_message{message_body = #message_stream_reset{
 
 handle(Manager, #client_message{message_body = #message_stream_reset{
     stream_id = StmId} = Msg}) ->
-    ?debug("Handling ~p by sequencer manager", [Msg]),
+    ?debug("Handling ~tp by sequencer manager", [Msg]),
     forward_to_sequencer_out_stream(Msg, StmId, Manager),
     ok;
 
 handle(Manager, #client_message{message_body = #message_request{
     stream_id = StmId} = Msg}) ->
-    ?debug("Handling ~p by sequencer manager", [Msg]),
+    ?debug("Handling ~tp by sequencer manager", [Msg]),
     forward_to_sequencer_out_stream(Msg, StmId, Manager),
     ok;
 
 handle(Manager, #client_message{message_body = #message_acknowledgement{
     stream_id = StmId} = Msg}) ->
-    ?debug("Handling ~p by sequencer manager", [Msg]),
+    ?debug("Handling ~tp by sequencer manager", [Msg]),
     forward_to_sequencer_out_stream(Msg, StmId, Manager),
     ok;
 
@@ -117,7 +117,7 @@ handle(Manager, #server_message{message_stream = #message_stream{
 
 % Test call
 handle(Manager, {close_stream, StmId}) ->
-    ?debug("Closing stream ~p", [StmId]),
+    ?debug("Closing stream ~tp", [StmId]),
     forward_to_sequencer_out_stream(#server_message{
         message_stream = #message_stream{stream_id = StmId},
         message_body = #end_of_message_stream{}
@@ -145,7 +145,7 @@ handle(Manager, Message) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SeqManSup, SessId]) ->
-    ?debug("Initializing sequencer manager for session ~p", [SessId]),
+    ?debug("Initializing sequencer manager for session ~tp", [SessId]),
     process_flag(trap_exit, true),
     init_state(),
     Self = self(),
@@ -171,7 +171,7 @@ init([SeqManSup, SessId]) ->
 % Test call
 handle_call(open_stream, _From, #state{session_id = SessId} = State) ->
     StmId = generate_stream_id(),
-    ?debug("Opening stream ~p in sequencer manager for session ~p", [StmId, SessId]),
+    ?debug("Opening stream ~tp in sequencer manager for session ~tp", [StmId, SessId]),
     {ok, _} = create_sequencer_out_stream(StmId, State),
     {reply, {ok, StmId}, State};
 
@@ -308,7 +308,7 @@ ensure_sent(Msg, SessId) ->
         ok ->
             ok;
         {error, Reason} ->
-            ?error("Cannot send message ~p due to: ~p", [Msg, Reason]),
+            ?error("Cannot send message ~tp due to: ~tp", [Msg, Reason]),
             erlang:send_after(?SEND_RETRY_DELAY, self(), {send, Msg, SessId}),
             ok
     end.

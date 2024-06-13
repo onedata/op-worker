@@ -694,7 +694,7 @@ check_if_all_archives_listed(ExpArchiveIds, Node, SessId, DatasetId, Opts) ->
         {true, true} ->
             ok;
         {true, false} ->
-            ct:fail("Not all expected archive were listed.~nExpected: ~p", [ExpArchiveIds]);
+            ct:fail("Not all expected archive were listed.~nExpected: ~tp", [ExpArchiveIds]);
         {false, _} ->
             NewOpts = update_opts(Opts, ListedArchives),
             check_if_all_archives_listed(RestExpArchiveIds, Node, SessId, DatasetId, NewOpts)

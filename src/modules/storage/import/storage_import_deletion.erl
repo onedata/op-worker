@@ -383,7 +383,7 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
             storage_import_monitoring:mark_processed_job(SpaceId),
             ok;
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
+            ?error_stacktrace("~tp:maybe_delete_file_and_update_counters failed due to ~tp",
                 [?MODULE, {Error, Reason}], Stacktrace),
             storage_import_monitoring:mark_failed_file(SpaceId)
     end.

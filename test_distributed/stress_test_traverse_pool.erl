@@ -178,7 +178,7 @@ start_traverse(Config, TraverseInfo, ID) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),
 
-    ct:print("Start traverse ~p", [ID]),
+    ct:print("Start traverse ~tp", [ID]),
 
     User = <<"user1">>,
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
@@ -204,11 +204,11 @@ process_task_description(Config, Type, ID) ->
     Evaluations = maps:get(dirs_evaluation, Description, 0),
     RequiredEvaluations = FilesDone * (DirLevel + 1),
 
-    ct:print("Files done: ~p, dirs done ~p~ndirs evaluations ~p, possible evaluations ~p, cache size ~p, test type ~p",
+    ct:print("Files done: ~tp, dirs done ~tp~ndirs evaluations ~tp, possible evaluations ~tp, cache size ~tp, test type ~tp",
         [FilesDone, DirsDone, Evaluations, RequiredEvaluations, 500, Type]),
 
     case Failed + Failed2 > 0 of
-        true -> ct:print("Alert! Master jobs failed: ~p, slave jobs failed ~p", [Failed, Failed2]);
+        true -> ct:print("Alert! Master jobs failed: ~tp, slave jobs failed ~tp", [Failed, Failed2]);
         _ -> ok
     end,
 

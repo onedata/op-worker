@@ -441,7 +441,7 @@ assert_event_received(ExpectedEvent) ->
     try
         ?assert(lists:member(ExpectedEvent, GetEventsFun()), ?ATTEMPTS)
     catch C:R:S ->
-        ?ct_pal_exception("Expected event not received: ~p~nAll events: ~p~n", [ExpectedEvent, GetSavedEventsFun()], C, R, S),
+        ?ct_pal_exception("Expected event not received: ~tp~nAll events: ~tp~n", [ExpectedEvent, GetSavedEventsFun()], C, R, S),
         erlang:apply(erlang, C, [R])
     end.
 

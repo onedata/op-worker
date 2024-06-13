@@ -70,7 +70,7 @@ run(SpaceId, Incarnation) ->
             % Space dir is not found - traverse is not needed
             dir_stats_service_state:report_collections_initialization_finished(SpaceId);
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Error starting stats initialization traverse for space ~p (incarnation ~p): ~p:~p",
+            ?error_stacktrace("Error starting stats initialization traverse for space ~tp (incarnation ~tp): ~tp:~tp",
                 [SpaceId, Incarnation, Error, Reason], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
@@ -124,7 +124,7 @@ do_master_job(Job, MasterJobExtendedArgs) ->
 
 -spec do_slave_job(tree_traverse:slave_job(), tree_traverse:id()) -> ok.
 do_slave_job(_, TaskId) ->
-    ?warning("Not expected slave job of ~p for task ~p", [?MODULE, TaskId]),
+    ?warning("Not expected slave job of ~tp for task ~tp", [?MODULE, TaskId]),
     ok.
 
 
@@ -179,8 +179,8 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
         {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error_exception("Error when listing directory during stats initialization: ~s",
-                [?autoformat([FileUuid])], error, Reason, Stacktrace),
+            ?error_exception(?autoformat_with_msg("Error when listing directory during stats initialization:",
+                FileUuid), error, Reason, Stacktrace),
             ok = dir_stats_collector:update_stats_of_dir(
                 file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1}),
             {ok, #{}}

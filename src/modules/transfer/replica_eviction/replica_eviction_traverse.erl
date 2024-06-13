@@ -111,7 +111,7 @@ start_replica_eviction_file_tree_traverse(ReplicaHolderProviderId, #document{
             transfer:mark_traverse_finished(TransferId);
         Class:Reason:Stacktrace ->
             ?error_exception(
-                "Failed to start transfer file tree traverse ~p", [TransferId],
+                "Failed to start transfer file tree traverse ~tp", [TransferId],
                 Class, Reason, Stacktrace
             ),
             replica_eviction_status:handle_aborting(TransferId)
@@ -153,7 +153,7 @@ start_replica_eviction_view_traverse(ReplicaHolderProviderId, #document{
             transfer:mark_traverse_finished(TransferId);
         Class:Reason:Stacktrace ->
             ?error_exception(
-                "Failed to start transfer view traverse ~p", [TransferId],
+                "Failed to start transfer view traverse ~tp", [TransferId],
                 Class, Reason, Stacktrace
             ),
             replica_eviction_status:handle_aborting(TransferId)

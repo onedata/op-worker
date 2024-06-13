@@ -112,17 +112,17 @@ sanitize(RawConfig) ->
         % config is a nested object of the archive object,
         % therefore catch errors and add "config." to name of the key associated with the error
         throw:?ERROR_MISSING_REQUIRED_VALUE(Key) ->
-            throw(?ERROR_MISSING_REQUIRED_VALUE(str_utils:format_bin("config.~s", [Key])));
+            throw(?ERROR_MISSING_REQUIRED_VALUE(str_utils:format_bin("config.~ts", [Key])));
         throw:?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedVals) ->
-            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(str_utils:format_bin("config.~s", [Key]), AllowedVals));
+            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(str_utils:format_bin("config.~ts", [Key]), AllowedVals));
         throw:?ERROR_BAD_VALUE_BOOLEAN(Key) ->
-            throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:format_bin("config.~s", [Key])));
+            throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:format_bin("config.~ts", [Key])));
         throw:?ERROR_BAD_VALUE_JSON(Key) ->
-            throw(?ERROR_BAD_VALUE_JSON(str_utils:format_bin("config.~s", [Key])));
+            throw(?ERROR_BAD_VALUE_JSON(str_utils:format_bin("config.~ts", [Key])));
         throw:?ERROR_BAD_VALUE_ATOM(Key) ->
-            throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])));
+            throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~ts", [Key])));
         throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(str_utils:format_bin("config.~s", [Key])))
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(str_utils:format_bin("config.~ts", [Key])))
     end.
 
 

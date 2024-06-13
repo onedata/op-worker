@@ -353,8 +353,8 @@ not_received_any_internal(NodesToCounterIds, Timeout, NotMatchedMessages) ->
         Msg = ?COUNTDOWN_FINISHED(CounterId, Node, _Data) ->
             case is_expected_counter(Node, CounterId, NodesToCounterIds) of
                 true ->
-                    ct:print("Countdown server unexpectedly received ~p", [Msg]),
-                    ct:fail("Countdown server unexpectedly received ~p", [Msg]);
+                    ct:print("Countdown server unexpectedly received ~tp", [Msg]),
+                    ct:fail("Countdown server unexpectedly received ~tp", [Msg]);
                 false ->
                     not_received_any_internal(NodesToCounterIds, Timeout, [Msg | NotMatchedMessages])
             end

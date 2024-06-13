@@ -461,7 +461,7 @@ delete_share_test(_Config) ->
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format_bin("Delete ~s for ~s using /shares rest endpoint", [
+                    name = str_utils:format_bin("Delete ~ts for ~ts using /shares rest endpoint", [
                         ShareTypeBin, FileType
                     ]),
                     type = rest,
@@ -469,7 +469,7 @@ delete_share_test(_Config) ->
                     validate_result_fun = build_delete_share_validate_rest_call_result_fun(MemRef, Providers)
                 },
                 #scenario_template{
-                    name = str_utils:format_bin("Delete ~s for ~s using /shares gs api", [
+                    name = str_utils:format_bin("Delete ~ts for ~ts using /shares gs api", [
                         ShareTypeBin, FileType
                     ]),
                     type = gs,
@@ -766,14 +766,14 @@ get_random_op_node(ProviderSelector) ->
 -spec build_share_public_url(od_share:id()) -> binary().
 build_share_public_url(ShareId) ->
     OzDomain = ozw_test_rpc:get_domain(),
-    str_utils:format_bin("https://~s/share/~s", [OzDomain, ShareId]).
+    str_utils:format_bin("https://~ts/share/~ts", [OzDomain, ShareId]).
 
 
 %% @private
 -spec build_share_public_rest_url(od_share:id()) -> binary().
 build_share_public_rest_url(ShareId) ->
     OzDomain = ozw_test_rpc:get_domain(),
-    str_utils:format_bin("https://~s/api/v3/onezone/shares/~s/public", [OzDomain, ShareId]).
+    str_utils:format_bin("https://~ts/api/v3/onezone/shares/~ts/public", [OzDomain, ShareId]).
 
 
 %%%===================================================================

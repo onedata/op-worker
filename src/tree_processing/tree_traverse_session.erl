@@ -92,7 +92,7 @@ acquire_for_task(_UserId, Pool, TaskId) ->
         {error, _} = Error ->
             utils:throttle(?LOG_THROTTLING_INTERVAL, fun() ->
                 ?error(
-                    "Traverse ~s performed by pool ~s failed to acquire offline session due to ~p. "
+                    "Traverse ~ts performed by pool ~ts failed to acquire offline session due to ~tp. "
                     "Traverse will be cancelled.", [TaskId, Pool, Error])
             end),
             tree_traverse:cancel(Pool, TaskId),

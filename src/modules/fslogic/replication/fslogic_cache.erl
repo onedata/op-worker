@@ -133,7 +133,7 @@ flush(Type) ->
             ok ->
                 [Key | Acc];
             FlushError ->
-                ?warning("Fslogic cache flush error: ~p for key ~p", [FlushError, Key]),
+                ?warning("Fslogic cache flush error: ~tp for key ~tp", [FlushError, Key]),
                 Acc
         end
     end, [], KeysToFlush),
@@ -147,7 +147,7 @@ flush(Type) ->
         0 ->
             ok;
         _ ->
-            ?warning("Fslogic cache not flushed keys: ~p", [NewKM ++ (NewKBM -- NewKM)]),
+            ?warning("Fslogic cache not flushed keys: ~tp", [NewKM ++ (NewKBM -- NewKM)]),
             init_flush_check(),
             flush_error
     end.
@@ -214,12 +214,12 @@ verify_flush_ans(Key, Check1, Check2) ->
                     ok;
                 _ ->
                     ?error("Local blocks flush failed for key"
-                    " ~p: ~p", [Key, Check2]),
+                    " ~tp: ~tp", [Key, Check2]),
                     Check2
             end;
         _ ->
             ?error("Local blocks del failed for key"
-            " ~p: ~p", [Key, Check1]),
+            " ~tp: ~tp", [Key, Check1]),
             Check1
     end.
 
@@ -336,7 +336,7 @@ get_doc_including_deleted(Key, ForceReload) ->
                 {error, not_found} = ENF ->
                     ENF;
                 Error ->
-                    ?error("Fslogic cache error: ~p", [Error]),
+                    ?error("Fslogic cache error: ~tp", [Error]),
                     throw({fslogic_cache_error, Error})
             end
     end.
@@ -392,7 +392,7 @@ delete_doc(Key, StatsUpdateReason) ->
         {error, not_found} ->
             ok;
         Error ->
-            ?error("~p:~p error ~p for key ~p", [?MODULE, ?FUNCTION_NAME, Error, Key]),
+            ?error("~tp:~tp error ~tp for key ~tp", [?MODULE, ?FUNCTION_NAME, Error, Key]),
             Error
     end,
 
@@ -489,7 +489,7 @@ get_public_blocks(Key) ->
                 #document{} ->
                     get_public_blocks(Key);
                 _ ->
-                    ?warning("Get public blocks for not existing key ~p", [Key]),
+                    ?warning("Get public blocks for not existing key ~tp", [Key]),
                     []
             end;
         Blocks ->
@@ -582,10 +582,10 @@ finish_blocks_usage(Key) ->
     case Ans of
         undefined ->
             ?warning("Attepmted to finish usage of blocks that were not previously "
-                "declared for the key ~p", [Key]),
+                "declared for the key ~tp", [Key]),
             [];
         [] ->
-            ?warning("Empty list of blocks to use declared for the key ~p", [Key]),
+            ?warning("Empty list of blocks to use declared for the key ~tp", [Key]),
             [];
         [Head] ->
             erase({?BLOCKS_IN_USE, Key}),
@@ -793,7 +793,7 @@ flush_key(Key, Type) ->
                             erase({?ENSURE_SYNCED, Key}),
                             flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                         Error ->
-                            ?error("Flush failed for key ~p: ~p", [Key, Error]),
+                            ?error("Flush failed for key ~tp: ~tp", [Key, Error]),
                             Error
                     end
             end,
@@ -943,7 +943,7 @@ apply_size_change(Key, FileUuid) ->
                 ok
             catch
                 Error:Reason:Stacktrace ->
-                    ?error_stacktrace("Apply quota error ~p:~p", [Error, Reason], Stacktrace),
+                    ?error_stacktrace("Apply quota error ~tp:~tp", [Error, Reason], Stacktrace),
                     {error, Reason}
             end
     end.

@@ -268,7 +268,7 @@ stream_space_changes(Req, State) ->
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
         Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
+            ?error_stacktrace("Unexpected error in ~tp:process_request - ~tp:~tp", [
                 ?MODULE, Type, Message
             ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
@@ -506,7 +506,7 @@ times_field_idx(_FieldName) ->
 %%--------------------------------------------------------------------
 -spec init_stream(State :: map()) -> map().
 init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = State) ->
-    ?info("[ changes ]: Starting stream ~p", [Since]),
+    ?info("[ changes ]: Starting stream ~tp", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
@@ -546,7 +546,7 @@ stream_loop(Req, State = #{
                     send_change(Req, ChangedDoc, State)
                 catch Class:Reason:Stacktrace ->
                     % Can appear when document connected with deleted file_meta appears
-                    ?debug_exception("Cannot stream change of ~p", [ChangedDoc], Class, Reason, Stacktrace)
+                    ?debug_exception("Cannot stream change of ~tp", [ChangedDoc], Class, Reason, Stacktrace)
                 end
             end, ChangedDocs),
             stream_loop(Req, State);
@@ -611,7 +611,7 @@ send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
                     Val
                 catch
                     _:Error1 ->
-                        ?debug("Cannot fetch cdmi id for changes, error: ~p", [Error1]),
+                        ?debug("Cannot fetch cdmi id for changes, error: ~tp", [Error1]),
                         <<>>
                 end,
             FilePath =
@@ -619,7 +619,7 @@ send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
                     fslogic_file_id:uuid_to_path(?ROOT_SESS_ID, FileUuid)
                 catch
                     _:Error2 ->
-                        ?debug("Cannot fetch Path for changes, error: ~p", [Error2]),
+                        ?debug("Cannot fetch Path for changes, error: ~tp", [Error2]),
                         <<>>
                 end,
             CommonInfo = #{
@@ -860,11 +860,11 @@ notify(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},
     ok;
 notify(Pid, Ref, _Triggers, {error, _Seq, shutdown = Reason}) ->
-    ?debug("Changes stream terminated due to: ~p", [Reason]),
+    ?debug("Changes stream terminated due to: ~tp", [Reason]),
     Pid ! {Ref, stream_ended},
     ok;
 notify(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
-    ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
+    ?error("Changes stream terminated abnormally due to: ~tp", [Reason]),
     Pid ! {Ref, stream_ended},
     ok.
 

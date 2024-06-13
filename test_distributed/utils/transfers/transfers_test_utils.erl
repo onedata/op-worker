@@ -264,8 +264,8 @@ assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts) ->
                     timer:sleep(timer:seconds(1)),
                     assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts - 1);
                 true ->
-                    ct:pal("Transfer: ~p not found.", [TransferId]),
-                    ct:fail("Transfer: ~p not found.", [TransferId])
+                    ct:pal("Transfer: ~tp not found.", [TransferId]),
+                    ct:fail("Transfer: ~tp not found.", [TransferId])
             end;
         throw:{assertion_error, Field, Expected, Value} ->
             case Attempts == 0 of
@@ -275,9 +275,9 @@ assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts) ->
                 true ->
                     {Format, Args} = transfer_fields_description(Node, TransferId),
                     ct:pal(
-                        "Assertion of field \"~p\" in transfer ~p failed.~n"
-                        "    Expected: ~p~n"
-                        "    Value: ~p~n" ++ Format, [Field, TransferId, Expected, Value | Args]),
+                        "Assertion of field \"~tp\" in transfer ~tp failed.~n"
+                        "    Expected: ~tp~n"
+                        "    Value: ~tp~n" ++ Format, [Field, TransferId, Expected, Value | Args]),
                     ct:fail("assertion failed")
             end
     end.
@@ -328,5 +328,5 @@ transfer_fields_description(Node, TransferId) ->
     FieldsList = record_info(fields, transfer),
     Transfer = transfers_test_utils:get_transfer(Node, TransferId),
     lists:foldl(fun(FieldName, {AccFormat, AccArgs}) ->
-        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
-    end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
+        {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
+    end, {"~nTransfer ~tp fields values:~n", [TransferId]}, FieldsList).

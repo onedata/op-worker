@@ -372,7 +372,7 @@ get_qos_transfer_stats_collection_schema_test_base(Config, Type) ->
             client_spec = ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS(Config),
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format_bin("Get ~s stats collection schema", [Type]),
+                    name = str_utils:format_bin("Get ~ts stats collection schema", [Type]),
                     type = gs,
                     prepare_args_fun = prepare_args_fun_gs(undefined, {qos_transfer_stats_collection, schema, Type}),
                     validate_result_fun = validate_result_fun_gs(undefined, {qos_transfer_stats_collection, schema, Type})

@@ -171,7 +171,7 @@ process_event_routing_keys(#event_routing_keys{
         }
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Processing event routing keys error ~p~p for keys ~p", [Error, Reason, Record], Stacktrace),
+            ?error_stacktrace("Processing event routing keys error ~tp~tp for keys ~tp", [Error, Reason, Record], Stacktrace),
             {error, processing_event_routing_keys_failed}
     end.
 

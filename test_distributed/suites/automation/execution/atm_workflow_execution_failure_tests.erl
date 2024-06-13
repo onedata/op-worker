@@ -184,7 +184,7 @@
     <<"value">>, ?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(
         ?TARGET_STORE_SCHEMA_ID,
         ?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
-            "Time series name generator '~s' specified in one of the dispatch rules "
+            "Time series name generator '~ts' specified in one of the dispatch rules "
             "does not reference any defined time series schema",
             [?MISSING_TS_NAME_GENERATOR]
         ))

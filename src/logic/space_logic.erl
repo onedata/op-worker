@@ -490,7 +490,7 @@ get_harvesters(SpaceId) ->
         {ok, Doc} ->
             get_harvesters(Doc);
         {error, _} = Error ->
-            ?error("space_logic:get_harvesters(~p) failed due to ~p", [SpaceId, Error]),
+            ?error("space_logic:get_harvesters(~tp) failed due to ~tp", [SpaceId, Error]),
             Error
     end.
 

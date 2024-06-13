@@ -86,7 +86,7 @@ gen_file_name(
     AtmStoreType = atm_store_container:get_store_type(AtmStoreContainer),
     AtmStoreName = sanitize_binary(get_store_name(AtmStoreId, AtmStore, AtmWorkflowExecution)),
 
-    str_utils:format_bin("~s.~p.~s.~B-~2..0B-~2..0B_~2..0B-~2..0B-~2..0B.json", [
+    str_utils:format_bin("~ts.~tp.~ts.~B-~2..0B-~2..0B_~2..0B-~2..0B-~2..0B.json", [
         binary:part(AtmWorkflowExecutionId, 0, 12), AtmStoreType, AtmStoreName,
         Year, Month, Day, Hour, Minute, Second
     ]).

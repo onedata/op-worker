@@ -64,7 +64,7 @@ build_url(AbsolutePath) ->
 build_url(Scheme, AbsolutePath) ->
     Port = https_listener:port(),
     Host = get_domain(),
-    str_utils:format_bin("~s://~s:~B~s", [Scheme, Host, Port, AbsolutePath]).
+    str_utils:format_bin("~ts://~ts:~B~ts", [Scheme, Host, Port, AbsolutePath]).
 
 
 -spec build_rest_url(binary() | [binary()]) -> binary().
@@ -197,7 +197,7 @@ set_up_service_in_onezone() ->
             ?info("Skipping GUI upload as it is already present in Onezone"),
             ?info("Oneprovider worker service successfully set up in Onezone");
         ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
-            ?info("Uploading GUI to Onezone (~s)", [GuiHash]),
+            ?info("Uploading GUI to Onezone (~ts)", [GuiHash]),
             case cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH) of
                 ok ->
                     ?info("GUI uploaded succesfully"),
@@ -207,7 +207,7 @@ set_up_service_in_onezone() ->
                     ?alert(
                         "Oneprovider worker service could not be successfully set "
                         "up in Onezone due to an error during GUI package upload. "
-                        "The Web GUI might be non-functional.~nError was: ~p",
+                        "The Web GUI might be non-functional.~nError was: ~tp",
                         [Error]
                     )
             end
@@ -248,7 +248,7 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         {ok, ProviderId}
     catch
         T:M:Stacktrace ->
-            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M], Stacktrace),
+            ?error_stacktrace("Cannot register in OZ - ~tp:~tp", [T, M], Stacktrace),
             {error, M}
     end.
 

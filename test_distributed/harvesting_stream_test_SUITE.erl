@@ -168,7 +168,7 @@ all() -> ?ALL([
                             {line, ?LINE}
                         ],
                         ct:print("assertHarvestMetadataNotCalled_failed: ~lp~n"
-                            "Unexpectedly received: ~p~n", [__Args, __HM]),
+                            "Unexpectedly received: ~tp~n", [__Args, __HM]),
                         erlang:error({assertHarvestMetadataNotCalled_failed, __Args})
                 end
         after
@@ -1476,7 +1476,7 @@ couchbase_changes_stream_mock_registry_get(Node, StreamPid, 0) ->
     case rpc:call(Node, couchbase_changes_stream_mock_registry, get, [StreamPid]) of
         Pid when is_pid(Pid) -> Pid;
         Other ->
-            ct:fail("couchbase_changes_stream_mock_registry:get returned ~p", [Other])
+            ct:fail("couchbase_changes_stream_mock_registry:get returned ~tp", [Other])
     end;
 couchbase_changes_stream_mock_registry_get(Node, StreamPid, Attempts) ->
     case rpc:call(Node, couchbase_changes_stream_mock_registry, get, [StreamPid]) of

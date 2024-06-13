@@ -191,8 +191,8 @@ synchronizer_test_base(Config0) ->
     {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
     {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
 
-    ct:print("Separate blocks: ~p, random read ~p, threads ~p,"
-    " iops remote 1: ~p, iops remote 2: ~p, iops local 1: ~p, iops local 2: ~p", [
+    ct:print("Separate blocks: ~tp, random read ~tp, threads ~tp,"
+    " iops remote 1: ~tp, iops remote 2: ~tp, iops local 1: ~tp, iops local 2: ~tp", [
         SeparateBlocks, RandomRead, Threads,  1000000 * Threads * BlocksCount / SyncTime1,
         1000000 * Threads * BlocksCount / SyncTime1_2, 1000000 * Threads * BlocksCount / SyncTime2,
         1000000 * Threads * BlocksCount / SyncTime2_2]).
@@ -260,8 +260,8 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     {SyncTime1, SyncTime1_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
     {SyncTime2, SyncTime2_2} = do_sync_test(FileCtxs, Worker1, SessId(Worker1), BlockSize, Blocks),
 
-    ct:print("Repeat: ~p: iops remote 1: ~p, iops remote 2: ~p, "
-        "iops local 1: ~p, iops local 2: ~p", [RepNum,  1000000 * BlocksCount / SyncTime1,
+    ct:print("Repeat: ~tp: iops remote 1: ~tp, iops remote 2: ~tp, "
+        "iops local 1: ~tp, iops local 2: ~tp", [RepNum,  1000000 * BlocksCount / SyncTime1,
         1000000 * BlocksCount / SyncTime1_2, 1000000 * BlocksCount / SyncTime2,
         1000000 * BlocksCount / SyncTime2_2]),
 
@@ -357,7 +357,7 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
 
     case PrintAns of
         true ->
-            ct:print("Repeat: ~p, many blocks: ~p, read remote: ~p, read local: ~p, open: ~p, close: ~p", [
+            ct:print("Repeat: ~tp, many blocks: ~tp, read remote: ~tp, read local: ~tp, open: ~tp, close: ~tp", [
                 RepNum, SeparateBlocks, ReadTime1 / BlocksCount, ReadTime2 / BlocksCount, OpenTime, CloseTime]),
             ok;
         _ ->
@@ -454,7 +454,7 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
         maps:put(Key, max(V, Time), Acc)
     end, #{}, Answers),
 
-    ct:print("Read max times ~p", [AnswersMap]),
+    ct:print("Read max times ~tp", [AnswersMap]),
 
     ok.
 
@@ -521,9 +521,9 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     ok = test_utils:mock_unload(Workers2, transfer),
     ok = test_utils:mock_unload(Workers2, replica_updater),
 
-    ct:pal("Transfer duration [s]: ~p~n"
-           "Transfer stats updates per second ~p~n"
-           "File location updates per second ~p", [
+    ct:pal("Transfer duration [s]: ~tp~n"
+           "Transfer stats updates per second ~tp~n"
+           "File location updates per second ~tp", [
         Duration, TUPS, FLUPS
     ]),
     ok.
@@ -630,7 +630,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     end, #{}, Answers),
 
     FetchCalls = rpc:call(Worker2, meck, num_calls, [rtransfer_config, fetch, 6]),
-    ct:print("Times ~p, fetch calls ~p", [AnswersMap, FetchCalls]),
+    ct:print("Times ~tp, fetch calls ~tp", [AnswersMap, FetchCalls]),
     ok.
 
 rtransfer_blocking_test_cleanup(Config) ->
@@ -651,7 +651,7 @@ basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, A
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
 basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
 
-%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
+%%    ct:print("Test ~tp", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
@@ -680,24 +680,24 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
 
     lists:foreach(fun(W) ->
         Level2TmpDir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-%%        ct:print("Verify dir ~p", [{Level2TmpDir, W}]),
+%%        ct:print("Verify dir ~tp", [{Level2TmpDir, W}]),
         ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId(W), Level2TmpDir)),
         verify_stats(Config, Level2TmpDir, true),
 
         lists:foreach(fun(W2) ->
             Level3TmpDir = <<Level2TmpDir/binary, "/", (generator:gen_name())/binary>>,
-%%            ct:print("Verify dir2 ~p", [{Level3TmpDir, W}]),
+%%            ct:print("Verify dir2 ~tp", [{Level3TmpDir, W}]),
             ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, SessId(W2), Level3TmpDir)),
             verify_stats(Config, Level3TmpDir, true)
         end, Workers),
-        ct:print("Tree verification from node ~p done", [W])
+        ct:print("Tree verification from node ~tp done", [W])
     end, Workers),
 
     lists:foreach(fun(W) ->
         Level2TmpFile = <<Dir/binary, "/", (generator:gen_name())/binary>>,
         create_file_on_worker(Config, FileBeg, 4, Level2TmpFile, W),
         verify_file(Config, FileBeg, {4, Level2TmpFile}),
-        ct:print("File from node ~p verified", [W])
+        ct:print("File from node ~tp verified", [W])
     end, Workers),
 
     verify(Config, fun(W) ->
@@ -754,7 +754,7 @@ create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritt
     create_after_del_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
 create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
 
-%%    ct:print("Test ~p", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
+%%    ct:print("Test ~tp", [{User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, DirsNum, FilesNum}]),
 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
 
@@ -785,11 +785,11 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
     Workers = ?config(op_worker_nodes, Config),
 
     lists:foreach(fun(I) ->
-        ct:print("~p ~p", [Desc, I]),
+        ct:print("~tp ~tp", [Desc, I]),
         DelFile = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
         lists:foldl(fun
             (W, undefined) ->
-                ct:print("Before del ~p", [{DelFile, W}]),
+                ct:print("Before del ~tp", [{DelFile, W}]),
                 WriteWorker = case WriteOn1 of
                     true -> Worker1;
                     _ -> W
@@ -799,7 +799,7 @@ delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
                 create_file_on_worker(Config, Beg, BegSize, DelFile, WriteWorker, 5),
                 verify_file(Config, Beg, {BegSize, DelFile});
             (W, DelInfo) ->
-                ct:print("Del ~p", [{DelFile, W}]),
+                ct:print("Del ~tp", [{DelFile, W}]),
                 WriteWorker = case WriteOn1 of
                     true -> Worker1;
                     _ -> W
@@ -883,7 +883,7 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     ct:print("Dirs created"),
 
     lists:map(fun(D) ->
-        ct:print("Verify dir ~p", [D]),
+        ct:print("Verify dir ~tp", [D]),
         verify_stats(Config, D, true)
     end, Level3Dirs),
 
@@ -901,12 +901,12 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     verify_dir_size(Config, Level2Dir, length(Level3Dirs) + length(Level3Dirs2) + 1),
 
     Level3Dirs2Uuids = lists:map(fun(D) ->
-        ct:print("Verify dir ~p", [D]),
+        ct:print("Verify dir ~tp", [D]),
         verify_stats(Config, D, true)
     end, Level3Dirs2),
 
     Level4FilesVerified = lists:map(fun(F) ->
-        ct:print("Verify file ~p", [F]),
+        ct:print("Verify file ~tp", [F]),
         verify_file(Config, FileBeg, F)
     end, Level4Files),
     verify_dir_size(Config, Level3Dir, length(Level4Files)),
@@ -922,11 +922,11 @@ many_ops_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, No
     ct:print("Dirs and files deleted"),
 
     lists:map(fun(F) ->
-        ct:print("Verify file del ~p", [F]),
+        ct:print("Verify file del ~tp", [F]),
         verify_del(Config, F)
     end, Level4FilesVerified),
     lists:map(fun({D, Uuid}) ->
-        ct:print("Verify dir del ~p", [D]),
+        ct:print("Verify dir del ~tp", [D]),
         verify_del(Config, {D, Uuid, []})
     end, lists:zip(Level3Dirs2, Level3Dirs2Uuids)),
     verify_dir_size(Config, Level3Dir, 0),
@@ -963,7 +963,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
     ct:print("File verified"),
 
     lists:foldl(fun(W, Acc) ->
-        ct:print("Changes of file from node ~p", [W]),
+        ct:print("Changes of file from node ~tp", [W]),
         OpenAns = lfm_proxy:open(W, SessId(W), {path, Level2File}, rdwr),
         ?assertMatch({ok, _}, OpenAns),
         {ok, Handle} = OpenAns,
@@ -975,7 +975,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
         NewAcc = <<Acc/binary, WriteBuf/binary>>,
 
         verify(Config, fun(W2) ->
-            ct:print("Verify write ~p", [{Level2File, W2}]),
+            ct:print("Verify write ~tp", [{Level2File, W2}]),
             ?match({ok, NewAcc},
                 begin
                     {ok, Handle2} = lfm_proxy:open(W2, SessId(W2), {path, Level2File}, rdwr),
@@ -986,7 +986,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
                     end
                 end, Attempts)
         end),
-        ct:print("Changes of file from node ~p verified", [W]),
+        ct:print("Changes of file from node ~tp verified", [W]),
         NewAcc
     end, <<>>, Workers),
 
@@ -1010,7 +1010,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
             end,
         ?assertMatch({_, {ok, _}}, MkAnsCheck),
         {Level2TmpDir, _} = MkAnsCheck,
-%%        ct:print("Verify spawn1 ~p", [{Level2TmpDir}]),
+%%        ct:print("Verify spawn1 ~tp", [{Level2TmpDir}]),
         verify_stats(Config, Level2TmpDir, true),
         ct:print("Dir verified"),
         [Level2TmpDir | Acc]
@@ -1038,7 +1038,7 @@ distributed_modification_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyN
                 end,
             ?assertMatch({_, {ok, _}}, MkAnsCheck),
             {Level3TmpDir, _} = MkAnsCheck,
-%%            ct:print("Verify spawn2 ~p", [{Level3TmpDir}]),
+%%            ct:print("Verify spawn2 ~tp", [{Level3TmpDir}]),
             verify_stats(Config, Level3TmpDir, true),
             ct:print("Dir verified")
         end, Workers)
@@ -1099,7 +1099,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ct:print("Children created"),
 
     Test = fun(MainDir, Children, Desc, DelWorkers) ->
-        ct:print("Test ~p", [Desc]),
+        ct:print("Test ~tp", [Desc]),
 
         ChildrenWithUuids = lists:map(fun(Child) ->
             {Child, verify_stats(Config, Child, true)}
@@ -1136,7 +1136,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
                 end,
             ?assertMatch({rm_ans, _, _, _, ok}, RmAnsCheck),
             {rm_ans, RecW, RecDir, RecUuid, ok} = RmAnsCheck,
-            ct:print("Verify spawn ~p", [{RecW, RecDir, RecUuid}]),
+            ct:print("Verify spawn ~tp", [{RecW, RecDir, RecUuid}]),
             verify_del(Config, {RecDir, RecUuid, []}),
             ct:print("Dir rm verified")
         end, Zipped),
@@ -1171,7 +1171,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
 %%    SpaceKey = SpaceDoc#document.key,
-%%    ct:print("Space key ~p", [SpaceKey]),
+%%    ct:print("Space key ~tp", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
 %%        ct:print("Do test"),
@@ -1189,7 +1189,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
                 },
                 scope = SpaceId
             },
-%%            ct:print("Doc ~p ~p", [Uuid, Name]),
+%%            ct:print("Doc ~tp ~tp", [Uuid, Name]),
             {Doc, Name}
         end,
 
@@ -1427,7 +1427,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         ]
     ],
     lists:foreach(fun(Num) ->
-        ct:print("Consistency config number ~p", [Num]),
+        ct:print("Consistency config number ~tp", [Num]),
         DoTest(lists:nth(Num, TestConfigs))
     end, ConfigsNum),
 
@@ -1439,7 +1439,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
 
     CreateLog = lists:foldl(fun(W, Acc) ->
         lists:foldl(fun({_, SN}, Acc2) ->
-            ct:print("Create dirs: node ~p, space ~p", [W, SN]),
+            ct:print("Create dirs: node ~tp, space ~tp", [W, SN]),
 
             Config = proplists:get_value(SN, SpaceConfigs),
             SessId = ?config(session, Config),
@@ -1456,16 +1456,16 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
     end, [], Workers),
 
     lists:foreach(fun({Dir, Level2Dir, _Level2File, W, SN}) ->
-        ct:print("Verify dirs, node ~p, space ~p ~p", [W, SN, Dir]),
+        ct:print("Verify dirs, node ~tp, space ~tp ~tp", [W, SN, Dir]),
 
         Config = proplists:get_value(SN, SpaceConfigs),
         verify_stats(Config, Dir, true),
-        ct:print("Verify dirs, node ~p, space ~p ~p", [W, SN, Level2Dir]),
+        ct:print("Verify dirs, node ~tp, space ~tp ~tp", [W, SN, Level2Dir]),
         verify_stats(Config, Level2Dir, true)
     end, CreateLog),
 
     FileCreateLog = lists:foldl(fun({_Dir, _Level2Dir, Level2File, W, SN}, Acc) ->
-        ct:print("Create files: node ~p, space ~p", [W, SN]),
+        ct:print("Create files: node ~tp, space ~tp", [W, SN]),
 
         FileBeg = <<"1234567890abcd",  (generator:gen_name())/binary>>,
         Config = proplists:get_value(SN, SpaceConfigs),
@@ -1474,7 +1474,7 @@ multi_space_test_base(Config0, SpaceConfigs, User) ->
     end, [], CreateLog),
 
     lists:foreach(fun({Level2File, FileBeg, W, SN}) ->
-        ct:print("Verify file, node ~p, space ~p ~p", [W, SN, Level2File]),
+        ct:print("Verify file, node ~tp, space ~tp ~tp", [W, SN, Level2File]),
 
         Config = proplists:get_value(SN, SpaceConfigs),
         verify_file(Config, FileBeg, {2, Level2File})
@@ -1580,7 +1580,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
         User = lists:nth(rand:uniform(length(Users)), Users),
         Block = #file_block{offset = Num * BlockSizeBytes, size = BlockSizeBytes},
         case Num rem 1000 of
-            0 -> ct:pal("REQ: ~p", [Num]);
+            0 -> ct:pal("REQ: ~tp", [Num]);
             _ -> ok
         end,
         request_synchronization(Worker1, User, SessId, FileCtx, Block)
@@ -1600,11 +1600,11 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
 
     ct:pal("Transfers canceled"),
 
-    ct:pal("Block size: ~p~n"
-           "Block count: ~p~n"
-           "Number of users: ~p~n"
-           "Total time[ms]: ~p~n"
-           "Average time per user[ms]: ~p",
+    ct:pal("Block size: ~tp~n"
+           "Block count: ~tp~n"
+           "Number of users: ~tp~n"
+           "Total time[ms]: ~tp~n"
+           "Average time per user[ms]: ~tp",
         [BlockSize, BlocksCount, UserCount, TotalTime, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
@@ -1645,7 +1645,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
         User = lists:nth(rand:uniform(length(Users)), Users),
         Block = #file_block{offset = Num * BlockSizeBytes, size = BlockSizeBytes},
         case Num rem 1000 of
-            0 -> ct:pal("REQ: ~p", [Num]);
+            0 -> ct:pal("REQ: ~tp", [Num]);
             _ -> ok
         end,
         async_synchronize(Worker1, User, SessId, FileCtx, Block)
@@ -1674,12 +1674,12 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
     TimeSeconds = stopwatch:read_seconds(Stopwatch, float),
 
-    ct:pal("Block size: ~p~n"
-    "Block count: ~p~n"
-    "Number of users: ~p~n"
-    "Total time[s]: ~p~n"
-    "Finished transfers: ~p~n"
-    "Cancelled transfers: ~p~n",
+    ct:pal("Block size: ~tp~n"
+    "Block count: ~tp~n"
+    "Number of users: ~tp~n"
+    "Total time[s]: ~tp~n"
+    "Finished transfers: ~tp~n"
+    "Cancelled transfers: ~tp~n",
         [BlockSize, BlocksCount, UserCount, TimeSeconds, OkCount, CancelCount]).
 
 % @TODO VFS-6617 fix fsync failing on timeout
@@ -1702,7 +1702,7 @@ transfer_files_to_source_provider(Config0) ->
         Guid
     end, lists:seq(1, FilesNum)),
 
-    ct:pal("~p files created", [FilesNum]),
+    ct:pal("~tp files created", [FilesNum]),
 
     StopwatchTransfers = stopwatch:start(),
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
@@ -1744,9 +1744,9 @@ transfer_files_to_source_provider(Config0) ->
     end, lists:seq(1, FilesNum div 100)),
     TimeSecGui = stopwatch:read_seconds(StopwatchGui, float),
 
-    ct:pal("Transfer time[s]: ~p~n"
-           "Average time per file[ms]: ~p~n"
-           "GUI time [s]: ~p",
+    ct:pal("Transfer time[s]: ~tp~n"
+           "Average time per file[ms]: ~tp~n"
+           "GUI time [s]: ~tp",
         [TransfersTimeSec, TransfersTimeSec * 1000 / FilesNum, TimeSecGui]).
 
 
@@ -1952,7 +1952,7 @@ get_links(FileUuid) ->
         Links
     catch
         _:Reason:Stacktrace ->
-            ct:print("Get links failed: ~p~n~p", [Reason, Stacktrace]),
+            ct:print("Get links failed: ~tp~n~tp", [Reason, Stacktrace]),
             #{}
     end.
 
@@ -2129,7 +2129,7 @@ verify_stats(Config, File, IsDir) ->
     {SyncNodes, ProxyNodes, ProxyNodesWritten, _ProxyNodesWritten0, _NodesOfProvider} = ?config(nodes_number, Config),
 
     VerAns = verify(Config, fun(W) ->
-%%        ct:print("VerifyStats ~p", [{File, IsDir, W}]),
+%%        ct:print("VerifyStats ~tp", [{File, IsDir, W}]),
         case IsDir of
             true ->
                 ?match({ok, #file_attr{type = ?DIRECTORY_TYPE}},
@@ -2277,10 +2277,10 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     end,
 
 %%        VerAns0 = VerifyLocation(),
-%%        ct:print("Locations0 ~p", [{Offset, File, VerAns0}]),
+%%        ct:print("Locations0 ~tp", [{Offset, File, VerAns0}]),
 
     verify(Config, fun(W) ->
-%%            ct:print("Verify file ~p", [{File, W}]),
+%%            ct:print("Verify file ~tp", [{File, W}]),
         ?match({ok, FileCheck},
             begin
                 {ok, Handle} = lfm_proxy:open(W, SessId(W), {path, File}, rdwr),
@@ -2295,12 +2295,12 @@ verify_file(Config, FileBeg, {Offset, File}) ->
     ToMatch = {ProxyNodes - ProxyNodesWritten, SyncNodes + ProxyNodesWritten},
     AssertLocations = fun() ->
         VerAns = VerifyLocation(),
-%%            ct:print("Locations1 ~p", [{Offset, File, VerAns}]),
+%%            ct:print("Locations1 ~tp", [{Offset, File, VerAns}]),
         Flattened = lists:flatten(VerAns),
 
         ZerosList = lists:filter(fun(S) -> S == 0 end, Flattened),
         LocationsList = lists:filter(fun(S) -> S >= 1 end, Flattened),
-%%            ct:print("Locations1 ~p", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
+%%            ct:print("Locations1 ~tp", [{{length(ZerosList), length(LocationsList)}, ToMatch}]),
         {length(ZerosList), length(LocationsList)}
     end,
     ?match(ToMatch, AssertLocations(), Attempts),
@@ -2411,7 +2411,7 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
             {ans, ok, T} ->
                 T + Acc;
             {ans, Error} ->
-                ct:print("Error: ~p", [Error]),
+                ct:print("Error: ~tp", [Error]),
                 ?assertEqual(ok, Error),
                 Acc
         after timer:minutes(5) ->
@@ -2450,7 +2450,7 @@ await_replication_end(Node, TransferId, Attempts, GetFun) ->
             Status == failed;
             Status == cancelled
         ->
-            ct:pal("Replication failed, id ~p, doc id ~p, method ~p~nrecord: ~p",
+            ct:pal("Replication failed, id ~tp, doc id ~tp, method ~tp~nrecord: ~tp",
                 [TransferId, Key, GetFun, Transfer]),
             throw(replication_failed);
         Result ->
@@ -2464,9 +2464,9 @@ await_replication_end(Node, TransferId, Attempts, GetFun) ->
 log_replication_stats(TransferId, {ok, #document{value = #transfer{
     bytes_replicated = BytesReplicated
 }}}) ->
-    ct:pal("[Transfer ~p] Bytes replicated: ~p", [TransferId, BytesReplicated]);
+    ct:pal("[Transfer ~tp] Bytes replicated: ~tp", [TransferId, BytesReplicated]);
 log_replication_stats(TransferId, Error = {error, _}) ->
-    ct:pal("[Transfer ~p] Failed to fetch transfer stats due to: ~p", [TransferId, Error]).
+    ct:pal("[Transfer ~tp] Failed to fetch transfer stats due to: ~tp", [TransferId, Error]).
 
 %% @private
 -spec get_session_client_tokens(node(), session:id()) ->

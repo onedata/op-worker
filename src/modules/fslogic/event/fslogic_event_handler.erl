@@ -165,7 +165,7 @@ handle_file_written_event(#file_written_event{
             end,
             fslogic_event_emitter:emit_file_locations_changed(LocationChanges, [SessId]);
         {error, not_found} ->
-            ?debug("Handling file_written_event for file ~p failed because file_location was not found.",
+            ?debug("Handling file_written_event for file ~tp failed because file_location was not found.",
                 [FileGuid]),
             ok
     end.

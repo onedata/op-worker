@@ -239,7 +239,7 @@ wait(Fun) ->
                 wait(Fun)
         end
     catch Error:Reason ->
-        ?warning("Error in space_unsupport:wait/1 ~p:~p", [Error, Reason]),
+        ?warning("Error in space_unsupport:wait/1 ~tp:~tp", [Error, Reason]),
         timer:sleep(timer:seconds(10)),
         wait(Fun)
     end.

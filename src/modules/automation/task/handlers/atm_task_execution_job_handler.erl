@@ -197,14 +197,14 @@ parse_job_batch_result(ItemBatch, {ok, #atm_lambda_output{results_batch = Result
         (Item, Result) ->
             {Item, ?ERROR_BAD_DATA(<<"lambdaResultsForItem">>, str_utils:format_bin(
                 "Expected object with result names matching those defined in task schema. "
-                "Instead got: ~s", [json_utils:encode(Result)]
+                "Instead got: ~ts", [json_utils:encode(Result)]
             ))}
     end, ItemBatch, ResultsBatch)};
 
 parse_job_batch_result(_ItemBatch, {ok, #atm_lambda_output{results_batch = ResultsBatch}}) ->
     ?ERROR_BAD_DATA(<<"lambdaOutput.resultsBatch">>, str_utils:format_bin(
         "Expected array with object for each item in 'argsBatch' provided to lambda. "
-        "Instead got: ~s", [json_utils:encode(ResultsBatch)]
+        "Instead got: ~ts", [json_utils:encode(ResultsBatch)]
     )).
 
 

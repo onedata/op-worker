@@ -107,7 +107,7 @@ many_files_creation_test_base(Config) ->
     RootUuid = <<>>,
 
     SpaceNameString = "Space" ++ AnswerDesc,
-    ct:print("Space name: ~p", [SpaceNameString]),
+    ct:print("Space name: ~tp", [SpaceNameString]),
     SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/" ++ SpaceNameString,
     {ok, #document{key = SpaceUuid}} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
@@ -168,7 +168,7 @@ many_files_creation_test_base(Config) ->
 
     FailedNum = ?config(failed_num, Config),
     DocsInDB = (ThreadsNum - NewTN) * FilesPerThead,
-    ct:print("Files in system: ~p", [DocsInDB * (RepNum - FailedNum)]),
+    ct:print("Files in system: ~tp", [DocsInDB * (RepNum - FailedNum)]),
 
     [
         #parameter{name = files_in_datastore, value = DocsInDB,

@@ -87,7 +87,7 @@ manager_test(Config) ->
 
     {ok, Ans} = ?assertMatch({ok, _},
         rpc:call(Worker, ?MODULE, manager_test_on_node, [Manager, Messages])),
-    ct:print("Ans ~p", [Ans]),
+    ct:print("Ans ~tp", [Ans]),
 
     lists:foreach(fun(StmId) ->
         InitMessage2 = client_message(SessId, StmId, 0),
@@ -118,7 +118,7 @@ manager_test(Config) ->
         {ok, AnsTime} = ?assertMatch({ok, _}, RecAns),
         Acc + AnsTime
     end, 0, Messages2),
-    ct:print("Ans2 ~p", [Ans2]),
+    ct:print("Ans2 ~tp", [Ans2]),
 
     session_teardown(Worker, SessId),
     ok.

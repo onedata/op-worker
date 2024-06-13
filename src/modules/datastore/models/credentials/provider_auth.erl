@@ -293,7 +293,7 @@ write_to_file(ProviderId, RootToken, Nodes) ->
     case lists:filter(fun(Result) -> Result /= ok end, Results ++ BadNodes) of
         [] -> ok;
         Errors ->
-            ?alert("Errors when writing provider root token to file: ~p", [Errors]),
+            ?alert("Errors when writing provider root token to file: ~tp", [Errors]),
             ok
     end.
 

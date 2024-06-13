@@ -2,7 +2,7 @@ CXX ?= g++
 
 HELPERS_DIR ?= ../_build/default/lib/helpers
 
-ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts-~s/include/\", [code:root_dir(), erlang:system_info(version)]).")
+ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~tp/erts-~tp/include/\", [code:root_dir(), erlang:system_info(version)]).")
 
 ifndef ONEDATA_SCL
 	LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/lib \

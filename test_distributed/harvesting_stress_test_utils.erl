@@ -56,7 +56,7 @@ harvesting_receive_loop(HarvestedFileIds, ExpectedFilesToHarvestCount) ->
                     harvesting_receive_loop(NewHarvestedFileIds, ExpectedFilesToHarvestCount)
             after
                 ?TIMEOUT ->
-                    ct:print("harvesting_receive_loop timeout with ~p changes left.",
+                    ct:print("harvesting_receive_loop timeout with ~tp changes left.",
                         [ExpectedFilesToHarvestCount - sets:size(HarvestedFileIds)]),
                     ct:fail("harvesting_receive_loop timeout")
             end

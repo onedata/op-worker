@@ -68,7 +68,7 @@ handle(<<"POST">>, InitialReq) ->
                     reply_with_error(Error, Req);
                 Type:Message:Stacktrace ->
                     ?error_stacktrace(
-                        "Error while processing file upload from user ~s~nError was: ~w:~p",
+                        "Error while processing file upload from user ~ts~nError was: ~w:~tp",
                         [UserId, Type, Message],
                         Stacktrace
                     ),
@@ -114,11 +114,11 @@ handle_multipart_req(Req, ?USER(_UserId, SessionId) = Auth, Params) ->
                 ok ->
                     case file_popularity:update_size(file_ctx:new_by_guid(FileGuid)) of
                         ok -> ok;
-                        Error -> ?warning("~p file_popularity update_size error: ~p", [?MODULE, Error])
+                        Error -> ?warning("~tp file_popularity update_size error: ~tp", [?MODULE, Error])
 
                     end;
                 FsyncError ->
-                    ?warning("~p fsync error: ~p", [?MODULE, FsyncError])
+                    ?warning("~tp fsync error: ~tp", [?MODULE, FsyncError])
             end,
             Req2
     end.

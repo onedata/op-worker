@@ -66,12 +66,12 @@ invalidate() ->
 
     case BadNodes of
         [] -> ok;
-        _ -> ?error("Invalidation of ~p failed on nodes: ~p (RPC error)", [?MODULE, BadNodes])
+        _ -> ?error("Invalidation of ~tp failed on nodes: ~tp (RPC error)", [?MODULE, BadNodes])
     end,
 
     lists:foreach(fun
         (ok) -> ok;
-        ({badrpc, _} = Error) -> ?error("Invalidation of ~p failed.~nReason: ~p", [?MODULE, Error])
+        ({badrpc, _} = Error) -> ?error("Invalidation of ~tp failed.~nReason: ~tp", [?MODULE, Error])
     end, Res).
 
 %%--------------------------------------------------------------------

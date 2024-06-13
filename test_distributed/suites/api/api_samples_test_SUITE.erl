@@ -159,7 +159,7 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
                         }
                     end,
                     validate_result_fun = fun(_, {ok, Result}) ->
-                        ExpectedApiRoot = str_utils:format_bin("https://~s/api/v3/onezone", [ozw_test_rpc:get_domain()]),
+                        ExpectedApiRoot = str_utils:format_bin("https://~ts/api/v3/onezone", [ozw_test_rpc:get_domain()]),
                         rest_api_samples_test_utils:verify_structure(
                             Result, ExpectedApiRoot, exp_operation_list(public, FileType)
                         ),
@@ -246,7 +246,7 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
                         }
                     end,
                     validate_result_fun = fun(#api_test_ctx{node = Node}, {ok, Result}) ->
-                        ExpApiRoot = str_utils:format_bin("https://~s:443/api/v3/oneprovider", [opw_test_rpc:get_provider_domain(Node)]),
+                        ExpApiRoot = str_utils:format_bin("https://~ts:443/api/v3/oneprovider", [opw_test_rpc:get_provider_domain(Node)]),
                         rest_api_samples_test_utils:verify_structure(Result, ExpApiRoot, exp_operation_list(private, FileType))
                     end
                 }
@@ -460,7 +460,7 @@ build_sample_test_spec(<<"Get symbolic link value">>) -> #sample_test_spec{
 
 %% @private
 verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePath, SamplesJson) ->
-    ExpectedServerURL = str_utils:format_bin("root://~s", [?DUMMY_XROOTD_SERVER_DOMAIN]),
+    ExpectedServerURL = str_utils:format_bin("root://~ts", [?DUMMY_XROOTD_SERVER_DOMAIN]),
     ExpectedFullDataPath = <<"/", SpaceId/binary, "/", SpaceId/binary, "/", ShareId/binary, FilePath/binary>>,
 
     OperationNames = lists:map(fun(Sample) ->

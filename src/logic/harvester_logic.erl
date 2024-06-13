@@ -70,6 +70,6 @@ get_indices(HarvesterId) ->
         {ok, Doc} ->
             get_indices(Doc);
         {error, _} = Error ->
-            ?error("harvester_logic:get_indices(~p) failed due to ~p", [HarvesterId, Error]),
+            ?error("harvester_logic:get_indices(~tp) failed due to ~tp", [HarvesterId, Error]),
             Error
     end.

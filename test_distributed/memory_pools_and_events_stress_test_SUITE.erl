@@ -153,7 +153,7 @@ many_files_test_base(Config, TestScenario) ->
     MemPoolsBefore = get(memory_pools),
     Res = pool_utils:get_documents_diff(Worker1, After, MemPoolsBefore, false),
     ?assertEqual([], Res),
-%%    ct:print("Docs number ~p", [{length(Res), Res}]),
+%%    ct:print("Docs number ~tp", [{length(Res), Res}]),
     client_simulation_test_utils:verify_streams(Config, false).
 
 %%%===================================================================

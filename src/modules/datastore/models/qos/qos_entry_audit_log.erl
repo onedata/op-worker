@@ -95,7 +95,7 @@ report_file_synchronization_failed(Id, FileGuid, FilePath, Error) ->
             <<"status">> => <<"failed">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
             <<"description">> => str_utils:format_bin(
-                "Failed to reconcile local replica: ~s",
+                "Failed to reconcile local replica: ~ts",
                 [maps:get(<<"description">>, ErrorJson)]
             ),
             <<"reason">> => ErrorJson,

@@ -120,7 +120,7 @@ mark_finished(ARId) ->
         {ok, #document{value = #autocleaning_run{space_id = SpaceId}}} ->
             autocleaning:mark_run_finished(SpaceId);
         Error ->
-            ?error("Fail to mark auto-cleaning run ~p as finished due to ~p",
+            ?error("Fail to mark auto-cleaning run ~tp as finished due to ~tp",
                 [ARId, Error]),
             Error
     end.
@@ -139,7 +139,7 @@ mark_finished(ARId, FinalReleasedFiles, FinalReleasedBytes) ->
         {ok, #document{value = #autocleaning_run{space_id = SpaceId}}} ->
             autocleaning:mark_run_finished(SpaceId);
         Error ->
-            ?error("Fail to mark auto-cleaning run ~p as finished due to ~p",
+            ?error("Fail to mark auto-cleaning run ~tp as finished due to ~tp",
                 [ARId, Error]),
             Error
     end.

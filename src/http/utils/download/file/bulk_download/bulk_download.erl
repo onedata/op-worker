@@ -133,7 +133,7 @@ data_streaming_loop(BulkDownloadId, MainPid, CowboyReq) ->
         case is_process_alive(MainPid) of
             true -> data_streaming_loop(BulkDownloadId, MainPid, CowboyReq);
             false -> 
-                ?error("Process ~p unexpectedly finished. Bulk download ~p will fail.", [MainPid, BulkDownloadId]),
+                ?error("Process ~tp unexpectedly finished. Bulk download ~tp will fail.", [MainPid, BulkDownloadId]),
                 error(?ERROR_INTERNAL_SERVER_ERROR)
         end
     end.

@@ -236,7 +236,7 @@ ensure_stalled_scans_are_fixed() ->
                                 ?debug("auto_storage_import_worker was unable to fix stalled scans due to unregistered provider."),
                                 throw(?STALLED_SCANS_NOT_FIXED_ERROR);
                             {error, _} = Error ->
-                                ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
+                                ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~tp", [Error]),
                                 throw(?STALLED_SCANS_NOT_FIXED_ERROR)
                         end
                 end
@@ -251,7 +251,7 @@ fix_stalled_scans(SpaceIds) ->
             mark_stalled_scans_fixed(),
             ok;
         {error, _} = Error ->
-            ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~p", [Error]),
+            ?error("auto_storage_import_worker was unable to fix stalled scans due to unexpected error: ~tp", [Error]),
             throw(?STALLED_SCANS_NOT_FIXED_ERROR)
     end.
 
@@ -278,7 +278,7 @@ check_spaces() ->
         throw:?STALLED_SCANS_NOT_FIXED_ERROR ->
             ok;
         Error2:Reason:Stacktrace ->
-            ?error_stacktrace("~s was unable to check spaces due to unexpected ~p:~p",
+            ?error_stacktrace("~ts was unable to check spaces due to unexpected ~tp:~tp",
                 [?AUTO_STORAGE_IMPORT_WORKER, Error2, Reason], Stacktrace)
     end.
 

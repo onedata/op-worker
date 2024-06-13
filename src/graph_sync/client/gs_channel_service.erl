@@ -120,7 +120,7 @@ force_start_connection() ->
                             false
                     end;
                 _OtherNode ->
-                    ?info("Attempting to start Onezone connection at node ~p (forced)...", [
+                    ?info("Attempting to start Onezone connection at node ~tp (forced)...", [
                         ResponsibleNode
                     ]),
                     rpc:call(ResponsibleNode, ?MODULE, force_start_connection, [])
@@ -307,8 +307,8 @@ check_compatibility_with_onezone() ->
                 {false, CompOzVersions} ->
                     ?THROTTLE_LOG(?critical(
                         "This Oneprovider is not compatible with its Onezone service.~n"
-                        "Oneprovider version: ~s, supports zones: ~s~n"
-                        "Onezone version: ~s~n"
+                        "Oneprovider version: ~ts, supports zones: ~ts~n"
+                        "Onezone version: ~ts~n"
                         "The service will not be operational until the problem is resolved "
                         "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
                             OpVersion, str_utils:join_binary(CompOzVersions, <<", ">>), OzVersion
@@ -316,7 +316,7 @@ check_compatibility_with_onezone() ->
                     false;
                 {error, Error} ->
                     ?THROTTLE_LOG(?critical(
-                        "Cannot check Oneprovider's compatibility due to ~p~n."
+                        "Cannot check Oneprovider's compatibility due to ~tp~n."
                         "The service will not be operational until the problem is resolved.", [
                             {error, Error}
                         ])),
@@ -326,15 +326,16 @@ check_compatibility_with_onezone() ->
             ?THROTTLE_LOG(?critical(
                 "Failure while checking Onezone version. "
                 "The service will not be operational until the problem is resolved.~n"
-                "HTTP response: ~B ~s", [
+                "HTTP response: ~B ~ts", [
                     Code, ResponseBody
                 ])),
             false;
         {error, _} = LastError ->
-            ?THROTTLE_LOG(?warning(
-                "Onezone is not reachable (~ts), is the service online? Retrying as long as it takes...~s",
-                [oneprovider:get_oz_domain(), ?autoformat(LastError)]
-            )),
+            ?THROTTLE_LOG(?warning(?autoformat_with_msg(
+                "Onezone is not reachable (~ts), is the service online? Retrying as long as it takes...",
+                [oneprovider:get_oz_domain()],
+                LastError
+            ))),
             false
     end.
 
@@ -355,7 +356,7 @@ check_for_compatibility_registry_updates(Resolver, OzConfiguration) ->
                     );
                 false ->
                     ?debug(
-                        "Local compatibility registry (v. ~s) is not older than Onezone's (v. ~s)",
+                        "Local compatibility registry (v. ~ts) is not older than Onezone's (v. ~ts)",
                         [LocalRevision, RemoteRevision]
                     )
             end;
