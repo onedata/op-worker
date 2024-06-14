@@ -303,8 +303,7 @@ new_helper(Config) ->
         ?XROOTD_HELPER_NAME,
         #{
             <<"url">> => atom_to_binary(?config(url, XRootDConfig), utf8),
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
       ),

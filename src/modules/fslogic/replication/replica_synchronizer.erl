@@ -1907,8 +1907,10 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
     Pid = spawn_link(fun() ->
         Ans = try
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
-            #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
-            ok
+            case truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false) of
+                #fuse_response{status = #status{code = ?OK}} -> ok;
+                #fuse_response{status = #status{code = ?ENOENT}} -> {error, {error, ?ENOENT}}
+            end
         catch
             Class:Reason:Stacktrace ->
                 FileUuid = file_ctx:get_logical_uuid_const(FileCtx),

@@ -44,8 +44,7 @@ new_helper_test_() ->
     lists:map(fun({HelperName, ArgsKeys}) ->
         Args = keys_to_map(ArgsKeys),
         Args2 = Args#{
-            <<"storagePathType">> => <<"flat">>,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => <<"flat">>
         },
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 
@@ -59,8 +58,7 @@ user_ctx_validation_test_() ->
     lists:flatmap(fun({HelperName, AdminCtxKeys}) ->
         Args = keys_to_map(proplists:get_value(HelperName, ?HELPER_ARGS)),
         Args2 = Args#{
-            <<"storagePathType">> => <<"flat">>,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => <<"flat">>
         },
         AdminCtx = keys_to_map(AdminCtxKeys),
 
@@ -81,8 +79,7 @@ helper_args_validation_test_() ->
     lists:flatmap(fun({HelperName, ArgsKeys}) ->
         Args = keys_to_map(ArgsKeys),
         Args2 = Args#{
-            <<"storagePathType">> => <<"flat">>,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => <<"flat">>
         },
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 

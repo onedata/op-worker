@@ -263,8 +263,7 @@ new_helper(Config) ->
             <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
             <<"clusterName">> => ?CEPH_CLUSTER_NAME,
             <<"poolName">> => ?CEPH_POOL_NAME,
-            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
         UserCtx
     ),

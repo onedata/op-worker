@@ -352,8 +352,7 @@ new_helper(Config) ->
         #{
             <<"endpoint">> => atom_to_binary(?config(endpoint, WebDAVConfig), utf8),
             <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8),
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
       ),

@@ -247,8 +247,7 @@ new_helper(Config) ->
             ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v2.0/tokens">>,
             <<"containerName">> => ?SWIFT_CONTAINER_NAME,
             <<"tenantName">> => atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
-            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
         UserCtx
     ),

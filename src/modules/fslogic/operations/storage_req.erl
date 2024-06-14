@@ -128,10 +128,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
             {SpaceStorageFileId, _SpaceCtx3} = file_ctx:get_storage_file_id(SpaceCtx2),
             DirName = filename:dirname(SpaceStorageFileId),
-            TestFileName = storage_detector:generate_file_id(),
-            TestFileId = filepath_utils:join([DirName, TestFileName]),
             try
-                FileContent = storage_detector:create_test_file(Helper, ServerStorageUserCtx, TestFileId),
+                {ok, TestFileId} = storage_detector:create_test_file(Helper, ServerStorageUserCtx, DirName),
+                {ok, FileContent} = storage_detector:write_test_file(Helper, ServerStorageUserCtx, TestFileId),
                 spawn(storage_req, remove_storage_test_file, [
                     Helper, ServerStorageUserCtx, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
                 #fuse_response{
@@ -229,7 +228,7 @@ verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
     #fuse_response{status = #status{code = Code}};
 verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, Attempts) ->
     try storage_detector:read_test_file(Helper, StorageUserCtx, FileId) of
-        FileContent ->
+        {ok, FileContent} ->
             storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, size(FileContent)),
             #fuse_response{status = #status{code = ?OK}};
         _ ->

@@ -403,8 +403,7 @@ setup_storage([Worker | Rest], Config) ->
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{
         <<"mountPoint">> => list_to_binary(TmpDir),
-        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
