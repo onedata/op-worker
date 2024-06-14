@@ -178,7 +178,7 @@ handle_push_message(ClientRef, Payload) ->
         end
     catch
         _:_:_ ->
-            ct:print("Unexpected message in ~p: ~s", [?MODULE, Payload]),
+            ct:print("Unexpected message in ~tp: ~ts", [?MODULE, Payload]),
             error(unexpected_message)
     end.
 

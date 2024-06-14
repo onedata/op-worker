@@ -238,6 +238,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, R
             public_handle = maps:get(<<"publicHandle">>, Result),
             resource_type = maps:get(<<"resourceType">>, Result),
             resource_id = maps:get(<<"resourceId">>, Result),
+            metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
             handle_service = maps:get(<<"handleServiceId">>, Result),
 
@@ -251,6 +252,7 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         key = Id,
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
+            metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
             metadata = maps:get(<<"metadata">>, Result)
         }
     };
@@ -340,7 +342,7 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
     };
 
 translate(GRI, Result) ->
-    ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p", [
+    ?error("Cannot translate graph sync response body for:~nGRI: ~tp~nResult: ~tp", [
         GRI, Result
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

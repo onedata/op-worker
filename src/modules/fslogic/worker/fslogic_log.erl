@@ -104,7 +104,7 @@ append_to_audit_log(Request, UserId, FileCtx) ->
 append_to_audit_log(Request, UserId, Uuid, ShareId, FilePath) ->
     FormattedRequest = format_request(Request),
     ok = lager:log(file_access_audit_lager_event, info, self(),
-        "request: ~s; user: ~s; file_uuid: ~s; share_id: ~s; path: ~ts",
+        "request: ~ts; user: ~ts; file_uuid: ~ts; share_id: ~ts; path: ~ts",
         [FormattedRequest, UserId, Uuid, ShareId, FilePath]
     ).
 
@@ -126,7 +126,7 @@ format_request(Record) ->
 %% @private
 -spec format_inner_record(logged_record(), logged_record()) -> string().
 format_inner_record(Record, SubRecord) ->
-    str_utils:format("~tp::~s", [utils:record_type(Record), format_request(SubRecord)]).
+    str_utils:format("~tp::~ts", [utils:record_type(Record), format_request(SubRecord)]).
 
 
 %%--------------------------------------------------------------------

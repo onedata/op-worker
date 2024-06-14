@@ -68,7 +68,7 @@ map(Callback, Elements) ->
             throw(Error);
         Class:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Unexpected error in ~w:~w - ~w:~p",
+                "Unexpected error in ~w:~w - ~w:~tp",
                 [?MODULE, ?FUNCTION_NAME, Class, Reason],
                 Stacktrace
             ),

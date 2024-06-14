@@ -129,7 +129,7 @@
         throw:Error ->
             Error;
         _:___Reason:Stacktrace ->
-            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason], Stacktrace),
+            ?error_stacktrace("logical_file_manager generic error: ~tp", [___Reason], Stacktrace),
             {error, ___Reason}
     end).
 
@@ -261,8 +261,8 @@ unlink(SessId, FileEntry, Silent) ->
 
 -spec make_link(session:id(), file_key(), file_key(), file_meta:name()) ->
     {ok, #file_attr{}} | error_reply().
-make_link(SessId, FileKey, TargetParentKey, Name) ->
-    ?run(lfm_files:make_link(SessId, FileKey, TargetParentKey, Name)).
+make_link(SessId, TargetFileKey, ParentKey, Name) ->
+    ?run(lfm_files:make_link(SessId, TargetFileKey, ParentKey, Name)).
 
 
 -spec make_symlink(session:id(), file_key(), file_meta:name(), file_meta_symlinks:symlink()) ->

@@ -58,7 +58,7 @@ get_spaces() ->
     catch
         _:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Cannot resolve spaces of provider due to ~p", [Reason], Stacktrace
+                "Cannot resolve spaces of provider due to ~tp", [Reason], Stacktrace
             ),
             []
     end.

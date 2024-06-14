@@ -117,7 +117,7 @@ download_single_regular_file(SessionId, #file_attr{
                     catch Class:Reason:Stacktrace ->
                         {ok, UserId} = session:get_user_id(SessionId),
                         ?error_stacktrace(
-                            "Error while processing file (~s) download for user ~s~nError was: ~w:~p",
+                            "Error while processing file (~ts) download for user ~ts~nError was: ~w:~tp",
                             [FileGuid, UserId, Class, Reason],
                             Stacktrace
                         ),
@@ -294,6 +294,6 @@ execute_on_success_callback(Guid, OnSuccessCallback) ->
     try
         ok = OnSuccessCallback()
     catch Type:Reason ->
-        ?warning("Failed to execute file download successfully finished callback for file (~p) "
-                 "due to ~p:~p", [Guid, Type, Reason])
+        ?warning("Failed to execute file download successfully finished callback for file (~tp) "
+                 "due to ~tp:~tp", [Guid, Type, Reason])
     end.

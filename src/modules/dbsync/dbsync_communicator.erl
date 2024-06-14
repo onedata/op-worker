@@ -84,7 +84,7 @@ forward(#tree_broadcast2{
             ]);
         Other ->
             ?error("Wrong provider ids in tree broadcast:"
-                "receiver: ~p, sender: ~p, low_provider: ~p, high_provider: ~p",
+                "receiver: ~tp, sender: ~tp, low_provider: ~tp, high_provider: ~tp",
                 [Other, SrcProviderId, LowProviderId, HighProviderId])
     end.
 
@@ -119,11 +119,11 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
             ok ->
                 ok;
             ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER ->
-                ?debug("Cannot broadcast changes batch to provider ~p due to "
+                ?debug("Cannot broadcast changes batch to provider ~tp due to "
                        "no available connection", [ProviderId]);
             {error, Reason} ->
-                ?warning("Cannot broadcast changes batch to provider ~p "
-                "due to: ~p", [ProviderId, Reason])
+                ?warning("Cannot broadcast changes batch to provider ~tp "
+                "due to: ~tp", [ProviderId, Reason])
         end
     end, Hops),
     Multipath.

@@ -133,8 +133,7 @@ end).
         ?POSIX_HELPER_NAME,
         #{
             <<"mountPoint">> => <<"mountPoint">>,
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         ?POSIX_ADMIN_CREDENTIALS
 ))).
@@ -168,8 +167,7 @@ end).
         <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
         <<"poolName">> => <<"poolName">>,
-        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     ?CEPH_ADMIN_CREDENTIALS
 ))).
@@ -202,8 +200,7 @@ end).
         <<"scheme">> => <<"https">>,
         <<"hostname">> => <<"hostname">>,
         <<"bucketName">> => <<"bucketName">>,
-        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     ?S3_ADMIN_CREDENTIALS
 ))).
@@ -235,8 +232,7 @@ end).
     #{<<"authUrl">> => <<"authUrl">>,
         <<"containerName">> => <<"containerName">>,
         <<"tenantName">> => <<"tenantName">>,
-        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     ?SWIFT_ADMIN_CREDENTIALS
 ))).
@@ -269,8 +265,7 @@ end).
         <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
         <<"poolName">> => <<"poolName">>,
-        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     ?CEPHRADOS_ADMIN_CREDENTIALS
 ))).
@@ -310,8 +305,7 @@ end).
     #{
         <<"volume">> => <<"volume">>,
         <<"hostname">> => <<"hostname">>,
-        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     ?GLUSTERFS_ADMIN_CREDENTIALS
 ))).
@@ -354,8 +348,7 @@ end).
 
 -define(NULLDEVICE_HELPER, ?STRIP_OK(helper:new_helper(
     ?NULL_DEVICE_HELPER_NAME, #{
-        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     ?NULLDEVICE_ADMIN_CREDENTIALS
 ))).
@@ -457,8 +450,7 @@ end).
     #{
         <<"endpoint">> => <<"endpoint">>,
         <<"oauth2IdP">> => ?OAUTH2_IDP,
-        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     AdminCtx
 ))).

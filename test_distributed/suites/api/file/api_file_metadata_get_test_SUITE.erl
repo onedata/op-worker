@@ -816,7 +816,7 @@ get_metadata_test_base(
             client_spec = ClientSpec,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Get ~s metadata from ~s using rest endpoint", [
+                    name = str_utils:format("Get ~ts metadata from ~ts using rest endpoint", [
                         MetadataType, FileType
                     ]),
                     type = rest,
@@ -826,7 +826,7 @@ get_metadata_test_base(
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
-                    name = str_utils:format("Get ~s metadata from ~s using gs private api", [
+                    name = str_utils:format("Get ~ts metadata from ~ts using gs private api", [
                         MetadataType, FileType
                     ]),
                     type = gs,
@@ -841,7 +841,7 @@ get_metadata_test_base(
         },
 
         #scenario_spec{
-            name = str_utils:format("Get ~s metadata from ~s using gs public api", [
+            name = str_utils:format("Get ~ts metadata from ~ts using gs public api", [
                 MetadataType, FileType
             ]),
             type = gs,
@@ -873,7 +873,7 @@ get_metadata_test_base(
             client_spec = ClientSpec,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Get ~s metadata from shared ~s using rest endpoint", [
+                    name = str_utils:format("Get ~ts metadata from shared ~ts using rest endpoint", [
                         MetadataType, FileType
                     ]),
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
@@ -883,7 +883,7 @@ get_metadata_test_base(
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
-                    name = str_utils:format("Get ~s metadata from shared ~s using gs public api", [
+                    name = str_utils:format("Get ~ts metadata from shared ~ts using gs public api", [
                         MetadataType, FileType
                     ]),
                     type = gs,
@@ -893,7 +893,7 @@ get_metadata_test_base(
                     validate_result_fun = ValidateGsCallResultFun
                 },
                 #scenario_template{
-                    name = str_utils:format("Get ~s metadata from shared ~s using gs private api", [
+                    name = str_utils:format("Get ~ts metadata from shared ~ts using gs private api", [
                         MetadataType, FileType
                     ]),
                     type = gs_with_shared_guid_and_aspect_private,

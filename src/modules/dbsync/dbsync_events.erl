@@ -56,7 +56,7 @@ change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{type = ?LINK_TYPE}
 } = LinkDoc) ->
-    ?debug("hardlink replicated ~p", [FileUuid]),
+    ?debug("hardlink replicated ~tp", [FileUuid]),
     case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, ReferencedDoc} ->
             {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
@@ -66,14 +66,14 @@ change_replicated_internal(SpaceId, #document{
         {error, not_found} ->
             file_meta_hardlinks_posthooks:add_posthook(SpaceId, FileUuid);
         Error ->
-            ?warning("hardlink replicated ~p - dbsync posthook failed~n~s", [FileUuid, ?autoformat([Error])])
+            ?warning(?autoformat_with_msg("hardlink replicated ~tp - dbsync posthook failed", [FileUuid], Error))
     end,
     ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #file_meta{mode = CurrentMode}
 } = FileDoc) ->
-    ?debug("file_meta_change_replicated: ~p", [FileUuid]),
+    ?debug("file_meta_change_replicated: ~tp", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     file_meta_change_replicated(FileDoc, FileCtx2),
@@ -82,7 +82,7 @@ change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}
 } = Doc) ->
-    ?debug("change_replicated_internal: changed file_location ~p", [FileUuid]),
+    ?debug("change_replicated_internal: changed file_location ~tp", [FileUuid]),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
@@ -90,7 +90,7 @@ change_replicated_internal(SpaceId, #document{
     value = #times{} = Record,
     deleted = true
 }) ->
-    ?debug("change_replicated_internal: deleted times ~p", [FileUuid]),
+    ?debug("change_replicated_internal: deleted times ~tp", [FileUuid]),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     dir_update_time_stats:report_update(FileCtx, Record),
     % Emmit event in case of changed times / deleted file_meta propagation race
@@ -99,7 +99,7 @@ change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     value = #times{} = Record
 }) ->
-    ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
+    ?debug("change_replicated_internal: changed times ~tp", [FileUuid]),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     % although times document is already updated, update values in times_cache so that fetches
     % from cache include those new values
@@ -109,24 +109,24 @@ change_replicated_internal(_SpaceId, #document{
     key = FileUuid,
     value = #custom_metadata{}
 }) ->
-    ?debug("change_replicated_internal: changed custom_metadata ~p", [FileUuid]);
+    ?debug("change_replicated_internal: changed custom_metadata ~tp", [FileUuid]);
 change_replicated_internal(_SpaceId, Transfer = #document{
     key = TransferId,
     value = #transfer{}
 }) ->
-    ?debug("change_replicated_internal: changed transfer ~p", [TransferId]),
+    ?debug("change_replicated_internal: changed transfer ~tp", [TransferId]),
     transfer_changes:handle(Transfer);
 change_replicated_internal(_SpaceId, ReplicaDeletion = #document{
     key = MsgId,
     value = #replica_deletion{}
 }) ->
-    ?debug("change_replicated_internal: changed replica_deletion ~p", [MsgId]),
+    ?debug("change_replicated_internal: changed replica_deletion ~tp", [MsgId]),
     replica_deletion_changes:handle(ReplicaDeletion);
 change_replicated_internal(_SpaceId, Index = #document{
     key = IndexId,
     value = #index{}
 }) ->
-    ?debug("change_replicated_internal: changed index ~p", [IndexId]),
+    ?debug("change_replicated_internal: changed index ~tp", [IndexId]),
     view_changes:handle(Index);
 change_replicated_internal(_SpaceId, #document{value = #traverse_task{}} = Task) ->
     traverse:on_task_change(Task, oneprovider:get_id_or_undefined());
@@ -142,28 +142,28 @@ change_replicated_internal(SpaceId, QosEntry = #document{
     key = QosEntryId,
     value = #qos_entry{}
 }) ->
-    ?debug("change_replicated_internal: qos_entry ~p", [QosEntryId]),
+    ?debug("change_replicated_internal: qos_entry ~tp", [QosEntryId]),
     qos_logic:handle_qos_entry_change(SpaceId, QosEntry);
 change_replicated_internal(SpaceId, ArchiveRecallDetails = #document{
     key = RecallId,
     value = #archive_recall_details{}
 }) ->
-    ?debug("change_replicated_internal: archive_recall_details ~p", [RecallId]),
+    ?debug("change_replicated_internal: archive_recall_details ~tp", [RecallId]),
     archive_recall_details:handle_remote_change(SpaceId, ArchiveRecallDetails);
 change_replicated_internal(SpaceId, DatasetDoc = #document{
     key = DatasetId,
     value = #dataset{}
 }) ->
-    ?debug("change_replicated_internal: dataset ~p", [DatasetId]),
+    ?debug("change_replicated_internal: dataset ~tp", [DatasetId]),
     dataset_api:handle_remote_change(SpaceId, DatasetDoc);
 change_replicated_internal(SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
-    ?debug("change_replicated_internal: links_forest ~p", [LinkKey]),
+    ?debug("change_replicated_internal: links_forest ~tp", [LinkKey]),
    link_replicated(Model, LinkKey, SpaceId);
 change_replicated_internal(SpaceId, #document{value = #links_node{key = LinkKey, model = Model}}) ->
-    ?debug("change_replicated_internal: links_node ~p", [LinkKey]),
+    ?debug("change_replicated_internal: links_node ~tp", [LinkKey]),
    link_replicated(Model, LinkKey, SpaceId);
 change_replicated_internal(SpaceId, #document{value = #links_mask{key = LinkKey, model = Model}}) ->
-    ?debug("change_replicated_internal: links_mask ~p", [LinkKey]),
+    ?debug("change_replicated_internal: links_mask ~tp", [LinkKey]),
    link_replicated(Model, LinkKey, SpaceId);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.

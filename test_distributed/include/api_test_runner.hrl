@@ -55,6 +55,12 @@
     required = [] :: [Key :: binary()],
     optional = [] :: [Key :: binary()],
     at_least_one = [] :: [Key :: binary()],
+    % Some endpoints behave differently when some optional parameters (discriminators) are provided
+    % e.g. optional parameters may became required or new parameters may be available.
+    % NOTE: it is assumed, that all provided keys form a single discriminator, i.e. all of them will
+    % be added to each request. In order to test behaviour for different discriminator new data_spec must be provided.
+    % During tests value for each discriminator key is selected randomly from those specified in correct_values.
+    discriminator = [] :: [Key :: binary()],
     correct_values = #{} :: #{Key :: binary() => Values :: [binary()]},
     bad_values = [] :: [{
         Key :: binary(),

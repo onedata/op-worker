@@ -1552,7 +1552,7 @@ unpack_tarball(Bytes) ->
     ok = file:write_file(Path, Bytes),
     Cmd = "cd " ++ TmpDir ++ " && tar -xvf " ++ binary_to_list(Name),
     Res = os:cmd(Cmd),
-    ct:print("~s", [Res]),
+    ct:print("~ts", [Res]),
     TmpDir.
 
 

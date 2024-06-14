@@ -449,7 +449,7 @@ all() -> [
     try
         __TEST_BASE_MODULE:?FUNCTION_NAME()
     catch __TYPE:__REASON:__STACKTRACE ->
-        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
+        ct:pal("Test failed due to ~tp:~tp.~nStacktrace: ~tp", [__TYPE, __REASON, __STACKTRACE]),
         error(test_failed)
     end
 ).
@@ -457,7 +457,7 @@ all() -> [
     try
         __TEST_BASE_MODULE:?FUNCTION_NAME(__CONFIG)
     catch __TYPE:__REASON:__STACKTRACE ->
-        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
+        ct:pal("Test failed due to ~tp:~tp.~nStacktrace: ~tp", [__TYPE, __REASON, __STACKTRACE]),
         error(test_failed)
     end
 ).

@@ -75,7 +75,7 @@
         throw:__Err ->
             {stop, http_req:send_error(__Err, __Req), __CdmiReq};
         Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+            ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ], Stacktrace),
             {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
@@ -117,7 +117,7 @@ init(Req, ReqTypeResolutionMethod) ->
         throw:Err ->
             {ok, http_req:send_error(Err, Req), undefined};
         Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+            ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ], Stacktrace),
             {ok, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
@@ -163,7 +163,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
         throw:Err ->
             {stop, http_req:send_error(Err, Req), CdmiReq};
         Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+            ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ], Stacktrace),
             {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
@@ -232,7 +232,7 @@ resource_exists(Req, #cdmi_req{
         throw:Error ->
             {stop, http_req:send_error(Error, Req), CdmiReq};
         Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+            ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
                 ?MODULE, ?FUNCTION_NAME, Type, Reason
             ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),

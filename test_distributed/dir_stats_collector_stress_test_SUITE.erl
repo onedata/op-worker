@@ -85,7 +85,7 @@ many_files_creation_tree_test_base(Config) ->
                     put(stress_phase, calculate_stats),
                     PhaseAns;
                 _ ->
-                    ct:print("Space dir stats: ~p~nExpected: ~p", [SpaceDirStats, ExpectedDirStats]),
+                    ct:print("Space dir stats: ~tp~nExpected: ~tp", [SpaceDirStats, ExpectedDirStats]),
                     timer:sleep(5000),
                     PhaseAns
             end;
@@ -108,7 +108,7 @@ many_files_creation_tree_test_base(Config) ->
                         ExpectedDirStats ->
                             [stop | PhaseAns];
                         _ ->
-                            ct:print("Collected space dir stats: ~p~nExpected: ~p", [SpaceDirStats, ExpectedDirStats]),
+                            ct:print("Collected space dir stats: ~tp~nExpected: ~tp", [SpaceDirStats, ExpectedDirStats]),
                             timer:sleep(5000),
                             PhaseAns
                     end

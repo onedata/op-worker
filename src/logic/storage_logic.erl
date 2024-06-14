@@ -129,7 +129,7 @@ get_shared_data(StorageId, SpaceId) ->
     }).
 
 
--spec force_fetch(storage:id()) -> {ok, od_storage:doc()} | errors:error().
+-spec force_fetch(storage:id()) -> {ok, od_storage:doc()}.
 force_fetch(StorageId) ->
     gs_client_worker:force_fetch_entity(#gri{type = od_storage, id = StorageId, aspect = instance}).
 
@@ -181,7 +181,6 @@ revoke_space_support(StorageId, SpaceId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = {space, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        space_logic:force_fetch(SpaceId),
         storage_logic:force_fetch(StorageId),
         provider_logic:force_fetch()
     end).

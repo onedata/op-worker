@@ -407,6 +407,17 @@ void handle_value(const NifCTX &ctx, file_handle_ptr handle)
 }
 
 /**
+ * Handles std::pair result from helpers and sends it to requesting process.
+ */
+template <class T1, class T2>
+void handle_value(const NifCTX &ctx, std::pair<T1, T2> &&response)
+{
+    ctx.send(std::make_tuple(ok,
+        std::make_tuple(std::forward<T1>(response.first),
+            std::forward<T2>(response.second))));
+}
+
+/**
  * Handles generic result from helpers and sends it to requesting process.
  */
 template <class T> void handle_value(const NifCTX &ctx, T &&response)

@@ -193,7 +193,7 @@ ensure_cache_updated() ->
             ?ERROR_TOKEN_INVALID ->
                 AlreadyFetchedSpaces;
             {error, _} = Error ->
-                ?warning("Could not fetch spaces~ts", [?autoformat([UserId, Error])]),
+                ?warning(?autoformat_with_msg("Could not fetch spaces", [UserId, Error])),
                 AlreadyFetchedSpaces
         end
     end, gb_sets:new(), find_fuse_sessions_of_all_users()),

@@ -152,7 +152,7 @@ oneprovider_should_unify_registry_on_multinode_clusters(_Config) ->
     % trigger a query, which should cause the default registry to replace the current one
     {ok, [ChosenNodeIp]} = inet:getaddrs(?GET_HOSTNAME(ChosenNode), inet),
     {ok, ChosenNodeIpBin} = ip_utils:to_binary(ChosenNodeIp),
-    URL = str_utils:format("https://~s/api/v3/oneprovider/configuration", [ChosenNodeIpBin]),
+    URL = str_utils:format("https://~ts/api/v3/oneprovider/configuration", [ChosenNodeIpBin]),
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _}, http_client:get(
         URL, #{}, <<>>, [{ssl_options, [{secure, false}]}]
     )),
@@ -189,7 +189,7 @@ peek_current_registry_revision_on_node(Node) ->
 
 is_connected_to_oz(Worker) ->
     Domain = rpc:call(Worker, oneprovider, get_domain, []),
-    Url = str_utils:format_bin("https://~s~s", [Domain, ?NAGIOS_OZ_CONNECTIVITY_PATH]),
+    Url = str_utils:format_bin("https://~ts~ts", [Domain, ?NAGIOS_OZ_CONNECTIVITY_PATH]),
     CaCerts = rpc:call(Worker, https_listener, get_cert_chain_ders, []),
     Opts = [{ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]}],
     Result = case http_client:get(Url, #{}, <<>>, Opts) of

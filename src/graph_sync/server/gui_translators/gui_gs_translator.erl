@@ -85,9 +85,9 @@ translate_value(_, #gri{type = op_atm_task_execution} = GRI, Value) ->
 translate_value(ProtocolVersion, GRI, Data) ->
     ?error(
         "Cannot translate graph sync create result for:~n"
-        "ProtocolVersion: ~p~n"
-        "GRI: ~p~n"
-        "Data: ~p",
+        "ProtocolVersion: ~tp~n"
+        "GRI: ~tp~n"
+        "Data: ~tp",
         [ProtocolVersion, GRI, Data]
     ),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
@@ -144,9 +144,9 @@ translate_resource(_, #gri{type = op_user} = GRI, Data) ->
 translate_resource(ProtocolVersion, GRI, Data) ->
     ?error(
         "Cannot translate graph sync get result for:~n"
-        "ProtocolVersion: ~p~n"
-        "GRI: ~p~n"
-        "Data: ~p",
+        "ProtocolVersion: ~tp~n"
+        "GRI: ~tp~n"
+        "Data: ~tp",
         [ProtocolVersion, GRI, Data]
     ),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

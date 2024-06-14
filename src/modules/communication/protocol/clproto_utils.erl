@@ -62,7 +62,7 @@ fill_effective_session_info(Msg, SessionId) ->
 -spec msg_to_string(message()) -> binary().
 msg_to_string(Msg) ->
     case op_worker:get_env(log_whole_messages_on_errors, false) of
-        true -> str_utils:format_bin("~p", [Msg]);
+        true -> str_utils:format_bin("~tp", [Msg]);
         _ -> stringify_only_relevant_info(Msg)
     end.
 
@@ -82,7 +82,7 @@ stringify_only_relevant_info(#server_message{
     effective_session_id = EffSessionId
 }) ->
     str_utils:format_bin(
-        "ServerMessage{id = ~w, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
+        "ServerMessage{id = ~w, eff_sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
         [MsgId, EffSessionId, MsgStream, element(1, MsgBody)]
     );
 stringify_only_relevant_info(#client_message{
@@ -93,6 +93,6 @@ stringify_only_relevant_info(#client_message{
     message_body = MsgBody
 }) ->
     str_utils:format_bin(
-        "ClientMessage{id = ~w, sess_id = ~s, eff_sess_id = ~s, stream = ~w, body = ~s#{...}}",
+        "ClientMessage{id = ~w, sess_id = ~ts, eff_sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
         [MsgId, SessionId, EffSessionId, MsgStream, element(1, MsgBody)]
     ).

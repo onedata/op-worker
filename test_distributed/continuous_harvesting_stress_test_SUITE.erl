@@ -77,8 +77,8 @@ continuous_harvesting_test_base(Config) ->
     harvesting_stress_test_utils:harvesting_receive_loop(AllFiles),
     DiffSec = stopwatch:read_seconds(Stopwatch, float),
     AvgRate =  AllFiles /DiffSec,
-    ct:print("Harvesting ~p files took ~p s.~n"
-    "Average rate was ~p files per second.", [AllFiles, DiffSec, AvgRate]),
+    ct:print("Harvesting ~tp files took ~tp s.~n"
+    "Average rate was ~tp files per second.", [AllFiles, DiffSec, AvgRate]),
     [
         #parameter{name = total_time, description = "Total harvesting time", value = DiffSec},
         #parameter{name = avg_rate, description = "Average harvesting rate", value = AvgRate}

@@ -153,7 +153,7 @@ before_init() ->
         ok = helpers_nif:init()
     catch
         _:Error:Stacktrace ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p", [Error], Stacktrace),
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~tp", [Error], Stacktrace),
             {error, cannot_start_node_manager_plugin}
     end.
 
@@ -253,7 +253,7 @@ upgrade_cluster(4) ->
 
         lists:foreach(fun(SpaceId) ->
             case file_meta:ensure_tmp_dir_exists(SpaceId) of
-                created -> ?info("Created tmp dir for space '~s'.", [SpaceId]);
+                created -> ?info("Created tmp dir for space '~ts'.", [SpaceId]);
                 already_exists -> ok
             end
         end, SpaceIds)
@@ -278,7 +278,7 @@ upgrade_cluster(5) ->
         % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
         % it will create it if it is not yet synced.
         lists:foreach(fun(SpaceId) ->
-            ?info("Upgrading dataset directory links for space '~s'...", [SpaceId]),
+            ?info("Upgrading dataset directory links for space '~ts'...", [SpaceId]),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
                 archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
@@ -286,7 +286,7 @@ upgrade_cluster(5) ->
         end, SpaceIds),
         lists:foreach(fun(SpaceId) ->
             % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
-            ?info("Creating directory for opened deleted files for space '~s'...", [SpaceId]),
+            ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
             file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
         end, SpaceIds),
         lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
@@ -432,14 +432,14 @@ init_etses_for_space_on_all_nodes(SpaceId) ->
         [] ->
             ok;
         _ ->
-            ?error("Could not initialize etses for space ~p on nodes: ~w (RPC error)", [SpaceId, BadNodes]),
+            ?error("Could not initialize etses for space ~tp on nodes: ~w (RPC error)", [SpaceId, BadNodes]),
             error({etses_not_ready, BadNodes})
     end,
     lists:foreach(fun
         (ok) ->
             ok;
         ({badrpc, _} = Error) ->
-            ?error("Could not initialize etses for space: ~p.~nReason: ~p", [SpaceId, Error]),
+            ?error("Could not initialize etses for space: ~tp.~nReason: ~tp", [SpaceId, Error]),
             error({etses_not_ready, Error})
     end, Res).
 

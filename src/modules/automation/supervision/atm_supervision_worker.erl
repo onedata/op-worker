@@ -89,10 +89,9 @@ try_to_gracefully_stop_atm_workflow_executions() ->
                     stop_atm_workflow_executions(RootUserCtx, SpaceIds, interrupt)
             end;
         {error, _} = Error ->
-            ?warning(
-                "Skipping automation workflow executions graceful stop procedure:~s",
-                [?autoformat([Error])]
-            )
+            ?warning(?autoformat_with_msg(
+                "Skipping automation workflow executions graceful stop procedure:", Error
+            ))
     end.
 
 
@@ -175,10 +174,10 @@ restart_atm_workflow_executions() ->
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             schedule_atm_workflow_executions_restart();
         Error = {error, _} ->
-            ?error("Unable to restart automation workflow executions due to: ~p", [Error])
+            ?error("Unable to restart automation workflow executions due to: ~tp", [Error])
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Unable to restart automation workflow executions due to:~n~p:~p",
+            "Unable to restart automation workflow executions due to:~n~tp:~tp",
             [Type, Reason],
             Stacktrace
         )
@@ -193,7 +192,7 @@ restart_atm_workflow_executions(SpaceId) ->
             atm_workflow_execution_handler:restart(AtmWorkflowExecutionId)
         catch Type:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Unexpected error while trying to restart automation workflow execution ~s:~n~p:~p",
+                "Unexpected error while trying to restart automation workflow execution ~ts:~n~tp:~tp",
                 [AtmWorkflowExecutionId, Type, Reason],
                 Stacktrace
             )
@@ -253,7 +252,7 @@ stop_atm_workflow_executions(UserCtx, SpaceId, StoppingReason) when is_binary(Sp
             atm_workflow_execution_handler:init_stop(UserCtx, AtmWorkflowExecutionId, StoppingReason)
         catch Type:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Unexpected error while trying to stop automation workflow execution ~s:~n~p:~p",
+                "Unexpected error while trying to stop automation workflow execution ~ts:~n~tp:~tp",
                 [AtmWorkflowExecutionId, Type, Reason],
                 Stacktrace
             )

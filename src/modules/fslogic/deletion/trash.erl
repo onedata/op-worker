@@ -99,7 +99,7 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
         {error, _} = Error ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error("Unable to start deletion of ~s from trash in space ~s due to ~p.", [Guid, SpaceId, Error]),
+            ?error("Unable to start deletion of ~ts from trash in space ~ts due to ~tp.", [Guid, SpaceId, Error]),
             Error
     end.
 

@@ -107,7 +107,7 @@ reconcile_qos(FileCtx) ->
         reconcile_qos_insecure(FileCtx)
     catch Class:Reason:Stacktrace ->
         ?critical_exception(
-            "Unexpected error during qos reconciliation for file ~p", [file_ctx:get_logical_uuid_const(FileCtx)],
+            "Unexpected error during qos reconciliation for file ~tp", [file_ctx:get_logical_uuid_const(FileCtx)],
             Class, Reason, Stacktrace
         )
     end.
@@ -265,7 +265,7 @@ get_eff_qos(FileCtx) ->
 %% @private
 -spec handle_missing_file_meta(file_ctx:ctx(), file_meta_posthooks:missing_element()) -> file_meta:uuid().
 handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElementFileMeta) ->
-    ?debug("[~p] Missing file meta: ~p", [?MODULE, MissingUuid]),
+    ?debug("[~tp] Missing file meta: ~tp", [?MODULE, MissingUuid]),
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     add_missing_file_meta_posthook(SpaceId, MissingElementFileMeta),
@@ -284,7 +284,7 @@ handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElem
 handle_missing_link(FileCtx, {link_missing, MissingParentUuid, MissingLinkName} = MissingElement) ->
     % Because of file_meta_sync_status_cache there is guarantee that all file_meta documents on path are synced,
     % as well as there is no another missing link between given file and given missing one.
-    ?debug("[~p] Missing link: ~p", [?MODULE, {MissingParentUuid, MissingLinkName}]),
+    ?debug("[~tp] Missing link: ~tp", [?MODULE, {MissingParentUuid, MissingLinkName}]),
     add_missing_link_posthook(file_ctx:get_space_id_const(FileCtx), MissingElement),
     MissingParentUuid.
 

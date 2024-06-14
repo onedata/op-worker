@@ -133,7 +133,7 @@ create_subfiles_import_many_test(Config) ->
     Stopwatch = stopwatch:start(),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, 60),
-    ct:pal("Import took ~p", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Import took ~tp", [stopwatch:read_seconds(Stopwatch, float)]),
 
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
 
@@ -163,7 +163,7 @@ create_subfiles_import_many2_test(Config) ->
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
     RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
-    DirStructure = [10, 10, 10],
+    DirStructure = [13, 13, 13],  % 2197 reg files in total
     RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     storage_import_test_base:create_nested_directory_tree(W1, DirStructure, RootSDHandle),
     Files = storage_import_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
@@ -172,17 +172,17 @@ create_subfiles_import_many2_test(Config) ->
 
     Timeout = 600,
     storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-    ct:pal("Import took ~p", [stopwatch:read_seconds(Stopwatch, float)]),
+    ct:pal("Import took ~tp", [stopwatch:read_seconds(Stopwatch, float)]),
     storage_import_test_base:parallel_assert(storage_import_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"created">> => 1000,
+        <<"created">> => 2197,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdDayHist">> => 1000,
+        <<"unmodified">> => 2,
+        <<"createdDayHist">> => 2197,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
@@ -485,7 +485,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"unmodified">> => 2,
+        <<"unmodified">> => 1,
         <<"createdMinHist">> => 4,
         <<"createdHourHist">> => 4,
         <<"createdDayHist">> => 4,
@@ -837,7 +837,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     ?assertEqual(true, rpc:call(W1, storage_import_monitoring, is_scan_in_progress, [?SPACE_ID]), ?ATTEMPTS),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
-    ?assertMatch({ok, []}, sd_test_utils:listobjects(W1, SDHandle,  ?DEFAULT_MARKER, 0, 100)),
+    ?assertMatch({ok, {?END_OF_LISTING_MARKER, []}}, sd_test_utils:listobjects(W1, SDHandle,  ?INITIAL_LISTING_MARKER, 0, 100)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId,  {path, ?SPACE_TEST_DIR_PATH}), 10 * ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
@@ -1306,7 +1306,7 @@ delete_many_subfiles_test(Config) ->
     RootPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
     ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
-    DirStructure = [10, 10, 10],
+    DirStructure = [11, 11, 11],  % 1331 reg files in total
     storage_import_test_base:create_nested_directory_tree(W1, DirStructure, SDHandle),
     storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
     Files = storage_import_test_base:generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_TEST_DIR_PATH),
@@ -1317,13 +1317,13 @@ delete_many_subfiles_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"created">> => 1000,
+        <<"created">> => 1331,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
         <<"unmodified">> => 1,
-        <<"createdHourHist">> => 1000,
-        <<"createdDayHist">> => 1000,
+        <<"createdHourHist">> => 1331,
+        <<"createdDayHist">> => 1331,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
@@ -1345,15 +1345,15 @@ delete_many_subfiles_test(Config) ->
         <<"scans">> => 2,
         <<"created">> => 0,
         <<"modified">> => 0,
-        <<"deleted">> => 1111,
+        <<"deleted">> => 1464,
         <<"failed">> => 0,
         <<"unmodified">> => 1,
-        <<"createdDayHist">> => 1000,
+        <<"createdDayHist">> => 1331,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
-        <<"deletedHourHist">> => 1111,
-        <<"deletedDayHist">> => 1111,
+        <<"deletedHourHist">> => 1464,
+        <<"deletedDayHist">> => 1464,
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
@@ -1403,7 +1403,7 @@ create_list_race_test(Config) ->
     storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
 
     ListedFiles = [FileToDeleteOnStorage, FileToDeleteByLFM] = receive
-        {waiting, Pid, 0, {ok, FilesAndStats}} ->
+        {waiting, Pid, 0, {ok, {_NextMarker, FilesAndStats}}} ->
             % continue storage import
             Pid ! continue,
             [filename:basename(F) || {F, _} <- FilesAndStats]

@@ -315,7 +315,7 @@ abandon(ExecutionId, InterruptReason) ->
         {ok, _} ->
             ok;
         ?ERROR_NOT_FOUND ->
-            ?warning("Ignoring abandon for not existing workflow execution ~p", [ExecutionId]),
+            ?warning("Ignoring abandon for not existing workflow execution ~tp", [ExecutionId]),
             ok
     end.
 
@@ -410,10 +410,10 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             {Doc, undefined, []};
         % Possible errors when result of async task that ended with timeout appeared
         ?WF_ERROR_JOB_NOT_FOUND ->
-            ?debug("Result for not found job ~p of execution ~p", [JobIdentifier, ExecutionId]),
+            ?debug("Result for not found job ~tp of execution ~tp", [JobIdentifier, ExecutionId]),
             {?WF_ERROR_JOB_NOT_FOUND, undefined, []};
         ?ERROR_NOT_FOUND ->
-            ?debug("Result for job ~p of ended execution ~p", [JobIdentifier, ExecutionId]),
+            ?debug("Result for job ~tp of ended execution ~tp", [JobIdentifier, ExecutionId]),
             {?WF_ERROR_JOB_NOT_FOUND, undefined, []}
     end,
 
@@ -666,7 +666,7 @@ finish_lane_preparation(Handler, ExecutionId, LaneId,
     case Boxes of
         [] when InitType =:= prepare ->
             % workflow_jobs require at least one parallel_boxes in lane
-            ?error("No parallel boxes for lane ~p of execution id: ~p", [LaneSpec, ExecutionId]),
+            ?error("No parallel boxes for lane ~tp of execution id: ~tp", [LaneSpec, ExecutionId]),
             {ok, _} = update(ExecutionId, fun(State) ->
                 handle_lane_preparation_failure(reset_state_fields_for_next_lane(State), undefined, ?PREPARE_CURRENT)
             end),
@@ -1151,7 +1151,7 @@ get_next_iterator(Handler, Context, Iterator, ExecutionId) ->
         Error:Reason:Stacktrace ->
             workflow_engine:handle_exception(
                 ExecutionId, Handler, Context,
-                "Unexpected error getting next iterator", [],
+                ?autoformat_with_msg("Unexpected error getting next iterator", []),
                 Error, Reason, Stacktrace
             ),
             undefined

@@ -108,7 +108,7 @@ unblock_archive_modification(#document{value = #archive{root_dir_guid = RootDirG
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    ?debug("Archive verification job ~p started", [TaskId]).
+    ?debug("Archive verification job ~tp started", [TaskId]).
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
@@ -119,7 +119,7 @@ task_finished(TaskId, Pool) ->
         false ->
             tree_traverse_session:close_for_task(TaskId),
             archive:mark_preserved(TaskId),
-            ?debug("Archive verification job ~p finished", [TaskId])
+            ?debug("Archive verification job ~tp finished", [TaskId])
     end.
 
 
@@ -130,7 +130,7 @@ task_canceled(TaskId, _Pool) ->
         ok -> ok;
         {error, marked_to_delete}  -> ok = archive_api:delete_single_archive(TaskId)
     end, 
-    ?debug("Archive verification job ~p cancelled", [TaskId]).
+    ?debug("Archive verification job ~tp cancelled", [TaskId]).
 
 
 -spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
@@ -156,8 +156,8 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
-        ?error_exception("Unexpected error during verification of archive ~s",
-            [?autoformat([TaskId])], error, Reason, Stacktrace),
+        ?error_exception(
+            ?autoformat_with_msg("Unexpected error during verification of archive", TaskId), error, Reason, Stacktrace),
         {ok, #{}} % unexpected error - no jobs can be created
     end,
     case archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler) of
@@ -167,8 +167,9 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
             handle_verification_error(TaskId, InitialJob),
             {FileCtx, FilePath} = job_to_error_info(InitialJob),
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error_exception("Unexpected error in archive verification traverse during listing of directory ~s",
-                [?autoformat([TaskId, FileGuid, FilePath])], error, Reason, Stacktrace),
+            ?error_exception(?autoformat_with_msg(
+                "Unexpected error in archive verification traverse during listing of directory ",
+                [TaskId, FileGuid, FilePath]), error, Reason, Stacktrace),
             {ok, #{}}
     end.
 
@@ -177,7 +178,7 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
 do_slave_job(InitialJob, TaskId) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         handle_verification_error(TaskId, Job),
-        ?error_exception("Unexpected error during verification of archive ~p",
+        ?error_exception("Unexpected error during verification of archive ~tp",
             [TaskId], error, Reason, Stacktrace)
     end,
     archive_traverses_common:execute_unsafe_job(
@@ -202,7 +203,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
                 false -> 
                     ok;
                 true ->
-                    ?warning("Invalid checksum for file ~p in archive ~p",
+                    ?warning("Invalid checksum for file ~tp in archive ~tp",
                         [file_ctx:get_logical_guid_const(FileCtx), TaskId]),
                     handle_verification_error(TaskId, Job)
             end
@@ -233,7 +234,7 @@ do_dir_master_job_unsafe(#tree_traverse{
                     false ->
                         ok;
                     true ->
-                        ?warning("Invalid checksum for dir ~p in archive ~p", 
+                        ?warning("Invalid checksum for dir ~tp in archive ~tp",
                             [file_ctx:get_logical_guid_const(FileCtx), TaskId]),
                         handle_verification_error(TaskId, Job)
                 end

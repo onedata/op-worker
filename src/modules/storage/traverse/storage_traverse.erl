@@ -146,7 +146,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         async_children_master_jobs = maps:get(async_children_master_jobs, RunOpts, ?DEFAULT_ASYNC_CHILDREN_MASTER_JOBS),
         offset = maps:get(offset, RunOpts, 0),
         batch_size = maps:get(batch_size, RunOpts, ?DEFAULT_BATCH_SIZE),
-        marker = maps:get(marker, RunOpts, ?DEFAULT_MARKER),
+        marker = maps:get(marker, RunOpts, ?INITIAL_LISTING_MARKER),
         max_depth = maps:get(max_depth, RunOpts, ?DEFAULT_MAX_DEPTH),
         next_batch_job_prehook = maps:get(next_batch_job_prehook, RunOpts, ?DEFAULT_NEXT_BATCH_JOB_PREHOOK),
         children_master_job_prehook = ChildrenMasterJobPrehook,
@@ -208,10 +208,10 @@ do_master_job(MasterJob = #storage_traverse_master{
         {ok, ChildrenBatch, NextBatchMasterJob} ->
             generate_master_and_slave_jobs(MasterJob, NextBatchMasterJob, ChildrenBatch, Args);
         Error = {error, ?ENOENT} ->
-            ?debug("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
+            ?debug("Getting children of ~tp on storage ~tp failed due to ~w", [StorageFileId, StorageId, Error]),
             Error;
         Error = {error, _} ->
-            ?error("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
+            ?error("Getting children of ~tp on storage ~tp failed due to ~w", [StorageFileId, StorageId, Error]),
             Error
     end.
 

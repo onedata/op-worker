@@ -527,8 +527,8 @@ get_transfer_stats(RequestedTransferType, SpaceId) ->
                     {AccTransferStats, AccLastUpdate};
                 {error, Error} ->
                     ?error("Failed to retrieve Space Transfer Stats Document
-                            for space ~p, provider ~p and transfer type ~p
-                            due to: ~p", [
+                            for space ~tp, provider ~tp and transfer type ~tp
+                            due to: ~tp", [
                         SpaceId, Provider, TransferType, Error
                     ]),
                     {AccTransferStats, AccLastUpdate}

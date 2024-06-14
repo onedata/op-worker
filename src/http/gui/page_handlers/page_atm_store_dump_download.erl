@@ -42,7 +42,7 @@ gen_dump_download_url(SessionId, AtmStoreId) ->
         store_id = AtmStoreId
     }),
 
-    str_utils:format_bin("https://~s~s/~s", [
+    str_utils:format_bin("https://~ts~ts/~ts", [
         oneprovider:get_domain(),
         ?GUI_ATM_STORE_DUMP_DOWNLOAD_PATH,
         Code

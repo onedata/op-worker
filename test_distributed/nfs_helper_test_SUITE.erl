@@ -369,8 +369,7 @@ new_helper(Config) ->
             <<"volume">> => ?NFS_VOLUME,
             <<"version">> => ?NFS_VERSION,
             <<"host">> => atom_to_binary(?config(host, NFSConfig), utf8),
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
     ),

@@ -837,6 +837,14 @@ template <> struct tuple_to_arrayer<0> {
 };
 } // namespace detail
 
+template <typename T1, typename T2>
+TERM make(ErlNifEnv *env, const std::pair<T1, T2> &var)
+{
+    std::array<ERL_NIF_TERM, 2> array {
+        make(env, var.first), make(env, var.second)};
+    return TERM(enif_make_tuple_from_array(env, array.begin(), array.size()));
+}
+
 template <typename... Ts>
 TERM make(ErlNifEnv *env, const std::tuple<Ts...> &var)
 {

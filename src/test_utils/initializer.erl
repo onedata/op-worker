@@ -403,8 +403,7 @@ setup_storage([Worker | Rest], Config) ->
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{
         <<"mountPoint">> => list_to_binary(TmpDir),
-        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-        <<"skipStorageDetection">> => <<"false">>
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
     },
     {ok, Helper} = helper:new_helper(
         ?POSIX_HELPER_NAME,
@@ -763,7 +762,7 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config, NoHistory) ->
         set_default_onezone_domain(Config),
         create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory)
     catch Type:Message:Stacktrace ->
-        ct:print("initializer:create_test_users_and_spaces crashed: ~p:~p~n~p", [
+        ct:print("initializer:create_test_users_and_spaces crashed: ~tp:~tp~n~tp", [
             Type, Message, Stacktrace
         ]),
         throw(cannot_create_test_users_and_spaces)

@@ -81,8 +81,8 @@ incremental_harvesting_test_base(Config) ->
 
     DiffSec = stopwatch:read_seconds(Stopwatch, float),
     AvgRate =  NewFilesSum /DiffSec,
-    ct:print("Harvesting ~p files took ~p s.~n"
-    "Average rate was ~p files per second.", [NewFilesSum, DiffSec, AvgRate]),
+    ct:print("Harvesting ~tp files took ~tp s.~n"
+    "Average rate was ~tp files per second.", [NewFilesSum, DiffSec, AvgRate]),
     [
         #parameter{name = total_time, description = "Total harvesting time", value = DiffSec},
         #parameter{name = avg_rate, description = "Average harvesting rate", value = AvgRate}

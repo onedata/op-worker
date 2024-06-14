@@ -115,7 +115,7 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
         {error, Reason} ->
             {error, Reason}
     end.
-    
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -254,7 +254,7 @@ get_event_manager(SessId) ->
         {error, not_found = Reason} ->
             {error, Reason};
         {error, Reason} ->
-            ?warning("Cannot get event manager for session ~p due to: ~p",
+            ?warning("Cannot get event manager for session ~tp due to: ~tp",
                 [SessId, Reason]),
             {error, Reason}
     end.
@@ -289,10 +289,10 @@ send_to_event_manager(Manager, Message, RetryCounter) ->
         ok = event_manager:handle(Manager, Message)
     catch
         exit:{timeout, _} ->
-            ?debug("Timeout of event manager for message ~p, retry", [Message]),
+            ?debug("Timeout of event manager for message ~tp, retry", [Message]),
             send_to_event_manager(Manager, Message, RetryCounter - 1);
         Reason1:Reason2:Stacktrace ->
-            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}], Stacktrace),
+            ?error_stacktrace("Cannot process event ~tp due to: ~tp", [Message, {Reason1, Reason2}], Stacktrace),
             send_to_event_manager(Manager, Message, RetryCounter - 1)
     end.
 
@@ -324,8 +324,8 @@ emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLi
         catch
             Class:Reason:Stacktrace ->
                 % Race with file/link deletion can result in error logged here
-                ?warning_exception("Error emitting event for additional guid ~s",
-                    [?autoformat([Context, Evt])], Class, Reason, Stacktrace)
+                ?warning_exception(?autoformat_with_msg("Error emitting event for additional guid ", [Context, Evt]),
+                    Class, Reason, Stacktrace)
         end
     end, SessIdsForLinks).
 

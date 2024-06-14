@@ -146,7 +146,7 @@ ensure_created(SpaceId) ->
                 {error, already_exists} -> ok
             end;
         Error ->
-            ?error("Failed to check whether storage_import_monitoring document for space ~s exists due to ~p.",
+            ?error("Failed to check whether storage_import_monitoring document for space ~ts exists due to ~tp.",
                 [SpaceId, Error])
     end.
 
@@ -408,10 +408,10 @@ get_stats(SpaceId, Types, Window) ->
         {ok, #document{value = SIM}} ->
             get_stats(SIM, Types, Window);
         {error, not_found} ->
-            ?debug("Failed to fetch storage import metrics for space ~p SpaceId due to not_found", [SpaceId]),
+            ?debug("Failed to fetch storage import metrics for space ~tp SpaceId due to not_found", [SpaceId]),
             {ok, return_empty_histograms_and_timestamps(Types)};
         Error ->
-            ?error("Failed to fetch storage import metrics for space ~p SpaceId due to ~p", [SpaceId, Error]),
+            ?error("Failed to fetch storage import metrics for space ~tp SpaceId due to ~tp", [SpaceId, Error]),
             {ok, return_empty_histograms_and_timestamps(Types)}
     end.
 
@@ -567,7 +567,7 @@ get_or_create(SpaceId) ->
                 {error, already_exists} -> storage_import_monitoring:get(SpaceId)
             end;
         Error ->
-            ?error("Failed to fetch storage_import_monitoring document for space ~p due to ~p",
+            ?error("Failed to fetch storage_import_monitoring document for space ~tp due to ~tp",
                 [SpaceId, Error]),
             Error
     end.

@@ -170,7 +170,7 @@ run_tests(SpecTemplates) ->
             throw:fail ->
                 false;
             Type:Reason:Stacktrace ->
-                ct:pal("Unexpected error while running test suite ~w:~p~nStacktrace: ~s", [
+                ct:pal("Unexpected error while running test suite ~w:~tp~nStacktrace: ~ts", [
                     Type, Reason, lager:pr_stacktrace(Stacktrace)
                 ]),
                 false
@@ -675,14 +675,14 @@ log_failure(
     ErrReason,
     Stacktrace
 ) ->
-    ct:pal("~s test case failed:~n"
-    "Node: ~p~n"
-    "Client: ~p~n"
-    "Args: ~s~n"
-    "Expected: ~p~n"
-    "Got: ~p~n"
-    "Error: ~p:~p~n"
-    "Stacktrace: ~s~n", [
+    ct:pal("~ts test case failed:~n"
+    "Node: ~tp~n"
+    "Client: ~tp~n"
+    "Args: ~ts~n"
+    "Expected: ~tp~n"
+    "Got: ~tp~n"
+    "Error: ~tp:~tp~n"
+    "Stacktrace: ~ts~n", [
         ScenarioName,
         TargetNode,
         client_to_placeholder(Client),
@@ -727,9 +727,14 @@ generate_required_data_sets(undefined) ->
     [?NO_DATA];
 generate_required_data_sets(#data_spec{
     required = Required,
-    at_least_one = AtLeastOne
+    at_least_one = AtLeastOne,
+    discriminator = Discriminator
 } = DataSpec) ->
-
+    
+    DiscriminatorWithValue = maps_utils:generate_from_list(fun(Key) ->
+        lists_utils:random_element(get_correct_values(Key, DataSpec))
+    end, Discriminator),
+    
     AtLeastOneWithValues = lists:flatten(lists:map(
         fun(Key) ->
             [#{Key => Val} || Val <- get_correct_values(Key, DataSpec)]
@@ -756,11 +761,14 @@ generate_required_data_sets(#data_spec{
             maps:merge(AllAtLeastOneMap, ReqMap)
         end, RequiredCombinations
     ),
-    case AtLeastOne of
+    Datasets = case AtLeastOne of
         [] -> RequiredCombinations;
         [_] -> RequiredWithOne;
         _ -> RequiredWithAll ++ RequiredWithOne
-    end.
+    end,
+    lists:map(fun(Dataset) ->
+        maps:merge(Dataset, DiscriminatorWithValue)
+    end, Datasets).
 
 
 %% @private
@@ -803,11 +811,12 @@ generate_bad_data_sets(#data_spec{
     required = Required,
     at_least_one = AtLeastOne,
     optional = Optional,
-    bad_values = BadValues
+    bad_values = BadValues,
+    discriminator = Discriminator
 } = DataSpec) ->
     CorrectDataSet = lists:foldl(fun(Param, Acc) ->
         Acc#{Param => lists_utils:random_element(get_correct_values(Param, DataSpec))}
-    end, #{}, Required ++ AtLeastOne ++ Optional),
+    end, #{}, Required ++ AtLeastOne ++ Optional ++ Discriminator),
 
     lists:map(fun({Param, InvalidValue, ExpError}) ->
         Data = CorrectDataSet#{Param => InvalidValue},
@@ -1128,11 +1137,11 @@ get_rest_endpoint(Node, ResourcePath) ->
 %%--------------------------------------------------------------------
 -spec get_rest_api_root(node()) -> URL :: binary().
 get_rest_api_root(?ONEZONE_TARGET_NODE) ->
-    str_utils:format_bin("https://~s/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
+    str_utils:format_bin("https://~ts/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
 get_rest_api_root(Node) ->
     Port = get_https_server_port_str(Node),
     Domain = opw_test_rpc:get_provider_domain(Node),
-    str_utils:format_bin("https://~s~s/api/v3/oneprovider/", [Domain, Port]).
+    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
 
 
 %% @private

@@ -44,12 +44,11 @@ new_helper_test_() ->
     lists:map(fun({HelperName, ArgsKeys}) ->
         Args = keys_to_map(ArgsKeys),
         Args2 = Args#{
-            <<"storagePathType">> => <<"flat">>,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => <<"flat">>
         },
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 
-        {str_utils:format("~s helper should be created", [HelperName]),
+        {str_utils:format("~ts helper should be created", [HelperName]),
             ?_assertMatch({ok, #helper{}},
                 helper:new_helper(HelperName, Args2, AdminCtx))}
     end, ?HELPER_ARGS).
@@ -59,8 +58,7 @@ user_ctx_validation_test_() ->
     lists:flatmap(fun({HelperName, AdminCtxKeys}) ->
         Args = keys_to_map(proplists:get_value(HelperName, ?HELPER_ARGS)),
         Args2 = Args#{
-            <<"storagePathType">> => <<"flat">>,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => <<"flat">>
         },
         AdminCtx = keys_to_map(AdminCtxKeys),
 
@@ -73,7 +71,7 @@ user_ctx_validation_test_() ->
     end, ?USER_CTXS).
 
 ctx_test_name(HelperName, Key) ->
-    str_utils:format("~s helper creation should fail without ~p in admin ctx",
+    str_utils:format("~ts helper creation should fail without ~tp in admin ctx",
         [HelperName, Key]).
 
 
@@ -81,8 +79,7 @@ helper_args_validation_test_() ->
     lists:flatmap(fun({HelperName, ArgsKeys}) ->
         Args = keys_to_map(ArgsKeys),
         Args2 = Args#{
-            <<"storagePathType">> => <<"flat">>,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => <<"flat">>
         },
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 
@@ -95,7 +92,7 @@ helper_args_validation_test_() ->
     end, ?HELPER_ARGS).
 
 args_test_name(HelperName, Key) ->
-    str_utils:format("~s helper creation should fail without ~p in helper args",
+    str_utils:format("~ts helper creation should fail without ~tp in helper args",
         [HelperName, Key]).
 
 

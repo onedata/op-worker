@@ -104,9 +104,9 @@ websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushM
     catch
         Class:Reason:Stacktrace ->
             ct:print(
-                "UNEXPECTED ERROR in ~w:~w - ~w:~p~n"
-                "Stacktrace: ~s~n"
-                "Payload: ~s", [
+                "UNEXPECTED ERROR in ~w:~w - ~w:~tp~n"
+                "Stacktrace: ~ts~n"
+                "Payload: ~ts", [
                     ?MODULE, ?FUNCTION_NAME, Class, Reason,
                     lager:pr_stacktrace(Stacktrace),
                     Payload
@@ -116,7 +116,7 @@ websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushM
     end;
 
 websocket_handle(Message, _, State) ->
-    ct:print("Unexpected message in ~w: ~s", [?MODULE, Message]),
+    ct:print("Unexpected message in ~w: ~ts", [?MODULE, Message]),
     {ok, State}.
 
 
@@ -141,7 +141,7 @@ websocket_info(terminate, _, State) ->
     {close, <<"">>, State};
 
 websocket_info(Msg, _, State) ->
-    ct:print("Unexpected message in ~p: ~p", [?MODULE, Msg]),
+    ct:print("Unexpected message in ~tp: ~tp", [?MODULE, Msg]),
     {ok, State}.
 
 

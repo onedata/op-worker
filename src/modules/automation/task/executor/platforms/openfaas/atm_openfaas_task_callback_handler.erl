@@ -99,7 +99,7 @@ init(Req, State = #{type := heartbeat}) ->
 ) ->
     binary().
 build_url(AtmWorkflowExecutionId, AtmJobBatchId, TypeBin) ->
-    str_utils:format_bin("http://~s:~B/automation/workflow/executions/~s/jobs/~s/~s", [
+    str_utils:format_bin("http://~ts:~B/automation/workflow/executions/~ts/jobs/~ts/~ts", [
         oneprovider:get_domain(),
         http_listener:port(),
         AtmWorkflowExecutionId,
@@ -128,7 +128,7 @@ decode_lambda_output(Body) ->
             ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
                 "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
                 "$LAMBDA_RESULTS_FOR_ITEM object for each item in 'argsBatch' "
-                "provided to lambda. Instead got: ~s",
+                "provided to lambda. Instead got: ~ts",
                 [json_utils:encode(trim_body(Body))]
             ))
     catch _:_ ->

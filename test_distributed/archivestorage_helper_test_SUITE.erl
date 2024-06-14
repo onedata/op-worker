@@ -203,7 +203,6 @@ new_helper(Config) ->
             <<"scheme">> => <<"http">>,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH,
             <<"blockSize">> => list_to_binary(integer_to_list(5 * ?MB)),
-            <<"skipStorageDetection">> => <<"true">>,
             <<"archiveStorage">> => <<"true">>
         },
         UserCtx

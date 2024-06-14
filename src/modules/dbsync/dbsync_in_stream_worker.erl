@@ -279,17 +279,17 @@ handle_changes_batch(Since, Until, Timestamp, Docs,
                                 {true, _, _} ->
                                     State#state{lower_changes_count = LCC + 1};
                                 {_, _, 0} ->
-                                    ?info("Reset changes seq for space ~p,"
-                                    " old ~p, new ~p", [SpaceId, Seq, Lower]),
+                                    ?info("Reset changes seq for space ~tp,"
+                                    " old ~tp, new ~tp", [SpaceId, Seq, Lower]),
                                     State#state{seq = Lower};
                                 _ ->
-                                    ?info("Reset changes seq for space ~p,"
-                                    " old ~p, new ~p", [SpaceId, Seq, FLS]),
+                                    ?info("Reset changes seq for space ~tp,"
+                                    " old ~tp, new ~tp", [SpaceId, Seq, FLS]),
                                     State#state{seq = FLS}
                             end;
                         _ ->
-                            ?info("Reset changes seq with first batch for space ~p,"
-                            " old ~p, new ~p", [SpaceId, Seq, Lower]),
+                            ?info("Reset changes seq with first batch for space ~tp,"
+                            " old ~tp, new ~tp", [SpaceId, Seq, Lower]),
                             State#state{seq = Lower}
                     end;
                 false ->

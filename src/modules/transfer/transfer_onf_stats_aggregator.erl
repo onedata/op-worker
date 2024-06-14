@@ -234,7 +234,7 @@ flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
                 {error, Error} ->
                     ?error(
                         "Failed to update on the fly transfer statistics for "
-                        "space ~p due to ~p", [
+                        "space ~tp due to ~tp", [
                             SpaceId, Error
                         ]
                     )

@@ -128,7 +128,7 @@ execute_hooks() ->
             ok = erlang:apply(Module, Function, binary_to_term(EncodedArgs))
         catch Error:Type:Stacktrace  ->
             ?error_stacktrace(
-                "Error during execution of restart posthook ~p: ~p:~p", [Identifier, Error, Type], Stacktrace
+                "Error during execution of restart posthook ~tp: ~tp:~tp", [Identifier, Error, Type], Stacktrace
             )
         end
     end, RestartHooks),

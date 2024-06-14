@@ -136,7 +136,7 @@ cancel(TaskId) ->
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
     archive_recall:report_started(TaskId),
-    ?debug("Archive recall traverse ~p started", [TaskId]).
+    ?debug("Archive recall traverse ~tp started", [TaskId]).
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
@@ -146,7 +146,7 @@ task_finished(TaskId, Pool) ->
     {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
     SpaceId = maps:get(<<"spaceId">>, AdditionalData),
     archive_recall:report_finished(TaskId, SpaceId),
-    ?debug("Archive recall traverse ~p finished", [TaskId]).
+    ?debug("Archive recall traverse ~tp finished", [TaskId]).
 
 
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
@@ -343,7 +343,7 @@ report_error(TaskId, Job, Reason, Stacktrace) ->
     {FileCtx, RelativePath, ArchiveDoc} = infer_job_context(Job),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    ?error_exception("~s", [?autoformat([TaskId, FileGuid, ArchiveId])], error, Reason, Stacktrace),
+    ?error_exception(?autoformat(TaskId, FileGuid, ArchiveId), error, Reason, Stacktrace),
     archive_recall:report_file_failed(TaskId, FileGuid, RelativePath, Reason).
 
 

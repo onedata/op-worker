@@ -96,11 +96,11 @@ single_large_dir_creation_test_base(Config) ->
                     ExpectedDirStats = get_expected_stats(Config),
                     case SpaceDirStats of
                         ExpectedDirStats ->
-                            ct:print("Collected space dir stats: ~p", [SpaceDirStats]),
+                            ct:print("Collected space dir stats: ~tp", [SpaceDirStats]),
                             put(stress_phase, check_synchronization_params),
                             PhaseAns;
                         _ ->
-                            ct:print("Collected space dir stats: ~p~nExpected: ~p", [SpaceDirStats, ExpectedDirStats]),
+                            ct:print("Collected space dir stats: ~tp~nExpected: ~tp", [SpaceDirStats, ExpectedDirStats]),
                             timer:sleep(5000),
                             PhaseAns
                     end
@@ -120,7 +120,7 @@ single_large_dir_creation_test_base(Config) ->
                     ct:print("Resynchronization finished"),
                     [stop | PhaseAns];
                 _ ->
-                    ct:print("Resynchronization worker1: ~p, worker2: ~p", [Params1, Params2]),
+                    ct:print("Resynchronization worker1: ~tp, worker2: ~tp", [Params1, Params2]),
                     timer:sleep(5000),
                     PhaseAns
             end

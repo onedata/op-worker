@@ -77,8 +77,7 @@
 %% @formatter:off
 -type config() :: #{
     readonly => readonly(),
-    importedStorage => imported(),
-    skipStorageDetection => boolean()
+    importedStorage => imported()
 }.
 %% @formatter:on
 
@@ -106,7 +105,7 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
                         ok ->
                             ok;
                         {error, _} = DeleteError ->
-                            ?error("Could not revert creation of storage ~p in Onezone: ~p", [
+                            ?error("Could not revert creation of storage ~tp in Onezone: ~tp", [
                                 Id, DeleteError
                             ])
                     end,
@@ -117,9 +116,9 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
     end,
     case Result of
         {ok, StorageId} ->
-            ?notice("Successfully added storage '~ts' with Id: '~s'", [Name, StorageId]);
+            ?notice("Successfully added storage '~ts' with Id: '~ts'", [Name, StorageId]);
         {error, _} = Error ->
-            ?error("Failed to add storage '~ts' due to: ~p", [Name, Error])
+            ?error("Failed to add storage '~ts' due to: ~tp", [Name, Error])
     end,
     Result.
 
@@ -424,14 +423,14 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
         {ok, SpaceId} ->
             case dir_stats_service_state:enable_for_new_support(SpaceId, SupportParameters) of
                 ok -> ok;
-                StatsError -> ?warning("Error enabling statistics for new space ~p~nGot: ~p", [SpaceId, StatsError])
+                StatsError -> ?warning("Error enabling statistics for new space ~tp~nGot: ~tp", [SpaceId, StatsError])
             end,
             case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
                     on_space_supported(SpaceId, StorageId),
                     {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
                     {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
-                    ?notice("New space has been supported: '~s' (~s) with ~s quota on storage '~s' (~s)", [
+                    ?notice("New space has been supported: '~ts' (~ts) with ~ts quota on storage '~ts' (~ts)", [
                         SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
                     ]),
                     {ok, SpaceId};
@@ -574,17 +573,14 @@ check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
 %% @private
 -spec sanitize_readonly_option(id() | name(), config()) -> ok.
 sanitize_readonly_option(IdOrName, #{
-    skipStorageDetection := SkipStorageDetection,
     readonly := Readonly,
     importedStorage := Imported
 }) ->
     case {
         utils:to_boolean(Readonly),
-        utils:to_boolean(SkipStorageDetection),
         utils:to_boolean(Imported)
     } of
-        {false, _, _} -> ok;
-        {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
-        {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
-        {true, true, true} -> ok
+        {false, _} -> ok;
+        {true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
+        {true, true} -> ok
     end.

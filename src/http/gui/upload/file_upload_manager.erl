@@ -157,7 +157,7 @@ handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads}
                 latest_activity_timestamp = ?NOW()
             }}});
         {ok, #upload_ctx{user_id = OtherUserId}} ->
-            ?debug("Failed to start upload by user ~p as it is already registered by user ~p", [
+            ?debug("Failed to start upload by user ~tp as it is already registered by user ~tp", [
                 UserId, OtherUserId
             ]),
             reply(?ERROR_FORBIDDEN, State);
@@ -361,16 +361,16 @@ call_server(Request) ->
         gen_server2:call(?SERVER, Request, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
-            ?debug("Process '~p' does not exist", [?MODULE]),
+            ?debug("Process '~tp' does not exist", [?MODULE]),
             ?ERROR_NOT_FOUND;
         exit:{normal, _} ->
-            ?debug("Exit of '~p' process", [?MODULE]),
+            ?debug("Exit of '~tp' process", [?MODULE]),
             ?ERROR_NOT_FOUND;
         exit:{timeout, _} ->
-            ?debug("Timeout of '~p' process", [?MODULE]),
+            ?debug("Timeout of '~tp' process", [?MODULE]),
             ?ERROR_TIMEOUT;
         Type:Reason ->
-            ?error("Cannot call '~p' due to ~p:~p", [?MODULE, Type, Reason]),
+            ?error("Cannot call '~tp' due to ~tp:~tp", [?MODULE, Type, Reason]),
             {error, Reason}
     end.
 

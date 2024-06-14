@@ -302,7 +302,7 @@ init([CallbackModule | OtherArgs]) ->
         init_internal(CallbackModule, OtherArgs)
     catch
         _:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to start harvesting_stream due to ~p", [Reason], Stacktrace),
+            ?error_stacktrace("Unable to start harvesting_stream due to ~tp", [Reason], Stacktrace),
             {stop, Reason}
     end.
 
@@ -423,7 +423,7 @@ handle_info(Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, State = #hs_state{name = Name, callback_module = Mod}) ->
-    ?debug("Stopping harvesting_stream ~p due to reason: ~p", [Name, Reason]),
+    ?debug("Stopping harvesting_stream ~tp due to reason: ~tp", [Name, Reason]),
     Mod:terminate(Reason, State),
     ?log_terminate(Reason, State).
 
@@ -450,7 +450,7 @@ init_internal(CallbackModule, Args) ->
             name = Name,
             last_seen_seq = LastSeenSeq
         }} ->
-            ?debug("Starting harvesting stream ~p", [Name]),
+            ?debug("Starting harvesting stream ~tp", [Name]),
             State2 = State#hs_state{
                 provider_id = oneprovider:get_id(),
                 last_persisted_seq = LastSeenSeq,
@@ -460,7 +460,7 @@ init_internal(CallbackModule, Args) ->
             },
             case harvesting_destination:is_empty(Destination) of
                 true ->
-                    ?debug("Not starting harvesting stream ~p due to empty destination", [Name]),
+                    ?debug("Not starting harvesting stream ~tp due to empty destination", [Name]),
                     {stop, normal};
                 false ->
                     {ok, enter_streaming_mode(State2)}
@@ -592,7 +592,7 @@ harvest_and_handle_errors(State = #hs_state{
     LastBatchSeq = harvesting_batch:get_last_seq(PreparedBatch),
     case harvesting_result:get_summary(ProcessedResult) of
         ?ERROR_NOT_FOUND ->
-            ?debug("Space ~p was deleted. Stopping harvesting_stream ~p", [SpaceId, Name]),
+            ?debug("Space ~tp was deleted. Stopping harvesting_stream ~tp", [SpaceId, Name]),
             {stop, normal, State2};
         Error = {error, _} ->
             ErrorLog = str_utils:format_bin("Unexpected error ~w occurred.", [Error]),
@@ -734,9 +734,9 @@ backoff_log(StreamName, SpaceId, ErrorLog, NexRetry, _) ->
 
 -spec backoff_log_format() -> string().
 backoff_log_format() ->
-    "Error in harvesting_stream: ~w when harvesting space: ~p.~n"
-    "~s~n"
-    "Next harvesting retry after: ~p seconds.".
+    "Error in harvesting_stream: ~w when harvesting space: ~tp.~n"
+    "~ts~n"
+    "Next harvesting retry after: ~tp seconds.".
 
 -spec get_max_seq(od_space:id()) -> couchbase_changes:seq().
 get_max_seq(SpaceId) ->

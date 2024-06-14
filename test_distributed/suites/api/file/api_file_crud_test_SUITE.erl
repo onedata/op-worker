@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
@@ -28,6 +29,9 @@
 ]).
 
 -export([
+    create_file_test/1,
+    create_file_at_path_test/1,
+    
     get_file_instance_test/1,
     get_shared_file_instance_test/1,
     get_file_instance_on_provider_not_supporting_space_test/1,
@@ -42,7 +46,9 @@
 
 groups() -> [
     {parallel, [parallel], [
-        get_file_instance_test,
+        create_file_test,
+        create_file_at_path_test,
+        
         get_file_instance_on_provider_not_supporting_space_test,
 
         update_file_instance_test,
@@ -53,8 +59,11 @@ groups() -> [
         delete_file_instance_on_provider_not_supporting_space_test
     ]},
     {sequential, [sequential], [
+        % Cannot be run in parallel with other tests, as they modify space
+        % content which results in mtime change.
+        get_file_instance_test,
         % Cannot be executed in parallel with get_file_instance_test as
-        % both tests check space dir shares and expect different results
+        % both tests check space dir shares and expect different results.
         get_shared_file_instance_test
     ]}
 ].
@@ -69,9 +78,200 @@ all() -> [
 
 
 %%%===================================================================
-%%% Get file instance test functions
+%%% Create file instance test functions
 %%%===================================================================
 
+create_file_test(_Config) ->
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, path_to_parent, <<>>),
+    create_file_test_base(id, MemRef).
+
+
+create_file_at_path_test(_Config) ->
+    MemRef = api_test_memory:init(),
+    PathTokens = [N1, N2, N3] = lists_utils:generate(fun(_) -> ?RANDOM_FILE_NAME() end, 3),
+    onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{
+        name = N1,
+        children = [
+            #dir_spec{
+                name = N2,
+                children = [#dir_spec{name = N3}]
+            }
+        ]
+    }),
+    api_test_memory:set(MemRef, path_to_parent, filename:join(PathTokens)),
+    create_file_test_base(path, MemRef).
+
+
+create_file_test_base(CreationType, MemRef) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    Providers = [P1Node, P2Node],
+    
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    SpaceObjectId = file_id:check_guid_to_objectid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+    
+    ClientSpec = #client_spec{
+        correct = [
+            user2,  % space owner - doesn't need any perms
+            user3,  % space member - should succeed as creating files doesn't require any perms
+            user4   % space member - should succeed as creating files doesn't require any perms
+        ],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user1]
+    },
+    
+    RequiredBase = case CreationType of
+        id -> [<<"name">>];
+        path -> []
+    end,
+    
+    % put dummy value, so nothing fails when retrieving it even if it doesn't make sense
+    api_test_memory:set(MemRef, hardlink_target, dummy_id),
+    ScenarioSpecBase =
+        #scenario_spec{
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpec,
+            prepare_args_fun = build_create_file_rest_args_fun(SpaceObjectId, CreationType, MemRef),
+            validate_result_fun = build_create_file_validate_rest_call_fun(MemRef),
+            data_spec = DataSpecBase = #data_spec{
+                required = RequiredBase,
+                optional = [<<"type">>, <<"mode">>],
+                correct_values = CorrectValuesBase = #{
+                    % name provided only to test that it is required field, actual name is generated in prepare_args_fun
+                    % in order to avoid conflicts
+                    <<"name">> => [dummy_name],
+                    <<"mode">> => [?DEFAULT_DIR_MODE, ?DEFAULT_FILE_MODE]
+                },
+                bad_values = [
+                    {<<"mode">>, <<"some_binary">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                    {<<"mode">>, -1, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+                    {<<"mode">>, <<"2000">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
+                    
+                ]
+            }
+        },
+    ?assert(onenv_api_test_runner:run_tests([
+        ScenarioSpecBase#scenario_spec{
+            name = "Create non-link file using rest",
+            data_spec = DataSpecBase#data_spec{
+                correct_values = CorrectValuesBase#{
+                    <<"type">> => ["REG", "DIR"]
+                }
+            }
+        },
+        ScenarioSpecBase#scenario_spec{
+            name = "Create hardlink using rest",
+            setup_fun = fun() ->
+                #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(
+                    user2, space_krk_par, #file_spec{}),
+                api_test_memory:set(MemRef, hardlink_target, file_id:check_guid_to_objectid(Guid))
+            end,
+            data_spec = DataSpecBase#data_spec{
+                required = RequiredBase ++ [<<"target_file_id">>],
+                discriminator = [<<"type">>],
+                correct_values = CorrectValuesBase#{
+                    <<"type">> => ["LNK"],
+                    <<"target_file_id">> => [dummy_id] % NOTE: substituted in prepare_args_fun
+                }
+            }
+        },
+        ScenarioSpecBase#scenario_spec{
+            name = "Create symlink using rest",
+            data_spec = DataSpecBase#data_spec{
+                required = RequiredBase ++ [<<"target_file_path">>],
+                discriminator = [<<"type">>],
+                correct_values = CorrectValuesBase#{
+                    <<"type">> => ["SYMLNK"],
+                    <<"target_file_path">> => [<<"dummy_symlink_path">>]
+                }
+            }
+        }
+    ])).
+
+
+%% @private
+build_create_file_rest_args_fun(ParentId, CreationType, MemRef) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, #{}),
+        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ParentId, Data1),
+        Name = ?RANDOM_FILE_NAME(),
+        api_test_memory:set(MemRef, name, Name),
+        % replace name to unique here to avoid conflicts between tests
+        Data3 = maps_utils:update_existing_key(Data2, <<"name">>, Name),
+        Data4 = maps_utils:update_existing_key(
+            Data3, <<"target_file_id">>, api_test_memory:get(MemRef, hardlink_target)),
+    
+        {Method, RestPath, Data5} = case CreationType of
+            id ->
+                {post, <<"data/", Id/binary, "/children">>, Data4};
+            path ->
+                PathToDirectParent = api_test_memory:get(MemRef, path_to_parent),
+                Path = <<"data/", Id/binary, "/path/", PathToDirectParent/binary, "/", Name/binary>>,
+                {put, Path, maps:without([<<"name">>], Data4)}
+        end,
+        
+        #rest_args{
+            method = Method,
+            path = http_utils:append_url_parameters(RestPath, Data5)
+        }
+    end.
+
+
+%% @private
+build_create_file_validate_rest_call_fun(MemRef) ->
+    fun
+        (#api_test_ctx{client = ?USER(UserId), node = Node, data = Data}, {ok, ?HTTP_201_CREATED, _, Response}) ->
+            #{<<"fileId">> := FileObjectId} = ?assertMatch(#{<<"fileId">> := _}, Response),
+            ProviderId = opw_test_rpc:get_provider_id(Node),
+            SessId = oct_background:get_user_session_id(UserId, ProviderId),
+            StatFun = fun(AttrList) ->
+                lfm_proxy:stat(Node, SessId, ?FILE_REF(file_id:check_objectid_to_guid(FileObjectId)), AttrList)
+            end,
+            PathToDirectParent = api_test_memory:get(MemRef, path_to_parent),
+            ExpectedName = api_test_memory:get(MemRef, name),
+            ExpectedPath = filename:join([<<"/">>, ?SPACE_KRK_PAR, PathToDirectParent, ExpectedName]),
+    
+            BaseAttrList = [?attr_name, ?attr_type, ?attr_path],
+            case maps:get(<<"type">>, Data, "REG") of
+                "REG" ->
+                    ?assertMatch({ok, #file_attr{
+                        name = ExpectedName,
+                        type = ?REGULAR_FILE_TYPE,
+                        path = ExpectedPath
+                    }}, StatFun(BaseAttrList));
+                "DIR" ->
+                    ?assertMatch({ok, #file_attr{
+                        name = ExpectedName,
+                        type = ?DIRECTORY_TYPE,
+                        path = ExpectedPath
+                    }}, StatFun(BaseAttrList));
+                "LNK" ->
+                    ?assertMatch({ok, #file_attr{
+                        name = ExpectedName,
+                        type = ?REGULAR_FILE_TYPE, % hardlinks are indistinguishable from regular files
+                        path = ExpectedPath,
+                        hardlink_count = 2
+                    }},
+                        StatFun(BaseAttrList ++ [?attr_hardlink_count]));
+                "SYMLNK" ->
+                    SymlinkValue = maps:get(<<"target_file_path">>, Data),
+                    ?assertMatch({ok, #file_attr{
+                        name = ExpectedName,
+                        type = ?SYMLINK_TYPE,
+                        path = ExpectedPath,
+                        symlink_value = SymlinkValue
+                    }},
+                        StatFun(BaseAttrList ++ [?attr_symlink_value]))
+            end;
+        (_ApiTestCtx, _) ->
+            ok
+    end.
+
+%%%===================================================================
+%%% Get file instance test functions
+%%%===================================================================
 
 get_file_instance_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -103,7 +303,7 @@ get_file_instance_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Get instance for ~s using gs private api", [FileType]),
+            name = str_utils:format("Get instance for ~ts using gs private api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpec,
@@ -114,7 +314,7 @@ get_file_instance_test(_Config) ->
             )
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for ~ts using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -172,7 +372,7 @@ get_shared_file_instance_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Get instance for directly shared ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for directly shared ~ts using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -183,7 +383,7 @@ get_shared_file_instance_test(_Config) ->
             )
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for directly shared ~s using gs private api", [FileType]),
+            name = str_utils:format("Get instance for directly shared ~ts using gs private api", [FileType]),
             type = gs_with_shared_guid_and_aspect_private,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -191,7 +391,7 @@ get_shared_file_instance_test(_Config) ->
             validate_result_fun = fun(_, Result) -> ?assertEqual(?ERROR_UNAUTHORIZED, Result) end
         },
         #scenario_spec{
-            name = str_utils:format("Get instance for indirectly shared ~s using gs public api", [FileType]),
+            name = str_utils:format("Get instance for indirectly shared ~ts using gs public api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -222,7 +422,7 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Get instance for ~s on provider not supporting user using gs api", [
+            name = str_utils:format("Get instance for ~ts on provider not supporting user using gs api", [
                 FileType
             ]),
             type = gs,
@@ -281,7 +481,9 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
         {ok, ResultMap} = ?assertMatch({ok, _}, Result),
         % do not compare size in attrs, as stats may not be fully calculated yet (which is normal and expected)
         %% @TODO VFS-11380 analyze why ctime is updated here and whether it should be
-        ?assertEqual(maps:without([<<"size">>, <<"ctime">>], ExpJsonDetailsFun(Node)), maps:without([<<"size">>, <<"ctime">>], ResultMap))
+        ?assertEqual(
+            maps:without([<<"size">>, <<"ctime">>], ExpJsonDetailsFun(Node)),
+            maps:without([<<"size">>, <<"ctime">>], ResultMap))
     end.
 
 
@@ -289,7 +491,9 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetailsFun) ->
 -spec get_space_dir_attrs(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_attr{}.
 get_space_dir_attrs(ProviderSelector, SpaceDirGuid, SpaceName) ->
     {ok, SpaceAttrs} = ?assertMatch(
-        {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
+        {ok, _},
+        file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid),
+        ?ATTEMPTS
     ),
     SpaceAttrs#file_attr{
         name = SpaceName,
@@ -322,7 +526,7 @@ update_file_instance_test(Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Update ~s instance using gs private api", [FileType]),
+            name = str_utils:format("Update ~ts instance using gs private api", [FileType]),
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
@@ -347,7 +551,7 @@ update_file_instance_test(Config) ->
             )
         },
         #scenario_spec{
-            name = str_utils:format("Update ~s instance using gs public api", [FileType]),
+            name = str_utils:format("Update ~ts instance using gs public api", [FileType]),
             type = gs_not_supported,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
@@ -369,7 +573,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Update ~s instance on provider not supporting user using gs api", [
+            name = str_utils:format("Update ~ts instance on provider not supporting user using gs api", [
                 FileType
             ]),
             type = gs,
@@ -466,7 +670,7 @@ delete_file_instance_test(Config) ->
 
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~s instance using rest api", [FileType]),
+                    name = str_utils:format("Delete ~ts instance using rest api", [FileType]),
                     type = rest,
                     prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({mem_ref, MemRef}),
                     validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
@@ -474,7 +678,7 @@ delete_file_instance_test(Config) ->
                     end
                 },
                 #scenario_template{
-                    name = str_utils:format("Delete ~s instance using gs private api", [FileType]),
+                    name = str_utils:format("Delete ~ts instance using gs private api", [FileType]),
                     type = gs,
                     prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({mem_ref, MemRef}, private),
                     validate_result_fun = fun(_, Result) ->
@@ -492,7 +696,7 @@ delete_file_instance_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete shared ~s instance using rest api", [FileType]),
+                    name = str_utils:format("Delete shared ~ts instance using rest api", [FileType]),
                     type = rest_not_supported,
                     prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({guid, TopDirShareGuid}),
                     validate_result_fun = fun(_TestCaseCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
@@ -501,7 +705,7 @@ delete_file_instance_test(Config) ->
                     end
                 }
                 #scenario_template{
-                    name = str_utils:format("Delete shared ~s instance using gs public api", [FileType]),
+                    name = str_utils:format("Delete shared ~ts instance using gs public api", [FileType]),
                     type = gs_not_supported,
                     prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, TopDirShareGuid}, public),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
@@ -563,9 +767,10 @@ delete_file_instance_at_path_test(Config) ->
 
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~s at path instance using rest api", [FileType]),
+                    name = str_utils:format("Delete ~ts at path instance using rest api", [FileType]),
                     type = rest,
-                    prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, TopDirName),
+                    prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(
+                        MemRef, TopDirGuid, TopDirName),
                     validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
                         ?assertEqual(?HTTP_204_NO_CONTENT, RespCode)
                     end
@@ -637,7 +842,7 @@ delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
-            name = str_utils:format("Delete ~s instance on provider not supporting user using gs api", [
+            name = str_utils:format("Delete ~ts instance on provider not supporting user using gs api", [
                 FileType
             ]),
             type = gs,

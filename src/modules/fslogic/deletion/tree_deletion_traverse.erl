@@ -115,7 +115,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid, RootDirName) ->
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    ?debug("dir deletion job ~p started", [TaskId]).
+    ?debug("dir deletion job ~tp started", [TaskId]).
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, _Pool) ->
@@ -123,7 +123,7 @@ task_finished(TaskId, _Pool) ->
     case AdditionalData of
         #{<<"failed">> := <<"true">>} ->
             #{<<"user_id">> := UserId, <<"root_guid">> := RootGuid, <<"options">> := EncodedOptions} = AdditionalData,
-            ?warning("dir deletion job ~p failed, reruning", [TaskId]),
+            ?warning("dir deletion job ~tp failed, reruning", [TaskId]),
             Backoff = min(binary_to_integer(maps:get(<<"backoff">>, AdditionalData, <<"8">>)) * 2, ?ERROR_RESTART_MAX_BACKOFF_SEC),
             % start in another function so current traverse can finish
             %% @TODO VFS-11719 this is insecure in case of provider restart
@@ -138,7 +138,7 @@ task_finished(TaskId, _Pool) ->
             ok;
         _ ->
             tree_traverse_session:close_for_task(TaskId),
-            ?debug("dir deletion job ~p finished", [TaskId])
+            ?debug("dir deletion job ~tp finished", [TaskId])
     end.
 
 
@@ -179,8 +179,8 @@ do_master_job(Job = #tree_traverse{
         {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?error_exception("Error when listing directory during tree deletion: ~s",
-                [?autoformat([FileUuid])], error, Reason, Stacktrace),
+            ?error_exception(?autoformat_with_msg("Error when listing directory during tree deletion:",
+                FileUuid), error, Reason, Stacktrace),
             tree_traverse_progress:delete(TaskId, FileUuid),
             tree_traverse:cancel(?POOL_NAME, TaskId),
             traverse_task:update_additional_data(traverse_task:get_ctx(), ?POOL_NAME, TaskId, fun(AdditionalData) ->

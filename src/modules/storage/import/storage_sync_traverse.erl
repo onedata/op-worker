@@ -117,7 +117,7 @@ run_scan(SpaceId, ScanConfig) ->
     case storage_import_monitoring:prepare_new_scan(SpaceId) of
         {ok, SSM} ->
             {ok, ScansNum} = storage_import_monitoring:get_finished_scans_num(SSM),
-            ?debug("Starting auto storage import scan no. ~p for space: ~p and storage: ~p", [ScansNum + 1, SpaceId, StorageId]),
+            ?debug("Starting auto storage import scan no. ~tp for space: ~tp and storage: ~tp", [ScansNum + 1, SpaceId, StorageId]),
             ScanConfigMap = ensure_scan_config_is_map(SpaceId, ScanConfig),
             try
                 run(SpaceId, StorageId, ScansNum + 1, ScanConfigMap)
@@ -144,7 +144,7 @@ cancel(SpaceId) ->
                     {error, not_found}
             end;
         {error, not_found} ->
-            ?debug("Cannot cancel auto storage import scan for space ~p and storage ~p as it is not configured",
+            ?debug("Cannot cancel auto storage import scan for space ~tp and storage ~tp as it is not configured",
                 [SpaceId, StorageId]),
             {error, not_found}
     end.
@@ -193,7 +193,7 @@ fix_stalled_scans(SpaceIds) ->
             BrokenSpacesWithStalledScans = SpacesWithStalledScans -- CorrectSpacesWithStalledScans,
             lists:foreach(fun(SpaceId) ->
                 storage_import_monitoring:mark_finished_scan(SpaceId, true),
-                ?info("Aborted stalled scan of auto storage import in the space ~s", [SpaceId])
+                ?info("Aborted stalled scan of auto storage import in the space ~ts", [SpaceId])
             end, BrokenSpacesWithStalledScans);
         {error, _} = Error ->
             Error
@@ -278,10 +278,10 @@ to_string(#storage_traverse_slave{
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     str_utils:format_bin(
         " ~nStorage import slave job:~n"
-        "    file: ~p~n"
-        "    storage: ~p~n"
-        "    space: ~p~n"
-        "    scan no.: ~p~n",
+        "    file: ~tp~n"
+        "    storage: ~tp~n"
+        "    space: ~tp~n"
+        "    scan no.: ~tp~n",
         [StorageFileId, StorageId, SpaceId, ScanNum]);
 to_string(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
@@ -294,12 +294,12 @@ to_string(#storage_traverse_master{
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     str_utils:format_bin(
         " ~nStorage import master job:~n"
-        "    file: ~p~n"
-        "    storage: ~p~n"
-        "    space: ~p~n"
-        "    scan no.: ~p~n"
-        "    offset: ~p~n"
-        "    marker: ~p~n",
+        "    file: ~tp~n"
+        "    storage: ~tp~n"
+        "    space: ~tp~n"
+        "    scan no.: ~tp~n"
+        "    offset: ~tp~n"
+        "    marker: ~tp~n",
         [StorageFileId, StorageId, SpaceId, ScanNum, Offset, Marker]).
 
 %%%===================================================================
@@ -488,7 +488,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             case file_ctx:is_root_dir_const(ParentCtx) of
                 true ->
                     % Space directory wasn't found on storage
-                    ?error("Storage import has failed because directory of space ~s was not found on storage ~s.",
+                    ?error("Storage import has failed because directory of space ~ts was not found on storage ~ts.",
                         [SpaceId, StorageId]),
                     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                     storage_import_logger:log_failure(StorageFileId, Error2, SpaceId),
@@ -569,7 +569,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                     % space directory is missing
                     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-                    ?error("Storage import has failed because directory of space ~s was not found on storage ~s.",
+                    ?error("Storage import has failed because directory of space ~ts was not found on storage ~ts.",
                         [SpaceId, StorageId]),
                     storage_import_logger:log_failure(StorageFileId, Error, SpaceId),
                     storage_import_monitoring:mark_failed_file(SpaceId),
@@ -836,7 +836,7 @@ process_storage_file(StorageFileCtx, Info) ->
                 {error, ?ENOENT};
             Error = {error, _} ->
                 ?error(
-                    "Syncing file ~p on storage ~p supporting space ~p failed due to ~w.",
+                    "Syncing file ~tp on storage ~tp supporting space ~tp failed due to ~w.",
                     [StorageFileId, StorageId, SpaceId, Error]),
                 Error
         end
@@ -845,7 +845,7 @@ process_storage_file(StorageFileCtx, Info) ->
             {error, ?ENOENT};
         Error2:Reason2:Stacktrace2 ->
             ?error_stacktrace(
-                "Syncing file ~p on storage ~p supporting space ~p failed due to ~w:~w.",
+                "Syncing file ~tp on storage ~tp supporting space ~tp failed due to ~w:~w.",
                 [StorageFileId, StorageId, SpaceId, Error2, Reason2], Stacktrace2),
             {error, {Error2, Reason2}}
     end.

@@ -136,13 +136,13 @@ create_file_transfer(Config, Type) ->
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
+                    name = str_utils:format("Transfer (~tp) view using /transfers rest endpoint", [Type]),
                     type = rest,
                     prepare_args_fun = build_create_transfer_prepare_rest_args_fun(MemRef),
                     validate_result_fun = build_create_transfer_validate_rest_call_result_fun(MemRef)
                 },
                 #scenario_template{
-                    name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
+                    name = str_utils:format("Transfer (~tp) file using gs transfer api", [Type]),
                     type = gs,
                     prepare_args_fun = build_create_transfer_prepare_gs_args_fun(MemRef, private),
                     validate_result_fun = build_create_transfer_validate_gs_call_result_fun(MemRef)
@@ -208,13 +208,13 @@ create_view_transfer(Config, Type) ->
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
+                    name = str_utils:format("Transfer (~tp) view using /transfers rest endpoint", [Type]),
                     type = rest,
                     prepare_args_fun = build_create_transfer_prepare_rest_args_fun(MemRef),
                     validate_result_fun = build_create_transfer_validate_rest_call_result_fun(MemRef)
                 },
                 #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using gs transfer gs api", [Type]),
+                    name = str_utils:format("Transfer (~tp) view using gs transfer gs api", [Type]),
                     type = gs,
                     prepare_args_fun = build_create_transfer_prepare_gs_args_fun(MemRef, private),
                     validate_result_fun = build_create_transfer_validate_gs_call_result_fun(MemRef)

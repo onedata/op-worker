@@ -1301,12 +1301,12 @@ qos_status_during_reconciliation_test_base(DirStructure, Filename) ->
     end,
     
     lists:foreach(fun({FileGuid, FilePath}) ->
-        ct:pal("writing to file ~p on node ~p", [FilePath, P1Node]),
+        ct:pal("writing to file ~tp on node ~tp", [FilePath, P1Node]),
         {ok, FileHandle} = lfm_proxy:open(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid), write),
         {ok, _} = lfm_proxy:write(P1Node, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(P1Node, FileHandle),
         lists:foreach(fun({G, P}) ->
-            ct:pal("Checking file: ~p~n\tis_ancestor: ~p", [P, IsAncestor(P, FilePath)]),
+            ct:pal("Checking file: ~tp~n\tis_ancestor: ~tp", [P, IsAncestor(P, FilePath)]),
             ExpectedStatus = case IsAncestor(P, FilePath) of
                 true -> ?PENDING_QOS_STATUS;
                 false -> ?FULFILLED_QOS_STATUS
@@ -1380,7 +1380,7 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(NumOfFiles, FileTyp
     
     lists:foreach(fun(Provider) ->
         lists:foreach(fun(Node) ->
-            ct:print("Deleting node: ~p", [Node]), % log current deleting node for greater verbosity during failures
+            ct:print("Deleting node: ~tp", [Node]), % log current deleting node for greater verbosity during failures
             {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), Dir1, generator:gen_name(), ?DEFAULT_DIR_PERMS),
             Guids = create_files_and_write(P1Node, ?SESS_ID(Provider1), DirGuid, TypeSpec, NumOfFiles),
             ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([Dir1, DirGuid | Guids], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),

@@ -59,7 +59,6 @@ refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
     ArgsWithUserCtxAndType = maps:put(<<"type">>, helper:get_name(Helper), ArgsWithUserCtx),
     % do the refresh
     % @TODO VFS-11947 Propagate storage update errors to onepanel and roll back
-    % @TODO VFS-11922 Consider performing a healthcheck with new parameters and fail if it's not successful
     helpers:refresh_params(Handle, ArgsWithUserCtxAndType).
 
 %%%===================================================================
@@ -80,6 +79,6 @@ local_refresh_helpers(StorageId) ->
         end, Sessions)
     catch Type:Error ->
         StorageName = storage:fetch_name_of_local_storage(StorageId),
-        ?error("Error updating active helper for storage ~tp with new args: ~p:~tp",
+        ?error("Error updating active helper for storage ~tp with new args: ~tp:~tp",
             [StorageName, Type, Error])
     end.

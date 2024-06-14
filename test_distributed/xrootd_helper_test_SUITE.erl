@@ -253,11 +253,11 @@ write_read_truncate_unlink_test_base(Config) ->
     end, ?config(threads_num, Config)).
 
 getattr_test(Config) ->
-    ?error("getattr config: ~p", [Config]),
+    ?error("getattr config: ~tp", [Config]),
     Helper = new_helper(Config),
-    ?error("getattr helper: ~p", [Helper]),
+    ?error("getattr helper: ~tp", [Helper]),
     FileId = random_file_id(),
-    ?error("getattr file_id: ~p", [FileId]),
+    ?error("getattr file_id: ~tp", [FileId]),
     create(Helper, FileId),
     ?assertMatch({ok, #statbuf{}}, call(Helper, getattr, [FileId])).
 
@@ -303,8 +303,7 @@ new_helper(Config) ->
         ?XROOTD_HELPER_NAME,
         #{
             <<"url">> => atom_to_binary(?config(url, XRootDConfig), utf8),
-            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
-            <<"skipStorageDetection">> => <<"false">>
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
       ),

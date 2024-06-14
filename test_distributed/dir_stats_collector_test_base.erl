@@ -419,12 +419,12 @@ verify_hardlinks_stats_enabled(Config, [NodesSelector | NodesSelectors], DirGuid
     verify_hardlinks_stats_enabled(Config, NodesSelectors, DirGuids, DirSizes, FileSize);
 
 verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSize) ->
-    ct:print("Verify hardlinks stats for nodes: ~p", [NodesSelector]),
+    ct:print("Verify hardlinks stats for nodes: ~tp", [NodesSelector]),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     lists:foreach(fun
         ({Guid, {INodesExpected, LinksExpected}}) ->
-            ct:print("Verify hardlinks stats for dir: ~p", [Guid]),
+            ct:print("Verify hardlinks stats for dir: ~tp", [Guid]),
             check_dir_stats(Config, NodesSelector, Guid, #{
                 ?REG_FILE_AND_LINK_COUNT => LinksExpected,
                 ?DIR_COUNT => 0,
@@ -436,7 +436,7 @@ verify_hardlinks_stats_enabled(Config, NodesSelector, DirGuids, DirSizes, FileSi
                     ?PHYSICAL_SIZE_VALUE(NodesSelector, INodesExpected * FileSize)
             });
         ({Guid, {INodesExpected, LinksExpected, SubdirsExpected}}) ->
-            ct:print("Verify hardlinks stats for dir: ~p", [Guid]),
+            ct:print("Verify hardlinks stats for dir: ~tp", [Guid]),
             check_dir_stats(Config, NodesSelector, Guid, #{
                 ?REG_FILE_AND_LINK_COUNT => LinksExpected,
                 ?DIR_COUNT => SubdirsExpected,
@@ -491,7 +491,7 @@ verify_opened_deleted_files_stats_enabled(Config, [NodesSelector | NodesSelector
 verify_opened_deleted_files_stats_enabled(Config, NodesSelector, FilesExpected, FileSize) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
-    ct:print("Verify opened deleted files stats for nodes ~p", [NodesSelector]),
+    ct:print("Verify opened deleted files stats for nodes ~tp", [NodesSelector]),
     check_dir_stats(Config, NodesSelector, TmpDirGuid, #{
         ?REG_FILE_AND_LINK_COUNT => FilesExpected,
         ?DIR_COUNT => 1,
@@ -597,7 +597,7 @@ multiprovider_trash_test(Config) ->
     end, GuidsAndNames),
 
     lists:foreach(fun(NodesSelector) ->
-        ct:print("Checking node ~p", [NodesSelector]),
+        ct:print("Checking node ~tp", [NodesSelector]),
         CheckFun = fun() ->
             [W | _] = ?config(NodesSelector, Config),
             SpaceStats = rpc:call(W, dir_size_stats, get_stats, [SpaceGuid]),
@@ -1475,7 +1475,7 @@ resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor, Attempts) 
 
 build_path(PathBeginning, Constructor, NamePrefix) ->
     lists:foldl(fun(DirNum, Acc) ->
-        ChildName = str_utils:format_bin("~s_~p", [NamePrefix, DirNum]),
+        ChildName = str_utils:format_bin("~ts_~tp", [NamePrefix, DirNum]),
         filename:join([Acc, ChildName])
     end, PathBeginning, Constructor).
 

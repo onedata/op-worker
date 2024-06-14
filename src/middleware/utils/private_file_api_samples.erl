@@ -103,7 +103,7 @@ create_file_endpoint(FileId) ->
         name = <<"Create file in directory">>,
         description = <<"Creates a file in the directory.">>,
         method = 'POST',
-        path = str_utils:format_bin("/data/~s/children?name=$NAME", [FileId]),
+        path = str_utils:format_bin("/data/~ts/children?name=$NAME", [FileId]),
         placeholders = #{
             <<"$NAME">> => <<"Name of the file.">>
         },
@@ -121,7 +121,7 @@ list_children_endpoint(FileId) ->
         name = <<"List directory files and subdirectories">>,
         description = <<"Returns the list of files and subdirectories that reside in this directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/children", [FileId]),
+        path = str_utils:format_bin("/data/~ts/children", [FileId]),
         optional_parameters = [
             <<"limit">>, <<"token">>, <<"attribute">>, <<"index">>, <<"tune_for_large_continuous_listing">>
         ],
@@ -136,7 +136,7 @@ download_directory_endpoint(FileId) ->
         name = <<"Download directory (tar)">>,
         description = <<"Returns a TAR archive (binary stream) with directory contents.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/content", [FileId]),
+        path = str_utils:format_bin("/data/~ts/content", [FileId]),
         swagger_operation_id = <<"download_file_content">>,
         follow_redirects = true
     }.
@@ -149,7 +149,7 @@ download_file_content_endpoint(FileId) ->
         name = <<"Download file content">>,
         description = <<"Returns the binary file content.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/content", [FileId]),
+        path = str_utils:format_bin("/data/~ts/content", [FileId]),
         swagger_operation_id = <<"download_file_content">>
     }.
 
@@ -161,7 +161,7 @@ update_file_content_endpoint(FileId) ->
         name = <<"Update file content">>,
         description = <<"Overwrites the content of the file.">>,
         method = 'PUT',
-        path = str_utils:format_bin("/data/~s/content", [FileId]),
+        path = str_utils:format_bin("/data/~ts/content", [FileId]),
         data = <<"$NEW_CONTENT">>,
         placeholders = #{
             <<"$NEW_CONTENT">> => <<"Binary content that will be written to the file.">>
@@ -178,7 +178,7 @@ get_data_distribution_endpoint(FileId) ->
         name = <<"Get data distribution">>,
         description = <<"Returns information about data distribution of the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/distribution", [FileId]),
+        path = str_utils:format_bin("/data/~ts/distribution", [FileId]),
         swagger_operation_id = <<"get_file_distribution">>  % @TODO VFS-10232 rename to get_data_distribution
     }.
 
@@ -190,7 +190,7 @@ remove_file_endpoint(FileId) ->
         name = <<"Remove file">>,
         description = <<"Removes the file or directory.">>,
         method = 'DELETE',
-        path = str_utils:format_bin("/data/~s", [FileId]),
+        path = str_utils:format_bin("/data/~ts", [FileId]),
         swagger_operation_id = <<"remove_file">>
     }.
 
@@ -202,7 +202,7 @@ get_attrs_endpoint(FileId) ->
         name = <<"Get attributes">>,
         description = <<"Returns basic attributes of the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s", [FileId]),
+        path = str_utils:format_bin("/data/~ts", [FileId]),
         optional_parameters = [<<"attribute">>],
         swagger_operation_id = <<"get_attrs">>
     }.
@@ -215,7 +215,7 @@ get_hardlinks_endpoint(FileId) ->
         name = <<"Get file hard links">>,
         description = <<"Returns the Ids of all hard links (including this one) associated with the file.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/hardlinks", [FileId]),
+        path = str_utils:format_bin("/data/~ts/hardlinks", [FileId]),
         swagger_operation_id = <<"get_file_hardlinks">>
     }.
 
@@ -227,7 +227,7 @@ get_symlink_value_endpoint(FileId) ->
         name = <<"Get symbolic link value">>,
         description = <<"Returns the value of the symbolic link.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/symlink_value", [FileId]),
+        path = str_utils:format_bin("/data/~ts/symlink_value", [FileId]),
         swagger_operation_id = <<"get_symlink_value">>
     }.
 
@@ -239,7 +239,7 @@ get_json_metadata_endpoint(FileId) ->
         name = <<"Get JSON metadata">>,
         description = <<"Returns custom JSON metadata associated with the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/metadata/json", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/json", [FileId]),
         optional_parameters = [
             <<"filter_type">>, <<"filter">>, <<"inherited">>, <<"resolve_symlink">>
         ],
@@ -254,7 +254,7 @@ set_json_metadata_endpoint(FileId) ->
         name = <<"Set JSON metadata">>,
         description = <<"Sets json metadata for the file or directory.">>,
         method = 'PUT',
-        path = str_utils:format_bin("/data/~s/metadata/json", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/json", [FileId]),
         data = <<"$METADATA">>,
         headers = #{
             <<"content-type">> => <<"application/json">>
@@ -276,7 +276,7 @@ remove_json_metadata_endpoint(FileId) ->
         name = <<"Remove JSON metadata">>,
         description = <<"Removes json metadata from the file or directory.">>,
         method = 'DELETE',
-        path = str_utils:format_bin("/data/~s/metadata/json", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/json", [FileId]),
         optional_parameters = [<<"resolve_symlink">>],
         swagger_operation_id = <<"remove_json_metadata">>
     }.
@@ -289,7 +289,7 @@ get_rdf_metadata_endpoint(FileId) ->
         name = <<"Get RDF metadata">>,
         description = <<"Returns custom RDF metadata associated with the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/metadata/rdf", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/rdf", [FileId]),
         optional_parameters = [<<"resolve_symlink">>],
         swagger_operation_id = <<"get_rdf_metadata">>
     }.
@@ -302,7 +302,7 @@ set_rdf_metadata_endpoint(FileId) ->
         name = <<"Set RDF metadata">>,
         description = <<"Sets rdf metadata for the file or directory.">>,
         method = 'PUT',
-        path = str_utils:format_bin("/data/~s/metadata/rdf", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/rdf", [FileId]),
         data = <<"$METADATA">>,
         headers = #{
             <<"content-type">> => <<"application/rdf+xml">>
@@ -322,7 +322,7 @@ remove_rdf_metadata_endpoint(FileId) ->
         name = <<"Remove RDF metadata">>,
         description = <<"Removes rdf metadata from the file or directory.">>,
         method = 'DELETE',
-        path = str_utils:format_bin("/data/~s/metadata/rdf", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/rdf", [FileId]),
         optional_parameters = [<<"resolve_symlink">>],
         swagger_operation_id = <<"remove_rdf_metadata">>
     }.
@@ -335,7 +335,7 @@ get_xattrs_metadata_endpoint(FileId) ->
         name = <<"Get extended attributes (xattrs)">>,
         description = <<"Returns custom extended attributes (xattrs) associated with the file or directory.">>,
         method = 'GET',
-        path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/xattrs", [FileId]),
         optional_parameters = [
             <<"attribute">>, <<"inherited">>, <<"resolve_symlink">>
         ],
@@ -350,7 +350,7 @@ set_xattr_metadata_endpoint(FileId) ->
         name = <<"Set extended attribute (xattr)">>,
         description = <<"Sets extended attribute (xattr) for the file or directory.">>,
         method = 'PUT',
-        path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/xattrs", [FileId]),
         data = <<"$XATTRS">>,
         headers = #{
             <<"content-type">> => <<"application/json">>
@@ -370,7 +370,7 @@ remove_xattrs_metadata_endpoint(FileId) ->
         name = <<"Remove extended attributes (xattrs)">>,
         description = <<"Removes extended attributes (xattrs) from the file or directory.">>,
         method = 'DELETE',
-        path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
+        path = str_utils:format_bin("/data/~ts/metadata/xattrs", [FileId]),
         data = <<"{\"keys\": $KEY_LIST}">>,
         headers = #{
             <<"content-type">> => <<"application/json">>

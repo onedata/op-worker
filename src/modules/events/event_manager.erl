@@ -81,8 +81,8 @@ handle(Manager, Message) ->
 -spec handle(pid(), term(), integer()) -> ok.
 handle(_Manager, Request, -1) ->
     case op_worker:get_env(log_event_manager_errors, false) of
-        true -> ?error("Max retries for request: ~p", [Request]);
-        false -> ?debug("Max retries for request: ~p", [Request])
+        true -> ?error("Max retries for request: ~tp", [Request]);
+        false -> ?debug("Max retries for request: ~tp", [Request])
     end,
     ok;
 handle(Manager, Request, RetryCounter) ->
@@ -91,7 +91,7 @@ handle(Manager, Request, RetryCounter) ->
             self ->
                 handle_locally(Request, Manager);
             ignore ->
-                ?debug("Ignore request: ~p", [Request]), % Manager is closing
+                ?debug("Ignore request: ~tp", [Request]), % Manager is closing
                 ok;
             ProviderId ->
                 Self = oneprovider:get_id_or_undefined(),
@@ -112,22 +112,22 @@ handle(Manager, Request, RetryCounter) ->
         end
     catch
         exit:{noproc, _} ->
-            ?debug("No proc to handle request ~p, retry", [Request]),
+            ?debug("No proc to handle request ~tp, retry", [Request]),
             handle(Manager, Request, RetryCounter - 1);
         exit:{normal, _} ->
-            ?debug("Exit of stream process for request ~p, retry", [Request]),
+            ?debug("Exit of stream process for request ~tp, retry", [Request]),
             handle(Manager, Request, RetryCounter - 1);
         exit:{timeout, _} ->
-            ?debug("Timeout of stream process for request ~p, retry", [Request]),
+            ?debug("Timeout of stream process for request ~tp, retry", [Request]),
             handle(Manager, Request, RetryCounter - 1);
         exit:Reason:Stacktrace ->
-            ?error_stacktrace("Cannot process request ~p due to: exit:~p", [Request, Reason], Stacktrace),
+            ?error_stacktrace("Cannot process request ~tp due to: exit:~tp", [Request, Reason], Stacktrace),
             % Stream process crashed - wait and ping supervisor to wait for restart to stream by supervisor
             timer:sleep(50),
             call_manager(Manager, ping_stream_sup),
             handle(Manager, Request, RetryCounter - 1);
         Reason1:Reason2:Stacktrace ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p:~p", [Request, Reason1, Reason2], Stacktrace),
+            ?error_stacktrace("Cannot process request ~tp due to: ~tp:~tp", [Request, Reason1, Reason2], Stacktrace),
             handle(Manager, Request, RetryCounter - 1)
     end.
 
@@ -155,7 +155,7 @@ handle_session_termination(Manager) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([MgrSup, SessId]) ->
-    ?debug("Initializing event manager for session ~p", [SessId]),
+    ?debug("Initializing event manager for session ~tp", [SessId]),
     process_flag(trap_exit, true),
     init_memory(SessId),
     Self = self(),
@@ -419,22 +419,22 @@ handle_in_process(Request, #state{streams_sup = StmsSup} = State, RetryCounter) 
         handle_in_process(Request, State)
     catch
         exit:{noproc, _} ->
-            ?debug("No proc to handle request ~p, retry", [Request]),
+            ?debug("No proc to handle request ~tp, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
         exit:{normal, _} ->
-            ?debug("Exit of stream process for request ~p, retry", [Request]),
+            ?debug("Exit of stream process for request ~tp, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
         exit:{timeout, _} ->
-            ?debug("Timeout of stream process for request ~p, retry", [Request]),
+            ?debug("Timeout of stream process for request ~tp, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
         exit:Reason:Stacktrace ->
-            ?error_stacktrace("Cannot process request ~p due to: exit:~p", [Request, Reason], Stacktrace),
+            ?error_stacktrace("Cannot process request ~tp due to: exit:~tp", [Request, Reason], Stacktrace),
             % Stream process crashed - wait and ping supervisor to wait for restart to stream by supervisor
             timer:sleep(50),
             event_stream_sup:ping(StmsSup),
             retry_handle(State, Request, RetryCounter);
         Reason1:Reason2:Stacktrace ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),
+            ?error_stacktrace("Cannot process request ~tp due to: ~tp", [Request, {Reason1, Reason2}], Stacktrace),
             retry_handle(State, Request, RetryCounter)
     end.
 
@@ -572,11 +572,11 @@ handle_remotely(#subscription{} = Sub, ProviderId, SessId) ->
         #server_message{message_body = #status{code = ?OK}} ->
             ok;
         #server_message{message_body = #status{} = Status} ->
-            ?error("Remote subscription ~p (provider ~p, seesion ~p) failed with status: ~p",
+            ?error("Remote subscription ~tp (provider ~tp, seesion ~tp) failed with status: ~tp",
                 [Sub, ProviderId, SessId, Status])
     after
         ?REMOTE_CALL_TIMEOUT ->
-            ?error("Remote subscription ~p (provider ~p, seesion ~p) failed timeout", [Sub, ProviderId, SessId])
+            ?error("Remote subscription ~tp (provider ~tp, seesion ~tp) failed timeout", [Sub, ProviderId, SessId])
     end;
 
 handle_remotely(Request, ProviderId, SessId) ->
@@ -710,8 +710,8 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
 -spec retry_handle(#state{}, Request :: term(), RetryCounter :: non_neg_integer()) -> ok.
 retry_handle(_State, Request, 0) ->
     case op_worker:get_env(log_event_manager_errors, false) of
-        true -> ?error("Max retries for request: ~p", [Request]);
-        false -> ?debug("Max retries for request: ~p", [Request])
+        true -> ?error("Max retries for request: ~tp", [Request]);
+        false -> ?debug("Max retries for request: ~tp", [Request])
     end,
     ok;
 retry_handle(State, Request, RetryCounter) ->

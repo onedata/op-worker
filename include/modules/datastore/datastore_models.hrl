@@ -55,7 +55,7 @@
 %           storage                       share     |  |
 %              ^                            ^       |  |
 %              |                            |       |  |
-%            space     handle_service<----handle    |  |
+%            space     handle_service<---|handle    |  |
 %           ^ ^ ^ ^          ^     ^       ^  ^     |  |
 %          /  | |  \         |     |      /   |     |  |
 %         /   | |   \        |     |     /    |    /   |
@@ -71,6 +71,9 @@
 %                    /       \                                ^           \
 %                  user      user                              \           \
 %                                                               '-- atm_lambda
+%
+% NOTE: the handle service - handle relation is unidirectional, handle service
+% not longer stores its handles (it's done using the handle registry).
 
 
 -record(od_user, {
@@ -189,6 +192,7 @@
     public_handle :: od_handle:public_handle(),
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
+    metadata_prefix :: od_handle:metadata_prefix() | undefined,
     metadata :: od_handle:metadata() | undefined,
 
     % Direct relations to other entities

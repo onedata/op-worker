@@ -58,9 +58,9 @@ handle(refresh_disabled_spaces) ->
                 update_disabled_spaces,
                 [BlockedSpaces]),
             BadNodes =/= [] andalso
-                ?error("Failed to update disabled spaces on nodes ~p", [BadNodes]);
+                ?error("Failed to update disabled spaces on nodes ~tp", [BadNodes]);
         {error, _} = Error ->
-            ?debug("Cannot update disabled spaces due to ~p", [Error])
+            ?debug("Cannot update disabled spaces due to ~tp", [Error])
     end,
     schedule_refresh_disabled_spaces();
 handle(Request) ->

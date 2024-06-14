@@ -73,7 +73,7 @@ report_finished(TraverseId, FileCtx) ->
             undefined -> [];
             {error, {file_meta_missing, FileUuid}} -> [];
             {error, _} = Error ->
-                ?warning("Error after file ~p have been reconciled: ~p", [FileUuid, Error]),
+                ?warning("Error after file ~tp have been reconciled: ~tp", [FileUuid, Error]),
                 [];
             {ok, EffectiveFileQos} ->
                 file_qos:get_qos_entries(EffectiveFileQos)
