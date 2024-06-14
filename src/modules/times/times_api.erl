@@ -49,7 +49,8 @@ report_file_created(FileCtx) ->
     report_file_created(FileCtx, build_current_times_record()).
 
 -spec report_file_created(file_ctx:ctx(), times:record()) -> ok | {error, term()}.
-report_file_created(FileCtx, #times{creation_time = 0, atime = ATime, mtime = MTime, ctime = CTime} = TimesRecord) ->
+report_file_created(FileCtx, #times{creation_time = undefined} = TimesRecord) ->
+    #times{atime = ATime, mtime = MTime, ctime = CTime} = TimesRecord,
     report_file_created(FileCtx, TimesRecord#times{creation_time = lists:min([ATime, CTime, MTime])});
 report_file_created(FileCtx, TimesRecord) ->
     dir_update_time_stats:report_update(FileCtx, TimesRecord),
