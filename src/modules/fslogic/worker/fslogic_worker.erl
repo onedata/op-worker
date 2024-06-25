@@ -356,17 +356,11 @@ handle_request_and_process_response(SessId, Request) ->
         FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
 
         EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
-        Providers = fslogic_request:get_target_providers(EffLocalUserCtx, FilePartialCtx, Request),
 
-        case lists:member(oneprovider:get_id(), Providers) of
-            true ->
-                OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
-                handle_request_and_process_response_locally(
-                    OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
-                );
-            false ->
-                handle_request_remotely(OriginalUserCtx, Request, Providers)
-        end
+        OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
+        handle_request_and_process_response_locally(
+            OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
+        )
     catch
         Type2:Error2:Stacktrace ->
             fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
@@ -498,19 +492,6 @@ handle_request_locally(UserCtx, #proxyio_request{
 }, FileCtx) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
     handle_proxyio_request(UserCtx, Req, FileCtx, HandleId).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle request remotely
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
-handle_request_remotely(_UserCtx, _Req, []) ->
-    #fuse_response{status = #status{code = ?ENOTSUP}};
-handle_request_remotely(UserCtx, Req, Providers) ->
-    ProviderId = fslogic_remote:get_provider_to_route(Providers),
-    fslogic_remote:route(UserCtx, ProviderId, Req).
 
 %%--------------------------------------------------------------------
 %% @private
