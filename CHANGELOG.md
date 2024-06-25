@@ -4,6 +4,80 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.5
+
+-   **VFS-11999** Improved listing objects on S3 storages during data
+    import.
+-   **VFS-11979** Web GUI: Fixed ACL editor view crash when user has no
+    space view privilege in the space. It is now possible to choose
+    groups that the user belongs to in the ACL editor and as input to
+    workflow stores, regardless of the user's privileges in the space.
+-   **VFS-11970** Web GUI: Added support for editing already published
+    Open Data metadata.
+-   **VFS-11945** Automation: Added support for new group data type.
+-   **VFS-11923** Web GUI: Renamed privilege group names in the ACL
+    editor: "General" to "Deletion" and "Data" to "Content".
+-   **VFS-11912** Web GUI: Added visual editor for Open Data metadata in
+    Europeana Data Model format.
+-   **VFS-11904** Implemented storage specific health check, to check
+    and monitor storage availability.
+-   **VFS-11876** Allow rtransfer storage parameters change without the
+    need for rtransfer restart.
+-   **VFS-11761** Web GUI: Improved user experience in publishing share
+    as Open Data.
+-   **VFS-11731** Web GUI: Fixed unexpected scroll down of file list
+    after closing file details panel.
+-   **VFS-11726** Web GUI: Fixed items selection in archives browser
+    after using breadcrumbs menu.
+-   **VFS-11712** Integration of Onedata and the Galaxy project; added a
+    driver to Galaxy enabling the use of Onedata as a so-called "Object
+    Store" --- this way, datasets in Galaxy can be stored in a Onedata
+    space.
+-   **VFS-11710** Web GUI: added possibility to embed Onedata Web
+    application into an iframe hosted on site with domain other than
+    Onezone.
+-   **VFS-11707** Web GUI: Detecting web browser extensions potentially
+    interfering with Onedata GUI.
+-   **VFS-11625** Extended functionality of runtime storage parameter
+    updates to all storage backends.
+-   **VFS-11607** Web GUI: Improvements of the ACL editor in the file
+    browser: detection of ACL rules forbidding permissions modification,
+    better descriptions and hints about settings, and numerous minor
+    User Experience tweaks.
+-   **VFS-11594** Web GUI: Fixed QoS query builder "Add" button
+    out-of-the-screen placement.
+-   **VFS-11566** Web GUI: Fixed issues with show/download link to space
+    root directory.
+-   **VFS-11536** Web GUI: Added "Changed (metadata)" (ctime) column to
+    the file list.
+-   **VFS-11487** Web GUI: Added QoS and Replication columns to the file
+    list. Reworked the file attribute fetching mechanisms to fetch only
+    the required attributes.
+-   **VFS-11443** Automation: Added support for resolving only subset of
+    selected file attributes for lambda invocation.
+-   **VFS-11365** Improvements to Open Data publishing and the OAI-PMH
+    protocol implementation. Added support for Europeana Data Model
+    metadata type. Improved the metadata editor in UI (both the visual
+    and XML forms). Improved the conformity to OAI-PMH protocol spec and
+    added support for optional functionalities. Added an HTTPS endpoint
+    (next to previously supported HTTP).
+-   **VFS-11080** Web GUI: Fixed share disappearing from the list after
+    delete failure.
+-   **VFS-10910** Reworked REST API endpoints used to retrieve file
+    attributes (get attributes, list, list recursively). Options are now
+    accepted as JSON body rather than in query string, some attributes
+    were renamed, and the list of available ones has been extended. The
+    old behaviour was retained as deprecated and scheduled for
+    discontinuation in the future major release.
+-   **VFS-10265** Changes to user spaces (changing space name,
+    joining/leaving a space) are now reflected in Oneclient in real
+    time. Added support for spaces with the same name in Oneclient - in
+    case of an ambiguity a space name is extended with its ID.
+-   **VFS-9157** Web GUI: Added support for advanced file info in file
+    selector panel.
+-   **VFS-8554** Web GUI: Fixed uploading files to wrong directory after
+    changing directory via URL.
+
 ### 21.02.4
 
 -   **VFS-11601** Web GUI: Fixed showing ACL when a subject user or
