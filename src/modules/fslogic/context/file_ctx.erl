@@ -1563,16 +1563,15 @@ prepare_file_size_summary_from_existing_doc(LocationDoc) ->
 %% @private
 -spec times_record_to_map(times:record()) -> #{times_api:times_type() => times:time()}.
 times_record_to_map(#times{creation_time = CreationTime, atime = ATime, mtime = MTime, ctime = CTime}) ->
-    BaseMap = #{
-        ?attr_creation_time => CreationTime,
-        ?attr_atime => ATime,
-        ?attr_mtime => MTime,
-        ?attr_ctime => CTime
-    },
-    maps:fold(fun
-        (_Time, 0, Acc) -> Acc;
-        (Time, Value, Acc) -> Acc#{Time => Value}
-    end, #{}, BaseMap).
+    lists:foldl(fun
+        ({_Time, 0}, Acc) -> Acc;
+        ({Time, Value}, Acc) -> Acc#{Time => Value}
+    end, #{}, [
+        {?attr_creation_time, CreationTime},
+        {?attr_atime, ATime},
+        {?attr_mtime, MTime},
+        {?attr_ctime, CTime}
+    ]).
 
 
 %% @private

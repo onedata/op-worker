@@ -28,11 +28,11 @@
 -type key() :: file_meta:uuid().
 -type record() :: #times{}.
 -type doc() :: datastore_doc:doc(record()).
--type time() :: time:seconds().
--type creation_time() :: time().
--type a_time() :: time().
--type m_time() :: time().
--type c_time() :: time().
+-type creation_time() :: time:seconds().
+-type a_time() :: time:seconds().
+-type m_time() :: time:seconds().
+-type c_time() :: time:seconds().
+-type time() :: creation_time() | a_time() | m_time() | c_time().
 
 -export_type([record/0, time/0, a_time/0, c_time/0, m_time/0, creation_time/0]).
 

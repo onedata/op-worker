@@ -114,10 +114,8 @@ chmod(UserCtx, FileCtx0, Mode) ->
 %% @equiv update_times_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: times:time() | undefined,
-    MTime :: times:time() | undefined,
-    CTime :: times:time() | undefined) -> fslogic_worker:fuse_response().
+-spec update_times(user_ctx:ctx(), file_ctx:ctx(), times:a_time() | undefined, times:m_time() | undefined,
+    times:c_time() | undefined) -> fslogic_worker:fuse_response().
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -278,10 +276,8 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% Changes file access times.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: times:time() | undefined,
-    MTime :: times:time() | undefined,
-    CTime :: times:time() | undefined) -> fslogic_worker:fuse_response().
+-spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(), times:a_time() | undefined,
+    times:m_time() | undefined, times:c_time() | undefined) -> fslogic_worker:fuse_response().
 update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % Flush events queue to prevent race with file_written_event
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient

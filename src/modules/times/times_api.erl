@@ -86,7 +86,7 @@ get(FileCtx, RequestedTimes) ->
 
 -spec report_file_deleted(file_ctx:ctx()) -> ok | {error, term()}.
 report_file_deleted(FileCtx) ->
-    dir_update_time_stats:report_update(FileCtx, build_times_record([?attr_atime, ?attr_mtime, ?attr_ctime], ?NOW())),
+    dir_update_time_stats:report_update(FileCtx, ?NOW()),
     times_cache:report_deleted(file_ctx:get_referenced_guid_const(FileCtx)).
 
 %%%===================================================================

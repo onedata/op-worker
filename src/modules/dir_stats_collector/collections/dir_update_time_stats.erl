@@ -54,7 +54,7 @@
 %%% API
 %%%===================================================================
 
--spec report_update(file_ctx:ctx(), times:record() | helpers:stat() | times:time()) -> ok.
+-spec report_update(file_ctx:ctx(), times:record() | times:time()) -> ok.
 report_update(FileCtx, Time) ->
     Update = #{?STAT_NAME => infer_update_time(Time)},
     Guid = file_ctx:get_logical_guid_const(FileCtx),
@@ -190,11 +190,9 @@ get_record_struct(1) ->
 %% (update time = change of mtime or ctime)
 %% @end
 %%--------------------------------------------------------------------
--spec infer_update_time(times:record() | helpers:stat() | times:time()) -> times:time().
+-spec infer_update_time(times:record() | times:time()) -> times:time().
 infer_update_time(#times{mtime = MTime, ctime = CTime}) ->
     max(MTime, CTime);
-infer_update_time(#statbuf{st_mtime = StMtime, st_ctime = StCtime}) ->
-    max(StMtime, StCtime);
 infer_update_time(Timestamp) when is_integer(Timestamp) ->
     Timestamp.
 

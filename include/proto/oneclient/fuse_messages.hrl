@@ -64,9 +64,9 @@
 }).
 
 -record(update_times, {
-    atime :: times:time(),
-    mtime :: times:time(),
-    ctime :: times:time()
+    atime :: times:a_time(),
+    mtime :: times:m_time(),
+    ctime :: times:c_time()
 }).
 
 -record(change_mode, {

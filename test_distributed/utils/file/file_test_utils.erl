@@ -29,7 +29,8 @@
     await_size/3,
     await_content/3, await_content/4,
     await_distribution/3,
-    await_xattr/4
+    await_xattr/4,
+    await_attrs/4
 ]).
 
 -type offset() :: non_neg_integer().
@@ -199,6 +200,24 @@ await_xattr(Node, FileGuid, ExpectedXattrs, Attempts) ->
         end
     end,
     ?assertEqual(ok, CheckFun(), Attempts).
+
+
+-spec await_attrs(node(), file_id:file_guid(), #{onedata_file:attr_name() => json_utils:json_term()},
+    non_neg_integer()) -> ok.
+await_attrs(Node, FileGuid, ExpectedAttrsMap, Attempts) ->
+    GetAttrFun = fun() ->
+        try
+            {ok, CurrentAttrs} = lfm_proxy:stat(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), maps:keys(ExpectedAttrsMap)),
+            CurrentAttrsJson = file_attr_translator:to_json(CurrentAttrs, default, maps:keys(ExpectedAttrsMap)),
+            maps:fold(fun(Key, Value, Acc) ->
+                Acc#{onedata_file:attr_name_from_json(Key) => Value}
+            end, #{}, CurrentAttrsJson)
+        catch _:E ->
+            E
+        end
+    end,
+    ?assertEqual(ExpectedAttrsMap, GetAttrFun(), Attempts).
+    
 
 
 %%%===================================================================

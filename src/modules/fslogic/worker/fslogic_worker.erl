@@ -62,12 +62,10 @@
 % delays and intervals
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
     op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
--define(RERUN_TRANSFERS_DELAY,
-    op_worker:get_env(rerun_transfers_delay, 10000)).
--define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
--define(TIMES_CACHE_FLUSH_INTERVAL,
-    timer:seconds(op_worker:get_env(times_cache_flush_interval_sec, 8))).
+-define(RERUN_TRANSFERS_DELAY, op_worker:get_env(rerun_transfers_delay, 10000)).
+-define(RESTART_AUTOCLEANING_RUNS_DELAY, op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
+% NOTE: times_cache flush interval should be below 10s in order to fit in acceptance tests timeout.
+-define(TIMES_CACHE_FLUSH_INTERVAL, timer:seconds(op_worker:get_env(times_cache_flush_interval_sec, 8))).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
