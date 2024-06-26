@@ -219,7 +219,6 @@ await_attrs(Node, FileGuid, ExpectedAttrsMap, Attempts) ->
     ?assertEqual(ExpectedAttrsMap, GetAttrFun(), Attempts).
     
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
