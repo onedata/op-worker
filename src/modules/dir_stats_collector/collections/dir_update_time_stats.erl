@@ -70,7 +70,7 @@ report_update(FileCtx, Time) ->
             not_found ->
                 dir_stats_collector:add_missing_file_meta_on_update_posthook(Guid, ?MODULE, Update);
             _ ->
-                error(?examine_exception(Class, Reason, Stacktrace))
+                throw(?examine_exception(Class, Reason, Stacktrace))
         end
     end.
 
