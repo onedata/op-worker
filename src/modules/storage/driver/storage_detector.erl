@@ -21,10 +21,11 @@
 -include_lib("ctool/include/errors.hrl").
 
 
-%% Onepanel RPC
--export([verify_storage_availability_on_all_nodes/2]).
-
 %% API
+-export([
+    verify_storage_availability_on_all_nodes/2, verify_storage_availability_on_current_node/2,
+    verify_storage_availability/3
+]).
 -export([
     check_storage_access/2,
     create_test_file/2, create_test_file/3,
@@ -48,9 +49,22 @@
 
 -spec verify_storage_availability_on_all_nodes(helpers:helper(), luma_config:feed()) ->
     ok | errors:error().
-verify_storage_availability_on_all_nodes(#helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed) ->
-    ok;
 verify_storage_availability_on_all_nodes(Helper, LumaFeed) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    verify_storage_availability(Nodes, Helper, LumaFeed).
+
+
+-spec verify_storage_availability_on_current_node(helpers:helper(), luma_config:feed()) ->
+    ok | errors:error().
+verify_storage_availability_on_current_node(Helper, LumaFeed) ->
+    verify_storage_availability([node()], Helper, LumaFeed).
+
+
+-spec verify_storage_availability([node()], helpers:helper(), luma_config:feed()) ->
+    ok | errors:error().
+verify_storage_availability(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed) ->
+    ok;
+verify_storage_availability(Nodes, Helper, LumaFeed) ->
     try
         case ?SKIP_STORAGE_DETECTION of
             true ->
@@ -60,7 +74,7 @@ verify_storage_availability_on_all_nodes(Helper, LumaFeed) ->
                 {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
                     ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
                 ),
-                verify_storage_availability_on_all_nodes_insecure(Helper, ExtendedAdminCtx)
+                verify_storage_availability_insecure(Nodes, Helper, ExtendedAdminCtx)
         end
     catch throw:?ERROR_STORAGE_TEST_FAILED(Operation) ->
         ?ERROR_STORAGE_TEST_FAILED(Operation)
@@ -141,9 +155,8 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %%%===================================================================
 
 %% @private
--spec verify_storage_availability_on_all_nodes_insecure(helpers:helper(), helper:user_ctx()) -> ok.
-verify_storage_availability_on_all_nodes_insecure(Helper, UserCtx) ->
-    Nodes = consistent_hashing:get_all_nodes(),
+-spec verify_storage_availability_insecure([node()], helpers:helper(), helper:user_ctx()) -> ok.
+verify_storage_availability_insecure(Nodes, Helper, UserCtx) ->
     BasicArgList = [[Helper, UserCtx] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
     case Helper of

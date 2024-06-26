@@ -32,7 +32,7 @@
 
 -export([update_helper/2, update_luma_config/2, set_luma_config/2]).
 
--export([delete_all/0]).
+-export([list_all/0, delete_all/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -174,9 +174,14 @@ set_luma_config(StorageId, LumaConfig) ->
     end)).
 
 
+-spec list_all() -> {ok, [doc()]} | {error, term()}.
+list_all() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+
 -spec delete_all() -> ok.
 delete_all() ->
-    {ok, StorageList} = datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []),
+    {ok, StorageList} = list_all(),
     lists:foreach(fun(#document{key = StorageId}) ->
         delete(StorageId)
     end, StorageList).

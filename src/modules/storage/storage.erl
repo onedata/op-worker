@@ -29,7 +29,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, exists/1, delete/1, clear_storages/0]).
+-export([create/6, get/1, get_all/0, exists/1, delete/1, clear_storages/0]).
 
 %% Functions to retrieve storage details in Onepanel compatible format
 -export([describe/1, describe_luma_config/1]).
@@ -128,6 +128,11 @@ get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
 get(StorageData = #document{}) ->
     {ok, StorageData}.
+
+
+-spec get_all() -> {ok, [data()]} | {error, term()}.
+get_all() ->
+    storage_config:list_all().
 
 
 %%-------------------------------------------------------------------
