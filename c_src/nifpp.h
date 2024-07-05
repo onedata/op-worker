@@ -313,7 +313,7 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::pair<const uint8_t*, size
 // folly::IOBufQueue
 inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::IOBufQueue &var)
 {
-    var.clear();
+    var.reset();
 
     ErlNifBinary bin;
     if (!enif_inspect_binary(env, term, &bin))
