@@ -24,6 +24,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -34,8 +35,8 @@
 -export([get_ctx/0]).
 
 -type hook_type() :: doc | link.
--type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
-    {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
+-type missing_element() :: ?MISSING_FILE_META(file_meta:uuid()) |
+    ?MISSING_FILE_META_LINK(file_meta:uuid(), file_meta:name()).
 -type hook_identifier() :: binary().
 -type function_name() :: atom().
 % Posthook args encoded with Module:encode_file_meta_posthook_args/2 function.
@@ -215,17 +216,17 @@ decode_hook(EncodedHook) ->
 
 %% @private
 -spec get_hook_uuid(missing_element()) -> file_meta:uuid().
-get_hook_uuid({file_meta_missing, MissingUuid}) ->
+get_hook_uuid(?MISSING_FILE_META(MissingUuid)) ->
     MissingUuid;
-get_hook_uuid({link_missing, Uuid, _MissingName}) ->
+get_hook_uuid(?MISSING_FILE_META_LINK(Uuid, _Name)) ->
     Uuid.
 
 
 %% @private
 -spec has_missing_element_appeared(missing_element()) -> boolean().
-has_missing_element_appeared({file_meta_missing, MissingUuid}) ->
+has_missing_element_appeared(?MISSING_FILE_META(MissingUuid)) ->
     file_meta:exists(MissingUuid);
-has_missing_element_appeared({link_missing, Uuid, MissingName}) ->
+has_missing_element_appeared(?MISSING_FILE_META_LINK(Uuid, MissingName)) ->
     case file_meta_forest:get(Uuid, all, MissingName) of
         {ok, _} -> true;
         {error, _} -> false
@@ -234,8 +235,8 @@ has_missing_element_appeared({link_missing, Uuid, MissingName}) ->
 
 %% @private
 -spec missing_element_to_hook_type(missing_element()) -> hook_type().
-missing_element_to_hook_type({file_meta_missing, _}) -> doc;
-missing_element_to_hook_type({link_missing, _, _}) -> link.
+missing_element_to_hook_type(?MISSING_FILE_META(_)) -> doc;
+missing_element_to_hook_type(?MISSING_FILE_META_LINK(_, _)) -> link.
 
 
 %% @private

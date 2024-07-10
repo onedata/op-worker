@@ -227,9 +227,9 @@ get_eff_qos(FileCtx) ->
     HighestSyncedAncestorUuid = case file_meta_sync_status_cache:get(SpaceId, ReferenceUuid) of
         {ok, synced} ->
             <<>>; % space dir parent
-        {error, {file_meta_missing, _} = MissingElement} ->
+        {error, ?MISSING_FILE_META(_) = MissingElement} ->
             handle_missing_file_meta(FileCtx, MissingElement);
-        {error, {link_missing, _, _} = MissingElement} ->
+        {error, ?MISSING_FILE_META_LINK(_, _) = MissingElement} ->
             handle_missing_link(FileCtx, MissingElement);
         {error, ancestor_deleted} ->
             ancestor_deleted
@@ -244,7 +244,7 @@ get_eff_qos(FileCtx) ->
             <<>> ->
                 {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
                 case file_qos:get_effective(FileDoc) of
-                    {error, {file_meta_missing, _}} ->
+                    {error, ?MISSING_FILE_META(_)} ->
                         % One of the file references has a missing ancestor. Calculate effective value only for this reference;
                         % all other references trigger reconciliation when they synchronize.
                         file_qos:get_effective_for_single_reference(FileDoc);
@@ -264,7 +264,7 @@ get_eff_qos(FileCtx) ->
 
 %% @private
 -spec handle_missing_file_meta(file_ctx:ctx(), file_meta_posthooks:missing_element()) -> file_meta:uuid().
-handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElementFileMeta) ->
+handle_missing_file_meta(FileCtx, ?MISSING_FILE_META(MissingUuid) = MissingElementFileMeta) ->
     ?debug("[~tp] Missing file meta: ~tp", [?MODULE, MissingUuid]),
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -281,7 +281,7 @@ handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElem
 
 %% @private
 -spec handle_missing_link(file_ctx:ctx(), file_meta_posthooks:missing_element()) -> file_meta:uuid().
-handle_missing_link(FileCtx, {link_missing, MissingParentUuid, MissingLinkName} = MissingElement) ->
+handle_missing_link(FileCtx, ?MISSING_FILE_META_LINK(MissingParentUuid, MissingLinkName) = MissingElement) ->
     % Because of file_meta_sync_status_cache there is guarantee that all file_meta documents on path are synced,
     % as well as there is no another missing link between given file and given missing one.
     ?debug("[~tp] Missing link: ~tp", [?MODULE, {MissingParentUuid, MissingLinkName}]),
@@ -291,14 +291,14 @@ handle_missing_link(FileCtx, {link_missing, MissingParentUuid, MissingLinkName} 
 
 %% @private
 -spec add_missing_link_posthook(od_space:id(), file_meta_posthooks:missing_element()) -> ok.
-add_missing_link_posthook(SpaceId, {link_missing, ParentUuid, MissingName} = MissingElement) ->
+add_missing_link_posthook(SpaceId, ?MISSING_FILE_META_LINK(ParentUuid, MissingName) = MissingElement) ->
     ok = file_meta_posthooks:add_hook(MissingElement, <<"qos_missing_link_", MissingName/binary>>,
         SpaceId, ?MODULE, missing_link_posthook, [ParentUuid, MissingName, SpaceId]).
 
 
 %% @private
 -spec add_missing_file_meta_posthook(od_space:id(), file_meta_posthooks:missing_element()) -> ok.
-add_missing_file_meta_posthook(SpaceId, {file_meta_missing, MissingUuid} = MissingElement) ->
+add_missing_file_meta_posthook(SpaceId, ?MISSING_FILE_META(MissingUuid) = MissingElement) ->
     ok = file_meta_posthooks:add_hook(MissingElement, <<"qos_missing_file_meta">>,
         SpaceId, ?MODULE, missing_file_meta_posthook, [MissingUuid, SpaceId]).
 

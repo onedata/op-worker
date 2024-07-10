@@ -312,7 +312,8 @@ emit_helper_params_changed(StorageId) ->
 %% For #file_location_changed_event{} uuid should be used, guid for other events.
 %% @end
 %%--------------------------------------------------------------------
--spec clone_event(event:type(), subscription_manager:link_subscription_context()) -> event:type().
+-spec clone_event(event:type() | event:aggregated() | event:base(), subscription_manager:link_subscription_context()) ->
+    event:type() | event:aggregated() | event:base().
 clone_event(#file_perm_changed_event{} = Event, {guid, NewGuid}) ->
     Event#file_perm_changed_event{file_guid = NewGuid};
 clone_event(#file_location_changed_event{file_location = FileLocation} = Event, {uuid, NewUuid, _SpaceId}) ->
@@ -334,6 +335,10 @@ clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, {guid, NewGu
         provider_id = ProviderId
     },
     Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
+clone_event(#event{type = Event}, Context) ->
+    #event{type = clone_event(Event, Context)};
+clone_event({aggregated, Events}, Context) ->
+    {aggregated, [clone_event(Ev, Context) || Ev <- Events]};
 clone_event(Event, Context) ->
     ?error("Trying to clone event ~tp of type that cannot be cloned. Context ~tp.", [Event, Context]),
     throw(not_supported_event_cloning).

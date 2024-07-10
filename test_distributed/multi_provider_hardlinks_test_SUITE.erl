@@ -254,12 +254,12 @@ hardlink_reference_file_meta_race_test(Config) ->
     ?assertMatch({error, not_found}, rpc:call(Worker2, file_meta, get, [file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
     Doc = wait_for_intercepted_dbsynced_file_meta(file_id:guid_to_uuid(FileGuid), Attempts),
     
-    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_events, hardlink_replicated, 2, 0),
+    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_file_meta_handler, hardlink_replicated, 2, 0),
 
     test_utils:mock_unload(Worker2, dbsync_changes),
     ok = rpc:call(Worker2, dbsync_changes, apply, [Doc]),
     
-    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_events, hardlink_replicated, 2, 1, Attempts).
+    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_file_meta_handler, hardlink_replicated, 2, 1, Attempts).
     
 
 %%%===================================================================
@@ -276,7 +276,7 @@ end_per_suite(Config) ->
 init_per_testcase(hardlink_reference_file_meta_race_test = Case, Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, 60),
     mock_file_meta_dbsync_to_intercept_regular_files(?config(workers2, Config)),
-    test_utils:mock_new(?config(workers2, Config), dbsync_events, [passthrough]),
+    test_utils:mock_new(?config(workers2, Config), dbsync_file_meta_handler, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 30}),
