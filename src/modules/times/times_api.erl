@@ -30,7 +30,7 @@
 -export([
     report_file_created/1, report_file_created/2,
     touch/2, report_change/2,
-    get/1, get/2,
+    get/2,
     report_file_deleted/1
 ]).
 
@@ -44,18 +44,15 @@
 %%% API
 %%%===================================================================
 
--spec report_file_created(file_ctx:ctx()) -> ok | {error, term()}.
+-spec report_file_created(file_ctx:ctx()) -> ok.
 report_file_created(FileCtx) ->
     report_file_created(FileCtx, build_current_times_record()).
 
--spec report_file_created(file_ctx:ctx(), times:record()) -> ok | {error, term()}.
-report_file_created(FileCtx, #times{creation_time = undefined} = TimesRecord) ->
-    #times{atime = ATime, mtime = MTime, ctime = CTime} = TimesRecord,
-    report_file_created(FileCtx, TimesRecord#times{creation_time = lists:min([ATime, CTime, MTime])});
+-spec report_file_created(file_ctx:ctx(), times:record()) -> ok.
 report_file_created(FileCtx, TimesRecord) ->
     dir_update_time_stats:report_update(FileCtx, TimesRecord),
     {IsSyncEnabled, FileCtx2} = file_ctx:is_synchronization_enabled(FileCtx),
-    times_cache:report_created(
+    ok = times_cache:report_created(
         file_ctx:get_referenced_guid_const(FileCtx2), not IsSyncEnabled, TimesRecord).
 
 
@@ -68,26 +65,21 @@ touch(FileCtx, TimesToUpdate) ->
 -spec report_change(file_ctx:ctx(), times:record()) -> ok.
 report_change(FileCtx, TimesRecord) ->
     dir_update_time_stats:report_update(FileCtx, TimesRecord),
-    times_cache:report_change(file_ctx:get_referenced_guid_const(FileCtx), TimesRecord).
+    ok = times_cache:report_changed(file_ctx:get_referenced_guid_const(FileCtx), TimesRecord).
 
 
--spec get(file_ctx:ctx()) -> {ok, times:record()} | {error, term()}.
-get(FileCtx) ->
-    get(FileCtx, [?attr_atime, ?attr_mtime, ?attr_ctime]).
-
--spec get(file_ctx:ctx(), [times_type()]) -> {ok, times:record()} | {error, term()}.
+-spec get(file_ctx:ctx(), [times_type()]) -> {ok, times:record()}.
 get(FileCtx, RequestedTimes) ->
-    case times_cache:get(file_ctx:get_referenced_guid_const(FileCtx), RequestedTimes) of
+    case times_cache:acquire(file_ctx:get_referenced_guid_const(FileCtx), RequestedTimes) of
         {ok, Times} -> {ok, Times};
-        {error, not_found} -> {ok, #times{}};
-        {error, _} = Error -> Error
+        {error, not_found} -> {ok, #times{}}
     end.
 
 
--spec report_file_deleted(file_ctx:ctx()) -> ok | {error, term()}.
+-spec report_file_deleted(file_ctx:ctx()) -> ok.
 report_file_deleted(FileCtx) ->
     dir_update_time_stats:report_update(FileCtx, ?NOW()),
-    times_cache:report_deleted(file_ctx:get_referenced_guid_const(FileCtx)).
+    ok = times_cache:report_deleted(file_ctx:get_referenced_guid_const(FileCtx)).
 
 %%%===================================================================
 %%% Internal functions

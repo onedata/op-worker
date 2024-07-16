@@ -858,7 +858,7 @@
 
 %% Model that holds file timestamps
 -record(times, {
-    creation_time = 0 :: times:creation_time() | undefined,
+    creation_time = 0 :: times:creation_time(),
     atime = 0 :: times:a_time(),
     mtime = 0 :: times:m_time(),
     ctime = 0 :: times:c_time()

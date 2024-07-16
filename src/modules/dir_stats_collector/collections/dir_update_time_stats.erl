@@ -199,9 +199,5 @@ infer_update_time(Timestamp) when is_integer(Timestamp) ->
 %% @private
 -spec init(file_id:file_guid()) -> dir_stats_collection:collection().
 init(Guid) ->
-    case times_api:get(file_ctx:new_by_guid(Guid)) of
-        {ok, Times} ->
-            #{?STAT_NAME => infer_update_time(Times)};
-        ?ERROR_NOT_FOUND ->
-            #{?STAT_NAME => 0} % Race with file deletion - stats will be invalidated by next update
-    end.
+    {Times, _FileCtx2} = file_ctx:get_times(file_ctx:new_by_guid(Guid), [?attr_mtime, ?attr_ctime]),
+    #{?STAT_NAME => infer_update_time(Times)}.

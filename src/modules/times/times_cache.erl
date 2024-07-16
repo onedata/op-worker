@@ -24,7 +24,7 @@
 %% API
 -export([init/0, destroy/0]).
 -export([flush/0]).
--export([report_created/3, report_change/2, get/2, report_deleted/1]).
+-export([report_created/3, report_changed/2, acquire/2, report_deleted/1]).
 
 -type key() :: file_id:file_guid().
 -type value() :: times:record().
@@ -64,12 +64,11 @@ flush() ->
 
 -spec report_created(key(), boolean(), value()) -> ok | {error, term()}.
 report_created(FileGuid, IgnoreInChanges, Times) ->
-    ?extract_ok(
-        times:create(file_id:guid_to_uuid(FileGuid), file_id:guid_to_space_id(FileGuid), IgnoreInChanges, Times)).
+    times:create(file_id:guid_to_uuid(FileGuid), file_id:guid_to_space_id(FileGuid), IgnoreInChanges, Times).
     
 
--spec report_change(key(), value()) -> ok.
-report_change(Key, NewTimes) ->
+-spec report_changed(key(), value()) -> ok.
+report_changed(Key, NewTimes) ->
     run_in_critical_section(Key, fun() ->
         case get_from_ets(Key) of
             {ok, CachedTimes} ->
@@ -81,18 +80,18 @@ report_change(Key, NewTimes) ->
                 put_in_ets(Key, NewTimes)
         end
     end),
-    check_flush().
+    flush_if_full().
 
 
--spec get(key(), [times_api:times_type()]) -> {ok, value()} | {error, term()}.
-get(FileGuid, RequestedTimes) ->
+-spec acquire(key(), [times_api:times_type()]) -> {ok, value()} | {error, term()}.
+acquire(FileGuid, RequestedTimes) ->
     case get_from_ets(FileGuid) of
         {ok, CachedTimes} ->
             case are_times_in_record(RequestedTimes, CachedTimes) of
                 true ->
                     {ok, CachedTimes};
                 false ->
-                    case get_times_doc(FileGuid) of
+                    case get_from_db(FileGuid) of
                         {ok, DatastoreTimes} ->
                             MergedTimes = times:merge_records(CachedTimes, DatastoreTimes),
                             put_in_ets(FileGuid, MergedTimes),
@@ -102,7 +101,7 @@ get(FileGuid, RequestedTimes) ->
                     end
             end;
         {error, not_found} ->
-            get_times_doc(FileGuid)
+            get_from_db(FileGuid)
     end.
 
 
@@ -116,8 +115,8 @@ report_deleted(FileGuid) ->
 %%%===================================================================
 
 %% @private
--spec check_flush() -> ok.
-check_flush() ->
+-spec flush_if_full() -> ok.
+flush_if_full() ->
     case cache_size() >= ?MAX_CACHE_SIZE of
         true -> flush();
         _ -> ok
@@ -146,7 +145,7 @@ flush_keys_recursively(Key) ->
 %% @private
 -spec flush_value_insecure(key(), value()) -> ok.
 flush_value_insecure(Key, Value) ->
-    case update_times_doc(Key, Value) of
+    case update_in_db(Key, Value) of
         ok ->
             delete_from_ets(Key);
         {error, not_found} ->
@@ -161,8 +160,8 @@ flush_value_insecure(Key, Value) ->
 %%%===================================================================
 
 %% @private
--spec get_times_doc(key()) -> {ok, value()} | {error, term()}.
-get_times_doc(FileGuid) ->
+-spec get_from_db(key()) -> {ok, value()} | {error, term()}.
+get_from_db(FileGuid) ->
     case times:get(file_id:guid_to_uuid(FileGuid)) of
         {ok, #document{value = Value}} -> {ok, Value};
         {error, _} = Error -> Error
@@ -170,8 +169,8 @@ get_times_doc(FileGuid) ->
 
 
 %% @private
--spec update_times_doc(key(), value()) -> ok | {error, term()}.
-update_times_doc(FileGuid, Value) ->
+-spec update_in_db(key(), value()) -> ok | {error, term()}.
+update_in_db(FileGuid, Value) ->
     case times:update(file_id:guid_to_uuid(FileGuid), Value) of
         ok ->
             fslogic_event_emitter:emit_sizeless_file_attrs_changed(file_ctx:new_by_guid(FileGuid));

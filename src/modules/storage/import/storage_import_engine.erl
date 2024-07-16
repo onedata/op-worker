@@ -885,7 +885,12 @@ build_times_from_stat_timestamps(StorageFileCtx) ->
         st_ctime = StCtime,
         st_mtime = StMtime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    {ok, #times{creation_time = undefined, atime = StAtime, ctime = StCtime, mtime = StMtime}, StorageFileCtx2}.
+    {ok, #times{
+        creation_time = lists:min([StAtime, StCtime, StMtime]),
+        atime = StAtime,
+        ctime = StCtime,
+        mtime = StMtime
+    }, StorageFileCtx2}.
 
 
 %%-------------------------------------------------------------------

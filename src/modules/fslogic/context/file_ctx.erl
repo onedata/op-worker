@@ -676,7 +676,7 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredent
 
 -spec get_times(ctx()) -> {times:record(), ctx()}.
 get_times(FileCtx) ->
-    get_times(FileCtx, [atime, ctime, mtime]).
+    get_times(FileCtx, [?attr_atime, ?attr_mtime, ?attr_ctime]).
 
 
 -spec get_times(ctx(), [times_api:times_type()]) -> {times:record(), ctx()}.

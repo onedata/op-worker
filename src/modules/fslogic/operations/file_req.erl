@@ -309,7 +309,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             ?error_stacktrace("create_file_insecure error: ~tp:~tp", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            times_api:report_file_deleted(FileCtx),
+            catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             case Reason of
@@ -397,7 +397,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Class:Reason:Stacktrace ->
             ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            times_api:report_file_deleted(FileCtx),
+            catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             erlang:Class(Reason)
