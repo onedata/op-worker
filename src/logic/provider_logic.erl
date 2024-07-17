@@ -44,7 +44,7 @@
 -export([get_domain/0, get_domain/1, get_domain/2]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
 -export([update_domain_config/1]).
--export([set_txt_record/3, remove_txt_record/1]).
+-export([update_txt_records/1]).
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
 -export([zone_get_offline_access_idps/0]).
@@ -519,35 +519,14 @@ update_domain_config(Data) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets TXT type dns record in onezone DNS.
+%% Updates TXT type dns records in onezone DNS.
 %% @end
 %%--------------------------------------------------------------------
--spec set_txt_record(Name :: binary(), Content :: binary(),
-    TTL :: non_neg_integer() | undefined) -> ok | no_return().
-set_txt_record(Name, Content, TTL) ->
-    Data = #{<<"content">> => Content},
-    Data2 = case TTL of
-        Number when is_integer(Number) -> Data#{<<"ttl">> => TTL};
-        _ -> Data
-    end,
+-spec update_txt_records(map()) -> ok | no_return().
+update_txt_records(Data) ->
     ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create, data = Data2,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = {dns_txt_record, Name}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes TXT type dns record in onezone DNS.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_txt_record(Name :: binary()) -> ok | no_return().
-remove_txt_record(Name) ->
-    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = delete,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = {dns_txt_record, Name}}
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = dns_txt_records}
     }).
 
 

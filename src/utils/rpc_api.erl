@@ -106,8 +106,7 @@
     storage_import_get_info/1,
     storage_import_get_manual_example/1,
     restart_rtransfer_link/0,
-    set_txt_record/3,
-    remove_txt_record/1
+    update_txt_records/1
 ]).
 
 
@@ -666,12 +665,6 @@ restart_rtransfer_link() ->
     rtransfer_config:restart_link().
 
 
--spec set_txt_record(Name :: binary(), Content :: binary(),
-    TTL :: non_neg_integer() | undefined) -> ok | no_return().
-set_txt_record(Name, Content, TTL) ->
-    provider_logic:set_txt_record(Name, Content, TTL).
-
-
--spec remove_txt_record(Name :: binary()) -> ok | no_return().
-remove_txt_record(Name) ->
-    provider_logic:remove_txt_record(Name).
+-spec update_txt_records(map()) -> ok | no_return().
+update_txt_records(Data) ->
+    provider_logic:update_txt_records(Data).
