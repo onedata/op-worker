@@ -52,8 +52,9 @@ report_file_created(FileCtx) ->
 report_file_created(FileCtx, TimesRecord) ->
     dir_update_time_stats:report_update(FileCtx, TimesRecord),
     {IsSyncEnabled, FileCtx2} = file_ctx:is_synchronization_enabled(FileCtx),
-    ok = times_cache:report_created(
-        file_ctx:get_referenced_guid_const(FileCtx2), not IsSyncEnabled, TimesRecord).
+    ?catch_exceptions(
+        ok = times_cache:report_created(file_ctx:get_referenced_guid_const(FileCtx2), not IsSyncEnabled, TimesRecord)
+    ).
 
 
 -spec touch(file_ctx:ctx(), [times_type()]) -> ok.
@@ -65,35 +66,50 @@ touch(FileCtx, TimesToUpdate) ->
 -spec report_change(file_ctx:ctx(), times:record()) -> ok.
 report_change(FileCtx, TimesRecord) ->
     dir_update_time_stats:report_update(FileCtx, TimesRecord),
-    ok = times_cache:report_changed(file_ctx:get_referenced_guid_const(FileCtx), TimesRecord).
+    ?catch_exceptions(
+        ok = times_cache:report_changed(file_ctx:get_referenced_guid_const(FileCtx), TimesRecord)
+    ).
 
 
--spec get(file_ctx:ctx(), [times_type()]) -> {ok, times:record()}.
+-spec get(file_ctx:ctx(), [times_type()]) -> times:record().
 get(FileCtx, RequestedTimes) ->
     case times_cache:acquire(file_ctx:get_referenced_guid_const(FileCtx), RequestedTimes) of
-        {ok, Times} -> {ok, Times};
-        {error, not_found} -> {ok, #times{}}
+        {ok, Times} -> Times;
+        {error, not_found} -> build_times_record(0) % documents not synchronized yet, return dummy times
     end.
 
 
 -spec report_file_deleted(file_ctx:ctx()) -> ok.
 report_file_deleted(FileCtx) ->
     dir_update_time_stats:report_update(FileCtx, ?NOW()),
-    ok = times_cache:report_deleted(file_ctx:get_referenced_guid_const(FileCtx)).
+    ?catch_exceptions(
+        ok = times_cache:report_deleted(file_ctx:get_referenced_guid_const(FileCtx))
+    ).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec build_current_times_record() -> times:record().
 build_current_times_record() ->
-    build_times_record([?attr_creation_time, ?attr_atime, ?attr_mtime, ?attr_ctime], ?NOW()).
+    build_times_record(?NOW()).
 
 
+%% @private
+-spec build_times_record(times:time()) -> times:record().
+build_times_record(Time) ->
+    build_times_record([?attr_creation_time, ?attr_atime, ?attr_mtime, ?attr_ctime], Time).
+
+
+%% @private
 -spec build_times_record([times_type()], times:time()) -> times:record().
 build_times_record(TimesList, Time) ->
     build_times_record(TimesList, Time, #times{}).
 
+
+%% @private
 -spec build_times_record([times_type()], times:time(), times:record()) -> times:record().
 build_times_record([], _Time, TimesRecord) ->
     TimesRecord;

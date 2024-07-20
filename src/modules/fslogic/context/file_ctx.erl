@@ -698,8 +698,7 @@ get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
             {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid), RequestedTimes),
             RootFileTimes;
         false ->
-            {ok, T} = times_api:get(FileCtx, RequestedTimes),
-            T
+            times_api:get(FileCtx, RequestedTimes)
     end,
     {Times, FileCtx#file_ctx{times = times_record_to_map(Times)}};
 get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
@@ -708,8 +707,7 @@ get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
             {map_to_times_record(TimesMap), FileCtx};
         NotAllTimes ->
             MissingTimes = RequestedTimes -- NotAllTimes,
-            {ok, MissingTimesRecord} = times_api:get(FileCtx, MissingTimes),
-            MissingTimesMap = times_record_to_map(MissingTimesRecord),
+            MissingTimesMap = times_record_to_map(times_api:get(FileCtx, MissingTimes)),
             FinalMap = maps:merge(TimesMap, MissingTimesMap),
             {map_to_times_record(FinalMap), FileCtx#file_ctx{times = FinalMap}}
     end.

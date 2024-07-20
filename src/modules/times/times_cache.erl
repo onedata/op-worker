@@ -94,7 +94,6 @@ acquire(FileGuid, RequestedTimes) ->
                     case get_from_db(FileGuid) of
                         {ok, DatastoreTimes} ->
                             MergedTimes = times:merge_records(CachedTimes, DatastoreTimes),
-                            put_in_ets(FileGuid, MergedTimes),
                             {ok, MergedTimes};
                         {error, _} = Error ->
                             Error
