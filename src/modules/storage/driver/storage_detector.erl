@@ -146,7 +146,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
         {error, Reason} ->
             Operation = remove,
             ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
-            throw(?ERROR_STORAGE_TEST_FAILED(remove))
+            throw(?ERROR_STORAGE_TEST_FAILED(Operation))
     end.
 
 

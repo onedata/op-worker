@@ -51,22 +51,22 @@
 ]).
 
 % requests
--define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
+-define(PERIODIC_SPACES_AUTOCLEANING_CHECK, periodic_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(PERIODICAL_STORAGES_CHECK, periodical_storages_check).
+-define(PERIODIC_STORAGES_CHECK, periodic_storages_check).
 
--define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
-    op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
+-define(SHOULD_PERFORM_PERIODIC_SPACES_AUTOCLEANING_CHECK,
+    op_worker:get_env(autocleaning_periodic_spaces_check_enabled, true)).
 
 % delays and intervals
--define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
-    op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+-define(AUTOCLEANING_PERIODIC_SPACES_CHECK_INTERVAL,
+    op_worker:get_env(autocleaning_periodic_spaces_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
     op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
     op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
--define(PERIODICAL_STORAGES_CHECK_INTERVAL, timer:seconds(op_worker:get_env(storages_check_interval_sec, 300))).
+-define(PERIODIC_STORAGES_CHECK_INTERVAL, timer:seconds(op_worker:get_env(storages_check_interval_sec, 300))).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -121,7 +121,7 @@
     | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
 ]).
 
--define(UNAVAILABLE_STORAGES_STATE_KEY, unavailable_storages).
+-define(UNHEALTHY_STORAGES_KEY, unhealthy_storages).
 
 %%%===================================================================
 %%% API
@@ -172,8 +172,8 @@ init(_Args) ->
 
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
-    schedule_periodical_spaces_autocleaning_check(),
-    schedule_periodical_storages_check(),
+    schedule_periodic_spaces_autocleaning_check(),
+    schedule_periodic_storages_check(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -189,7 +189,7 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
     
-    {ok, #{?UNAVAILABLE_STORAGES_STATE_KEY => perform_storages_check()}}.
+    {ok, #{?UNHEALTHY_STORAGES_KEY => perform_all_storages_checks()}}.
 
 
 %%--------------------------------------------------------------------
@@ -218,17 +218,17 @@ handle(?RESTART_AUTOCLEANING_RUNS) ->
     ?debug("Restarting unfinished auto-cleaning runs"),
     restart_autocleaning_runs(),
     ok;
-handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
-    case ?SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK of
+handle(?PERIODIC_SPACES_AUTOCLEANING_CHECK) ->
+    case ?SHOULD_PERFORM_PERIODIC_SPACES_AUTOCLEANING_CHECK of
         true ->
-            periodical_spaces_autocleaning_check();
+            periodic_spaces_autocleaning_check();
         false ->
             ok
     end,
-    schedule_periodical_spaces_autocleaning_check();
-handle(?PERIODICAL_STORAGES_CHECK) ->
-    handle_periodical_storages_check(),
-    schedule_periodical_storages_check(),
+    schedule_periodic_spaces_autocleaning_check();
+handle(?PERIODIC_STORAGES_CHECK) ->
+    handle_periodic_storages_check(),
+    schedule_periodic_storages_check(),
     ok;
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
@@ -422,11 +422,13 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
     try
-        assert_storage_accessible(file_ctx:get_space_id_const(FileCtx1)),
-        handle_request_locally(EffUserCtx, Request, FileCtx1)
+        case is_storage_accessible(FileCtx1) of
+            true ->
+                handle_request_locally(EffUserCtx, Request, FileCtx1);
+            false ->
+                #fuse_response{status = #status{code = ?EAGAIN}}
+        end
     catch
-        _Type:storage_unavailable ->
-            #fuse_response{status = #status{code = ?EAGAIN}};
         Type:Error:Stacktrace ->
             fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
     end.
@@ -716,15 +718,15 @@ schedule_restart_autocleaning_runs() ->
 
 
 %% @private
--spec schedule_periodical_spaces_autocleaning_check() -> ok.
-schedule_periodical_spaces_autocleaning_check() ->
-    schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
+-spec schedule_periodic_spaces_autocleaning_check() -> ok.
+schedule_periodic_spaces_autocleaning_check() ->
+    schedule(?PERIODIC_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODIC_SPACES_CHECK_INTERVAL).
 
 
 %% @private
--spec schedule_periodical_storages_check() -> ok.
-schedule_periodical_storages_check() ->
-    schedule(?PERIODICAL_STORAGES_CHECK, ?PERIODICAL_STORAGES_CHECK_INTERVAL).
+-spec schedule_periodic_storages_check() -> ok.
+schedule_periodic_storages_check() ->
+    schedule(?PERIODIC_STORAGES_CHECK, ?PERIODIC_STORAGES_CHECK_INTERVAL).
 
 
 %% @private
@@ -735,8 +737,8 @@ schedule(Request, Timeout) ->
 
 
 %% @private
--spec periodical_spaces_autocleaning_check() -> ok.
-periodical_spaces_autocleaning_check() ->
+-spec periodic_spaces_autocleaning_check() -> ok.
+periodic_spaces_autocleaning_check() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             MyNode = node(),
@@ -810,56 +812,73 @@ restart_autocleaning_runs() ->
 
 
 %% @private
--spec assert_storage_accessible(od_space:id()) -> ok | no_return().
-assert_storage_accessible(SpaceId) ->
-    case worker_host:state_get(?MODULE, ?UNAVAILABLE_STORAGES_STATE_KEY) of
+-spec is_storage_accessible(file_ctx:ctx() | undefined) -> boolean().
+is_storage_accessible(undefined) ->
+    true;
+is_storage_accessible(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
         [] ->
-            ok;
+            true;
         Storages ->
             {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-            lists:member(StorageId, Storages) andalso throw(storage_unavailable),
-            ok
+            not lists:member(StorageId, Storages)
     end.
 
 
 %% @private
--spec handle_periodical_storages_check() -> ok.
-handle_periodical_storages_check() ->
-    UnavailableStorages = perform_storages_check(),
-    ExistingUnavailableStorages = worker_host:state_get(?MODULE, ?UNAVAILABLE_STORAGES_STATE_KEY),
-    case UnavailableStorages of
-        [] ->
-            ExistingUnavailableStorages =/= [] andalso
-                ?notice("Following storages are no longer unavailable:~n~tp", [ExistingUnavailableStorages]),
-            worker_host:state_put(?MODULE, ?UNAVAILABLE_STORAGES_STATE_KEY, []);
-        ExistingUnavailableStorages ->
+-spec handle_periodic_storages_check() -> ok.
+handle_periodic_storages_check() ->
+    UnhealthyStorages = perform_all_storages_checks(),
+    PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
+    case UnhealthyStorages of
+        PreviousUnhealthyStorages ->
             ok;
-        NewUnavailableStorages ->
-            ExistingUnavailableStorages -- NewUnavailableStorages =/= [] andalso
-                ?notice("Following storages are no longer unavailable:~n~tp",
-                    [ExistingUnavailableStorages -- NewUnavailableStorages]),
-            UnavailableStorages -- ExistingUnavailableStorages =/= [] andalso
-                ?notice("Following storages became unavailable - all request to suppported spaces will be rejected:~n~tp",
-                    [UnavailableStorages -- ExistingUnavailableStorages]),
-            worker_host:state_put(?MODULE, ?UNAVAILABLE_STORAGES_STATE_KEY, NewUnavailableStorages)
+        _ ->
+            PreviousUnhealthyStorages -- UnhealthyStorages =/= [] andalso
+                ?notice("Following storage backends are no longer unhealthy:~n~ts",
+                    [format_storages_log(PreviousUnhealthyStorages -- UnhealthyStorages)]),
+            UnhealthyStorages -- PreviousUnhealthyStorages =/= [] andalso
+                ?notice("Following storage backends became unhealthy - all request concerning the suppported spaces "
+                "will be rejected:~n~ts", [format_storages_log(UnhealthyStorages -- PreviousUnhealthyStorages)]),
+            worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStorages)
     end.
 
 
 %% @private
--spec verify_storage_availability(storage:data()) -> boolean().
-verify_storage_availability(StorageData) ->
-    Helper = storage:get_helper(StorageData),
-    LumaFeed = storage:get_luma_feed(StorageData),
-    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed).
-
-
-%% @private
--spec perform_storages_check() -> [storage:id()].
-perform_storages_check() ->
+-spec perform_all_storages_checks() -> [storage:id()].
+perform_all_storages_checks() ->
     {ok, StoragesData} = storage:get_all(),
     lists:filtermap(fun(StorageData) ->
-        case verify_storage_availability(StorageData) of
+        case is_storage_healthy(StorageData) of
             true -> false;
             false -> {true, storage:get_id(StorageData)}
         end
     end, StoragesData).
+
+
+%% @private
+-spec is_storage_healthy(storage:data()) -> boolean().
+is_storage_healthy(StorageData) ->
+    Helper = storage:get_helper(StorageData),
+    LumaFeed = storage:get_luma_feed(StorageData),
+    ?info("Performing healthcheck of storage backend ~ts", [storage:get_id(StorageData)]),
+    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed).
+
+
+%% @private
+-spec format_storages_log([storage:id()]) -> binary().
+format_storages_log(StorageIds) ->
+    string:join([format_storage_log(S) || S <- StorageIds], "\n").
+
+
+%% @private
+-spec format_storage_log(storage:id()) -> binary().
+format_storage_log(StorageId) ->
+    try
+        Name = storage:fetch_name_of_local_storage(StorageId),
+        Type = storage:get_helper_name(StorageId),
+        str_utils:format(" - StorageId: ~ts~n   Name: ~ts~n   Type: ~ts", [StorageId, Name, Type])
+    catch _:_ ->
+        str_utils:format(" - StorageId: ~ts", [StorageId])
+    end.
