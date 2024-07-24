@@ -158,7 +158,7 @@ add_hardlink_missing_base_doc_posthook(SpaceId, HardlinkUuid) ->
 -spec add_missing_parent_link_posthook(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok.
 add_missing_parent_link_posthook(FileCtx, ParentUuid, Name) ->
     file_meta_posthooks:add_hook(
-        ?MISSING_FILE_META_LINK(ParentUuid, Name),
+        ?MISSING_FILE_LINK(ParentUuid, Name),
         <<"missing_parent_link_", Name/binary>>,
         file_ctx:get_space_id_const(FileCtx),
         ?MODULE,

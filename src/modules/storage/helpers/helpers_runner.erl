@@ -47,11 +47,11 @@ run_and_handle_error(SDHandle = #sd_handle{
             run_and_handle_error(SDHandle, HelperHandle, Operation, SufficientAccessType);
         {error, not_found} ->
             case session:get(SessionId) of
-                {ok, Sess} ->
+                {ok, Session} ->
                     ?error(?autoformat_with_msg("Helper not found:",
-                        [Sess, SpaceId, StorageId, StorageFileId, FileUuid]));
+                        [Session, SpaceId, StorageId, StorageFileId, FileUuid]));
                 {error, not_found} ->
-                    ?warning(?autoformat_with_msg("Helper for not existing session not found:",
+                    ?warning(?autoformat_with_msg("Helper for nonexistent session not found:",
                         [SessionId, SpaceId, StorageId, StorageFileId, FileUuid]))
             end,
             throw(?EACCES);

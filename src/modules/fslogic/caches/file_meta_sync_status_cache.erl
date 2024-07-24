@@ -35,7 +35,7 @@
 -export([invalidate/1]).
 
 -type missing_link() :: ?MISSING_FILE_META(file_meta:uuid()).
--type missing_file_meta() :: ?MISSING_FILE_META_LINK(file_meta:uuid(), file_meta:name()).
+-type missing_file_meta() :: ?MISSING_FILE_LINK(file_meta:uuid(), file_meta:name()).
 
 -define(CACHE_GROUP, <<"file_meta_links_sync_status_cache_group">>).
 -define(CACHE_NAME(SpaceId),
@@ -134,7 +134,7 @@ get(SpaceId, Doc = #document{value = #file_meta{}, scope = Scope}, Opts) ->
     case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1, Opts2) of
         {ok, synced, _} ->
             {ok, synced};
-        {error, ?MISSING_FILE_META_LINK(_, _) = MissingLink} ->
+        {error, ?MISSING_FILE_LINK(_, _) = MissingLink} ->
             {error, find_lowest_missing_link(MissingLink, Doc)};
         {error, _} = Error ->
             Error
@@ -170,7 +170,7 @@ calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, Calculatio
     #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}, scope = Scope} = FileMetaDoc,
     case file_meta_forest:get_local_or_remote(ParentUuid, Name, Scope, Scope) of
         {ok, _} -> {ok, synced, CalculationInfo};
-        {error, _} -> {error, ?MISSING_FILE_META_LINK(ParentUuid, Name)}
+        {error, _} -> {error, ?MISSING_FILE_LINK(ParentUuid, Name)}
     end.
 
 
@@ -178,7 +178,7 @@ calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, Calculatio
 -spec find_lowest_missing_link(missing_link(), file_meta:doc()) ->
     missing_link() | ancestor_deleted.
 find_lowest_missing_link(
-    ?MISSING_FILE_META_LINK(ParentUuid, _) = MissingLink,
+    ?MISSING_FILE_LINK(ParentUuid, _) = MissingLink,
     #document{value = #file_meta{parent_uuid = ParentUuid}}
 ) ->
     MissingLink;
@@ -193,5 +193,5 @@ find_lowest_missing_link(
                 {error, not_found} -> ancestor_deleted
             end;
         {error, _} ->
-            ?MISSING_FILE_META_LINK(ParentUuid, Name)
+            ?MISSING_FILE_LINK(ParentUuid, Name)
     end.

@@ -126,7 +126,7 @@
 
 % Macros for missing file meta documents
 -define(MISSING_FILE_META(Uuid), {file_meta_missing, Uuid}).
--define(MISSING_FILE_META_LINK(Uuid, MissingName), {link_missing, Uuid, MissingName}).
+-define(MISSING_FILE_LINK(Uuid, MissingName), {link_missing, Uuid, MissingName}).
 
 -define(catch_not_found(_Code), ?catch_not_found_as(not_found, _Code)).
 -define(catch_not_found_as(ReturnValue, _Code),
