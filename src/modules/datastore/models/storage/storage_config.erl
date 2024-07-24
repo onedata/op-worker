@@ -49,7 +49,7 @@
     model => ?MODULE,
     % fold enabled to allow for listing and deleting local
     % documents after provider was deregistered
-    fold_enabled => true,
+    secure_fold_enabled => true,
     memory_copies => all
 }).
 
