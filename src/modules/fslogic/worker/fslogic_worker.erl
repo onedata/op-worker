@@ -867,13 +867,13 @@ is_storage_healthy(StorageData) ->
 
 
 %% @private
--spec format_storages_log([storage:id()]) -> binary().
+-spec format_storages_log([storage:id()]) -> string().
 format_storages_log(StorageIds) ->
     string:join([format_storage_log(S) || S <- StorageIds], "\n").
 
 
 %% @private
--spec format_storage_log(storage:id()) -> binary().
+-spec format_storage_log(storage:id()) -> string().
 format_storage_log(StorageId) ->
     try
         Name = storage:fetch_name_of_local_storage(StorageId),
