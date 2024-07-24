@@ -282,7 +282,7 @@ resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
         {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
         case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
             true ->
-                fslogic_file_id:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
+                space_dir:guid(SpaceIdOrObjectId);
             false ->
                 ProviderId = oneprovider:get_id(),
                 throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceIdOrObjectId, ProviderId))

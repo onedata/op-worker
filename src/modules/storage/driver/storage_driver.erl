@@ -58,10 +58,6 @@ new_handle(SessionId, FileCtx) ->
     new_handle(SessionId, FileCtx, true).
 
 
-%%--------------------------------------------------------------------
-%% @equiv new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
-%% @end
-%%--------------------------------------------------------------------
 -spec new_handle(session:id(), file_ctx:ctx(), boolean()) ->
     {handle() | undefined, file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
@@ -761,7 +757,7 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
 } = SDHandle, Fun, SufficientAccessType) ->
     case helpers_runner:run_and_handle_error(SDHandle, Fun, SufficientAccessType) of
         {error, Errno} = Error when Errno == ?EACCES orelse Errno == ?EPERM ->
-            IsSpaceDir = fslogic_file_id:is_space_dir_uuid(FileUuid),
+            IsSpaceDir = space_dir:is_special(uuid, FileUuid),
             IsSpaceOwner = session:is_space_owner(SessionId, SpaceId),
 
             % TODO VFS-11852 Consider fallback to ROOT for other users than space owner.

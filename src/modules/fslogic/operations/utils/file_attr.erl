@@ -540,11 +540,11 @@ resolve_name_attrs_conflicts(State) ->
     ProviderId = file_meta:get_provider_id(FileDoc),
     Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+    case space_dir:is_special(uuid, FileUuid) of
         true ->
             #state{user_ctx = UserCtx} = UpdatedState,
             {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, FileName,
-                fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+                space_dir:extract_space_id(FileUuid)),
             {UpdatedState#state{file_ctx = file_ctx:cache_name(Name, FileCtx)}, #file_attr{
                 name = Name,
                 conflicting_name = FileName,

@@ -172,8 +172,11 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
 
         assert_has_access_to_space(UserCtx, FileCtx),
         middleware_utils:assert_file_managed_locally(FileGuid),
+        case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), element(1, Operation)) of
+            false -> ?ERROR_FORBIDDEN;
+            _ -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
+        end
 
-        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;

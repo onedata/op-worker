@@ -345,12 +345,10 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
     end.
 
 
+%% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
 -spec is_uuid_counted(file_meta:uuid()) -> boolean().
 is_uuid_counted(Uuid) ->
-    not (fslogic_file_id:is_trash_dir_uuid(Uuid) orelse
-        archivisation_tree:is_special_uuid(Uuid) orelse
-        archivisation_tree:is_archive_dir_uuid(Uuid)
-    ).
+    not special_dirs:is_ignored_in_dir_stats(Uuid).
 
 
 %%%===================================================================
@@ -1037,7 +1035,8 @@ update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
 propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
-    case fslogic_file_id:is_tmp_dir_guid(Guid) of
+    %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
+    case tmp_dir:is_special(guid, Guid) of
         true ->
             CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
         false ->
@@ -1107,7 +1106,7 @@ get_parent(Guid) ->
 -spec get_parent(file_meta:doc(), od_space:id()) -> file_id:file_guid().
 get_parent(Doc, SpaceId) ->
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-    case fslogic_file_id:is_root_dir_uuid(ParentUuid) of
+    case special_dirs:is_scope_root_dir(ParentUuid) of
         true -> <<"root_dir">>;
         false -> file_id:pack_guid(ParentUuid, SpaceId)
     end.

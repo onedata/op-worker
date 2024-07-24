@@ -111,10 +111,10 @@ all() -> ?ALL([
 -define(SPACE_NAME2, oct_background:get_space_name(?SPACE2_PLACEHOLDER)).
 
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID1)).
--define(SPACE_UUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)).
--define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID1)).
--define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
--define(TRASH_DIR_GUID(SpaceId), fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)).
+-define(SPACE_UUID(SpaceId), space_dir:uuid(SpaceId)).
+-define(SPACE_DIR_GUID, ?SPACE_DIR_GUID(?SPACE_ID1)).
+-define(SPACE_DIR_GUID(SpaceId), space_dir:guid(SpaceId)).
+-define(TRASH_DIR_GUID(SpaceId), trash:guid(SpaceId)).
 
 -define(ATTEMPTS, 300).
 -define(RAND_NAME(Prefix), <<Prefix/binary, (integer_to_binary(rand:uniform(1000)))/binary>>).
@@ -150,14 +150,14 @@ create_dir_with_trash_dir_name_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     % TODO VFS-7064 change this error to EEXIST after adding link from space to trash directory
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, ?TRASH_DIR_NAME, ?DEFAULT_DIR_PERMS)).
+        lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, ?TRASH_DIR_NAME, ?DEFAULT_DIR_PERMS)).
 
 create_file_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     % TODO VFS-7064 change this error to EEXIST after adding link from space to trash directory
     ?assertMatch({error, ?EPERM},
-        lfm_proxy:create(P1Node, UserSessIdP1, ?SPACE_GUID, ?TRASH_DIR_NAME, ?DEFAULT_FILE_PERMS)).
+        lfm_proxy:create(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, ?TRASH_DIR_NAME, ?DEFAULT_FILE_PERMS)).
 
 
 remove_trash_dir_is_forbidden(_Config) ->
@@ -181,7 +181,7 @@ rename_other_dir_to_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     DirName = ?RAND_DIR_NAME,
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     ?assertMatch({error, ?EPERM},
         lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(DirGuid), filename:join([?SPACE_NAME, ?TRASH_DIR_NAME]))).
 
@@ -280,7 +280,7 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
 
     % create file and directory
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}], DirGuid),
 
     % move subtree to trash
@@ -292,7 +292,7 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
 
     P2Id = oct_background:get_provider_id(paris),
     {ok, TransferId} = ?assertMatch({ok, _},
-        opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P2Id)),
+        opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_DIR_GUID), P2Id)),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = completed,
@@ -311,7 +311,7 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
     % create file and directory
     TestData = <<"test data">>,
     Size = byte_size(TestData),
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     {ok, {FileGuid, H}} =
         ?assertMatch({ok, _}, lfm_proxy:create_and_open(P1Node, UserSessIdP1, DirGuid, FileName, ?DEFAULT_FILE_PERMS), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:write(P1Node, H,  0, TestData), ?ATTEMPTS),
@@ -341,7 +341,7 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
 
     % evict whole space
     {ok, TransferId} = ?assertMatch({ok, _},
-        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P1Id, undefined)),
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_DIR_GUID), P1Id, undefined)),
 
     ?assertMatch({ok, #document{value = #transfer{
         eviction_status = completed,
@@ -359,7 +359,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
 
     % create file and directory
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{0, 10}], DirGuid),
 
     % move subtree to trash
@@ -373,7 +373,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
     {ok, TransferId} = ?assertMatch({ok, _},
-        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P1Id, P2Id)),
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_DIR_GUID), P1Id, P2Id)),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = completed,
@@ -388,7 +388,7 @@ move_to_trash_should_work(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
     DirName = ?RAND_DIR_NAME,
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     DirCtx = file_ctx:new_by_guid(DirGuid),
     lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
 
@@ -422,7 +422,7 @@ move_to_trash_and_schedule_deletion_should_work(_Config) ->
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
@@ -463,7 +463,7 @@ move_to_trash_should_fail_if_user_does_not_have_sufficient_perms(_Config) ->
     InsufficientPerms = [8#600, 8#500, 8#400],
     lists:foreach(fun(Perms) ->
         DirName = ?RAND_DIR_NAME,
-        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, Perms),
+        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, Perms),
         ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, ?FILE_REF(DirGuid)))
     end, InsufficientPerms).
 
@@ -479,7 +479,7 @@ move_to_trash_should_fail_if_required_acl_perm_is_missing(_Config) ->
 
     lists:foreach(fun(RequiredPerm) ->
         DirName = ?RAND_DIR_NAME,
-        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
         Perms = ?ALL_DIR_PERMS -- utils:ensure_list(RequiredPerm),
         ok = lfm_proxy:set_acl(P1Node, UserSessIdP1, ?FILE_REF(DirGuid), [perms_to_allow_ace(Perms)]),
         ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, ?FILE_REF(DirGuid)))
@@ -505,7 +505,7 @@ files_from_trash_are_not_reimported(_Config) ->
     % ensure that 1st scan has been finished
     ?assertEqual(true, rpc:call(P1Node, storage_import_monitoring, is_initial_scan_finished, [?SPACE_ID2]), ?ATTEMPTS),
 
-    {ok, [{DirGuid, _}]} = lfm_proxy:get_children(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID(?SPACE_ID2)), 0, 1000),
+    {ok, [{DirGuid, _}]} = lfm_proxy:get_children(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_DIR_GUID(?SPACE_ID2)), 0, 1000),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
     % move imported directory to trash
@@ -516,7 +516,7 @@ files_from_trash_are_not_reimported(_Config) ->
     ?assertEqual(true, rpc:call(P1Node, storage_import_monitoring, is_scan_finished, [?SPACE_ID2, 2]), ?ATTEMPTS),
 
     % files which are currently in trash shouldn't have been reimported
-    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID(?SPACE_ID2)), 0, 1000)).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_DIR_GUID(?SPACE_ID2)), 0, 1000)).
 
 deletion_lasting_for_4_days_should_succeed(Config) ->
     TimeWarp = 4 * 24 * 3600, % 4 days
@@ -563,7 +563,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
 
     DirName = ?RAND_DIR_NAME,
     FileName = ?RAND_FILE_NAME,
-    {ok, DirGuid} = lfm_proxy:mkdir(P2Node, UserSessIdP2, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P2Node, UserSessIdP2, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     DirCtx = file_ctx:new_by_guid(DirGuid),
     {ok, {FileGuid, H1}} = lfm_proxy:create_and_open(P2Node, UserSessIdP2, DirGuid, FileName, ?DEFAULT_FILE_PERMS),
     TestData1 = <<"first part ">>,
@@ -574,7 +574,7 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
     lfm_proxy:fsync(P2Node, H1),
 
     GuidWithQos = case SetQosOn of
-        space_dir -> ?SPACE_GUID;
+        space_dir -> ?SPACE_DIR_GUID;
         parent_dir -> DirGuid;
         file -> FileGuid
     end,
@@ -612,7 +612,7 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
     [P2Node] = oct_background:get_provider_nodes(paris),
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}, {10, 10}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 

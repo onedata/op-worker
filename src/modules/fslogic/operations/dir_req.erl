@@ -67,8 +67,6 @@
 ) ->
     fslogic_worker:fuse_response().
 mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
-    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]

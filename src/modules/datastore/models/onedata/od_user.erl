@@ -157,8 +157,11 @@ run_in_critical_section(UserId, Fun) ->
 handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
     % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
     case NewSpaces -- PrevSpaces of
-        [] -> ok;
-        SpacesDiff -> user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
+        [] ->
+            ok;
+        SpacesDiff ->
+            lists:foreach(fun special_dirs:report_new_space/1, SpacesDiff),
+            user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
     end.
 
 
@@ -176,6 +179,6 @@ handle_spaces_removed(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_sp
 -spec handle_new_doc(id(), PrevVal :: record(), NewVal :: record()) -> ok.
 handle_new_doc(UserId, #od_user{username = undefined}, _) ->
     % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
-    user_root_dir:ensure_docs_exist(UserId);
+    special_dirs:report_new_user(UserId);
 handle_new_doc(_, _, _) ->
     ok.

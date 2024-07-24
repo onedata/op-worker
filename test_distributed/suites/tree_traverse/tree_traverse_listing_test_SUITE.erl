@@ -224,7 +224,7 @@ archive_recall_traverse_listing_error_base() ->
     {ok, _} = opw_test_rpc:call(krakow, archive_recall_traverse, setup_recall_traverse,
         [SpaceId, ArchiveDoc, RootDirGuid, #{
             archive_doc => ArchiveDoc,
-            current_parent => fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+            current_parent => space_dir:guid(SpaceId),
             root_file_name => generator:gen_name()
         }, file_ctx:new_by_guid(RootDirGuid), UserCtx]),
     
@@ -288,7 +288,7 @@ tree_deletion_traverse_listing_error_base(ErrorType) ->
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
     {ok, _} = opw_test_rpc:call(krakow, tree_deletion_traverse, start,
-        [file_ctx:new_by_guid(RootDirGuid), UserCtx, false, fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), <<>>]),
+        [file_ctx:new_by_guid(RootDirGuid), UserCtx, false, space_dir:uuid(SpaceId), <<>>]),
     
     case ErrorType of
         unexpected ->
@@ -303,7 +303,7 @@ tree_deletion_traverse_listing_error_base(ErrorType) ->
 dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
     #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
     ok = opw_test_rpc:call(krakow, dir_stats_collections_initialization_traverse, run,

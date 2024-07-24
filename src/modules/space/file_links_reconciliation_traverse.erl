@@ -52,7 +52,7 @@ start() ->
 
 -spec start_for_space(od_space:id()) -> ok.
 start_for_space(SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+    FileCtx = file_ctx:new_by_guid(space_dir:guid(SpaceId)),
     try
         ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
             callback_module => ?MODULE,

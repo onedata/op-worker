@@ -9,8 +9,7 @@
 %%% API module for trash management.
 %%% Trash is a special directory where files are moved as a result
 %%% of fslogic #move_to_trash operation.
-%%% Trash directory is created for each space, it has
-%%% a predefined uuid (see fslogic_file_id) and a predefined name.
+%%% Trash directory is created for each space, it has a predefined uuid and a predefined name.
 %%% Trash directory is child of a space directory.
 %%%
 %%% TODO VFS-7064 below paragraph will be true after adding link from space directory to trash in 21.02
@@ -28,6 +27,8 @@
 -module(trash).
 -author("Jakub Kudzia").
 
+-behaviour(special_dir_behaviour).
+
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -35,29 +36,52 @@
 
 
 %% API
--export([ensure_exists/1]).
+-export([uuid/1, guid/1, ensure_exists/1]).
 -export([move_to_trash/2, schedule_deletion_from_trash/5]).
+
+% special_dir_behaviour
+-export([is_special/2, is_operation_allowed/1, exists/1]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
 
+
+-define(ALLOWED_OPERATIONS, [
+    resolve_guid,
+
+    get_file_attr,
+    get_file_children,
+    get_child_attr,
+    get_file_children_attrs,
+    get_recursive_file_list
+]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
+-spec uuid(od_space:id()) -> file_meta:uuid().
+uuid(SpaceId) ->
+    ?TRASH_DIR_UUID(SpaceId).
+
+
+-spec guid(od_space:id()) -> file_id:file_guid().
+guid(SpaceId) ->
+    file_id:pack_guid(uuid(SpaceId), SpaceId).
+
+
 -spec ensure_exists(od_space:id()) -> ok.
 ensure_exists(SpaceId) ->
-    #document{key = Key} = TrashDoc = prepare_doc(SpaceId),
     % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added
     %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
     %  * maybe there should be option passed to file_meta_forest:list that would exclude trash from the result
-    ok = ?ok_if_exists(?extract_ok(file_meta:update(Key, fun(_) -> {error, already_exists} end, TrashDoc))).
+    special_dir_docs:create(SpaceId, prepare_doc(SpaceId), no_link),
+    ok.
 
 
 -spec move_to_trash(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 move_to_trash(FileCtx, UserCtx) ->
-    file_ctx:assert_not_special_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
@@ -66,8 +90,8 @@ move_to_trash(FileCtx, UserCtx) ->
     {Name, FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
     {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
     % files moved to trash are direct children of trash directory
-    % they names are suffixed with Uuid to avoid conflicts
-    TrashUuid = fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
+    % their names are suffixed with Uuid to avoid conflicts
+    TrashUuid = trash:uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:cleanup_reference_related_documents(FileCtx5),
     ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId),
@@ -91,7 +115,6 @@ move_to_trash(FileCtx, UserCtx) ->
 -spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid(), file_meta:name()) ->
     {ok, tree_deletion_traverse:id()} | {error, term()}.
 schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUuid, RootFileName) ->
-    file_ctx:assert_not_special_const(FileCtx),
     % TODO VFS-7348 schedule deletion as user not by root
     case tree_deletion_traverse:start(FileCtx, user_ctx:new(?ROOT_USER_ID), EmitEvents, RootOriginalParentUuid, RootFileName) of
         {ok, TaskId} ->
@@ -105,17 +128,34 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
 
 
 %%%===================================================================
-%%% Internal functions
+%%% special_dir_behaviour callbacks
 %%%===================================================================
 
+-spec is_special(uuid | guid, file_meta:uuid()) -> boolean().
+is_special(uuid, <<?TRASH_DIR_UUID_PREFIX, _SpaceId/binary>>) -> true;
+is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
+is_special(_, _) -> false.
+
+
+-spec is_operation_allowed(atom()) -> boolean().
+is_operation_allowed(Operation) ->
+    lists:member(Operation, ?ALLOWED_OPERATIONS).
+
+
+-spec exists(file_meta:uuid()) -> boolean().
+exists(Uuid) ->
+    file_meta:exists(Uuid).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %% @private
 -spec prepare_doc(od_space:id()) -> file_meta:doc().
 prepare_doc(SpaceId) ->
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
-    file_meta:new_special_dir_doc(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
-        ?TRASH_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId
+    file_meta:new_dir_doc(trash:uuid(SpaceId),
+        ?TRASH_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), space_dir:uuid(SpaceId), SpaceId
     ).
 
 

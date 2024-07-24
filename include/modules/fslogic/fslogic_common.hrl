@@ -47,6 +47,14 @@
 % note: spaces are also linked to virtual root directories of each user belonging to space
 -define(GLOBAL_ROOT_DIR_UUID, <<"">>).
 -define(GLOBAL_ROOT_DIR_NAME, <<"">>).
+-define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
+
+% For each "normal" file (including spaces) scope is id of a space to
+% which the file belongs.
+% For root directory and users' root directories we use "special" scope
+% as they don't belong to any space
+-define(ROOT_DIR_SCOPE, <<>>).
+
 %% root user definitions
 -define(ROOT_CREDENTIALS, root_credentials).
 -define(ROOT_USER_ID, <<"0">>).

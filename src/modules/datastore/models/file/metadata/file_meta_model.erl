@@ -500,7 +500,7 @@ on_remote_doc_created(_Ctx, #document{
     value = #file_meta{type = Type, parent_uuid = ParentUuid}, scope = SpaceId
 } = Doc) ->
     try
-        case fslogic_file_id:is_space_dir_uuid(Key) orelse fslogic_file_id:is_trash_dir_uuid(Key) of
+        case special_dirs:is_special(Key) of
             true ->
                 ok;
             false ->
@@ -514,6 +514,7 @@ on_remote_doc_created(_Ctx, #document{
                     {ok, State} ->
                         case dir_stats_service_state:is_active(State) of
                             true ->
+                                %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
                                 dir_stats_collector:is_uuid_counted(Key) andalso
                                     dir_size_stats:report_file_created_without_state_check(
                                         Type, file_id:pack_guid(ParentUuid, SpaceId));
@@ -524,6 +525,7 @@ on_remote_doc_created(_Ctx, #document{
                         ok;
                     {error, internal_call} ->
                         spawn(fun() ->
+                            %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
                             dir_stats_collector:is_uuid_counted(Key) andalso
                                 dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
                         end)
@@ -575,7 +577,7 @@ invalidate_dataset_eff_cache_if_needed(
 invalidate_qos_bounded_cache_if_moved_to_trash(
     #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}
 }) ->
-    case PrevParentUuid =/= NewParentUuid andalso fslogic_file_id:is_trash_dir_uuid(NewParentUuid) of
+    case PrevParentUuid =/= NewParentUuid andalso trash:is_special(uuid, NewParentUuid) of
         true ->
             % the file has been moved to trash
             FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),

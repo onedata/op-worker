@@ -120,8 +120,10 @@ report_file_deleted(FileCtx, #document{key = QosEntryId} = QosEntryDoc, Original
             %% TODO VFS-7133 take original parent uuid from file_meta doc
             UuidBasedPath2 = case filepath_utils:split(UuidBasedPath) of
                 Tokens = [<<"/">>, SpaceId, Token | Rest] ->
-                    case fslogic_file_id:is_trash_dir_uuid(Token) andalso OriginalRootParentCtx =/= undefined of
+                    case trash:is_special(uuid, Token) andalso OriginalRootParentCtx =/= undefined of
                         true ->
+                            % file is deleted while being in trash - status link is still a path before deletion
+                            % @TODO VFS-12134 no longer true when rename is working properly
                             {OriginalParentUuidBasedPath, _} = file_ctx:get_uuid_based_path(OriginalRootParentCtx),
                             filename:join([OriginalParentUuidBasedPath | Rest]);
                         false ->

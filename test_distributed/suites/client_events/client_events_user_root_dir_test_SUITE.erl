@@ -236,7 +236,7 @@ add_user_to_existing_space_test_base(ClientProvider) ->
             ?assertMatch({ok, _}, opw_test_rpc:call(ClientProvider,
                 space_logic, get, [oct_background:get_user_session_id(?OTHER_USER, ClientProvider), Space#space.id])),
             ?assertMatch({ok, _}, opw_test_rpc:call(ClientProvider,
-                file_meta, get, [fslogic_file_id:spaceid_to_space_dir_uuid(Space#space.id)]), ?ATTEMPTS),
+                file_meta, get, [space_dir:uuid(Space#space.id)]), ?ATTEMPTS),
             Space
         end,
         test_fun = fun(#space{id = SpaceId} = Space) ->
@@ -364,7 +364,7 @@ setup_client_connection(ClientProvider) ->
     GetSessionId = fun(P) -> oct_background:get_user_session_id(?CLIENT_USER, P) end,
     {ok, {Sock, ConnSessId}} = fuse_test_utils:connect_via_token(oct_background:get_random_provider_node(ClientProvider),
         [{active, true}], GetSessionId(ClientProvider), oct_background:get_user_access_token(?CLIENT_USER)),
-    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
+    UserRootDirGuid = user_root_dir:guid(UserId),
     client_simulation_test_utils:create_new_file_subscriptions(Sock, UserRootDirGuid, 0),
     lists:foreach(fun(Sub) ->
         assert_subscribed(ClientProvider, ConnSessId, Sub)
@@ -505,7 +505,7 @@ start_zone_connection(ProviderSelector) ->
 
 
 guid(#space{id = SpaceId}) ->
-    fslogic_file_id:spaceid_to_space_dir_guid(SpaceId).
+    space_dir:guid(SpaceId).
 
 extended_name(#space{id = SpaceId, name = Name}) ->
     <<Name/binary, "@", SpaceId/binary>>.

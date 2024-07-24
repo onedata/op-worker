@@ -49,9 +49,9 @@
 
 -spec create(key(), od_space:id(), boolean(), record()) -> ok | {error, term()}.
 create(Key, Scope, IgnoreInChanges, Times) ->
-    ?extract_ok(datastore_model:create(?CTX, #document{
+    ?extract_ok(?ok_if_exists(datastore_model:create(?CTX, #document{
         key = Key, scope = Scope, value = Times, ignore_in_changes = IgnoreInChanges
-    })).
+    }))).
     
 
 -spec update(key(), record()) -> ok | {error, term()}.

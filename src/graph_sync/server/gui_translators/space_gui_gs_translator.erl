@@ -76,7 +76,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
         true ->
             RootDirGRI = gri:serialize(#gri{
                 type = op_file,
-                id = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+                id = space_dir:guid(SpaceId),
                 aspect = instance,
                 scope = private
             }),

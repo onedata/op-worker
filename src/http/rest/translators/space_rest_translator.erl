@@ -72,7 +72,7 @@ translate_space(SpaceId, #od_space{
     name = Name,
     providers = ProvidersIds
 }) ->
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
     {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
     {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),

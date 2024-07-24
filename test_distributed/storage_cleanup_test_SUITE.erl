@@ -822,11 +822,11 @@ end_per_testcase(_Case, Config) ->
 
 cleanup_space(Config, SpaceId) ->
     [W2, W1 | _] = ?config(op_worker_nodes, Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    cleanup_space_children(W1, ?ROOT_SESS_ID, SpaceGuid, 1000),
-    cleanup_space_children(W2, ?ROOT_SESS_ID, SpaceGuid, 1000),
-    ?assertEqual({ok, []}, lfm_proxy:get_children(W1, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 1)),
-    ?assertEqual({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 1), ?ATTEMPTS).
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    cleanup_space_children(W1, ?ROOT_SESS_ID, SpaceDirGuid, 1000),
+    cleanup_space_children(W2, ?ROOT_SESS_ID, SpaceDirGuid, 1000),
+    ?assertEqual({ok, []}, lfm_proxy:get_children(W1, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 1)),
+    ?assertEqual({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 1), ?ATTEMPTS).
 
 ensure_empty_storages(Config, SpaceId) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -839,12 +839,12 @@ ensure_empty_storage(Worker, SpaceId) ->
         Result =:= {ok, []} orelse Result =:= {error, ?ENOENT}
     end, ?ATTEMPTS).
 
-cleanup_space_children(Worker, SessionId, SpaceGuid, BatchSize) ->
-    {ok, Children} = lfm_proxy:get_children(Worker, SessionId, ?FILE_REF(SpaceGuid), 0, BatchSize),
+cleanup_space_children(Worker, SessionId, SpaceDirGuid, BatchSize) ->
+    {ok, Children} = lfm_proxy:get_children(Worker, SessionId, ?FILE_REF(SpaceDirGuid), 0, BatchSize),
     lists:foreach(fun({G, _}) ->
         lfm_proxy:rm_recursive(Worker, SessionId, ?FILE_REF(G))
     end, Children),
     case length(Children) < BatchSize of
         true -> ok;
-        false -> cleanup_space_children(Worker, SessionId, SpaceGuid, BatchSize)
+        false -> cleanup_space_children(Worker, SessionId, SpaceDirGuid, BatchSize)
     end.

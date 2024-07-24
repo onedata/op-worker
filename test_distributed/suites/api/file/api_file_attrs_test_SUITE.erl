@@ -1657,7 +1657,7 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
     
     #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{
+        user3, space_dir:guid(SpaceId), #file_spec{
             shares = [#share_spec{}],
             mode = 8#707,
             content = crypto:strong_rand_bytes(20)

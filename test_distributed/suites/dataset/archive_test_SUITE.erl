@@ -407,13 +407,13 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(?USER1, krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     Size = 20,
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
         content = ?RAND_CONTENT(Size)
     }),
     {ok, #file_attr{guid = LinkGuid}} =
-        lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
+        lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceDirGuid), ?RAND_NAME()),
     Json = ?RAND_JSON_METADATA(),
     ok = opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
     UserId = oct_background:get_user_id(?USER1),

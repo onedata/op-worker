@@ -186,7 +186,7 @@ get(FileDoc, true = _CheckInvalidateOnDatasetsGetFlag) ->
 
     get(FileDoc, false);
 get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFlag) ->
-    case fslogic_file_id:is_root_dir_uuid(FileUuid) orelse fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
+    case special_dirs:is_restricted_for_datasets(FileUuid) of
         true ->
             {ok, #entry{}};
         false ->

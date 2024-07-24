@@ -72,13 +72,11 @@
     get_logical_guid_const/1, get_referenced_guid_const/1, get_logical_uuid_const/1, get_referenced_uuid_const/1,
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
--export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
-    is_tmp_dir_const/1, is_tmp_dir_const/2, is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
+-export([is_file_ctx_const/1, is_space_dir_const/1, is_symlink_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
-    get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2,
-    assert_not_trash_or_tmp_dir_const/1, assert_not_trash_or_tmp_dir_const/2,
-    assert_synchronization_enabled/1, assert_synchronization_disabled/1]).
+    is_in_user_space_const/2, assert_is_dir/1, assert_not_dir/1, get_type/1,
+    get_effective_type/1, assert_synchronization_enabled/1, assert_synchronization_disabled/1
+]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 -export([get_local_file_location_doc_const/1, get_local_file_location_doc_const/2]).
@@ -116,7 +114,7 @@
 %%--------------------------------------------------------------------
 -spec new_root_ctx() -> ctx().
 new_root_ctx() ->
-    new_by_guid(fslogic_file_id:root_dir_guid()).
+    new_by_guid(global_root_dir:guid()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -254,7 +252,7 @@ get_space_id_const(#file_ctx{space_id = SpaceId}) ->
 -spec get_space_dir_uuid_const(ctx()) -> file_meta:uuid().
 get_space_dir_uuid_const(FileCtx) ->
     SpaceId = get_space_id_const(FileCtx),
-    fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId).
+    space_dir:uuid(SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -355,10 +353,7 @@ get_logical_path(FileCtx, UserCtx) ->
 -spec get_file_doc(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     Uuid = get_logical_uuid_const(FileCtx),
-    {ok, FileDoc} = case fslogic_file_id:is_share_root_dir_uuid(Uuid) of
-        true -> get_share_root_dir_doc(FileCtx, false);
-        false -> file_meta:get({uuid, Uuid})
-    end,
+    {ok, FileDoc} = file_meta:get({uuid, Uuid}),
     {FileDoc, FileCtx#file_ctx{file_doc = FileDoc}};
 get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
@@ -427,20 +422,12 @@ is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) 
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_doc_including_deleted(ctx()) -> {file_meta:doc(), ctx()}.
-get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
-    FileUuid = get_logical_uuid_const(FileCtx),
-    {ok, Doc} = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
-        true -> get_share_root_dir_doc(FileCtx, true);
-        false -> file_meta:get_including_deleted(FileUuid)
-    end,
+get_file_doc_including_deleted(FileCtx) ->
+    {#document{} = Doc, FileCtx2} = get_and_cache_file_doc_including_deleted(FileCtx),
     case file_meta:is_deleted(Doc) of
-        false ->
-            {Doc, FileCtx#file_ctx{file_doc = Doc}};
-        true ->
-            {Doc, FileCtx}
-    end;
-get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
-    {FileDoc, FileCtx}.
+        false -> {Doc, FileCtx2};
+        true -> {Doc, FileCtx}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -451,12 +438,8 @@ get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 -spec get_and_cache_file_doc_including_deleted(ctx()) ->
     {file_meta:doc(), ctx()} | {error, term()}.
 get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
-    FileUuid = get_logical_uuid_const(FileCtx),
-    Result = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
-        true -> get_share_root_dir_doc(FileCtx, true);
-        false -> file_meta:get_including_deleted(FileUuid)
-    end,
-    case Result of
+    Uuid = get_logical_uuid_const(FileCtx),
+    case file_meta:get_including_deleted(Uuid) of
         {ok, Doc} ->
             {Doc, FileCtx#file_ctx{file_doc = Doc}};
         Error ->
@@ -464,27 +447,6 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefine
     end;
 get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {FileDoc, FileCtx}.
-
-
-%% @private
--spec get_share_root_dir_doc(ctx(), IncludingDeleted :: boolean()) ->
-    {ok, file_meta:doc()} | {error, not_found}.
-get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
-    ShareDirUuid = get_logical_uuid_const(FileCtx),
-    SpaceId = get_space_id_const(FileCtx),
-
-    #document{
-        value = #file_meta{
-            deleted = IsDeleted
-        }
-    } = ShareRootDirDoc = file_meta:new_share_root_dir_doc(ShareDirUuid, SpaceId),
-
-    case {IsDeleted, IncludingDeleted} of
-        {true, false} ->
-            ?ERROR_NOT_FOUND;
-        _ ->
-            {ok, ShareRootDirDoc}
-    end.
 
 
 -spec get_cached_parent_const(ctx()) -> undefined | ctx().
@@ -682,23 +644,9 @@ get_times(FileCtx) ->
 -spec get_times(ctx(), [times_api:times_type()]) -> {times:record(), ctx()}.
 get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
     FileUuid = get_logical_uuid_const(FileCtx),
-    Times = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
-        true ->
-            % Share root dir is virtual directory which does not have documents
-            % like `file_meta` or `times` - in such case get times of share root
-            % file
-            ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(FileUuid),
-            {ok, #document{
-                value = #od_share{
-                    root_file = RootFileShareGuid
-                }
-            }} = share_logic:get(?ROOT_SESS_ID, ShareId),
-
-            RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
-            {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid), RequestedTimes),
-            RootFileTimes;
-        false ->
-            times_api:get(FileCtx, RequestedTimes)
+    Times = case special_dirs:get_times_if_special(FileUuid, RequestedTimes) of
+        {true, T} -> T;
+        not_special -> times_api:get(FileCtx, RequestedTimes)
     end,
     {Times, FileCtx#file_ctx{times = times_record_to_map(Times)}};
 get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
@@ -1061,84 +1009,12 @@ is_file_ctx_const(_) ->
 
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_file_id:is_space_dir_guid(Guid).
-
-
--spec is_trash_dir_const(ctx()) -> boolean().
-is_trash_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_file_id:is_trash_dir_guid(Guid).
-
-
--spec is_trash_dir_const(ctx(), file_meta:name()) -> boolean().
-is_trash_dir_const(ParentCtx, Name) ->
-    file_ctx:is_space_dir_const(ParentCtx)
-        andalso (Name =:= ?TRASH_DIR_NAME).
-
-
--spec is_tmp_dir_const(ctx()) -> boolean().
-is_tmp_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_file_id:is_tmp_dir_guid(Guid).
-
-
--spec is_tmp_dir_const(ctx(), file_meta:name()) -> boolean().
-is_tmp_dir_const(ParentCtx, Name) ->
-    file_ctx:is_space_dir_const(ParentCtx)
-        andalso (Name =:= ?TMP_DIR_NAME).
-
-
--spec is_share_root_dir_const(ctx()) -> boolean().
-is_share_root_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_file_id:is_share_root_dir_guid(Guid).
+    space_dir:is_special(guid, Guid).
 
 
 -spec is_symlink_const(ctx()) -> boolean().
 is_symlink_const(FileCtx) ->
     fslogic_file_id:is_symlink_uuid(get_logical_uuid_const(FileCtx)).
-
-
--spec is_special_const(ctx()) -> boolean().
-is_special_const(#file_ctx{guid = Guid}) ->
-    fslogic_file_id:is_special_guid(Guid).
-
-
--spec assert_not_special_const(ctx()) -> ok.
-assert_not_special_const(FileCtx) ->
-    case is_special_const(FileCtx) of
-        true -> throw(?EPERM);
-        false -> ok
-    end.
-
-
--spec assert_not_trash_dir_const(file_ctx:ctx()) -> ok.
-assert_not_trash_dir_const(FileCtx) ->
-    case is_trash_dir_const(FileCtx) of
-        true -> throw(?EPERM);
-        false -> ok
-    end.
-
-
--spec assert_not_trash_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
-assert_not_trash_dir_const(ParentCtx, Name) ->
-    case is_trash_dir_const(ParentCtx, Name) of
-        true -> throw(?EPERM);
-        false -> ok
-    end.
-
-
--spec assert_not_trash_or_tmp_dir_const(file_ctx:ctx()) -> ok.
-assert_not_trash_or_tmp_dir_const(FileCtx) ->
-    case is_trash_dir_const(FileCtx) orelse is_tmp_dir_const(FileCtx) of
-        true -> throw(?EPERM);
-        false -> ok
-    end.
-
-
--spec assert_not_trash_or_tmp_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
-assert_not_trash_or_tmp_dir_const(ParentCtx, Name) ->
-    case is_trash_dir_const(ParentCtx, Name) orelse is_tmp_dir_const(ParentCtx, Name) of
-        true -> throw(?EPERM);
-        false -> ok
-    end.
 
 
 -spec assert_synchronization_enabled(ctx()) -> ctx().
@@ -1185,8 +1061,7 @@ is_user_root_dir_const(#file_ctx{canonical_path = <<"/">>}, _UserCtx) ->
     true;
 is_user_root_dir_const(#file_ctx{uuid = Uuid, canonical_path = undefined}, UserCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    UserRootDirUuid = fslogic_file_id:user_root_dir_uuid(UserId),
-    UserRootDirUuid == Uuid;
+    Uuid == user_root_dir:uuid(UserId);
 is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
     false.
 
@@ -1198,8 +1073,8 @@ is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
 -spec is_root_dir_const(ctx()) -> boolean().
 is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
-is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
-    fslogic_file_id:is_root_dir_guid(Guid);
+is_root_dir_const(#file_ctx{uuid = Uuid, canonical_path = undefined}) ->
+    special_dirs:is_scope_root_dir(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -1212,16 +1087,9 @@ is_root_dir_const(#file_ctx{}) ->
 file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
 
-    case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
-        true ->
-            ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(FileUuid),
-
-            case share_logic:get(?ROOT_SESS_ID, ShareId) of
-                {ok, _} -> true;
-                ?ERROR_NOT_FOUND -> false
-            end;
-        false ->
-            file_meta:exists(FileUuid)
+    case special_dirs:exists(FileUuid) of
+        not_special -> file_meta:exists(FileUuid);
+        SpecialDirResult -> SpecialDirResult
     end;
 file_exists_const(_) ->
     true.
@@ -1384,7 +1252,7 @@ get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) -
 
 -spec resolve_and_cache_path(ctx(), file_meta:path_type()) -> {file_meta:uuid() | file_meta:name(), ctx()}.
 resolve_and_cache_path(FileCtx, PathType) ->
-    try get_file_doc_including_deleted(FileCtx) of
+    case get_file_doc_including_deleted(FileCtx) of
         {#document{
             key = Uuid,
             value = #file_meta{
@@ -1418,9 +1286,8 @@ resolve_and_cache_path(FileCtx, PathType) ->
                         {error, not_found} ->
                             throw({error, ?MISSING_FILE_META(ParentUuid)})
                     end
-            end
-    catch
-        _:{badmatch, {error, not_found}} ->
+            end;
+    {error, not_found} ->
             throw({error, ?MISSING_FILE_META(file_ctx:get_logical_uuid_const(FileCtx))})
     end.
 

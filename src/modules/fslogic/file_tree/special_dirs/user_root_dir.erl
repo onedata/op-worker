@@ -33,12 +33,20 @@
 -module(user_root_dir).
 -author("Michal Stanisz").
 
+-behaviour(special_dir_behaviour).
+
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+
+-export([
+    uuid/1,
+    guid/1
+]).
 
 -export([
     list_spaces/4,
@@ -52,12 +60,22 @@
 ]).
 
 -export([
-    ensure_cache_updated/0,
-    ensure_docs_exist/1
+    ensure_cache_updated/0
 ]).
 
+% special_dir_behaviour
+-export([
+    is_special/2,
+    ensure_exists/1,
+    is_operation_allowed/1,
+    exists/1
+]).
+
+
+-define(USER_ROOT_PREFIX, "userRoot_").
+
 -define(FILE_META_DOC(UserId), #document{
-    key = fslogic_file_id:user_root_dir_uuid(UserId),
+    key = uuid(UserId),
     value = #file_meta{
         name = UserId,
         type = ?DIRECTORY_TYPE,
@@ -65,14 +83,43 @@
         owner = ?ROOT_USER_ID,
         is_scope = true,
         parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-    }
+    },
+    scope = ?ROOT_DIR_SCOPE
 }).
+
+-define(ALLOWED_OPERATIONS, [
+    resolve_guid,
+
+    get_parent,
+    get_file_path,
+
+    get_file_attr,
+    get_file_children,
+    get_child_attr,
+    get_file_children_attrs
+]).
 
 -type apply_fun() :: fun((session:id(), file_id:file_guid(), od_space:id(), #{od_space:name() => [od_space:id()]}) -> ok).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec uuid(od_user:id()) -> file_meta:uuid().
+uuid(UserId) ->
+    <<?USER_ROOT_PREFIX, UserId/binary>>.
+
+
+-spec guid(od_user:id()) -> fslogic_worker:file_guid().
+guid(UserId) ->
+    file_id:pack_guid(uuid(UserId), ?ROOT_DIR_VIRTUAL_SPACE_ID).
+
+
+-spec ensure_exists(od_user:id()) -> ok.
+ensure_exists(UserId) ->
+    special_dir_docs:create(?ROOT_DIR_VIRTUAL_SPACE_ID, ?FILE_META_DOC(UserId), add_link),
+    ok.
+
 
 -spec list_spaces(user_ctx:ctx(), file_listing:offset(), file_listing:limit(),
     file_listing:whitelist() | undefined) -> [{file_meta:name(), od_space:id()}].
@@ -110,7 +157,7 @@ get_space_name_and_conflicts(SessId, UserId, PossiblyDisambiguatedName, SpaceId)
         [_] ->
             {BaseSpaceName, []};
         SpaceIds ->
-            Conflicts = [{BaseSpaceName, fslogic_file_id:spaceid_to_space_dir_uuid(Sid)} || Sid <- SpaceIds, Sid /= SpaceId],
+            Conflicts = [{BaseSpaceName, space_dir:uuid(Sid)} || Sid <- SpaceIds, Sid /= SpaceId],
             ExtendedName = disambiguate_conflicted_space_name(BaseSpaceName, SpaceId),
             {ExtendedName, Conflicts}
     end.
@@ -162,18 +209,6 @@ report_space_name_change(UserIds, SpaceId, PrevName, NewName) ->
     end, UserIds, [SpaceId]).
 
 
--spec ensure_docs_exist(od_user:id()) -> ok.
-ensure_docs_exist(UserId) ->
-    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?FILE_META_DOC(UserId)) of
-        {ok, #document{}} ->
-            ?extract_ok(times_api:report_file_created(
-                file_ctx:new_by_guid(fslogic_file_id:user_root_dir_guid(UserId))
-            ));
-        {error, already_exists} ->
-            ok
-    end.
-
-
 -spec ensure_cache_updated() -> ok.
 ensure_cache_updated() ->
     maps:fold(fun(UserId, [SessId | _], AlreadyFetchedSpaces) ->
@@ -198,6 +233,25 @@ ensure_cache_updated() ->
         end
     end, gb_sets:new(), find_fuse_sessions_of_all_users()),
     ok.
+
+%%%===================================================================
+%%% special_dir_behaviour callbacks
+%%%===================================================================
+
+-spec is_special(uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().
+is_special(uuid, <<?USER_ROOT_PREFIX, _UserId/binary>>) -> true;
+is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
+is_special(_, _) -> false.
+
+
+-spec is_operation_allowed(atom()) -> boolean().
+is_operation_allowed(Operation) ->
+    lists:member(Operation, ?ALLOWED_OPERATIONS).
+
+
+-spec exists(file_meta:uuid()) -> boolean().
+exists(Uuid) ->
+    file_meta:exists(Uuid).
 
 %%%===================================================================
 %%% Helper functions
@@ -237,10 +291,9 @@ handle_space_name_disappeared_events(_SpaceName, _UserRootDirGuid, _SpaceIdsWith
 apply_for_spaces_of_users_with_active_fuse_sessions(Fun, UserIds, SpaceIds) ->
     % user to session mapping is done only to fetch space name in user context (as provider may not have access to such space)
     maps:foreach(fun(UserId, [SessId | _]) ->
-        UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
         SpaceIdsByName = group_spaces_by_name(SessId, get_user_supported_spaces(SessId, UserId)),
         lists:foreach(fun(SpaceId) ->
-            Fun(SessId, UserRootDirGuid, SpaceId, SpaceIdsByName)
+            Fun(SessId, guid(UserId), SpaceId, SpaceIdsByName)
         end, lists_utils:intersect(lists:merge(maps:values(SpaceIdsByName)), SpaceIds))
     end, maps:with(UserIds, find_fuse_sessions_of_all_users())).
 
@@ -333,14 +386,14 @@ disambiguate_conflicted_space_name(SpaceName, SpaceId) ->
 %% @private
 -spec emit_renamed_event(od_space:id(), file_id:file_guid(), od_space:name(), od_space:name()) -> ok.
 emit_renamed_event(SpaceId, UserRootDirGuid, NewName, PrevName) ->
-    FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+    FileCtx = file_ctx:new_by_guid(space_dir:guid(SpaceId)),
     fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, UserRootDirGuid, UserRootDirGuid, NewName, PrevName).
 
 
 %% @private
 -spec emit_space_dir_created(session:id(), od_space:id(), od_space:name()) -> ok.
 emit_space_dir_created(SessId, SpaceId, SpaceName) ->
-    FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+    FileCtx = file_ctx:new_by_guid(space_dir:guid(SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
         attr_req:get_file_attr_insecure(user_ctx:new(SessId), FileCtx, #{
             allow_deleted_files => false,
@@ -353,5 +406,5 @@ emit_space_dir_created(SessId, SpaceId, SpaceName) ->
 %% @private
 -spec emit_space_dir_deleted(od_space:id(), od_user:id()) -> ok.
 emit_space_dir_deleted(SpaceId, UserId) ->
-    FileCtx = file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId),
-    ok = fslogic_event_emitter:emit_file_removed(FileCtx, [], fslogic_file_id:user_root_dir_guid(UserId)).
+    FileCtx = file_ctx:new_by_uuid(space_dir:uuid(SpaceId), SpaceId),
+    ok = fslogic_event_emitter:emit_file_removed(FileCtx, [], user_root_dir:guid(UserId)).

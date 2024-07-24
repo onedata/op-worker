@@ -773,17 +773,10 @@ should_doc_be_harvested(#document{
     key = Key,
     value = ModelRecord
 }) ->
-    is_harvested_model(ModelRecord) andalso not is_uuid_restricted(Key).
+    is_harvested_model(ModelRecord) andalso special_dirs:is_harvested(Key).
 
 
 -spec is_harvested_model(datastore:value()) -> boolean().
 is_harvested_model(#file_meta{}) -> true;
 is_harvested_model(#custom_metadata{}) -> true;
 is_harvested_model(_) -> false.
-
-
--spec is_uuid_restricted(file_meta:uuid()) -> boolean().
-is_uuid_restricted(Uuid) ->
-    fslogic_file_id:is_trash_dir_uuid(Uuid) orelse
-        archivisation_tree:is_special_uuid(Uuid) orelse 
-            archivisation_tree:uuid_to_archive_id(Uuid) =/= undefined.

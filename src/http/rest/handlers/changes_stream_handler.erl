@@ -616,7 +616,9 @@ send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
                 end,
             FilePath =
                 try
-                    fslogic_file_id:uuid_to_path(?ROOT_SESS_ID, FileUuid)
+                    {Path, _} = file_ctx:get_logical_path(
+                        file_ctx:new_by_uuid(FileUuid, ChangedDoc#document.scope), user_ctx:new(?ROOT_SESS_ID)),
+                    Path
                 catch
                     _:Error2 ->
                         ?debug("Cannot fetch Path for changes, error: ~tp", [Error2]),
@@ -786,8 +788,8 @@ get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
             ({<<"name">>, _FieldIndex}, Acc) ->
                 Auth = maps:get(auth, State),
                 SpaceId = maps:get(space_id, State),
-                SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-                Name = case FileUuid =:= SpaceUuid of
+                SpaceDirUuid = space_dir:uuid(SpaceId),
+                Name = case FileUuid =:= SpaceDirUuid of
                     true ->
                         {ok, SpaceName} = space_logic:get_name(Auth, SpaceId),
                         SpaceName;

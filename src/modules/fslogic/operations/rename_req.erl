@@ -39,8 +39,6 @@
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     validate_target_name(TargetName),
-    file_ctx:assert_not_special_const(SourceFileCtx),
-    file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx, TargetName),
 
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
@@ -716,7 +714,7 @@ should_ensure_sync(
     #document{ignore_in_changes = true} = _SourceDoc,
     #document{key = ParentKey, ignore_in_changes = false} = _ParentDoc
 ) ->
-    case fslogic_file_id:is_trash_dir_uuid(ParentKey) of
+    case trash:is_special(uuid, ParentKey) of
         true -> ignore;
         false -> ensure
     end;

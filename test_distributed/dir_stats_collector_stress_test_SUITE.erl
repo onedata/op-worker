@@ -72,8 +72,8 @@ many_files_creation_tree_test_base(Config) ->
             end;
         verify_stats ->
             [Worker | _] = ?config(op_worker_nodes, Config),
-            SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
-            {ok, SpaceDirStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid])),
+            SpaceDirGuid = lfm_test_utils:get_user1_first_space_dir_guid(Config),
+            {ok, SpaceDirStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceDirGuid])),
             ExpectedDirStats = get_expected_stats(Config),
             PhaseAns = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
             case SpaceDirStats of
@@ -91,9 +91,9 @@ many_files_creation_tree_test_base(Config) ->
             end;
         calculate_stats ->
             [Worker | _] = ?config(op_worker_nodes, Config),
-            SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+            SpaceDirGuid = lfm_test_utils:get_user1_first_space_dir_guid(Config),
             PhaseAns = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-            case rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]) of
+            case rpc:call(Worker, dir_size_stats, get_stats, [SpaceDirGuid]) of
                 ?ERROR_DIR_STATS_NOT_READY ->
                     ct:print("Initializing stats collections"),
                     timer:sleep(5000),

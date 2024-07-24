@@ -38,7 +38,6 @@
 delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
-            file_ctx:assert_not_special_const(FileCtx2),
             delete_dir(UserCtx, FileCtx2, Silent);
         {false, FileCtx2} ->
             delete_file(UserCtx, FileCtx2, Silent)
@@ -48,7 +47,6 @@ delete(UserCtx, FileCtx, Silent) ->
 -spec delete_using_trash(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
 delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
-    file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = file_ctx:assert_is_dir(FileCtx0),
 
     {FileParentCtx, FileCtx2} = file_tree:get_parent(FileCtx1, UserCtx),

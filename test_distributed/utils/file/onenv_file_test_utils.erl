@@ -62,7 +62,7 @@
 resolve_file(FileSelector) ->
     try
         SpaceId = oct_background:get_space_id(FileSelector),
-        {fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), SpaceId}
+        {space_dir:guid(SpaceId), SpaceId}
     catch error:{badkeys, _} ->
         {FileSelector, file_id:guid_to_space_id(FileSelector)}
     end.

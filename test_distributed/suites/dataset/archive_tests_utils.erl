@@ -42,7 +42,7 @@
 %===================================================================
 
 create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId) ->
-    rpc:call(Node, archivisation_tree, create_archive_dir, [ArchiveId, DatasetId, SpaceId, UserId]).
+    rpc:call(Node, archive_dir, ensure_exists, [ArchiveId, DatasetId, SpaceId, UserId]).
 
 
 assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, Attempts) ->

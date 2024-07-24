@@ -53,9 +53,9 @@ all() -> ?ALL([
 -define(SPACE_PLACEHOLDER, space1).
 -define(SPACE_ID, oct_background:get_space_id(?SPACE_PLACEHOLDER)).
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
--define(SPACE_UUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)).
--define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
--define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
+-define(SPACE_UUID(SpaceId), space_dir:uuid(SpaceId)).
+-define(SPACE_DIR_GUID, ?SPACE_DIR_GUID(?SPACE_ID)).
+-define(SPACE_DIR_GUID(SpaceId), space_dir:guid(SpaceId)).
 -define(ATTEMPTS, 30).
 -define(RAND_DIR_NAME, <<"dir_", (integer_to_binary(rand:uniform(1000)))/binary>>).
 
@@ -111,7 +111,7 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
     mock_traverse_finished(P1Node, self()),
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    {ok, RootGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, RootGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
     {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, FilesStructure, RootGuid),
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
@@ -125,7 +125,7 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
     case ExpectedResult of
         success ->
             % all files should have been deleted
-            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, ?FILE_REF(?SPACE_GUID), 0, 10000)),
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, ?FILE_REF(?SPACE_DIR_GUID), 0, 10000)),
             lists:foreach(fun(Guid) ->
                 ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, ?FILE_REF(Guid)))
             end, [RootGuid | DirGuids] ++ FileGuids);

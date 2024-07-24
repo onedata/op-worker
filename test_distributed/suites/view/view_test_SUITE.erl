@@ -134,24 +134,23 @@ query_view_using_file_meta(_Config) ->
     ProviderId = oct_background:get_provider_id(krakow),
 
     SpaceId = oct_background:get_space_id(space_krk),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
-    TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
-    TmpUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
+    TmpDirGuid = tmp_dir:guid(SpaceId),
+    TmpDirUuid = tmp_dir:uuid(SpaceId),
+    {ok, TmpObjectId} = file_id:guid_to_objectid(TmpDirGuid),
 
     OpenedDeletedGuid = file_id:pack_guid(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId),
     {ok, OpenedDeletedObjectId} = file_id:guid_to_objectid(OpenedDeletedGuid),
 
-    TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
+    TrashGuid = trash:guid(SpaceId),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
     
-    ArchivesRootDirGuid = file_id:pack_guid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId),
     ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
-    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(ArchivesRootDirGuid),
+    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(archives_root_dir:guid(SpaceId)),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -174,7 +173,7 @@ query_view_using_file_meta(_Config) ->
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
                 <<"deleted">> := false,
-                <<"parent_uuid">> := SpaceUuid
+                <<"parent_uuid">> := SpaceDirUuid
             }
         },
         #{
@@ -188,7 +187,7 @@ query_view_using_file_meta(_Config) ->
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
                 <<"deleted">> := false,
-                <<"parent_uuid">> := SpaceUuid
+                <<"parent_uuid">> := SpaceDirUuid
             }
         },
         #{
@@ -216,7 +215,7 @@ query_view_using_file_meta(_Config) ->
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
                 <<"deleted">> := false,
-                <<"parent_uuid">> := SpaceUuid
+                <<"parent_uuid">> := SpaceDirUuid
             }
         },
         #{
@@ -230,7 +229,7 @@ query_view_using_file_meta(_Config) ->
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
                 <<"deleted">> := false,
-                <<"parent_uuid">> := TmpUuid
+                <<"parent_uuid">> := TmpDirUuid
             }
         }
     ], ViewName, [{stale, false}]).
@@ -238,11 +237,11 @@ query_view_using_file_meta(_Config) ->
 
 query_view_using_times(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
-    TmpGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
-    {ok, TmpObjectId} = file_id:guid_to_objectid(TmpGuid),
+    TmpDirGuid = tmp_dir:guid(SpaceId),
+    {ok, TmpObjectId} = file_id:guid_to_objectid(TmpDirGuid),
 
     OpenedDeletedGuid = file_id:pack_guid(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId),
     {ok, OpenedDeletedObjectId} = file_id:guid_to_objectid(OpenedDeletedGuid),
@@ -306,20 +305,20 @@ query_view_using_custom_metadata_when_xattr_is_not_set(_Config) ->
 query_view_using_custom_metadata(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
     SessionId = oct_background:get_user_session_id(user1, krakow),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     Worker = oct_background:get_random_provider_node(krakow),
 
     XattrName = <<"xattr_name">>,
     XattrValue = <<"xattr_value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    lfm_proxy:set_xattr(Worker, SessionId, ?FILE_REF(SpaceGuid), Xattr),
+    lfm_proxy:set_xattr(Worker, SessionId, ?FILE_REF(SpaceDirGuid), Xattr),
 
     XattrName2 = <<"xattr_name2">>,
     XattrValue2 = <<"xattr_value2">>,
     Xattr2 = #xattr{name = XattrName2, value = XattrValue2},
-    lfm_proxy:set_xattr(Worker, SessionId, ?FILE_REF(SpaceGuid), Xattr2),
+    lfm_proxy:set_xattr(Worker, SessionId, ?FILE_REF(SpaceDirGuid), Xattr2),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -392,8 +391,8 @@ query_view_and_emit_ctx(_Config) ->
     ProviderId = oct_background:get_provider_id(krakow),
 
     SpaceId = oct_background:get_space_id(space_krk),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -415,8 +414,8 @@ query_view_and_emit_ctx(_Config) ->
 
 wrong_map_function(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -431,8 +430,8 @@ wrong_map_function(_Config) ->
 
 emitting_null_key_in_map_function_should_return_empty_result(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"

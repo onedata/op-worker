@@ -57,12 +57,10 @@ get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
 ) ->
     ok.
 set_metadata(UserCtx, FileCtx0, json, Value, Query, Create, Replace) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = json_metadata:set(UserCtx, FileCtx1, Value, Query, Create, Replace),
     ok;
 set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = xattr:set(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Value, Create, Replace),
     ok.
@@ -71,10 +69,8 @@ set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
     ok.
 remove_metadata(UserCtx, FileCtx0, json) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     ok = json_metadata:remove(UserCtx, FileCtx1);
 remove_metadata(UserCtx, FileCtx0, rdf) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY).

@@ -87,7 +87,7 @@ test_remove_share(SpaceId) ->
 
 test_share_perms_are_checked_only_up_to_share_root(SpaceId) ->
     SpaceOwnerUserId = oct_background:get_user_id(space_owner),
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     #object{children = [#object{
         shares = [ShareId],

@@ -114,12 +114,12 @@ all() -> [
 
 archive_dataset_attached_to_space_dir(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceGuid, #dataset_spec{archives = 1}),
-    archive_sequential_test_base:archive_simple_dataset_test(SpaceGuid, DatasetId, ArchiveId).
+    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceDirGuid, #dataset_spec{archives = 1}),
+    archive_sequential_test_base:archive_simple_dataset_test(SpaceDirGuid, DatasetId, ArchiveId).
 
 archive_big_tree_plain_layout(_Config) ->
     archive_sequential_test_base:archive_big_tree_test(?ARCHIVE_PLAIN_LAYOUT).

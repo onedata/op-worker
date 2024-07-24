@@ -1418,7 +1418,7 @@ format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
     {ok, ExecutionerSessionMode} = session:get_mode(ExecutionerSession),
     ExecutionerSessionConstraints = session:get_data_constraints(ExecutionerSession),
 
-    ?info(?autoformat(
+    onedata_logger:format_generic_log(?autoformat(
         TestCaseName,
         TestCaseRootDirPath,
         RootDirProtectionFlags,
@@ -1428,7 +1428,7 @@ format_additional_log_data(ActualPermsPerFile, #authz_test_case_ctx{
         ExecutionerSpacePrivs,
         ExecutionerSessionMode,
         ExecutionerSessionConstraints
-    )).
+    ), []).
 
 
 %% @private

@@ -366,11 +366,11 @@ teardown_session(Worker, Config) ->
                     [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, internal_services_manager, stop_service,
                     [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
-                rpc:call(Worker, file_meta, delete, [fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)])
+                rpc:call(Worker, file_meta, delete, [space_dir:uuid(SpaceId)])
             end, SpaceIds),
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
-            rpc:call(Worker, file_meta, delete, [fslogic_file_id:user_root_dir_uuid(UserId)]),
+            rpc:call(Worker, file_meta, delete, [user_root_dir:uuid(UserId)]),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;
@@ -945,8 +945,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
 
     lists:foreach(
         fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->
-            [rpc:call(W, user_root_dir, ensure_docs_exist, [UserId]) || W <- AllWorkers],
-            [[rpc:call(W, space_logic, ensure_required_docs_exist, [S]) || S <- proplists:get_keys(UserSpaces)] || W <- AllWorkers]
+            [rpc:call(W, special_dirs, report_new_user, [UserId]) || W <- AllWorkers],
+            [[rpc:call(W, special_dirs, report_new_space, [S]) || S <- proplists:get_keys(UserSpaces)] || W <- AllWorkers]
         end, Users),
 
     proplists:compact(

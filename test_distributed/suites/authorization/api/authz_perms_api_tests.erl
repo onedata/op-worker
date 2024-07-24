@@ -40,7 +40,7 @@ test_set_perms(SpaceId) ->
     SpaceMemberSessionId = oct_background:get_user_session_id(user2, krakow),
     NonSpaceMemberSessionId = oct_background:get_user_session_id(user3, krakow),
 
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     #object{
         guid = DirGuid,

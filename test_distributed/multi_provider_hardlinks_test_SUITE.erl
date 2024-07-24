@@ -79,13 +79,13 @@ basic_test(Config0) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}},
             lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
     end),
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _},
+    {ok, #file_attr{guid = SpaceDirGuid}} = ?assertMatch({ok, _},
         lfm_proxy:stat(Worker1, SessId(Worker1), {path, filename:join("/", SpaceName)})),
     {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
     FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % Create link and verify its stats
-    {Link, LinkAttr} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
+    {Link, LinkAttr} = make_and_verify_link(Config, FileGuid, SpaceDirGuid, FileAttr),
     % stat ignores fully_replicated field so use attrs without it in asserts
     LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{is_fully_replicated = undefined},
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
@@ -166,7 +166,7 @@ first_access_performed_via_link_test(Config0) ->
     FileGuid = file_ops_test_utils:create_file(Worker1, SessId(Worker1), DirGuid, FileName, FileContent),
     FileGuid2 = file_ops_test_utils:create_file(Worker1, SessId(Worker1), DirGuid, FileName2, FileContent),
 
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _},
+    {ok, #file_attr{guid = SpaceDirGuid}} = ?assertMatch({ok, _},
         lfm_proxy:stat(Worker1, SessId(Worker1), {path, filename:join("/", SpaceName)})),
     {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
     {ok, FileAttr2} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File2})),
@@ -174,9 +174,9 @@ first_access_performed_via_link_test(Config0) ->
     FileUuid2 = file_id:guid_to_uuid(FileGuid2),
 
     % Create links and verify its stats
-    {Link, #file_attr{guid = LinkGuid}} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
+    {Link, #file_attr{guid = LinkGuid}} = make_and_verify_link(Config, FileGuid, SpaceDirGuid, FileAttr),
     LinkUuid = file_id:guid_to_uuid(LinkGuid),
-    {Link2, #file_attr{guid = LinkGuid2}} = make_and_verify_link(Config, FileGuid2, SpaceGuid, FileAttr2),
+    {Link2, #file_attr{guid = LinkGuid2}} = make_and_verify_link(Config, FileGuid2, SpaceDirGuid, FileAttr2),
     LinkUuid2 = file_id:guid_to_uuid(LinkGuid2),
 
     % Read/write link on second provider without reading/writing file
@@ -210,15 +210,15 @@ create_link_to_link_test(Config0) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = FileSize}},
             lfm_proxy:stat(W, SessId(W), {path, File}), Attempts)
     end),
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _},
+    {ok, #file_attr{guid = SpaceDirGuid}} = ?assertMatch({ok, _},
         lfm_proxy:stat(Worker1, SessId(Worker1), {path, filename:join("/", SpaceName)})),
     {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId(Worker1), {path, File})),
 
     % Create link and verify its stats
-    {Link, #file_attr{guid = LinkGuid}} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
+    {Link, #file_attr{guid = LinkGuid}} = make_and_verify_link(Config, FileGuid, SpaceDirGuid, FileAttr),
 
     % Create link to link and verify its stats
-    {Link2, _LinkAttr2} = make_and_verify_link(Config, LinkGuid, SpaceGuid, FileAttr),
+    {Link2, _LinkAttr2} = make_and_verify_link(Config, LinkGuid, SpaceDirGuid, FileAttr),
 
     % Verify reading through second link
     assert_size_and_content_identical(Worker1, SessId, Link2, FileContent),
@@ -243,11 +243,11 @@ hardlink_reference_file_meta_race_test(Config) ->
     Worker1 = ?config(worker1, Config),
     [Worker2, _] = Workers2 = ?config(workers2, Config),
     Attempts = ?config(attempts, Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     
-    {ok, FileGuid} = lfm_proxy:create(Worker1, SessIdFun(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_MODE),
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessIdFun(Worker1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_FILE_MODE),
     {ok, #file_attr{guid = HardlinkGuid}} = lfm_proxy:make_link(Worker1, SessIdFun(Worker1), ?FILE_REF(FileGuid),
-        ?FILE_REF(SpaceGuid), generator:gen_name()),
+        ?FILE_REF(SpaceDirGuid), generator:gen_name()),
     
     ?assertMatch({ok, _}, rpc:call(Worker1, file_meta, get, [file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
     ?assertMatch({ok, _}, rpc:call(Worker1, datastore_model, get, [file_meta:get_ctx(), file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
@@ -292,7 +292,7 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-make_and_verify_link(Config, FileGuid, SpaceGuid, AttrToVerify) ->
+make_and_verify_link(Config, FileGuid, SpaceDirGuid, AttrToVerify) ->
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Attempts = ?config(attempts, Config),
@@ -301,15 +301,15 @@ make_and_verify_link(Config, FileGuid, SpaceGuid, AttrToVerify) ->
     Link = filename:join(["/", SpaceName, LinkName]),
     {ok, LinkAttr} = ?assertMatch({ok, _},
         lfm_proxy:make_link(Worker1, SessId(Worker1), Link, FileGuid), Attempts),
-    verify_link_attrs(LinkName, LinkAttr, AttrToVerify, SpaceGuid),
+    verify_link_attrs(LinkName, LinkAttr, AttrToVerify, SpaceDirGuid),
     {Link, LinkAttr}.
 
-verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid) ->
+verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceDirGuid) ->
     ?assertNotEqual(FileAttr#file_attr.guid, LinkAttr#file_attr.guid),
     ?assert(fslogic_file_id:is_link_uuid(file_id:guid_to_uuid(LinkAttr#file_attr.guid))),
     ?assertNot(fslogic_file_id:is_link_uuid(file_id:guid_to_uuid(FileAttr#file_attr.guid))),
     ?assertEqual(LinkName, LinkAttr#file_attr.name),
-    ?assertEqual(SpaceGuid, LinkAttr#file_attr.parent_guid),
+    ?assertEqual(SpaceDirGuid, LinkAttr#file_attr.parent_guid),
 
     ?assertEqual(FileAttr#file_attr.type, LinkAttr#file_attr.type),
     ?assertEqual(FileAttr#file_attr.mode, LinkAttr#file_attr.mode),

@@ -47,8 +47,6 @@
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
-    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
@@ -77,8 +75,6 @@ storage_file_created(UserCtx, FileCtx0) ->
 -spec make_file(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
-    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
@@ -100,8 +96,6 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
             {ok, SymLink} = file_meta_symlinks:readlink(FileDoc),
             make_symlink(UserCtx, TargetParentFileCtx0, Name, SymLink);
         false ->
-            % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-            file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx0, Name),
             TargetParentFileCtx1 = file_ctx:assert_synchronization_enabled(TargetParentFileCtx0),
             TargetFileCtx1 = file_ctx:assert_synchronization_enabled(TargetFileCtx0),
             % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deleted
@@ -123,8 +117,6 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
 -spec make_symlink(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta_symlinks:symlink()) ->
     fslogic_worker:fuse_response().
 make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
-    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]

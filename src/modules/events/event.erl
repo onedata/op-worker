@@ -72,9 +72,7 @@ emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
     case event_type:get_context(Evt) of
         {file, Guid} ->
-            % Filter events connected with trash (oneclient should not see trash) and
-            % tmp dir (it is accessed via guid - it does not appear in listing results)
-            case fslogic_file_id:is_trash_dir_guid(Guid) orelse fslogic_file_id:is_tmp_dir_guid(Guid) of
+            case special_dirs:is_ignored_in_events(file_id:guid_to_uuid(Guid)) of
                 true -> ok;
                 false -> send_to_event_managers(Evt, get_event_managers(MgrRef))
             end;
@@ -333,7 +331,7 @@ emit_for_file_links(Evt, #event_subscribers{subscribers_for_links = SessIdsForLi
 %% @private
 -spec extend_event_for_space_dir(base() | aggregated() | type(), [session:id()]) -> #{type() => [session:id()]}.
 extend_event_for_space_dir(#file_attr_changed_event{file_attr = #file_attr{guid = Guid} = Attr} = Evt, SessionIds) ->
-    case fslogic_file_id:is_space_dir_guid(Guid) of
+    case space_dir:is_special(guid, Guid) of
         true ->
             SpaceId = file_id:guid_to_space_id(Guid),
             lists:foldl(fun(SessionId, Acc) ->
@@ -369,7 +367,7 @@ get_space_dir_event_details(SpaceId, SessionId) ->
             case session:get_user_id(SessionId) of
                 {ok, UserId} ->
                     {FinalName, _} = user_root_dir:get_space_name_and_conflicts(SessionId, UserId, Name, SpaceId),
-                    {ok, FinalName, fslogic_file_id:user_root_dir_guid(UserId)};
+                    {ok, FinalName, user_root_dir:guid(UserId)};
                 {error, not_found} ->
                     not_applicable
             end;

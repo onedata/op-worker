@@ -583,9 +583,9 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
-    NonExistentSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
+    NonExistentSpaceDirGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
+    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceDirGuid),
     NonExistentSpaceExpError = case ShareId of
         undefined ->
             % For authenticated users it should fail on authorization step
@@ -605,7 +605,7 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
 
     BadFileIdErrors = InvalidFileIdErrors ++ [
         {bad_id, NonExistentSpaceObjectId, {rest, NonExistentSpaceExpError}},
-        {bad_id, NonExistentSpaceGuid, {gs, NonExistentSpaceExpError}},
+        {bad_id, NonExistentSpaceDirGuid, {gs, NonExistentSpaceExpError}},
 
         % Errors thrown by internal logic (all middleware checks were passed)
         {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
@@ -649,15 +649,15 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
 
-    NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
-    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
+    NonExistentSpaceDirGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
+    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceDirGuid),
 
     NonExistentSpaceErrors = add_share_file_id_errors_for_operations_not_available_in_share_mode(
-        NonExistentSpaceGuid, ShareId, [
+        NonExistentSpaceDirGuid, ShareId, [
             % Errors in normal mode - thrown by middleware auth checks
             % (checks whether authenticated user belongs to space)
             {bad_id, NonExistentSpaceObjectId, {rest, ?ERROR_FORBIDDEN}},
-            {bad_id, NonExistentSpaceGuid, {gs, ?ERROR_FORBIDDEN}}
+            {bad_id, NonExistentSpaceDirGuid, {gs, ?ERROR_FORBIDDEN}}
         ]
     ),
 
@@ -717,10 +717,10 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
 add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, SpaceId, ShareId, DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
 
-    NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
-    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
+    NonExistentSpaceDirGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
+    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceDirGuid),
 
-    NonExistentSpaceShareGuid = file_id:guid_to_share_guid(NonExistentSpaceGuid, ShareId),
+    NonExistentSpaceShareGuid = file_id:guid_to_share_guid(NonExistentSpaceDirGuid, ShareId),
     {ok, NonExistentSpaceShareObjectId} = file_id:guid_to_objectid(NonExistentSpaceShareGuid),
 
     NonExistentFileGuid = file_id:pack_guid(<<"InvalidUuid">>, SpaceId),

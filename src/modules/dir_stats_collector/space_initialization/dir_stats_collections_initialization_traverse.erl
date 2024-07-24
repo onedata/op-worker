@@ -62,7 +62,7 @@ run(SpaceId, Incarnation) ->
             task_id => gen_task_id(SpaceId, Incarnation),
             listing_errors_handling_policy => propagate_unknown
         },
-        FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+        FileCtx = file_ctx:new_by_guid(space_dir:guid(SpaceId)),
         {ok, _} = tree_traverse:run(?MODULE, FileCtx, Options),
         ok
     catch
@@ -109,11 +109,11 @@ do_master_job(#tree_traverse{
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             TrashJob = tree_traverse:get_child_master_job(Job,
-                file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
+                file_ctx:new_by_uuid(trash:uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
             ArchiveJob = tree_traverse:get_child_master_job(Job,
-                file_ctx:new_by_uuid(archivisation_tree:get_root_dir_uuid(SpaceId), SpaceId), ?ARCHIVES_ROOT_DIR_NAME),
+                file_ctx:new_by_uuid(archives_root_dir:uuid(SpaceId), SpaceId), ?ARCHIVES_ROOT_DIR_NAME),
             TmpDirJob = tree_traverse:get_child_master_job(Job,
-                file_ctx:new_by_uuid(fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId), SpaceId), ?TMP_DIR_NAME),
+                file_ctx:new_by_uuid(tmp_dir:uuid(SpaceId), SpaceId), ?TMP_DIR_NAME),
             {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob, TmpDirJob | maps:get(master_jobs, MasterJobMap, [])]}};
         false ->
             Ans

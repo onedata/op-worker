@@ -380,7 +380,7 @@ upgrade_from_21_02_2_tmp_dir(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     SpaceIds = [?DUMMY_SPACE_ID1, ?DUMMY_SPACE_ID2],
-    TmdDirUuids = lists:map(fun fslogic_file_id:spaceid_to_tmp_dir_uuid/1, SpaceIds),
+    TmdDirUuids = lists:map(fun tmp_dir:uuid/1, SpaceIds),
 
     TmpDirExistsFun = fun(Uuid) -> rpc:call(Worker, file_meta, exists, [Uuid]) end,
 

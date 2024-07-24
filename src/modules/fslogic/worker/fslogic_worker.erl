@@ -420,7 +420,10 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
     try
-        handle_request_locally(EffUserCtx, Request, FileCtx1)
+        case is_operation_allowed(FileCtx1, extract_operation(Request)) of
+            false -> build_eperm_response(Request);
+            _ -> handle_request_locally(EffUserCtx, Request, FileCtx1)
+        end
     catch
         Type:Error:Stacktrace ->
             fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
@@ -787,3 +790,29 @@ restart_autocleaning_runs() ->
         false ->
             ok
     end.
+
+
+%% @private
+-spec extract_operation(request()) -> atom().
+extract_operation(#fuse_request{fuse_request = #file_request{file_request = FileRequest}}) -> element(1, FileRequest);
+extract_operation(#fuse_request{fuse_request = FuseRequest}) -> element(1, FuseRequest);
+extract_operation(#provider_request{provider_request = ProviderRequest}) -> element(1, ProviderRequest);
+extract_operation(#proxyio_request{proxyio_request = ProxyioRequest}) -> element(1, ProxyioRequest).
+
+
+%% @private
+-spec build_eperm_response(request()) -> response().
+build_eperm_response(#fuse_request{}) ->
+    #fuse_response{status = #status{code = ?EPERM}};
+build_eperm_response(#provider_request{}) ->
+    #provider_response{status = #status{code = ?EPERM}};
+build_eperm_response(#proxyio_request{}) ->
+    #proxyio_response{status = #status{code = ?EPERM}}.
+
+
+%% @private
+-spec is_operation_allowed(file_ctx:ctx() | undefined, atom()) -> boolean().
+is_operation_allowed(undefined, _Operation) ->
+    true;
+is_operation_allowed(FileCtx, Operation) ->
+    special_dirs:is_operation_allowed(file_ctx:get_logical_uuid_const(FileCtx), Operation).

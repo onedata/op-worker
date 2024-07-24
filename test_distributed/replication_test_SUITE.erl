@@ -92,7 +92,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     SpaceId = <<"space_id1">>,
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
-    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
     FileMeta = #document{value = #file_meta{
         mode = 8#777,
         name = <<"file">>,
@@ -134,7 +134,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
-    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_have_correct_uid_for_local_user">>,
@@ -191,7 +191,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ExternalUser = <<"external_user_id">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
-    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,

@@ -56,7 +56,7 @@ basic_operations_test_core(Config, LastLevel) ->
     % Test
     RootUuid = <<>>,
     SpaceId = <<"Space 1">>,
-    Space1Uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    Space1Uuid = space_dir:uuid(SpaceId),
     {{ok, #document{key = Space1Uuid}}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
         ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
