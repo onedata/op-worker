@@ -110,5 +110,32 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
+end_per_testcase(import_directory_error_test, Config) ->
+    unmock_import_file_error(),
+    end_per_testcase(default, Config);
+end_per_testcase(import_directory_check_user_id_test, Config) ->
+    unmock_luma(),
+    end_per_testcase(default, Config);
 end_per_testcase(_Case, _Config) ->
     ok.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec unmock_import_file_error() -> ok.
+unmock_import_file_error() ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ProviderSelector} = ?SUITE_CTX,
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_import_engine).
+
+
+%% @private
+-spec unmock_luma() -> ok.
+unmock_luma() ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ProviderSelector} = ?SUITE_CTX,
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, [luma]).

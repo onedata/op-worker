@@ -64,7 +64,9 @@ end)).
     metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this dir (i.e. further on the list) in file spec.
-    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label()
+    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label(),
+    uid = undefined :: luma:uid(),
+    gid = undefined :: luma:gid()
 }).
 
 -record(symlink_spec, {

@@ -217,6 +217,7 @@ import_directory_error_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector
 }) ->
     DirName = ?RAND_STR(),
+    mock_import_file_error(ImportingProviderSelector, DirName),
 
     #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
@@ -245,8 +246,16 @@ import_directory_error_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}),
         ?ATTEMPTS
     ),
+    ?assertMatch({error, enoent},
+        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}),
+        ?ATTEMPTS
+    ),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}),
+        ?ATTEMPTS
+    ),
+    ?assertMatch({error, eacces},
+        lfm_proxy:stat(NodeImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}),
         ?ATTEMPTS
     ),
     StorageSDHandleImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
@@ -283,7 +292,7 @@ import_directory_check_user_id_test(TestSuiteCtx = #storage_import_test_suite_ct
     space_owner_selector = SpaceOwnerSelector
 }) ->
     DirName = ?RAND_STR(),
-
+    mock_uid_and_gid(ImportingProviderSelector, SpaceOwnerSelector),
     #storage_import_test_case_ctx{
         other_storage_id = OtherStorageId,
         space_id = SpaceId,
@@ -295,7 +304,7 @@ import_directory_check_user_id_test(TestSuiteCtx = #storage_import_test_suite_ct
             random_node = NodeNonImportingProvider,
             session_id = SessionIdNonImportingProvider
         }
-    } = init_testcase(?FUNCTION_NAME,  #dir_spec{name = DirName}, TestSuiteCtx),
+    } = init_testcase(?FUNCTION_NAME,  #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
 
     SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, DirName]),
@@ -356,7 +365,7 @@ import_empty_file_test(TestSuiteCtx = #storage_import_test_suite_ctx{
             random_node = NodeNonImportingProvider,
             session_id = SessionIdNonImportingProvider
         }
-    }  = init_testcase(?FUNCTION_NAME, #file_spec{name = FileName}, TestSuiteCtx),
+    } = init_testcase(?FUNCTION_NAME, #file_spec{name = FileName}, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
 
     SpacePathFileKey = {path, filepath_utils:join([SpacePath, FileName])},
@@ -511,37 +520,7 @@ delete_storage(NodeSelector, StorageId) ->
     atom(), undefined | onenv_file_test_utils:object_spec(), storage_import_test_suite_ctx()
 ) ->
     storage_import_test_case_ctx().
-init_testcase(TestCaseName = import_directory_error_test, FileDesc = #dir_spec{name = DirName},
-    TestSuiteCtx = #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector}
-) ->
-    mock_import_file_error(ImportingProviderSelector, DirName),
-    init_testcase(default, TestCaseName, FileDesc, TestSuiteCtx);
-init_testcase(TestCaseName = import_directory_check_user_id_test, FileDesc,
-    TestSuiteCtx = #storage_import_test_suite_ctx{
-        importing_provider_selector = ImportingProviderSelector,
-        space_owner_selector = SpaceOwnerSelector
-    }
-) ->
-    Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
-    SpaceOwnerUid = oct_background:to_entity_id(SpaceOwnerSelector),
-    ok = test_utils:mock_new(Nodes, [luma]),
-    ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
-        {ok, SpaceOwnerUid}
-    end),
-    ok = test_utils:mock_expect(Nodes, luma, map_to_display_credentials, fun(_, _, _) ->
-        {ok, {?TEST_UID, ?TEST_GID}}
-    end),
-    init_testcase(default, TestCaseName, FileDesc, TestSuiteCtx);
-init_testcase(TestCaseName, FileDesc, TestSuiteCtx) ->
-    init_testcase(default, TestCaseName, FileDesc, TestSuiteCtx).
-
-
-%% @private
--spec init_testcase(
-    atom(), atom(), undefined | onenv_file_test_utils:object_spec(), storage_import_test_suite_ctx()
-) ->
-    storage_import_test_case_ctx().
-init_testcase(default, TestCaseName, FileDesc, TestSuiteCtx = #storage_import_test_suite_ctx{
+init_testcase(TestCaseName, FileDesc, TestSuiteCtx = #storage_import_test_suite_ctx{
     storage_type = StorageType,
     importing_provider_selector = ImportingProviderSelector,
     non_importing_provider_selector = NonImportingProviderSelector,
@@ -549,7 +528,7 @@ init_testcase(default, TestCaseName, FileDesc, TestSuiteCtx = #storage_import_te
 }) ->
     ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
     FileDesc =/= undefined andalso ?rpc(ImportingProviderSelector, create_file_tree_on_storage(
-        TestCaseName, ImportedStorageId, FileDesc
+        ImportedStorageId, FileDesc
     )),
 
     OtherStorageId = create_storage(StorageType, NonImportingProviderSelector, false),
@@ -618,7 +597,7 @@ build_s3_hostname(ProviderSelector) ->
 
 
 %% @private
--spec build_provider_ctx(oct_background:entity_selector(), oct_background:entity_selector()) ->
+-spec build_provider_ctx(ocunmock_import_file_errort_background:entity_selector(), oct_background:entity_selector()) ->
     provider_ctx().
 build_provider_ctx(SpaceOwnerSelector, ProviderSelector) ->
     #provider_ctx{
@@ -628,38 +607,35 @@ build_provider_ctx(SpaceOwnerSelector, ProviderSelector) ->
 
 
 %% @private
--spec create_file_tree_on_storage(atom(), storage:id(), onenv_file_test_utils:object_spec()) ->
+-spec create_file_tree_on_storage(storage:id(), onenv_file_test_utils:object_spec()) ->
     storage:id().
-create_file_tree_on_storage(TestCase, StorageId, FileDesc) ->
+create_file_tree_on_storage(StorageId, FileDesc) ->
     Helper = storage:get_helper(StorageId),
     HelperHandle = helpers:get_helper_handle(Helper, Helper#helper.admin_ctx),
-    create_file_tree_on_storage(TestCase, HelperHandle, <<"/">>, FileDesc).
+    create_file_tree_on_storage(HelperHandle, <<"/">>, FileDesc).
 
 
 %% @private
 -spec create_file_tree_on_storage(
-    atom(),
     helpers:helper_handle(),
     file_meta:path(),
     onenv_file_test_utils:object_spec()
 ) ->
     storage:id().
-create_file_tree_on_storage(import_directory_check_user_id_test, HelperHandle, ParentPath, #dir_spec{
+create_file_tree_on_storage(HelperHandle, ParentPath, #dir_spec{
     name = NameOrUndefined,
-    mode = DirMode
+    mode = DirMode,
+    uid = Uid,
+    gid = Gid
 }) ->
     DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     StorageDirId = filepath_utils:join([ParentPath, DirName]),
     ok = helpers:mkdir(HelperHandle, StorageDirId, DirMode),
-    ok = helpers:chown(HelperHandle, StorageDirId, ?TEST_UID, ?TEST_GID);
-create_file_tree_on_storage(_TestCase, HelperHandle, ParentPath, #dir_spec{
-    name = NameOrUndefined,
-    mode = DirMode
-}) ->
-    DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
-    StorageDirId = filepath_utils:join([ParentPath, DirName]),
-    ok = helpers:mkdir(HelperHandle, StorageDirId, DirMode);
-create_file_tree_on_storage(_TestCase, HelperHandle, ParentPath, #file_spec{
+    case Uid =/= undefined andalso Gid =/= undefined of
+        true -> ok = helpers:chown(HelperHandle, StorageDirId, Uid, Gid);
+        false -> ok
+    end;
+create_file_tree_on_storage(HelperHandle, ParentPath, #file_spec{
     name = NameOrUndefined,
     mode = FileMode,
     content =  FileContent
@@ -727,14 +703,25 @@ mock_import_file_error(ProviderSelector, ErroneousFile) ->
     ok = test_utils:mock_new(Nodes, storage_import_engine),
     ok = test_utils:mock_expect(Nodes, storage_import_engine, import_file_unsafe,
         fun(StorageFileCtx, Info) ->
-            FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-            case FileName of
+            case storage_file_ctx:get_file_name_const(StorageFileCtx) of
                 ErroneousFile -> throw(test_error);
-                _ ->
-                    meck:passthrough([StorageFileCtx, Info])
+                _ -> meck:passthrough([StorageFileCtx, Info])
             end
         end
     ).
+
+
+-spec mock_uid_and_gid(oct_background:node_selector(), oct_background:entity_selector()) -> ok.
+mock_uid_and_gid(ProviderSelector, SpaceOwnerSelector) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    SpaceOwnerUserId = oct_background:to_entity_id(SpaceOwnerSelector),
+    ok = test_utils:mock_new(Nodes, [luma]),
+    ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
+        {ok, SpaceOwnerUserId}
+    end),
+    test_utils:mock_expect(Nodes, luma, map_to_display_credentials, fun(_, _, _) ->
+        {ok, {?TEST_UID, ?TEST_GID}}
+    end).
 
 
 %% @private

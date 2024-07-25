@@ -6285,7 +6285,6 @@ is_synced(<<"synced_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
 get_rdwr_storage(Config, Worker) ->
     case maps:get(Worker, ?config(rdwr_storages, Config), undefined) of
         undefined -> get_synced_storage(Config, Worker);
-        undefined -> get_synced_storage(Config, Worker);
         Storage -> Storage
     end.
 
