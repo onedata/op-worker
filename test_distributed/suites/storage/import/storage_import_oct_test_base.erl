@@ -18,7 +18,8 @@
 
 % API
 -export([
-    clean_up_after_previous_run/2
+    clean_up_after_previous_run/2,
+    end_per_testcase/2
 ]).
 
 %% tests
@@ -70,6 +71,16 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
     end, filter_spaces_from_previous_run(AllTestCases)).
 
 
+end_per_testcase(Case = import_directory_error_test, TestSuiteCtx) ->
+    unmock_import_file_error(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx);
+end_per_testcase(Case = import_directory_check_user_id_test, TestSuiteCtx) ->
+    unmock_luma(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx);
+end_per_testcase(_Case, _TestSuiteCtx) ->
+    ok.
+
+
 %%%===================================================================
 %%% Tests
 %%%===================================================================
@@ -82,12 +93,12 @@ import_empty_storage_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
         importing_provider_ctx = #provider_ctx{
-            random_node = NodeImportingProvider,
-            session_id = SessionIdImportingProvider
+            random_node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
         },
         non_importing_provider_ctx = #provider_ctx{
-            random_node = NodeNonImportingProvider,
-            session_id = SessionIdNonImportingProvider
+            random_node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
         }
     } = init_testcase(?FUNCTION_NAME, undefined, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
@@ -96,15 +107,15 @@ import_empty_storage_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     SpacePathFileKey = {path, SpacePath},
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, 0, 10)
+        lfm_proxy:get_children(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey, 0, 10)
     ),
     ?assertMatch(
         {ok, #file_attr{}},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey)
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey)
     ),
     ?assertMatch(
         {ok, #file_attr{}},
-        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, SpacePathFileKey),
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, SpacePathFileKey),
         ?ATTEMPTS
     ),
 
@@ -136,12 +147,12 @@ import_empty_directory_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
         importing_provider_ctx = #provider_ctx{
-            random_node = NodeImportingProvider,
-            session_id = SessionIdImportingProvider
+            random_node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
         },
         non_importing_provider_ctx = #provider_ctx{
-            random_node = NodeNonImportingProvider,
-            session_id = SessionIdNonImportingProvider
+            random_node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
         }
     } = init_testcase(?FUNCTION_NAME, #dir_spec{name = DirName}, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
@@ -151,24 +162,24 @@ import_empty_directory_test(TestSuiteCtx = #storage_import_test_suite_ctx{
     SpacePathFileKey = {path, SpacePath},
     ?assertMatch(
         {ok, [{_, DirName}]},
-        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, 0, 10),
+        lfm_proxy:get_children(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey, 0, 10),
         ?ATTEMPTS
     ),
 
     SpaceTestDirPath = filename:join([<<"/">>, ?FUNCTION_NAME, DirName]),
     StorageSDHandleImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        NodeImportingProvider, SpaceId, ImportedStorageId
+        ImportingProviderNode, SpaceId, ImportedStorageId
     ),
     StorageSDHandleNonImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        NodeImportingProvider, SpaceId, OtherStorageId
+        ImportingProviderNode, SpaceId, OtherStorageId
     ),
     {ok, #statbuf{st_uid = MountUidImportingProvider}} = sd_test_utils:stat(
-        NodeImportingProvider, StorageSDHandleImportingProvider
+        ImportingProviderNode, StorageSDHandleImportingProvider
     ),
     {ok, #statbuf{
         st_uid = MountUidNonImportingProvider,
         st_gid = MountGidNonImportingProvider
-    }} = sd_test_utils:stat(NodeNonImportingProvider, StorageSDHandleNonImportingProvider),
+    }} = sd_test_utils:stat(NonImportingProviderNode, StorageSDHandleNonImportingProvider),
 
     SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
 
@@ -178,7 +189,7 @@ import_empty_directory_test(TestSuiteCtx = #storage_import_test_suite_ctx{
             uid = MountUidImportingProvider,
             gid = 0
         }},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}),
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestDirPath}),
         ?ATTEMPTS
     ),
     ?assertMatch(
@@ -187,7 +198,7 @@ import_empty_directory_test(TestSuiteCtx = #storage_import_test_suite_ctx{
             uid = MountUidNonImportingProvider,
             gid = MountGidNonImportingProvider
         }},
-        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}),
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceTestDirPath}),
         ?ATTEMPTS
     ),
 
@@ -224,12 +235,12 @@ import_directory_error_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
         importing_provider_ctx = #provider_ctx{
-            random_node = NodeImportingProvider,
-            session_id = SessionIdImportingProvider
+            random_node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
         },
         non_importing_provider_ctx = #provider_ctx{
-            random_node = NodeNonImportingProvider,
-            session_id = SessionIdNonImportingProvider
+            random_node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
         }
     } = init_testcase(?FUNCTION_NAME,  #dir_spec{name = DirName}, TestSuiteCtx),
 
@@ -239,31 +250,23 @@ import_directory_error_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     %% Check if dir was not imported
     ?assertMatch({ok, []},
-        lfm_proxy:get_children(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, 0, 1),
+        lfm_proxy:get_children(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey, 0, 1),
         ?ATTEMPTS
     ),
-    ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestDirPath}),
         ?ATTEMPTS
     ),
-    ?assertMatch({error, enoent},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}),
-        ?ATTEMPTS
-    ),
-    ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}),
-        ?ATTEMPTS
-    ),
-    ?assertMatch({error, eacces},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}),
+    ?assertMatch({error, ?EACCES},
+        lfm_proxy:stat(ImportingProviderNode, NonImportingProviderSessionId, {path, SpaceTestDirPath}),
         ?ATTEMPTS
     ),
     StorageSDHandleImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        NodeImportingProvider, SpaceId, ImportedStorageId
+        ImportingProviderNode, SpaceId, ImportedStorageId
     ),
 
     %% Check if dir is still on storage
-    ?assertMatch({ok, [DirName]}, sd_test_utils:ls(NodeImportingProvider, StorageSDHandleImportingProvider, 0, 1)),
+    ?assertMatch({ok, [DirName]}, sd_test_utils:ls(ImportingProviderNode, StorageSDHandleImportingProvider, 0, 1)),
 
     assert_storage_import_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
@@ -297,12 +300,12 @@ import_directory_check_user_id_test(TestSuiteCtx = #storage_import_test_suite_ct
         other_storage_id = OtherStorageId,
         space_id = SpaceId,
         importing_provider_ctx = #provider_ctx{
-            random_node = NodeImportingProvider,
-            session_id = SessionIdImportingProvider
+            random_node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
         },
         non_importing_provider_ctx = #provider_ctx{
-            random_node = NodeNonImportingProvider,
-            session_id = SessionIdNonImportingProvider
+            random_node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
         }
     } = init_testcase(?FUNCTION_NAME,  #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
@@ -314,19 +317,19 @@ import_directory_check_user_id_test(TestSuiteCtx = #storage_import_test_suite_ct
         owner_id = SpaceOwnerId,
         uid = ?TEST_UID,
         gid = ?TEST_GID
-    }}, lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    }}, lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
-    GeneratedUid = ?rpc(NodeNonImportingProvider, luma_auto_feed:generate_uid(SpaceOwnerId)),
+    GeneratedUid = ?rpc(NonImportingProviderNode, luma_auto_feed:generate_uid(SpaceOwnerId)),
     StorageSDHandleNonImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        NodeImportingProvider, SpaceId, OtherStorageId
+        ImportingProviderNode, SpaceId, OtherStorageId
     ),
-    {ok, #statbuf{st_gid = Gid2}} = sd_test_utils:stat(NodeNonImportingProvider, StorageSDHandleNonImportingProvider),
+    {ok, #statbuf{st_gid = Gid2}} = sd_test_utils:stat(NonImportingProviderNode, StorageSDHandleNonImportingProvider),
 
     ?assertMatch({ok, #file_attr{
         owner_id = SpaceOwnerId,
         uid = GeneratedUid,
         gid = Gid2
-    }}, lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, {path, SpaceTestDirPath}), ?ATTEMPTS),
+    }}, lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceTestDirPath}), ?ATTEMPTS),
 
     assert_storage_import_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
@@ -358,12 +361,12 @@ import_empty_file_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
         importing_provider_ctx = #provider_ctx{
-            random_node = NodeImportingProvider,
-            session_id = SessionIdImportingProvider
+            random_node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
         },
         non_importing_provider_ctx = #provider_ctx{
-            random_node = NodeNonImportingProvider,
-            session_id = SessionIdNonImportingProvider
+            random_node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
         }
     } = init_testcase(?FUNCTION_NAME, #file_spec{name = FileName}, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
@@ -372,14 +375,14 @@ import_empty_file_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     %% Check if file was imported on ImportingProvider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey),
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey),
     ?ATTEMPTS),
 
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, read)),
+        lfm_proxy:open(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey, read)),
     ?assertMatch({ok, <<>>},
-        lfm_proxy:check_size_and_read(NodeImportingProvider, Handle1, 0, 100)),
-    lfm_proxy:close(NodeImportingProvider, Handle1),
+        lfm_proxy:check_size_and_read(ImportingProviderNode, Handle1, 0, 100)),
+    lfm_proxy:close(ImportingProviderNode, Handle1),
 
     assert_storage_import_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
@@ -404,11 +407,11 @@ import_empty_file_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     %% Check if file was imported on NonImportingProvider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, SpacePathFileKey), ?ATTEMPTS),
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, SpacePathFileKey), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(NodeNonImportingProvider, SessionIdNonImportingProvider, SpacePathFileKey, read), ?ATTEMPTS),
+        lfm_proxy:open(NonImportingProviderNode, NonImportingProviderSessionId, SpacePathFileKey, read), ?ATTEMPTS),
     ?assertMatch({ok, <<>>},
-        lfm_proxy:check_size_and_read(NodeNonImportingProvider, Handle2, 0, 1), ?ATTEMPTS).
+        lfm_proxy:check_size_and_read(NonImportingProviderNode, Handle2, 0, 1), ?ATTEMPTS).
 
 
 import_file_with_content_test(TestSuiteCtx = #storage_import_test_suite_ctx{
@@ -421,12 +424,12 @@ import_file_with_content_test(TestSuiteCtx = #storage_import_test_suite_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
         importing_provider_ctx = #provider_ctx{
-            random_node = NodeImportingProvider,
-            session_id = SessionIdImportingProvider
+            random_node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
         },
         non_importing_provider_ctx = #provider_ctx{
-            random_node = NodeNonImportingProvider,
-            session_id = SessionIdNonImportingProvider
+            random_node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
         }
     } = init_testcase(?FUNCTION_NAME, #file_spec{name = FileName, content = FileContent}, TestSuiteCtx),
     await_initial_scan_finished(ImportingProviderSelector, SpaceId),
@@ -435,14 +438,14 @@ import_file_with_content_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     %% Check if file was imported on ImportingProvider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey),
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey),
         ?ATTEMPTS),
 
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(NodeImportingProvider, SessionIdImportingProvider, SpacePathFileKey, read)),
+        lfm_proxy:open(ImportingProviderNode, ImportingProviderSessionId, SpacePathFileKey, read)),
     ?assertMatch({ok, FileContent},
-        lfm_proxy:check_size_and_read(NodeImportingProvider, Handle1, 0, 100)),
-    lfm_proxy:close(NodeImportingProvider, Handle1),
+        lfm_proxy:check_size_and_read(ImportingProviderNode, Handle1, 0, 100)),
+    lfm_proxy:close(ImportingProviderNode, Handle1),
 
     assert_storage_import_monitoring_state(ImportingProviderSelector, SpaceId, #{
         <<"scans">> => 1,
@@ -467,11 +470,11 @@ import_file_with_content_test(TestSuiteCtx = #storage_import_test_suite_ctx{
 
     %% Check if file was imported on NonImportingProvider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(NodeNonImportingProvider, SessionIdNonImportingProvider, SpacePathFileKey), ?ATTEMPTS),
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, SpacePathFileKey), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(NodeNonImportingProvider, SessionIdNonImportingProvider, SpacePathFileKey, read), ?ATTEMPTS),
+        lfm_proxy:open(NonImportingProviderNode, NonImportingProviderSessionId, SpacePathFileKey, read), ?ATTEMPTS),
     ?assertMatch({ok, FileContent},
-        lfm_proxy:check_size_and_read(NodeNonImportingProvider, Handle2, 0, 100), ?ATTEMPTS).
+        lfm_proxy:check_size_and_read(NonImportingProviderNode, Handle2, 0, 100), ?ATTEMPTS).
 
 
 %%%===================================================================
@@ -760,3 +763,21 @@ build_storage_import_monitoring_description(SIM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
         {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [Key, Value]}
     end, {"~n#storage_import_monitoring fields values:~n", []}, SIM).
+
+
+%% @private
+-spec unmock_import_file_error(storage_import_test_suite_ctx()) -> ok.
+unmock_import_file_error(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_import_engine).
+
+
+%% @private
+-spec unmock_luma(storage_import_test_suite_ctx()) -> ok.
+unmock_luma(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, [luma]).

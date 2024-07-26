@@ -187,10 +187,7 @@ s3_authorization(Hostname, AmzContent, DateTime, BucketName, SecretKey, AccessKe
     Signature = hash_to_hex_list(crypto:mac(hmac, sha256, SigningKey, StringToSign)),
 
     str_utils:format(
-        "AWS4-HMAC-SHA256 Credential=~ts"
-        "/~ts, "
-        "SignedHeaders=~ts, "
-        "Signature=~ts",
+        "AWS4-HMAC-SHA256 Credential=~ts/~ts, SignedHeaders=~ts, Signature=~ts",
         [AccessKey, CredentialScope, SignedHeaders, Signature]
     ).
 

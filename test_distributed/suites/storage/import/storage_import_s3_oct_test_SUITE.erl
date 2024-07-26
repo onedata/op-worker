@@ -91,5 +91,5 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(Case, _Config) ->
+    storage_import_oct_test_base:end_per_testcase(Case, ?SUITE_CTX).
