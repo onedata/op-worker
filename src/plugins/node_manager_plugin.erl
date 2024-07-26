@@ -349,7 +349,6 @@ after_listeners_stop() ->
 %%--------------------------------------------------------------------
 -spec listeners() -> Listeners :: [atom()].
 listeners() -> [
-    http_listener,
     https_listener
 ].
 
