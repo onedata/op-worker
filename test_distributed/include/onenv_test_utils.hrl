@@ -65,7 +65,7 @@ end)).
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this dir (i.e. further on the list) in file spec.
     custom_label = undefined :: undefined | onenv_file_test_utils:custom_label(),
-    %% TODO VFS-12179 handle uid/gid using utils for file generation
+    %% TODO VFS-12179 handle uid/gid in creating test files utils
     uid = undefined :: luma:uid(),
     gid = undefined :: luma:gid()
 }).

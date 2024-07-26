@@ -19,7 +19,8 @@
 % API
 -export([
     clean_up_after_previous_run/2,
-    end_per_testcase/2
+    init_per_testcase/1,
+    end_per_testcase/3
 ]).
 
 %% tests
@@ -71,14 +72,18 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
     end, filter_spaces_from_previous_run(AllTestCases)).
 
 
-end_per_testcase(Case = import_directory_error_test, TestSuiteCtx) ->
+init_per_testcase(Config) ->
+    lfm_proxy:init(Config).
+
+
+end_per_testcase(Case = import_directory_error_test, TestSuiteCtx, Config) ->
     unmock_import_file_error(TestSuiteCtx),
-    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx);
-end_per_testcase(Case = import_directory_check_user_id_test, TestSuiteCtx) ->
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+end_per_testcase(Case = import_directory_check_user_id_test, TestSuiteCtx, Config) ->
     unmock_luma(TestSuiteCtx),
-    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx);
-end_per_testcase(_Case, _TestSuiteCtx) ->
-    ok.
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+end_per_testcase(_Case, _TestSuiteCtx, Config) ->
+    lfm_proxy:teardown(Config).
 
 
 %%%===================================================================
