@@ -104,6 +104,8 @@
     name :: undefined | binary(),
     type = role :: od_group:type(),
 
+    eff_users = #{} :: #{od_user:id() => [privileges:group_privilege()]},
+
     cache_state = #{} :: cache_state()
 }).
 
