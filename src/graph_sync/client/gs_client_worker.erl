@@ -968,6 +968,9 @@ is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_user, i
             false
     end;
 
+is_user_authorized_to_get(ClientUserId, _, _, #gri{type = od_group, scope = private}, CachedDoc) ->
+    group_logic:has_eff_privilege(CachedDoc#document.value, ClientUserId, ?GROUP_VIEW);
+
 is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_group, id = GroupId, scope = shared}, _) ->
     case AuthHint of
         ?THROUGH_SPACE(SpaceId) ->

@@ -399,7 +399,7 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
         <<"image">> => DockerImage,
         <<"namespace">> => atm_openfaas_config:get_function_namespace(OpenfaasConfig)
     },
-    FullDefinition1 = add_default_properties(BaseDefinition),
+    FullDefinition1 = add_default_properties(BaseDefinition, InitiationCtx),
     FullDefinition2 = add_resources_properties(FullDefinition1, InitiationCtx),
     FullDefinition3 = add_function_ctx_annotations(FullDefinition2, InitiationCtx),
     FullDefinition4 = add_data_stream_annotations_if_required(FullDefinition3, InitiationCtx),
@@ -407,9 +407,10 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
 
 
 %% @private
--spec add_default_properties(json_utils:json_map()) -> json_utils:json_map().
-add_default_properties(FunctionDefinition) ->
-    lists:foldl(fun({Property, EnvVar}, Acc) ->
+-spec add_default_properties(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_default_properties(FunctionDefinition, #initiation_ctx{openfaas_config = OpenfaasConfig}) ->
+    DefaultProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
         case op_worker:get_env(EnvVar, undefined) of
             undefined ->
                 Acc;
@@ -427,7 +428,17 @@ add_default_properties(FunctionDefinition) ->
         {<<"constraints">>, openfaas_function_constraints},
         {<<"labels">>, openfaas_function_labels},
         {<<"annotations">>, openfaas_function_annotations}
-    ]).
+    ]),
+
+    case atm_openfaas_config:should_disable_tls_verification(OpenfaasConfig) of
+        true ->
+            EnvVars = maps:get(<<"envVars">>, DefaultProperties, #{}),
+            DefaultProperties#{<<"envVars">> => EnvVars#{
+                <<"VERIFY_SSL_CERTIFICATES">> => <<"false">>
+            }};
+        false ->
+            DefaultProperties
+    end.
 
 
 %% @private
@@ -570,11 +581,8 @@ add_oneclient_annotations_if_required(FunctionDefinition, InitiationCtx = #initi
 
 %% @private
 -spec build_oneclient_options(initiation_ctx()) -> binary().
-build_oneclient_options(#initiation_ctx{
+build_oneclient_options(InitiationCtx = #initiation_ctx{
     openfaas_config = OpenfaasConfig,
-    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx
-    },
     executor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
@@ -583,15 +591,26 @@ build_oneclient_options(#initiation_ctx{
         }
     }
 }) ->
-    EnvSpecificOneclientOptions = atm_openfaas_config:get_oneclient_options(OpenfaasConfig),
-    Opts0 = <<EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary>>,
+    DefaultOneclientOptions = atm_openfaas_config:get_oneclient_default_options(OpenfaasConfig),
 
-    case re:run(Opts0, <<"--force-(direct|proxy)-io">>) of
+    Opts0 = <<DefaultOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary>>,
+    Opts1 = ensure_oneclient_io_mode_specified(Opts0, InitiationCtx),
+    ensure_insecure_if_tls_verification_disabled(Opts1, InitiationCtx).
+
+
+%% @private
+-spec ensure_oneclient_io_mode_specified(binary(), initiation_ctx()) -> binary().
+ensure_oneclient_io_mode_specified(Options, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    }}
+) ->
+    case re:run(Options, <<"--force-(direct|proxy)-io">>) of
         nomatch ->
             IoMode = infer_oneclient_io_mode(AtmWorkflowExecutionCtx),
-            <<Opts0/binary, " ", IoMode/binary>>;
+            <<Options/binary, " ", IoMode/binary>>;
         _ ->
-            Opts0
+            Options
     end.
 
 
@@ -605,6 +624,21 @@ infer_oneclient_io_mode(AtmWorkflowExecutionCtx) ->
     case storage:get_helper_name(StorageId) of
         ?POSIX_HELPER_NAME -> <<"--force-proxy-io">>;
         _ -> <<"--force-direct-io">>
+    end.
+
+
+%% @private
+-spec ensure_insecure_if_tls_verification_disabled(binary(), initiation_ctx()) -> binary().
+ensure_insecure_if_tls_verification_disabled(Options, #initiation_ctx{
+    openfaas_config = OpenfaasConfig
+}) ->
+    TlsDisabled = atm_openfaas_config:should_disable_tls_verification(OpenfaasConfig),
+
+    case re:run(Options, <<"(?:^|\\s)(-\\pL*i\\pL*|--insecure)\\b">>) of
+        nomatch when TlsDisabled ->
+            <<Options/binary, " --insecure">>;
+        _ ->
+            Options
     end.
 
 

@@ -56,7 +56,6 @@
 % Endpoint for downloading atm store dump
 -define(GUI_ATM_STORE_DUMP_DOWNLOAD_PATH, "/automation/execution/stores/download").
 
-% TODO VFS-7628 make openfaas respond to https
 %% Endpoint used as callback for Openfaas
 -define(ATM_JOB_OUTPUT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/output").
 -define(ATM_JOB_HEARTBEAT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/heartbeat").
