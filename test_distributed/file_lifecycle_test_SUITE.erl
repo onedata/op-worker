@@ -174,7 +174,7 @@ create_open_race_test(Config) ->
     create_open_race_test(Config, file_req).
 
 create_open_race_test2(Config) ->
-    create_open_race_test(Config, fslogic_times).
+    create_open_race_test(Config, times_api).
 
 create_open_race_test(Config, Mock) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -197,9 +197,9 @@ create_open_race_test(Config, Mock) ->
                     end,
                     Ans
                 end);
-        fslogic_times ->
-            test_utils:mock_new(W, fslogic_times, [passthrough]),
-            test_utils:mock_expect(W, fslogic_times, update_mtime_ctime,
+        times_api ->
+            test_utils:mock_new(W, times_api, [passthrough]),
+            test_utils:mock_expect(W, times_api, report_file_created,
                 fun(FileCtx) ->
                     Master ! {open_file, self()},
                     ok = receive
@@ -391,7 +391,7 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers,
-        [communicator, file_meta, file_req, sd_utils, fslogic_times, fslogic_delete, fslogic_event_emitter]).
+        [communicator, file_meta, file_req, sd_utils, times_api, fslogic_delete, fslogic_event_emitter]).
 
 %%%===================================================================
 %%% Internal functions

@@ -39,7 +39,7 @@
 all() ->
     ?ALL(?TEST_CASES).
 
--define(GET_TIMES(Worker, Uuid), rpc:call(Worker, times, get, [Uuid])).
+-define(GET_TIMES(Worker, Uuid), rpc:call(Worker, times, get, [fslogic_file_id:ensure_referenced_uuid(Uuid)])).
 -define(GET_LOCATION(Worker, Uuid), rpc:call(Worker, file_location, get_local, [Uuid])).
 
 %%%===================================================================

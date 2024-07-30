@@ -154,7 +154,7 @@ handle_file_written_event(#file_written_event{
             LocationChanges = replica_updater:get_location_changes(ReplicaUpdateResult),
             SizeChanged = replica_updater:has_size_changed(ReplicaUpdateResult),
             ReplicaStatusChanged = replica_updater:has_replica_status_changed(ReplicaUpdateResult),
-            fslogic_times:update_mtime_ctime(FileCtx),
+            times_api:touch(FileCtx, [?attr_mtime, ?attr_ctime]),
             case {ReplicaStatusChanged, SizeChanged} of
                 {true, _} ->
                     fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, [SessId]);
@@ -192,4 +192,4 @@ handle_file_read_event(#file_read_event{
         ?ERROR_NOT_FOUND ->
             ok
     end,
-    fslogic_times:update_atime(FileCtx).
+    times_api:touch(FileCtx, [?attr_atime]).

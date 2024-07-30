@@ -21,11 +21,15 @@
 
     get_endpoint/2,
     get_basic_auth_header/1,
-    get_function_namespace/1,
     get_activity_feed_secret/1,
+    get_result_streamer_image/1,
+
+    should_disable_tls_verification/1,
+
+    get_function_namespace/1,
+
     get_oneclient_image/1,
-    get_oneclient_options/1,
-    get_result_streamer_image/1
+    get_oneclient_default_options/1
 ]).
 
 -record(atm_openfaas_config, {
@@ -71,14 +75,30 @@ get_basic_auth_header(#atm_openfaas_config{basic_auth = BasicAuth}) ->
     #{?HDR_AUTHORIZATION => BasicAuth}.
 
 
--spec get_function_namespace(record()) -> binary().
-get_function_namespace(#atm_openfaas_config{function_namespace = FunctionNamespace}) ->
-    FunctionNamespace.
-
-
 -spec get_activity_feed_secret(record()) -> binary().
 get_activity_feed_secret(#atm_openfaas_config{activity_feed_secret = ActivityFeedSecret}) ->
     ActivityFeedSecret.
+
+
+-spec get_result_streamer_image(record()) -> binary().
+get_result_streamer_image(_Record) ->
+    case get_env(openfaas_result_streamer_image, undefined) of
+        undefined ->
+            ReleaseVersion = op_worker:get_release_version(),
+            <<"onedata/openfaas-lambda-result-streamer:", ReleaseVersion/binary>>;
+        ResultStreamerImage ->
+            str_utils:to_binary(ResultStreamerImage)
+    end.
+
+
+-spec should_disable_tls_verification(record()) -> boolean().
+should_disable_tls_verification(_Record) ->
+    utils:to_boolean(get_env(openfaas_disable_tls_verification, false)).
+
+
+-spec get_function_namespace(record()) -> binary().
+get_function_namespace(#atm_openfaas_config{function_namespace = FunctionNamespace}) ->
+    FunctionNamespace.
 
 
 -spec get_oneclient_image(record()) -> binary().
@@ -92,20 +112,9 @@ get_oneclient_image(_Record) ->
     end.
 
 
--spec get_oneclient_options(record()) -> binary().
-get_oneclient_options(_Record) ->
+-spec get_oneclient_default_options(record()) -> binary().
+get_oneclient_default_options(_Record) ->
     str_utils:to_binary(get_env(openfaas_oneclient_options, <<"">>)).
-
-
--spec get_result_streamer_image(record()) -> binary().
-get_result_streamer_image(_Record) ->
-    case get_env(openfaas_result_streamer_image, undefined) of
-        undefined ->
-            ReleaseVersion = op_worker:get_release_version(),
-            <<"onedata/openfaas-lambda-result-streamer:", ReleaseVersion/binary>>;
-        ResultStreamerImage ->
-            str_utils:to_binary(ResultStreamerImage)
-    end.
 
 
 %%%===================================================================

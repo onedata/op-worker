@@ -104,6 +104,8 @@
     name :: undefined | binary(),
     type = role :: od_group:type(),
 
+    eff_users = #{} :: #{od_user:id() => [privileges:group_privilege()]},
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -858,9 +860,10 @@
 
 %% Model that holds file timestamps
 -record(times, {
-    atime = 0 :: times:time(),
-    ctime = 0 :: times:time(),
-    mtime = 0 :: times:time()
+    creation_time = 0 :: times:creation_time(),
+    atime = 0 :: times:a_time(),
+    mtime = 0 :: times:m_time(),
+    ctime = 0 :: times:c_time()
 }).
 
 %% Model that tracks popularity of file
