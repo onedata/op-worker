@@ -241,6 +241,14 @@ translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = pri
         }
     };
 
+translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = public}, Result) ->
+    #document{
+        key = Id,
+        value = #od_handle_service{
+            name = maps:get(<<"name">>, Result)
+        }
+    };
+
 translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
@@ -263,7 +271,8 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
             metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
-            metadata = maps:get(<<"metadata">>, Result)
+            metadata = maps:get(<<"metadata">>, Result),
+            handle_service = maps:get(<<"handleServiceId">>, Result)
         }
     };
 
@@ -457,12 +466,19 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
         }
     };
 
+apply_scope_mask(Doc = #document{value = Handle = #od_handle_service{}}, public) ->
+    Doc#document{
+        value = Handle#od_handle_service{
+            eff_users = #{},
+            eff_groups = #{}
+        }
+    };
+
 apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
     Doc#document{
         value = Handle#od_handle{
             resource_type = undefined,
             resource_id = undefined,
-            handle_service = undefined,
 
             eff_users = #{},
             eff_groups = #{}
