@@ -16,6 +16,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -148,7 +149,7 @@ check_traverses(FileCtx, #document{key = QosEntryId}) ->
 is_traverse_finished_for_file(TraverseId, FileCtx, TraverseRootFileUuid) ->
     try
         is_traverse_finished_for_file_unsafe(TraverseId, FileCtx, TraverseRootFileUuid)
-    catch throw:{error, {file_meta_missing, _}} ->
+    catch throw:{error, ?MISSING_FILE_META(_)} ->
         % subtree of this file is disconnected from space root, no one should be checking it
         false
     end.
@@ -308,6 +309,6 @@ handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
 get_uuid_based_path(FileCtx) ->
     try
         file_ctx:get_uuid_based_path(FileCtx)
-    catch throw:{error, {file_meta_missing, _}} ->
+    catch throw:{error, ?MISSING_FILE_META(_)} ->
         not_synced
     end.

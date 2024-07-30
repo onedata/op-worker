@@ -93,27 +93,29 @@ check_references_and_remove(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
     case dir_size_stats:on_local_file_delete(FileCtx) of
         no_references_left ->
-            remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS);
+            remove_or_handle_opened_file(UserCtx, FileCtx, ?ALL_DOCS);
         has_at_least_one_reference ->
             % There are hardlinks to file - do not delete documents, remove only link
             delete_parent_link(FileCtx, UserCtx),
             ok
-    end.
+    end,
+    maybe_emit_event(FileCtx, UserCtx, Silent).
 
 %% @private
 -spec delete_hardlink_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
     % TODO VFS-7436 - handle deletion links for hardlinks to integrate with sync
-    case hardlink_registry_utils:deregister(FileCtx) of
+    FinalFileCtx = case hardlink_registry_utils:deregister(FileCtx) of
         no_references_left ->
-            remove_or_handle_opened_file(UserCtx, FileCtx, Silent, ?ALL_DOCS),
+            remove_or_handle_opened_file(UserCtx, FileCtx, ?ALL_DOCS),
             % File meta for original file has not been deleted because hardlink existed - delete it now
             delete_referenced_file_meta(FileCtx);
         has_at_least_one_reference ->
             FileCtx2 = delete_parent_link(FileCtx, UserCtx),
             delete_file_meta(FileCtx2),
-            ok
-    end.
+            FileCtx2
+    end,
+    maybe_emit_event(FinalFileCtx, UserCtx, Silent).
 
 
 -spec handle_remotely_deleted_file(file_ctx:ctx()) -> ok.
@@ -131,30 +133,32 @@ handle_remotely_deleted_file(FileCtx) ->
         _ ->
             % Hardlink created by other provider or regular file has been
             % deleted - check if local documents should be cleaned
-            FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_referenced_uuid_const(FileCtx2),
+            UserCtx = user_ctx:new(?ROOT_SESS_ID),
             case file_meta_hardlinks:inspect_references(FileUuid) of
                 no_references_left ->
-                    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-                    remove_or_handle_opened_file(UserCtx, FileCtx2, false, ?LOCAL_DOCS);
+                    remove_or_handle_opened_file(UserCtx, FileCtx2, ?LOCAL_DOCS);
                 has_at_least_one_reference ->
                     ok
-            end
+            end,
+            maybe_emit_event(FileCtx2, UserCtx, false)
     end.
 
 %% @private
 -spec handle_remotely_deleted_local_hardlink(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_local_hardlink(FileCtx) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     case hardlink_registry_utils:deregister(FileCtx) of
         no_references_left ->
             delete_file_meta(FileCtx), % Delete hardlink document
-            UserCtx = user_ctx:new(?ROOT_SESS_ID),
             % Delete documents connected with original file as deleted
             % hardlink is last reference to data
-            remove_or_handle_opened_file(UserCtx, FileCtx, false, ?LOCAL_DOCS);
+            remove_or_handle_opened_file(UserCtx, FileCtx, ?LOCAL_DOCS);
         has_at_least_one_reference ->
             delete_file_meta(FileCtx),
             ok
-    end.
+    end,
+    maybe_emit_event(FileCtx, UserCtx, false).
 
 
 -spec handle_release_of_deleted_file(file_ctx:ctx(), file_handles:removal_status()) -> ok.
@@ -227,14 +231,13 @@ cleanup_opened_files() ->
 %% Checks if file is opened and deletes it or marks to be deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_or_handle_opened_file(user_ctx:ctx(), file_ctx:ctx(), boolean(), docs_deletion_scope()) -> ok.
+-spec remove_or_handle_opened_file(user_ctx:ctx(), file_ctx:ctx(), docs_deletion_scope()) -> ok.
 % TODO VFS-5268 - prevent reimport connected with remote delete
-remove_or_handle_opened_file(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
+remove_or_handle_opened_file(UserCtx, FileCtx, DocsDeletionScope) ->
     try
         case file_ctx:is_dir(FileCtx) of
             {true, FileCtx2} ->
-                ok = remove_file(FileCtx2, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope)),
-                maybe_emit_event(FileCtx2, UserCtx, Silent);
+                ok = remove_file(FileCtx2, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope));
             {false, FileCtx2} ->
                 FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
                 case file_handles:is_file_opened(FileUuid) of
@@ -242,8 +245,7 @@ remove_or_handle_opened_file(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
                         handle_opened_file(FileCtx2, UserCtx, DocsDeletionScope);
                     _ ->
                         ok = remove_file(FileCtx2, UserCtx, true, ?SPEC(?SINGLE_STEP_DEL, DocsDeletionScope))
-                end,
-                maybe_emit_event(FileCtx2, UserCtx, Silent)
+                end
         end
     catch
         _:{badmatch, {error, not_found}} ->
@@ -361,7 +363,7 @@ delete_storage_file(FileCtx, UserCtx) ->
                 OtherError
         end
     catch
-        _:{error, {file_meta_missing, _}} ->
+        _:{error, ?MISSING_FILE_META(_)} ->
             % File has not been created on storage (missing path to space dir)
             {ok, FileCtx};
         Class:Reason:Stacktrace ->
@@ -753,6 +755,6 @@ get_storage_file_id(FileCtx) ->
         file_ctx:get_storage_file_id(FileCtx)
     catch
         % Parent is not synced while handling remote deletion of file
-        throw:{error, {file_meta_missing, _}}  ->
+        throw:{error, ?MISSING_FILE_META(_)}  ->
             {undefined, FileCtx}
     end.

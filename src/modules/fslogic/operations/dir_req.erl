@@ -125,7 +125,7 @@ list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
         UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}, Attributes, []),
     
     times_api:touch(FileCtx3, [?attr_atime]),
-    
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
@@ -260,7 +260,7 @@ list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
             attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{attributes => Attributes}),
         FileAttr
     end,
-    
+
     ChildrenAttrs = gather_attributes(MapperFun, Children),
     
     case infer_listing_finished(length(ChildrenAttrs), NextToken, ListOpts) of

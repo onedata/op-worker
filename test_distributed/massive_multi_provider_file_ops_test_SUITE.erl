@@ -1009,7 +1009,7 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
             }, rpc:call(Worker, dbsync_state, get_synchronization_params, [SpaceId, ProviderId])),
             lists:foreach(fun(PosthookName) ->
                 ?assertEqual(ok, rpc:call(Worker, file_meta_posthooks, add_hook,
-                    [{file_meta_missing, Uuid}, PosthookName, SpaceId, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
+                    [?MISSING_FILE_META(Uuid), PosthookName, SpaceId, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
                 ))
             end, Posthooks),    
             DbsyncProc ! proceed,

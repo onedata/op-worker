@@ -58,6 +58,7 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -562,7 +563,7 @@ handle_cast(Info, State) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_missing_file_meta_on_update_posthook(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(),
+    file_meta_posthooks:add_hook(?MISSING_FILE_META(FileUuid), generator:gen_name(),
         SpaceId, ?MODULE, update_stats_of_nearest_dir, [Guid, CollectionType, CollectionUpdate]).
 
 
@@ -1141,7 +1142,7 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
+    file_meta_posthooks:add_hook(?MISSING_FILE_META(FileUuid), generator:gen_name(), SpaceId,
         ?MODULE, update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]).
 
 

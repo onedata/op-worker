@@ -38,12 +38,22 @@
 run_and_handle_error(SDHandle = #sd_handle{
     session_id = SessionId,
     space_id = SpaceId,
-    storage_id = StorageId
+    storage_id = StorageId,
+    file = StorageFileId,
+    file_uuid = FileUuid
 }, Operation, SufficientAccessType) ->
     case session_helpers:get_helper(SessionId, SpaceId, StorageId) of
         {ok, HelperHandle} ->
             run_and_handle_error(SDHandle, HelperHandle, Operation, SufficientAccessType);
         {error, not_found} ->
+            case session:get(SessionId) of
+                {ok, Session} ->
+                    ?error(?autoformat_with_msg("Helper not found:",
+                        [Session, SpaceId, StorageId, StorageFileId, FileUuid]));
+                {error, not_found} ->
+                    ?warning(?autoformat_with_msg("Helper for nonexistent session not found:",
+                        [SessionId, SpaceId, StorageId, StorageFileId, FileUuid]))
+            end,
             throw(?EACCES);
         {error, Reason} ->
             throw(Reason)
