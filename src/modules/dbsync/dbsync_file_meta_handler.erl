@@ -67,6 +67,7 @@ hardlink_change_replicated(SpaceId, #document{key = FileUuid} = LinkDoc) ->
         {error, not_found} ->
             add_hardlink_missing_base_doc_posthook(SpaceId, FileUuid);
         Error ->
+            %% @TODO VFS-12199 properly handle errors on dbsync hooks
             ?warning(?autoformat_with_msg("hardlink replicated ~tp - dbsync posthook failed", [FileUuid], Error))
     end.
 
