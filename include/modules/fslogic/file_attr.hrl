@@ -15,7 +15,10 @@
 
 -include_lib("ctool/include/onedata_file.hrl").
 
-
+%% NOTE: any change to this record should be reflected in:
+%%  * ctool: onedata_file.hrl and onedata_file.erl
+%%  * onedatafilerestclient: file_attributes.py
+%%  * gui: atm lambda attributes schema selector for file type
 -record(file_attr, {
     guid :: undefined | fslogic_worker:file_guid(),
     index :: undefined | file_listing:index(),
@@ -32,6 +35,7 @@
     atime :: undefined | times:a_time(),
     mtime :: undefined | times:m_time(),
     ctime :: undefined | times:c_time(),
+    creation_time :: undefined | times:creation_time(),
     size :: undefined | file_meta:size(),
     is_fully_replicated :: undefined | boolean(),
     local_replication_rate :: undefined | float(),

@@ -258,7 +258,7 @@ effective_qos_audit_log_failure(_Config) ->
 
 
 qos_audit_log_test_base(ExpectedStatus, Type) ->
-    ok = clock_freezer_mock:set_current_time_millis(123),
+    ok = clock_freezer_mock:set_current_time_millis(12345),
     [ProviderId] = oct_background:get_provider_ids(),
     Node = oct_background:get_random_provider_node(ProviderId),
     Timestamp = opw_test_rpc:call(Node, global_clock, timestamp_millis, []),

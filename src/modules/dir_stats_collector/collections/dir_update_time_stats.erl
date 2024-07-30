@@ -21,10 +21,11 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1]).
+-export([report_update/2, get_update_time/1]).
 
 %% dir_stats_collection_behaviour callbacks
 -export([
@@ -53,20 +54,25 @@
 %%% API
 %%%===================================================================
 
--spec report_update_of_dir(file_id:file_guid(), times:record() | helpers:stat() | times:time()) -> ok.
-report_update_of_dir(Guid, Time) ->
-    ok = dir_stats_collector:update_stats_of_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks file type and sets time of directory identified by Guid or time of parent if Guid represents regular
-%% file or link.
-%% @end
-%%--------------------------------------------------------------------
--spec report_update_of_nearest_dir(file_id:file_guid(), times:record() | helpers:stat() | times:time()) -> ok.
-report_update_of_nearest_dir(Guid, Time) ->
-    ok = dir_stats_collector:update_stats_of_nearest_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
+-spec report_update(file_ctx:ctx(), times:record() | times:time()) -> ok.
+report_update(FileCtx, Time) ->
+    Update = #{?STAT_NAME => infer_update_time(Time)},
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
+    try
+        case file_ctx:get_type(FileCtx) of
+            {?DIRECTORY_TYPE, _} ->
+                ok = dir_stats_collector:update_stats_of_dir(Guid, ?MODULE, Update);
+            _ ->
+                ok = dir_stats_collector:update_stats_of_nearest_dir(Guid, ?MODULE, Update)
+        end
+    catch Class:Reason:Stacktrace ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found ->
+                dir_stats_collector:add_missing_file_meta_on_update_posthook(Guid, ?MODULE, Update);
+            _ ->
+                throw(?examine_exception(Class, Reason, Stacktrace))
+        end
+    end.
 
 
 -spec get_update_time(file_id:file_guid()) -> {ok, times:time()} | dir_stats_collector:error().
@@ -183,11 +189,9 @@ get_record_struct(1) ->
 %% (update time = change of mtime or ctime)
 %% @end
 %%--------------------------------------------------------------------
--spec infer_update_time(times:record() | helpers:stat() | times:time()) -> times:time().
+-spec infer_update_time(times:record() | times:time()) -> times:time().
 infer_update_time(#times{mtime = MTime, ctime = CTime}) ->
     max(MTime, CTime);
-infer_update_time(#statbuf{st_mtime = StMtime, st_ctime = StCtime}) ->
-    max(StMtime, StCtime);
 infer_update_time(Timestamp) when is_integer(Timestamp) ->
     Timestamp.
 
@@ -195,10 +199,5 @@ infer_update_time(Timestamp) when is_integer(Timestamp) ->
 %% @private
 -spec init(file_id:file_guid()) -> dir_stats_collection:collection().
 init(Guid) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    case times:get(Uuid) of
-        {ok, #document{value = Times}} ->
-            #{?STAT_NAME => infer_update_time(Times)};
-        ?ERROR_NOT_FOUND ->
-            #{?STAT_NAME => 0} % Race with file deletion - stats will be invalidated by next update
-    end.
+    {Times, _FileCtx2} = file_ctx:get_times(file_ctx:new_by_guid(Guid), [?attr_mtime, ?attr_ctime]),
+    #{?STAT_NAME => infer_update_time(Times)}.

@@ -216,7 +216,7 @@ set_perms(Worker, SessId, FileKey, NewPerms) ->
 
 
 -spec update_times(node(), session:id(), lfm:file_key(),
-    file_meta:time(), file_meta:time(), file_meta:time()) ->
+    times:a_time(), times:m_time(), times:c_time()) ->
     ok | lfm:error_reply().
 update_times(Worker, SessId, FileKey, ATime, MTime, CTime) ->
     ?EXEC(Worker, lfm:update_times(SessId, FileKey, ATime, MTime, CTime)).

@@ -54,6 +54,7 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
+-define(TIMES_CACHE_FLUSH, times_cache_flush).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
@@ -61,10 +62,10 @@
 % delays and intervals
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
     op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
--define(RERUN_TRANSFERS_DELAY,
-    op_worker:get_env(rerun_transfers_delay, 10000)).
--define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
+-define(RERUN_TRANSFERS_DELAY, op_worker:get_env(rerun_transfers_delay, 10000)).
+-define(RESTART_AUTOCLEANING_RUNS_DELAY, op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
+% NOTE: times_cache flush interval should be below 10s in order to fit in acceptance tests timeout.
+-define(TIMES_CACHE_FLUSH_INTERVAL, timer:seconds(op_worker:get_env(times_cache_flush_interval_sec, 8))).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -165,10 +166,12 @@ init(_Args) ->
     bulk_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
     archivisation_traverse:init_pool(),
+    times_cache:init(),
 
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
+    schedule_periodical_times_cache_flush(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -220,6 +223,9 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
             ok
     end,
     schedule_periodical_spaces_autocleaning_check();
+handle(?TIMES_CACHE_FLUSH) ->
+    times_cache:flush(),
+    schedule_periodical_times_cache_flush();
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -248,6 +254,8 @@ handle(Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    times_cache:flush(),
+    times_cache:destroy(),
     transfer:cleanup(),
     autocleaning_view_traverse:stop_pool(),
     file_registration:stop_pool(),
@@ -700,6 +708,10 @@ schedule_restart_autocleaning_runs() ->
 -spec schedule_periodical_spaces_autocleaning_check() -> ok.
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
+
+-spec schedule_periodical_times_cache_flush() -> ok.
+schedule_periodical_times_cache_flush() ->
+    schedule(?TIMES_CACHE_FLUSH, ?TIMES_CACHE_FLUSH_INTERVAL).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->

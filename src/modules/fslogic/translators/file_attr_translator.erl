@@ -82,6 +82,8 @@ get_attr_as_json(?attr_gid, #file_attr{gid = Gid}) ->
     Gid;
 get_attr_as_json(?attr_uid, #file_attr{uid = Uid}) ->
     Uid;
+get_attr_as_json(?attr_creation_time, #file_attr{creation_time = CreationTime}) ->
+    CreationTime;
 get_attr_as_json(?attr_atime, #file_attr{atime = ATime}) ->
     ATime;
 get_attr_as_json(?attr_mtime, #file_attr{mtime = MTime}) ->

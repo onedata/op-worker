@@ -519,7 +519,7 @@ delete_referenced_file_meta(FileCtx) ->
 update_parent_timestamps(UserCtx, FileCtx) ->
     try
         {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
-        fslogic_times:update_mtime_ctime(ParentCtx),
+        times_api:touch(ParentCtx, [?attr_mtime, ?attr_ctime]),
         FileCtx2
     catch
         error:{badmatch, {error, not_found}} ->
@@ -661,7 +661,7 @@ remove_synced_associated_documents(FileCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     ok = custom_metadata:delete(FileUuid),
-    ok = times:delete(FileUuid),
+    ok = times_api:report_file_deleted(FileCtx),
     ok = transferred_file:clean_up(FileGuid),
     ok = archive_recall:delete_synced_docs(FileUuid),
     ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
