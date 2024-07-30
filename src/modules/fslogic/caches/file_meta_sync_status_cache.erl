@@ -34,8 +34,8 @@
 %% RPC API
 -export([invalidate/1]).
 
--type missing_link() :: ?MISSING_FILE_META(file_meta:uuid()).
--type missing_file_meta() :: ?MISSING_FILE_LINK(file_meta:uuid(), file_meta:name()).
+-type missing_file_meta() :: ?MISSING_FILE_META(file_meta:uuid()).
+-type missing_link() :: ?MISSING_FILE_LINK(file_meta:uuid(), file_meta:name()).
 
 -define(CACHE_GROUP, <<"file_meta_links_sync_status_cache_group">>).
 -define(CACHE_NAME(SpaceId),
