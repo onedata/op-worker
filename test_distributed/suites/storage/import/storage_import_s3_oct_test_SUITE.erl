@@ -50,7 +50,7 @@ all() -> [
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
     storage_type = s3,
-    importing_provider_selector = krakow,
+    importing_provider_selector = ?IMPORTING_PROVIDER_SELECTOR,
     non_importing_provider_selector = paris,
     space_owner_selector = space_owner
 }).
@@ -91,6 +91,14 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             storage_import_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
 
+            % Space root dir is emulated for flat storages (object storages that
+            % have no concept of directories - see flat_storage_iterator.erl).
+            % It's time stats are always set to current time. This may cause
+            % storage import tests to fail as sometimes space root dir will be
+            % reported as modified (if import started later than times doc was created)
+            % or unmodified (if imported started in the same second as time doc
+            % was created). To run tests deterministically, space root dir time
+            % stats are mocked to be in the past.
             Nodes = oct_background:get_provider_nodes(?IMPORTING_PROVIDER_SELECTOR),
             ok = test_utils:mock_new(Nodes, storage_file_ctx),
             ok = test_utils:mock_expect(Nodes, storage_file_ctx, new_with_stat,
