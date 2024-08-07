@@ -522,7 +522,7 @@ resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = Sta
         are_any_attrs_requested([?attr_conflicting_name, ?attr_conflicting_files], State) orelse
             read_option(name_conflicts_resolution_policy, State, resolve_name_conflicts) == resolve_name_conflicts,
 
-    case ShouldCalculateConflicts andalso not file_ctx:is_space_dir_const(FileCtx) of
+    case ShouldCalculateConflicts of
         true ->
             resolve_name_attrs_conflicts(State);
         false ->
@@ -536,32 +536,44 @@ resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = Sta
 resolve_name_attrs_conflicts(State) ->
     {FileDoc, #state{file_ctx = FileCtx} = UpdatedState} = get_file_doc(State),
     {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
-    FileName = file_meta:get_name(FileDoc),
     ProviderId = file_meta:get_provider_id(FileDoc),
     Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
     case fslogic_file_id:is_space_dir_uuid(FileUuid) of
         true ->
             #state{user_ctx = UserCtx} = UpdatedState,
-            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, FileName,
+            {SpaceName, FileCtx2} = file_ctx:get_space_name(FileCtx, UserCtx),
+            {ExtendedName, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, SpaceName,
                 fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
-            {UpdatedState#state{file_ctx = file_ctx:cache_name(Name, FileCtx)}, #file_attr{
-                name = Name,
-                conflicting_name = FileName,
-                conflicting_files = Conflicts
-            }};
+            case Conflicts of
+                [] ->
+                    {UpdatedState, #file_attr{name = SpaceName}};
+                [_ | _] ->
+                    handle_conflicting_name(UpdatedState, FileCtx2, ExtendedName, SpaceName, Conflicts)
+            end;
         false ->
+            FileName = file_meta:get_name(FileDoc),
             case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
                 {conflicting, ExtendedName, ConflictingFiles} ->
-                    {UpdatedState#state{file_ctx = file_ctx:cache_name(ExtendedName, FileCtx)}, #file_attr{
-                        name = ExtendedName,
-                        conflicting_name = FileName,
-                        conflicting_files = ConflictingFiles
-                    }};
+                    handle_conflicting_name(UpdatedState, FileCtx, ExtendedName, FileName, ConflictingFiles);
                 _ ->
                     {UpdatedState, #file_attr{name = FileName}}
             end
     end.
+
+
+%% @private
+-spec handle_conflicting_name(state(), file_ctx:ctx(), file_meta:disambiguated_name(), file_meta:name(),
+    file_meta:conflicts()) -> {state(), record()}.
+handle_conflicting_name(State, FileCtx, ExtendedName, ConflictingName, ConflictingFiles) ->
+    UpdatedState = State#state{file_ctx = file_ctx:cache_name(ExtendedName, FileCtx)},
+    FileAttr = #file_attr{
+        name = ExtendedName,
+        conflicting_name = ConflictingName,
+        conflicting_files = ConflictingFiles
+    },
+    {UpdatedState, FileAttr}.
+
 
 
 %% @private

@@ -89,7 +89,7 @@
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2, cache_name/2,
     get_storage_file_id/1, get_storage_file_id/2,
-    get_new_storage_file_id/1, get_aliased_name/2,
+    get_new_storage_file_id/1, get_aliased_name/2, get_space_name/2,
     get_display_credentials/1, get_times/1, get_times/2,
     get_logical_path/2, get_path_before_deletion/1,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
