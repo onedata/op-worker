@@ -55,6 +55,7 @@
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(PERIODIC_STORAGES_CHECK, periodic_storages_check).
+-define(TIMES_CACHE_FLUSH, times_cache_flush).
 
 -define(SHOULD_PERFORM_PERIODIC_SPACES_AUTOCLEANING_CHECK,
     op_worker:get_env(autocleaning_periodic_spaces_check_enabled, true)).
@@ -67,6 +68,8 @@
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
     op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
 -define(PERIODIC_STORAGES_CHECK_INTERVAL, timer:seconds(op_worker:get_env(storages_check_interval_sec, 300))).
+% NOTE: times_cache flush interval should be below 10s in order to fit in acceptance tests timeout.
+-define(TIMES_CACHE_FLUSH_INTERVAL, timer:seconds(op_worker:get_env(times_cache_flush_interval_sec, 8))).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -169,11 +172,13 @@ init(_Args) ->
     bulk_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
     archivisation_traverse:init_pool(),
+    times_cache:init(),
 
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
     schedule_periodic_spaces_autocleaning_check(),
     schedule_periodic_storages_check(),
+    schedule_periodic_times_cache_flush(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -188,7 +193,7 @@ init(_Args) ->
         {fun session_manager:create_root_session/0, []},
         {fun session_manager:create_guest_session/0, []}
     ]),
-    
+
     {ok, #{?UNHEALTHY_STORAGES_KEY => perform_all_storages_checks()}}.
 
 
@@ -230,6 +235,9 @@ handle(?PERIODIC_STORAGES_CHECK) ->
     handle_periodic_storages_check(),
     schedule_periodic_storages_check(),
     ok;
+handle(?TIMES_CACHE_FLUSH) ->
+    times_cache:flush(),
+    schedule_periodic_times_cache_flush();
 handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
@@ -258,6 +266,8 @@ handle(Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    times_cache:flush(),
+    times_cache:destroy(),
     transfer:cleanup(),
     autocleaning_view_traverse:stop_pool(),
     file_registration:stop_pool(),
@@ -727,6 +737,11 @@ schedule_periodic_spaces_autocleaning_check() ->
 -spec schedule_periodic_storages_check() -> ok.
 schedule_periodic_storages_check() ->
     schedule(?PERIODIC_STORAGES_CHECK, ?PERIODIC_STORAGES_CHECK_INTERVAL).
+
+
+-spec schedule_periodic_times_cache_flush() -> ok.
+schedule_periodic_times_cache_flush() ->
+    schedule(?TIMES_CACHE_FLUSH, ?TIMES_CACHE_FLUSH_INTERVAL).
 
 
 %% @private

@@ -104,7 +104,7 @@ gen_status_message({invalid_guid, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(not_found) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
-gen_status_message({file_meta_missing, _MissingUuid}) -> % error thrown by paths_cache
+gen_status_message(?MISSING_FILE_META(_MissingUuid)) -> % error thrown by paths_cache
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(already_exists) ->
     #status{code = ?EEXIST, description = describe_error(?EEXIST)};

@@ -50,7 +50,7 @@ is_file_access_error(?ERROR_POSIX(?ENOENT)) -> true;
 is_file_access_error(?ERROR_UNAUTHORIZED) -> true;
 is_file_access_error(?ERROR_FORBIDDEN) -> true;
 is_file_access_error(?ERROR_NOT_FOUND) -> true;
-is_file_access_error({error, {file_meta_missing, _Uuid}}) -> true; % error thrown by paths_cache
+is_file_access_error({error, ?MISSING_FILE_META(_Uuid)}) -> true; % error thrown by paths_cache
 is_file_access_error(_) -> false.
 
 

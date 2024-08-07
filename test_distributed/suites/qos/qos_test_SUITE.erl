@@ -13,6 +13,7 @@
 -author("Michal Cwiertnia").
 
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("qos_tests_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -221,7 +222,7 @@ qos_cleanup_test(_Config) ->
     QosEntryId = maps:get(?QOS1, QosNameIdMapping),
 
     ?assertEqual({error, not_found}, opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])),
-    ?assertEqual({error, {file_meta_missing, FileUuid}}, opw_test_rpc:call(Node, file_qos, get_effective, [FileUuid])),
+    ?assertEqual({error, ?MISSING_FILE_META(FileUuid)}, opw_test_rpc:call(Node, file_qos, get_effective, [FileUuid])),
     ?assertEqual({error, not_found}, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId])).
 
 
@@ -258,7 +259,7 @@ effective_qos_audit_log_failure(_Config) ->
 
 
 qos_audit_log_test_base(ExpectedStatus, Type) ->
-    ok = clock_freezer_mock:set_current_time_millis(123),
+    ok = clock_freezer_mock:set_current_time_millis(12345),
     [ProviderId] = oct_background:get_provider_ids(),
     Node = oct_background:get_random_provider_node(ProviderId),
     Timestamp = opw_test_rpc:call(Node, global_clock, timestamp_millis, []),

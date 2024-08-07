@@ -24,12 +24,29 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([get_shared_data/3]).
+-export([get/2, get_shared_data/3]).
 -export([get_name/1, get_name/3]).
+-export([has_eff_privilege/3, has_eff_privileges/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves group doc private data by given GroupId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get(gs_client_worker:client(), od_group:id()) ->
+    {ok, od_group:doc()} | errors:error().
+get(SessionId, GroupId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_group, id = GroupId, aspect = instance, scope = private},
+        subscribe = true
+    }).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -65,3 +82,16 @@ get_name(SessionId, GroupId, AuthHint) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec has_eff_privilege(od_group:record(), od_user:id(), privileges:group_privilege()) ->
+    boolean().
+has_eff_privilege(GroupRecord, UserId, Privilege) ->
+    has_eff_privileges(GroupRecord, UserId, [Privilege]).
+
+
+-spec has_eff_privileges(od_group:record(), od_user:id(), [privileges:group_privilege()]) ->
+    boolean().
+has_eff_privileges(#od_group{eff_users = EffUsers}, UserId, Privileges) ->
+    UserPrivileges = maps:get(UserId, EffUsers, []),
+    lists_utils:is_subset(Privileges, UserPrivileges).

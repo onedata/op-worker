@@ -1,154 +1,96 @@
 %%%-------------------------------------------------------------------
-%%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Tomasz Lichon, Michał Stanisz
+%%% @copyright (C) 2016-2024 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding files' times.
-%%% Note: this module operates on referenced uuids - all operations on hardlinks
-%%% are treated as operations on original file. Thus, all hardlinks pointing on
-%%% the same file share single times document.
+%%% @doc
+%%% Model for holding files' times.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(times).
 -author("Tomasz Lichon").
+-author("Michał Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("proto/oneprovider/provider_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/errors.hrl").
+
 
 %% API
--export([get_or_default/1, get/1, create_or_update/3, delete/1,
-    save/1, save/5, save_with_current_times/1, save_with_current_times/3, ensure_synced/1]).
+-export([create/4, update/2, get/1, delete/1]).
+-export([is_deleted/1, merge_records/2]).
+-export([ensure_synced/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
--type key() :: datastore:key().
+-type key() :: file_meta:uuid().
 -type record() :: #times{}.
 -type doc() :: datastore_doc:doc(record()).
--type diff() :: datastore_doc:diff(record()).
--type time() :: time:seconds().
--type a_time() :: time().
--type c_time() :: time().
--type m_time() :: time().
--type times() :: {a_time(), c_time(), m_time()}.
+-type creation_time() :: time:seconds().
+-type a_time() :: time:seconds().
+-type m_time() :: time:seconds().
+-type c_time() :: time:seconds().
+-type time() :: creation_time() | a_time() | m_time() | c_time().
 
--export_type([record/0, time/0, a_time/0, c_time/0, m_time/0, times/0, diff/0]).
+-export_type([record/0, time/0, a_time/0, c_time/0, m_time/0, creation_time/0]).
 
 -define(CTX, #{
     model => ?MODULE,
     sync_enabled => true,
-    remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined()
+    mutator => oneprovider:get_id_or_undefined()
 }).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Get times or return zeroes.
-%% @end
-%%--------------------------------------------------------------------
--spec get_or_default(file_meta:uuid()) -> {ok, times()} | {error, term()}.
-get_or_default(FileUuid) ->
-    case times:get(FileUuid) of
-        {ok, #document{value = #times{
-            atime = ATime, ctime = CTime, mtime = MTime
-        }}} ->
-            {ok, {ATime, CTime, MTime}};
-        {error, not_found} ->
-            {ok, {0, 0, 0}};
-        Error ->
-            Error
-    end.
+-spec create(key(), od_space:id(), boolean(), record()) -> ok | {error, term()}.
+create(Key, Scope, IgnoreInChanges, Times) ->
+    ?extract_ok(datastore_model:create(?CTX, #document{
+        key = Key, scope = Scope, value = Times, ignore_in_changes = IgnoreInChanges
+    })).
+    
 
--spec save(file_meta:uuid(), od_space:id(), a_time(), m_time(), c_time()) -> ok | {error, term()}.
-save(FileUuid, SpaceId, ATime, MTime, CTime) ->
-    ?extract_ok(save(#document{
-        key = FileUuid,
-        value = #times{
-            atime = ATime,
-            mtime = MTime,
-            ctime = CTime
-        },
-        scope = SpaceId}
-    )).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec save(doc()) -> {ok, doc()} | {error, term()}.
-save(#document{key = Key} = Doc) ->
-    datastore_model:save(?CTX#{generated_key => true},
-        Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
+-spec update(key(), record()) -> ok | {error, term()}.
+update(Key, NewTimes) ->
+    ?extract_ok(datastore_model:update(?CTX, Key, fun(PrevTimes) ->
+        case merge_records(PrevTimes, NewTimes) of
+            PrevTimes -> {error, no_change};
+            FinalTimes -> {ok, FinalTimes}
+        end
+    end)).
 
 
--spec save_with_current_times(file_meta:uuid()) -> {ok, time()} | {error, term()}.
-save_with_current_times(FileUuid) ->
-    save_with_current_times(FileUuid, <<>>, false).
-
-
--spec save_with_current_times(file_meta:uuid(), od_space:id(), boolean()) -> {ok, time()} | {error, term()}.
-save_with_current_times(FileUuid, SpaceId, IgnoreInChanges) ->
-    Time = global_clock:timestamp_seconds(),
-    SaveAns = datastore_model:save(
-        ?CTX#{generated_key => true},
-        #document{
-            key = fslogic_file_id:ensure_referenced_uuid(FileUuid),
-            value = #times{
-                atime = Time,
-                mtime = Time,
-                ctime = Time
-            },
-            scope = SpaceId,
-            ignore_in_changes = IgnoreInChanges
-        }
-    ),
-
-    case SaveAns of
-        {ok, _} -> {ok, Time};
-        Error -> Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates document with using ID from document. If such object does not exist,
-%% it initialises the object with the document.
-%% @end
-%%--------------------------------------------------------------------
--spec create_or_update(doc(), diff(), od_space:id()) -> {ok, doc()} | {error, term()}.
-create_or_update(#document{key = Key} = Doc, Diff, Scope) ->
-    ReferencedUuid = fslogic_file_id:ensure_referenced_uuid(Key),
-    datastore_model:update(?CTX, ReferencedUuid, Diff, Doc#document{key = ReferencedUuid, scope = Scope}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns permission cache.
-%% @end
-%%--------------------------------------------------------------------
 -spec get(key()) -> {ok, doc()} | {error, term()}.
-get(Uuid) ->
-    datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(Uuid)).
+get(Key) ->
+    datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes permission cache.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete(key()) -> ok | {error, term()}.
-delete(FileUuid) ->
-    datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
+delete(Key) ->
+    datastore_model:delete(?CTX, Key).
+
+
+-spec is_deleted(key()) -> boolean().
+is_deleted(Key) ->
+    case datastore_model:get(?CTX#{include_deleted => true}, Key) of
+        {ok, #document{deleted = Deleted}} ->
+            Deleted;
+        {error, not_found} ->
+            false
+    end.
+
+-spec merge_records(record(), record()) -> record().
+merge_records(TimesA, TimesB) ->
+    #times{
+        creation_time = max(TimesA#times.creation_time, TimesB#times.creation_time),
+        atime = max(TimesA#times.atime, TimesB#times.atime),
+        mtime = max(TimesA#times.mtime, TimesB#times.mtime),
+        ctime = max(TimesA#times.ctime, TimesB#times.ctime)
+    }.
 
 
 -spec ensure_synced(file_meta:uuid()) -> ok.
@@ -161,25 +103,20 @@ ensure_synced(Key) ->
         {error, not_found} -> ok
     end.
 
-
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
@@ -187,4 +124,64 @@ get_record_struct(1) ->
         {atime, integer},
         {ctime, integer},
         {mtime, integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {creation_time, integer}, % new field
+        {atime, integer},
+        {mtime, integer},
+        {ctime, integer}
     ]}.
+
+
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Times) ->
+    {times,
+        ATime,
+        CTime,
+        MTime
+    } = Times,
+    
+    {2, #times{
+        creation_time = lists:min([ATime, CTime, MTime]),
+        atime = ATime,
+        mtime = MTime,
+        ctime = CTime
+    }}.
+
+
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, RemoteDoc, LocalDoc) ->
+    #document{value = LocalValue, revs = [LocalRev | _], deleted = LocalDeleted} = LocalDoc,
+    #document{value = RemoteValue, revs = [RemoteRev | _], deleted = RemoteDeleted} = RemoteDoc,
+    
+    FinalValue = merge_records(RemoteValue, LocalValue),
+    
+    case datastore_rev:is_greater(RemoteRev, LocalRev) of
+        true ->
+            case {LocalDeleted, FinalValue} of
+                {true, _} ->
+                    case RemoteDeleted of
+                        true -> {false, RemoteDoc};
+                        false -> {true, RemoteDoc#document{deleted = true}}
+                    end;
+                {false, RemoteValue} ->
+                    {false, RemoteDoc};
+                _ ->
+                    {true, RemoteDoc#document{value = FinalValue}}
+            end;
+        false ->
+            case {RemoteDeleted, FinalValue} of
+                {true, _} ->
+                    case LocalDeleted of
+                        true -> ignore;
+                        false -> {true, LocalDoc#document{deleted = true}}
+                    end;
+                {false, LocalValue} ->
+                    ignore;
+                _ ->
+                    {true, LocalDoc#document{value = FinalValue}}
+            end
+    end.

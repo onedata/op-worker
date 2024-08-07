@@ -16,6 +16,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -71,7 +72,7 @@ report_finished(TraverseId, FileCtx) ->
         FileUuid = file_ctx:get_logical_uuid_const(InternalFileCtx),
         QosEntries = case file_qos:get_effective(FileUuid) of
             undefined -> [];
-            {error, {file_meta_missing, FileUuid}} -> [];
+            {error, ?MISSING_FILE_META(FileUuid)} -> [];
             {error, _} = Error ->
                 ?warning("Error after file ~tp have been reconciled: ~tp", [FileUuid, Error]),
                 [];
@@ -184,7 +185,7 @@ get_uuid_based_path(FileCtx) ->
     try
         {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
         UuidBasedPath
-    catch throw:{error, {file_meta_missing, _}} ->
+    catch throw:{error, ?MISSING_FILE_META(_)} ->
         not_synced
     end.
 

@@ -18,6 +18,10 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
+-define(TEST_UID, 2000).
+-define(TEST_GID, 2000).
+
+
 -record(storage_import_test_suite_ctx, {
     storage_type :: posix,
     importing_provider_selector :: oct_background:entity_selector(),
