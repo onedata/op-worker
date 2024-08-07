@@ -23,6 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
+-export([is_storage_accessible/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
@@ -151,6 +152,20 @@ supervisor_children_spec() ->
         lfm_handles_monitor:spec(),
         transfer_onf_stats_aggregator:spec()
     ].
+
+
+-spec is_storage_accessible(file_ctx:ctx() | undefined) -> boolean().
+is_storage_accessible(undefined) ->
+    true;
+is_storage_accessible(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
+        [] ->
+            true;
+        Storages ->
+            {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+            not lists:member(StorageId, Storages)
+    end.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -823,21 +838,6 @@ restart_autocleaning_runs() ->
             end;
         false ->
             ok
-    end.
-
-
-%% @private
--spec is_storage_accessible(file_ctx:ctx() | undefined) -> boolean().
-is_storage_accessible(undefined) ->
-    true;
-is_storage_accessible(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
-        [] ->
-            true;
-        Storages ->
-            {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-            not lists:member(StorageId, Storages)
     end.
 
 
