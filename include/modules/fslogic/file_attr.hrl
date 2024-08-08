@@ -26,7 +26,7 @@
     active_permissions_type :: undefined | file_meta:permissions_type(),
     mode :: undefined | file_meta:mode(),
     acl :: undefined | acl:acl(),
-    name :: undefined | file_meta:name(),
+    name :: undefined | file_meta:name() | file_meta:disambiguated_name(),
     conflicting_name :: undefined | file_meta:name(),
     path :: undefined | file_meta:path(),
     parent_guid :: undefined | fslogic_worker:file_guid(),
