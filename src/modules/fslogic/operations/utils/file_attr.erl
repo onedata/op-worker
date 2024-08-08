@@ -575,7 +575,6 @@ handle_conflicting_name(State, FileCtx, ExtendedName, ConflictingName, Conflicti
     {UpdatedState, FileAttr}.
 
 
-
 %% @private
 -spec get_file_doc(state()) -> {file_meta:doc(), state()}.
 get_file_doc(#state{file_ctx = FileCtx} = State) ->
