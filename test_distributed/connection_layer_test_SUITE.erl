@@ -573,6 +573,10 @@ init_per_testcase(heartbeats_test, Config) ->
             meck:passthrough([Evts, UserCtxMap])
     end),
 
+    % mock storage detector so storage monitoring does not disable storages mid tests due to mocked helpers
+    test_utils:mock_new(Workers, storage_detector),
+    test_utils:mock_expect(Workers, storage_detector, verify_storage_availability_on_current_node, fun(_, _) -> ok end),
+
     [{control_proc, CP_Pid} |
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
 
@@ -594,6 +598,7 @@ init_per_testcase(_Case, Config) ->
     initializer:remove_pending_messages(),
     mock_auth_manager(Config),
 
+    % mock storage detector so storage monitoring does not disable storages mid tests
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
     ),
@@ -625,6 +630,7 @@ end_per_testcase(Case, Config) when
     test_utils:mock_validate_and_unload(Workers, [
         helpers, attr_req, fslogic_event_handler
     ]),
+    test_utils:mock_unload(Workers, storage_detector),
     initializer:clean_test_users_and_spaces_no_validate(Config);
 
 end_per_testcase(socket_timeout_test, Config) ->
