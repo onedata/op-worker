@@ -43,6 +43,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
+% API
 -export([
     uuid/1,
     guid/1

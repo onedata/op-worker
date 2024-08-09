@@ -31,7 +31,9 @@
     get_file_children,
     get_child_attr,
     get_file_children_attrs,
-    get_recursive_file_list
+    get_recursive_file_list,
+
+    historical_dir_size_stats_get_request
 ]).
 
 %%%===================================================================
@@ -54,13 +56,11 @@ is_special(_, _) -> false.
 
 -spec ensure_exists(binary()) -> ok.
 ensure_exists(SpaceId) ->
-    SpaceDirUuid = space_dir:uuid(SpaceId),
-    ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
-    ArchivesRootDirDoc = file_meta:new_dir_doc(
-        ArchivesRootDirUuid, ?ARCHIVES_ROOT_DIR_NAME, ?ARCHIVES_ROOT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
-        SpaceDirUuid, SpaceId
+    ParentUuid = space_dir:uuid(SpaceId),
+    FMDoc = file_meta:new_dir_doc(uuid(SpaceId), ?ARCHIVES_ROOT_DIR_NAME, ?ARCHIVES_ROOT_DIR_PERMS,
+        ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
-    special_dir_docs:create(SpaceId, ArchivesRootDirDoc, add_link),
+    special_dir_docs:create(SpaceId, FMDoc, add_link),
     ok.
 
 

@@ -37,7 +37,9 @@
     get_file_children,
     get_child_attr,
     get_file_children_attrs,
-    get_recursive_file_list
+    get_recursive_file_list,
+
+    historical_dir_size_stats_get_request
 ]).
 
 %%%===================================================================
@@ -66,7 +68,7 @@ ensure_exists(SpaceId) ->
 
 -spec ensure_tmp_dir_link_exists(od_space:id()) -> ok.
 ensure_tmp_dir_link_exists(SpaceId) ->
-    special_dir_docs:add_parent_link(space_dir:uuid(SpaceId), SpaceId, ?TMP_DIR_NAME, tmp_dir:uuid(SpaceId)).
+    special_dir_docs:add_parent_link(space_dir:uuid(SpaceId), SpaceId, ?TMP_DIR_NAME, uuid(SpaceId)).
 
 
 %%%===================================================================

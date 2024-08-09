@@ -19,7 +19,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 % API
--export([ensure_exists/2, ensure_parent_link_exists/2, delete_parent_link/2]).
+-export([uuid/1, ensure_exists/2, ensure_parent_link_exists/2, delete_parent_link/2]).
 % special_dir_behaviour
 -export([is_special/2, is_operation_allowed/1, exists/1]).
 
@@ -31,7 +31,9 @@
     get_file_children,
     get_child_attr,
     get_file_children_attrs,
-    get_recursive_file_list
+    get_recursive_file_list,
+
+    historical_dir_size_stats_get_request
 ]).
 
 
@@ -39,29 +41,31 @@
 %%% API
 %%%===================================================================
 
+-spec uuid(od_space:id()) -> file_meta:uuid().
+uuid(DatasetId) -> ?DATASET_ARCHIVES_DIR_UUID(DatasetId).
+
+
 -spec ensure_exists(binary(), binary()) -> ok.
 ensure_exists(DatasetId, SpaceId) ->
-    ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
-    DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
-    DatasetArchivesDirDoc = file_meta:new_dir_doc(
-        DatasetArchivesDirUuid, ?DATASET_ARCHIVES_DIR_NAME(DatasetId),
-        ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId), ArchivesRootDirUuid, SpaceId
+    ParentUuid = archives_root_dir:uuid(SpaceId),
+    FMDoc = file_meta:new_dir_doc(uuid(DatasetId), ?DATASET_ARCHIVES_DIR_NAME(DatasetId),
+        ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
     archives_root_dir:ensure_exists(SpaceId),
-    special_dir_docs:create(SpaceId, DatasetArchivesDirDoc, add_link),
+    special_dir_docs:create(SpaceId, FMDoc, add_link),
     ok.
 
 
 -spec ensure_parent_link_exists(dataset:id(), od_space:id()) -> ok.
 ensure_parent_link_exists(DatasetId, SpaceId) ->
-    special_dir_docs:add_parent_link(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId,
-        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId)).
+    special_dir_docs:add_parent_link(archives_root_dir:uuid(SpaceId), SpaceId,
+        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), uuid(DatasetId)).
 
 
 -spec delete_parent_link(dataset:id(), od_space:id()) -> ok.
 delete_parent_link(DatasetId, SpaceId) ->
-    special_dir_docs:delete_parent_link(space_dir:uuid(SpaceId), SpaceId,
-        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId)).
+    special_dir_docs:delete_parent_link(archives_root_dir:uuid(SpaceId), SpaceId,
+        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), uuid(DatasetId)).
 
 %%%===================================================================
 %%% special_dir_behaviour callbacks

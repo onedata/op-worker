@@ -51,10 +51,11 @@
 -record(authz_test_case_ctx, {
     suite_ctx :: authz_test_suite_ctx(),
     test_case_name :: binary(),
-    test_case_root_dir_path :: file_meta:path(),
+    test_case_root_dir_path :: file_meta:path() | undefined,
     executioner_session_id :: session:id(),
     required_perms_per_file :: perms_per_file(),
-    extra_data = #{} :: extra_data()
+    extra_data = #{} :: extra_data(),
+    special_dir_file_key :: undefined | lfm:file_key() % defined only for special dir testcases
 }).
 -type authz_test_case_ctx() :: #authz_test_case_ctx{}.
 
@@ -106,11 +107,12 @@ run_suite(TestSuiteSpec) ->
     run_share_test_group(TestSuiteCtx),
     run_open_handle_mode_test_group(TestSuiteCtx),
     run_posix_permission_test_group(TestSuiteCtx),
-    run_acl_permission_test_group(TestSuiteCtx).
+    run_acl_permission_test_group(TestSuiteCtx),
+    run_special_dirs_test_group(TestSuiteCtx).
 
 
 %%%===================================================================
-%%% SPACE PRIVILEGES TESTS
+%%% SPACE OWNER TESTS
 %%%===================================================================
 
 
@@ -1212,6 +1214,53 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
 
 
 %%%===================================================================
+%%% SPECIAL DIRS TESTS
+%%%===================================================================
+
+%% @private
+-spec run_special_dirs_test_group(authz_test_suite_ctx()) -> ok | no_return().
+run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
+    suite_spec = #authz_test_suite_spec{
+        space_owner_selector = SpaceOwnerSelector,
+        forbidden_special_dirs = ForbiddenSpecialDirs,
+        special_dirs_error = ExpectedError
+    } = SuiteSpec
+}) ->
+    lists:foreach(fun(SpecialDir) ->
+        TestCaseName = build_test_case_name(["special dir", SpecialDir]),
+        TestCaseCtx = init_test_case(TestCaseName, SpaceOwnerSelector, TestSuiteCtx),
+
+        assert_operation(#{}, ExpectedError, TestCaseCtx#authz_test_case_ctx{
+            special_dir_file_key = build_special_dir_file_key(SpecialDir, SuiteSpec)
+        })
+
+    end, ForbiddenSpecialDirs).
+
+
+%% @private
+-spec build_special_dir_file_key(module(), authz_test_suite_spec()) -> lfm:file_key().
+% NOTE: global_root_dir cannot be tested as all requests to it are automatically rejected with not_found
+build_special_dir_file_key(user_root_dir, #authz_test_suite_spec{space_owner_selector = SpaceOwnerSelector}) ->
+    ?FILE_REF(user_root_dir:guid(oct_background:get_user_id(SpaceOwnerSelector)));
+build_special_dir_file_key(space_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(space_dir:guid(SpaceId));
+build_special_dir_file_key(trash, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(trash:guid(SpaceId));
+build_special_dir_file_key(tmp_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(tmp_dir:guid(SpaceId));
+build_special_dir_file_key(opened_deleted_files_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(opened_deleted_files_dir:guid(SpaceId));
+build_special_dir_file_key(share_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(file_id:pack_guid(share_root_dir:uuid(<<"dummy_id">>), SpaceId));
+build_special_dir_file_key(archives_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(archives_root_dir:guid(SpaceId));
+build_special_dir_file_key(dataset_archives_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(file_id:pack_guid(dataset_archives_root_dir:uuid(<<"dummy_id">>), SpaceId));
+build_special_dir_file_key(archive_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(file_id:pack_guid(archive_dir:uuid(<<"dummy_id">>), SpaceId)).
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -1440,15 +1489,29 @@ exec_operation(#authz_test_case_ctx{
     },
     test_case_root_dir_path = TestCaseRootDirPath,
     executioner_session_id = ExecutionerSessionId,
-    extra_data = ExtraData
+    extra_data = ExtraData,
+    special_dir_file_key = undefined
 }) ->
-    case Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath, ExtraData) of
-        ok -> ok;
-        {ok, _} -> ok;
-        {ok, _, _} -> ok;
-        {ok, _, _, _} -> ok;
-        {error, _} = Error -> Error
-    end.
+    check_operation_result(Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath, ExtraData));
+exec_operation(#authz_test_case_ctx{
+    suite_ctx = #authz_test_suite_ctx{
+        suite_spec = #authz_test_suite_spec{operation = Operation},
+        test_node = TestNode
+    },
+    executioner_session_id = ExecutionerSessionId,
+    special_dir_file_key = SpecialDirFileKey
+}) ->
+    check_operation_result(Operation(guid, TestNode, ExecutionerSessionId, SpecialDirFileKey)).
+
+
+%% @private
+-spec check_operation_result(ok | {ok, any()} | {ok, any(), any()} | {ok, any(), any(), any()} | {error, term()}) ->
+    ok | {error, term()}.
+check_operation_result(ok) -> ok;
+check_operation_result({ok, _}) -> ok;
+check_operation_result({ok, _, _}) -> ok;
+check_operation_result({ok, _, _, _}) -> ok;
+check_operation_result({error, _} = Error) -> Error.
 
 
 %% @private

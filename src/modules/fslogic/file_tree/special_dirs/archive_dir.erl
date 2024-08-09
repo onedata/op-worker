@@ -61,14 +61,12 @@ guid(SpaceId, ArchiveId) -> file_id:pack_guid(uuid(ArchiveId), SpaceId).
 
 -spec ensure_exists(archive:id(), dataset:id(), od_space:id(), od_user:id()) -> ok.
 ensure_exists(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
-    DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
-    ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
-    ArchiveDirDoc = file_meta:new_dir_doc(
-        ArchiveDirUuid, ?ARCHIVE_DIR_NAME(ArchiveId),
-        ?DEFAULT_DIR_PERMS, ArchiveCreatorId, DatasetArchivesDirUuid, SpaceId
+    ParentUuid = dataset_archives_root_dir:uuid(DatasetId),
+    FMDoc = file_meta:new_dir_doc(uuid(ArchiveId), ?ARCHIVE_DIR_NAME(ArchiveId), ?DEFAULT_DIR_PERMS,
+        ArchiveCreatorId, ParentUuid, SpaceId
     ),
     dataset_archives_root_dir:ensure_exists(DatasetId, SpaceId),
-    special_dir_docs:create(SpaceId, ArchiveDirDoc, add_link),
+    special_dir_docs:create(SpaceId, FMDoc, add_link),
     ok.
 
 

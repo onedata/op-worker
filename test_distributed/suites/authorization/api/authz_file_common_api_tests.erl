@@ -39,14 +39,21 @@ test_get_parent(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = true,
         available_in_open_handle_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_parent(Node, SessionId, FileKey)
-        end,
+        operation = fun
+            F(guid, Node, SessionId, FileKey) ->
+                lfm_proxy:get_parent(Node, SessionId, FileKey);
+            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
+            end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        forbidden_special_dirs = [
+            trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            archives_root_dir, dataset_archives_root_dir, archive_dir
+        ],
+        special_dirs_error = {error, ?EPERM}
     }).
 
 
@@ -58,14 +65,21 @@ test_get_file_path(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false, % TODO VFS-6057
         available_in_open_handle_mode = false, % TODO VFS-6057
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_file_path(Node, SessionId, FileGuid)
-        end,
+        operation = fun
+            F(guid, Node, SessionId, ?FILE_REF(FileGuid)) ->
+                lfm_proxy:get_file_path(Node, SessionId, FileGuid);
+            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
+            end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        forbidden_special_dirs = [
+            trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            archives_root_dir, dataset_archives_root_dir
+        ],
+        special_dirs_error = {error, ?EPERM}
     }).
 
 

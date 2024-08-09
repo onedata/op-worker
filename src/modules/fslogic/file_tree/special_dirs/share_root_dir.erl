@@ -25,18 +25,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([
-    uuid/1
-]).
-
+% API
+-export([uuid/1]).
 % special_dir_behaviour
--export([
-    is_special/2,
-    is_operation_allowed/1,
-    exists/1,
-    get_file_meta/1,
-    get_times/2
-]).
+-export([is_special/2, is_operation_allowed/1, exists/1, get_file_meta/1, get_times/2]).
 
 -define(SHARE_ROOT_DIR_UUID_PREFIX, "share_").
 
@@ -53,12 +45,17 @@
 
 
 %%%===================================================================
-%%% special_dir_behaviour callbacks
+%%% API
 %%%===================================================================
 
 -spec uuid(od_share:id()) -> file_meta:uuid().
 uuid(ShareId) ->
     <<?SHARE_ROOT_DIR_UUID_PREFIX, ShareId/binary>>.
+
+
+%%%===================================================================
+%%% special_dir_behaviour callbacks
+%%%===================================================================
 
 
 -spec is_special(uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().

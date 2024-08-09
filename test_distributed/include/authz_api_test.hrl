@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -define(ALL_PERMS, [
     ?read_object,
@@ -170,9 +171,12 @@
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
     %               following tuple ?FILE_REF(FileGuid), which is required by framework.
-    operation :: fun((node(), session:id(), file_meta:path(), map()) ->
-        ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}
-    ),
+    % In case of guid mode (used for special dirs tests) it takes FileKey to tested file, instead of Path and ExtraData.
+    operation ::
+        fun((node(), session:id(), file_meta:path(), map()) ->
+            ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}) |
+        fun((guid, node(), session:id(), lfm:file_key()) ->
+            ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}),
 
     % Tells whether failed operation returns:
     % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl
@@ -187,7 +191,10 @@
 
         {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
-    )
+    ),
+
+    forbidden_special_dirs = [] :: [module()],
+    special_dirs_error :: {error, ?EPERM} | ?ERROR_FORBIDDEN
 }).
 
 -endif.

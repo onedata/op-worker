@@ -39,14 +39,21 @@ test_get_acl(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false,
         available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_acl(Node, SessionId, FileKey)
-        end,
+        operation = fun
+            F(guid, Node, SessionId, FileKey) ->
+                lfm_proxy:get_acl(Node, SessionId, FileKey);
+            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
+            end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        forbidden_special_dirs = [
+            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            archives_root_dir, dataset_archives_root_dir, archive_dir
+        ],
+        special_dirs_error = {error, ?EPERM}
     }).
 
 
@@ -63,20 +70,27 @@ test_set_acl(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_open_handle_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_acl(Node, SessionId, FileKey, [
-                ?ALLOW_ACE(
-                    ?group,
-                    ?no_flags_mask,
-                    authz_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
-                )
-            ])
-        end,
+        operation = fun
+            F(guid, Node, SessionId, FileKey) ->
+                lfm_proxy:set_acl(Node, SessionId, FileKey, [
+                    ?ALLOW_ACE(
+                        ?group,
+                        ?no_flags_mask,
+                        authz_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
+                    )
+                ]);
+            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
+            end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        forbidden_special_dirs = [
+            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            archives_root_dir, dataset_archives_root_dir, archive_dir
+        ],
+        special_dirs_error = {error, ?EPERM}
     }).
 
 

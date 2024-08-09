@@ -19,16 +19,10 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
--export([
-    ensure_exists/1
-]).
-
+% API
+-export([uuid/1, guid/1, ensure_exists/1]).
 % special_dir_behaviour
--export([
-    is_special/2,
-    is_operation_allowed/1,
-    exists/1
-]).
+-export([is_special/2, is_operation_allowed/1, exists/1]).
 
 -define(ALLOWED_OPERATIONS, [
     resolve_guid,
@@ -44,6 +38,16 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec uuid(od_space:id()) -> file_meta:uuid().
+uuid(SpaceId) ->
+    ?OPENED_DELETED_FILES_DIR_UUID(SpaceId).
+
+
+-spec guid(od_space:id()) -> file_id:file_guid().
+guid(SpaceId) ->
+    file_id:pack_guid(uuid(SpaceId), SpaceId).
+
 
 -spec ensure_exists(binary()) -> ok.
 ensure_exists(SpaceId) ->

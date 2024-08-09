@@ -21,8 +21,8 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 
+% API
 -export([uuid/1, guid/1, ensure_exists/1, extract_space_id/1]).
-
 % special_dir_behaviour
 -export([is_special/2, is_operation_allowed/1, exists/1]).
 
