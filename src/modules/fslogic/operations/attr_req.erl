@@ -114,10 +114,8 @@ chmod(UserCtx, FileCtx0, Mode) ->
 %% @equiv update_times_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec update_times(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
+-spec update_times(user_ctx:ctx(), file_ctx:ctx(), times:a_time() | undefined, times:m_time() | undefined,
+    times:c_time() | undefined) -> fslogic_worker:fuse_response().
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -267,7 +265,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     sd_utils:chmod(UserCtx, FileCtx, Mode),
     FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx2),
+    times_api:touch(FileCtx2, [?attr_ctime]),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -278,10 +276,8 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% Changes file access times.
 %% @end
 %%--------------------------------------------------------------------
--spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined,
-    CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
+-spec update_times_insecure(user_ctx:ctx(), file_ctx:ctx(), times:a_time() | undefined,
+    times:m_time() | undefined, times:c_time() | undefined) -> fslogic_worker:fuse_response().
 update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % Flush events queue to prevent race with file_written_event
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
@@ -289,22 +285,11 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     catch lfm_event_controller:flush_event_queue(
         SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
 
-    TimesDiff1 = fun
-        (Times = #times{}) when ATime == undefined -> Times;
-        (Times = #times{}) -> Times#times{atime = ATime}
-    end,
-    TimesDiff2 = fun
-        (Times = #times{}) when MTime == undefined -> Times;
-        (Times = #times{}) -> Times#times{mtime = MTime}
-    end,
-    TimesDiff3 = fun
-        (Times = #times{}) when CTime == undefined -> Times;
-        (Times = #times{}) -> Times#times{ctime = CTime}
-    end,
-    TimesDiff = fun(Times = #times{}) ->
-        {ok, TimesDiff1(TimesDiff2(TimesDiff3(Times)))}
-    end,
-    fslogic_times:update_times_and_emit(FileCtx, TimesDiff),
+    times_api:report_change(FileCtx, #times{
+        atime = utils:ensure_defined(ATime, 0),
+        mtime = utils:ensure_defined(MTime, 0),
+        ctime = utils:ensure_defined(CTime, 0)
+    }),
     #fuse_response{status = #status{code = ?OK}}.
 
 

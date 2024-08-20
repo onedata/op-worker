@@ -665,17 +665,17 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     case create_location(FileUuid, StorageFileCtx2, OwnerId) of
         {ok, StorageFileCtx3} ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
-            {#statbuf{st_mode = Mode} = StatBuf, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
+            {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
             {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.
             file_meta_posthooks:execute_hooks(FileUuid, doc),
-            {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
+            {ok, TimesRecord, StorageFileCtx5} = build_times_from_stat_timestamps(StorageFileCtx4),
+            times_api:report_file_created(FileCtx, TimesRecord),
             ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
             {ok, FileType} = storage_driver:infer_type(Mode),
             dir_size_stats:report_file_created(FileType, ParentGuid),
-            dir_update_time_stats:report_update_of_dir(ParentGuid, StatBuf),
             {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
             {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -700,8 +700,6 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {ok, FileCtx} = file_registration:create_missing_directory(ParentCtx, ParentName, ?SPACE_OWNER_ID(SpaceId)),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    set_times_for_dir_using_current_time(FileUuid, SpaceId),
-    dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_ctx:get_logical_guid_const(FileCtx)),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
@@ -879,24 +877,21 @@ prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
     {ok, Type} = storage_driver:infer_type(Mode),
     file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
 
--spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
-    {ok, storage_file_ctx:ctx()}.
-create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
+-spec build_times_from_stat_timestamps(storage_file_ctx:ctx()) ->
+    {ok, times:record(), storage_file_ctx:ctx()}.
+build_times_from_stat_timestamps(StorageFileCtx) ->
     {#statbuf{
-        st_mtime = StMtime,
         st_atime = StAtime,
-        st_ctime = StCtime
+        st_ctime = StCtime,
+        st_mtime = StMtime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
-    times:save(FileUuid, SpaceId, StAtime, StMtime, StCtime),
-    {ok, StorageFileCtx2}.
+    {ok, #times{
+        creation_time = lists:min([StAtime, StCtime, StMtime]),
+        atime = StAtime,
+        ctime = StCtime,
+        mtime = StMtime
+    }, StorageFileCtx2}.
 
-
--spec set_times_for_dir_using_current_time(file_meta:uuid(), od_space:id()) -> ok.
-set_times_for_dir_using_current_time(FileUuid, SpaceId) ->
-    CurrentTime = global_clock:timestamp_seconds(),
-    times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
-    dir_update_time_stats:report_update_of_dir(file_id:pack_guid(FileUuid, SpaceId), CurrentTime).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1082,10 +1077,10 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc, ShouldUpdat
         {ok, SSI} -> SSI
     end,
     {Size, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
-    {{_, _, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
+    {#times{mtime = MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
     NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
     LastReplicationTimestamp = file_location:get_last_replication_timestamp(FileLocationDoc),
-    {FileDoc, FileCtx4} = file_ctx:get_file_doc(FileCtx3),
+    {FileDoc, FileCtx4} = file_ctx:get_file_doc(FileCtx2),
     ProviderId = file_meta:get_provider_id(FileDoc),
     IsLocallyCreatedFile = oneprovider:get_id() =:= ProviderId,
     Result2 = case {IsLocallyCreatedFile, LastReplicationTimestamp, StorageSyncInfo} of
@@ -1219,15 +1214,11 @@ maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, Fil
 
 -spec update_times(file_ctx:ctx(), helpers:stat()) -> ok.
 update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime}) ->
-    ok = fslogic_times:update_times_and_emit(FileCtx,
-        fun(T = #times{atime = ATime, mtime = MTime, ctime = CTime}) ->
-            {ok, T#times{
-                atime = max(StorageATime, ATime),
-                mtime = max(StorageMTime, MTime),
-                ctime = max(StorageCTime, CTime)
-            }}
-        end
-    ).
+    ok = times_api:report_change(FileCtx, #times{
+        atime = StorageATime,
+        mtime = StorageMTime,
+        ctime = StorageCTime
+    }).
 
 -spec maybe_update_owner(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(), ShouldUpdate :: boolean()) ->
     {Modified :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.

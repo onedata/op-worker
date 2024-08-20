@@ -47,7 +47,7 @@
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name(),
     display_credentials :: undefined | luma:display_credentials(),
-    times :: undefined | times:times(),
+    times :: undefined | #{times_api:times_type() => times:time()},
     file_name :: undefined | file_meta:name(),
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
@@ -89,8 +89,8 @@
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2, cache_name/2,
     get_storage_file_id/1, get_storage_file_id/2,
-    get_new_storage_file_id/1, get_aliased_name/2,
-    get_display_credentials/1, get_times/1,
+    get_new_storage_file_id/1, get_aliased_name/2, get_space_name/2,
+    get_display_credentials/1, get_times/1, get_times/2,
     get_logical_path/2, get_path_before_deletion/1,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
@@ -674,15 +674,15 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredent
     {DisplayCredentials, FileCtx}.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's atime, ctime and mtime.
-%% @end
-%%--------------------------------------------------------------------
--spec get_times(ctx()) -> {times:times(), ctx()}.
-get_times(FileCtx = #file_ctx{times = undefined}) ->
+-spec get_times(ctx()) -> {times:record(), ctx()}.
+get_times(FileCtx) ->
+    get_times(FileCtx, [?attr_atime, ?attr_mtime, ?attr_ctime]).
+
+
+-spec get_times(ctx(), [times_api:times_type()]) -> {times:record(), ctx()}.
+get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
     FileUuid = get_logical_uuid_const(FileCtx),
-    {ok, Times} = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
+    Times = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
             % Share root dir is virtual directory which does not have documents
             % like `file_meta` or `times` - in such case get times of share root
@@ -695,15 +695,22 @@ get_times(FileCtx = #file_ctx{times = undefined}) ->
             }} = share_logic:get(?ROOT_SESS_ID, ShareId),
 
             RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
-            {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid)),
-            {ok, RootFileTimes};
+            {RootFileTimes, _} = get_times(new_by_guid(RootFileGuid), RequestedTimes),
+            RootFileTimes;
         false ->
-            times:get_or_default(FileUuid)
+            times_api:get(FileCtx, RequestedTimes)
     end,
-    {Times, FileCtx#file_ctx{times = Times}};
-get_times(
-    FileCtx = #file_ctx{times = Times}) ->
-    {Times, FileCtx}.
+    {Times, FileCtx#file_ctx{times = times_record_to_map(Times)}};
+get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
+    case lists_utils:intersect(RequestedTimes, maps:keys(TimesMap)) of
+        RequestedTimes ->
+            {map_to_times_record(TimesMap), FileCtx};
+        NotAllTimes ->
+            MissingTimes = RequestedTimes -- NotAllTimes,
+            MissingTimesMap = times_record_to_map(times_api:get(FileCtx, MissingTimes)),
+            FinalMap = maps:merge(TimesMap, MissingTimesMap),
+            {map_to_times_record(FinalMap), FileCtx#file_ctx{times = FinalMap}}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -1150,6 +1157,7 @@ assert_synchronization_disabled(FileCtx) ->
     end.
 
 
+%% @TODO VFS-12025 - find better place for this function, it does not belong here
 -spec ensure_synced(ctx()) -> ctx().
 ensure_synced(FileCtx) ->
     Uuid = get_logical_uuid_const(FileCtx),
@@ -1390,7 +1398,7 @@ resolve_and_cache_path(FileCtx, PathType) ->
                     case paths_cache:get(SpaceId, Doc, PathType) of
                         {ok, Path} ->
                             {Path, FileCtx2};
-                        {error, {file_meta_missing, _MissingUuid}} = Error ->
+                        {error, ?MISSING_FILE_META(_MissingUuid)} = Error ->
                             throw(Error)
                     end;
                 _ ->
@@ -1404,16 +1412,16 @@ resolve_and_cache_path(FileCtx, PathType) ->
                                         ?UUID_BASED_PATH -> Uuid
                                     end,
                                     {filename:join(Path, FilenameOrUuid), FileCtx2};
-                                {error, {file_meta_missing, _MissingUuid}} = Error ->
+                                {error, ?MISSING_FILE_META(_MissingUuid)} = Error ->
                                     throw(Error)
                             end;
                         {error, not_found} ->
-                            throw({error, {file_meta_missing, ParentUuid}})
+                            throw({error, ?MISSING_FILE_META(ParentUuid)})
                     end
             end
     catch
         _:{badmatch, {error, not_found}} ->
-            throw({error, {file_meta_missing, file_ctx:get_logical_uuid_const(FileCtx)}})
+            throw({error, ?MISSING_FILE_META(file_ctx:get_logical_uuid_const(FileCtx))})
     end.
 
 
@@ -1494,6 +1502,7 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 
+%% @private
 -spec get_synced_gid(ctx()) -> {luma:gid() | undefined, ctx()}.
 get_synced_gid(FileCtx) ->
     case is_dir(FileCtx) of
@@ -1503,6 +1512,7 @@ get_synced_gid(FileCtx) ->
             {get_file_synced_gid_const(FileCtx2), FileCtx2}
     end.
 
+%% @private
 -spec get_file_synced_gid_const(ctx()) -> luma:gid() | undefined.
 get_file_synced_gid_const(FileCtx) ->
     case get_local_file_location_doc_const(FileCtx, skip_local_blocks) of
@@ -1512,6 +1522,7 @@ get_file_synced_gid_const(FileCtx) ->
             file_location:get_synced_gid(FileLocation)
     end.
 
+%% @private
 -spec get_dir_synced_gid_const(ctx()) -> luma:gid() | undefined.
 get_dir_synced_gid_const(FileCtx) ->
     case get_dir_location_doc_const(FileCtx) of
@@ -1522,6 +1533,7 @@ get_dir_synced_gid_const(FileCtx) ->
     end.
 
 
+%% @private
 -spec get_type(ctx(), fun((file_meta:doc()) -> onedata_file:type())) -> {onedata_file:type(), ctx()}.
 get_type(FileCtx = #file_ctx{is_dir = true}, _) ->
     {?DIRECTORY_TYPE, FileCtx};
@@ -1533,6 +1545,7 @@ get_type(FileCtx, FileMetaFun) ->
     {Type, FileCtx2#file_ctx{is_dir = IsDir}}.
 
 
+%% @private
 -spec prepare_file_size_summary_from_existing_doc(file_location:doc()) -> file_size_summary().
 prepare_file_size_summary_from_existing_doc(LocationDoc) ->
     case LocationDoc of
@@ -1543,3 +1556,28 @@ prepare_file_size_summary_from_existing_doc(LocationDoc) ->
         #document{value = #file_location{size = Size, storage_id = StorageId}} ->
             [{virtual, Size}, {StorageId, file_location:count_bytes(fslogic_location_cache:get_blocks(LocationDoc))}]
     end.
+
+
+%% @private
+-spec times_record_to_map(times:record()) -> #{times_api:times_type() => times:time()}.
+times_record_to_map(#times{creation_time = CreationTime, atime = ATime, mtime = MTime, ctime = CTime}) ->
+    lists:foldl(fun
+        ({_Time, 0}, Acc) -> Acc;
+        ({Time, Value}, Acc) -> Acc#{Time => Value}
+    end, #{}, [
+        {?attr_creation_time, CreationTime},
+        {?attr_atime, ATime},
+        {?attr_mtime, MTime},
+        {?attr_ctime, CTime}
+    ]).
+
+
+%% @private
+-spec map_to_times_record(#{times_api:times_type() => times:time()}) -> times:record().
+map_to_times_record(Map) ->
+    #times{
+        creation_time = maps:get(?attr_creation_time, Map, 0),
+        atime = maps:get(?attr_atime, Map, 0),
+        mtime = maps:get(?attr_mtime, Map, 0),
+        ctime = maps:get(?attr_ctime, Map, 0)
+    }.

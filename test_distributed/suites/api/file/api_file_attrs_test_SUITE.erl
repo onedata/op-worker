@@ -124,17 +124,22 @@ get_file_attrs_with_xattrs_test(Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     
-    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
+    {FileType, _FilePath, FileGuid, _ShareId} =
+        api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
     ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name">>, <<"xattr_value">>),
     ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name2">>, <<"xattr_value2">>),
     file_test_utils:await_xattr(P2Node, FileGuid, [<<"xattr_name">>, <<"xattr_name2">>], ?ATTEMPTS),
-    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
+    {ok, #file_attr{ctime = CTime} = FileAttrs} = file_test_utils:get_attrs(P1Node, FileGuid),
+    file_test_utils:await_attrs(P2Node, FileGuid, #{?attr_ctime => CTime}, ?ATTEMPTS),
     
     DataSpec = #data_spec{
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => [<<"xattr.xattr_name">>]}
     },
-    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs#file_attr{xattrs = #{<<"xattr_name">> => <<"xattr_value">>}}).
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs#file_attr{
+        ctime = CTime,
+        xattrs = #{<<"xattr_name">> => <<"xattr_value">>}
+    }).
 
 
 get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs) ->
