@@ -965,6 +965,8 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_user, id = UserId, scope 
     true;
 is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_user, id = TargetUserId, scope = shared}, _) ->
     case AuthHint of
+        ?THROUGH_GROUP(GroupId) ->
+            group_logic:can_view_user_through_group(Client, GroupId, ClientUserId, TargetUserId);
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_user_through_space(Client, SpaceId, ClientUserId, TargetUserId);
         _ ->

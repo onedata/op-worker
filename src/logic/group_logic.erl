@@ -27,6 +27,7 @@
 -export([get/2, get_shared_data/3]).
 -export([get_name/1, get_name/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
+-export([can_view_user_through_group/3, can_view_user_through_group/4]).
 
 %%%===================================================================
 %%% API
@@ -95,3 +96,26 @@ has_eff_privilege(GroupRecord, UserId, Privilege) ->
 has_eff_privileges(#od_group{eff_users = EffUsers}, UserId, Privileges) ->
     UserPrivileges = maps:get(UserId, EffUsers, []),
     lists_utils:is_subset(Privileges, UserPrivileges).
+
+
+-spec can_view_user_through_group(gs_client_worker:client(), od_group:id(),
+    ClientUserId :: od_user:id(), TargetUserId :: od_user:id()) -> boolean().
+can_view_user_through_group(SessionId, GroupId, ClientUserId, TargetUserId) ->
+    case get(SessionId, GroupId) of
+        {ok, GroupDoc = #document{}} ->
+            can_view_user_through_group(GroupDoc, ClientUserId, TargetUserId);
+        _ ->
+            false
+    end.
+
+-spec can_view_user_through_group(od_group:doc(), ClientUserId :: od_user:id(),
+    TargetUserId :: od_user:id()) -> boolean().
+can_view_user_through_group(GroupDoc, ClientUserId, TargetUserId) ->
+    has_eff_privilege(GroupDoc, ClientUserId, ?GROUP_VIEW) andalso
+        has_eff_user(GroupDoc, TargetUserId).
+
+
+%% @private
+-spec has_eff_user(od_group:doc(), od_user:id()) -> boolean().
+has_eff_user(#document{value = #od_group{eff_users = EffUsers}}, UserId) ->
+    maps:is_key(UserId, EffUsers).
