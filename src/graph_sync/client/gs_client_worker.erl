@@ -856,6 +856,9 @@ cmp_scope(private, _) -> greater.
 is_authorized_to_get(_, _, #gri{type = od_share, scope = public}, _) ->
     true;
 
+is_authorized_to_get(_, _, #gri{type = od_handle_service, scope = public}, _) ->
+    true;
+
 is_authorized_to_get(_, _, #gri{type = od_handle, scope = public}, _) ->
     true;
 
