@@ -111,7 +111,7 @@ can_view_user_through_group(SessionId, GroupId, ClientUserId, TargetUserId) ->
 -spec can_view_user_through_group(od_group:doc(), ClientUserId :: od_user:id(),
     TargetUserId :: od_user:id()) -> boolean().
 can_view_user_through_group(GroupDoc, ClientUserId, TargetUserId) ->
-    has_eff_privilege(GroupDoc, ClientUserId, ?GROUP_VIEW) andalso
+    has_eff_privilege(GroupDoc#document.value, ClientUserId, ?GROUP_VIEW) andalso
         has_eff_user(GroupDoc, TargetUserId).
 
 
