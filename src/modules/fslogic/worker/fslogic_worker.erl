@@ -250,7 +250,7 @@ handle(?PERIODIC_SPACES_AUTOCLEANING_CHECK) ->
     end,
     schedule_periodic_spaces_autocleaning_check();
 handle(?PERIODIC_STORAGES_CHECK) ->
-    handle_periodic_storages_check(),
+    ?catch_exceptions(handle_periodic_storages_check()),
     schedule_periodic_storages_check(),
     ok;
 handle(?TIMES_CACHE_FLUSH) ->
