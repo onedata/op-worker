@@ -883,7 +883,11 @@ perform_all_storages_checks() ->
 is_storage_healthy(StorageData) ->
     Helper = storage:get_helper(StorageData),
     LumaFeed = storage:get_luma_feed(StorageData),
-    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed).
+    Imported = case storage:is_imported(StorageData) of
+        true -> imported;
+        false -> not_imported
+    end,
+    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed, Imported).
 
 
 %% @private

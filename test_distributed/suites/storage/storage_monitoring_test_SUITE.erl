@@ -56,7 +56,7 @@ storage_monitoring_test(_Config) ->
 mock_storage_detector_error(Node) ->
     test_utils:mock_new(Node, storage_detector),
     test_utils:mock_expect(Node, storage_detector, verify_storage_availability_on_current_node,
-        fun(_, _) -> {error, mocked} end
+        fun(_, _, _) -> {error, mocked} end
     ).
     
 
