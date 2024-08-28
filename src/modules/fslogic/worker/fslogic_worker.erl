@@ -127,6 +127,8 @@
 
 -define(UNHEALTHY_STORAGES_KEY, unhealthy_storages).
 
+-define(THROTTLE_STORAGE_MONITORING_LOG(Log), utils:throttle(2 * 3600, fun() -> Log end)). % 2 hours
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -209,7 +211,8 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
-    {ok, #{?UNHEALTHY_STORAGES_KEY => perform_all_storages_checks()}}.
+    {UnhealthyStoragesIds, _} = perform_all_storages_checks(),
+    {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStoragesIds}}.
 
 
 %%--------------------------------------------------------------------
@@ -844,32 +847,35 @@ restart_autocleaning_runs() ->
 %% @private
 -spec handle_periodic_storages_check() -> ok.
 handle_periodic_storages_check() ->
-    UnhealthyStorages = perform_all_storages_checks(),
+    {UnhealthyStoragesIds, AllStoragesIds} = perform_all_storages_checks(),
     PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
-    case UnhealthyStorages of
+    case UnhealthyStoragesIds of
         PreviousUnhealthyStorages ->
-            ok;
+            ?THROTTLE_STORAGE_MONITORING_LOG(
+                log_storages_health_report(UnhealthyStoragesIds, AllStoragesIds -- UnhealthyStoragesIds)
+            );
         _ ->
-            PreviousUnhealthyStorages -- UnhealthyStorages =/= [] andalso
+            PreviousUnhealthyStorages -- UnhealthyStoragesIds =/= [] andalso
                 ?notice("Following storage backends are no longer unhealthy:~n~ts",
-                    [format_storages_log(PreviousUnhealthyStorages -- UnhealthyStorages)]),
-            UnhealthyStorages -- PreviousUnhealthyStorages =/= [] andalso
-                ?notice("Following storage backends became unhealthy - all request concerning the suppported spaces "
-                "will be rejected:~n~ts", [format_storages_log(UnhealthyStorages -- PreviousUnhealthyStorages)]),
-            worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStorages)
+                    [format_storages_log(PreviousUnhealthyStorages -- UnhealthyStoragesIds)]),
+            UnhealthyStoragesIds -- PreviousUnhealthyStorages =/= [] andalso
+                ?warning("Following storage backends became unhealthy - all request concerning the suppported spaces "
+                "will be rejected:~n~ts", [format_storages_log(UnhealthyStoragesIds -- PreviousUnhealthyStorages)]),
+            worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStoragesIds)
     end.
 
 
 %% @private
--spec perform_all_storages_checks() -> [storage:id()].
+-spec perform_all_storages_checks() -> {[storage:id()], [storage:id()]}.
 perform_all_storages_checks() ->
     {ok, StoragesData} = storage:get_all(),
-    lists:filtermap(fun(StorageData) ->
+    UnhealthyStoragesIds = lists:filtermap(fun(StorageData) ->
         case is_storage_healthy(StorageData) of
             true -> false;
             false -> {true, storage:get_id(StorageData)}
         end
-    end, StoragesData).
+    end, StoragesData),
+    {UnhealthyStoragesIds, lists:map(fun storage:get_id/1, StoragesData)}.
 
 
 %% @private
@@ -877,7 +883,6 @@ perform_all_storages_checks() ->
 is_storage_healthy(StorageData) ->
     Helper = storage:get_helper(StorageData),
     LumaFeed = storage:get_luma_feed(StorageData),
-    ?info("Performing healthcheck of storage backend ~ts", [storage:get_id(StorageData)]),
     ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed).
 
 
@@ -897,3 +902,32 @@ format_storage_log(StorageId) ->
     catch _:_ ->
         str_utils:format(" - StorageId: ~ts", [StorageId])
     end.
+
+
+%% @private
+-spec log_storages_health_report([storage:id()], [storage:id()]) -> ok.
+log_storages_health_report([], []) ->
+    ok;
+log_storages_health_report(Unhealthy, []) ->
+    ?warning("Storage health report: ~ts", [format_unhealthy_storages_report(Unhealthy)]);
+log_storages_health_report([], Healthy) ->
+    ?info("Storage health report: ~ts", [format_healthy_storages_report(Healthy)]);
+log_storages_health_report(Unhealthy, Healthy) ->
+    ?warning("Storage health report:~n - ~ts~n - ~ts", [
+        format_healthy_storages_report(Healthy), format_unhealthy_storages_report(Unhealthy)]).
+
+
+%% @private
+-spec format_healthy_storages_report([storage:id()]) -> string().
+format_healthy_storages_report([StorageId]) ->
+    str_utils:format("the storage backend ~ts is healthy", [StorageId]);
+format_healthy_storages_report(HealthyStorages) ->
+    str_utils:format("~tp storage backends are healthy", [length(HealthyStorages)]).
+
+
+%% @private
+-spec format_unhealthy_storages_report([storage:id()]) -> string().
+format_unhealthy_storages_report([StorageId]) ->
+    str_utils:format("the storage backend ~ts remains unhealthy", [StorageId]);
+format_unhealthy_storages_report(HealthyStorages) ->
+    str_utils:format("~tp storage backends remain unhealthy", [length(HealthyStorages)]).
