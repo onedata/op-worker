@@ -124,9 +124,9 @@ gui_config() ->
         {?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, atm_openfaas_activity_feed_ws_handler, []},
         {?ATM_JOB_OUTPUT_CALLBACK_PATH, atm_openfaas_task_callback_handler, #{type => output}},
         {?ATM_JOB_HEARTBEAT_CALLBACK_PATH, atm_openfaas_task_callback_handler, #{type => heartbeat}},
-        {?CDMI_ID_PATH, cdmi_handler, by_id},
-        {?CDMI_PATH, cdmi_handler, by_path},
-        rest_routes:routes()
+        {?CDMI_ID_PATH, cdmi_handler, by_id}, % blocked when no DB space
+        {?CDMI_PATH, cdmi_handler, by_path}, % blocked when no DB space
+        rest_routes:routes() % blocked when no DB space
     ]),
 
     DynamicPageRoutes = [

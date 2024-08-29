@@ -43,6 +43,7 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([run_tests/1]).
+-export([connect_via_gs/2, gs_request/2]).
 
 -type ct_config() :: proplists:proplist().
 
@@ -176,6 +177,46 @@ run_tests(SpecTemplates) ->
                 false
         end
     end, true, SpecTemplates).
+
+
+-spec gs_request(GsClient :: pid(), gs_args()) ->
+    {ok, Result :: map()} | {error, term()}.
+gs_request(GsClient, #gs_args{
+    operation = Operation,
+    gri = GRI,
+    auth_hint = AuthHint,
+    data = Data
+}) ->
+    case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
+        {ok, ?GS_RESP(undefined)} ->
+            ok;
+        {ok, ?GS_RESP(Result)} ->
+            {ok, Result};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec connect_via_gs(node(), aai:auth()) ->
+    {ok, GsClient :: pid()} | errors:error().
+connect_via_gs(Node, Client) ->
+    {Auth, ExpIdentity} = case Client of
+        ?NOBODY ->
+            {undefined, ?SUB(nobody)};
+        ?USER(UserId) ->
+            TokenAuth = {token, oct_background:get_user_access_token(UserId)},
+            {TokenAuth, ?SUB(user, UserId)}
+    end,
+    GsEndpoint = gs_endpoint(Node),
+    GsSupportedVersions = opw_test_rpc:gs_protocol_supported_versions(Node),
+    Opts = [{cacerts, get_cert_chain_ders()}],
+
+    case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
+        {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
+            {ok, GsClient};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
@@ -1019,47 +1060,10 @@ make_request(Node, Client, #gs_args{} = Args) ->
 %% @private
 -spec make_gs_request(node(), aai:auth(), gs_args()) ->
     {ok, Result :: map()} | {error, term()}.
-make_gs_request(Node, Client, #gs_args{
-    operation = Operation,
-    gri = GRI,
-    auth_hint = AuthHint,
-    data = Data
-}) ->
+make_gs_request(Node, Client, Args) ->
     case connect_via_gs(Node, Client) of
-        {ok, GsClient} ->
-            case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
-                {ok, ?GS_RESP(undefined)} ->
-                    ok;
-                {ok, ?GS_RESP(Result)} ->
-                    {ok, Result};
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
-
-%% @private
--spec connect_via_gs(node(), aai:auth()) ->
-    {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(Node, Client) ->
-    {Auth, ExpIdentity} = case Client of
-        ?NOBODY ->
-            {undefined, ?SUB(nobody)};
-        ?USER(UserId) ->
-            TokenAuth = {token, oct_background:get_user_access_token(UserId)},
-            {TokenAuth, ?SUB(user, UserId)}
-    end,
-    GsEndpoint = gs_endpoint(Node),
-    GsSupportedVersions = opw_test_rpc:gs_protocol_supported_versions(Node),
-    Opts = [{cacerts, get_cert_chain_ders()}],
-
-    case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
-        {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
-            {ok, GsClient};
-        {error, _} = Error ->
-            Error
+        {ok, GsClient} -> gs_request(GsClient, Args);
+        {error, _} = Error -> Error
     end.
 
 

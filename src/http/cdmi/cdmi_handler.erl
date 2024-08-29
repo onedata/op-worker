@@ -68,17 +68,16 @@
     {?DATAOBJECT_CAPABILITY_ID, filename:absname(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>)}
 ]).
 
--define(run_cdmi(__Req, __CdmiReq, __FunctionCall),
+-define(run_cdmi(__Req, __CdmiReq, __FunctionCall), % error exception
     try
+        op_worker_circuit_breaker:assert_closed(),
         __FunctionCall
-    catch
-        throw:__Err ->
-            {stop, http_req:send_error(__Err, __Req), __CdmiReq};
-        Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
-                ?MODULE, ?FUNCTION_NAME, Type, Message
-            ], Stacktrace),
-            {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
+    catch Class:Reason:Stacktrace ->
+        Error = case request_error_handler:infer_error(Reason) of
+            {true, KnownError} -> KnownError;
+            false -> ?examine_exception(Class, Reason, Stacktrace)
+        end,
+        {stop, http_req:send_error(Error, Req), __CdmiReq}
     end
 ).
 
@@ -340,19 +339,8 @@ error_wrong_path(Req, CdmiReq) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi_capability(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
-get_cdmi_capability(Req, #cdmi_req{
-    resource = {capabilities, CapType},
-    options = Options
-} = CdmiReq) ->
-    NonEmptyOpts = utils:ensure_defined(
-        Options, [], ?DEFAULT_CAPABILITIES_OPTIONS
-    ),
-    Capabilities = case CapType of
-        root -> cdmi_capabilities:root_capabilities(NonEmptyOpts);
-        container -> cdmi_capabilities:container_capabilities(NonEmptyOpts);
-        dataobject -> cdmi_capabilities:dataobject_capabilities(NonEmptyOpts)
-    end,
-    {json_utils:encode(Capabilities), Req, CdmiReq}.
+get_cdmi_capability(Req, CdmiReq) ->
+    ?run_cdmi(Req, CdmiReq, cdmi_capabilities:get_cdmi(Req, CdmiReq)).
 
 
 %%--------------------------------------------------------------------

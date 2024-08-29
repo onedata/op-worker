@@ -19,9 +19,7 @@
 
 %% API
 -export([
-    root_capabilities/1,
-    container_capabilities/1,
-    dataobject_capabilities/1
+    get_cdmi/2
 ]).
 
 
@@ -30,6 +28,36 @@
 %%%===================================================================
 
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets requested info about requestet object capabilities.
+%% @end
+%%--------------------------------------------------------------------
+
+
+-spec get_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
+    {binary(), cowboy_req:req(), cdmi_handler:cdmi_req()}.
+get_cdmi(Req, #cdmi_req{resource = {capabilities, CapType},
+    options = Options
+} = CdmiReq) ->
+    NonEmptyOpts = utils:ensure_defined(
+        Options, [], ?DEFAULT_CAPABILITIES_OPTIONS
+    ),
+    Capabilities = case CapType of
+        root -> root_capabilities(NonEmptyOpts);
+        container -> container_capabilities(NonEmptyOpts);
+        dataobject -> dataobject_capabilities(NonEmptyOpts)
+    end,
+    {json_utils:encode(Capabilities), Req, CdmiReq}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
 -spec root_capabilities(RequestedOptions :: [binary()]) -> map().
 root_capabilities(RequestedOptions) ->
     lists:foldl(fun
@@ -54,6 +82,7 @@ root_capabilities(RequestedOptions) ->
     end, #{}, RequestedOptions).
 
 
+%% @private
 -spec container_capabilities(RequestedOptions :: [binary()]) -> map().
 container_capabilities(RequestedOptions) ->
     lists:foldl(fun
@@ -78,6 +107,7 @@ container_capabilities(RequestedOptions) ->
     end, #{}, RequestedOptions).
 
 
+%% @private
 -spec dataobject_capabilities(RequestedOptions :: [binary()]) -> map().
 dataobject_capabilities(RequestedOptions) ->
     lists:foldl(fun

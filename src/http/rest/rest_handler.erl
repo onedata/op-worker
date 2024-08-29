@@ -218,6 +218,7 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
     b_gri = GriWithBindings
 }} = State) ->
     try
+        op_worker_circuit_breaker:assert_closed(),
         {Data, Req2} = get_data(Req, ParseBody, Consumes),
         OpReq = #op_req{
             auth = Auth,
