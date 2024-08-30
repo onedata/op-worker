@@ -211,7 +211,15 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
-    {UnhealthyStoragesIds, _} = perform_all_storages_checks(),
+    %% @TODO VFS-12272 - properly handle imported storages during storage monitoring
+    UnhealthyStoragesIds = try perform_all_storages_checks() of
+        {ok, Unhealthy, _} -> Unhealthy
+        catch Class:Reason ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone -> [];
+                _ -> erlang:apply(erlang, Class, [Reason])
+            end
+    end,
     {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStoragesIds}}.
 
 
@@ -250,7 +258,7 @@ handle(?PERIODIC_SPACES_AUTOCLEANING_CHECK) ->
     end,
     schedule_periodic_spaces_autocleaning_check();
 handle(?PERIODIC_STORAGES_CHECK) ->
-    handle_periodic_storages_check(),
+    ?catch_exceptions(handle_periodic_storages_check()),
     schedule_periodic_storages_check(),
     ok;
 handle(?TIMES_CACHE_FLUSH) ->
@@ -847,7 +855,7 @@ restart_autocleaning_runs() ->
 %% @private
 -spec handle_periodic_storages_check() -> ok.
 handle_periodic_storages_check() ->
-    {UnhealthyStoragesIds, AllStoragesIds} = perform_all_storages_checks(),
+    {ok, UnhealthyStoragesIds, AllStoragesIds} = perform_all_storages_checks(),
     PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
     case UnhealthyStoragesIds of
         PreviousUnhealthyStorages ->
@@ -866,7 +874,7 @@ handle_periodic_storages_check() ->
 
 
 %% @private
--spec perform_all_storages_checks() -> {[storage:id()], [storage:id()]}.
+-spec perform_all_storages_checks() -> {ok, [storage:id()], [storage:id()]}.
 perform_all_storages_checks() ->
     {ok, StoragesData} = storage:get_all(),
     UnhealthyStoragesIds = lists:filtermap(fun(StorageData) ->
@@ -875,7 +883,7 @@ perform_all_storages_checks() ->
             false -> {true, storage:get_id(StorageData)}
         end
     end, StoragesData),
-    {UnhealthyStoragesIds, lists:map(fun storage:get_id/1, StoragesData)}.
+    {ok, UnhealthyStoragesIds, lists:map(fun storage:get_id/1, StoragesData)}.
 
 
 %% @private
@@ -883,7 +891,11 @@ perform_all_storages_checks() ->
 is_storage_healthy(StorageData) ->
     Helper = storage:get_helper(StorageData),
     LumaFeed = storage:get_luma_feed(StorageData),
-    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed).
+    Imported = case storage:is_imported(StorageData) of
+        true -> imported;
+        false -> not_imported
+    end,
+    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed, Imported).
 
 
 %% @private
