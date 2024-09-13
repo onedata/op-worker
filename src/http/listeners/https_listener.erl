@@ -80,7 +80,7 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec reload_web_certs() -> ok | {error, term()}.
 reload_web_certs() ->
-    gui:reload_web_certs(gui_config()).
+    gui:reload_web_certs().
 
 
 %%--------------------------------------------------------------------
