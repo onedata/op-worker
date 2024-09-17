@@ -173,8 +173,13 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         assert_has_access_to_space(UserCtx, FileCtx),
         middleware_utils:assert_file_managed_locally(FileGuid),
         case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), element(1, Operation)) of
-            false -> ?ERROR_FORBIDDEN;
-            _ -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
+            false ->
+                ?ERROR_FORBIDDEN;
+            _ ->
+                case fslogic_worker:is_storage_accessible(FileCtx) of
+                    true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
+                    false -> ?ERROR_SERVICE_UNAVAILABLE
+                end
         end
 
     catch Type:Reason:Stacktrace ->

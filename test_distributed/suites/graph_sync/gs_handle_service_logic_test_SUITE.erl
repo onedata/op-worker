@@ -19,6 +19,8 @@
 
 -export([
     get_test/1,
+    get_public_data_test/1,
+    mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
     confined_access_token_test/1
@@ -26,6 +28,8 @@
 
 all() -> ?ALL([
     get_test,
+    get_public_data_test,
+    mixed_get_test,
     subscribe_test,
     convenience_functions_test,
     confined_access_token_test
@@ -85,6 +89,103 @@ get_test(Config) ->
         rpc:call(Node, handle_service_logic, get, [User3Sess, ?HANDLE_SERVICE_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    ok.
+
+
+get_public_data_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    % User 3 does not belong to the handle_service
+    User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
+
+    HServiceGriMatcher = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher),
+
+    % All users and providers should be able to fetch public handle_service data
+    % when it is cached
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User3Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [?ROOT_SESS_ID, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    % All users and providers should be able to fetch public handle_service data
+    % when is is NOT cached
+    logic_tests_common:invalidate_cache(Config, od_handle_service, ?HANDLE_SERVICE_1),
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User3Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    logic_tests_common:invalidate_cache(Config, od_handle_service, ?HANDLE_SERVICE_1),
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [?ROOT_SESS_ID, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+
+    ok.
+
+
+mixed_get_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+
+    HServiceGriMatcher = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher),
+    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher),
+
+    % Fetching rising scopes should cause an unsub and new fetch every time
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
+
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
+
+    % When private data is cached, any scope should always be fetched from cache
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
+
+    ?assertMatch(
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
 
     ok.
 

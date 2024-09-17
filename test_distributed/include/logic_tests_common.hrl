@@ -579,6 +579,12 @@ end).
     eff_groups = ?HANDLE_SERVICE_EFF_GROUPS_MATCHER(__HService)
 }}).
 
+-define(HANDLE_SERVICE_PUBLIC_DATA_MATCHER(__HService), #document{key = __HService, value = #od_handle_service{
+    name = ?HANDLE_SERVICE_NAME(__HService),
+    eff_users = #{},
+    eff_groups = #{}
+}}).
+
 
 -define(HANDLE_PRIVATE_DATA_MATCHER(__Handle), #document{key = __Handle, value = #od_handle{
     public_handle = ?HANDLE_PUBLIC_HANDLE(__Handle),
@@ -596,7 +602,7 @@ end).
     resource_id = undefined,
     metadata_prefix = ?HANDLE_METADATA_PREFIX(__Handle),
     metadata = ?HANDLE_METADATA(__Handle),
-    handle_service = undefined,
+    handle_service = ?HANDLE_H_SERVICE(__Handle),
     eff_users = #{},
     eff_groups = #{}
 
@@ -764,18 +770,25 @@ end).
 end).
 
 
--define(HANDLE_SERVICE_PRIVATE_DATA_VALUE(__HServiceId), #{
+-define(HANDLE_SERVICE_PUBLIC_DATA_VALUE(__HServiceId), #{
     <<"revision">> => 1,
-    <<"gri">> => gri:serialize(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = private}),
-    <<"name">> => ?HANDLE_SERVICE_NAME(__HServiceId),
-    <<"effectiveUsers">> => ?HANDLE_SERVICE_EFF_USERS_VALUE(__HServiceId),
-    <<"effectiveGroups">> => ?HANDLE_SERVICE_EFF_GROUPS_VALUE(__HServiceId)
+    <<"gri">> => gri:serialize(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = public}),
+    <<"name">> => ?HANDLE_SERVICE_NAME(__HServiceId)
 }).
+-define(HANDLE_SERVICE_PRIVATE_DATA_VALUE(__HServiceId), begin
+    __PublicData = ?HANDLE_SERVICE_PUBLIC_DATA_VALUE(__HServiceId),
+    __PublicData#{
+        <<"gri">> => gri:serialize(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = private}),
+        <<"effectiveUsers">> => ?HANDLE_SERVICE_EFF_USERS_VALUE(__HServiceId),
+        <<"effectiveGroups">> => ?HANDLE_SERVICE_EFF_GROUPS_VALUE(__HServiceId)
+    }
+end).
 
 
 -define(HANDLE_PUBLIC_DATA_VALUE(__HandleId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
+    <<"handleServiceId">> => ?HANDLE_H_SERVICE(__HandleId),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
     <<"metadataPrefix">> => ?HANDLE_METADATA_PREFIX(__HandleId),
     <<"metadata">> => ?HANDLE_METADATA(__HandleId)

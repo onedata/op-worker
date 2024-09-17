@@ -26,7 +26,7 @@
 -define(MAX_KEEPALIVE, op_worker:get_env(https_max_keepalive, 30)).
 
 -define(ONEPANEL_CONNECT_OPTS, fun() -> [
-    {recv_timeout, timer:seconds(op_worker:get_env(onepanel_proxy_recv_timeout_sec, 30))},
+    {recv_timeout, timer:seconds(op_worker:get_env(onepanel_proxy_recv_timeout_sec, 60))},
     {ssl_options, [
         {secure, only_verify_peercert},
         {cacerts, get_cert_chain_ders()}

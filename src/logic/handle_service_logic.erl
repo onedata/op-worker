@@ -22,6 +22,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 -export([get/2]).
+-export([get_public_data/2]).
 -export([has_eff_user/2, has_eff_user/3]).
 
 %%%===================================================================
@@ -39,6 +40,16 @@ get(SessionId, HServiceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
         gri = #gri{type = od_handle_service, id = HServiceId, aspect = instance, scope = private},
+        subscribe = true
+    }).
+
+
+-spec get_public_data(gs_client_worker:client(), od_handle_service:id()) ->
+    {ok, od_handle_service:doc()} | errors:error().
+get_public_data(SessionId, HServiceId) ->
+    gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_handle_service, id = HServiceId, aspect = instance, scope = public},
         subscribe = true
     }).
 

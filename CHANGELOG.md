@@ -4,6 +4,27 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.6
+
+-   **VFS-12239** Web GUI: Automatically filling-in the EDM file size
+    property on metadata creation and modification.
+-   **VFS-12232** Web GUI: Improved UX of Europeana Data Model editor.
+-   **VFS-12198** Web GUI: Added public download URL to file details
+    panel for shared files.
+-   **VFS-12197** Web GUI: Improved share list views.
+-   **VFS-12195** The name of the handle service where an Open Data
+    handle has been registered is now publicly visible and always
+    displayed on the Share view.
+-   **VFS-12060** Storage backends are now monitored and when failure is
+    detected access to the supported spaces is blocked.
+-   **VFS-12049** Web GUI: Added File ID column in file browser.
+-   **VFS-12012** Web GUI: Added Permissions column in file browser.
+-   **VFS-12001** Web GUI: Added available users list inferring in the
+    ACL view entity selector when user lacks some privileges in the
+    space.
+-   **VFS-11948** Web GUI: Added Creation time and Access time columns
+    in file browser.
+
 ### 21.02.5
 
 -   **VFS-11999** Improved listing objects on S3 storages during data
