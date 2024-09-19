@@ -363,7 +363,9 @@ update_support_parameters(SpaceId, SupportParametersOverlay) ->
 is_supported(#od_space{providers = Providers}, ProviderId) ->
     maps:is_key(ProviderId, Providers);
 is_supported(#document{value = Space}, ProviderId) ->
-    is_supported(Space, ProviderId).
+    is_supported(Space, ProviderId);
+is_supported(SpaceId, ProviderId) ->
+    is_supported(?ROOT_SESS_ID, SpaceId, ProviderId).
 
 
 -spec is_supported(gs_client_worker:client(), od_space:id(), od_provider:id()) ->
