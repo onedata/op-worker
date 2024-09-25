@@ -23,8 +23,7 @@
 
 %% API
 -export([
-    verify_storage_availability_on_all_nodes/2, verify_storage_availability_on_current_node/2,
-    verify_storage_availability/3
+    verify_storage_availability_on_all_nodes/3, verify_storage_availability_on_current_node/3
 ]).
 -export([
     check_storage_access/2,
@@ -35,6 +34,9 @@
 ]).
 
 -type operation() :: access | create | write | read | remove.
+-type imported_flag() :: imported | not_imported.
+
+-export_type([imported_flag/0]).
 
 -define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
 -define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
@@ -47,24 +49,24 @@
 %%% API
 %%%===================================================================
 
--spec verify_storage_availability_on_all_nodes(helpers:helper(), luma_config:feed()) ->
+-spec verify_storage_availability_on_all_nodes(helpers:helper(), luma_config:feed(), imported_flag()) ->
     ok | errors:error().
-verify_storage_availability_on_all_nodes(Helper, LumaFeed) ->
+verify_storage_availability_on_all_nodes(Helper, LumaFeed, Imported) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    verify_storage_availability(Nodes, Helper, LumaFeed).
+    verify_storage_availability(Nodes, Helper, LumaFeed, Imported).
 
 
--spec verify_storage_availability_on_current_node(helpers:helper(), luma_config:feed()) ->
+-spec verify_storage_availability_on_current_node(helpers:helper(), luma_config:feed(), imported_flag()) ->
     ok | errors:error().
-verify_storage_availability_on_current_node(Helper, LumaFeed) ->
-    verify_storage_availability([node()], Helper, LumaFeed).
+verify_storage_availability_on_current_node(Helper, LumaFeed, Imported) ->
+    verify_storage_availability([node()], Helper, LumaFeed, Imported).
 
 
--spec verify_storage_availability([node()], helpers:helper(), luma_config:feed()) ->
+-spec verify_storage_availability([node()], helpers:helper(), luma_config:feed(), imported_flag()) ->
     ok | errors:error().
-verify_storage_availability(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed) ->
+verify_storage_availability(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
     ok;
-verify_storage_availability(Nodes, Helper, LumaFeed) ->
+verify_storage_availability(Nodes, Helper, LumaFeed, Imported) ->
     try
         case ?SKIP_STORAGE_DETECTION of
             true ->
@@ -74,7 +76,7 @@ verify_storage_availability(Nodes, Helper, LumaFeed) ->
                 {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
                     ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
                 ),
-                verify_storage_availability_insecure(Nodes, Helper, ExtendedAdminCtx)
+                verify_storage_availability_insecure(Nodes, Helper, ExtendedAdminCtx, Imported)
         end
     catch throw:?ERROR_STORAGE_TEST_FAILED(Operation) ->
         ?ERROR_STORAGE_TEST_FAILED(Operation)
@@ -155,12 +157,14 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %%%===================================================================
 
 %% @private
--spec verify_storage_availability_insecure([node()], helpers:helper(), helper:user_ctx()) -> ok.
-verify_storage_availability_insecure(Nodes, Helper, UserCtx) ->
+-spec verify_storage_availability_insecure([node()], helpers:helper(), helper:user_ctx(), imported_flag()) ->
+    ok.
+verify_storage_availability_insecure(Nodes, Helper, UserCtx, Imported) ->
     BasicArgList = [[Helper, UserCtx] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
-    case Helper of
-        #helper{args = #{<<"readonly">> := <<"true">>}} -> ok;
+    case {Helper, Imported} of
+        {#helper{args = #{<<"readonly">> := <<"true">>}}, _} -> ok;
+        {_, imported} -> ok;
         _ -> perform_read_write_test(Nodes, BasicArgList)
     end.
 
