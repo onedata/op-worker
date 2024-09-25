@@ -75,14 +75,14 @@ gs_circuit_breaker_test(_Config) ->
 
     set_circuit_breaker_state(closed),
     {ok, GsClient} = ?assertMatch({ok, _}, onenv_api_test_runner:connect_via_gs(Node, ?NOBODY)),
-    ?assertMatch({ok, _}, onenv_api_test_runner:gs_request(GsClient, GsArgs)),
+    ?assertMatch({ok, _}, gs_test_utils:gs_request(GsClient, GsArgs)),
 
     set_circuit_breaker_state(open),
-    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, onenv_api_test_runner:gs_request(GsClient, GsArgs)),
+    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, gs_test_utils:gs_request(GsClient, GsArgs)),
     ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, onenv_api_test_runner:connect_via_gs(Node, ?NOBODY)),
 
     set_circuit_breaker_state(closed),
-    ?assertMatch({ok, _}, onenv_api_test_runner:gs_request(GsClient, GsArgs)),
+    ?assertMatch({ok, _}, gs_test_utils:gs_request(GsClient, GsArgs)),
     ?assertMatch({ok, _}, onenv_api_test_runner:connect_via_gs(Node, ?NOBODY)).
 
 
@@ -115,13 +115,13 @@ end_per_testcase(_, Config) ->
 %% @private
 get_rest_response() ->
     Node = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
-    process_response(rest_test_utils:request(Node, <<"configuration">>, get, #{}, <<>>)).
+    process_http_response(rest_test_utils:request(Node, <<"configuration">>, get, #{}, <<>>)).
 
 
 %% @private
 get_cdmi_response() ->
     Nodes = oct_background:get_provider_nodes(?PROVIDER_SELECTOR),
-    process_response(cdmi_test_utils:do_request(Nodes, "cdmi_capabilities/", get, [?CDMI_VERSION_HEADER], [])).
+    process_http_response(cdmi_test_utils:do_request(Nodes, "cdmi_capabilities/", get, [?CDMI_VERSION_HEADER], [])).
 
 
 %% @private
@@ -130,7 +130,7 @@ set_circuit_breaker_state(State) ->
 
 
 %% @private
-process_response(Response) ->
+process_http_response(Response) ->
     case Response of
         {ok, 200, _, _} ->
             ok;

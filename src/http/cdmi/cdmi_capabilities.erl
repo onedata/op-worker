@@ -28,14 +28,11 @@
 %%%===================================================================
 
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets requested info about requestet object capabilities.
 %% @end
 %%--------------------------------------------------------------------
-
-
 -spec get_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {binary(), cowboy_req:req(), cdmi_handler:cdmi_req()}.
 get_cdmi(Req, #cdmi_req{resource = {capabilities, CapType},

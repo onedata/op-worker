@@ -68,9 +68,8 @@
     {?DATAOBJECT_CAPABILITY_ID, filename:absname(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>)}
 ]).
 
--define(run_cdmi(__Req, __CdmiReq, __FunctionCall), % error exception
+-define(run_cdmi(__Req, __CdmiReq, __FunctionCall),
     try
-        op_worker_circuit_breaker:assert_closed(),
         __FunctionCall
     catch Class:Reason:Stacktrace ->
         Error = case request_error_handler:infer_error(Reason) of
@@ -102,6 +101,7 @@
     {ok, cowboy_req:req(), undefined}.
 init(Req, ReqTypeResolutionMethod) ->
     try
+        op_worker_circuit_breaker:assert_closed(),
         CdmiReq = case ReqTypeResolutionMethod of
             by_id ->
                 resolve_resource_by_id(Req);

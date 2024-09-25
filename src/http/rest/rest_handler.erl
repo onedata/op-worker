@@ -227,15 +227,12 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
             data = Data
         },
         {stop, route_to_proper_handler(OpReq, Req2), State}
-    catch
-        throw:{error, _} = Error ->
-            {stop, http_req:send_error(Error, Req), State};
-        Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
-                ?MODULE, ?FUNCTION_NAME, Type, Message
-            ], Stacktrace),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {stop, NewReq, State}
+    catch Class:Reason:Stacktrace ->
+        Error = case request_error_handler:infer_error(Reason) of
+            {true, KnownError} -> KnownError;
+            false -> ?examine_exception(Class, Reason, Stacktrace)
+        end,
+        {stop, http_req:send_error(Error, Req), State}
     end.
 
 

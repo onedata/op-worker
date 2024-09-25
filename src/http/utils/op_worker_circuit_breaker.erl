@@ -30,7 +30,7 @@ assert_closed() ->
     case op_worker:get_env(service_circuit_breaker_state, closed) of
         open ->
             ?THROTTLE_LOG(?critical(
-                "All services have been temporarily disabled, consult Onepanel logs for details."
+                "All services have been temporarily disabled, consult Onepanel logs for details"
             )),
             throw(?ERROR_SERVICE_UNAVAILABLE);
         closed ->
