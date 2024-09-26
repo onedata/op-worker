@@ -203,7 +203,7 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
             ok = space_logic:ensure_required_docs_exist(SpaceId),
             % Fetch docs of co-supporting providers to trigger connection establishment
             % (see od_provider:ensure_connected_to_peer/1).
-            fetch_cosupporting_provider_docs(maps:keys(maps:remove(ProviderId, NewProviders))),
+            lists:foreach(fun provider_logic:get/1, maps:keys(maps:remove(ProviderId, NewProviders))),
             user_root_dir:report_new_spaces_appeared(Users, [SpaceId]);
         {_, 0} ->
             user_root_dir:report_spaces_removed(Users, [SpaceId]);
@@ -230,9 +230,3 @@ handle_space_support_parameters_change(ProviderId, #document{key = SpaceId, valu
         }
     end,
     dir_stats_service_state:handle_space_support_parameters_change(SpaceId, SupportParameters).
-
-
-%% @private
--spec fetch_cosupporting_provider_docs([od_provider:id()]) -> ok.
-fetch_cosupporting_provider_docs(ProvidersList) ->
-    lists:foreach(fun provider_logic:get/1, ProvidersList).

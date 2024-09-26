@@ -305,8 +305,8 @@
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),
-    % incoming_session_watcher pid for incoming sessions
-    % outgoing_connection_manager pid for provider outgoing sessions
+    % incoming_session_watcher for incoming sessions
+    % outgoing_connection_manager for provider outgoing sessions
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),

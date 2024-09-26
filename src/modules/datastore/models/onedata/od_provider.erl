@@ -86,13 +86,18 @@ get_ctx() ->
 
 -spec ensure_connected_to_peer(id()) -> ok.
 ensure_connected_to_peer(ProviderId) ->
-    case provider_auth:get_provider_id() of
-        {ok, ProviderId} ->
-            ok;
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ok;
-        _ ->
-            SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-            {ok, _} = session_connections:ensure_connected(SessId),
-            ok
+    try
+        case provider_auth:get_provider_id() of
+            {ok, ProviderId} ->
+                ok;
+            ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ok;
+            _ ->
+                SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
+                {ok, _} = session_connections:ensure_connected(SessId),
+                ok
+        end
+    catch Class:Reason:Stacktrace ->
+        ?error_exception("Could not ensure connection to provider ~ts",
+            [provider_logic:to_printable(ProviderId)], Class, Reason, Stacktrace)
     end.

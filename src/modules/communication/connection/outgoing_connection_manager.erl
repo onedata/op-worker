@@ -259,7 +259,7 @@ renew_connections(#state{
             true ->
                 renew_connections_insecure(State0);
             false ->
-                ?info("Stopping connection to provider ~ts because of no common supported spaces.",
+                ?info("Stopping connection to provider ~ts because of no common supported spaces",
                     [provider_logic:to_printable(PeerId)]),
                 terminate_session(State0)
         end

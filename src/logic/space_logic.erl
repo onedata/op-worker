@@ -358,7 +358,7 @@ update_support_parameters(SpaceId, SupportParametersOverlay) ->
     end).
 
 
--spec is_supported(od_space:doc() | od_space:record(), od_provider:id()) ->
+-spec is_supported(od_space:doc() | od_space:record() | od_space:id(), od_provider:id()) ->
     boolean().
 is_supported(#od_space{providers = Providers}, ProviderId) ->
     maps:is_key(ProviderId, Providers);

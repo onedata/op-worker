@@ -176,9 +176,9 @@ init_per_testcase(_Case, Config) ->
     terminate_session(KrakowNode, SessId),
     ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
-    % mock provider into thinking there are common spaces instead just cosupporting
-    % a space so no connections are created before tests
-    mock_common_spaces(KrakowNode),
+    % Environment is started without common spaces, so we can be certain that no connections are automatically set up.
+    % Mock provider into thinking there are common spaces so connection can be manually established.
+    mock_existence_of_common_spaces(KrakowNode),
 
     opw_test_rpc:set_env(KrakowNode, conn_manager_min_backoff_interval, 2000),  % 2 seconds
     opw_test_rpc:set_env(KrakowNode, conn_manager_max_backoff_interval, 10000),  % 10 seconds
@@ -294,8 +294,8 @@ unmock_provider_handshake(Nodes) ->
 
 
 %% @private
--spec mock_common_spaces(node()) -> ok.
-mock_common_spaces(Node) ->
+-spec mock_existence_of_common_spaces(node()) -> ok.
+mock_existence_of_common_spaces(Node) ->
     test_utils:mock_new(Node, space_logic, [passthrough]),
     test_utils:mock_expect(Node, space_logic, is_supported, fun
         (SpaceId, _ProviderId) when is_binary(SpaceId) -> true;
