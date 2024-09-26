@@ -360,6 +360,16 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
         }
     };
 
+translate(#gri{type = od_cluster, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_cluster{worker_version = {
+            maps:get(<<"workerReleaseVersion">>, Result),
+            maps:get(<<"workerBuildVersion">>, Result),
+            maps:get(<<"workerGuiHash">>, Result)}
+        }
+    };
+
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~tp~nResult: ~tp", [
         GRI, Result

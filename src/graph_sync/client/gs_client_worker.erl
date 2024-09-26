@@ -779,6 +779,8 @@ put_cache_state(Share = #od_share{}, CacheState) ->
     Share#od_share{cache_state = CacheState};
 put_cache_state(Provider = #od_provider{}, CacheState) ->
     Provider#od_provider{cache_state = CacheState};
+put_cache_state(Cluster = #od_cluster{}, CacheState) ->
+    Cluster#od_cluster{cache_state = CacheState};
 put_cache_state(HService = #od_handle_service{}, CacheState) ->
     HService#od_handle_service{cache_state = CacheState};
 put_cache_state(Handle = #od_handle{}, CacheState) ->
@@ -812,6 +814,8 @@ get_cache_state(#od_space{cache_state = CacheState}) ->
 get_cache_state(#od_share{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_provider{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_cluster{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_handle_service{cache_state = CacheState}) ->
     CacheState;
@@ -929,6 +933,9 @@ is_root_authorized_to_get(_, #gri{type = od_provider, scope = private}, _) ->
 is_root_authorized_to_get(_, #gri{type = od_provider, scope = protected}, _) ->
     true;
 
+is_root_authorized_to_get(_, #gri{type = od_cluster, scope = private}, _) ->
+    true;
+
 is_root_authorized_to_get(_, #gri{type = od_handle_service, scope = private}, _) ->
     false;
 
@@ -1005,6 +1012,9 @@ is_user_authorized_to_get(UserId, Client, AuthHint, #gri{type = od_provider, id 
         _ ->
             unknown
     end;
+
+is_user_authorized_to_get(_UserId, _, _, #gri{type = od_cluster, scope = private}, _) ->
+    false;
 
 is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle_service, scope = private}, CachedDoc) ->
     handle_service_logic:has_eff_user(CachedDoc, UserId);

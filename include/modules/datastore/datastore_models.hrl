@@ -20,6 +20,10 @@
 -include_lib("ctool/include/space_support/support_parameters.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
+-define(DEFAULT_RELEASE_VERSION, <<"18.02.*">>).
+-define(DEFAULT_BUILD_VERSION, <<"unknown">>).
+-define(EMPTY_GUI_HASH, <<"empty">>).
+
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
 
 %% @formatter:off
@@ -35,6 +39,11 @@
 }.
 %% @formatter:on
 
+-type version_info() :: {
+    Release :: onedata:release_version(),
+    Build :: binary(),
+    GuiHash :: onedata:gui_hash()
+}.
 
 %%%===================================================================
 %%% Records synchronized via Graph Sync
@@ -262,6 +271,15 @@
     atm_inventory :: od_atm_inventory:id(),
     compatible :: boolean(),
 
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_cluster, {
+    worker_version = {
+        ?DEFAULT_RELEASE_VERSION,
+        ?DEFAULT_BUILD_VERSION,
+        ?EMPTY_GUI_HASH
+    } :: version_info(),
     cache_state = #{} :: cache_state()
 }).
 

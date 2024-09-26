@@ -20,6 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
+-export([handle_healthcheck_success/0]).
 -export([handle_connected_to_oz/0]).
 -export([handle_disconnected_from_oz/0]).
 -export([handle_deregistered_from_oz/0]).
@@ -28,6 +29,11 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+handle_healthcheck_success() ->
+    ok = oneprovider:set_up_service_in_onezone().
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -116,7 +122,6 @@ handle_entity_deleted(GRI) ->
 on_connect_to_oz() ->
     ok = restart_hooks:maybe_execute_hooks(),
     ok = gs_client_worker:enable_cache(),
-    ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
     ok = main_harvesting_stream:revise_all_spaces(),

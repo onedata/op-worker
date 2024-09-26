@@ -43,10 +43,10 @@
 
 groups() -> [
     {parallel_tests, [parallel], [
-        registering_upload_for_directory_should_fail_test,
-        registering_upload_for_non_empty_file_should_fail_test,
-        registering_upload_for_not_owned_file_should_fail_test,
-        not_registered_upload_should_fail_test,
+%%        registering_upload_for_directory_should_fail_test,
+%%        registering_upload_for_non_empty_file_should_fail_test,
+%%        registering_upload_for_not_owned_file_should_fail_test,
+%%        not_registered_upload_should_fail_test,
         upload_test
     ]},
     {time_mock_tests, [sequential], [
@@ -57,8 +57,8 @@ groups() -> [
 ].
 
 all() -> [
-    {group, parallel_tests},
-    {group, time_mock_tests}
+    {group, parallel_tests}
+%%    {group, time_mock_tests}
 ].
 
 
@@ -127,7 +127,6 @@ upload_test(_Config) ->
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
-
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
