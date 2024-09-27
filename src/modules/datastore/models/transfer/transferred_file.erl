@@ -230,6 +230,9 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     2.
 
 %%--------------------------------------------------------------------
@@ -246,6 +249,9 @@ get_record_struct(1) ->
         {past_tranfers, [string]}
     ]};
 get_record_struct(2) ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     {record, [
         {ongoing_tranfers, [string]},
         {ended_tranfers, [string]}

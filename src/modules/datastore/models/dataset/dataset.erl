@@ -192,6 +192,9 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     2.
 
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
@@ -207,6 +210,9 @@ get_record_struct(1) ->
         ]}}
     ]};
 get_record_struct(2) ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     {record, [
         {creation_time, integer},
         {state, atom},
