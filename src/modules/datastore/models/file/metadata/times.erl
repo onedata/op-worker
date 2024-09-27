@@ -86,7 +86,10 @@ is_deleted(Key) ->
 -spec merge_records(record(), record()) -> record().
 merge_records(TimesA, TimesB) ->
     #times{
-        creation_time = max(TimesA#times.creation_time, TimesB#times.creation_time),
+        creation_time = case min(TimesA#times.creation_time, TimesB#times.creation_time) of
+            0 -> max(TimesA#times.creation_time, TimesB#times.creation_time);
+            Min -> Min
+        end,
         atime = max(TimesA#times.atime, TimesB#times.atime),
         mtime = max(TimesA#times.mtime, TimesB#times.mtime),
         ctime = max(TimesA#times.ctime, TimesB#times.ctime)
