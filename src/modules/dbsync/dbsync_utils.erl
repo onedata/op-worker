@@ -117,7 +117,16 @@ gen_request_id() ->
 
 -spec encode_batch([datastore:doc()], boolean()) -> binary().
 encode_batch(Docs, Compress) ->
-    EncodedDocs = jiffy:encode([datastore_json:encode(Doc) || Doc <- Docs]),
+    EncodedDocs = jiffy:encode(
+        lists:map(fun
+            (#document{value = #times{}} = Doc) ->
+                {EncodedDoc} = datastore_json:encode(Doc),
+                WithoutCreation = lists:keydelete(<<"creation_time">>, 1, EncodedDoc),
+                {lists:keyreplace(<<"_version">>, 1, WithoutCreation, {<<"_version">>, 1})};
+            (Doc) ->
+                datastore_json:encode(Doc)
+        end, Docs)
+    ),
 
     case Compress of
         true -> zlib:compress(EncodedDocs);
@@ -131,4 +140,18 @@ decode_batch(EncodedDocs0, Compressed) ->
         false -> EncodedDocs0
     end,
     Docs = jiffy:decode(EncodedDocs1, [copy_strings]),
-    [datastore_json:decode(Doc) || Doc <- Docs].
+    lists:map(fun({Doc}) ->
+        case lists:keyfind(<<"_record">>, 1, Doc) of
+            {<<"_record">>, <<"times">>} ->
+                case lists:keyfind(<<"creation_time">>, 1, Doc) of
+                    {<<"creation_time">>, _} ->
+                        datastore_json:decode({Doc});
+                    _ ->
+                        {Prefix, Suffix} = lists:split(9, Doc),
+                        WithCreation = Prefix ++ [{<<"creation_time">>, 0}] ++ Suffix,
+                        datastore_json:decode({lists:keyreplace(<<"_version">>, 1, WithCreation, {<<"_version">>, 2})})
+                end;
+            _ ->
+                datastore_json:decode({Doc})
+        end
+    end, Docs).
