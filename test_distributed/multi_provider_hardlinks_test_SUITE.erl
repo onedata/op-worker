@@ -86,12 +86,19 @@ basic_test(Config0) ->
 
     % Create link and verify its stats
     {Link, LinkAttr} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
+    GetAttrsFun = fun(Node, S, FileKey) ->
+        case lfm_proxy:stat(Node, S, FileKey) of
+            % do not check creation time, as it is not synchronized in line 21.*
+            {ok, FileAttrs} -> {ok, FileAttrs#file_attr{creation_time = 0}};
+            Other -> Other
+        end
+    end,
     % stat ignores fully_replicated field so use attrs without it in asserts
-    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{is_fully_replicated = undefined},
+    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{is_fully_replicated = undefined, creation_time = 0},
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
-        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link})),
+        GetAttrsFun(Worker1, SessId(Worker1), {path, Link})),
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
-        lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link}), Attempts),
+        GetAttrsFun(Worker2, SessId(Worker2), {path, Link}), Attempts),
 
     % Verify reading through link
     assert_size_and_content_identical(Worker1, SessId, Link, FileContent),
