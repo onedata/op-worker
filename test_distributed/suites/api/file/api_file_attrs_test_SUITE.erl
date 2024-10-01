@@ -487,7 +487,11 @@ build_get_attrs_validate_rest_call_fun(FileAttr, ShareId) ->
     fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         case get_attrs_exp_result(TestCtx, FileAttr, ShareId, rest) of
             {ok, ExpAttrs} ->
-                ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
+                ?assertEqual(
+                    % do not check creation time, as it is not synchronized in line 21.*
+                    {?HTTP_200_OK, maps:remove(<<"creationTime">>, ExpAttrs)},
+                    {RespCode, maps:remove(<<"creationTime">>, RespBody)}
+                );
             {error, _} = Error ->
                 ?assertEqual({?HTTP_400_BAD_REQUEST, #{<<"error">> => errors:to_json(Error)}}, {RespCode, RespBody})
         end
@@ -502,7 +506,11 @@ build_get_attrs_validate_gs_call_fun(FileAttr, ShareId) ->
         case get_attrs_exp_result(TestCtx, FileAttr, ShareId, gs) of
             {ok, ExpAttrs} ->
                 {ok, ResultMap} = ?assertMatch({ok, _}, Result),
-                ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap));
+                ?assertEqual(
+                    % do not check creation time, as it is not synchronized in line 21.*
+                    maps:remove(<<"creationTime">>, ExpAttrs),
+                    maps:without([<<"gri">>, <<"revision">>, <<"creationTime">>], ResultMap)
+                );
             {error, _} = Error ->
                 ?assertEqual(Error, Result)
         end
