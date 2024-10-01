@@ -34,7 +34,7 @@
     qos_entry => 2,
     replica_deletion => 3,
     space_transfer_stats => 1,
-    times => 1,
+    times => 2,
     transfer => 12,
     transferred_file => 2,
     tree_traverse_job => 6
@@ -56,9 +56,7 @@ datastore_model_version_verification_test_() ->
     ),
 
     lists:map(fun({Model, Version}) ->
-        {str_utils:to_binary(Model), fun() ->
-            ?_assertEqual(Version, maps:get(Model, ?FROZEN_MODEL_VERSIONS, unknown))
-        end}
+        {str_utils:to_binary(Model), ?_assertEqual(Version, maps:get(Model, ?FROZEN_MODEL_VERSIONS, unknown))}
     end, ActualModelVersions).
 
 
