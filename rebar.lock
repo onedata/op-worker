@@ -73,7 +73,7 @@
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.9.0">>},1},
  {<<"gui">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/gui.git",
-       {ref,"7ebb990084bd940be1dcb904374fa18ad49ba866"}},
+       {ref,"fd22bb797e2ee02cc528180ca620920e4b5c518c"}},
   1},
  {<<"hackney">>,
   {git,"https://github.com/benoitc/hackney",
