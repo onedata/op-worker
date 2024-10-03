@@ -394,6 +394,7 @@ Build:
 
 _Codetag Tracker:
   key: CT
+  other: *common-opts
   tasks:
     - checkout: &fake-checkout
         conditions:
