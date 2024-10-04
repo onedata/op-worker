@@ -192,9 +192,13 @@ set_up_service_in_onezone() ->
     Release = op_worker:get_release_version(),
     Build = op_worker:get_build_version(),
     {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
-    {ok, #document{value = #od_cluster{worker_version = {
-        WorkerReleaseVersion, WorkerBuildVersion, WorkerGuiHashVersion
-    }}}} = cluster_logic:get(),
+    {WorkerReleaseVersion, WorkerBuildVersion, WorkerGuiHashVersion} = case cluster_logic:get() of
+        {ok, #document{value = #od_cluster{worker_version = {
+            WorkerRelease, WorkerBuild, WorkerGuiHash
+        }}}} -> {WorkerRelease, WorkerBuild, WorkerGuiHash};
+        ?ERROR_INTERNAL_SERVER_ERROR ->
+            {<<"18.02.*">>, <<"unknown">>, <<"empty">>}
+    end,
     case {Release, Build, GuiHash} of
         {WorkerReleaseVersion, WorkerBuildVersion, WorkerGuiHashVersion} ->
             ok;
