@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% It is a virtual directory (there are no associated documents in the db).
-%%% It is being used in 'open_handle' mode. In that  mode listing space directory
+%%% It is used in 'open_handle' mode. In that  mode listing space directory
 %%% returns list of share root dirs instead of regular files/dirs in the space so
 %%% that only shared content can be viewed (from this point down the tree the context
 %%% is changed to shared one). In the future it will be used as mount root when
@@ -28,7 +28,19 @@
 % API
 -export([uuid/1]).
 % special_dir_behaviour
--export([is_special/2, is_operation_allowed/1, exists/1, get_file_meta/1, get_times/2]).
+-export([
+    is_special/2,
+    is_operation_allowed/1,
+    is_scope_root_dir/0,
+    is_restricted_for_datasets/0,
+    is_harvested/0,
+    is_ignored_in_dir_stats/0,
+    is_ignored_in_events/0,
+    is_without_parent/0,
+    exists/1,
+    get_file_meta/1,
+    get_times/2
+]).
 
 -define(SHARE_ROOT_DIR_UUID_PREFIX, "share_").
 
@@ -69,9 +81,33 @@ is_operation_allowed(Operation) ->
     lists:member(Operation, ?ALLOWED_OPERATIONS).
 
 
+-spec is_scope_root_dir() -> boolean().
+is_scope_root_dir() -> false.
+
+
+-spec is_restricted_for_datasets() -> boolean().
+is_restricted_for_datasets() -> true.
+
+
+-spec is_harvested() -> boolean().
+is_harvested() -> false.
+
+
+-spec is_ignored_in_dir_stats() -> boolean().
+is_ignored_in_dir_stats() -> false.
+
+
+-spec is_ignored_in_events() -> boolean().
+is_ignored_in_events() -> false.
+
+
+-spec is_without_parent() -> boolean().
+is_without_parent() -> true.
+
+
 -spec exists(file_meta:uuid()) -> boolean().
 exists(Uuid) ->
-    ShareId = share_root_dir:extract_share_id(Uuid),
+    ShareId = extract_share_id(Uuid),
 
     case share_logic:get(?ROOT_SESS_ID, ShareId) of
         {ok, _} -> true;
@@ -81,7 +117,11 @@ exists(Uuid) ->
 
 -spec get_file_meta(file_meta:uuid()) -> file_meta:doc().
 get_file_meta(Uuid) ->
-    ShareId = share_root_dir:extract_share_id(Uuid),
+    ShareId = extract_share_id(Uuid),
+    {Deleted, Scope, ParentUuid} = case share_logic:get(?ROOT_SESS_ID, ShareId) of
+        {ok, #document{value = #od_share{space = SpaceId}}} -> {false, SpaceId, space_dir:uuid(SpaceId)};
+        ?ERROR_NOT_FOUND -> {true, undefined, <<>>}
+    end,
 
     #document{
         key = Uuid,
@@ -92,11 +132,10 @@ get_file_meta(Uuid) ->
             mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
             owner = ?ROOT_USER_ID,
             provider_id = oneprovider:get_id(),
-            deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
-                {ok, _} -> false;
-                ?ERROR_NOT_FOUND -> true
-            end
-        }
+            deleted = Deleted,
+            parent_uuid = ParentUuid
+        },
+        scope = Scope
     }.
 
 
@@ -104,7 +143,7 @@ get_file_meta(Uuid) ->
 get_times(FileUuid, RequestedTimes) ->
     % Share root dir is virtual directory which does not have documents
     % like `file_meta` or `times` - in such case get times of share root file
-    ShareId = share_root_dir:extract_share_id(FileUuid),
+    ShareId = extract_share_id(FileUuid),
     {ok, #document{
         value = #od_share{
             root_file = RootFileShareGuid

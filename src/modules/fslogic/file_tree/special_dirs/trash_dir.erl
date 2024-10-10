@@ -24,7 +24,7 @@
 %%% Therefore, their names are suffixed with their uuid to avoid conflicts.
 %%% @end
 %%%-------------------------------------------------------------------
--module(trash).
+-module(trash_dir).
 -author("Jakub Kudzia").
 
 -behaviour(special_dir_behaviour).
@@ -38,9 +38,20 @@
 %% API
 -export([uuid/1, guid/1, ensure_exists/1]).
 -export([move_to_trash/2, schedule_deletion_from_trash/5]).
+-export([is_name_allowed/2]).
 
 % special_dir_behaviour
--export([is_special/2, is_operation_allowed/1, exists/1]).
+-export([
+    is_special/2,
+    is_operation_allowed/1,
+    is_scope_root_dir/0,
+    is_restricted_for_datasets/0,
+    is_harvested/0,
+    is_ignored_in_dir_stats/0,
+    is_ignored_in_events/0,
+    is_without_parent/0,
+    exists/1
+]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
@@ -93,7 +104,7 @@ move_to_trash(FileCtx, UserCtx) ->
     {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
     % files moved to trash are direct children of trash directory
     % their names are suffixed with Uuid to avoid conflicts
-    TrashUuid = trash:uuid(SpaceId),
+    TrashUuid = uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:cleanup_reference_related_documents(FileCtx5),
     ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId),
@@ -129,6 +140,17 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
     end.
 
 
+%% @TODO VFS-7064 no longer needed after link between space and trash dir is created
+-spec is_name_allowed(file_meta:name(), file_meta:uuid()) -> boolean().
+is_name_allowed(?TRASH_DIR_NAME, ParentUuid) ->
+    case space_dir:is_special(uuid, ParentUuid) of
+        true -> false;
+        false -> true
+    end;
+is_name_allowed(_, _ParentUuid) ->
+    true.
+
+
 %%%===================================================================
 %%% special_dir_behaviour callbacks
 %%%===================================================================
@@ -144,6 +166,30 @@ is_operation_allowed(Operation) ->
     lists:member(Operation, ?ALLOWED_OPERATIONS).
 
 
+-spec is_scope_root_dir() -> boolean().
+is_scope_root_dir() -> false.
+
+
+-spec is_restricted_for_datasets() -> boolean().
+is_restricted_for_datasets() -> true.
+
+
+-spec is_harvested() -> boolean().
+is_harvested() -> false.
+
+
+-spec is_ignored_in_dir_stats() -> boolean().
+is_ignored_in_dir_stats() -> true.
+
+
+-spec is_ignored_in_events() -> boolean().
+is_ignored_in_events() -> true.
+
+
+-spec is_without_parent() -> boolean().
+is_without_parent() -> true.
+
+
 -spec exists(file_meta:uuid()) -> boolean().
 exists(Uuid) ->
     file_meta:exists(Uuid).
@@ -156,7 +202,7 @@ exists(Uuid) ->
 %% @private
 -spec prepare_doc(od_space:id()) -> file_meta:doc().
 prepare_doc(SpaceId) ->
-    file_meta:new_dir_doc(trash:uuid(SpaceId),
+    file_meta:new_dir_doc(uuid(SpaceId),
         ?TRASH_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), space_dir:uuid(SpaceId), SpaceId
     ).
 

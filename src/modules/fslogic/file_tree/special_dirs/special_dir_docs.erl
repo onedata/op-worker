@@ -18,7 +18,7 @@
 
 
 % API
--export([create/3, add_parent_link/4, delete_parent_link/4]).
+-export([create/3, ensure_parent_link/4, delete_parent_link/4]).
 
 %%%===================================================================
 %%% API
@@ -35,17 +35,17 @@ create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uui
             exists
     end,
     case LinkPolicy of
-        add_link -> add_parent_link(ParentUuid, SpaceId, Name, Uuid);
+        add_link -> ensure_parent_link(ParentUuid, SpaceId, Name, Uuid);
         no_link -> ok
     end,
     Result.
 
 
--spec add_parent_link(file_meta:uuid(), od_space:id(), file_meta:name(), file_meta:uuid()) -> ok | {error, term()}.
-add_parent_link(ParentUuid, SpaceId, Name, Uuid) ->
+-spec ensure_parent_link(file_meta:uuid(), od_space:id(), file_meta:name(), file_meta:uuid()) -> ok.
+ensure_parent_link(ParentUuid, SpaceId, Name, Uuid) ->
     ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(ParentUuid, SpaceId, Name, Uuid))).
 
 
--spec delete_parent_link(file_meta:uuid(), od_space:id(), file_meta:name(), file_meta:uuid()) -> ok | {error, term()}.
+-spec delete_parent_link(file_meta:uuid(), od_space:id(), file_meta:name(), file_meta:uuid()) -> ok.
 delete_parent_link(ParentUuid, SpaceId, Name, Uuid) ->
     ok = ?ok_if_not_found(file_meta_forest:delete(ParentUuid, SpaceId, Name, Uuid)).

@@ -140,7 +140,7 @@
 -define(catch_not_found_as(ReturnValue, _Code),
     try
         _Code
-    catch Class:Reason ->
+    catch Class:Reason:S ->
         case datastore_runner:normalize_error(Reason) of
             not_found ->
                 ReturnValue;

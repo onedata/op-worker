@@ -144,7 +144,7 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, AllWorkers),
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceDirGuid, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, trash:guid(SpaceId), BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, trash_dir:guid(SpaceId), BatchSize, false),
     ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, false),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
@@ -167,7 +167,7 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
                     lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 100), Attempts),
                 % trash directory should be empty
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(trash:guid(SpaceId)), 0, 100), Attempts);
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(trash_dir:guid(SpaceId)), 0, 100), Attempts);
                 % TODO VFS-7809 Check why sometimes after cleanup in tests, space capacity is not equal to 0
                 % ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
             false ->

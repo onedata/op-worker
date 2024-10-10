@@ -160,7 +160,7 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
         [] ->
             ok;
         SpacesDiff ->
-            lists:foreach(fun special_dirs:report_new_space/1, SpacesDiff),
+            lists:foreach(fun special_dirs:set_up_for_new_space/1, SpacesDiff),
             user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
     end.
 

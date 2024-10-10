@@ -21,7 +21,17 @@
 % API
 -export([uuid/1, ensure_exists/2, ensure_parent_link_exists/2, delete_parent_link/2]).
 % special_dir_behaviour
--export([is_special/2, is_operation_allowed/1, exists/1]).
+-export([
+    is_special/2,
+    is_operation_allowed/1,
+    is_scope_root_dir/0,
+    is_restricted_for_datasets/0,
+    is_harvested/0,
+    is_ignored_in_dir_stats/0,
+    is_ignored_in_events/0,
+    is_without_parent/0,
+    exists/1
+]).
 
 -define(ALLOWED_OPERATIONS, [
     resolve_guid,
@@ -47,24 +57,24 @@ uuid(DatasetId) -> ?DATASET_ARCHIVES_DIR_UUID(DatasetId).
 
 -spec ensure_exists(binary(), binary()) -> ok.
 ensure_exists(DatasetId, SpaceId) ->
-    ParentUuid = archives_root_dir:uuid(SpaceId),
+    ParentUuid = space_archives_root_dir:uuid(SpaceId),
     FMDoc = file_meta:new_dir_doc(uuid(DatasetId), ?DATASET_ARCHIVES_DIR_NAME(DatasetId),
         ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
-    archives_root_dir:ensure_exists(SpaceId),
+    space_archives_root_dir:ensure_exists(SpaceId),
     special_dir_docs:create(SpaceId, FMDoc, add_link),
     ok.
 
 
 -spec ensure_parent_link_exists(dataset:id(), od_space:id()) -> ok.
 ensure_parent_link_exists(DatasetId, SpaceId) ->
-    special_dir_docs:add_parent_link(archives_root_dir:uuid(SpaceId), SpaceId,
+    special_dir_docs:ensure_parent_link(space_archives_root_dir:uuid(SpaceId), SpaceId,
         ?DATASET_ARCHIVES_DIR_NAME(DatasetId), uuid(DatasetId)).
 
 
 -spec delete_parent_link(dataset:id(), od_space:id()) -> ok.
 delete_parent_link(DatasetId, SpaceId) ->
-    special_dir_docs:delete_parent_link(archives_root_dir:uuid(SpaceId), SpaceId,
+    special_dir_docs:delete_parent_link(space_archives_root_dir:uuid(SpaceId), SpaceId,
         ?DATASET_ARCHIVES_DIR_NAME(DatasetId), uuid(DatasetId)).
 
 %%%===================================================================
@@ -80,6 +90,30 @@ is_special(_, _) -> false.
 -spec is_operation_allowed(atom()) -> boolean().
 is_operation_allowed(Operation) ->
     lists:member(Operation, ?ALLOWED_OPERATIONS).
+
+
+-spec is_scope_root_dir() -> boolean().
+is_scope_root_dir() -> false.
+
+
+-spec is_restricted_for_datasets() -> boolean().
+is_restricted_for_datasets() -> true.
+
+
+-spec is_harvested() -> boolean().
+is_harvested() -> false.
+
+
+-spec is_ignored_in_dir_stats() -> boolean().
+is_ignored_in_dir_stats() -> true.
+
+
+-spec is_ignored_in_events() -> boolean().
+is_ignored_in_events() -> false.
+
+
+-spec is_without_parent() -> boolean().
+is_without_parent() -> false.
 
 
 -spec exists(file_meta:uuid()) -> boolean().

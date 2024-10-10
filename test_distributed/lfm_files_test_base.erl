@@ -1886,7 +1886,7 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        ?ERROR_POSIX(?EPERM),
+        ?ERROR_FORBIDDEN,
         opt_shares:create(W, SessId, ?FILE_REF(user_root_dir:guid(UserId)), <<"share_name">>)
     ),
     % But space dir can

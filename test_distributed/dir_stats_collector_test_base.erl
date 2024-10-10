@@ -123,7 +123,7 @@ basic_test(Config) ->
         ?PHYSICAL_SIZE_KEY(Config, op_worker_nodes) => 0
     }),
 
-    check_dir_stats(Config, op_worker_nodes, trash:guid(SpaceId), #{
+    check_dir_stats(Config, op_worker_nodes, trash_dir:guid(SpaceId), #{
         ?REG_FILE_AND_LINK_COUNT => 0,
         ?DIR_COUNT => 0,
         ?FILE_ERROR_COUNT => 0,
@@ -601,7 +601,7 @@ multiprovider_trash_test(Config) ->
         CheckFun = fun() ->
             [W | _] = ?config(NodesSelector, Config),
             SpaceStats = rpc:call(W, dir_size_stats, get_stats, [SpaceDirGuid]),
-            TrashStats = rpc:call(W, dir_size_stats, get_stats, [trash:guid(SpaceId)]),
+            TrashStats = rpc:call(W, dir_size_stats, get_stats, [trash_dir:guid(SpaceId)]),
             HighestLevelDirStats = lists:map(fun({Guid, _}) ->
                 rpc:call(W, dir_size_stats, get_stats, [Guid])
             end, GuidsAndNames),

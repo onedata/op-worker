@@ -208,11 +208,13 @@ create({uuid, ParentUuid}, FileDoc = #document{
                                     false ->
                                         create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
                                     _ ->
+                                        delete_without_link(FileUuid),
                                         Eexists
                                 end;
                             {error, not_found} ->
                                 create({uuid, ParentUuid}, FileDoc, TreesToCheck);
                             _ ->
+                                delete_without_link(FileUuid),
                                 Eexists
                         end;
                     {error, Reason} ->

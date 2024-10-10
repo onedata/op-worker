@@ -239,7 +239,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
 
     SpaceDirGuid = space_dir:guid(?SPACE_ID1),
-    TrashGuid = trash:guid(?SPACE_ID1),
+    TrashGuid = trash_dir:guid(?SPACE_ID1),
     {ok, SpaceFileId} = file_id:guid_to_objectid(SpaceDirGuid),
     {ok, TrashFileId} = file_id:guid_to_objectid(TrashGuid),
 

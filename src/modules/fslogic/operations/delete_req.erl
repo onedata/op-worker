@@ -66,8 +66,8 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
     {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     {Filename, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    FileCtx4 = trash:move_to_trash(FileCtx3, UserCtx),
-    {ok, _} = trash:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
+    FileCtx4 = trash_dir:move_to_trash(FileCtx3, UserCtx),
+    {ok, _} = trash_dir:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
     ?FUSE_OK_RESP.
 
 

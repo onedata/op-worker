@@ -22,8 +22,19 @@
 
 -callback is_operation_allowed(atom()) -> boolean().
 
--callback exists(file_meta:uuid()) -> boolean().
+-callback is_scope_root_dir() -> boolean().
 
+-callback is_restricted_for_datasets() -> boolean().
+
+-callback is_harvested() -> boolean().
+
+-callback is_ignored_in_dir_stats() -> boolean().
+
+-callback is_ignored_in_events() -> boolean().
+
+-callback is_without_parent() -> boolean().
+
+-callback exists(file_meta:uuid()) -> boolean().
 
 %%%===================================================================
 %%% Optional callbacks

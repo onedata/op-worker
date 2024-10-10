@@ -431,7 +431,7 @@ get_effective(#document{} = FileDoc, OriginalParentDoc, Options) ->
         ([_, {error, _} = Error, _CalculationInfo]) ->
             Error;
         ([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
-            case trash:is_special(uuid, Uuid) of
+            case trash_dir:is_special(uuid, Uuid) of
                 true ->
                     % qos cannot be set on trash directory
                     {ok, #effective_file_qos{in_trash = true}, CalculationInfo};

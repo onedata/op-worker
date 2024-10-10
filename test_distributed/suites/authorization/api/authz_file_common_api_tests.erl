@@ -51,7 +51,7 @@ test_get_parent(SpaceId) ->
         end,
         forbidden_special_dirs = [
             trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
-            archives_root_dir, dataset_archives_root_dir, archive_dir
+            space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = {error, ?EPERM}
     }).
@@ -77,7 +77,7 @@ test_get_file_path(SpaceId) ->
         end,
         forbidden_special_dirs = [
             trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
-            archives_root_dir, dataset_archives_root_dir
+            space_archives_root_dir, dataset_archives_root_dir
         ],
         special_dirs_error = {error, ?EPERM}
     }).

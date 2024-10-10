@@ -114,7 +114,7 @@ all() -> ?ALL([
 -define(SPACE_UUID(SpaceId), space_dir:uuid(SpaceId)).
 -define(SPACE_DIR_GUID, ?SPACE_DIR_GUID(?SPACE_ID1)).
 -define(SPACE_DIR_GUID(SpaceId), space_dir:guid(SpaceId)).
--define(TRASH_DIR_GUID(SpaceId), trash:guid(SpaceId)).
+-define(TRASH_DIR_GUID(SpaceId), trash_dir:guid(SpaceId)).
 
 -define(ATTEMPTS, 300).
 -define(RAND_NAME(Prefix), <<Prefix/binary, (integer_to_binary(rand:uniform(1000)))/binary>>).
@@ -219,42 +219,42 @@ set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     JSON = #{<<"key">> => <<"value">>},
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json, JSON, [])).
 
 set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_cdmi:set_mimetype(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"mimetype">>)),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_cdmi:set_cdmi_completion_status(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"COMPLETED">>)),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_cdmi:set_transfer_encoding(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"base64">>)).
 
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_shares:create(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"MY SHARE">>)).
 
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_qos:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"key=value">>, 1)).
 
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_file_metadata:remove_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json)).
 
 schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P2Id)).
 
 schedule_eviction_transfer_on_trash_dir_is_allowed(_Config) ->
@@ -271,7 +271,7 @@ schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERROR_FORBIDDEN,
         opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, P2Id)).
 
 schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
@@ -694,11 +694,11 @@ end_per_testcase(_Case, Config) ->
 
 move_to_trash(Worker, FileCtx, SessId) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    rpc:call(Worker, trash, move_to_trash, [FileCtx, UserCtx]).
+    rpc:call(Worker, trash_dir, move_to_trash, [FileCtx, UserCtx]).
 
 schedule_deletion_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid, DirName) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    rpc:call(Worker, trash, schedule_deletion_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid, DirName]).
+    rpc:call(Worker, trash_dir, schedule_deletion_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid, DirName]).
 
 register_file(Worker, User, Body) ->
     Headers = #{

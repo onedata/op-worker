@@ -22,7 +22,18 @@
 % API
 -export([uuid/1, guid/2, ensure_exists/4]).
 % special_dir_behaviour
--export([is_special/2, is_operation_allowed/1, exists/1]).
+-export([
+    is_special/2,
+    is_operation_allowed/1,
+    is_scope_root_dir/0,
+    is_restricted_for_datasets/0,
+    is_harvested/0,
+    is_ignored_in_dir_stats/0,
+    is_ignored_in_events/0,
+    is_without_parent/0,
+    exists/1
+]).
+
 
 -define(ALLOWED_OPERATIONS, [
     resolve_guid,
@@ -85,6 +96,31 @@ is_operation_allowed(Operation) ->
     lists:member(Operation, ?ALLOWED_OPERATIONS).
 
 
+-spec is_scope_root_dir() -> boolean().
+is_scope_root_dir() -> false.
+
+
+-spec is_restricted_for_datasets() -> boolean().
+is_restricted_for_datasets() -> false.
+
+
+-spec is_harvested() -> boolean().
+is_harvested() -> false.
+
+
+-spec is_ignored_in_dir_stats() -> boolean().
+is_ignored_in_dir_stats() -> true.
+
+
+-spec is_ignored_in_events() -> boolean().
+is_ignored_in_events() -> false.
+
+
+-spec is_without_parent() -> boolean().
+is_without_parent() -> false.
+
+
 -spec exists(file_meta:uuid()) -> boolean().
 exists(Uuid) ->
     file_meta:exists(Uuid).
+

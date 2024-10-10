@@ -175,7 +175,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), element(1, Operation)) of
             false ->
                 ?ERROR_FORBIDDEN;
-            _ ->
+            true ->
                 case fslogic_worker:is_storage_accessible(FileCtx) of
                     true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
                     false -> ?ERROR_SERVICE_UNAVAILABLE

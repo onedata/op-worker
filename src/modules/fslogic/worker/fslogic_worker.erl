@@ -458,15 +458,15 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
     try
-        case is_operation_allowed(FileCtx1, extract_operation(Request)) of
+        case is_operation_allowed_by_special_dir_logic(FileCtx1, get_operation(Request)) of
             false ->
-                build_eperm_response(Request);
-            _ ->
+                throw(?EPERM);
+            true ->
                 case is_storage_accessible(FileCtx1) of
                     true ->
                         handle_request_locally(EffUserCtx, Request, FileCtx1);
                     false ->
-                        #fuse_response{status = #status{code = ?EAGAIN}}
+                        throw(?EAGAIN)
                 end
         end
     catch
@@ -951,26 +951,8 @@ format_unhealthy_storages_report(HealthyStorages) ->
 
 
 %% @private
--spec extract_operation(request()) -> atom().
-extract_operation(#fuse_request{fuse_request = #file_request{file_request = FileRequest}}) -> element(1, FileRequest);
-extract_operation(#fuse_request{fuse_request = FuseRequest}) -> element(1, FuseRequest);
-extract_operation(#provider_request{provider_request = ProviderRequest}) -> element(1, ProviderRequest);
-extract_operation(#proxyio_request{proxyio_request = ProxyioRequest}) -> element(1, ProxyioRequest).
-
-
-%% @private
--spec build_eperm_response(request()) -> response().
-build_eperm_response(#fuse_request{}) ->
-    #fuse_response{status = #status{code = ?EPERM}};
-build_eperm_response(#provider_request{}) ->
-    #provider_response{status = #status{code = ?EPERM}};
-build_eperm_response(#proxyio_request{}) ->
-    #proxyio_response{status = #status{code = ?EPERM}}.
-
-
-%% @private
--spec is_operation_allowed(file_ctx:ctx() | undefined, atom()) -> boolean().
-is_operation_allowed(undefined, _Operation) ->
+-spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, atom()) -> boolean().
+is_operation_allowed_by_special_dir_logic(undefined, _Operation) ->
     true;
-is_operation_allowed(FileCtx, Operation) ->
+is_operation_allowed_by_special_dir_logic(FileCtx, Operation) ->
     special_dirs:is_operation_allowed(file_ctx:get_logical_uuid_const(FileCtx), Operation).

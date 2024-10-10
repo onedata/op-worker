@@ -39,6 +39,7 @@
     no_return() | #fuse_response{}.
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     validate_target_name(TargetName),
+    trash_dir:is_name_allowed(TargetName, file_ctx:get_logical_uuid_const(TargetParentFileCtx)) orelse throw(?EPERM),
 
     SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
@@ -714,7 +715,7 @@ should_ensure_sync(
     #document{ignore_in_changes = true} = _SourceDoc,
     #document{key = ParentKey, ignore_in_changes = false} = _ParentDoc
 ) ->
-    case trash:is_special(uuid, ParentKey) of
+    case trash_dir:is_special(uuid, ParentKey) of
         true -> ignore;
         false -> ensure
     end;

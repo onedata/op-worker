@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% It is a special directory that is parent for all spaces.
+%%% Virtual root directory containing all supported spaces.
 %%% NOTE: spaces are also linked to virtual root directories of each user belonging to space (@see user_root_dir)
 %%% @end
 %%%-------------------------------------------------------------------
@@ -20,7 +20,18 @@
 % API
 -export([uuid/0, guid/0]).
 % special_dir_behaviour
--export([is_special/2, is_operation_allowed/1, exists/1, get_file_meta/1]).
+-export([
+    is_special/2,
+    is_operation_allowed/1,
+    is_scope_root_dir/0,
+    is_restricted_for_datasets/0,
+    is_harvested/0,
+    is_ignored_in_dir_stats/0,
+    is_ignored_in_events/0,
+    is_without_parent/0,
+    exists/1,
+    get_file_meta/1
+]).
 
 %%%===================================================================
 %%% API
@@ -48,6 +59,32 @@ is_special(_, _) -> false.
 
 -spec is_operation_allowed(atom()) -> boolean().
 is_operation_allowed(_) -> false.
+
+
+-spec is_scope_root_dir() -> boolean().
+is_scope_root_dir() -> true.
+
+
+-spec is_restricted_for_datasets() -> boolean().
+is_restricted_for_datasets() -> true.
+
+
+-spec is_harvested() -> boolean().
+is_harvested() -> false.
+
+
+-spec is_ignored_in_dir_stats() -> boolean().
+is_ignored_in_dir_stats() -> true.
+
+
+-spec is_ignored_in_events() -> boolean().
+is_ignored_in_events() -> false.
+
+
+-spec is_without_parent() -> boolean().
+is_without_parent() -> true.
+
+
 
 
 -spec exists(file_meta:uuid()) -> boolean().

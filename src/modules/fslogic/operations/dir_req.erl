@@ -67,6 +67,7 @@
 ) ->
     fslogic_worker:fuse_response().
 mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
+    trash_dir:is_name_allowed(Name, file_ctx:get_logical_uuid_const(ParentFileCtx0)) orelse throw(?EPERM),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]

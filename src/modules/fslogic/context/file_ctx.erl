@@ -643,8 +643,8 @@ get_times(FileCtx) ->
 
 -spec get_times(ctx(), [times_api:times_type()]) -> {times:record(), ctx()}.
 get_times(FileCtx = #file_ctx{times = undefined}, RequestedTimes) ->
-    FileUuid = get_logical_uuid_const(FileCtx),
-    Times = case special_dirs:get_times_if_special(FileUuid, RequestedTimes) of
+    FileGuid = get_logical_guid_const(FileCtx),
+    Times = case special_dirs:get_times_if_special(FileGuid, RequestedTimes) of
         {true, T} -> T;
         not_special -> times_api:get(FileCtx, RequestedTimes)
     end,
@@ -1250,9 +1250,10 @@ get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) -
 %%% Internal functions
 %%%===================================================================
 
--spec resolve_and_cache_path(ctx(), file_meta:path_type()) -> {file_meta:uuid() | file_meta:name(), ctx()}.
+-spec resolve_and_cache_path(ctx(), file_meta:path_type()) ->
+    {file_meta:uuid() | file_meta:name(), ctx()} | no_return().
 resolve_and_cache_path(FileCtx, PathType) ->
-    case get_file_doc_including_deleted(FileCtx) of
+    try get_file_doc_including_deleted(FileCtx) of
         {#document{
             key = Uuid,
             value = #file_meta{
@@ -1286,8 +1287,9 @@ resolve_and_cache_path(FileCtx, PathType) ->
                         {error, not_found} ->
                             throw({error, ?MISSING_FILE_META(ParentUuid)})
                     end
-            end;
-    {error, not_found} ->
+            end
+    catch
+        _:{badmatch, {error, not_found}} ->
             throw({error, ?MISSING_FILE_META(file_ctx:get_logical_uuid_const(FileCtx))})
     end.
 

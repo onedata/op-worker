@@ -146,7 +146,7 @@ get_original_parent(FileCtx, undefined) ->
     get_parent(FileCtx, undefined);
 get_original_parent(FileCtx, OriginalParentCtx) ->
     {ParentCtx, FileCtx2} = get_parent(FileCtx, undefined),
-    case trash:is_special(uuid, file_ctx:get_logical_uuid_const(ParentCtx)) of
+    case trash_dir:is_special(uuid, file_ctx:get_logical_uuid_const(ParentCtx)) of
         true ->
             {OriginalParentCtx, FileCtx2};
         false ->

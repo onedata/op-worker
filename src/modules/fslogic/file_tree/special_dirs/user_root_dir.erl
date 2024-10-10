@@ -46,7 +46,8 @@
 % API
 -export([
     uuid/1,
-    guid/1
+    guid/1,
+    ensure_exists/1
 ]).
 
 -export([
@@ -67,8 +68,13 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    ensure_exists/1,
     is_operation_allowed/1,
+    is_scope_root_dir/0,
+    is_restricted_for_datasets/0,
+    is_harvested/0,
+    is_ignored_in_dir_stats/0,
+    is_ignored_in_events/0,
+    is_without_parent/0,
     exists/1
 ]).
 
@@ -250,6 +256,30 @@ is_operation_allowed(Operation) ->
     lists:member(Operation, ?ALLOWED_OPERATIONS).
 
 
+-spec is_scope_root_dir() -> boolean().
+is_scope_root_dir() -> true.
+
+
+-spec is_restricted_for_datasets() -> boolean().
+is_restricted_for_datasets() -> true.
+
+
+-spec is_harvested() -> boolean().
+is_harvested() -> false.
+
+
+-spec is_ignored_in_dir_stats() -> boolean().
+is_ignored_in_dir_stats() -> false.
+
+
+-spec is_ignored_in_events() -> boolean().
+is_ignored_in_events() -> false.
+
+
+-spec is_without_parent() -> boolean().
+is_without_parent() -> true.
+
+
 -spec exists(file_meta:uuid()) -> boolean().
 exists(Uuid) ->
     file_meta:exists(Uuid).
@@ -408,4 +438,4 @@ emit_space_dir_created(SessId, SpaceId, SpaceName) ->
 -spec emit_space_dir_deleted(od_space:id(), od_user:id()) -> ok.
 emit_space_dir_deleted(SpaceId, UserId) ->
     FileCtx = file_ctx:new_by_uuid(space_dir:uuid(SpaceId), SpaceId),
-    ok = fslogic_event_emitter:emit_file_removed(FileCtx, [], user_root_dir:guid(UserId)).
+    ok = fslogic_event_emitter:emit_file_removed(FileCtx, [], guid(UserId)).
