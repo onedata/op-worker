@@ -31,6 +31,7 @@
 %%%===================================================================
 
 
+-spec handle_healthcheck_success() -> ok.
 handle_healthcheck_success() ->
     ok = oneprovider:set_up_service_in_onezone().
 

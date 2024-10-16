@@ -12,13 +12,14 @@
 -module(op_worker_circuit_breaker_test_SUITE).
 -author("Katarzyna Such").
 
+-include("api_file_test_utils.hrl").
 -include("cdmi_test.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include("onenv_test_utils.hrl").
--include("api_file_test_utils.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 
 -define(PROVIDER_SELECTOR, krakow).
--define(GUI_UPLOAD_INTERVAL, 10).
+-define(GUI_UPLOAD_INTERVAL_SECONDS, 10).
 
 %% API
 -export([
@@ -91,25 +92,22 @@ gs_circuit_breaker_test(_Config) ->
 
 gui_upload_circuit_breaker_test(_Config) ->
     OpWorkerNode = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
-    Path = ?rpc(OpWorkerNode, op_worker:get_env(gui_package_path)),
+    Path = opw_test_rpc:get_env(OpWorkerNode, gui_package_path),
 
     set_oz_circuit_breaker_state(open),
     ok = create_dummy_gui_package(),
 
     %% since the oz is blocked op will not upload gui
     {ok, GuiHashOpen} = ?rpc(OpWorkerNode, gui:package_hash(Path)),
-    WorkerGuiHashOpen = get_worker_gui_hash(OpWorkerNode),
-    ?assertNotEqual(GuiHashOpen, WorkerGuiHashOpen),
+    ?assertNotEqual(GuiHashOpen, get_worker_gui_hash(OpWorkerNode)),
 
     set_oz_circuit_breaker_state(closed),
-    timer:sleep(timer:seconds(?GUI_UPLOAD_INTERVAL)),
 
     %% after setting service_circuit_breaker_state to closed in oz,
     %% gui will upload automatically within gui_upload_interval time
     {ok, GuiHashClosed} = ?rpc(OpWorkerNode, gui:package_hash(Path)),
-    WorkerGuiHashClosed = get_worker_gui_hash(OpWorkerNode),
 
-    ?assertEqual(GuiHashClosed, WorkerGuiHashClosed).
+    ?assertEqual(GuiHashClosed, get_worker_gui_hash(OpWorkerNode), ?ATTEMPTS).
 
 
 %%%===================================================================
@@ -119,7 +117,7 @@ gui_upload_circuit_breaker_test(_Config) ->
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{gui_upload_interval, ?GUI_UPLOAD_INTERVAL}]}]
+        envs = [{op_worker, op_worker, [{gui_upload_interval_seconds, ?GUI_UPLOAD_INTERVAL_SECONDS}]}]
         }).
 
 
@@ -132,9 +130,7 @@ init_per_testcase(_, Config) ->
 
 
 end_per_testcase(gui_upload_circuit_breaker_test, Config) ->
-    Path = ?rpc(?PROVIDER_SELECTOR, op_worker:get_env(gui_package_path)),
-    TempDir = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
-    DummyGuiRoot = filename:join(TempDir, "gui_static"),
+    {_, DummyGuiRoot} = get_dummy_gui_root(),
     ok = file:del_dir_r(DummyGuiRoot),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
@@ -159,19 +155,18 @@ get_cdmi_response() ->
 
 %% @private
 set_circuit_breaker_state(State) ->
-    ok = ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(service_circuit_breaker_state, State)).
+    ok = opw_test_rpc:set_env(?PROVIDER_SELECTOR, service_circuit_breaker_state, State).
 
 
 %% @private
 set_oz_circuit_breaker_state(State) ->
-    OzWorkerNode = hd(oct_background:get_zone_nodes()),
-    ok = ?rpc(OzWorkerNode, oz_worker:set_env(service_circuit_breaker_state, State)).
+    ok = ozw_test_rpc:set_env(service_circuit_breaker_state, State).
 
 
 %% @private
 process_http_response(Response) ->
     case Response of
-        {ok, 200, _, _} ->
+        {ok, ?HTTP_200_OK, _, _} ->
             ok;
         {ok, _, _, ErrorBody} ->
             #{<<"error">> := ErrorJson} = json_utils:decode(ErrorBody),
@@ -181,10 +176,7 @@ process_http_response(Response) ->
 
 %% @private
 create_dummy_gui_package() ->
-    Path = ?rpc(?PROVIDER_SELECTOR, op_worker:get_env(gui_package_path)),
-    TempDir = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
-    DummyGuiRoot = filename:join(TempDir, "gui_static"),
-
+    {TempDir, DummyGuiRoot} = get_dummy_gui_root(),
     ok = file:make_dir(DummyGuiRoot),
     DummyIndex = filename:join(DummyGuiRoot, "index.html"),
     IndexContent = datastore_key:new(),
@@ -196,6 +188,13 @@ create_dummy_gui_package() ->
     [] = os:cmd(str_utils:format("tar -C ~ts -czf ~ts ~ts", [TempDir, DummyPackage, "gui_static"])),
     {ok, Content} = file:read_file(DummyPackage),
     ok = ?rpc(?PROVIDER_SELECTOR, file:write_file(DummyPackage, Content)).
+
+
+%% @private
+get_dummy_gui_root() ->
+    Path = opw_test_rpc:get_env(?PROVIDER_SELECTOR, gui_package_path),
+    TempDir = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
+    {TempDir, filename:join(TempDir, "gui_static")}.
 
 
 %% @private

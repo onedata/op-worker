@@ -43,10 +43,10 @@
 
 groups() -> [
     {parallel_tests, [parallel], [
-%%        registering_upload_for_directory_should_fail_test,
-%%        registering_upload_for_non_empty_file_should_fail_test,
-%%        registering_upload_for_not_owned_file_should_fail_test,
-%%        not_registered_upload_should_fail_test,
+        registering_upload_for_directory_should_fail_test,
+        registering_upload_for_non_empty_file_should_fail_test,
+        registering_upload_for_not_owned_file_should_fail_test,
+        not_registered_upload_should_fail_test,
         upload_test
     ]},
     {time_mock_tests, [sequential], [
