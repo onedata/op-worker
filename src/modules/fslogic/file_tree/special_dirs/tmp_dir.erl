@@ -14,7 +14,9 @@
 
 -behaviour(special_dir_behaviour).
 
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 % API
@@ -22,34 +24,35 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    is_operation_allowed/1,
-    is_scope_root_dir/0,
-    is_restricted_for_datasets/0,
-    is_harvested/0,
-    is_ignored_in_dir_stats/0,
-    is_ignored_in_events/0,
-    is_without_parent/0,
+    allowed_operations/0,
+    is_filesystem_root_dir/0,
+    can_be_shared/0,
+    is_affected_by_protection_flags/0,
+    is_included_in_harvesting/0,
+    is_included_in_dir_stats/0,
+    is_included_in_events/0,
+    is_logically_detached/0,
     exists/1
 ]).
 
 
 -define(ALLOWED_OPERATIONS, [
-    resolve_guid,
-    resolve_guid_by_relative_path,
+    #resolve_guid{}
+    #resolve_guid_by_relative_path{}
 
-    create_dir,
-    create_file,
-    make_file,
-    make_link,
-    make_symlink,
+    #create_dir{}
+    #create_file{}
+    #make_file{}
+    #make_link{}
+    #make_symlink{}
 
-    get_file_attr,
-    get_file_children,
-    get_child_attr,
-    get_file_children_attrs,
-    get_recursive_file_list,
+    #get_file_attr{}
+    #get_file_children{}
+    #get_child_attr{}
+    #get_file_children_attrs{}
+    #get_recursive_file_list{}
 
-    historical_dir_size_stats_get_request
+    #historical_dir_size_stats_get_request{}
 ]).
 
 %%%===================================================================
@@ -91,35 +94,38 @@ is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec is_operation_allowed(atom()) -> boolean().
-is_operation_allowed(Operation) ->
-    lists:member(Operation, ?ALLOWED_OPERATIONS).
+-spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+allowed_operations() -> ?ALLOWED_OPERATIONS.
 
 
--spec is_scope_root_dir() -> boolean().
-is_scope_root_dir() -> false.
+-spec is_filesystem_root_dir() -> boolean().
+is_filesystem_root_dir() -> false.
 
 
--spec is_restricted_for_datasets() -> boolean().
-is_restricted_for_datasets() -> true.
+-spec can_be_shared() -> boolean().
+can_be_shared() -> false.
 
 
--spec is_harvested() -> boolean().
-is_harvested() -> false. % it is not in changes anyway
+-spec is_affected_by_protection_flags() -> boolean().
+is_affected_by_protection_flags() -> false.
 
 
--spec is_ignored_in_dir_stats() -> boolean().
-is_ignored_in_dir_stats() ->
-    %% @TODO VFS-12228 - it is handled specially in stats
+-spec is_included_in_harvesting() -> boolean().
+is_included_in_harvesting() -> false.
+
+
+-spec is_included_in_dir_stats() -> boolean().
+is_included_in_dir_stats() ->
+    %% @TODO VFS-12229 - it is handled specially in stats
     false.
 
 
--spec is_ignored_in_events() -> boolean().
-is_ignored_in_events() -> true.
+-spec is_included_in_events() -> boolean().
+is_included_in_events() -> false.
 
 
--spec is_without_parent() -> boolean().
-is_without_parent() -> true.
+-spec is_logically_detached() -> boolean().
+is_logically_detached() -> true.
 
 
 -spec exists(file_meta:uuid()) -> boolean().

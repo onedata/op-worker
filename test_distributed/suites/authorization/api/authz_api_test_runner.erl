@@ -1250,12 +1250,12 @@ build_special_dir_file_key(tmp_dir, #authz_test_suite_spec{space_id = SpaceId}) 
     ?FILE_REF(tmp_dir:guid(SpaceId));
 build_special_dir_file_key(opened_deleted_files_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
     ?FILE_REF(opened_deleted_files_dir:guid(SpaceId));
-build_special_dir_file_key(share_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(file_id:pack_guid(share_root_dir:uuid(<<"dummy_id">>), SpaceId));
+build_special_dir_file_key(share_container, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(file_id:pack_guid(share_container:uuid(<<"dummy_id">>), SpaceId));
 build_special_dir_file_key(space_archives_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(space_archives_root_dir:guid(SpaceId));
+    ?FILE_REF(space_archives_dir:guid(SpaceId));
 build_special_dir_file_key(dataset_archives_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(file_id:pack_guid(dataset_archives_root_dir:uuid(<<"dummy_id">>), SpaceId));
+    ?FILE_REF(file_id:pack_guid(dataset_archives_dir:uuid(<<"dummy_id">>), SpaceId));
 build_special_dir_file_key(archive_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
     ?FILE_REF(file_id:pack_guid(archive_dir:uuid(<<"dummy_id">>), SpaceId)).
 

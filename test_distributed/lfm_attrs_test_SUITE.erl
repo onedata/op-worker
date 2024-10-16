@@ -930,7 +930,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     ),
 
     BuildShareRootDirFun = fun(ShareId) ->
-        file_id:pack_share_guid(share_root_dir:uuid(ShareId), SpaceId, ShareId)
+        file_id:pack_share_guid(share_container:uuid(ShareId), SpaceId, ShareId)
     end,
 
     SpaceShareId = <<"spaceshare">>,

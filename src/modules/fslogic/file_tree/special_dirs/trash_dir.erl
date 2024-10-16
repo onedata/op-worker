@@ -12,7 +12,7 @@
 %%% Trash directory is created for each space, it has a predefined uuid and a predefined name.
 %%% Trash directory is child of a space directory.
 %%%
-%%% TODO VFS-7064 below paragraph will be true after adding link from space directory to trash in 21.02
+%%% TODO VFS-7064 below paragraph will be true after adding link from space directory to trash
 %%% Each provider adds link from space to trash to its own file_meta_forest
 %%% tree. The links are not listed as conflicting because file_meta_forest
 %%% module detects that they point to the same uuid.
@@ -29,10 +29,8 @@
 
 -behaviour(special_dir_behaviour).
 
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("middleware/middleware.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 
 %% API
@@ -43,13 +41,14 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    is_operation_allowed/1,
-    is_scope_root_dir/0,
-    is_restricted_for_datasets/0,
-    is_harvested/0,
-    is_ignored_in_dir_stats/0,
-    is_ignored_in_events/0,
-    is_without_parent/0,
+    allowed_operations/0,
+    is_filesystem_root_dir/0,
+    can_be_shared/0,
+    is_affected_by_protection_flags/0,
+    is_included_in_harvesting/0,
+    is_included_in_dir_stats/0,
+    is_included_in_events/0,
+    is_logically_detached/0,
     exists/1
 ]).
 
@@ -59,15 +58,15 @@
 
 
 -define(ALLOWED_OPERATIONS, [
-    resolve_guid,
+    #resolve_guid{}
 
-    get_file_attr,
-    get_file_children,
-    get_child_attr,
-    get_file_children_attrs,
-    get_recursive_file_list,
+    #get_file_attr{}
+    #get_file_children{}
+    #get_child_attr{}
+    #get_file_children_attrs{}
+    #get_recursive_file_list{}
 
-    historical_dir_size_stats_get_request
+    #historical_dir_size_stats_get_request{}
 ]).
 
 %%%===================================================================
@@ -97,7 +96,7 @@ ensure_exists(SpaceId) ->
 move_to_trash(FileCtx, UserCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     FileCtx3 = add_deletion_marker_if_applicable(ParentUuid, FileCtx2),
     {Name, FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
@@ -105,7 +104,7 @@ move_to_trash(FileCtx, UserCtx) ->
     % files moved to trash are direct children of trash directory
     % their names are suffixed with Uuid to avoid conflicts
     TrashUuid = uuid(SpaceId),
-    % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
+    % TODO VFS-7133 save original parent after extending file_meta !!!
     file_qos:cleanup_reference_related_documents(FileCtx5),
     ok = qos_eff_cache:invalidate_on_all_nodes(SpaceId),
     NameInTrash = ?NAME_IN_TRASH(Name, Uuid),
@@ -161,33 +160,36 @@ is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec is_operation_allowed(atom()) -> boolean().
-is_operation_allowed(Operation) ->
-    lists:member(Operation, ?ALLOWED_OPERATIONS).
+-spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+allowed_operations() -> ?ALLOWED_OPERATIONS.
 
 
--spec is_scope_root_dir() -> boolean().
-is_scope_root_dir() -> false.
+-spec is_filesystem_root_dir() -> boolean().
+is_filesystem_root_dir() -> false.
 
 
--spec is_restricted_for_datasets() -> boolean().
-is_restricted_for_datasets() -> true.
+-spec can_be_shared() -> boolean().
+can_be_shared() -> false.
 
 
--spec is_harvested() -> boolean().
-is_harvested() -> false.
+-spec is_affected_by_protection_flags() -> boolean().
+is_affected_by_protection_flags() -> false.
 
 
--spec is_ignored_in_dir_stats() -> boolean().
-is_ignored_in_dir_stats() -> true.
+-spec is_included_in_harvesting() -> boolean().
+is_included_in_harvesting() -> false.
 
 
--spec is_ignored_in_events() -> boolean().
-is_ignored_in_events() -> true.
+-spec is_included_in_dir_stats() -> boolean().
+is_included_in_dir_stats() -> false.
 
 
--spec is_without_parent() -> boolean().
-is_without_parent() -> true.
+-spec is_included_in_events() -> boolean().
+is_included_in_events() -> false.
+
+
+-spec is_logically_detached() -> boolean().
+is_logically_detached() -> true.
 
 
 -spec exists(file_meta:uuid()) -> boolean().

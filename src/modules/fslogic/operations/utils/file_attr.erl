@@ -394,7 +394,7 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs, user_ctx = UserCtx} = State) ->
     case lists:member(?attr_parent_guid, RequestedAttrs) of
         true ->
-            {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+            {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
             {ParentGuid, State#state{file_ctx = FileCtx2}};
         _ ->
             {undefined, State}

@@ -9,41 +9,42 @@
 %%% Directory containing all archives of a space - for more details @see archivisation_tree.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_archives_root_dir).
+-module(space_archives_dir).
 -author("Michal Stanisz").
 
 -behaviour(special_dir_behaviour).
 
+-include("middleware/middleware.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 % API
 -export([uuid/1, guid/1, ensure_exists/1]).
 % special_dir_behaviour
 -export([
     is_special/2,
-    is_operation_allowed/1,
-    is_scope_root_dir/0,
-    is_restricted_for_datasets/0,
-    is_harvested/0,
-    is_ignored_in_dir_stats/0,
-    is_ignored_in_events/0,
-    is_without_parent/0,
+    allowed_operations/0,
+    is_filesystem_root_dir/0,
+    can_be_shared/0,
+    is_affected_by_protection_flags/0,
+    is_included_in_harvesting/0,
+    is_included_in_dir_stats/0,
+    is_included_in_events/0,
+    is_logically_detached/0,
     exists/1
 ]).
 
 -define(ALLOWED_OPERATIONS, [
-    resolve_guid,
-    resolve_guid_by_relative_path,
+    #resolve_guid{}
+    #resolve_guid_by_relative_path{}
 
-    get_file_attr,
-    get_file_children,
-    get_child_attr,
-    get_file_children_attrs,
-    get_recursive_file_list,
+    #get_file_attr{}
+    #get_file_children{}
+    #get_child_attr{}
+    #get_file_children_attrs{}
+    #get_recursive_file_list{}
 
-    historical_dir_size_stats_get_request
+    #historical_dir_size_stats_get_request{}
 ]).
 
 %%%===================================================================
@@ -51,7 +52,7 @@
 %%%===================================================================
 
 -spec uuid(od_space:id()) -> file_meta:uuid().
-uuid(SpaceId) -> ?ARCHIVES_ROOT_DIR_UUID(SpaceId).
+uuid(SpaceId) -> ?SPACE_ARCHIVES_DIR_UUID(SpaceId).
 
 
 -spec guid(od_space:id()) -> file_meta:uuid().
@@ -61,7 +62,7 @@ guid(SpaceId) -> file_id:pack_guid(uuid(SpaceId), SpaceId).
 -spec ensure_exists(binary()) -> ok.
 ensure_exists(SpaceId) ->
     ParentUuid = space_dir:uuid(SpaceId),
-    FMDoc = file_meta:new_dir_doc(uuid(SpaceId), ?SPACE_ARCHIVES_ROOT_DIR_NAME, ?SPACE_ARCHIVES_ROOT_DIR_PERMS,
+    FMDoc = file_meta:new_dir_doc(uuid(SpaceId), ?SPACE_ARCHIVES_DIR_NAME, ?SPACE_ARCHIVES_DIR_PERMS,
         ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
     special_dir_docs:create(SpaceId, FMDoc, add_link),
@@ -69,38 +70,41 @@ ensure_exists(SpaceId) ->
 
 
 -spec is_special(uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().
-is_special(uuid, ?ARCHIVES_ROOT_DIR_UUID(_SpaceId)) -> true;
+is_special(uuid, ?SPACE_ARCHIVES_DIR_UUID(_SpaceId)) -> true;
 is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec is_operation_allowed(atom()) -> boolean().
-is_operation_allowed(Operation) ->
-    lists:member(Operation, ?ALLOWED_OPERATIONS).
+-spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+allowed_operations() -> ?ALLOWED_OPERATIONS.
 
 
--spec is_scope_root_dir() -> boolean().
-is_scope_root_dir() -> false.
+-spec is_filesystem_root_dir() -> boolean().
+is_filesystem_root_dir() -> false.
 
 
--spec is_restricted_for_datasets() -> boolean().
-is_restricted_for_datasets() -> true.
+-spec can_be_shared() -> boolean().
+can_be_shared() -> false.
 
 
--spec is_harvested() -> boolean().
-is_harvested() -> false.
+-spec is_affected_by_protection_flags() -> boolean().
+is_affected_by_protection_flags() -> false.
 
 
--spec is_ignored_in_dir_stats() -> boolean().
-is_ignored_in_dir_stats() -> true.
+-spec is_included_in_harvesting() -> boolean().
+is_included_in_harvesting() -> false.
 
 
--spec is_ignored_in_events() -> boolean().
-is_ignored_in_events() -> false.
+-spec is_included_in_dir_stats() -> boolean().
+is_included_in_dir_stats() -> false.
 
 
--spec is_without_parent() -> boolean().
-is_without_parent() -> true.
+-spec is_included_in_events() -> boolean().
+is_included_in_events() -> true.
+
+
+-spec is_logically_detached() -> boolean().
+is_logically_detached() -> true.
 
 
 -spec exists(file_meta:uuid()) -> boolean().

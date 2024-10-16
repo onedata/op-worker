@@ -215,7 +215,7 @@ has_access_to_file_space(?USER(UserId) = Auth, Guid) ->
     ok | no_return().
 assert_file_managed_locally(FileGuid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
-    case special_dirs:is_scope_root_dir(FileUuid) of
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
         true ->
             ok;
         false ->

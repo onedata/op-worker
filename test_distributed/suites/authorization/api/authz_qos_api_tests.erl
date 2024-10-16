@@ -50,7 +50,7 @@ test_add_qos_entry(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = ?ERROR_FORBIDDEN
@@ -141,7 +141,7 @@ test_get_effective_file_qos(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = ?ERROR_FORBIDDEN

@@ -64,7 +64,7 @@ test_create_file(SpaceId) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir
         ],
         special_dirs_error = {error, ?EPERM}
@@ -167,7 +167,7 @@ test_create_and_open(SpaceId) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir
         ],
         special_dirs_error = {error, ?EPERM}

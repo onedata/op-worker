@@ -158,6 +158,7 @@ execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
     %% @TODO VFS-6134 Close all open file handles
     %% @TODO VFS-6135 Block all modifying file operations
     %% @TODO VFS-6136 Inform onezone that unsupport started
+    %% @TODO VFS-12387 Stop times cache
     ok;
 
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->

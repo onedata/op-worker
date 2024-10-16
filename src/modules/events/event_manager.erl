@@ -314,7 +314,7 @@ get_provider(Request, Manager) ->
 -spec get_provider(Request :: term(), session:id(), file_id:file_guid()) ->
     provider() | no_return().
 get_provider(_, SessId, FileGuid) ->
-    case special_dirs:is_scope_root_dir(file_id:guid_to_uuid(FileGuid)) of
+    case special_dirs:is_filesystem_root_dir(file_id:guid_to_uuid(FileGuid)) of
         true ->
             self;
         false ->

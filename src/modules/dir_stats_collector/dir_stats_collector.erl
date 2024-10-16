@@ -348,7 +348,7 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
 %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
 -spec is_uuid_counted(file_meta:uuid()) -> boolean().
 is_uuid_counted(Uuid) ->
-    not special_dirs:is_ignored_in_dir_stats(Uuid).
+    not special_dirs:is_included_in_dir_stats(Uuid).
 
 
 %%%===================================================================
@@ -1036,7 +1036,7 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
     %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
-    case tmp_dir:is_special(guid, Guid) of
+    case special_dirs:is_special(tmp_dir, guid, Guid) of
         true ->
             CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}};
         false ->
@@ -1106,7 +1106,7 @@ get_parent(Guid) ->
 -spec get_parent(file_meta:doc(), od_space:id()) -> file_id:file_guid().
 get_parent(Doc, SpaceId) ->
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-    case special_dirs:is_scope_root_dir(ParentUuid) of
+    case special_dirs:is_filesystem_root_dir(ParentUuid) of
         true -> <<"root_dir">>;
         false -> file_id:pack_guid(ParentUuid, SpaceId)
     end.

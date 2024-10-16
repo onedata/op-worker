@@ -20,19 +20,21 @@
 
 -callback is_special(uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().
 
--callback is_operation_allowed(atom()) -> boolean().
+-callback allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
 
--callback is_scope_root_dir() -> boolean().
+-callback is_filesystem_root_dir() -> boolean().
 
--callback is_restricted_for_datasets() -> boolean().
+-callback can_be_shared() -> boolean().
 
--callback is_harvested() -> boolean().
+-callback is_affected_by_protection_flags() -> boolean().
 
--callback is_ignored_in_dir_stats() -> boolean().
+-callback is_included_in_harvesting() -> boolean().
 
--callback is_ignored_in_events() -> boolean().
+-callback is_included_in_dir_stats() -> boolean().
 
--callback is_without_parent() -> boolean().
+-callback is_included_in_events() -> boolean().
+
+-callback is_logically_detached() -> boolean().
 
 -callback exists(file_meta:uuid()) -> boolean().
 

@@ -111,7 +111,7 @@ do_master_job(#tree_traverse{
             TrashJob = tree_traverse:get_child_master_job(Job,
                 file_ctx:new_by_uuid(trash_dir:uuid(SpaceId), SpaceId), ?TRASH_DIR_NAME),
             ArchiveJob = tree_traverse:get_child_master_job(Job,
-                file_ctx:new_by_uuid(space_archives_root_dir:uuid(SpaceId), SpaceId), ?SPACE_ARCHIVES_ROOT_DIR_NAME),
+                file_ctx:new_by_uuid(space_archives_dir:uuid(SpaceId), SpaceId), ?SPACE_ARCHIVES_DIR_NAME),
             TmpDirJob = tree_traverse:get_child_master_job(Job,
                 file_ctx:new_by_uuid(tmp_dir:uuid(SpaceId), SpaceId), ?TMP_DIR_NAME),
             {ok, MasterJobMap#{master_jobs => [TrashJob, ArchiveJob, TmpDirJob | maps:get(master_jobs, MasterJobMap, [])]}};

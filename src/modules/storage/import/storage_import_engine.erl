@@ -96,7 +96,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceCtx = file_ctx:new_by_guid(SpaceDirGuid),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     IsManualImport = maps:get(manual, Info, false),
-    case file_ctx:is_root_dir_const(ParentCtx) of
+    case file_ctx:is_filesystem_root_dir_const(ParentCtx) of
         true ->
             check_file_meta_and_maybe_sync(StorageFileCtx, SpaceCtx, Info, true);
         false ->

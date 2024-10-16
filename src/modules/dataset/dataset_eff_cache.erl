@@ -186,7 +186,7 @@ get(FileDoc, true = _CheckInvalidateOnDatasetsGetFlag) ->
 
     get(FileDoc, false);
 get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFlag) ->
-    case special_dirs:is_restricted_for_datasets(FileUuid) of
+    case special_dirs:is_affected_by_protection_flags(FileUuid) of
         true ->
             {ok, #entry{}};
         false ->
@@ -239,7 +239,7 @@ calculate(Doc = #document{}, undefined) ->
         eff_dataset_protection_flags = ProtectionFlags,
         eff_protection_flags = ProtectionFlags
     };
-calculate(#document{key = ?ARCHIVES_ROOT_DIR_UUID(SpaceId), scope = SpaceId}, _) ->
+calculate(#document{key = ?SPACE_ARCHIVES_DIR_UUID(SpaceId), scope = SpaceId}, _) ->
     % files in archives cannot be established as datasets nor should they inherit dataset membership
     #entry{};
 calculate(#document{key = ?TRASH_DIR_UUID(SpaceId), scope = SpaceId}, _) ->

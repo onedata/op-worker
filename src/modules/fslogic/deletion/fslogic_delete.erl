@@ -443,7 +443,7 @@ maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) -
 
 -spec maybe_add_deletion_marker(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 maybe_add_deletion_marker(FileCtx, UserCtx) ->
-    case file_ctx:is_space_dir_const(FileCtx) orelse file_ctx:is_root_dir_const(FileCtx) of
+    case file_ctx:is_space_dir_const(FileCtx) orelse file_ctx:is_filesystem_root_dir_const(FileCtx) of
         true ->
             % this case should never happen
             ?warning("Adding deletion marker for space or root directory is not allowed"),
@@ -451,7 +451,7 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
         false ->
             case file_ctx:is_imported_storage(FileCtx) of
                 {true, FileCtx2} ->
-                    {ParentGuid, FileCtx3} = file_tree:get_parent_guid_if_not_root_dir(FileCtx2, UserCtx),
+                    {ParentGuid, FileCtx3} = file_tree:get_parent(FileCtx2, UserCtx),
                     ParentUuid = file_id:guid_to_uuid(ParentGuid),
                     deletion_marker:add(ParentUuid, FileCtx3);
                 {false, FileCtx2} ->
@@ -476,7 +476,7 @@ remove_deletion_marker(FileCtx, UserCtx, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     case file_ctx:is_imported_storage(FileCtx) of
         {true, FileCtx2} ->
-            {ParentGuid, FileCtx3} = file_tree:get_parent_guid_if_not_root_dir(FileCtx2, UserCtx),
+            {ParentGuid, FileCtx3} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx2, UserCtx),
             ParentUuid = file_id:guid_to_uuid(ParentGuid),
             deletion_marker:remove_by_name(ParentUuid, filename:basename(StorageFileId)),
             FileCtx3;
@@ -497,7 +497,7 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx, UserCtx),
-    {ParentGuid, FileCtx4} = file_tree:get_parent_guid_if_not_root_dir(FileCtx3, UserCtx),
+    {ParentGuid, FileCtx4} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx3, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     ok = file_meta_forest:delete(ParentUuid, Scope, FileName, FileUuid),
     FileCtx4.

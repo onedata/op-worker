@@ -271,15 +271,15 @@ upgrade_cluster(5) ->
         lists:foreach(fun trash_dir:ensure_exists/1, SpaceIds),
         ?info("Upgrading archive root directories..."),
         % NOTE: below function also ensures existence of archives root link.
-        lists:foreach(fun space_archives_root_dir:ensure_exists/1, SpaceIds),
+        lists:foreach(fun space_archives_dir:ensure_exists/1, SpaceIds),
         % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
         % it will create it if it is not yet synced.
         lists:foreach(fun(SpaceId) ->
             ?info("Upgrading dataset directory links for space '~ts'...", [SpaceId]),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
-                dataset_archives_root_dir:ensure_parent_link_exists(DatasetId, SpaceId) end),
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
-                dataset_archives_root_dir:ensure_parent_link_exists(DatasetId, SpaceId) end)
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end)
         end, SpaceIds),
         lists:foreach(fun(SpaceId) ->
             % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.

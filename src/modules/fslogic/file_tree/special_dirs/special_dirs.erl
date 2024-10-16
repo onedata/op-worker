@@ -14,7 +14,7 @@
 %%% all providers, because there can be race on creation as uuid is known - this
 %%% can result in broken children listing.
 %%5
-%%% @TODO VFS-12229 - implement is operation allowed for special dirs subtree
+%%% @TODO VFS-12229 - implement allowed_operations for special dirs subtree
 %%% @TODO VFS-12233 - properly handle special dirs deletion
 %%% @end
 %%%-------------------------------------------------------------------
@@ -24,21 +24,22 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([set_up_for_new_space/1, report_new_user/1]).
--export([exists/1, is_special/1, is_scope_root_dir/1, is_operation_allowed/2, is_restricted_for_datasets/1,
-    is_harvested/1, is_ignored_in_dir_stats/1, is_ignored_in_events/1, is_without_parent/1]).
+-export([exists/1, is_special/1, is_special/3, is_filesystem_root_dir/1, is_operation_allowed/2,
+    is_affected_by_protection_flags/1, is_included_in_harvesting/1, is_included_in_dir_stats/1,
+    is_included_in_events/1, is_logically_detached/1]).
 -export([get_file_meta_if_special/1, get_times_if_special/2]).
 
 -define(ALL_SPECIAL_DIRS, [
     global_root_dir,
     user_root_dir,
-    space_dir,
-    opened_deleted_files_dir,
-    share_root_dir,
-    space_archives_root_dir,
-    dataset_archives_root_dir,
-    archive_dir,
-    tmp_dir,
-    trash_dir
+        space_dir,
+            share_container,
+            space_archives_dir,
+                dataset_archives_dir,
+                    archive_dir,
+            tmp_dir,
+                opened_deleted_files_dir,
+            trash_dir
 ]).
 
 
@@ -51,7 +52,7 @@
 set_up_for_new_space(SpaceId) ->
     space_dir:ensure_exists(SpaceId),
     trash_dir:ensure_exists(SpaceId),
-    space_archives_root_dir:ensure_exists(SpaceId),
+    space_archives_dir:ensure_exists(SpaceId),
     tmp_dir:ensure_exists(SpaceId),
     opened_deleted_files_dir:ensure_exists(SpaceId).
 
@@ -64,10 +65,7 @@ report_new_user(UserId) ->
 
 -spec exists(file_meta:uuid()) -> boolean() | not_special.
 exists(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, [Uuid]) of
-        {special, Res} -> Res;
-        not_special -> not_special
-    end.
+    apply_if_special(Uuid, ?FUNCTION_NAME, not_special, [Uuid]).
 
 
 -spec is_special(file_meta:uuid()) -> boolean().
@@ -78,60 +76,48 @@ is_special(Uuid) ->
     end.
 
 
--spec is_operation_allowed(file_meta:uuid(), atom()) -> boolean().
+-spec is_special(module(), uuid | guid, file_meta:uuid() | file_meta:guid()) -> boolean().
+is_special(Module, IdType, Id) ->
+    Module:is_special(IdType, Id).
+
+
+-spec is_operation_allowed(file_meta:uuid(), middleware_worker:operation() | fslogic_worker:operation()) -> boolean().
 is_operation_allowed(Uuid, Operation) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, [Operation]) of
-        {special, Res} -> Res;
-        not_special -> true
+    case apply_if_special(Uuid, allowed_operations, not_special) of
+        not_special -> true;
+        AllowedOperations -> lists:member(Operation, AllowedOperations)
     end.
 
 
--spec is_scope_root_dir(file_meta:uuid()) -> boolean().
-is_scope_root_dir(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, []) of
-        {special, Res} -> Res;
-        not_special -> false
-    end.
+-spec is_filesystem_root_dir(file_meta:uuid()) -> boolean().
+is_filesystem_root_dir(Uuid) ->
+    apply_if_special(Uuid, ?FUNCTION_NAME, false).
 
 
--spec is_restricted_for_datasets(file_meta:uuid()) -> boolean().
-is_restricted_for_datasets(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, []) of
-        {special, Res} -> Res;
-        not_special -> false
-    end.
+-spec is_affected_by_protection_flags(file_meta:uuid()) -> boolean().
+is_affected_by_protection_flags(Uuid) ->
+    apply_if_special(Uuid, ?FUNCTION_NAME, true).
 
 
--spec is_harvested(file_meta:uuid()) -> boolean().
-is_harvested(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, []) of
-        {special, Res} -> Res;
-        not_special -> false
-    end.
+%% @TODO VFS-12501 Analyze special dirs in context of harvesting
+-spec is_included_in_harvesting(file_meta:uuid()) -> boolean().
+is_included_in_harvesting(Uuid) ->
+    apply_if_special(Uuid, ?FUNCTION_NAME, true).
 
 
--spec is_ignored_in_dir_stats(file_meta:uuid()) -> boolean().
-is_ignored_in_dir_stats(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, []) of
-        {special, Res} -> Res;
-        not_special -> false
-    end.
+-spec is_included_in_dir_stats(file_meta:uuid()) -> boolean().
+is_included_in_dir_stats(Uuid) ->
+    apply_if_special(Uuid, ?FUNCTION_NAME, true).
 
 
--spec is_ignored_in_events(file_meta:uuid()) -> boolean().
-is_ignored_in_events(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, []) of
-        {special, Res} -> Res;
-        not_special -> false
-    end.
+-spec is_included_in_events(file_meta:uuid()) -> boolean().
+is_included_in_events(Uuid) ->
+    apply_if_special(Uuid, ?FUNCTION_NAME, true).
 
 
--spec is_without_parent(file_meta:uuid()) -> boolean().
-is_without_parent(Uuid) ->
-    case apply_if_special(Uuid, ?FUNCTION_NAME, []) of
-        {special, Res} -> Res;
-        not_special -> false
-    end.
+-spec is_logically_detached(file_meta:uuid()) -> boolean().
+is_logically_detached(Uuid) ->
+    apply_if_special(Uuid, ?FUNCTION_NAME, false).
 
 
 -spec get_times_if_special(file_id:file_guid(), [times_api:times_type()]) -> {true, times:record()} | not_special.
@@ -171,13 +157,19 @@ get_file_meta_if_special(Uuid) ->
 %%%===================================================================
 
 %% @private
--spec apply_if_special(file_meta:uuid(), atom(), [any()]) -> {special, any()} | not_special.
-apply_if_special(Uuid, Fun, Args) ->
+-spec apply_if_special(file_meta:uuid(), atom(), NotSpecialValue) -> term() | NotSpecialValue.
+apply_if_special(Uuid, FunctionName, NotSpecialValue) ->
+    apply_if_special(Uuid, FunctionName, NotSpecialValue, []).
+
+
+%% @private
+-spec apply_if_special(file_meta:uuid(), atom(), NotSpecialValue, [any()]) -> term() | NotSpecialValue.
+apply_if_special(Uuid, FunctionName, NotSpecialValue, Args) ->
     case extract_special_module(Uuid) of
         {true, DirType} ->
-            {special, erlang:apply(DirType, Fun, Args)};
+            erlang:apply(DirType, FunctionName, Args);
         undefined ->
-            not_special
+            NotSpecialValue
     end.
 
 

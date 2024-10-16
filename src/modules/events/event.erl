@@ -72,7 +72,7 @@ emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
     case event_type:get_context(Evt) of
         {file, Guid} ->
-            case special_dirs:is_ignored_in_events(file_id:guid_to_uuid(Guid)) of
+            case special_dirs:is_included_in_events(file_id:guid_to_uuid(Guid)) of
                 true -> ok;
                 false -> send_to_event_managers(Evt, get_event_managers(MgrRef))
             end;

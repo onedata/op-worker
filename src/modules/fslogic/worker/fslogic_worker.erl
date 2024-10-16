@@ -46,9 +46,12 @@
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: file_id:file_guid().
 
+-type operation() :: fuse_request_type() | file_request_type() | provider_request_type() | proxyio_request_type().
+
 -export_type([
     request/0, response/0, file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0
+    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0,
+    operation/0
 ]).
 
 % requests
@@ -458,7 +461,7 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
     try
-        case is_operation_allowed_by_special_dir_logic(FileCtx1, get_operation(Request)) of
+        case is_operation_allowed_by_special_dir_logic(FileCtx1, Request) of
             false ->
                 throw(?EPERM);
             true ->
@@ -951,7 +954,7 @@ format_unhealthy_storages_report(HealthyStorages) ->
 
 
 %% @private
--spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, atom()) -> boolean().
+-spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, operation()) -> boolean().
 is_operation_allowed_by_special_dir_logic(undefined, _Operation) ->
     true;
 is_operation_allowed_by_special_dir_logic(FileCtx, Operation) ->

@@ -485,7 +485,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             end;
         Error2 = {error, ?ENOENT} ->
             % directory might have been deleted after it was listed in parent's master job
-            case file_ctx:is_root_dir_const(ParentCtx) of
+            case file_ctx:is_filesystem_root_dir_const(ParentCtx) of
                 true ->
                     % Space directory wasn't found on storage
                     ?error("Storage import has failed because directory of space ~ts was not found on storage ~ts.",
@@ -564,7 +564,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             end;
         Error = {error, ?ENOENT} ->
             % directory might have been deleted after it was listed in parent's master job
-            case file_ctx:is_root_dir_const(ParentCtx) of
+            case file_ctx:is_filesystem_root_dir_const(ParentCtx) of
                 true ->
                     % space directory is missing
                     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),

@@ -83,7 +83,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             {#{
                 <<"rootDir">> => RootDirGRI,
                 <<"trashDirId">> => file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId),
-                <<"archivesDirId">> => file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)
+                <<"archivesDirId">> => file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId)
             }, file_upload_utils:get_preferable_write_block_size(SpaceId)};
         false ->
             {#{<<"rootDir">> => null}, undefined}

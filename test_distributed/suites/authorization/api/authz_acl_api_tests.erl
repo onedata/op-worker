@@ -50,7 +50,7 @@ test_get_acl(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = {error, ?EPERM}
@@ -87,7 +87,7 @@ test_set_acl(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = {error, ?EPERM}

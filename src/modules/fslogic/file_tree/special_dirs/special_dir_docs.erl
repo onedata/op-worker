@@ -27,6 +27,7 @@
 -spec create(od_space:id(), file_meta:doc(), add_link | no_link) -> created | exists.
 create(SpaceId, #document{key = Uuid, value = #file_meta{name = Name, parent_uuid = ParentUuid} = FM} = Doc, LinkPolicy) ->
     FinalDoc = Doc#document{value = FM#file_meta{provider_id = oneprovider:get_id()}},
+    % using update with default to avoid side effects of file_meta:create/2
     Result = case file_meta:update(Uuid, fun(_) -> {error, already_exists} end, FinalDoc) of
         {ok, CreatedDoc} ->
             times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId)),

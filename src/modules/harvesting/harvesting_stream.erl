@@ -773,7 +773,7 @@ should_doc_be_harvested(#document{
     key = Key,
     value = ModelRecord
 }) ->
-    is_harvested_model(ModelRecord) andalso special_dirs:is_harvested(Key).
+    is_harvested_model(ModelRecord) andalso special_dirs:is_included_in_harvesting(Key).
 
 
 -spec is_harvested_model(datastore:value()) -> boolean().

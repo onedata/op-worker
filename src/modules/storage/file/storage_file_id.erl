@@ -106,7 +106,7 @@ canonical(FslogicCanonicalPath, SpaceId, StorageDataOrId) ->
 %%--------------------------------------------------------------------
 -spec raw_flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
 raw_flat(FileUuid, SpaceId) ->
-    case special_dirs:is_scope_root_dir(FileUuid) of
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
         true ->
             <<?DIRECTORY_SEPARATOR>>;
         false ->

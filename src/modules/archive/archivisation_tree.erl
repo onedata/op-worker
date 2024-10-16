@@ -65,7 +65,7 @@ uuid_to_archive_id(_) ->
 
 -spec is_in_archive(file_meta:path()) -> boolean().
 is_in_archive(CanonicalPath) ->
-    ArchivesRootDirName = ?SPACE_ARCHIVES_ROOT_DIR_NAME,
+    ArchivesRootDirName = ?SPACE_ARCHIVES_DIR_NAME,
     case filepath_utils:split(CanonicalPath) of
         [_Sep, _SpaceId, ArchivesRootDirName | _Rest] -> true;
         _ -> false
@@ -74,7 +74,7 @@ is_in_archive(CanonicalPath) ->
 
 -spec extract_archive_id(file_meta:path()) -> {ok, archive:id()} | {error, term()}.
 extract_archive_id(CanonicalPath) ->
-    ArchivesRootDirName = ?SPACE_ARCHIVES_ROOT_DIR_NAME,
+    ArchivesRootDirName = ?SPACE_ARCHIVES_DIR_NAME,
     case filename:split(CanonicalPath) of
         [
             ?DIRECTORY_SEPARATOR_BIN,

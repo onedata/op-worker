@@ -50,7 +50,7 @@ test_get_parent(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         forbidden_special_dirs = [
-            trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = {error, ?EPERM}
@@ -76,7 +76,7 @@ test_get_file_path(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         forbidden_special_dirs = [
-            trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir
         ],
         special_dirs_error = {error, ?EPERM}

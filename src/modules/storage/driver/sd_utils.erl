@@ -262,7 +262,7 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
             % for this reason it is acceptable to try chowning parent once
              % TODO VFS-6432 in case of changing default credentials in LUMA we should not chown parent dir
             {ParentCtx, FileCtx4} = file_tree:get_parent(FileCtx3, UserCtx),
-             case file_ctx:is_root_dir_const(ParentCtx) of
+             case file_ctx:is_filesystem_root_dir_const(ParentCtx) of
                  true -> ok;
                  false -> files_to_chown:chown_or_defer(ParentCtx)
              end,
@@ -434,7 +434,7 @@ truncate_created_file(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
 create_missing_parent_dirs(UserCtx, FileCtx) ->
-    case file_ctx:is_root_dir_const(FileCtx) of
+    case file_ctx:is_filesystem_root_dir_const(FileCtx) of
         true ->
             FileCtx;
         false ->
@@ -664,7 +664,7 @@ should_chown(UserCtx, FileCtx) ->
 %%-------------------------------------------------------------------
 -spec mark_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
-    case file_ctx:is_root_dir_const(DirCtx) of
+    case file_ctx:is_filesystem_root_dir_const(DirCtx) of
         true ->
             ok;
         false ->
@@ -676,7 +676,7 @@ mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
 
 -spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> [file_ctx:ctx()].
 get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
-    case file_ctx:is_space_dir_const(DirCtx) orelse file_ctx:is_root_dir_const(DirCtx) of
+    case file_ctx:is_space_dir_const(DirCtx) orelse file_ctx:is_filesystem_root_dir_const(DirCtx) of
         true ->
             ParentCtxs;
         false ->

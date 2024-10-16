@@ -15,8 +15,8 @@
 
 % Macros associated with archivisation
 -define(ARCHIVES_ROOT_DIR_UUID_PREFIX, "archives_root_").
--define(ARCHIVES_ROOT_DIR_UUID(SpaceId), <<?ARCHIVES_ROOT_DIR_UUID_PREFIX, SpaceId/binary>>).
--define(SPACE_ARCHIVES_ROOT_DIR_NAME, file_meta:hidden_file_name(<<"archive">>)).
+-define(SPACE_ARCHIVES_DIR_UUID(SpaceId), <<?ARCHIVES_ROOT_DIR_UUID_PREFIX, SpaceId/binary>>).
+-define(SPACE_ARCHIVES_DIR_NAME, file_meta:hidden_file_name(<<"archive">>)).
 
 -define(DATASET_ARCHIVES_DIR_UUID_PREFIX, "dataset_archives_").
 -define(DATASET_ARCHIVES_DIR_UUID(DatasetId), <<?DATASET_ARCHIVES_DIR_UUID_PREFIX, DatasetId/binary>>).
@@ -26,7 +26,7 @@
 -define(ARCHIVE_DIR_UUID(ArchiveId), <<?ARCHIVE_DIR_UUID_PREFIX, ArchiveId/binary>>).
 -define(ARCHIVE_DIR_NAME(ArchiveId), ?ARCHIVE_DIR_UUID(ArchiveId)).
 
--define(SPACE_ARCHIVES_ROOT_DIR_PERMS, 8#755).
+-define(SPACE_ARCHIVES_DIR_PERMS, 8#755).
 -define(DATASET_ARCHIVES_DIR_PERMS, 8#755).
 
 -endif.

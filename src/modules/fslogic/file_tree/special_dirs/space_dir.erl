@@ -17,7 +17,9 @@
 
 -behaviour(special_dir_behaviour).
 
--include("modules/fslogic/fslogic_common.hrl").
+-include("middleware/middleware.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include("proto/fslogic_operations.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 
@@ -26,13 +28,14 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    is_operation_allowed/1,
-    is_scope_root_dir/0,
-    is_restricted_for_datasets/0,
-    is_harvested/0,
-    is_ignored_in_dir_stats/0,
-    is_ignored_in_events/0,
-    is_without_parent/0,
+    allowed_operations/0,
+    is_filesystem_root_dir/0,
+    can_be_shared/0,
+    is_affected_by_protection_flags/0,
+    is_included_in_harvesting/0,
+    is_included_in_dir_stats/0,
+    is_included_in_events/0,
+    is_logically_detached/0,
     exists/1
 ]).
 
@@ -52,9 +55,9 @@
 }).
 
 -define(DISALLOWED_OPERATIONS, [
-    move_to_trash,
-    delete_file,
-    change_mode
+    #move_to_trash{}
+    #delete_file{}
+    #change_mode{}
 ]).
 
 
@@ -92,33 +95,37 @@ is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec is_operation_allowed(atom()) -> boolean().
-is_operation_allowed(Operation) ->
-    not lists:member(Operation, ?DISALLOWED_OPERATIONS).
+-spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+allowed_operations() ->
+    (?MIDDLEWARE_ALL_OPERATIONS ++ ?FSLOGIC_ALL_OPERATIONS) -- ?DISALLOWED_OPERATIONS.
 
 
--spec is_scope_root_dir() -> boolean().
-is_scope_root_dir() -> false.
+-spec is_filesystem_root_dir() -> boolean().
+is_filesystem_root_dir() -> false.
 
 
--spec is_restricted_for_datasets() -> boolean().
-is_restricted_for_datasets() -> false.
+-spec can_be_shared() -> boolean().
+can_be_shared() -> true.
 
 
--spec is_harvested() -> boolean().
-is_harvested() -> true.
+-spec is_affected_by_protection_flags() -> boolean().
+is_affected_by_protection_flags() -> true.
 
 
--spec is_ignored_in_dir_stats() -> boolean().
-is_ignored_in_dir_stats() -> false.
+-spec is_included_in_harvesting() -> boolean().
+is_included_in_harvesting() -> true.
 
 
--spec is_ignored_in_events() -> boolean().
-is_ignored_in_events() -> false.
+-spec is_included_in_dir_stats() -> boolean().
+is_included_in_dir_stats() -> true.
 
 
--spec is_without_parent() -> boolean().
-is_without_parent() -> false.
+-spec is_included_in_events() -> boolean().
+is_included_in_events() -> true.
+
+
+-spec is_logically_detached() -> boolean().
+is_logically_detached() -> false.
 
 
 -spec exists(file_meta:uuid()) -> boolean().

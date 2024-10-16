@@ -89,8 +89,8 @@
 
 %% API
 -export([
-    get_parent_guid_if_not_root_dir/2,
-    get_original_parent/2,
+    get_parent_guid_if_not_logically_detached/2,
+    get_original_parent_of_deleted_file/2,
     get_parent/2,
 
     get_child/3, list_children/3
@@ -111,14 +111,14 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns 'undefined' if file is root file (either userRootDir, share root, archive root, trash, tmp dir or shared
-%% file accessed in share ctx) or proper ParentGuid otherwise.
+%% Returns 'undefined' if file is logically detached (see module special_dirs) or is a shared
+%% file accessed in share ctx. Returns proper ParentGuid otherwise.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_guid_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
+-spec get_parent_guid_if_not_logically_detached(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
-get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
-    case special_dirs:is_without_parent(file_ctx:get_logical_uuid_const(FileCtx)) of
+get_parent_guid_if_not_logically_detached(FileCtx, UserCtx) ->
+    case special_dirs:is_logically_detached(file_ctx:get_logical_uuid_const(FileCtx)) of
         true ->
             {undefined, FileCtx};
         false ->
@@ -140,11 +140,11 @@ get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
 %% TODO VFS-7133 original parent uuid should be stored in file_meta doc
 %% @end
 %%--------------------------------------------------------------------
--spec get_original_parent(file_ctx:ctx(), undefined | file_ctx:ctx()) ->
+-spec get_original_parent_of_deleted_file(file_ctx:ctx(), undefined | file_ctx:ctx()) ->
     {file_ctx:ctx(), file_ctx:ctx()}.
-get_original_parent(FileCtx, undefined) ->
+get_original_parent_of_deleted_file(FileCtx, undefined) ->
     get_parent(FileCtx, undefined);
-get_original_parent(FileCtx, OriginalParentCtx) ->
+get_original_parent_of_deleted_file(FileCtx, OriginalParentCtx) ->
     {ParentCtx, FileCtx2} = get_parent(FileCtx, undefined),
     case trash_dir:is_special(uuid, file_ctx:get_logical_uuid_const(ParentCtx)) of
         true ->
@@ -177,13 +177,13 @@ get_parent(FileCtx, UserCtx) ->
 -spec get_child(file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) ->
     {ChildCtx :: file_ctx:ctx(), file_ctx:ctx()} | no_return().
 get_child(FileCtx, Name, UserCtx) ->
-    {ChildCtx, NewFileCtx} = case file_ctx:is_root_dir_const(FileCtx) of
+    {ChildCtx, NewFileCtx} = case file_ctx:is_filesystem_root_dir_const(FileCtx) of
         true ->
             get_user_root_dir_child(UserCtx, FileCtx, Name);
         false ->
-            case is_share_root_dir(FileCtx) of
+            case is_share_container(FileCtx) of
                 true ->
-                    get_share_root_dir_child(UserCtx, FileCtx, Name);
+                    get_share_container_child(UserCtx, FileCtx, Name);
                 false ->
                     case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
                         true ->
@@ -203,9 +203,9 @@ list_children(FileCtx, UserCtx, ListOpts) ->
         true ->
             get_user_root_dir_children(UserCtx, FileCtx, ListOpts);
         false ->
-            case is_share_root_dir(FileCtx) of
+            case is_share_container(FileCtx) of
                 true ->
-                    list_share_root_dir_children(UserCtx, FileCtx, maps:get(whitelist, ListOpts, undefined));
+                    list_share_container_children(UserCtx, FileCtx, maps:get(whitelist, ListOpts, undefined));
                 false ->
                     case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
                         true ->
@@ -241,13 +241,13 @@ get_parent_internal(FileCtx, UserCtx) ->
     end,
 
     Parent = case {
-        special_dirs:is_scope_root_dir(ParentUuid),
+        special_dirs:is_filesystem_root_dir(ParentUuid),
         IsShareRootFile,
         (UserCtx =/= undefined andalso user_ctx:is_in_open_handle_mode(UserCtx))
     } of
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode
-            file_ctx:new_by_uuid(share_root_dir:uuid(ShareId), SpaceId, ShareId);
+            file_ctx:new_by_uuid(share_container:uuid(ShareId), SpaceId, ShareId);
         {true, false, _} ->
             case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                 andalso UserCtx =/= undefined
@@ -265,15 +265,9 @@ get_parent_internal(FileCtx, UserCtx) ->
                     file_ctx:new_root_ctx()
             end;
         {true, true, _} ->
-            case space_dir:is_special(uuid, FileUuid) of
-                true ->
-                    FileCtx2;
-                false ->
-                    % userRootDir and globalRootDir can not be shared
-                    throw(?EINVAL)
-            end;
+            FileCtx2; % Only space dir can be a filesystem root and be shared
         {false, false, IsInOpenHandleMode} ->
-            case is_share_root_dir(FileCtx2) of
+            case is_share_container(FileCtx2) of
                 true ->
                     case IsInOpenHandleMode of
                         true ->
@@ -341,7 +335,7 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 
     case lists:member(Name, Shares) of
         true ->
-            {file_ctx:new_by_uuid(share_root_dir:uuid(Name), SpaceId, Name), SpaceDirCtx};
+            {file_ctx:new_by_uuid(share_container:uuid(Name), SpaceId, Name), SpaceDirCtx};
         false ->
             throw(?ENOENT)
     end.
@@ -382,7 +376,7 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts) ->
     Children = case Offset < length(FilteredShares) of
         true ->
             lists:map(fun(ShareId) ->
-                file_ctx:new_by_uuid(share_root_dir:uuid(ShareId), SpaceId, ShareId, ShareId)
+                file_ctx:new_by_uuid(share_container:uuid(ShareId), SpaceId, ShareId, ShareId)
             end, lists:sublist(lists:sort(FilteredShares), Offset + 1, Limit));
         false ->
             []
@@ -391,9 +385,9 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts) ->
 
 
 %% @private
--spec get_share_root_dir_child(user_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
+-spec get_share_container_child(user_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
     {ChildCtx :: file_ctx:ctx(), file_ctx:ctx()} | no_return().
-get_share_root_dir_child(UserCtx, ShareRootDirCtx, Name) ->
+get_share_container_child(UserCtx, ShareRootDirCtx, Name) ->
     ShareId = file_ctx:get_share_id_const(ShareRootDirCtx),
     ChildCtx = get_share_root_file(UserCtx, ShareId),
 
@@ -406,9 +400,9 @@ get_share_root_dir_child(UserCtx, ShareRootDirCtx, Name) ->
 
 
 %% @private
--spec list_share_root_dir_children(user_ctx:ctx(), file_ctx:ctx(), children_whitelist()) ->
+-spec list_share_container_children(user_ctx:ctx(), file_ctx:ctx(), children_whitelist()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
+list_share_container_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
     ShareId = file_ctx:get_share_id_const(ShareRootDirCtx),
     ChildCtx = get_share_root_file(UserCtx, ShareId),
 
@@ -505,6 +499,6 @@ build_listing_result(UserCtx, Children, Limit, ListedCtx) ->
 
 
 %% @private
--spec is_share_root_dir(file_ctx:ctx()) -> boolean().
-is_share_root_dir(FileCtx) ->
-    share_root_dir:is_special(uuid, file_ctx:get_logical_uuid_const(FileCtx)).
+-spec is_share_container(file_ctx:ctx()) -> boolean().
+is_share_container(FileCtx) ->
+    share_container:is_special(uuid, file_ctx:get_logical_uuid_const(FileCtx)).

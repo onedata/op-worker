@@ -120,7 +120,7 @@ is_symlink_guid(FileGuid) ->
 %%--------------------------------------------------------------------
 -spec uuid_to_space_id(file_meta:uuid()) -> SpaceId :: od_space:id().
 uuid_to_space_id(FileUuid) ->
-    case special_dirs:is_scope_root_dir(FileUuid) of
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
         true ->
             ?ROOT_DIR_VIRTUAL_SPACE_ID;
         false ->

@@ -84,7 +84,7 @@
 
 %% Default permissions for directories
 -define(DEFAULT_DIR_PERMS, 8#775).
--define(DEFAULT_SHARE_ROOT_DIR_PERMS, 8#555).
+-define(DEFAULT_SHARE_CONTAINER_PERMS, 8#555).
 -define(DEFAULT_DIR_MODE, ?DEFAULT_DIR_PERMS bor 8#40000).
 
 %% Mode of deleted opened files directory
@@ -140,7 +140,7 @@
 -define(catch_not_found_as(ReturnValue, _Code),
     try
         _Code
-    catch Class:Reason:S ->
+    catch Class:Reason ->
         case datastore_runner:normalize_error(Reason) of
             not_found ->
                 ReturnValue;

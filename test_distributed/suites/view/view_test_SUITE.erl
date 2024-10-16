@@ -149,8 +149,8 @@ query_view_using_file_meta(_Config) ->
     TrashGuid = trash_dir:guid(SpaceId),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
     
-    ArchivesRootDirName = ?SPACE_ARCHIVES_ROOT_DIR_NAME,
-    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(space_archives_root_dir:guid(SpaceId)),
+    ArchivesRootDirName = ?SPACE_ARCHIVES_DIR_NAME,
+    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(space_archives_dir:guid(SpaceId)),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -210,7 +210,7 @@ query_view_using_file_meta(_Config) ->
             <<"value">> := #{
                 <<"name">> := ArchivesRootDirName,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?SPACE_ARCHIVES_ROOT_DIR_PERMS,
+                <<"mode">> := ?SPACE_ARCHIVES_DIR_PERMS,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],

@@ -358,7 +358,7 @@ list_spaces(Config) ->
         SpaceDirGuid = space_dir:guid(SpaceId),
         {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
         {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
-        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
+        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId)),
 
         #{
             <<"name">> => SpaceId,

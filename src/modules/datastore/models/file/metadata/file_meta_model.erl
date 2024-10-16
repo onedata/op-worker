@@ -500,6 +500,7 @@ on_remote_doc_created(_Ctx, #document{
     value = #file_meta{type = Type, parent_uuid = ParentUuid}, scope = SpaceId
 } = Doc) ->
     try
+        %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
         case special_dirs:is_special(Key) of
             true ->
                 ok;

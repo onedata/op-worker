@@ -237,7 +237,7 @@ check_access_requirement(UserCtx, FileCtx0, ?OWNERSHIP) ->
     end;
 
 check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
-    case file_ctx:is_root_dir_const(FileCtx0) of
+    case file_ctx:is_filesystem_root_dir_const(FileCtx0) of
         true ->
             throw(?ENOENT);
         false ->

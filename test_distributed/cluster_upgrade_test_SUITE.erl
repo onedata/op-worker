@@ -398,7 +398,7 @@ upgrade_from_21_02_2_tmp_dir(Config) ->
 upgrade_from_21_02_3_missing_dirs(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
-    DirUuids = [?TRASH_DIR_UUID(?DUMMY_SPACE_ID1), ?ARCHIVES_ROOT_DIR_UUID(?DUMMY_SPACE_ID1)],
+    DirUuids = [?TRASH_DIR_UUID(?DUMMY_SPACE_ID1), ?SPACE_ARCHIVES_DIR_UUID(?DUMMY_SPACE_ID1)],
     DirExistsFun = fun(Uuid) -> rpc:call(Worker, file_meta, exists, [Uuid]) end,
     
     ?assertNot(lists:any(DirExistsFun, DirUuids)),

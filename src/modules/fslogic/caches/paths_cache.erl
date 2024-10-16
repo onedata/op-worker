@@ -169,7 +169,7 @@ calculate_path_tokens_callback(PathType) ->
         },
         ParentValue, CalculationInfo
     ]) ->
-        case special_dirs:is_scope_root_dir(Uuid) of
+        case special_dirs:is_filesystem_root_dir(Uuid) of
             true ->
                 {ok, [<<"/">>], CalculationInfo};
             false ->

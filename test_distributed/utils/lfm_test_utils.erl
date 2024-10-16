@@ -145,7 +145,7 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceDirGuid, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, trash_dir:guid(SpaceId), BatchSize, false),
-    ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
+    ArchivesDirGuid = file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId),
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, false),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 

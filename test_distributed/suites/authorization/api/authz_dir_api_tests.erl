@@ -63,7 +63,7 @@ test_mkdir(SpaceId) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
         end,
         forbidden_special_dirs = [
-            user_root_dir, trash, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, trash, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir
         ],
         special_dirs_error = {error, ?EPERM}
@@ -187,7 +187,7 @@ test_rm_dir(SpaceId) ->
             end,
         final_ownership_check = fun(_) -> {inapplicable_due_to, dir_removal} end,
         forbidden_special_dirs = [
-            user_root_dir, space_dir, trash, tmp_dir, opened_deleted_files_dir, share_root_dir,
+            user_root_dir, space_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
         special_dirs_error = {error, ?EPERM}

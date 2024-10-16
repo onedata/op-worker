@@ -73,7 +73,7 @@
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_symlink_const/1,
-    is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
+    is_user_root_dir_const/2, is_filesystem_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_is_dir/1, assert_not_dir/1, get_type/1,
     get_effective_type/1, assert_synchronization_enabled/1, assert_synchronization_disabled/1
 ]).
@@ -308,7 +308,7 @@ ensure_based_on_referenced_guid(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_canonical_path(ctx()) -> {file_meta:path(), ctx()}.
 get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
-    case is_root_dir_const(FileCtx) of
+    case is_filesystem_root_dir_const(FileCtx) of
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
@@ -489,7 +489,7 @@ get_storage_file_id(FileCtx) ->
 -spec get_storage_file_id(ctx(), boolean()) ->
     {StorageFileId :: helpers:file_id() | undefined, ctx()}.
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
-    case is_root_dir_const(FileCtx0) of
+    case is_filesystem_root_dir_const(FileCtx0) of
         true ->
             StorageFileId = <<?DIRECTORY_SEPARATOR>>,
             {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
@@ -683,7 +683,7 @@ get_storage_id(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_storage(ctx()) -> {storage:data() | undefined, ctx()}.
 get_storage(FileCtx = #file_ctx{storage = undefined}) ->
-    case file_ctx:is_root_dir_const(FileCtx) of
+    case file_ctx:is_filesystem_root_dir_const(FileCtx) of
         true ->
             {undefined, FileCtx};
         false ->
@@ -1067,15 +1067,15 @@ is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if file is a root dir (any user root).
+%% Checks if file is a root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec is_root_dir_const(ctx()) -> boolean().
-is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
+-spec is_filesystem_root_dir_const(ctx()) -> boolean().
+is_filesystem_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
-is_root_dir_const(#file_ctx{uuid = Uuid, canonical_path = undefined}) ->
-    special_dirs:is_scope_root_dir(Uuid);
-is_root_dir_const(#file_ctx{}) ->
+is_filesystem_root_dir_const(#file_ctx{uuid = Uuid, canonical_path = undefined}) ->
+    special_dirs:is_filesystem_root_dir(Uuid);
+is_filesystem_root_dir_const(#file_ctx{}) ->
     false.
 
 %%--------------------------------------------------------------------

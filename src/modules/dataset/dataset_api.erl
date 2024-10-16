@@ -253,9 +253,9 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 handle_remote_change(SpaceId, #document{deleted = true, key = DatasetId}) ->
     % Doc was deleted remotely (alongside dataset deletion), but link must
     % be deleted as it was created on every provider.
-    dataset_archives_root_dir:delete_parent_link(DatasetId, SpaceId);
+    dataset_archives_dir:delete_parent_link(DatasetId, SpaceId);
 handle_remote_change(SpaceId, #document{deleted = false, key = DatasetId}) ->
-    dataset_archives_root_dir:ensure_exists(DatasetId, SpaceId),
+    dataset_archives_dir:ensure_exists(DatasetId, SpaceId),
     ok.
 
 
