@@ -13,12 +13,12 @@ sources:
   onezone:
     node-1:
       - oz-worker
-#      - cluster-manager
+      - cluster-manager
       - oz-panel
   oneprovider-1:
     node-1:
       - op-worker
-#      - cluster-manager
+      - cluster-manager
       - op-panel
 
 
