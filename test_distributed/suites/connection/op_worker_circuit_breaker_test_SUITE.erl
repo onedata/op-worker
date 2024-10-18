@@ -176,16 +176,16 @@ process_http_response(Response) ->
 
 %% @private
 create_dummy_gui_package() ->
-    {TempDir, DummyGuiRoot} = get_dummy_gui_root(),
+    {DirName, DummyGuiRoot} = get_dummy_gui_root(),
     ok = file:make_dir(DummyGuiRoot),
     DummyIndex = filename:join(DummyGuiRoot, "index.html"),
     IndexContent = datastore_key:new(),
     ok = file:write_file(DummyIndex, IndexContent),
 
-    DummyPackage = filename:join(TempDir, "gui_static.tar.gz"),
+    DummyPackage = filename:join(DirName, "gui_static.tar.gz"),
 
     % Use tar to create archive as erl_tar is limited when it comes to tarring directories
-    [] = os:cmd(str_utils:format("tar -C ~ts -czf ~ts ~ts", [TempDir, DummyPackage, "gui_static"])),
+    [] = os:cmd(str_utils:format("tar -C ~ts -czf ~ts ~ts", [DirName, DummyPackage, "gui_static"])),
     {ok, Content} = file:read_file(DummyPackage),
     ok = ?rpc(?PROVIDER_SELECTOR, file:write_file(DummyPackage, Content)).
 
@@ -193,8 +193,8 @@ create_dummy_gui_package() ->
 %% @private
 get_dummy_gui_root() ->
     Path = opw_test_rpc:get_env(?PROVIDER_SELECTOR, gui_package_path),
-    TempDir = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
-    {TempDir, filename:join(TempDir, "gui_static")}.
+    DirName = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
+    {DirName, filename:join(DirName, "gui_static")}.
 
 
 %% @private
