@@ -162,9 +162,8 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 verify_storage_availability_insecure(Nodes, Helper, UserCtx, Imported) ->
     BasicArgList = [[Helper, UserCtx] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
-    case {Helper, Imported} of
-        {#helper{args = #{<<"readonly">> := <<"true">>}}, _} -> ok;
-        {_, imported} -> ok;
+    case Imported of
+        imported -> ok;
         _ -> perform_read_write_test(Nodes, BasicArgList)
     end.
 
