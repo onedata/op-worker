@@ -2,7 +2,7 @@ CXX ?= g++
 
 HELPERS_DIR ?= ../_build/default/lib/helpers
 
-ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~tp/erts-~tp/include/\", [code:root_dir(), erlang:system_info(version)]).")
+ERTS_INCLUDE_DIR ?= $(shell erl -noshell -eval "io:format(\"~ts/erts-~ts/include/\", [code:root_dir(), erlang:system_info(version)])." -s erlang halt)
 
 MVFST_LIBS = -lmvfst_transport -lmvfst_client -lmvfst_fizz_client -lmvfst_server -lmvfst_codec_types -lmvfst_state_machine
 
