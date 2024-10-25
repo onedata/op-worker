@@ -105,7 +105,7 @@ session_should_be_terminated_when_there_are_no_common_spaces_test(_Config) ->
     start_outgoing_provider_session(KrakowNode, SessId),
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
-    unmock_common_spaces(KrakowNode),
+    unmock_existence_of_common_spaces(KrakowNode),
 
     ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
@@ -204,7 +204,7 @@ end_per_testcase(session_should_be_terminated_when_there_are_no_common_spaces_te
 
 end_per_testcase(_Case, _Config) ->
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
-    unmock_common_spaces(KrakowNode),
+    unmock_existence_of_common_spaces(KrakowNode),
     ok.
 
 
@@ -304,6 +304,6 @@ mock_existence_of_common_spaces(Node) ->
 
 
 %% @private
--spec unmock_common_spaces(node()) -> ok.
-unmock_common_spaces(Node) ->
+-spec unmock_existence_of_common_spaces(node()) -> ok.
+unmock_existence_of_common_spaces(Node) ->
     test_utils:mock_unload(Node, space_logic).
