@@ -496,12 +496,14 @@ revoke_space_support(StorageId, SpaceId) ->
     end.
 
 
--spec supports_any_space(id()) -> boolean() | errors:error().
-supports_any_space(StorageId) ->
+-spec supports_any_space(id() | data()) -> boolean().
+supports_any_space(#document{key = StorageId}) ->
+    supports_any_space(StorageId);
+supports_any_space(StorageId) when is_binary(StorageId) ->
     case storage_logic:get_spaces(StorageId) of
         {ok, []} -> false;
         {ok, _Spaces} -> true;
-        {error, _} = Error -> Error
+        {error, _} = Error -> throw(Error)
     end.
 
 
