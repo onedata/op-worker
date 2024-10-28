@@ -57,8 +57,8 @@ groups() -> [
 ].
 
 all() -> [
-    {group, parallel_tests}
-%%    {group, time_mock_tests}
+    {group, parallel_tests},
+    {group, time_mock_tests}
 ].
 
 

@@ -19,7 +19,7 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 -define(PROVIDER_SELECTOR, krakow).
--define(GUI_UPLOAD_INTERVAL_SECONDS, 10).
+-define(LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS, 2).
 
 %% API
 -export([
@@ -48,24 +48,24 @@ all() -> ?ALL([
 
 
 rest_handler_circuit_breaker_test(_Config) ->
-    set_circuit_breaker_state(closed),
+    set_circuit_breaker_state(op_worker, closed),
     ?assertMatch(ok, get_rest_response()),
 
-    set_circuit_breaker_state(open),
+    set_circuit_breaker_state(op_worker, open),
     ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, get_rest_response()),
 
-    set_circuit_breaker_state(closed),
+    set_circuit_breaker_state(op_worker, closed),
     ?assertMatch(ok, get_rest_response()).
 
 
 cdmi_handler_circuit_breaker_test(_Config) ->
-    set_circuit_breaker_state(closed),
+    set_circuit_breaker_state(op_worker, closed),
     ?assertMatch(ok, get_cdmi_response()),
 
-    set_circuit_breaker_state(open),
+    set_circuit_breaker_state(op_worker, open),
     ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, get_cdmi_response()),
 
-    set_circuit_breaker_state(closed),
+    set_circuit_breaker_state(op_worker, closed),
     ?assertMatch(ok, get_cdmi_response()).
 
 
@@ -77,37 +77,34 @@ gs_circuit_breaker_test(_Config) ->
         data = #{}
     },
 
-    set_circuit_breaker_state(closed),
-    {ok, GsClient} = ?assertMatch({ok, _}, onenv_api_test_runner:connect_via_gs(Node, ?NOBODY)),
+    set_circuit_breaker_state(op_worker, closed),
+    {ok, GsClient} = ?assertMatch({ok, _}, gs_test_utils:connect_via_gs(Node, ?NOBODY)),
     ?assertMatch({ok, _}, gs_test_utils:gs_request(GsClient, GsArgs)),
 
-    set_circuit_breaker_state(open),
+    set_circuit_breaker_state(op_worker, open),
     ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, gs_test_utils:gs_request(GsClient, GsArgs)),
-    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, onenv_api_test_runner:connect_via_gs(Node, ?NOBODY)),
+    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, gs_test_utils:connect_via_gs(Node, ?NOBODY)),
 
-    set_circuit_breaker_state(closed),
+    set_circuit_breaker_state(op_worker, closed),
     ?assertMatch({ok, _}, gs_test_utils:gs_request(GsClient, GsArgs)),
-    ?assertMatch({ok, _}, onenv_api_test_runner:connect_via_gs(Node, ?NOBODY)).
+    ?assertMatch({ok, _}, gs_test_utils:connect_via_gs(Node, ?NOBODY)).
 
 
 gui_upload_circuit_breaker_test(_Config) ->
     OpWorkerNode = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
-    Path = opw_test_rpc:get_env(OpWorkerNode, gui_package_path),
 
-    set_oz_circuit_breaker_state(open),
-    ok = create_dummy_gui_package(),
+    set_circuit_breaker_state(oz_worker, open),
+    DummyGuiHash = create_dummy_gui_package(),
 
     %% since the oz is blocked op will not upload gui
-    {ok, GuiHashOpen} = ?rpc(OpWorkerNode, gui:package_hash(Path)),
-    ?assertNotEqual(GuiHashOpen, get_worker_gui_hash(OpWorkerNode)),
+    ?assertNotEqual(DummyGuiHash, get_gui_hash_set_up_in_oz(OpWorkerNode)),
 
-    set_oz_circuit_breaker_state(closed),
+    set_circuit_breaker_state(oz_worker, closed),
 
     %% after setting service_circuit_breaker_state to closed in oz,
     %% gui will upload automatically within gui_upload_interval time
-    {ok, GuiHashClosed} = ?rpc(OpWorkerNode, gui:package_hash(Path)),
-
-    ?assertEqual(GuiHashClosed, get_worker_gui_hash(OpWorkerNode), ?ATTEMPTS).
+    %% (low time interval is set in init_per_suite)
+    ?assertEqual(DummyGuiHash, get_gui_hash_set_up_in_oz(OpWorkerNode), ?ATTEMPTS).
 
 
 %%%===================================================================
@@ -117,8 +114,10 @@ gui_upload_circuit_breaker_test(_Config) ->
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{gui_upload_interval_seconds, ?GUI_UPLOAD_INTERVAL_SECONDS}]}]
-        }).
+        envs = [{op_worker, op_worker, [
+            {gui_upload_retry_interval_seconds, ?LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS}
+        ]}]
+    }).
 
 
 end_per_suite(_Config) ->
@@ -129,10 +128,6 @@ init_per_testcase(_, Config) ->
     Config.
 
 
-end_per_testcase(gui_upload_circuit_breaker_test, Config) ->
-    {_, DummyGuiRoot} = get_dummy_gui_root(),
-    ok = file:del_dir_r(DummyGuiRoot),
-    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Config.
 
@@ -154,12 +149,9 @@ get_cdmi_response() ->
 
 
 %% @private
-set_circuit_breaker_state(State) ->
-    ok = opw_test_rpc:set_env(?PROVIDER_SELECTOR, service_circuit_breaker_state, State).
-
-
-%% @private
-set_oz_circuit_breaker_state(State) ->
+set_circuit_breaker_state(op_worker, State) ->
+    ok = opw_test_rpc:set_env(?PROVIDER_SELECTOR, service_circuit_breaker_state, State);
+set_circuit_breaker_state(oz_worker, State) ->
     ok = ozw_test_rpc:set_env(service_circuit_breaker_state, State).
 
 
@@ -176,29 +168,32 @@ process_http_response(Response) ->
 
 %% @private
 create_dummy_gui_package() ->
-    {DirName, DummyGuiRoot} = get_dummy_gui_root(),
+    Path = opw_test_rpc:get_env(?PROVIDER_SELECTOR, gui_package_path),
+    DirName = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
+    DummyGuiRoot = filename:join(DirName, "gui_static"),
+    case filelib:is_dir(DummyGuiRoot) of
+        true -> ok = file:del_dir_r(DummyGuiRoot);
+        false -> ok
+    end,
     ok = file:make_dir(DummyGuiRoot),
+
     DummyIndex = filename:join(DummyGuiRoot, "index.html"),
     IndexContent = datastore_key:new(),
     ok = file:write_file(DummyIndex, IndexContent),
-
     DummyPackage = filename:join(DirName, "gui_static.tar.gz"),
 
     % Use tar to create archive as erl_tar is limited when it comes to tarring directories
     [] = os:cmd(str_utils:format("tar -C ~ts -czf ~ts ~ts", [DirName, DummyPackage, "gui_static"])),
     {ok, Content} = file:read_file(DummyPackage),
-    ok = ?rpc(?PROVIDER_SELECTOR, file:write_file(DummyPackage, Content)).
+    ok = ?rpc(?PROVIDER_SELECTOR, file:write_file(DummyPackage, Content)),
+
+    OpWorkerNode = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
+    {ok, DummyGuiHash} = ?rpc(OpWorkerNode, gui:package_hash(DummyPackage)),
+    DummyGuiHash.
 
 
 %% @private
-get_dummy_gui_root() ->
-    Path = opw_test_rpc:get_env(?PROVIDER_SELECTOR, gui_package_path),
-    DirName = filename:dirname(?rpc(?PROVIDER_SELECTOR, filename:absname(Path))),
-    {DirName, filename:join(DirName, "gui_static")}.
-
-
-%% @private
-get_worker_gui_hash(OpWorkerNode) ->
-    {ok, #document{value = #od_cluster{worker_version = {_, _, WorkerGuiHash}}}} =
+get_gui_hash_set_up_in_oz(OpWorkerNode) ->
+    {ok, #document{value = #od_cluster{worker_gui_hash = WorkerGuiHash}}} =
         ?rpc(OpWorkerNode, cluster_logic:get()),
     WorkerGuiHash.

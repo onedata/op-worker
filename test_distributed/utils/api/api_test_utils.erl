@@ -26,6 +26,7 @@
 
 -export([
     build_rest_url/2,
+    get_https_server_port_str/1,
 
     create_shared_file_in_space_krk/0,
     create_and_sync_shared_file_in_space_krk_par/1,
@@ -85,6 +86,22 @@
 -spec build_rest_url(node(), [binary()]) -> binary().
 build_rest_url(Node, PathTokens) ->
     rpc:call(Node, oneprovider, build_rest_url, [PathTokens]).
+
+
+-spec get_https_server_port_str(node()) -> PortStr :: string().
+get_https_server_port_str(Node) ->
+    case get(port) of
+        undefined ->
+            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+            PortStr = case Port of
+                443 -> "";
+                _ -> ":" ++ integer_to_list(Port)
+            end,
+            put(port, PortStr),
+            PortStr;
+        Port ->
+            Port
+    end.
 
 
 -spec create_shared_file_in_space_krk() ->

@@ -24,7 +24,7 @@
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
--export([get/0, get/2]).
+-export([get/0]).
 -export([update_version_info/3, upload_op_worker_gui/1]).
 
 %%%===================================================================

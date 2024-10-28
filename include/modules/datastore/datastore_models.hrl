@@ -20,10 +20,6 @@
 -include_lib("ctool/include/space_support/support_parameters.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
--define(DEFAULT_RELEASE_VERSION, <<"18.02.*">>).
--define(DEFAULT_BUILD_VERSION, <<"unknown">>).
--define(EMPTY_GUI_HASH, <<"empty">>).
-
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
 
 %% @formatter:off
@@ -38,12 +34,6 @@
     connection_ref => pid()
 }.
 %% @formatter:on
-
--type version_info() :: {
-    Release :: onedata:release_version(),
-    Build :: binary(),
-    GuiHash :: onedata:gui_hash()
-}.
 
 %%%===================================================================
 %%% Records synchronized via Graph Sync
@@ -275,11 +265,9 @@
 }).
 
 -record(od_cluster, {
-    worker_version = {
-        ?DEFAULT_RELEASE_VERSION,
-        ?DEFAULT_BUILD_VERSION,
-        ?EMPTY_GUI_HASH
-    } :: version_info(),
+    worker_release_version :: onedata:release_version(),
+    worker_build_version :: binary(),
+    worker_gui_hash :: onedata:gui_hash(),
     cache_state = #{} :: cache_state()
 }).
 

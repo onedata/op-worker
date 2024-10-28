@@ -20,8 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([handle_healthcheck_success/0]).
 -export([handle_connected_to_oz/0]).
+-export([handle_healthcheck_success/0]).
 -export([handle_disconnected_from_oz/0]).
 -export([handle_deregistered_from_oz/0]).
 -export([handle_entity_deleted/1]).
@@ -29,11 +29,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec handle_healthcheck_success() -> ok.
-handle_healthcheck_success() ->
-    ok = oneprovider:set_up_service_in_onezone().
 
 
 %%--------------------------------------------------------------------
@@ -57,6 +52,11 @@ handle_connected_to_oz() ->
             ], Stacktrace),
             error
     end.
+
+
+-spec handle_healthcheck_success() -> ok.
+handle_healthcheck_success() ->
+    ok = oneprovider:ensure_service_set_up_in_onezone().
 
 
 %%--------------------------------------------------------------------

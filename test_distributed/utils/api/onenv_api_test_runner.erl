@@ -35,7 +35,6 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
--include("global_definitions.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -43,7 +42,6 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([run_tests/1]).
--export([connect_via_gs/2]).
 
 -type ct_config() :: proplists:proplist().
 
@@ -177,28 +175,6 @@ run_tests(SpecTemplates) ->
                 false
         end
     end, true, SpecTemplates).
-
-
--spec connect_via_gs(node(), aai:auth()) ->
-    {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(Node, Client) ->
-    {Auth, ExpIdentity} = case Client of
-        ?NOBODY ->
-            {undefined, ?SUB(nobody)};
-        ?USER(UserId) ->
-            TokenAuth = {token, oct_background:get_user_access_token(UserId)},
-            {TokenAuth, ?SUB(user, UserId)}
-    end,
-    GsEndpoint = gs_endpoint(Node),
-    GsSupportedVersions = opw_test_rpc:gs_protocol_supported_versions(Node),
-    Opts = [{cacerts, get_cert_chain_ders()}],
-
-    case gs_client:start_link(GsEndpoint, Auth, GsSupportedVersions, fun(_) -> ok end, Opts) of
-        {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
-            {ok, GsClient};
-        {error, _} = Error ->
-            Error
-    end.
 
 
 %%%===================================================================
@@ -1043,22 +1019,10 @@ make_request(Node, Client, #gs_args{} = Args) ->
 -spec make_gs_request(node(), aai:auth(), gs_args()) ->
     {ok, Result :: map()} | {error, term()}.
 make_gs_request(Node, Client, Args) ->
-    case connect_via_gs(Node, Client) of
+    case gs_test_utils:connect_via_gs(Node, Client) of
         {ok, GsClient} -> gs_test_utils:gs_request(GsClient, Args);
         {error, _} = Error -> Error
     end.
-
-
-%% @private
--spec gs_endpoint(node()) -> URL :: binary().
-gs_endpoint(Node) ->
-    Port = get_https_server_port_str(Node),
-    Domain = opw_test_rpc:get_provider_domain(Node),
-
-    str_utils:join_as_binaries(
-        ["wss://", Domain, Port, "/graph_sync/gui"],
-        <<>>
-    ).
 
 
 %% @private
@@ -1125,26 +1089,9 @@ get_rest_endpoint(Node, ResourcePath) ->
 get_rest_api_root(?ONEZONE_TARGET_NODE) ->
     str_utils:format_bin("https://~ts/api/v3/onezone/shares/", [ozw_test_rpc:get_domain()]);
 get_rest_api_root(Node) ->
-    Port = get_https_server_port_str(Node),
+    Port = api_test_utils:get_https_server_port_str(Node),
     Domain = opw_test_rpc:get_provider_domain(Node),
     str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
-
-
-%% @private
--spec get_https_server_port_str(node()) -> PortStr :: string().
-get_https_server_port_str(Node) ->
-    case get(port) of
-        undefined ->
-            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PortStr = case Port of
-                443 -> "";
-                _ -> ":" ++ integer_to_list(Port)
-            end,
-            put(port, PortStr),
-            PortStr;
-        Port ->
-            Port
-    end.
 
 
 %% @private

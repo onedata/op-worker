@@ -31,12 +31,12 @@
 -export([get_oz_domain/0, replicate_oz_domain_to_node/1]).
 -export([get_oz_url/0, get_oz_url/1]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
--export([set_up_service_in_onezone/0]).
+-export([ensure_service_set_up_in_onezone/0]).
 
 % Developer functions
 -export([register_in_oz_dev/3]).
 
--define(GUI_UPLOAD_INTERVAL_SECONDS, op_worker:get_env(gui_upload_interval_seconds)).
+-define(GUI_UPLOAD_RETRY_INTERVAL_SECONDS, op_worker:get_env(gui_upload_retry_interval_seconds, 300)).
 -define(GUI_PACKAGE_PATH, op_worker:get_env(gui_package_path)).
 -define(OZ_VERSION_CACHE_TTL, timer:minutes(5)).
 
@@ -186,39 +186,22 @@ get_oz_providers_page() ->
 %% functional.
 %% @end
 %%--------------------------------------------------------------------
--spec set_up_service_in_onezone() -> ok.
-set_up_service_in_onezone() ->
+-spec ensure_service_set_up_in_onezone() -> ok.
+ensure_service_set_up_in_onezone() ->
     ?info("Setting up Oneprovider worker service in Onezone"),
     Release = op_worker:get_release_version(),
     Build = op_worker:get_build_version(),
     {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
-    {ok, #document{value = #od_cluster{worker_version = WorkerVersion}}} = cluster_logic:get(),
+    {ok, #document{value = #od_cluster{
+        worker_release_version = WorkerReleaseVersion,
+        worker_build_version = WorkerBuildVersion,
+        worker_gui_hash = WorkerGuiHash
+    }}} = cluster_logic:get(),
     case {Release, Build, GuiHash} of
-        WorkerVersion ->
+        {WorkerReleaseVersion, WorkerBuildVersion, WorkerGuiHash} ->
             ok;
         _ ->
-            case cluster_logic:update_version_info(Release, Build, GuiHash) of
-                ok ->
-                    ?info("Skipping GUI upload as it is already present in Onezone"),
-                    ?info("Oneprovider worker service successfully set up in Onezone");
-                ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
-                    ?info("Uploading GUI to Onezone (~ts)", [GuiHash]),
-
-                    utils:throttle(?GUI_UPLOAD_INTERVAL_SECONDS, fun() ->
-                        case cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH) of
-                            ok ->
-                                ?info("GUI uploaded succesfully"),
-                                ok = cluster_logic:update_version_info(Release, Build, GuiHash),
-                                ?info("Oneprovider worker service successfully set up in Onezone");
-                            {error, _} = Error ->
-                                ?alert(
-                                    "Oneprovider worker service could not be successfully set "
-                                    "up in Onezone due to an error during GUI package upload. "
-                                    "The Web GUI might be non-functional.~nError was: ~tp", [Error]
-                                )
-                        end
-                    end)
-            end
+            set_up_service_in_onezone(Release, Build, GuiHash)
     end.
 
 
@@ -276,3 +259,28 @@ get_all_nodes_ips(NodeList) ->
         IPAddr
     end, NodeList).
 
+
+-spec set_up_service_in_onezone(onedata:release_version(), binary(), onedata:gui_hash()) -> ok.
+set_up_service_in_onezone(Release, Build, GuiHash) ->
+    case cluster_logic:update_version_info(Release, Build, GuiHash) of
+        ok ->
+            ?info("Skipping GUI upload as it is already present in Onezone"),
+            ?info("Oneprovider worker service successfully set up in Onezone");
+        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
+            ?info("Uploading GUI to Onezone (~ts)", [GuiHash]),
+
+            utils:throttle(?GUI_UPLOAD_RETRY_INTERVAL_SECONDS, fun() ->
+                case cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH) of
+                    ok ->
+                        ?info("GUI uploaded succesfully"),
+                        ok = cluster_logic:update_version_info(Release, Build, GuiHash),
+                        ?info("Oneprovider worker service successfully set up in Onezone");
+                    {error, _} = Error ->
+                        ?alert(
+                            "Oneprovider worker service could not be successfully set "
+                            "up in Onezone due to an error during GUI package upload. "
+                            "The Web GUI might be non-functional.~nError was: ~tp", [Error]
+                        )
+                end
+            end)
+    end.
