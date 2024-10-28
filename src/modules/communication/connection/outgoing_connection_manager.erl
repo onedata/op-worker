@@ -255,14 +255,15 @@ renew_connections(#state{
     renewal_timer = undefined
 } = State0) ->
     try
-        case cosupports_any_space(PeerId) of
-            true ->
-                renew_connections_insecure(State0);
-            false ->
-                ?info("Stopping connection to provider ~ts because of no common supported spaces",
-                    [provider_logic:to_printable(PeerId)]),
-                terminate_session(State0)
-        end
+%%        @ TODO VFS-5418 uncomment when proxy is no more
+%%        case cosupports_any_space(PeerId) of
+%%            true ->
+                renew_connections_insecure(State0)
+%%            false ->
+%%                ?info("Stopping connection to provider ~ts because of no common supported spaces",
+%%                    [provider_logic:to_printable(PeerId)]),
+%%                terminate_session(State0)
+%%        end
     catch Type:Reason ->
         State1 = schedule_next_renewal(State0),
         ?debug("Failed to establish connection with provider ~ts due to ~tp:~tp.~n"
