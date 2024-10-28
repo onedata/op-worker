@@ -316,9 +316,13 @@ is_imported(StorageId) when is_binary(StorageId) ->
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
+
 -spec is_local_storage_readonly(id()) -> boolean().
 is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
-    ?check(storage_logic:is_local_storage_readonly(StorageId)).
+    ?check(storage_logic:is_local_storage_readonly(StorageId));
+is_local_storage_readonly(StorageData) ->
+    is_local_storage_readonly(storage:get_id(StorageData)).
+
 
 -spec is_storage_readonly(id() | data(), od_space:id()) -> boolean().
 is_storage_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
@@ -497,14 +501,14 @@ revoke_space_support(StorageId, SpaceId) ->
 
 
 -spec supports_any_space(id() | data()) -> boolean().
-supports_any_space(#document{key = StorageId}) ->
-    supports_any_space(StorageId);
 supports_any_space(StorageId) when is_binary(StorageId) ->
     case storage_logic:get_spaces(StorageId) of
         {ok, []} -> false;
         {ok, _Spaces} -> true;
         {error, _} = Error -> throw(Error)
-    end.
+    end;
+supports_any_space(StorageData) ->
+    supports_any_space(get_id(StorageData)).
 
 
 %%%===================================================================
