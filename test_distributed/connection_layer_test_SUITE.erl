@@ -575,7 +575,7 @@ init_per_testcase(heartbeats_test, Config) ->
 
     % mock storage detector so storage monitoring does not disable storages mid tests due to mocked helpers
     test_utils:mock_new(Workers, storage_detector),
-    test_utils:mock_expect(Workers, storage_detector, verify_storage_availability_on_current_node, fun(_, _, _) -> ok end),
+    test_utils:mock_expect(Workers, storage_detector, run_diagnostics, fun(_, _, _, _) -> ok end),
 
     [{control_proc, CP_Pid} |
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config)];
