@@ -317,7 +317,7 @@ is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
 
--spec is_local_storage_readonly(id()) -> boolean().
+-spec is_local_storage_readonly(id() | data()) -> boolean().
 is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
     ?check(storage_logic:is_local_storage_readonly(StorageId));
 is_local_storage_readonly(StorageData) ->
