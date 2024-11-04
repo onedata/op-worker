@@ -891,11 +891,10 @@ perform_all_storages_checks() ->
 is_storage_healthy(StorageData) ->
     Helper = storage:get_helper(StorageData),
     LumaFeed = storage:get_luma_feed(StorageData),
-    Imported = case storage:is_imported(StorageData) of
-        true -> imported;
-        false -> not_imported
-    end,
-    ok == storage_detector:verify_storage_availability_on_current_node(Helper, LumaFeed, Imported).
+    IgnoreReadWriteTest = storage:is_local_storage_readonly(StorageData) orelse
+        (storage:is_imported(StorageData) andalso storage:supports_any_space(StorageData)),
+    ok == storage_detector:run_diagnostics(this_node, Helper, LumaFeed,
+        #{read_write_test => not IgnoreReadWriteTest}).
 
 
 %% @private
