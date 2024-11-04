@@ -39,24 +39,9 @@
 -spec get() ->
     {ok, od_provider:doc()} | errors:error().
 get() ->
-    get(?ROOT_SESS_ID, ?SELF).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves provider doc by given ProviderId.
-%% @end
-%%--------------------------------------------------------------------
--spec get(gs_client_worker:client(), od_provider:id()) ->
-    {ok, od_provider:doc()} | errors:error().
-get(SessionId, ?SELF) ->
-    case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_ONEPROVIDER;
-        ProviderId -> get(SessionId, ProviderId)
-    end;
-get(SessionId, ProviderId) ->
-    gs_client_worker:request(SessionId, #gs_req_graph{
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
-        gri = #gri{type = od_cluster, id = ProviderId, aspect = instance},
+        gri = #gri{type = od_cluster, id = oneprovider:get_id(), aspect = instance},
         subscribe = true
     }).
 
