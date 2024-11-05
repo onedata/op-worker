@@ -391,6 +391,7 @@ reuse_or_create_session(
     case session:update_doc_and_time(SessId, Diff) of
         {ok, #document{key = SessId, value = UpdatedSession}} ->
             update_credentials_if_needed(SessType, Credentials, UpdatedSession),
+            renew_connection_if_needed(SessType, UpdatedSession),
             {ok, SessId};
         {error, not_found} = Error ->
             case start_session(#document{key = SessId, value = Sess}) of
@@ -403,7 +404,7 @@ reuse_or_create_session(
                     Other
             end;
         {error, {supervisor_dead, SessType}} ->
-            case restart_session(SessId, SessType)of
+            case restart_session(SessId, SessType) of
                 {error, already_exists} = Error ->
                     maybe_retry_session_init(
                         SessId, SessType, SessMode, Identity, Credentials,
@@ -449,6 +450,14 @@ update_credentials(NewCredentials, #session{watcher = SessionWatcher}) ->
         auth_manager:get_access_token(NewCredentials),
         auth_manager:get_consumer_token(NewCredentials)
     ).
+
+
+%% @private
+-spec renew_connection_if_needed(session:type(), session:record()) -> ok.
+renew_connection_if_needed(provider_outgoing, #session{watcher = ConnManagerPid}) ->
+    outgoing_connection_manager:renew_connection(ConnManagerPid);
+renew_connection_if_needed(_, _) ->
+    ok.
 
 
 %% @private

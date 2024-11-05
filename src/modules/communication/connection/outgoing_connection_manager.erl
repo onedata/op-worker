@@ -10,11 +10,9 @@
 %%% management of connections for outgoing provider session, which includes:
 %%% - (re)starting connections to peer hosts. In case of a connection attempt
 %%%   failure next retry will be performed after a backoff period that grows
-%%%   with every such failure. If backoff reaches ?MAX_RENEWAL_INTERVAL and
-%%%   manager still fails to connect to at least one peer host, then it is
-%%%   assumed that the peer is down/offline and the session is terminated.
-%%%   Otherwise, backoff period is reset on every successful handshake.
-%%% - session termination in case of any connection timeout (stale session).
+%%%   with every such failure up to ?MAX_RENEWAL_INTERVAL.
+%%%   Backoff period is reset on every successful handshake.
+%%% - session termination in case of no longer supporting common spaces.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(outgoing_connection_manager).
@@ -29,7 +27,8 @@
 %% API
 -export([
     start_link/1,
-    report_successful_handshake/1
+    report_successful_handshake/1,
+    renew_connection/1
 ]).
 
 %% gen_server callbacks
@@ -92,6 +91,12 @@ report_successful_handshake(ConnManager) ->
     gen_server:cast(ConnManager, ?HANDSHAKE_SUCCEEDED(self())).
 
 
+-spec renew_connection(pid()) -> ok.
+renew_connection(ConnManager) ->
+    ConnManager ! ?RENEW_CONNECTIONS_REQ,
+    ok.
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -108,8 +113,9 @@ init([SessionId]) ->
     process_flag(trap_exit, true),
     self() ! ?RENEW_CONNECTIONS_REQ,
 
+    Self = self(),
     {ok, _} = session:update(SessionId, fun(Session = #session{}) ->
-        {ok, Session#session{status = active}}
+        {ok, Session#session{status = active, watcher = Self}}
     end),
 
     {ok, #state{
@@ -171,7 +177,8 @@ handle_cast(Request, State) ->
 handle_info(_, #state{is_stopping = true} = State) ->
     {noreply, State};
 
-handle_info(?RENEW_CONNECTIONS_REQ, State0) ->
+handle_info(?RENEW_CONNECTIONS_REQ, #state{renewal_timer = TimerRef} = State0) ->
+    TimerRef =/= undefined andalso erlang:cancel_timer(TimerRef),
     {noreply, renew_connections(State0#state{renewal_timer = undefined})};
 
 handle_info({'EXIT', _ConnPid, timeout}, State) ->
@@ -183,9 +190,9 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{
 } = State) ->
     case maps:take(ConnPid, Connecting) of
         {_Host, LeftoverConnecting} ->
-            handle_failed_connection_attempt(State#state{
+            {noreply, schedule_next_renewal(State#state{
                 connecting = LeftoverConnecting
-            });
+            })};
         error ->
             {noreply, renew_connections(State#state{
                 connected = maps:remove(ConnPid, Connected)
@@ -195,16 +202,6 @@ handle_info({'EXIT', ConnPid, _Reason}, #state{
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
-
-
-%% @private
--spec handle_failed_connection_attempt(state()) -> {noreply, state()}.
-handle_failed_connection_attempt(State) ->
-    NewState = case failed_connection_attempts_limit_exceeded(State) of
-        true -> terminate_session(State);
-        false -> schedule_next_renewal(State)
-    end,
-    {noreply, NewState}.
 
 
 %%--------------------------------------------------------------------
@@ -257,8 +254,16 @@ renew_connections(#state{
     session_id = SessionId,
     renewal_timer = undefined
 } = State0) ->
-    State2 = try
-        renew_connections_insecure(State0)
+    try
+%%        @ TODO VFS-5418 uncomment when proxy is no more
+%%        case cosupports_any_space(PeerId) of
+%%            true ->
+                renew_connections_insecure(State0)
+%%            false ->
+%%                ?info("Stopping connection to provider ~ts because of no common supported spaces",
+%%                    [provider_logic:to_printable(PeerId)]),
+%%                terminate_session(State0)
+%%        end
     catch Type:Reason ->
         State1 = schedule_next_renewal(State0),
         ?debug("Failed to establish connection with provider ~ts due to ~tp:~tp.~n"
@@ -270,11 +275,6 @@ renew_connections(#state{
             log_error(State1, Type, Reason)
         end),
         State1
-    end,
-
-    case failed_connection_attempts_limit_exceeded(State2) of
-        true -> terminate_session(State2);
-        false -> State2
     end;
 renew_connections(State) ->
     State.
@@ -344,21 +344,9 @@ schedule_next_renewal(State) ->
 
 
 %% @private
--spec failed_connection_attempts_limit_exceeded(state()) -> boolean().
-failed_connection_attempts_limit_exceeded(#state{
-    connecting = Connecting,
-    connected = Connected,
-    renewal_timer = undefined,
-    renewal_interval = PrevInterval
-}) when map_size(Connecting) == 0, map_size(Connected) == 0 ->
-    PrevInterval >= ?MAX_RENEWAL_INTERVAL;
-failed_connection_attempts_limit_exceeded(_) ->
-    false.
-
-
-%% @private
 -spec terminate_session(state()) -> state().
-terminate_session(#state{session_id = SessionId} = State) ->
+terminate_session(#state{session_id = SessionId, renewal_timer = TimerRef} = State) ->
+    TimerRef =/= undefined andalso erlang:cancel_timer(TimerRef),
     spawn(fun() ->
         session_manager:terminate_session(SessionId)
     end),
@@ -404,3 +392,13 @@ log_error(#state{peer_id = PeerId}, ReasonString) ->
             ReasonString
         ]
     ).
+
+
+%% @ TODO VFS-5418 uncomment when proxy is no more
+%% @private
+%%-spec cosupports_any_space(od_provider:id()) -> boolean().
+%%cosupports_any_space(ProviderId) ->
+%%    {ok, Spaces} = provider_logic:get_spaces(),
+%%    lists:any(fun(SpaceId) ->
+%%        space_logic:is_supported(SpaceId, ProviderId)
+%%    end, Spaces).

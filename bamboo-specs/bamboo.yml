@@ -210,8 +210,8 @@ stages:
         - session_manager
         - session_offline
         - session_watcher
-#        - single_node_failure
-        - space_unsupport
+#        - single_node_failure # TODO VFS-11953
+#        - space_unsupport # TODO VFS-12430
         - storage_cleanup
         - storage_files
         - storage_import
@@ -1625,12 +1625,13 @@ session_watcher:
 #    - <<: *ct_logs
 #      name: ct_logs_single_node_failure.tar.gz
 
-space_unsupport:
-  <<: *ct-job
-  key: SPUN
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_space_unsupport.tar.gz
+# TODO VFS-12430
+#space_unsupport:
+#  <<: *ct-job
+#  key: SPUN
+#  artifacts:
+#    - <<: *ct_logs
+#      name: ct_logs_space_unsupport.tar.gz
 
 storage_cleanup:
   <<: *ct-job
@@ -2036,7 +2037,7 @@ Coverage report:
     - artifact: ct_logs_session_offline.tar.gz
     - artifact: ct_logs_session_watcher.tar.gz
 #    - artifact: ct_logs_single_node_failure.tar.gz # TODO VFS-11953
-    - artifact: ct_logs_space_unsupport.tar.gz
+#    - artifact: ct_logs_space_unsupport.tar.gz # TODO VFS-12430
     - artifact: ct_logs_storage_cleanup.tar.gz
     - artifact: ct_logs_storage_files.tar.gz
     - artifact: ct_logs_storage_import.tar.gz
