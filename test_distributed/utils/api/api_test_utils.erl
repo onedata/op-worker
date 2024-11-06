@@ -92,10 +92,9 @@ build_rest_url(Node, PathTokens) ->
 get_https_server_port_str(Node) ->
     case get(port) of
         undefined ->
-            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PortStr = case Port of
+            PortStr = case opw_test_rpc:get_env(Node, https_server_port) of
                 443 -> "";
-                _ -> ":" ++ integer_to_list(Port)
+                P -> ":" ++ integer_to_list(P)
             end,
             put(port, PortStr),
             PortStr;
