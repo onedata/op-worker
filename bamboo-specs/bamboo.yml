@@ -181,6 +181,7 @@ stages:
 #        - nfs_helper # uncomment after fixing helper
 #        - node_failure # TODO VFS-11953
         - nulldevice_helper
+        - op_worker_circuit_breaker
         - performance_2_provider
         - posix_helper
         - provider_connection
@@ -1412,6 +1413,13 @@ nulldevice_helper:
     - <<: *ct_logs
       name: ct_logs_nulldevice_helper.tar.gz
 
+op_worker_circuit_breaker:
+  <<: *ct-onenv-job
+  key: OPCB
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_op_worker_circuit_breaker.tar.gz
+
 performance_2_provider:
   <<: *ct-job
   key: P2P
@@ -1999,6 +2007,7 @@ Coverage report:
 #    - artifact: ct_logs_nfs_helper.tar.gz # uncomment after fixing helper
 #    - artifact: ct_logs_node_failure.tar.gz # TODO VFS-11953
     - artifact: ct_logs_nulldevice_helper.tar.gz
+    - artifact: ct_logs_op_worker_circuit_breaker.tar.gz
     - artifact: ct_logs_performance_2_provider.tar.gz
     - artifact: ct_logs_posix_helper.tar.gz
     - artifact: ct_logs_provider_connection.tar.gz

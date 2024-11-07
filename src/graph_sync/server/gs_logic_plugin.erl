@@ -29,6 +29,7 @@
 -export([handle_rpc/4]).
 -export([handle_graph_request/6]).
 -export([is_subscribable/1, is_type_supported/1]).
+-export([assert_service_available/0]).
 
 
 %%%===================================================================
@@ -198,3 +199,13 @@ is_type_supported(#gri{type = op_storage}) -> true;
 is_type_supported(#gri{type = op_transfer}) -> true;
 is_type_supported(#gri{type = op_user}) -> true;
 is_type_supported(#gri{type = _}) -> false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gs_logic_plugin_behaviour} callback assert_service_available/0.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_service_available() -> ok | no_return().
+assert_service_available() ->
+    op_worker_circuit_breaker:assert_closed().
