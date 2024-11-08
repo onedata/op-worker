@@ -209,7 +209,7 @@ get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFl
             case effective_value:get_or_calculate(CacheName, FileDoc, Callback, Options) of
                 {ok, Entry, _} ->
                     {ok, Entry};
-                {error, {file_meta_missing, _}} ->
+                {error, ?MISSING_FILE_META(_)} ->
                     ?ERROR_NOT_FOUND
             end
     end.

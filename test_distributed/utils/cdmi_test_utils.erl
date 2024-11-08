@@ -38,7 +38,7 @@
 
 
 cdmi_endpoint(Node, Domain) ->
-    Port = get_https_server_port_str(Node),
+    Port = api_test_utils:get_https_server_port_str(Node),
     str_utils:format("https://~ts~ts/cdmi/", [Domain, Port]).
 
 
@@ -202,23 +202,6 @@ get_random_string(Length, AllowedChars) ->
             AllowedChars)]
         ++ Acc
     end, [], lists:seq(1, Length)).
-
-
-%% @private
--spec get_https_server_port_str(node()) -> PortStr :: string().
-get_https_server_port_str(Node) ->
-    case get(port) of
-        undefined ->
-            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PortStr = case Port of
-                443 -> "";
-                _ -> ":" ++ integer_to_list(Port)
-            end,
-            put(port, PortStr),
-            PortStr;
-        Port ->
-            Port
-    end.
 
 
 % Performs a single request using http_client

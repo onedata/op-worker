@@ -153,6 +153,7 @@ get_attr_required_perms(?attr_path) -> [];
 get_attr_required_perms(?attr_parent_guid) -> [];
 get_attr_required_perms(?attr_gid) -> [];
 get_attr_required_perms(?attr_uid) -> [];
+get_attr_required_perms(?attr_creation_time) -> [];
 get_attr_required_perms(?attr_atime) -> [];
 get_attr_required_perms(?attr_mtime) -> [];
 get_attr_required_perms(?attr_ctime) -> [];

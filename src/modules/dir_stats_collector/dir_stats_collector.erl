@@ -58,6 +58,7 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -79,8 +80,9 @@
     init/0, graceful_terminate/1, forced_terminate/2,
     handle_call/2, handle_cast/2]).
 
-%% file_meta_posthooks_behaviour callbacks
+%% file_meta_posthooks related functions
 -export([
+    add_missing_file_meta_on_update_posthook/3,
     encode_file_meta_posthook_args/2,
     decode_file_meta_posthook_args/2
 ]).
@@ -272,8 +274,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                             update_stats_of_parent_internal(get_parent(Doc, SpaceId), CollectionType, CollectionUpdate)
                     end;
                 ?ERROR_NOT_FOUND ->
-                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(),
-                        SpaceId, ?MODULE, ?FUNCTION_NAME, [Guid, CollectionType, CollectionUpdate])
+                    add_missing_file_meta_on_update_posthook(Guid, CollectionType, CollectionUpdate)
             end;
         false ->
             ok
@@ -555,8 +556,16 @@ handle_cast(Info, State) ->
 
 
 %%%===================================================================
-%%% file_meta_posthooks_behaviour callbacks
+%%% file_meta_posthooks related functions
 %%%===================================================================
+
+-spec add_missing_file_meta_on_update_posthook(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_missing_file_meta_on_update_posthook(Guid, CollectionType, CollectionUpdate) ->
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+    file_meta_posthooks:add_hook(?MISSING_FILE_META(FileUuid), generator:gen_name(),
+        SpaceId, ?MODULE, update_stats_of_nearest_dir, [Guid, CollectionType, CollectionUpdate]).
+
 
 -spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
     file_meta_posthooks:encoded_args().
@@ -1133,7 +1142,7 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
+    file_meta_posthooks:add_hook(?MISSING_FILE_META(FileUuid), generator:gen_name(), SpaceId,
         ?MODULE, update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]).
 
 

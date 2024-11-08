@@ -290,7 +290,8 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
             http_client:post(
                 build_job_callback_url(AtmLambdaInput),
                 #{<<"x-function-status">> => FunctionStatus},
-                Response
+                Response,
+                [{ssl_options, [{cacerts, https_listener:get_cert_chain_ders()}]}]
             )
         end),
 

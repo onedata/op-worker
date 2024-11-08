@@ -127,7 +127,6 @@ upload_test(_Config) ->
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
-
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 

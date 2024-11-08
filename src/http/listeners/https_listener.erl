@@ -26,7 +26,7 @@
 -define(MAX_KEEPALIVE, op_worker:get_env(https_max_keepalive, 30)).
 
 -define(ONEPANEL_CONNECT_OPTS, fun() -> [
-    {recv_timeout, timer:seconds(op_worker:get_env(onepanel_proxy_recv_timeout_sec, 30))},
+    {recv_timeout, timer:seconds(op_worker:get_env(onepanel_proxy_recv_timeout_sec, 60))},
     {ssl_options, [
         {secure, only_verify_peercert},
         {cacerts, get_cert_chain_ders()}
@@ -120,11 +120,13 @@ gui_config() ->
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
-        {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
+        {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]}, % blocked when no DB space
         {?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, atm_openfaas_activity_feed_ws_handler, []},
-        {?CDMI_ID_PATH, cdmi_handler, by_id},
-        {?CDMI_PATH, cdmi_handler, by_path},
-        rest_routes:routes()
+        {?ATM_JOB_OUTPUT_CALLBACK_PATH, atm_openfaas_task_callback_handler, #{type => output}},
+        {?ATM_JOB_HEARTBEAT_CALLBACK_PATH, atm_openfaas_task_callback_handler, #{type => heartbeat}},
+        {?CDMI_ID_PATH, cdmi_handler, by_id}, % blocked when no DB space
+        {?CDMI_PATH, cdmi_handler, by_path}, % blocked when no DB space
+        rest_routes:routes() % blocked when no DB space
     ]),
 
     DynamicPageRoutes = [

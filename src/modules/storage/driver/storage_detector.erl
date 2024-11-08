@@ -21,10 +21,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 
-%% Onepanel RPC
--export([verify_storage_availability_on_all_nodes/2]).
-
 %% API
+-export([
+    run_diagnostics/4
+]).
 -export([
     check_storage_access/2,
     create_test_file/2, create_test_file/3,
@@ -34,6 +34,9 @@
 ]).
 
 -type operation() :: access | create | write | read | remove.
+-type diagnostic_opts() :: #{read_write_test := boolean()}.
+
+-export_type([diagnostic_opts/0]).
 
 -define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
 -define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
@@ -46,25 +49,13 @@
 %%% API
 %%%===================================================================
 
--spec verify_storage_availability_on_all_nodes(helpers:helper(), luma_config:feed()) ->
+-spec run_diagnostics(all_nodes | this_node, helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
     ok | errors:error().
-verify_storage_availability_on_all_nodes(#helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed) ->
-    ok;
-verify_storage_availability_on_all_nodes(Helper, LumaFeed) ->
-    try
-        case ?SKIP_STORAGE_DETECTION of
-            true ->
-                ok;
-            false ->
-                AdminCtx = helper:get_admin_ctx(Helper),
-                {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
-                    ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
-                ),
-                verify_storage_availability_on_all_nodes_insecure(Helper, ExtendedAdminCtx)
-        end
-    catch throw:?ERROR_STORAGE_TEST_FAILED(Operation) ->
-        ?ERROR_STORAGE_TEST_FAILED(Operation)
-    end.
+run_diagnostics(all_nodes, Helper, LumaFeed, Opts) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Opts);
+run_diagnostics(this_node, Helper, LumaFeed, Opts) ->
+    run_diagnostics_on_nodes([node()], Helper, LumaFeed, Opts).
 
 
 -spec check_storage_access(helpers:helper(), helper:user_ctx()) ->
@@ -132,7 +123,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
         {error, Reason} ->
             Operation = remove,
             ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
-            throw(?ERROR_STORAGE_TEST_FAILED(remove))
+            throw(?ERROR_STORAGE_TEST_FAILED(Operation))
     end.
 
 
@@ -141,14 +132,36 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %%%===================================================================
 
 %% @private
--spec verify_storage_availability_on_all_nodes_insecure(helpers:helper(), helper:user_ctx()) -> ok.
-verify_storage_availability_on_all_nodes_insecure(Helper, UserCtx) ->
-    Nodes = consistent_hashing:get_all_nodes(),
+-spec run_diagnostics_on_nodes([node()], helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
+    ok | errors:error().
+run_diagnostics_on_nodes(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
+    ok;
+run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
+    try
+        case ?SKIP_STORAGE_DETECTION of
+            true ->
+                ok;
+            false ->
+                AdminCtx = helper:get_admin_ctx(Helper),
+                {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
+                    ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
+                ),
+                run_diagnostics_on_nodes_insecure(Nodes, Helper, ExtendedAdminCtx, Options)
+        end
+    catch throw:?ERROR_STORAGE_TEST_FAILED(Operation) ->
+        ?ERROR_STORAGE_TEST_FAILED(Operation)
+    end.
+
+
+%% @private
+-spec run_diagnostics_on_nodes_insecure([node()], helpers:helper(), helper:user_ctx(), diagnostic_opts()) ->
+    ok.
+run_diagnostics_on_nodes_insecure(Nodes, Helper, UserCtx, Opts) ->
     BasicArgList = [[Helper, UserCtx] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
-    case Helper of
-        #helper{args = #{<<"readonly">> := <<"true">>}} -> ok;
-        _ -> perform_read_write_test(Nodes, BasicArgList)
+    case maps:get(read_write_test, Opts) of
+        true -> perform_read_write_test(Nodes, BasicArgList);
+        false -> ok
     end.
 
 

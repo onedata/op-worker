@@ -26,6 +26,7 @@
 
 -export([
     build_rest_url/2,
+    get_https_server_port_str/1,
 
     create_shared_file_in_space_krk/0,
     create_and_sync_shared_file_in_space_krk_par/1,
@@ -85,6 +86,21 @@
 -spec build_rest_url(node(), [binary()]) -> binary().
 build_rest_url(Node, PathTokens) ->
     rpc:call(Node, oneprovider, build_rest_url, [PathTokens]).
+
+
+-spec get_https_server_port_str(node()) -> PortStr :: string().
+get_https_server_port_str(Node) ->
+    case get(port) of
+        undefined ->
+            PortStr = case opw_test_rpc:get_env(Node, https_server_port) of
+                443 -> "";
+                P -> ":" ++ integer_to_list(P)
+            end,
+            put(port, PortStr),
+            PortStr;
+        Port ->
+            Port
+    end.
 
 
 -spec create_shared_file_in_space_krk() ->
@@ -403,6 +419,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     parent_guid = ParentGuid,
     gid = Gid,
     uid = Uid,
+    creation_time = CreationTime,
     atime = Atime,
     mtime = Mtime,
     ctime = Ctime,
@@ -461,6 +478,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"parentFileId">> => map_file_id_for_api_type(ApiType, ParentGuid),
         <<"displayGid">> => Gid,
         <<"displayUid">> => Uid,
+        <<"creationTime">> => CreationTime,
         <<"atime">> => Atime,
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,

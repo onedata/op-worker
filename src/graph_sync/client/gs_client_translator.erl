@@ -80,6 +80,16 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
         }
     };
 
+translate(#gri{type = od_group, id = Id, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_group{
+            name = maps:get(<<"name">>, Result),
+            type = binary_to_atom(maps:get(<<"type">>, Result), utf8),
+            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result))
+        }
+    };
+
 translate(#gri{type = od_group, id = Id, scope = shared}, Result) ->
     #document{
         key = Id,
@@ -231,6 +241,14 @@ translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = pri
         }
     };
 
+translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = public}, Result) ->
+    #document{
+        key = Id,
+        value = #od_handle_service{
+            name = maps:get(<<"name">>, Result)
+        }
+    };
+
 translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
@@ -253,7 +271,8 @@ translate(#gri{type = od_handle, id = Id, aspect = instance, scope = public}, Re
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
             metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
-            metadata = maps:get(<<"metadata">>, Result)
+            metadata = maps:get(<<"metadata">>, Result),
+            handle_service = maps:get(<<"handleServiceId">>, Result)
         }
     };
 
@@ -341,6 +360,16 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
         }
     };
 
+translate(#gri{type = od_cluster, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_cluster{
+            worker_release_version = maps:get(<<"workerReleaseVersion">>, Result),
+            worker_build_version = maps:get(<<"workerBuildVersion">>, Result),
+            worker_gui_hash = maps:get(<<"workerGuiHash">>, Result)
+        }
+    };
+
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~tp~nResult: ~tp", [
         GRI, Result
@@ -409,6 +438,13 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
         }
     };
 
+apply_scope_mask(Doc = #document{value = Group = #od_group{}}, shared) ->
+    Doc#document{
+        value = Group#od_group{
+            eff_users = #{}
+        }
+    };
+
 apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
     Doc#document{
         value = Space#od_space{
@@ -440,12 +476,19 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
         }
     };
 
+apply_scope_mask(Doc = #document{value = Handle = #od_handle_service{}}, public) ->
+    Doc#document{
+        value = Handle#od_handle_service{
+            eff_users = #{},
+            eff_groups = #{}
+        }
+    };
+
 apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
     Doc#document{
         value = Handle#od_handle{
             resource_type = undefined,
             resource_id = undefined,
-            handle_service = undefined,
 
             eff_users = #{},
             eff_groups = #{}

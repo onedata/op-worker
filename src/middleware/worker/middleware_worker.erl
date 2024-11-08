@@ -173,7 +173,10 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         assert_has_access_to_space(UserCtx, FileCtx),
         middleware_utils:assert_file_managed_locally(FileGuid),
 
-        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
+        case fslogic_worker:is_storage_accessible(FileCtx) of
+            true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
+            false -> ?ERROR_SERVICE_UNAVAILABLE
+        end
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;

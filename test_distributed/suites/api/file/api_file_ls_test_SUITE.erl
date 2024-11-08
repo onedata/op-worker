@@ -702,11 +702,13 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
                     maps:with(utils:ensure_list(Attributes),
                         api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, Attrs))
             end,
-            case fslogic_file_id:is_space_dir_guid(Guid) of
+            MappedChildAttrs2 = case fslogic_file_id:is_space_dir_guid(Guid) of
                 % do not check localReplicationRate for space dirs as it might be difficult to determine actual correct value
                 true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
                 false -> MappedChildAttrs
-            end
+            end,
+            % do not check creation time, as it is not synchronized in line 21.*
+            maps:remove(<<"creationTime">>, MappedChildAttrs2)
         end, ExpFiles2),
         <<"isLast">> => IsLast
     },

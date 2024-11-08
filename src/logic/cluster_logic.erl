@@ -24,11 +24,27 @@
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
+-export([get/0]).
 -export([update_version_info/3, upload_op_worker_gui/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves provider doc of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get() ->
+    {ok, od_provider:doc()} | errors:error().
+get() ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_cluster, id = oneprovider:get_id(), aspect = instance},
+        subscribe = true
+    }).
+
 
 %%--------------------------------------------------------------------
 %% @doc

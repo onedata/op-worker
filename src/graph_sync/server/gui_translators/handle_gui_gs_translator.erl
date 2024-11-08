@@ -40,8 +40,23 @@ translate_resource(#gri{aspect = instance, scope = private}, #od_handle{
             type = op_handle_service,
             id = HandleServiceId,
             aspect = instance,
-            scope = private
+            scope = public
         })
     };
-translate_resource(#gri{aspect = instance, scope = public}, HandleInfo) ->
-    HandleInfo.
+translate_resource(#gri{aspect = instance, scope = public}, #{
+    <<"url">> := PublicHandle,
+    <<"metadataPrefix">> := MetadataPrefix,
+    <<"metadataString">> := MetadataString,
+    <<"handleServiceId">> := HandleServiceId
+}) ->
+    #{
+        <<"url">> => PublicHandle,
+        <<"metadataPrefix">> => MetadataPrefix,
+        <<"metadataString">> => MetadataString,
+        <<"handleService">> => gri:serialize(#gri{
+            type = op_handle_service,
+            id = HandleServiceId,
+            aspect = instance,
+            scope = public
+        })
+    }.

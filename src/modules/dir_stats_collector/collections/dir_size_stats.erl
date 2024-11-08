@@ -627,7 +627,7 @@ init_reg_file(Guid) ->
     {FileSizes, _} = try
         file_ctx:prepare_file_size_summary(FileCtx, create_missing_location)
     catch
-        throw:{error, {file_meta_missing, _}} ->
+        throw:{error, ?MISSING_FILE_META(_)} ->
             % It is impossible to create file_location because of missing ancestor's file_meta.
             % Sizes will be counted on location creation.
             {[], FileCtx}

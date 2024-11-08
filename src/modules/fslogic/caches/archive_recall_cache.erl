@@ -21,6 +21,7 @@
 -author("Michał Stanisz").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -114,7 +115,7 @@ invalidate_on_all_nodes(SpaceId) ->
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
     {ok, undefined | {ongoing | finished, file_meta:uuid()}} 
-    | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
+    | {error, ?MISSING_FILE_META(file_meta:uuid())} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun find_closest_recall/1) of
@@ -126,7 +127,7 @@ get(SpaceId, Doc = #document{value = #file_meta{}}) ->
 get(SpaceId, Uuid) ->
     case file_meta:get_including_deleted(Uuid) of
         {ok, Doc} -> get(SpaceId, Doc);
-        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, Uuid}};
+        ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
         {error, _} = Error -> Error
     end.
 

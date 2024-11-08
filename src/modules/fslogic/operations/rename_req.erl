@@ -697,10 +697,9 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
     end,
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
-    CurrentTime = global_clock:timestamp_seconds(),
-    ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
-    ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
-    ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime, emit_event),
+    times_api:touch(SourceParentFileCtx, [?attr_mtime, ?attr_ctime]),
+    times_api:touch(TargetParentFileCtx, [?attr_mtime, ?attr_ctime]),
+    times_api:touch(SourceFileCtx2, [?attr_ctime]),
     ok = fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx2, ParentGuid, TargetName, PrevName, UserCtx).
 
 

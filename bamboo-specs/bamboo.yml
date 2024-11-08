@@ -181,6 +181,7 @@ stages:
 #        - nfs_helper # uncomment after fixing helper
 #        - node_failure # TODO VFS-11953
         - nulldevice_helper
+        - op_worker_circuit_breaker
         - performance_2_provider
         - posix_helper
         - provider_connection
@@ -209,8 +210,8 @@ stages:
         - session_manager
         - session_offline
         - session_watcher
-#        - single_node_failure
-        - space_unsupport
+#        - single_node_failure # TODO VFS-11953
+#        - space_unsupport # TODO VFS-12430
         - storage_cleanup
         - storage_files
         - storage_import
@@ -221,6 +222,7 @@ stages:
         - storage_import_s3
         - storage_import_update
         - storage_import_update_s3
+        - storage_monitoring
         - storage_req
         - storage_sync_links
         - storage_traverse
@@ -393,6 +395,7 @@ Build:
 
 _Codetag Tracker:
   key: CT
+  other: *common-opts
   tasks:
     - checkout: &fake-checkout
         conditions:
@@ -1410,6 +1413,13 @@ nulldevice_helper:
     - <<: *ct_logs
       name: ct_logs_nulldevice_helper.tar.gz
 
+op_worker_circuit_breaker:
+  <<: *ct-onenv-job
+  key: OPCB
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_op_worker_circuit_breaker.tar.gz
+
 performance_2_provider:
   <<: *ct-job
   key: P2P
@@ -1615,12 +1625,13 @@ session_watcher:
 #    - <<: *ct_logs
 #      name: ct_logs_single_node_failure.tar.gz
 
-space_unsupport:
-  <<: *ct-job
-  key: SPUN
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_space_unsupport.tar.gz
+# TODO VFS-12430
+#space_unsupport:
+#  <<: *ct-job
+#  key: SPUN
+#  artifacts:
+#    - <<: *ct_logs
+#      name: ct_logs_space_unsupport.tar.gz
 
 storage_cleanup:
   <<: *ct-job
@@ -1691,6 +1702,13 @@ storage_import_update_s3:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_storage_import_update_s3.tar.gz
+
+storage_monitoring:
+  <<: *ct-onenv-job
+  key: STORMON
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_monitoring.tar.gz
 
 storage_req:
   <<: *ct-job
@@ -1989,6 +2007,7 @@ Coverage report:
 #    - artifact: ct_logs_nfs_helper.tar.gz # uncomment after fixing helper
 #    - artifact: ct_logs_node_failure.tar.gz # TODO VFS-11953
     - artifact: ct_logs_nulldevice_helper.tar.gz
+    - artifact: ct_logs_op_worker_circuit_breaker.tar.gz
     - artifact: ct_logs_performance_2_provider.tar.gz
     - artifact: ct_logs_posix_helper.tar.gz
     - artifact: ct_logs_provider_connection.tar.gz
@@ -2018,7 +2037,7 @@ Coverage report:
     - artifact: ct_logs_session_offline.tar.gz
     - artifact: ct_logs_session_watcher.tar.gz
 #    - artifact: ct_logs_single_node_failure.tar.gz # TODO VFS-11953
-    - artifact: ct_logs_space_unsupport.tar.gz
+#    - artifact: ct_logs_space_unsupport.tar.gz # TODO VFS-12430
     - artifact: ct_logs_storage_cleanup.tar.gz
     - artifact: ct_logs_storage_files.tar.gz
     - artifact: ct_logs_storage_import.tar.gz
@@ -2029,6 +2048,7 @@ Coverage report:
     - artifact: ct_logs_storage_import_s3.tar.gz
     - artifact: ct_logs_storage_import_update.tar.gz
     - artifact: ct_logs_storage_import_update_s3.tar.gz
+    - artifact: ct_logs_storage_monitoring.tar.gz
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz
     - artifact: ct_logs_storage_traverse.tar.gz

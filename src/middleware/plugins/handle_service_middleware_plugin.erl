@@ -42,6 +42,7 @@
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
 resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, instance, public) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -70,6 +71,14 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId, scope = public}}) ->
+    case handle_service_logic:get_public_data(Auth#auth.session_id, HandleServiceId) of
+        {ok, #document{value = HandleService}} ->
+            {ok, {HandleService, 1}};
+        {error, _} = Error ->
+            Error
+    end;
+
 fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
@@ -88,6 +97,9 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
+authorize(#op_req{auth = ?GUEST, operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
+    true;
+
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
@@ -124,7 +136,13 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{aspect = instance, scope = private}}, HandleService) ->
-    {ok, HandleService}.
+    {ok, HandleService};
+get(#op_req{gri = #gri{aspect = instance, scope = public}}, #od_handle_service{
+    name = Name
+}) ->
+    {ok, #{
+        <<"name">> => Name
+    }}.
 
 
 %%--------------------------------------------------------------------

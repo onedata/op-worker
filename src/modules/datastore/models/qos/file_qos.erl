@@ -113,19 +113,19 @@ delete(Key, Pred) ->
 %%%===================================================================
 
 -spec get_effective(file_meta:doc() | file_meta:uuid()) ->
-    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+    {ok, effective_file_qos()} | {error, ?MISSING_FILE_META(binary())} | undefined.
 get_effective(FileIdOrDoc) ->
     get_effective(FileIdOrDoc, #{}).
 
 
 -spec get_effective_for_single_reference(file_meta:doc() | file_meta:uuid()) ->
-    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+    {ok, effective_file_qos()} | {error, ?MISSING_FILE_META(binary())} | undefined.
 get_effective_for_single_reference(FileIdOrDoc) ->
     get_effective_for_single_reference(FileIdOrDoc, <<>>).
 
 
 -spec get_effective_for_single_reference(file_meta:doc() | file_meta:uuid(), file_meta:uuid()) ->
-    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+    {ok, effective_file_qos()} | {error, ?MISSING_FILE_META(binary())} | undefined.
 get_effective_for_single_reference(FileIdOrDoc, CalculationRootParent) ->
     get_effective(FileIdOrDoc, #{
         merge_callback => undefined,
@@ -315,7 +315,7 @@ cleanup_reference_related_documents(FileCtx, OriginalParentCtx) ->
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalParentCtx)
             end, EffectiveQosEntries);
-        {error, {file_meta_missing, _}} ->
+        {error, ?MISSING_FILE_META(_)} ->
             % original parent is already deleted or not yet synchronized; nothing to clean up
             ok;
         {error, _} = Error ->
@@ -413,11 +413,11 @@ merge_file_qos(FirstEffQos, SecondEffQos) ->
 
 %% @private
 -spec get_effective(file_meta:doc() | file_meta:uuid(), effective_value:get_or_calculate_options()) ->
-    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+    {ok, effective_file_qos()} | {error, ?MISSING_FILE_META(binary())} | undefined.
 get_effective(FileUuid, Options) when is_binary(FileUuid) ->
     case file_meta:get(FileUuid) of
         {ok, FileDoc} -> get_effective(FileDoc, Options);
-        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
+        ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(FileUuid)}
     end;
 get_effective(#document{} = FileDoc, Options) ->
     get_effective(FileDoc, undefined, Options).
@@ -486,7 +486,7 @@ get_effective_qos_for_single_file(#document{scope = SpaceId} = FileDoc, Callback
     case effective_value:get_or_calculate(?CACHE_TABLE_NAME(SpaceId), FileDoc, Callback, Options) of
         {ok, EffQos, _} ->
             {ok, EffQos};
-        {error, {file_meta_missing, _MissingUuid}} = Error ->
+        {error, ?MISSING_FILE_META(_MissingUuid)} = Error ->
             % documents are not synchronized yet
             Error
     end.
