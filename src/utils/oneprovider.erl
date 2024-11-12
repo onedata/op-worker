@@ -188,7 +188,6 @@ get_oz_providers_page() ->
 %%--------------------------------------------------------------------
 -spec ensure_service_set_up_in_onezone() -> ok.
 ensure_service_set_up_in_onezone() ->
-    ?info("Setting up Oneprovider worker service in Onezone"),
     Release = op_worker:get_release_version(),
     Build = op_worker:get_build_version(),
     {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
@@ -262,6 +261,7 @@ get_all_nodes_ips(NodeList) ->
 
 -spec set_up_service_in_onezone(onedata:release_version(), binary(), onedata:gui_hash()) -> ok.
 set_up_service_in_onezone(Release, Build, GuiHash) ->
+    ?info("Setting up Oneprovider worker service in Onezone"),
     case cluster_logic:update_version_info(Release, Build, GuiHash) of
         ok ->
             ?info("Skipping GUI upload as it is already present in Onezone"),
