@@ -244,6 +244,17 @@ execute(UserCtx, FileCtx, #share_create_request{name = Name, description = Descr
 execute(UserCtx, FileCtx, #share_remove_request{share_id = ShareId}) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
 
+%% Handles
+
+execute(UserCtx, FileCtx, #handle_create_request{
+    share_id = ShareId, handle_service_id = HServiceId, metadata_prefix =  MetadataPrefix,
+    metadata_string = MetadataString
+}) ->
+    handle_req:create_handle(UserCtx, FileCtx, ShareId, HServiceId, MetadataPrefix, MetadataString);
+
+execute(UserCtx, _FileCtx, #handle_get_request{handle_id = HandleId}) ->
+    handle_req:get_handle(UserCtx, HandleId);
+
 %% Transfers
 
 execute(UserCtx, FileCtx, #file_transfer_schedule_request{

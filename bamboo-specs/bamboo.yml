@@ -84,6 +84,7 @@ stages:
         - api_file_stream
         - api_file_upload_gui
         - api_file_upload_rest
+        - api_handle
         - api_samples
         - api_share
         - api_storage
@@ -698,6 +699,13 @@ api_file_upload_rest:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_api_file_upload_rest.tar.gz
+
+api_handle:
+  <<: *ct-onenv-job
+  key: AH
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_api_handle.tar.gz
 
 api_samples:
   <<: *ct-onenv-job
@@ -1910,6 +1918,7 @@ Coverage report:
     - artifact: ct_logs_api_file_stream.tar.gz
     - artifact: ct_logs_api_file_upload_gui.tar.gz
     - artifact: ct_logs_api_file_upload_rest.tar.gz
+    - artifact: ct_logs_api_handle.tar.gz
     - artifact: ct_logs_api_samples.tar.gz
     - artifact: ct_logs_api_share.tar.gz
     - artifact: ct_logs_api_storage.tar.gz

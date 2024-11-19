@@ -87,6 +87,10 @@
     #share_create_request{} |
     #share_remove_request{}.
 
+-type handle_operation() ::
+    #handle_create_request{} |
+    #handle_get_request{}.
+
 -type transfer_operation() ::
     #file_transfer_schedule_request{} |
     #view_transfer_schedule_request{}.
@@ -99,6 +103,7 @@
     file_metadata_operations() |
     qos_operation() |
     share_operation() |
+    handle_operation() |
     transfer_operation().
 
 -export_type([

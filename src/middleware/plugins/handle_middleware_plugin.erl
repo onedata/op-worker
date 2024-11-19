@@ -66,9 +66,9 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"shareId">> => {binary, non_empty},
         <<"handleServiceId">> => {binary, non_empty},
-        <<"metadataPrefix">> => {binary, non_empty}
-    },
-    optional => #{<<"metadataString">> => {binary, any}}
+        <<"metadataPrefix">> => {binary, non_empty},
+        <<"metadataString">> => {binary, non_empty}
+    }
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
@@ -162,7 +162,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ShareId = maps:get(<<"shareId">>, Data),
     HServiceId = maps:get(<<"handleServiceId">>, Data),
     MetadataPrefix = maps:get(<<"metadataPrefix">>, Data),
-    Metadata = maps:get(<<"metadataString">>, Data, <<"">>),
+    Metadata = maps:get(<<"metadataString">>, Data),
 
     case handle_logic:create(SessionId, HServiceId, <<"Share">>, ShareId, MetadataPrefix, Metadata) of
         {ok, HandleId} ->
