@@ -647,7 +647,7 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
 %%--------------------------------------------------------------------
 -spec add_file_id_errors_for_operations_not_available_in_share_mode(
     file_id:file_guid(),
-    od_share:id(),
+    od_share:id() | undefined,
     undefined | onenv_api_test_runner:data_spec()
 ) ->
     onenv_api_test_runner:data_spec().
@@ -658,7 +658,7 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 -spec add_file_id_errors_for_operations_not_available_in_share_mode(
     IdKey :: binary(),
     file_id:file_guid(),
-    od_share:id(),
+    od_share:id() | undefined,
     undefined | onenv_api_test_runner:data_spec()
 ) ->
     onenv_api_test_runner:data_spec().
@@ -813,6 +813,8 @@ get_invalid_file_id_errors(IdKey) ->
 
 
 %% @private
+add_share_file_id_errors_for_operations_not_available_in_share_mode(_FileGuid, undefined, Errors) ->
+    Errors;
 add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, Errors) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),

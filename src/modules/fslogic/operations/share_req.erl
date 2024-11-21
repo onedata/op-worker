@@ -79,11 +79,8 @@ create_share_internal(UserCtx, FileCtx0, Name, Description) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx0),
 
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    FileType = case IsDir of
-        true -> dir;
-        false -> file
-    end,
+    {FileType, FileCtx1} = file_ctx:get_effective_type(FileCtx0),
+    lists:member(FileType, [?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE]) orelse throw({error, ?EINVAL}),
 
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 

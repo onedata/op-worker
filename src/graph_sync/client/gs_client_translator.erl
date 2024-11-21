@@ -149,6 +149,8 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
             storages_by_provider = StoragesByProvider,
 
             providers = maps:get(<<"providers">>, Result),
+            % NOTE: at some point, providers should list shares by batches
+            % as this list may be very big
             shares = maps:get(<<"shares">>, Result),
             harvesters = maps:get(<<"harvesters">>, Result),
 
@@ -167,7 +169,13 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
             public_url = maps:get(<<"publicUrl">>, Result),
             public_rest_url = maps:get(<<"publicRestUrl">>, Result),
             root_file = maps:get(<<"rootFileId">>, Result),
-            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
+            % TODO VFS-VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
+            file_type = case maps:get(<<"fileType">>, Result) of
+                <<"file">> -> ?REGULAR_FILE_TYPE;
+                <<"REG">> -> ?REGULAR_FILE_TYPE;
+                <<"dir">> -> ?DIRECTORY_TYPE;
+                <<"DIR">> -> ?DIRECTORY_TYPE
+            end,
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
@@ -181,7 +189,13 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
             public_url = maps:get(<<"publicUrl">>, Result),
             public_rest_url = maps:get(<<"publicRestUrl">>, Result),
             root_file = maps:get(<<"rootFileId">>, Result),
-            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
+            % TODO VFS-VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
+            file_type = case maps:get(<<"fileType">>, Result) of
+                <<"file">> -> ?REGULAR_FILE_TYPE;
+                <<"REG">> -> ?REGULAR_FILE_TYPE;
+                <<"dir">> -> ?DIRECTORY_TYPE;
+                <<"DIR">> -> ?DIRECTORY_TYPE
+            end,
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
