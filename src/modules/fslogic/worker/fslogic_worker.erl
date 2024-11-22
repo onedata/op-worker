@@ -210,15 +210,15 @@ init(_Args) ->
     ]),
 
     %% @TODO VFS-12272 - properly handle imported storages during storage monitoring
-    UnhealthyStoragesIds = try storage_monitoring:check_storages_health() of
-        {ok, Unhealthy, _} -> Unhealthy
-        catch Class:Reason ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone -> [];
-                _ -> erlang:apply(erlang, Class, [Reason])
-            end
+    UnhealthyStorageIds = try
+         storage_monitoring:perform_regular_checks([])
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            no_connection_to_onezone -> [];
+            _ -> erlang:apply(erlang, Class, [Reason])
+        end
     end,
-    {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStoragesIds}}.
+    {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStorageIds}}.
 
 
 %%--------------------------------------------------------------------
@@ -854,7 +854,7 @@ restart_autocleaning_runs() ->
 -spec handle_periodic_storages_check() -> ok.
 handle_periodic_storages_check() ->
     PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
-    case storage_monitoring:perform_storages_check(PreviousUnhealthyStorages) of
+    case storage_monitoring:perform_regular_checks(PreviousUnhealthyStorages) of
         PreviousUnhealthyStorages ->
             ok;
         UnhealthyStoragesIds ->
