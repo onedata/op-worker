@@ -35,7 +35,6 @@
 }.
 %% @formatter:on
 
-
 %%%===================================================================
 %%% Records synchronized via Graph Sync
 %%%===================================================================
@@ -265,6 +264,13 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_cluster, {
+    worker_release_version :: onedata:release_version(),
+    worker_build_version :: binary(),
+    worker_gui_hash :: onedata:gui_hash(),
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -305,6 +311,8 @@
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),
+    % incoming_session_watcher for incoming sessions
+    % outgoing_connection_manager for provider outgoing sessions
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),

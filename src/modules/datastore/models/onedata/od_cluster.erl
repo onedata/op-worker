@@ -1,24 +1,24 @@
 %%%-------------------------------------------------------------------
-%%% @author Lukasz Opiola
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @author Katarzyna Such
+%%% @copyright (C) 2024 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model serves as cache for od_provider records
+%%% This model serves as cache for od_cluster records
 %%% synchronized via Graph Sync.
 %%% @end
 %%%-------------------------------------------------------------------
--module(od_provider).
--author("Lukasz Opiola").
+-module(od_cluster).
+-author("Katarzyna Such").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type id() :: binary().
--type record() :: #od_provider{}.
+-type record() :: #od_cluster{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
@@ -47,13 +47,7 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
-    case datastore_model:update(?CTX, Id, Diff, Default) of
-        {ok, #document{value = #od_provider{online = true}} = Doc} ->
-            ensure_connected_to_peer(Id),
-            {ok, Doc};
-        Other ->
-            Other
-    end.
+    datastore_model:update(?CTX, Id, Diff, Default).
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -70,6 +64,7 @@ invalidate_cache(Key) ->
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -82,22 +77,3 @@ list() ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-
--spec ensure_connected_to_peer(id()) -> ok.
-ensure_connected_to_peer(ProviderId) ->
-    try
-        case provider_auth:get_provider_id() of
-            {ok, ProviderId} ->
-                ok;
-            ?ERROR_UNREGISTERED_ONEPROVIDER ->
-                ok;
-            _ ->
-                SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
-                {ok, _} = session_connections:ensure_connected(SessId),
-                ok
-        end
-    catch Class:Reason:Stacktrace ->
-        ?error_exception("Could not ensure connection to provider ~ts",
-            [provider_logic:to_printable(ProviderId)], Class, Reason, Stacktrace)
-    end.

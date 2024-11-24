@@ -83,11 +83,18 @@
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
-        undefined -> RequestedAttributes;
+        undefined ->
+            RequestedAttributes;
         %% @TODO VFS-11299 left for compatibility with oneclient
         % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_FILE_ATTRS.
         % It does not influence rest output, as it is later cut out in translation (see file_attr_translator.erl).
-        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_FILE_ATTRS, ?ONECLIENT_FILE_ATTRS))
+        _ ->
+            AttrsBase = lists_utils:intersect(RequestedAttributes,
+                lists_utils:union(?PUBLIC_API_FILE_ATTRS, ?ONECLIENT_FILE_ATTRS)),
+            case should_fetch_xattrs(RequestedAttributes) of
+                {true, Xattrs} -> [{xattrs, Xattrs} | AttrsBase];
+                false -> AttrsBase
+            end
     end,
     InitialState = #state{
         file_ctx = FileCtx,

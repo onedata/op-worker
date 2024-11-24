@@ -32,6 +32,9 @@
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     12.
 
 
@@ -247,6 +250,9 @@ get_record_struct(11) ->
         {parent_uuid, string}
     ]};
 get_record_struct(12) ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     {record, [
         {name, string},
         {type, atom},

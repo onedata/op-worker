@@ -134,7 +134,7 @@ flush_keys_recursively(Key) ->
                 catch Class:Reason:Stacktrace ->
                     ?error_exception(Class, Reason, Stacktrace)
                 end;
-            ?ERROR_NOT_FOUND ->
+            {error, not_found} ->
                 ok
         end
     end),
@@ -148,7 +148,7 @@ flush_value_insecure(Key, Value) ->
         ok ->
             delete_from_ets(Key);
         {error, not_found} ->
-            case times:is_deleted(Key) of
+            case times:is_deleted(file_id:guid_to_uuid(Key)) of
                 true -> delete_from_ets(Key);
                 false -> ok % race with dbsync - leave the value in the cache, it will be saved in the next flush
             end
