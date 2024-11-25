@@ -15,15 +15,12 @@
 -include("api_test_runner.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
-%%-include_lib("ctool/include/privileges.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 
 
 -export([
     groups/0, all/0,
-    init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
-    init_per_testcase/2, end_per_testcase/2
+    init_per_suite/1, end_per_suite/1
 ]).
 
 -export([
@@ -44,16 +41,16 @@ all() -> [
     {group, all_tests}
 ].
 
+-define(HANDLE_SERVICE_MEMBER, space_owner).
 -define(CLIENT_SPEC, #client_spec{
-    correct = [user1]
+    correct = [?HANDLE_SERVICE_MEMBER],
+    unauthorized = [nobody],
+    forbidden_in_space = [space_member],
+    forbidden_not_in_space = [space_non_member]
+
 }).
-
--define(METADATA_STRING, <<
-    "<?xml version=\"1.0\" encoding=\"utf-8\"?><metadata>",
-    "    <dc:contributor>John Doe</dc:contributor>",
-    "</metadata>"
->>).
-
+-define(PROVIDER_SELECTOR, krakow).
+-define(SPACE_SELECTOR, space_krk).
 -define(METADATA_PREFIX, <<"oai_dc">>).
 
 
@@ -63,27 +60,39 @@ all() -> [
 
 
 create_handle_test(_Config) ->
-    Providers = [krakow],
-    HServiceId = hd(ozw_test_rpc:list_handle_services()),
-
+    HServiceId = hd(ozt_handle_services:list_handle_services()),
     MemRef = api_test_memory:init(),
-    SetupFun = create_share_setup_fun(MemRef),
-    TearDownFun = rm_share_teardown_fun(MemRef),
 
+    ValidateResultFun = fun(_, {ok, #{
+        <<"handleService">> := HServiceInDb,
+        <<"metadataPrefix">> := MetadataPrefixInDb,
+        <<"metadataString">> := MetadataInDb,
+        <<"url">> := Url
+    }}) ->
+        ExpectedHService = gri:serialize(#gri{
+                type = op_handle_service, id = HServiceId, aspect = instance, scope = public
+        }),
+        ExpectedMetadata = ozt_handles:expected_metadata_after_publication(
+            ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1), Url
+        ),
+
+        ?assertMatch(
+            {ExpectedHService, ?METADATA_PREFIX, ExpectedMetadata},
+            {HServiceInDb, MetadataPrefixInDb, MetadataInDb}
+        )
+    end,
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = Providers,
+            target_nodes = [?PROVIDER_SELECTOR],
             client_spec = ?CLIENT_SPEC,
-            setup_fun = SetupFun,
-            teardown_fun = TearDownFun,
+            setup_fun = build_create_handle_setup_fun(MemRef),
+            teardown_fun = build_create_handle_teardown_fun(MemRef),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create handle for share using gs api">>,
                     type = gs,
                     prepare_args_fun = create_handle_prepare_gs_args_fun(MemRef),
-                    validate_result_fun = fun(_, Result) ->
-                        ?assertMatch({ok, _}, Result)
-                    end
+                    validate_result_fun = ValidateResultFun
                 }
             ],
             data_spec = #data_spec{
@@ -92,10 +101,10 @@ create_handle_test(_Config) ->
                     <<"metadataPrefix">>, <<"metadataString">>
                 ],
                 correct_values = #{
-                    <<"shareId">> => [shareId],
+                    <<"shareId">> => [share_id],
                     <<"handleServiceId">> => [HServiceId],
                     <<"metadataPrefix">> => [?METADATA_PREFIX],
-                    <<"metadataString">> => [?METADATA_STRING]
+                    <<"metadataString">> => [ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)]
                 }
             }
         }
@@ -103,72 +112,69 @@ create_handle_test(_Config) ->
 
 
 %% @private
--spec create_handle_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
-    onenv_api_test_runner:gs_args().
-create_handle_prepare_gs_args_fun(MemRef) ->
-    fun(#api_test_ctx{data = Data}) ->
-        ShareId = api_test_memory:get(MemRef, share_id),
-        #gs_args{
-            operation = create,
-            gri = #gri{type = op_handle, aspect = instance, scope = private},
-            data = maybe_inject_share_id(Data, ShareId)
-        }
-    end.
-
-
-%% @private
--spec create_share_setup_fun(api_test_memory:mem_ref()) -> onenv_api_test_runner:setup_fun().
-create_share_setup_fun(MemRef) ->
+-spec build_create_handle_setup_fun(api_test_memory:mem_ref()) -> onenv_api_test_runner:setup_fun().
+build_create_handle_setup_fun(MemRef) ->
     fun() ->
-        {_, FileSpec} = generate_random_file_spec([#share_spec{}]),
-        Object = #object{guid = _, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-            user1, space_krk, FileSpec
-        ),
-        api_test_memory:set(MemRef, file_tree_object, Object),
+        #object{guid = Guid, shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
+        api_test_memory:set(MemRef, guid, Guid),
         api_test_memory:set(MemRef, share_id, ShareId)
     end.
 
 
 %% @private
--spec rm_share_teardown_fun(api_test_memory:mem_ref()) -> onenv_api_test_runner:setup_fun().
-rm_share_teardown_fun(MemRef) ->
+-spec create_handle_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+    onenv_api_test_runner:gs_args().
+create_handle_prepare_gs_args_fun(MemRef) ->
+    fun(#api_test_ctx{data = Data}) ->
+        #gs_args{
+            operation = create,
+            gri = #gri{type = op_handle, aspect = instance, scope = private},
+            data = case maps:get(<<"shareId">>, Data, undefined) of
+                share_id -> Data#{<<"shareId">> => api_test_memory:get(MemRef, share_id)};
+                _ -> Data
+            end
+        }
+    end.
+
+
+%% @private
+-spec build_create_handle_teardown_fun(api_test_memory:mem_ref()) -> onenv_api_test_runner:setup_fun().
+build_create_handle_teardown_fun(MemRef) ->
     fun() ->
-        #object{guid = Guid} = api_test_memory:get(MemRef, file_tree_object),
-        onenv_file_test_utils:rm_and_sync_file(user1, Guid)
+        onenv_file_test_utils:rm_and_sync_file(?HANDLE_SERVICE_MEMBER, api_test_memory:get(MemRef, guid))
     end.
 
 
 get_handle_test(_Config) ->
-    Providers = [krakow],
-    HServiceId = hd(ozw_test_rpc:list_handle_services()),
-    {_, FileSpec} = generate_random_file_spec([#share_spec{}]),
-    #object{guid = _, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, space_krk, FileSpec
+    HServiceId = hd(ozt_handle_services:list_handle_services()),
+    #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
+    HandleId = ozt_handles:create(
+        ?PROVIDER_SELECTOR, ?HANDLE_SERVICE_MEMBER, ShareId, HServiceId,
+        ?METADATA_PREFIX, ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
     ),
-    HandleId = create_handle(ShareId, HServiceId),
+    PublicHandle = opt_handles:get_public_handle_url(?PROVIDER_SELECTOR, ?HANDLE_SERVICE_MEMBER, HandleId),
 
-    ValidateResultFun = fun(_, {ok, #{
-        <<"handleService">> := HServiceResult,
-        <<"metadataPrefix">> := MetadataPrefixResult,
-        <<"metadataString">> := MetadataStringResult,
-        <<"url">> := PublicHandle
-    }}) ->
-        ExpectedHService = <<"op_handle_service.", HServiceId/binary, ".instance:public">>,
-        ExpectedMetadataString = <<
-            "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
-            "<metadata>\n",
-            "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>"
-            "    <dc:contributor>John Doe</dc:contributor>",
-            "</metadata>"
-        >>,
-        ?assertEqual(
-            {ExpectedHService, ExpectedMetadataString, ?METADATA_PREFIX},
-            {HServiceResult, MetadataStringResult, MetadataPrefixResult}
-        )
+    ValidateResultFun = fun(_, {ok, Result}) ->
+        ExpectedHandleData =  #{
+            <<"gri">> => gri:serialize(#gri{
+                type = op_handle, id = HandleId, aspect = instance
+            }),
+            <<"handleService">> => gri:serialize(#gri{
+                type = op_handle_service, id = HServiceId, aspect = instance, scope = public
+            }),
+            <<"metadataPrefix">> => ?METADATA_PREFIX,
+            <<"metadataString">> => ozt_handles:expected_metadata_after_publication(
+                ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1), PublicHandle
+            ),
+            <<"revision">> => 1,
+            <<"url">> => PublicHandle
+        },
+
+        ?assertEqual(ExpectedHandleData, Result)
     end,
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = Providers,
+            target_nodes = [?PROVIDER_SELECTOR],
             client_spec = ?CLIENT_SPEC,
             scenario_templates = [
                 #scenario_template{
@@ -186,64 +192,54 @@ get_handle_test(_Config) ->
 -spec get_handle_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
     onenv_api_test_runner:gs_args().
 get_handle_prepare_gs_args_fun(HandleId) ->
-    fun(#api_test_ctx{data = Data}) ->
+    fun(#api_test_ctx{}) ->
         #gs_args{
             operation = get,
-            gri = #gri{type = op_handle, id = HandleId, aspect = instance, scope = private},
-            data = Data
+            gri = #gri{type = op_handle, id = HandleId, aspect = instance, scope = private}
         }
     end.
 
 
 update_handle_test(_Config) ->
-    Providers = [krakow],
-    HServiceId = hd(ozw_test_rpc:list_handle_services()),
-    {_, FileSpec} = generate_random_file_spec([#share_spec{}]),
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, space_krk, FileSpec
+    HServiceId = hd(ozt_handle_services:list_handle_services()),
+    #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
+    HandleId = ozt_handles:create(
+        ?PROVIDER_SELECTOR, ?HANDLE_SERVICE_MEMBER, ShareId, HServiceId,
+        ?METADATA_PREFIX, ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
     ),
-    HandleId = create_handle(ShareId, HServiceId),
+    PublicHandle = opt_handles:get_public_handle_url(?PROVIDER_SELECTOR, ?HANDLE_SERVICE_MEMBER, HandleId),
+
+
+    ValidateResultFun = fun(_, ok) ->
+        #document{value = #od_handle{
+            metadata = MetadataInDbAfterUpdate
+        }} = opt_handles:get(?PROVIDER_SELECTOR, ?HANDLE_SERVICE_MEMBER, HandleId),
+        ExpectedMetadata = ozt_handles:expected_metadata_after_publication(
+            ozt_handles:example_metadata_variant(?METADATA_PREFIX, 2), PublicHandle
+        ),
+        ?assertEqual(ExpectedMetadata, MetadataInDbAfterUpdate)
+    end,
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = Providers,
+            target_nodes = [?PROVIDER_SELECTOR],
             client_spec = ?CLIENT_SPEC,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Update handle using gs api">>,
                     type = gs,
                     prepare_args_fun = update_handle_prepare_gs_args_fun(HandleId),
-                    validate_result_fun = fun(_, Result) ->
-                        ?assertMatch(ok, Result)
-                    end
+                    validate_result_fun = ValidateResultFun
                 }
             ],
             data_spec = #data_spec{
                 required = [<<"metadataString">>],
                 correct_values = #{
-                    <<"metadataString">> => [<<
-                        "<?xml version=\"1.0\" encoding=\"utf-8\"?><metadata>",
-                        "    <dc:contributor>Jane Doe</dc:contributor>",
-                        "    <dc:description>Lorem ipsum</dc:description>",
-                        "</metadata>"
-                    >>]
+                    <<"metadataString">> => [ozt_handles:example_metadata_variant(?METADATA_PREFIX, 2)]
                 }
             }
         }
-    ])),
-
-    #document{value = #od_handle{
-        public_handle = PublicHandle,
-        metadata = MetadataStringResult
-    }} = get_handle(?FILE_REF(FileGuid), HandleId),
-    ExpectedMetadata = <<
-        "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n<metadata>\n",
-        "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>"
-        "    <dc:contributor>Jane Doe</dc:contributor>",
-        "    <dc:description>Lorem ipsum</dc:description>",
-        "</metadata>"
-    >>,
-    ?assertEqual(ExpectedMetadata, MetadataStringResult).
+    ])).
 
 
 %% @private
@@ -260,53 +256,22 @@ update_handle_prepare_gs_args_fun(HandleId) ->
 
 
 %%%===================================================================
-%%% Common handle test utils
-%%%===================================================================
-
-
-%% @private
--spec generate_random_file_spec([onenv_file_test_utils:shares_spec()]) ->
-    {binary(), onenv_file_test_utils:file_spec()}.
-generate_random_file_spec(ShareSpecs) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    case FileType of
-        <<"file">> -> {<<"REG">>, #file_spec{shares = ShareSpecs}};
-        <<"dir">> -> {<<"DIR">>, #dir_spec{shares = ShareSpecs}}
-    end.
-
-
-%% @private
-create_handle(ShareId, HServiceId) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    SessId = oct_background:get_user_session_id(user1, krakow),
-    MetadataPrefix = ?METADATA_PREFIX,
-    MetadataString = ?METADATA_STRING,
-   opw_test_rpc:insecure_call(P1Node, mi_handles, create,
-        [SessId, ShareId, HServiceId, MetadataPrefix, MetadataString]
-    ).
-
-
-%% @private
-get_handle(FileRef, HandleId) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    SessId = oct_background:get_user_session_id(user1, krakow),
-   opw_test_rpc:insecure_call(P1Node, mi_handles, get,
-        [SessId, FileRef, HandleId]
-    ).
-
-
-%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 
 %% @private
--spec maybe_inject_share_id(map(), od_share:id()) -> map().
-maybe_inject_share_id(Data, ShareId) ->
-    case maps:get(<<"shareId">>, Data, undefined) of
-        shareId -> Data#{<<"shareId">> => ShareId};
-        _ -> Data
-    end.
+-spec create_and_sync_shared_file_of_random_type() -> onenv_file_test_utils:object().
+create_and_sync_shared_file_of_random_type() ->
+    ShareSpecs = [#share_spec{}],
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    FileSpec = case FileType of
+        <<"file">> -> #file_spec{shares = ShareSpecs};
+        <<"dir">> ->  #dir_spec{shares = ShareSpecs}
+    end,
+    onenv_file_test_utils:create_and_sync_file_tree(
+        ?HANDLE_SERVICE_MEMBER, ?SPACE_SELECTOR, FileSpec
+    ).
 
 
 %%%===================================================================
@@ -315,35 +280,16 @@ maybe_inject_share_id(Data, ShareId) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    LoadModules = [opt_handles, ozt_handles, ozt_handle_services],
+    oct_background:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
         onenv_scenario = "1op-handle-proxy",
-        posthook = fun(Config) ->
-            UserId = oct_background:get_user_id(user1),
-            HServiceId = hd(ozw_test_rpc:list_handle_services()),
-            ok = ozw_test_rpc:add_user_to_handle_service(HServiceId, UserId),
-            Config
+        posthook = fun(NewConfig) ->
+            ozt_handle_services:add_user_to_all_handle_services(?HANDLE_SERVICE_MEMBER),
+            NewConfig
         end
     }).
 
 
 end_per_suite(_Config) ->
-    UserId = oct_background:get_user_id(user1),
-    HServiceId = hd(ozw_test_rpc:list_handle_services()),
-    ok = ozw_test_rpc:remove_user_to_handle_service(HServiceId, UserId),
+    ozt_handle_services:remove_user_from_all_handle_services(?HANDLE_SERVICE_MEMBER),
     oct_background:end_per_suite().
-
-
-init_per_group(_Group, Config) ->
-    Config.
-
-
-end_per_group(_Group, _Config) ->
-    ok.
-
-
-init_per_testcase(_Case, Config) ->
-    Config.
-
-
-end_per_testcase(_Case, Config) ->
-    Config.

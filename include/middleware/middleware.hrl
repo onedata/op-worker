@@ -243,23 +243,6 @@
 
 
 %%%===================================================================
-%%% Shares related operations available in middleware_worker
-%%%===================================================================
-
-
--record(handle_create_request, {
-    share_id :: od_share:id(),
-    handle_service_id :: od_handle_service:id(),
-    metadata_prefix :: od_handle:metadata_prefix(),
-    metadata_string :: od_handle:metadata()
-}).
-
--record(handle_get_request, {
-    handle_id :: od_handle:id()
-}).
-
-
-%%%===================================================================
 %%% Transfers related operations available in middleware_worker
 %%%===================================================================
 

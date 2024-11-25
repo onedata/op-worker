@@ -22,19 +22,22 @@ sources:
       - cluster-manager
 
 users:
-  - &user1
-    name: user1
+  - &space_owner
+    name: space_owner
     password: password
-  - &user2
-    name: user2
+  - &space_member
+    name: space_member
+    password: password
+  - &space_non_member
+    name: space_non_member
     password: password
 
 
 spaces:
   - name: space_krk
-    user: *user1
+    user: *space_owner
     users:
-      - user: *user2
+      - user: *space_member
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"
