@@ -32,6 +32,8 @@ all() -> [
     storage_monitoring_test
 ].
 
+-define(ATTEMPTS, 5).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -42,11 +44,9 @@ storage_monitoring_test(_Config) ->
     User1KrakowSessId = oct_background:get_user_session_id(user1, krakow),
     ?assertMatch({ok, _}, lfm_proxy:stat(KrakowNode, User1KrakowSessId, #file_ref{guid = Guid})),
     mock_storage_detector_error(KrakowNode),
-    timer:sleep(timer:seconds(2)),
-    ?assertMatch({error, ?EAGAIN}, lfm_proxy:stat(KrakowNode, User1KrakowSessId, #file_ref{guid = Guid})),
+    ?assertMatch({error, ?EAGAIN}, lfm_proxy:stat(KrakowNode, User1KrakowSessId, #file_ref{guid = Guid}), ?ATTEMPTS),
     unmock_storage_detector(KrakowNode),
-    timer:sleep(timer:seconds(2)),
-    ?assertMatch({ok, _}, lfm_proxy:stat(KrakowNode, User1KrakowSessId, #file_ref{guid = Guid})).
+    ?assertMatch({ok, _}, lfm_proxy:stat(KrakowNode, User1KrakowSessId, #file_ref{guid = Guid}), ?ATTEMPTS).
 
 
 %%%===================================================================
