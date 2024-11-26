@@ -55,8 +55,8 @@
 }).
 
 -define(DISALLOWED_OPERATIONS, [
-    #move_to_trash{}
-    #delete_file{}
+    #move_to_trash{},
+    #delete_file{},
     #change_mode{}
 ]).
 

@@ -44,13 +44,13 @@
 -define(SHARE_CONTAINER_UUID_PREFIX, "share_").
 
 -define(ALLOWED_OPERATIONS, [
-    #resolve_guid{}
-    #resolve_guid_by_relative_path{}
+    #resolve_guid{},
+    #resolve_guid_by_relative_path{},
 
-    #get_file_attr{}
-    #get_file_children{}
-    #get_child_attr{}
-    #get_file_children_attrs{}
+    #get_file_attr{},
+    #get_file_children{},
+    #get_child_attr{},
+    #get_file_children_attrs{},
     #get_recursive_file_list{}
 ]).
 

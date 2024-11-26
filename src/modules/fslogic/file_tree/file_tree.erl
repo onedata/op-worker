@@ -227,7 +227,7 @@ list_children(FileCtx, UserCtx, ListOpts) ->
     {ParentFileCtx :: file_ctx:ctx(), NewFileCtx :: file_ctx:ctx()}.
 get_parent_internal(FileCtx, UserCtx) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    {FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
+    {_FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
 

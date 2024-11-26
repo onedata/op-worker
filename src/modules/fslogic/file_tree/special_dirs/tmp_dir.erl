@@ -37,20 +37,20 @@
 
 
 -define(ALLOWED_OPERATIONS, [
-    #resolve_guid{}
-    #resolve_guid_by_relative_path{}
+    #resolve_guid{},
+    #resolve_guid_by_relative_path{},
 
-    #create_dir{}
-    #create_file{}
-    #make_file{}
-    #make_link{}
-    #make_symlink{}
+    #create_dir{},
+    #create_file{},
+    #make_file{},
+    #make_link{},
+    #make_symlink{},
 
-    #get_file_attr{}
-    #get_file_children{}
-    #get_child_attr{}
-    #get_file_children_attrs{}
-    #get_recursive_file_list{}
+    #get_file_attr{},
+    #get_file_children{},
+    #get_child_attr{},
+    #get_file_children_attrs{},
+    #get_recursive_file_list{},
 
     #historical_dir_size_stats_get_request{}
 ]).

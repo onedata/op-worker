@@ -97,14 +97,14 @@
 }).
 
 -define(ALLOWED_OPERATIONS, [
-    #resolve_guid{}
+    #resolve_guid{},
 
-    #get_parent{}
-    #get_file_path{}
+    #get_parent{},
+    #get_file_path{},
 
-    #get_file_attr{}
-    #get_file_children{}
-    #get_child_attr{}
+    #get_file_attr{},
+    #get_file_children{},
+    #get_child_attr{},
     #get_file_children_attrs{}
 ]).
 
