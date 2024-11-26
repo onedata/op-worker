@@ -12,7 +12,7 @@
 %%% operations depends on the file type.
 %%%
 %%% Two types of APIs are supported; REST and xrootd (only if
-%%% "openDataXrootdServerDomain" config variable is set in Onezone).
+%%% "publicDataXrootdServerDomain" config variable is set in Onezone).
 %%%
 %%% NOTE: API samples do not cover all available API, only the commonly used
 %%% endpoints and options.
@@ -43,7 +43,7 @@
 generate_for(SessionId, FileGuid) ->
     {ok, #file_attr{type = FileType}} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
     {ok, FileId} = file_id:guid_to_objectid(FileGuid),
-    XRootDApiTemplates = case lookup_open_data_xrootd_server_domain() of
+    XRootDApiTemplates = case lookup_public_data_xrootd_server_domain() of
         false ->
             #{};
         {true, XRootDDomain} ->
@@ -62,10 +62,10 @@ generate_for(SessionId, FileGuid) ->
 
 
 %% @private
--spec lookup_open_data_xrootd_server_domain() -> false | {true, binary()}.
-lookup_open_data_xrootd_server_domain() ->
+-spec lookup_public_data_xrootd_server_domain() -> false | {true, binary()}.
+lookup_public_data_xrootd_server_domain() ->
     {ok, OnezoneConfiguration} = provider_logic:get_service_configuration(onezone),
-    case maps:get(<<"openDataXrootdServerDomain">>, OnezoneConfiguration, null) of
+    case maps:get(<<"publicDataXrootdServerDomain">>, OnezoneConfiguration, null) of
         null -> false;
         XRootDDomain -> {true, XRootDDomain}
     end.
