@@ -83,7 +83,7 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId}}) ->
-    case handle_service_logic:get(Auth#auth.session_id, HandleServiceId) of
+    case handle_service_logic:get_public_data(Auth#auth.session_id, HandleServiceId) of
         {ok, #document{value = HandleService}} ->
             {ok, {HandleService, 1}};
         {error, _} = Error ->

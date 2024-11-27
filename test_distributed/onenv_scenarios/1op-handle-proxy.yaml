@@ -28,8 +28,11 @@ users:
   - &space_member
     name: space_member
     password: password
-  - &space_non_member
-    name: space_non_member
+  - &handle_service_admin
+    name: handle_service_admin
+    password: password
+  - &non_space_member
+    name: non_space_member
     password: password
 
 
@@ -38,6 +41,12 @@ spaces:
     user: *space_owner
     users:
       - user: *space_member
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'
+  - name: different_space
+    user: *handle_service_admin
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"

@@ -59,24 +59,21 @@ example_metadata_variant(<<"oai_dc">>, 2) ->
 
 
 -spec expected_metadata_after_publication(binary(), binary()) -> binary().
-expected_metadata_after_publication(InputMetadata, PublicHandle) ->
-    case InputMetadata of
-        ?EXAMPLE_METADATA1 ->
-            <<
-                "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
-                "<metadata>\n",
-                "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
-                "    <dc:contributor>John Doe</dc:contributor>",
-                "</metadata>"
-            >>;
-        ?EXAMPLE_METADATA2 ->
-            <<
-                "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
-                "<metadata>\n",
-                "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
-                "    <dc:contributor>Jane Doe</dc:contributor>",
-                "    <dc:description>Lorem ipsum</dc:description>",
-                "</metadata>"
-            >>
-    end.
+expected_metadata_after_publication(?EXAMPLE_METADATA1, PublicHandle) ->
+        <<
+            "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
+            "<metadata>\n",
+            "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
+            "    <dc:contributor>John Doe</dc:contributor>",
+            "</metadata>"
+        >>;
+expected_metadata_after_publication(?EXAMPLE_METADATA2, PublicHandle) ->
+        <<
+            "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n",
+            "<metadata>\n",
+            "    <dc:identifier>", PublicHandle/binary, "</dc:identifier>",
+            "    <dc:contributor>Jane Doe</dc:contributor>",
+            "    <dc:description>Lorem ipsum</dc:description>",
+            "</metadata>"
+        >>.
 

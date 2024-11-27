@@ -43,7 +43,6 @@
     module() | no_return().
 resolve_handler(create, instance, private) -> ?MODULE;
 
-resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, instance, public) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
@@ -101,13 +100,9 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = public}}) ->
 fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
-fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = private}}) ->
-    case handle_logic:get(Auth#auth.session_id, HandleId) of
-        {ok, #document{value = Handle}} ->
-            {ok, {Handle, 1}};
-        {error, _} = Error ->
-            Error
-    end.
+fetch_entity(#op_req{operation = update, gri = #gri{scope = private}}) ->
+    % authorization will be checked by oz in during handle update
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -166,8 +161,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 
     case handle_logic:create(SessionId, HServiceId, <<"Share">>, ShareId, MetadataPrefix, Metadata) of
         {ok, HandleId} ->
-            {ok, #document{value = Handle}} = handle_logic:get(SessionId, HandleId),
-            {ok, resource, {GRI#gri{id = HandleId}, Handle}};
+            {ok, #document{value = Handle}} = handle_logic:get_public_data(SessionId, HandleId),
+            {ok, resource, {GRI#gri{id = HandleId, scope = public}, record_to_data(Handle)}};
         {error, _} = Error ->
             Error
     end.
@@ -179,20 +174,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = private}}, Handle) ->
-    {ok, Handle};
-get(#op_req{gri = #gri{aspect = instance, scope = public}}, #od_handle{
-    public_handle = PublicHandle,
-    metadata_prefix = MetadataPrefix,
-    metadata = Metadata,
-    handle_service = HandleServiceId
-}) ->
-    {ok, #{
-        <<"handleServiceId">> => HandleServiceId,
-        <<"url">> => utils:undefined_to_null(PublicHandle),
-        <<"metadataPrefix">> => MetadataPrefix,
-        <<"metadataString">> => utils:undefined_to_null(Metadata)
-    }}.
+get(#op_req{gri = #gri{aspect = instance, scope = public}}, Handle) ->
+    {ok, record_to_data(Handle)}.
 
 
 %%--------------------------------------------------------------------
@@ -214,3 +197,19 @@ update(#op_req{auth = #auth{session_id = SessionId}, data = Data, gri = #gri{id 
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+
+%% @private
+-spec record_to_data(od_handle:record()) -> middleware:data().
+record_to_data(#od_handle{
+    public_handle = PublicHandle,
+    metadata_prefix = MetadataPrefix,
+    metadata = Metadata,
+    handle_service = HandleServiceId
+}) ->
+    #{
+        <<"handleServiceId">> => HandleServiceId,
+        <<"url">> => utils:undefined_to_null(PublicHandle),
+        <<"metadataPrefix">> => MetadataPrefix,
+        <<"metadataString">> => utils:undefined_to_null(Metadata)
+    }.

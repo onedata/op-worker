@@ -231,16 +231,6 @@ translate(#gri{type = od_provider, id = _Id, aspect = domain_config}, Result) ->
             Result
     end;
 
-translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = private}, Result) ->
-    #document{
-        key = Id,
-        value = #od_handle_service{
-            name = maps:get(<<"name">>, Result),
-            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
-            eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result))
-        }
-    };
-
 translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = public}, Result) ->
     #document{
         key = Id,
@@ -249,19 +239,15 @@ translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = pub
         }
     };
 
+%% private scope is returned only from create operation and never fetched
 translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
-            resource_type = maps:get(<<"resourceType">>, Result),
-            resource_id = maps:get(<<"resourceId">>, Result),
             metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
-            handle_service = maps:get(<<"handleServiceId">>, Result),
-
-            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
-            eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result))
+            handle_service = maps:get(<<"handleServiceId">>, Result)
         }
     };
 
@@ -476,24 +462,13 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
         }
     };
 
-apply_scope_mask(Doc = #document{value = Handle = #od_handle_service{}}, public) ->
-    Doc#document{
-        value = Handle#od_handle_service{
-            eff_users = #{},
-            eff_groups = #{}
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_handle_service{}}, public) ->
+    % public scope is the same as private scope
+    Doc;
 
-apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
-    Doc#document{
-        value = Handle#od_handle{
-            resource_type = undefined,
-            resource_id = undefined,
-
-            eff_users = #{},
-            eff_groups = #{}
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_handle{}}, public) ->
+    % public scope is the same as private scope
+    Doc;
 
 apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     Doc#document{

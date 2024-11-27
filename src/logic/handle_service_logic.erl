@@ -21,27 +21,11 @@
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
--export([get/2]).
 -export([get_public_data/2]).
--export([has_eff_user/2, has_eff_user/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves handle_service doc by given HandleServiceId.
-%% @end
-%%--------------------------------------------------------------------
--spec get(gs_client_worker:client(), od_handle_service:id()) ->
-    {ok, od_handle_service:doc()} | errors:error().
-get(SessionId, HServiceId) ->
-    gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_handle_service, id = HServiceId, aspect = instance, scope = private},
-        subscribe = true
-    }).
 
 
 -spec get_public_data(gs_client_worker:client(), od_handle_service:id()) ->
@@ -53,18 +37,3 @@ get_public_data(SessionId, HServiceId) ->
         subscribe = true
     }).
 
-
--spec has_eff_user(od_handle_service:doc(), od_user:id()) -> boolean().
-has_eff_user(#document{value = #od_handle_service{eff_users = EffUsers}}, UserId) ->
-    maps:is_key(UserId, EffUsers).
-
-
--spec has_eff_user(gs_client_worker:client(), od_handle_service:id(), od_user:id()) ->
-    boolean().
-has_eff_user(SessionId, HServiceId, UserId) ->
-    case get(SessionId, HServiceId) of
-        {ok, HServiceDoc = #document{}} ->
-            has_eff_user(HServiceDoc, UserId);
-        _ ->
-            false
-    end.
