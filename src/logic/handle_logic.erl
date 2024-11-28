@@ -22,28 +22,13 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([get/2, get_public_data/2]).
+-export([get_public_data/2]).
 -export([force_fetch/2]).
--export([has_eff_user/2, has_eff_user/3]).
 -export([create/6, update/3]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves handle doc by given SpaceId.
-%% @end
-%%--------------------------------------------------------------------
--spec get(gs_client_worker:client(), od_handle:id()) ->
-    {ok, od_handle:doc()} | errors:error().
-get(SessionId, HandleId) ->
-    gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = private},
-        subscribe = true
-    }).
 
 
 %%--------------------------------------------------------------------
@@ -63,23 +48,9 @@ get_public_data(SessionId, HandleId) ->
 
 -spec force_fetch(gs_client_worker:client(), od_handle:id()) -> {ok, od_handle:doc()}.
 force_fetch(SessionId, HandleId) ->
-    gs_client_worker:force_fetch_entity(SessionId, #gri{type = od_handle, id = HandleId, aspect = instance}).
-
-
--spec has_eff_user(od_handle:doc(), od_user:id()) -> boolean().
-has_eff_user(#document{value = #od_handle{eff_users = EffUsers}}, UserId) ->
-    maps:is_key(UserId, EffUsers).
-
-
--spec has_eff_user(gs_client_worker:client(), od_handle:id(), od_user:id()) ->
-    boolean().
-has_eff_user(SessionId, HandleId, UserId) ->
-    case get(SessionId, HandleId) of
-        {ok, HandleDoc = #document{}} ->
-            has_eff_user(HandleDoc, UserId);
-        _ ->
-            false
-    end.
+    gs_client_worker:force_fetch_entity(SessionId, #gri{
+        type = od_handle, id = HandleId, aspect = instance, scope = public
+    }).
 
 
 -spec create(

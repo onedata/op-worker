@@ -360,7 +360,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, #au
     } = Data,
     case lists:member(HandleServiceId, [?HANDLE_SERVICE_1, ?HANDLE_SERVICE_2]) of
         true ->
-            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PUBLIC_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end;
@@ -567,49 +567,11 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_handle_service, id = HServiceId, aspect = instance}, AuthOverride, _) ->
-    Authorized = case {AuthOverride, GRI#gri.scope} of
-        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, private} ->
-            UserId = token_to_user_id(SerializedToken),
-            lists:member(atom_to_binary(?HANDLE_SERVICE_VIEW, utf8), maps:get(UserId, ?HANDLE_SERVICE_EFF_USERS_VALUE(HServiceId), []));
-        % undefined AuthOverride means asking with provider's auth
-        {undefined, private} ->
-            false;
-        {_, public} ->
-            true
-    end,
-    case Authorized of
-        true ->
-            Data = case GRI#gri.scope of
-                public -> ?HANDLE_SERVICE_PUBLIC_DATA_VALUE(HServiceId);
-                private -> ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(HServiceId)
-            end,
-            {ok, #gs_resp_graph{data_format = resource, data = Data}};
-        false ->
-            ?ERROR_FORBIDDEN
-    end;
+mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance}, _, _) ->
+    {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_SERVICE_PUBLIC_DATA_VALUE(HServiceId)}};
 
-mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, AuthOverride, _) ->
-    Authorized = case {AuthOverride, GRI#gri.scope} of
-        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, private} ->
-            UserId = token_to_user_id(SerializedToken),
-            lists:member(atom_to_binary(?HANDLE_VIEW, utf8), maps:get(UserId, ?HANDLE_EFF_USERS_VALUE(HandleId), []));
-        % undefined AuthOverride means asking with provider's auth
-        {undefined, private} ->
-            false;
-        {_, public} ->
-            true
-    end,
-    case Authorized of
-        true ->
-            Data = case GRI#gri.scope of
-                public -> ?HANDLE_PUBLIC_DATA_VALUE(HandleId);
-                private -> ?HANDLE_PRIVATE_DATA_VALUE(HandleId)
-            end,
-            {ok, #gs_resp_graph{data_format = resource, data = Data}};
-        false ->
-            ?ERROR_FORBIDDEN
-    end;
+mock_graph_get(#gri{type = od_handle, id = HandleId, aspect = instance}, _, _) ->
+    {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PUBLIC_DATA_VALUE(HandleId)}};
 
 mock_graph_get(GRI = #gri{type = od_harvester, id = HarvesterId, aspect = instance}, AuthOverride, _) ->
     Authorized = case {AuthOverride, GRI#gri.scope} of
