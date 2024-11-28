@@ -23,7 +23,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
--export([is_valid_filename/1]).
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
@@ -117,27 +116,6 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if given term is valid path()
-%% @end
-%%--------------------------------------------------------------------
--spec is_valid_filename(term()) -> boolean().
-is_valid_filename(FileName) when not is_binary(FileName) ->
-    false;
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<?CURRENT_DIRECTORY>>) ->
-    false;
-is_valid_filename(<<?PARENT_DIRECTORY>>) ->
-    false;
-is_valid_filename(FileName) when is_binary(FileName) ->
-    % Ensure name contains no POSIX forbidden characters (/ or \0)
-    case binary:matches(FileName, [<<?DIRECTORY_SEPARATOR>>, <<0>>]) of
-        [] -> true;
-        _ -> false
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Saves file meta doc.
 %% @end
 %%--------------------------------------------------------------------
@@ -187,7 +165,7 @@ create({uuid, ParentUuid}, FileDoc = #document{
     ignore_in_changes = IgnoreInChanges
 }, TreesToCheck) ->
     ?run(begin
-        is_valid_filename(FileName) orelse error({error, ?EINVAL}),
+        onedata_file:is_valid_filename(FileName) orelse error({error, ?EINVAL}),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),

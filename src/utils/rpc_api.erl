@@ -356,7 +356,7 @@ new_luma_config_with_external_feed(URL, ApiKey) ->
 
 
 -spec storage_detector_run_diagnostics(helpers:helper(), luma_config:feed(), storage_detector:diagnostic_opts()) ->
-    ok | errors:error().
+    ok | {errors:error(), storage_detector:diagnostic_error_details()}.
 storage_detector_run_diagnostics(Helper, LumaMode, Opts) ->
     storage_detector:run_diagnostics(all_nodes, Helper, LumaMode, Opts).
 
