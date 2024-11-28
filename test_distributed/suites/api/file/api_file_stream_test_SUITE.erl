@@ -245,7 +245,7 @@ gui_download_different_filetypes_test(Config) ->
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
     Name = ?RANDOM_FILE_NAME(),
     DirSpec = [
-        #symlink_spec{shares = [#share_spec{}], symlink_value = make_symlink_target()},
+        #symlink_spec{symlink_value = make_symlink_target()},
         #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [
             #dir_spec{},
             #file_spec{content = Name, name = Name, custom_label = Name},
@@ -461,7 +461,16 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, download_type, maps:get(download_type, Opts, simulate_failures)),
 
-    SetupFun = build_download_file_setup_fun(MemRef, FileTreeSpec),
+    BuildSetupFun = fun
+        (shared_files) ->
+            % filter out symlinks that cannot be shared
+            build_download_file_setup_fun(MemRef, lists:filter(fun
+                (#symlink_spec{}) -> false;
+                (_OtherTypeSpec) -> true
+            end, utils:ensure_list(FileTreeSpec)));
+        (private_files) ->
+            build_download_file_setup_fun(MemRef, FileTreeSpec)
+    end,
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef),
     VerifyFun = build_download_file_verify_fun(MemRef),
 
@@ -491,7 +500,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpec,
-            setup_fun = SetupFun,
+            setup_fun = BuildSetupFun(private_files),
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, normal_mode, private),
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
@@ -504,7 +513,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             type = gs,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            setup_fun = SetupFun,
+            setup_fun = BuildSetupFun(shared_files),
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, public),
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
@@ -517,7 +526,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             type = gs_with_shared_guid_and_aspect_private,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
-            setup_fun = SetupFun,
+            setup_fun = BuildSetupFun(shared_files),
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, private),
             validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
                 case Client of

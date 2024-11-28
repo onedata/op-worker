@@ -137,7 +137,7 @@
 -define(SHARE_DESCRIPTION(__Share), __Share).
 -define(SHARE_PUBLIC_URL(__Share), __Share).
 -define(SHARE_PUBLIC_REST_URL(__Share), __Share).
--define(SHARE_FILE_TYPE(__Share), dir).
+-define(SHARE_FILE_TYPE(__Share), ?DIRECTORY_TYPE).
 -define(SHARE_SPACE(__Share), ?SPACE_1).
 -define(SHARE_HANDLE(__Share), ?HANDLE_1).
 -define(SHARE_ROOT_FILE(__Share), __Share).

@@ -149,6 +149,8 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
             storages_by_provider = StoragesByProvider,
 
             providers = maps:get(<<"providers">>, Result),
+            % NOTE: at some point, providers should list shares by batches
+            % as this list may be very big
             shares = maps:get(<<"shares">>, Result),
             harvesters = maps:get(<<"harvesters">>, Result),
 
@@ -167,7 +169,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
             public_url = maps:get(<<"publicUrl">>, Result),
             public_rest_url = maps:get(<<"publicRestUrl">>, Result),
             root_file = maps:get(<<"rootFileId">>, Result),
-            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
+            file_type = translate_share_file_type(Result),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
@@ -181,7 +183,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
             public_url = maps:get(<<"publicUrl">>, Result),
             public_rest_url = maps:get(<<"publicRestUrl">>, Result),
             root_file = maps:get(<<"rootFileId">>, Result),
-            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
+            file_type = translate_share_file_type(Result),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
@@ -504,9 +506,24 @@ apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     }.
 
 
+%%%===================================================================
+%%% Helpers
+%%%===================================================================
+
+
+%% @private
 -spec privileges_to_atoms(#{binary() => binary()}) -> #{binary() => atom()}.
 privileges_to_atoms(Map) ->
     maps:map(
         fun(_Key, Privileges) ->
             [binary_to_atom(P, utf8) || P <- Privileges]
         end, Map).
+
+
+%% @private
+% TODO VFS-VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
+-spec translate_share_file_type(json_utils:json_map()) -> onedata_file:type().
+translate_share_file_type(#{<<"fileType">> := <<"file">>}) -> ?REGULAR_FILE_TYPE;
+translate_share_file_type(#{<<"fileType">> := <<"REG">>}) -> ?REGULAR_FILE_TYPE;
+translate_share_file_type(#{<<"fileType">> := <<"dir">>}) -> ?DIRECTORY_TYPE;
+translate_share_file_type(#{<<"fileType">> := <<"DIR">>}) -> ?DIRECTORY_TYPE.
