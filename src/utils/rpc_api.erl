@@ -91,11 +91,9 @@
     get_space_dir_stats_service_status/1,
     get_provider_details/0,
     is_subdomain_delegated/0,
-    set_delegated_subdomain/1,
-    set_domain/1,
+    update_domain_config/1,
     space_quota_current_size/1,
     update_space_support_size/2,
-    update_subdomain_delegation_ips/0,
     force_oz_connection_start/0,
     provider_auth_save/2,
     get_root_token_file_path/0,
@@ -108,8 +106,7 @@
     storage_import_get_info/1,
     storage_import_get_manual_example/1,
     restart_rtransfer_link/0,
-    set_txt_record/3,
-    remove_txt_record/1
+    update_txt_records/1
 ]).
 
 
@@ -539,15 +536,9 @@ is_subdomain_delegated() ->
     provider_logic:is_subdomain_delegated().
 
 
--spec set_delegated_subdomain(binary()) ->
-    ok | errors:error().
-set_delegated_subdomain(Subdomain) ->
-    provider_logic:set_delegated_subdomain(Subdomain).
-
-
--spec set_domain(binary()) -> ok | errors:error().
-set_domain(Domain) ->
-    provider_logic:set_domain(Domain).
+-spec update_domain_config(json_utils:json_map()) -> ok | errors:error().
+update_domain_config(Data) ->
+    provider_logic:update_domain_config(Data).
 
 
 -spec space_quota_current_size(space_quota:id()) -> non_neg_integer().
@@ -567,11 +558,6 @@ update_space_support_size(SpaceId, NewSupportSize) ->
     ok | errors:error().
 update_space_support_parameters(SpaceId, SupportParametersOverlay) ->
     space_logic:update_support_parameters(SpaceId, SupportParametersOverlay).
-
-
--spec update_subdomain_delegation_ips() -> ok | error.
-update_subdomain_delegation_ips() ->
-    provider_logic:update_subdomain_delegation_ips().
 
 
 -spec autocleaning_configure(od_space:id(), map()) ->
@@ -679,12 +665,6 @@ restart_rtransfer_link() ->
     rtransfer_config:restart_link().
 
 
--spec set_txt_record(Name :: binary(), Content :: binary(),
-    TTL :: non_neg_integer() | undefined) -> ok | no_return().
-set_txt_record(Name, Content, TTL) ->
-    provider_logic:set_txt_record(Name, Content, TTL).
-
-
--spec remove_txt_record(Name :: binary()) -> ok | no_return().
-remove_txt_record(Name) ->
-    provider_logic:remove_txt_record(Name).
+-spec update_txt_records(map()) -> ok | no_return().
+update_txt_records(Data) ->
+    provider_logic:update_txt_records(Data).
