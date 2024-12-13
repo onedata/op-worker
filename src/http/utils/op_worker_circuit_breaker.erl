@@ -19,7 +19,7 @@
 -define(THROTTLE_LOG(Log), utils:throttle({?MODULE, ?FUNCTION_NAME}, timer:minutes(5), fun() -> Log end)).
 
 %% API
--export([assert_closed/0]).
+-export([assert_closed/0, toggle/1]).
 
 %%%===================================================================
 %%% API
@@ -36,4 +36,13 @@ assert_closed() ->
         closed ->
             ok
     end.
+
+
+-spec toggle(open | closed) -> ok.
+toggle(open) ->
+    op_worker:set_env(service_circuit_breaker_state, open),
+    ?emergency("The circuit breaker has been set to 'open' - consult Onepanel logs for details");
+toggle(closed) ->
+    op_worker:set_env(service_circuit_breaker_state, closed),
+    ?notice("The circuit breaker has been set to 'closed'").
 
