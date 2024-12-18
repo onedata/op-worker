@@ -671,6 +671,6 @@ update_txt_records(Data) ->
     provider_logic:update_txt_records(Data).
 
 
--spec circuit_breaker_toggle(atom()) -> ok.
+-spec circuit_breaker_toggle(open | closed) -> ok.
 circuit_breaker_toggle(State) ->
     op_worker_circuit_breaker:toggle(State).
