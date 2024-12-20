@@ -81,7 +81,7 @@
   1},
  {<<"helpers">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/helpers.git",
-       {ref,"59761d58044d43bb55943c220d3213eea08677e9"}},
+       {ref,"b7db9dd818abee4b6c1246f408bb55b6cc3c693f"}},
   0},
  {<<"hut">>,{pkg,<<"hut">>,<<"1.3.0">>},2},
  {<<"idna">>,{pkg,<<"idna">>,<<"6.1.1">>},2},
