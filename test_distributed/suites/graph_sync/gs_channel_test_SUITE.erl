@@ -36,19 +36,19 @@ oz_connection_test(Config) ->
     [Node | _] = Nodes = ?config(op_worker_nodes, Config),
 
     % If provider can't connect to onezone, it should return
-    % ?ERROR_NO_CONNECTION_TO_ONEZONE for all requests.
+    % ?ERR_NO_CONNECTION_TO_ONEZONE for all requests.
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CONN_ERROR),
     ?assertMatch(
-        ?ERROR_NO_CONNECTION_TO_ONEZONE,
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_),
         rpc:call(Node, provider_logic, get, []),
         60
     ),
 
     % If provider can connect to onezone, but was authenticated as nobody,
-    % it should return ?ERROR_NO_CONNECTION_TO_ONEZONE for all requests.
+    % it should return ?ERR_NO_CONNECTION_TO_ONEZONE for all requests.
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_NOBODY_IDENTITY),
     ?assertMatch(
-        ?ERROR_NO_CONNECTION_TO_ONEZONE,
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_),
         rpc:call(Node, provider_logic, get, []),
         60
     ),
@@ -221,14 +221,14 @@ async_request_handling_test(Config) ->
     logic_tests_common:set_request_timeout(Config, 1000),
     logic_tests_common:mock_request_processing_time(Config, 1500, 2000),
     ?assertEqual(
-        ?ERROR_TIMEOUT,
+        ?ERR_TIMEOUT,
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
 
     logic_tests_common:set_harvest_request_timeout(Config, 10000),
     logic_tests_common:mock_harvest_request_processing_time(Config, 15000, 20000),
     ?assertEqual(
-        ?ERROR_TIMEOUT,
+        ?ERR_TIMEOUT,
         rpc:call(Node, space_logic, harvest_metadata, [?SPACE_1, #{}, [], 100, 100])
     ),
     ok.

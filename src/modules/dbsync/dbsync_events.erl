@@ -117,7 +117,7 @@ change_replicated_internal(_SpaceId, #document{key = JobId, value = #tree_traver
     case tree_traverse:get_job(Doc) of
         {ok, Job, PoolName, TaskId} ->
             traverse:on_job_change(Job, JobId, PoolName, TaskId, oneprovider:get_id_or_undefined());
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             % TODO VFS-6391 fix race with file_meta
             ok
     end;

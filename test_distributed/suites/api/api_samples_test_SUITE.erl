@@ -177,7 +177,7 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistentFile">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}]
+                bad_values = [{bad_id, <<"NonExistentFile">>, ?ERR_BAD_VALUE_IDENTIFIER(<<"id">>)}]
             }
         }
     ])).
@@ -252,7 +252,7 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistentFile">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}]
+                bad_values = [{bad_id, <<"NonExistentFile">>, ?ERR_BAD_VALUE_IDENTIFIER(<<"id">>)}]
             }
         }
     ])),
@@ -406,7 +406,7 @@ build_sample_test_spec(<<"Set JSON metadata">>) -> #sample_test_spec{
 build_sample_test_spec(<<"Remove JSON metadata">>) -> #sample_test_spec{
     testing_priority = 10,
     verify_fun = fun(Guid, _ResultBody) ->
-        ?assertEqual(?ERROR_POSIX(?ENODATA), get_custom_metadata(Guid, json))
+        ?assertEqual(?ERR_POSIX(?ENODATA), get_custom_metadata(Guid, json))
     end
 };
 build_sample_test_spec(<<"Get RDF metadata">>) -> #sample_test_spec{
@@ -425,7 +425,7 @@ build_sample_test_spec(<<"Set RDF metadata">>) -> #sample_test_spec{
 build_sample_test_spec(<<"Remove RDF metadata">>) -> #sample_test_spec{
     testing_priority = 10,
     verify_fun = fun(Guid, _ResultBody) ->
-        ?assertEqual(?ERROR_POSIX(?ENODATA), get_custom_metadata(Guid, rdf))
+        ?assertEqual(?ERR_POSIX(?ENODATA), get_custom_metadata(Guid, rdf))
     end
 };
 build_sample_test_spec(<<"Get extended attributes (xattrs)">>) -> #sample_test_spec{

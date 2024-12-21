@@ -82,12 +82,12 @@ get_test(Config) ->
 
     % Make sure that provider and other users cannot access cached data
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get, [User2Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get, [?ROOT_SESS_ID, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -95,12 +95,12 @@ get_test(Config) ->
     % Make sure that provider and other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get, [User2Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get, [?ROOT_SESS_ID, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -181,7 +181,7 @@ get_protected_data_test(Config) ->
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get_protected_data, [User2Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -189,7 +189,7 @@ get_protected_data_test(Config) ->
     % Make sure that other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get_protected_data, [User2Sess, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -242,7 +242,7 @@ get_shared_data_test(Config) ->
     ?assertEqual(SpaceGraphCalls + 1, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
 
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, undefined])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -268,7 +268,7 @@ get_shared_data_test(Config) ->
 
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, user_logic, get_shared_data, [User2Sess, ?USER_1, undefined])
     ),
     ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -550,13 +550,13 @@ fetch_idp_access_token_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
 
     ?assertMatch(
-        ?ERROR_NOT_FOUND,
+        ?ERR_NOT_FOUND,
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, <<"wrongId">>, ?MOCK_IDP])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
 
     ?assertMatch(
-        ?ERROR_NOT_FOUND,
+        ?ERR_NOT_FOUND,
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, ?USER_1, <<"wrongId">>])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
@@ -583,7 +583,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of
     % data access caveat presence
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, user_logic, fetch_idp_access_token, [TokenCredentials, ?USER_1, ?MOCK_IDP])
     ),
     % Nevertheless, following requests should be made:

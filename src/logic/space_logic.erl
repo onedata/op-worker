@@ -269,7 +269,7 @@ get_provider_storages(SpaceId, ProviderId) when is_binary(SpaceId) ->
         {ok, #{ProviderId := ProviderStorages}} ->
             {ok, ProviderStorages};
         {ok, _} ->
-            ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+            ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, ProviderId);
         {error, _} = Error ->
             Error
     end.
@@ -303,7 +303,7 @@ get_support_size(SpaceId, ProviderId) ->
         {ok, #document{value = #od_space{providers = ProviderSupports}}} ->
             case maps:get(ProviderId, ProviderSupports, undefined) of
                 undefined ->
-                    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+                    ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, ProviderId);
                 SupportSize ->
                     {ok, SupportSize}
             end;
@@ -374,9 +374,9 @@ is_supported(SessionId, SpaceId, ProviderId) ->
     case get(SessionId, SpaceId) of
         {ok, SpaceDoc = #document{}} ->
             is_supported(SpaceDoc, ProviderId);
-        ?ERROR_NOT_FOUND ->  % the space has been deleted or never existed
+        ?ERR_NOT_FOUND ->  % the space has been deleted or never existed
             false;
-        ?ERROR_FORBIDDEN ->  % forbidden access due to lack of support
+        ?ERR_FORBIDDEN ->  % forbidden access due to lack of support
             false
     end.
 

@@ -220,7 +220,7 @@ cancel_archivisation(SpaceDirCtx, ArchiveId, PreservationPolicy, UserCtx) ->
                     SpaceDirCtx, UserCtx, [?SPACE_MANAGE_ARCHIVES])
             end,
             archive_api:cancel_archivisation(ArchiveDoc, PreservationPolicy);
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ok;
         {error, _} = Error ->
             Error

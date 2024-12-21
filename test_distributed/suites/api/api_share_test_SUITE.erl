@@ -108,8 +108,8 @@ create_share_test(_Config) ->
                             <<"rootFileId">> => [FileObjectId]
                         },
                         bad_values = [
-                            {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
-                            {<<"description">>, 14, ?ERROR_BAD_VALUE_BINARY(<<"description">>)}
+                            {<<"name">>, 100, ?ERR_BAD_VALUE_STRING(<<"name">>)},
+                            {<<"description">>, 14, ?ERR_BAD_VALUE_STRING(<<"description">>)}
                         ]
                     }
                 )
@@ -235,7 +235,7 @@ get_share_test(_Config) ->
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
     DataSpec = #data_spec{
-        bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]
+        bad_values = [{bad_id, <<"NonExistentShare">>, ?ERR_NOT_FOUND}]
     },
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -401,10 +401,10 @@ update_share_test(_Config) ->
                     <<"description">> => [<<"">>, OriginalDescription]
                 },
                 bad_values = [
-                    {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
-                    {<<"name">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"name">>)},
-                    {<<"description">>, 90, ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
-                    {bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}
+                    {<<"name">>, 100, ?ERR_BAD_VALUE_STRING(<<"name">>)},
+                    {<<"name">>, <<>>, ?ERR_BAD_VALUE_EMPTY(<<"name">>)},
+                    {<<"description">>, 90, ?ERR_BAD_VALUE_STRING(<<"description">>)},
+                    {bad_id, <<"NonExistentShare">>, ?ERR_NOT_FOUND}
                 ]
             }
         }
@@ -479,7 +479,7 @@ delete_share_test(_Config) ->
             ],
             data_spec = #data_spec{
                 bad_values = [
-                    {bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}
+                    {bad_id, <<"NonExistentShare">>, ?ERR_NOT_FOUND}
                 ]
             }
         }
@@ -576,7 +576,7 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
     ShareId = api_test_memory:get(MemRef, share_to_remove),
 
     lists:foreach(fun(Provider) ->
-        ?assertEqual(?ERROR_NOT_FOUND, get_share_doc(Provider, UserId, ShareId), ?ATTEMPTS)
+        ?assertEqual(?ERR_NOT_FOUND, get_share_doc(Provider, UserId, ShareId), ?ATTEMPTS)
     end, Providers),
 
     api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).

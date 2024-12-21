@@ -91,7 +91,7 @@ create(#atm_store_container_creation_args{
 
 -spec copy(record()) -> no_return().
 copy(_) ->
-    throw(?ERROR_NOT_SUPPORTED).
+    throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 -spec get_config(record()) -> atm_range_store_config:record().
@@ -122,7 +122,7 @@ browse_content(
         options = #atm_range_store_content_browse_options{}
     }
 ) ->
-    throw(?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchemaId));
+    throw(?ERR_ATM_STORE_CONTENT_NOT_SET(?err_ctx(), AtmStoreSchemaId));
 
 browse_content(
     #atm_range_store_container{range = Range},

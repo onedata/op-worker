@@ -51,7 +51,7 @@ resolve_handler(get, content, private) -> ?MODULE;
 resolve_handler(get, dump_download_url, private) -> ?MODULE;
 resolve_handler(get, indices_by_trace_ids, private) -> ?MODULE;  %% supported only by exception store
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -91,7 +91,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = indices_by_trace_ids}}) -
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
     case atm_store_api:get_ctx(AtmStoreId) of
@@ -99,8 +99,8 @@ fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
             assert_operation_supported(OpReq, AtmStore),
             {ok, {AtmStoreCtx, 1}};
 
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 
@@ -151,7 +151,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = dump_download_url}}, AtmSt
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -200,7 +200,7 @@ get(#op_req{data = Data, gri = #gri{aspect = indices_by_trace_ids, scope = priva
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -210,7 +210,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%%===================================================================
@@ -227,7 +227,7 @@ assert_operation_supported(
 ) ->
     case atm_store_container:get_store_type(AtmStoreContainer) of
         exception -> ok;
-        _ -> throw(?ERROR_NOT_SUPPORTED)
+        _ -> throw(?ERR_NOT_SUPPORTED(?err_ctx()))
     end;
 
 assert_operation_supported(_, _) ->

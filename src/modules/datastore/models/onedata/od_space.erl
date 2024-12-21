@@ -136,7 +136,7 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
                 case space_logic:get(?ROOT_SESS_ID, SpaceId) of
                     {ok, CurrentDoc} ->
                         ok = handle_space_support_parameters_change(ProviderId, CurrentDoc);
-                    ?ERROR_NOT_FOUND ->
+                    ?ERR_NOT_FOUND ->
                         ok
                 end
             end),

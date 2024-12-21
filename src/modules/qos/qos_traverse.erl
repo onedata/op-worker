@@ -164,7 +164,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx} = Job, TaskId) ->
     FinalQosEntries = lists:filter(fun(QosEntryId) ->
         case qos_entry:get(QosEntryId) of
             {ok, _} -> true;
-            ?ERROR_NOT_FOUND -> false
+            ?ERR_NOT_FOUND -> false
         end
     end, get_traverse_qos_entries(AdditionalData)),
     ok = synchronize_file_for_entries(TaskId, Job, FinalQosEntries),
@@ -407,9 +407,9 @@ transfer_id_to_file_uuid(TransferId) ->
 %% @private
 -spec normalize_error({error, any()}) -> errors:error().
 normalize_error({error, <<"quota exceeded">>}) ->
-    ?ERROR_QUOTA_EXCEEDED;
+    ?ERR_QUOTA_EXCEEDED(?err_ctx());
 normalize_error({error, {connection,<<"No such file or directory">>}}) ->
-    ?ERROR_NOT_FOUND;
+    ?ERR_NOT_FOUND(?err_ctx());
 normalize_error(Error) ->
     Error.
 

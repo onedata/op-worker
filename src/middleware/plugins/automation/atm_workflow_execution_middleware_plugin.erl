@@ -59,7 +59,7 @@ resolve_handler(get, summary, private) -> ?MODULE;
 resolve_handler(delete, instance, private) -> ?MODULE;
 resolve_handler(delete, batch, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -129,7 +129,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = batch}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = delete, gri = #gri{scope = private, aspect = As}}) when
     As =:= instance;
@@ -312,7 +312,7 @@ get(#op_req{gri = #gri{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -332,7 +332,7 @@ delete(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{
         CreatorUserId -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
         _ -> ?SPACE_MANAGE_ATM_WORKFLOW_EXECUTIONS
     end),
-    IsAuthorized orelse throw(?ERROR_FORBIDDEN),
+    IsAuthorized orelse throw(?ERR_FORBIDDEN(?err_ctx())),
 
     mi_atm:discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId);
 

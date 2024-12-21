@@ -491,7 +491,7 @@ spatial_function_returning_integer_key_should_return_error(_Config) ->
 
     create_view(ViewName, SpatialFunction, undefined, [], true),
     ?assertQuery(
-        ?ERROR_VIEW_QUERY_FAILED(_, _),
+        ?ERR_VIEW_QUERY_FAILED(_, _),
         ViewName, [{stale, false}, {spatial, true}]
     ).
 
@@ -506,7 +506,7 @@ spatial_function_returning_string_key_should_return_error(_Config) ->
 
     create_view(ViewName, SpatialFunction, undefined, [], true),
     ?assertQuery(
-        ?ERROR_VIEW_QUERY_FAILED(_, _),
+        ?ERR_VIEW_QUERY_FAILED(_, _),
         ViewName,  [{stale, false}, {spatial, true}]
     ).
 

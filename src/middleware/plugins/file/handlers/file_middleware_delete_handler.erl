@@ -41,7 +41,7 @@ assert_operation_supported(instance, private)      -> ok;        % gs only
 assert_operation_supported(xattrs, private)        -> ok;        % REST/gs
 assert_operation_supported(json_metadata, private) -> ok;        % REST/gs
 assert_operation_supported(rdf_metadata, private)  -> ok;        % REST/gs
-assert_operation_supported(_, _)                   -> throw(?ERROR_NOT_SUPPORTED).
+assert_operation_supported(_, _)                   -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================

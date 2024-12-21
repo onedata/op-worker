@@ -137,7 +137,7 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ExpStat
                 }
             ],
             data_spec = #data_spec{bad_values = [
-                {bad_id, <<"NonExistentTransfer">>, ?ERROR_NOT_FOUND}
+                {bad_id, <<"NonExistentTransfer">>, ?ERR_NOT_FOUND}
             ]}
         }
     ])).
@@ -503,7 +503,7 @@ get_rerun_transfer_status(Config, TransferType, Env, RerunId, EffTransferId, Exp
                 }
             ],
             data_spec = #data_spec{bad_values = [
-                {bad_id, <<"NonExistentTransfer">>, ?ERROR_NOT_FOUND}
+                {bad_id, <<"NonExistentTransfer">>, ?ERR_NOT_FOUND}
             ]}
         }
     ])).

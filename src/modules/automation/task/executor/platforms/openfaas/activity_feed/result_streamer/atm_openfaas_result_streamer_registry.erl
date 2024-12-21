@@ -269,7 +269,7 @@ await_deregistration_of_all_streamers() ->
         last_streamer_has_deregistered ->
             success
     after ?AWAIT_DEREGISTRATION_TIMEOUT ->
-        {failure, ?ERROR_TIMEOUT}
+        {failure, ?ERR_TIMEOUT(?err_ctx())}
     end.
 
 

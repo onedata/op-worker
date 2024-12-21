@@ -351,14 +351,14 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, AtmDataSpec) ->
 infer_exp_invalid_data_error(InvalidArray = [InvalidValue | _], #atm_array_data_spec{
     item_data_spec = ItemDataSpec
 }) ->
-    ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+    ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
         InvalidArray, atm_array_type, #{<<"$[0]">> => errors:to_json(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidValue, atm_data_spec:get_data_type(ItemDataSpec))
+            ?ERR_ATM_DATA_TYPE_UNVERIFIED(InvalidValue, atm_data_spec:get_data_type(ItemDataSpec))
         )}
     );
 
 infer_exp_invalid_data_error(InvalidItem, AtmDataSpec) ->
-    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, atm_data_spec:get_data_type(AtmDataSpec)).
+    ?ERR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, atm_data_spec:get_data_type(AtmDataSpec)).
 
 
 -spec to_described_item(
@@ -432,7 +432,7 @@ randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecution
             ?rpc(ProviderSelector, lfm:rm_recursive(SessionId, FileRef)),
             ?assertEqual({error, ?ENOENT}, ?rpc(ProviderSelector, lfm:stat(SessionId, FileRef)), ?ATTEMPTS),
 
-            {true, ?ERROR_POSIX(?ENOENT)};
+            {true, ?ERR_POSIX(?ENOENT)};
         _ ->
             false
     end;
@@ -442,7 +442,7 @@ randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecution
         1 ->
             SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
             ?rpc(ProviderSelector, mi_datasets:remove(SessionId, maps:get(<<"datasetId">>, Item))),
-            {true, ?ERROR_NOT_FOUND};
+            {true, ?ERR_NOT_FOUND};
         _ ->
             false
     end;

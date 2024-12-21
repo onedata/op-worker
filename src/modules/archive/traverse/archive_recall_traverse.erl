@@ -113,9 +113,9 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
                         SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx2, UserCtx),
                     {ok, RootFileGuid};
                 {error, eexist} ->
-                    ?ERROR_ALREADY_EXISTS;
+                    ?ERR_ALREADY_EXISTS(?err_ctx());
                 {error, Reason} ->
-                    ?ERROR_POSIX(Reason)
+                    ?ERR_POSIX(?err_ctx(), Reason)
             end;
         Error ->
             Error
@@ -219,7 +219,7 @@ ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) ->
 can_start_recall(SpaceId, Guid) ->
     case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(Guid)) of
         {ok, {ongoing, _}} ->
-            ?ERROR_RECALL_TARGET_CONFLICT;
+            ?ERR_RECALL_TARGET_CONFLICT(?err_ctx());
         _ ->
             ok
     end.

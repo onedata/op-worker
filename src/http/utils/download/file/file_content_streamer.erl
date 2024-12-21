@@ -219,7 +219,7 @@ stream_bytes_range_internal({From, To}, #streaming_ctx{
 read_file_data(FileHandle, From, ToRead, MinBytes) ->
     case lfm:check_size_and_read(FileHandle, From, ToRead) of
         {error, ?ENOSPC} ->
-            throw(?ERROR_QUOTA_EXCEEDED);
+            throw(?ERR_QUOTA_EXCEEDED(?err_ctx()));
         Res ->
             {ok, NewFileHandle, Data} = ?lfm_check(Res),
             FinalData = case byte_size(Data) < MinBytes of

@@ -90,7 +90,7 @@ remove(FileHandle) ->
             delete_doc(Key);
         {ok, _}  ->
             ok;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ok;
         {error, _} = Error ->
             Error
@@ -113,7 +113,7 @@ release_all_process_handles(Process) ->
         {ok, ProcessHandles} ->
             release_handles(ProcessHandles),
             delete_doc(key(Process));
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ok;
         {error, _} = Error ->
             Error

@@ -216,7 +216,7 @@ browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
             AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
         )),
         Item
-    catch throw:?ERROR_ATM_STORE_CONTENT_NOT_SET(_) ->
+    catch throw:?ERR_ATM_STORE_CONTENT_NOT_SET(_) ->
         undefined
     end.
 

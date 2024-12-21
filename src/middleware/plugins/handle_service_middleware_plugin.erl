@@ -44,7 +44,7 @@
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, instance, public) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -80,7 +80,7 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId, scope = publi
     end;
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId}}) ->
     case handle_service_logic:get_public_data(Auth#auth.session_id, HandleServiceId) of
@@ -126,7 +126,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -152,7 +152,7 @@ get(#op_req{gri = #gri{aspect = instance, scope = public}}, #od_handle_service{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -162,4 +162,4 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).

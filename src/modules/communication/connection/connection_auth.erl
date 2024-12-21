@@ -110,17 +110,17 @@ handle_client_handshake(#client_handshake_request{
                 Nonce, Subject, SessMode, TokenCredentials
             ),
             {UserId, SessionId};
-        ?ERROR_FORBIDDEN ->
+        ?ERR_FORBIDDEN ->
             throw(invalid_provider);
-        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{}) ->
+        ?ERR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{}) ->
             throw(expired_token);
-        ?ERROR_TOKEN_REVOKED ->
+        ?ERR_TOKEN_REVOKED ->
             throw(expired_token);
-        ?ERROR_USER_NOT_SUPPORTED ->
+        ?ERR_USER_NOT_SUPPORTED ->
             throw(invalid_provider);
-        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_service{}) ->
+        ?ERR_TOKEN_CAVEAT_UNVERIFIED(#cv_service{}) ->
             throw(invalid_provider);
-        {error, _} = Error ->
+        ?ERR = Error ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
                     ?debug("Cannot authorize subject ~w based on token (id: ~ts) "

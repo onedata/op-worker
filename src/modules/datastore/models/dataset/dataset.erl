@@ -146,7 +146,7 @@ mark_detached(DatasetId, DatasetPath, RootFilePath, RootFileType, ProtectionFlag
                     DatasetPath, RootFilePath, RootFileType, ProtectionFlags, Reason)
             }};
         (#dataset{state = ?DETACHED_DATASET}) ->
-            ?ERROR_ALREADY_EXISTS
+            ?ERR_ALREADY_EXISTS(?err_ctx())
     end).
 
 
@@ -170,7 +170,7 @@ mark_reattached(DatasetId) ->
                 detached_info = undefined
             }};
         (#dataset{state = ?ATTACHED_DATASET}) ->
-            ?ERROR_ALREADY_EXISTS
+            ?ERR_ALREADY_EXISTS(?err_ctx())
     end).
 
 %%%===================================================================

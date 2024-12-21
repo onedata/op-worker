@@ -111,7 +111,7 @@ report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx) ->
         fun(#qos_status{files_list = FilesList} = Value) ->
             case lists:member(FileUuid, FilesList) of
                 true -> {ok, Value#qos_status{files_list = FilesList -- [FileUuid]}};
-                false -> ?ERROR_NOT_FOUND % file was deleted during traverse
+                false -> ?ERR_NOT_FOUND(?err_ctx()) % file was deleted during traverse
             end
         end
     )).
@@ -192,7 +192,7 @@ is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, TraverseRootFi
     case qos_status_model:get(TraverseId, InodeUuid) of
         {ok, _} ->
             false;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             has_traverse_link(TraverseId, FileCtx) orelse is_parent_fulfilled(TraverseId, FileCtx, InodeUuid, TraverseRootFileUuid)
     end;
 is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, TraverseRootFileUuid, _IsDir = false) ->
@@ -209,7 +209,7 @@ is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, TraverseRootFi
         }} ->
             FileName =< PreviousBatchLastFilename orelse
                 (not (FileName > LastFilename) and not lists:member(LogicalUuid, FilesList));
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             is_parent_fulfilled(TraverseId, FileCtx2, LogicalUuid, TraverseRootFileUuid)
     end.
 
@@ -242,7 +242,7 @@ has_traverse_link(TraverseId, FileCtx) ->
 has_qos_status_doc(TraverseId, Uuid) ->
     case qos_status_model:get(TraverseId, Uuid) of
         {ok, _} -> true;
-        ?ERROR_NOT_FOUND -> false
+        ?ERR_NOT_FOUND -> false
     end.
 
 %%%===================================================================

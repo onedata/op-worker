@@ -101,7 +101,7 @@ archive_regular_file(
                     make_hardlink_to_file_in_base_archive(
                         FileCtx, TargetParentCtx, BaseArchiveFileCtx, UserCtx)
             end;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx, CopyOpts)
     end.
 

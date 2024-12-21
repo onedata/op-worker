@@ -84,7 +84,7 @@ validate(#op_req{operation = get, gri = #gri{
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -97,7 +97,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
     {ok, value, case dir_stats_service_state:get(SpaceId) of
         {ok, DirStatsServiceState} ->
             translate_dir_stats_service_state(DirStatsServiceState);
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             #{<<"status">> => disabled}
     end}.
 
@@ -109,7 +109,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -119,7 +119,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%%===================================================================
@@ -137,6 +137,6 @@ translate_dir_stats_service_state(DirStatsServiceState) ->
         DirStatsServiceState
     ) of
         {ok, Timestamp} -> Json#{<<"since">> => Timestamp};
-        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> Json;
-        ?ERROR_DIR_STATS_NOT_READY-> Json
+        ?ERR_DIR_STATS_DISABLED_FOR_SPACE -> Json;
+        ?ERR_DIR_STATS_NOT_READY-> Json
     end.

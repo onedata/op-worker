@@ -101,7 +101,7 @@ report_openfaas_unhealthy(#atm_mock_call_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, atm_workflow_execution_handler:on_openfaas_down(
-        AtmWorkflowExecutionId, ?ERROR_ATM_OPENFAAS_UNHEALTHY
+        AtmWorkflowExecutionId, ?ERR_ATM_OPENFAAS_UNHEALTHY
     )).
 
 
@@ -280,7 +280,7 @@ assert_impossible_actions_are_declined_for_ended_workflow_execution(AtmMockCallC
     workflow_execution_exp_state = ExpState
 }) ->
     lists:foreach(fun(StoppingReason) ->
-        ?assertEqual(?ERROR_ATM_WORKFLOW_EXECUTION_ENDED, stop_workflow_execution(StoppingReason, AtmMockCallCtx))
+        ?assertEqual(?ERR_ATM_WORKFLOW_EXECUTION_ENDED, stop_workflow_execution(StoppingReason, AtmMockCallCtx))
     end, ?STOPPING_REASONS),
 
     case atm_workflow_execution_exp_state_builder:get_workflow_status(ExpState) of
@@ -288,11 +288,11 @@ assert_impossible_actions_are_declined_for_ended_workflow_execution(AtmMockCallC
             ok;
         _ ->
             ?assertThrow(
-                ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
+                ?ERR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
                 force_continue_workflow_execution(AtmMockCallCtx)
             )
     end,
-    ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)).
+    ?assertThrow(?ERR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)).
 
 
 %% Impossible actions:
@@ -310,8 +310,8 @@ assert_impossible_actions_are_declined_for_not_stopped_workflow_execution(
     AtmMockCallCtx
 ) ->
     assert_impossible_actions_are_declined_for_not_ended_workflow_execution(AtmLaneRunSelector, AtmMockCallCtx),
-    ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)),
-    ?assertEqual(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED, discard_workflow_execution(AtmMockCallCtx)).
+    ?assertThrow(?ERR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)),
+    ?assertEqual(?ERR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED, discard_workflow_execution(AtmMockCallCtx)).
 
 
 %% Impossible actions:
@@ -324,11 +324,11 @@ assert_impossible_actions_are_declined_for_not_stopped_workflow_execution(
     ok.
 assert_impossible_actions_are_declined_for_not_ended_workflow_execution(AtmLaneRunSelector, AtmMockCallCtx) ->
     ?assertThrow(
-        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
+        ?ERR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
         force_continue_workflow_execution(AtmMockCallCtx)
     ),
     lists:foreach(fun(RepeatType) ->
-        ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED, repeat_workflow_execution(
+        ?assertThrow(?ERR_ATM_WORKFLOW_EXECUTION_NOT_ENDED, repeat_workflow_execution(
             RepeatType, AtmLaneRunSelector, AtmMockCallCtx
         ))
     end, [rerun, retry]).
@@ -477,7 +477,7 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
     AtmStoreContent = try
         atm_store_api:browse_content(AtmWorkflowExecutionAuth, AtmStoreBrowseOpts, AtmStore)
     catch
-        throw:?ERROR_NOT_FOUND when AtmStoreType == audit_log ->
+        throw:?ERR_NOT_FOUND when AtmStoreType == audit_log ->
             % audit log may not exist because of:
             % 1. it is created only at first append
             % 2. it may have been purged

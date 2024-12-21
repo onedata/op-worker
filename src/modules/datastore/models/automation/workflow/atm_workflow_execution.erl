@@ -85,7 +85,7 @@ get(AtmWorkflowExecutionId) ->
 get(AtmWorkflowExecutionId, ignore_discarded) ->
     case get(AtmWorkflowExecutionId, include_discarded) of
         {ok, #document{value = #atm_workflow_execution{discarded = true}}} ->
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         Result ->
             Result
     end;
@@ -104,7 +104,7 @@ update(AtmWorkflowExecutionId, Diff1) ->
 update(AtmWorkflowExecutionId, Diff1, Policy) ->
     Diff2 = fun
         (#atm_workflow_execution{discarded = true}) when Policy =:= ignore_discarded ->
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         (#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
             Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
     end,

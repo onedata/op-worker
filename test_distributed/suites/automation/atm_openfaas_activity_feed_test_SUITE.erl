@@ -167,7 +167,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
         LogId = Summary#atm_openfaas_function_pod_status_summary.event_log_id,
         ?rpc(audit_log:delete(LogId)),
         % browsing should return a proper error
-        ?assertEqual(?ERROR_NOT_FOUND, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{}))),
+        ?assertEqual(?ERR_NOT_FOUND, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{}))),
         % the log should be recreated upon new activity
         submit_pod_status_reports(Client, [gen_pod_status_report(FunctionId, PodId)]),
         ?assertMatch({ok, _}, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{})), ?ATTEMPTS)
@@ -186,7 +186,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
         event_log_id = PodEventLogId
     }) ->
         ?assertEqual(
-            ?ERROR_NOT_FOUND,
+            ?ERR_NOT_FOUND,
             ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(PodEventLogId, #{}))
         )
     end, PodStatusRegistry).
@@ -327,7 +327,7 @@ result_stream_conclusion_mixed_test(_Config) ->
 result_stream_conclusion_with_no_registered_streamers_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
-    ?await(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_INTERNAL_SERVER_ERROR})).
+    ?await(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERR_INTERNAL_SERVER_ERROR(undefined)})).
 
 
 result_stream_conclusion_timeout_test(_Config) ->
@@ -344,7 +344,7 @@ result_stream_conclusion_timeout_test(_Config) ->
 
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
-    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_TIMEOUT})),
+    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERR_TIMEOUT})),
     % the registry should be cleaned even if there were conclusion errors
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})),
 
@@ -381,7 +381,7 @@ result_stream_registration_during_conclusion_test(_Config) ->
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
 
     % as client beta has never deregistered, the stream should fail to conclude
-    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_TIMEOUT})),
+    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERR_TIMEOUT})),
     % the registry should be cleaned even if there were conclusion errors
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})),
 
@@ -561,7 +561,7 @@ result_streamer_error_handling_test(_Config) ->
 
     atm_openfaas_result_streamer_mock:send_text(ClientAlpha, <<"bad-message">>),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?ERROR_BAD_MESSAGE(<<"bad-message">>)
+        ?ERR_BAD_MESSAGE(<<"bad-message">>)
     ])),
 
     simulate_failure_of_next_report_processing(WorkflowExecutionId, TaskExecutionId),
@@ -570,8 +570,8 @@ result_streamer_error_handling_test(_Config) ->
     }),
     ?await(atm_openfaas_result_streamer_mock:has_received_internal_server_error_push_message(ClientGamma)),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?ERROR_BAD_MESSAGE(<<"bad-message">>),
-        ?ERROR_INTERNAL_SERVER_ERROR
+        ?ERR_BAD_MESSAGE(<<"bad-message">>),
+        ?ERR_INTERNAL_SERVER_ERROR(undefined)
     ])),
 
     % a result streamer client may not send pod status reports
@@ -580,9 +580,9 @@ result_streamer_error_handling_test(_Config) ->
         gen_pod_status_report(<<"c">>, <<"d">>)
     ]),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?ERROR_BAD_MESSAGE(<<"bad-message">>),
-        ?ERROR_INTERNAL_SERVER_ERROR,
-        ?ERROR_INTERNAL_SERVER_ERROR
+        ?ERR_BAD_MESSAGE(<<"bad-message">>),
+        ?ERR_INTERNAL_SERVER_ERROR(undefined),
+        ?ERR_INTERNAL_SERVER_ERROR(undefined)
     ])),
 
     % errors are streamed, but should not cause the stream to conclude by itself;

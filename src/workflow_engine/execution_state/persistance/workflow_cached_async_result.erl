@@ -22,7 +22,7 @@
 -export([put/1, take/1, delete/1]).
 
 -type id() :: datastore:key().
--type result_ref() :: id() | ?ERROR_TIMEOUT.
+-type result_ref() :: id() | od_error_timeout:t().
 
 -export_type([result_ref/0]).
 
@@ -36,23 +36,23 @@
 %%%===================================================================
 
 -spec put(workflow_handler:async_processing_result()) -> result_ref().
-put(?ERROR_TIMEOUT) ->
-    ?ERROR_TIMEOUT;
+put(?ERR_TIMEOUT = ErrorTimeout) ->
+    ErrorTimeout;
 put(ProcessingResult) ->
     Doc = #document{value = #workflow_cached_async_result{result = ProcessingResult}},
     {ok, #document{key = Id}} = datastore_model:save(?CTX, Doc),
     Id.
 
 -spec take(result_ref()) -> workflow_handler:async_processing_result().
-take(?ERROR_TIMEOUT) ->
-    ?ERROR_TIMEOUT;
+take(?ERR_TIMEOUT = ErrorTimeout) ->
+    ErrorTimeout;
 take(Id) ->
     {ok, #document{value = #workflow_cached_async_result{result = ProcessingResult}}} = datastore_model:get(?CTX, Id),
     ok = datastore_model:delete(?CTX, Id),
     ProcessingResult.
 
 -spec delete(result_ref()) -> ok.
-delete(?ERROR_TIMEOUT) ->
+delete(?ERR_TIMEOUT) ->
     ok;
 delete(Id) ->
     ok = datastore_model:delete(?CTX, Id).

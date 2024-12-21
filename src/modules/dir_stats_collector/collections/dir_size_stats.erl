@@ -153,7 +153,7 @@ get_stats(Guid, StatNames) ->
 
 
 -spec browse_historical_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> 
-    {ok, ts_browse_result:record()} | dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
+    {ok, ts_browse_result:record()} | dir_stats_collector:collecting_status_error() | od_error_internal_server_error:t().
 browse_historical_stats_collection(Guid, BrowseRequest) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
@@ -169,7 +169,7 @@ browse_historical_stats_collection(Guid, BrowseRequest) ->
                     Error
             end;
         false ->
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx())
     end.
 
 
@@ -340,7 +340,7 @@ report_remote_links_change(Uuid, SpaceId) ->
                         _ ->
                             ok
                     end;
-                ?ERROR_NOT_FOUND ->
+                ?ERR_NOT_FOUND ->
                     ok
             end
     end.
@@ -501,7 +501,7 @@ save(Guid, Collection, Incarnation) ->
             % {error, already_exists} is impossible - match create answer to ok
             ok = datastore_time_series_collection:create(?CTX, Uuid, Config),
             save(Guid, Collection, Incarnation);
-        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+        ?ERR_TSC_MISSING_LAYOUT(MissingLayout) ->
             MissingConfig = maps:with(maps:keys(MissingLayout), internal_stats_config(Guid)),
             ok = datastore_time_series_collection:incorporate_config(?CTX, Uuid, MissingConfig),
             ok = datastore_time_series_collection:consume_measurements(?CTX, Uuid, ConsumeSpec)
@@ -512,7 +512,7 @@ save(Guid, Collection, Incarnation) ->
 delete(Guid) ->
     case datastore_time_series_collection:delete(?CTX, file_id:guid_to_uuid(Guid)) of
         ok -> ok;
-        ?ERROR_NOT_FOUND -> ok
+        ?ERR_NOT_FOUND -> ok
     end.
 
 
@@ -546,7 +546,7 @@ init_child(Guid, IncludeDeleted) ->
                 false ->
                     init_existing_child(Guid, Doc)
             end;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             % Race with file deletion - stats will be invalidated by next update
             gen_empty_current_stats_and_handle_errors(Guid)
     end.
@@ -674,7 +674,7 @@ stat_names(Guid) ->
         {ok, StorageId} ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERROR_COUNT, ?DIR_ERROR_COUNT,
                 ?VIRTUAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
-        {error, not_found} ->
+        ?ERR_NOT_FOUND ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
                 false -> throw({error, space_unsupported})

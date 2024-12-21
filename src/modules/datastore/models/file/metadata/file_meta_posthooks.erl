@@ -75,7 +75,7 @@
 %%%===================================================================
 
 -spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 add_hook(MissingElement, Identifier, SpaceId, Module, Function, PosthookArgs) ->
     case ?SHOULD_IGNORE_ON_INITIAL_SYNC andalso dbsync_state:set_initial_sync_repeat(SpaceId) of
         ok ->
@@ -106,7 +106,7 @@ cleanup(FileUuid) ->
 
 %% @private
 -spec add_hook_internal(missing_element(), hook_identifier(), module(), atom(), [term()]) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs) ->
     FileUuid = get_hook_uuid(MissingElement),
     HookType = missing_element_to_hook_type(MissingElement),
@@ -147,7 +147,7 @@ add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs) ->
         Error ->
             ?error("~tp:~tp error adding file meta posthook for file ~tp (identifier ~tp, hook module ~tp, hook fun ~tp): ~tp",
                 [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Error]),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
     end.
 
 

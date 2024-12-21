@@ -270,7 +270,7 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
                         ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
                         case lfm:resolve_symlink(SessionId, ?FILE_REF(ChildGuid)) of
                             {ok, Guid} -> {ok, file_ctx:new_by_guid(Guid)};
-                            {error, ?ENOENT} -> ?ERROR_NOT_FOUND
+                            {error, ?ENOENT} -> ?ERR_NOT_FOUND(?err_ctx())
                         end;
                     false ->
                         {ok, ChildCtx}
@@ -280,7 +280,7 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
         end, {ok, DataDirCtx}, RelativeFilePathTokens)
     catch
         throw:?ENOENT ->
-            ?ERROR_NOT_FOUND
+            ?ERR_NOT_FOUND(?err_ctx())
     end.
 
 %%%===================================================================
@@ -460,10 +460,10 @@ mark_deleting(ArchiveId, Callback) ->
                     }
                 }};
             {false, undefined} ->
-                ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, ?ARCHIVE_FINISHED_STATES);
+                ?ERR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?err_ctx(), State, ?ARCHIVE_FINISHED_STATES);
             {_, Parent} ->
                 % nested archive cannot be deleted as it would destroy parent archive
-                ?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(Parent)
+                ?ERR_NESTED_ARCHIVE_DELETION_FORBIDDEN(?err_ctx(), Parent)
         end
     end).
 

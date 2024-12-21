@@ -47,7 +47,7 @@ resolve_handler(get, instance, public) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -98,7 +98,7 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = public}}) ->
     end;
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = update, gri = #gri{scope = private}}) ->
     % authorization will be checked by oz in during handle update
@@ -196,7 +196,7 @@ update(#op_req{auth = #auth{session_id = SessionId}, data = Data, gri = #gri{id 
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %% @private

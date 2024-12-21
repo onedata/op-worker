@@ -195,7 +195,7 @@ archivisation_of_detached_dataset_should_be_impossible(_Config) ->
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>),
+        ?ERR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>),
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)
     ).
 
@@ -277,7 +277,7 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
     ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ?assertEqual(?ERROR_POSIX(?ENOTEMPTY), opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
+    ?assertEqual(?ERR_POSIX(?ENOTEMPTY), opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
 
     ?assertEqual(ok, opt_archives:delete(P1Node, UserSessIdP1, ArchiveId)),
     % wait till archive is deleted
@@ -407,7 +407,7 @@ create_and_modify_archive_privileges_test(_Config) ->
     lists:foreach(fun(Privilege) ->
         ozt_spaces:set_privileges(SpaceId, UserId2, AllCreatePrivileges -- [Privilege]),
         % user2 cannot create archive
-        ?assertEqual(?ERROR_POSIX(?EPERM),
+        ?assertEqual(?ERR_POSIX(?EPERM),
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     
         ozt_spaces:set_privileges(SpaceId, UserId2, AllCreatePrivileges),
@@ -429,7 +429,7 @@ create_and_modify_archive_privileges_test(_Config) ->
     lists:foreach(fun(Privilege) ->
         ozt_spaces:set_privileges(SpaceId, UserId2, AllModifyPrivileges -- [Privilege]),
         % user2 cannot modify an existing archive either
-        ?assertEqual(?ERROR_POSIX(?EPERM),
+        ?assertEqual(?ERR_POSIX(?EPERM),
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
         
         ozt_spaces:set_privileges(SpaceId, UserId2, AllModifyPrivileges ),
@@ -463,10 +463,10 @@ view_archive_privileges_test(_Config) ->
     ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [?SPACE_VIEW_ARCHIVES]),
 
     % user2 cannot fetch archive info
-    ?assertEqual(?ERROR_POSIX(?EPERM),
+    ?assertEqual(?ERR_POSIX(?EPERM),
         opt_archives:get_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
     % neither can he list the archives
-    ?assertEqual(?ERROR_POSIX(?EPERM),
+    ?assertEqual(?ERR_POSIX(?EPERM),
         opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
@@ -507,7 +507,7 @@ remove_archive_privileges_test(_Config) ->
     
         ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- RequiredPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:delete(P1Node, User2SessIdP1, ArchiveId)),
+        ?assertEqual(?ERR_POSIX(?EPERM), opt_archives:delete(P1Node, User2SessIdP1, ArchiveId)),
     
         ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
         % user2 can now remove archive
@@ -604,13 +604,13 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ok = opt_archives:delete(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_DELETED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
-    ?assertEqual(?ERROR_NOT_FOUND,
+    ?assertEqual(?ERR_NOT_FOUND,
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, {[], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
 
     % verify whether Archive has been removed in the remote provider
-    ?assertEqual(?ERROR_NOT_FOUND,
+    ?assertEqual(?ERR_NOT_FOUND,
         opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, {[], true}},
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).

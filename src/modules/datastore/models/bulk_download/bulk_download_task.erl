@@ -97,7 +97,7 @@ lookup(BulkDownloadId) ->
                     {ok, Record};
                 false ->
                     delete(BulkDownloadId),
-                    ?ERROR_NOT_FOUND
+                    ?ERR_NOT_FOUND(?err_ctx())
             end;
         {error, _} = Error ->
             Error

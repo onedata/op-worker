@@ -799,14 +799,14 @@ lfm_monitored_open(Config) ->
             HandleId1 = lfm_context:get_handle_id(OpenedFileHandle),
             ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId1]), Attempts),
             ?assertMatch(true, rpc:call(W, file_handles, is_file_opened, [File1Uuid]), Attempts),
-            ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts),
+            ?assertMatch(?ERR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts),
 
             exit(ProcOpeningFile, kill),
             timer:sleep(1000),
 
             ?assertMatch({ok, _}, rpc:call(W, session_handles, get, [SessId1, HandleId1]), Attempts),
             ?assertMatch(true, rpc:call(W, file_handles, is_file_opened, [File1Uuid]), Attempts),
-            ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts);
+            ?assertMatch(?ERR_NOT_FOUND, GetAllProcessHandles(ProcOpeningFile), Attempts);
         Error1 ->
             ct:fail(Error1)
     end,
@@ -825,9 +825,9 @@ lfm_monitored_open(Config) ->
             exit(ProcMonitorOpeningFile, kill),
             timer:sleep(1000),
 
-            ?assertMatch(?ERROR_NOT_FOUND, rpc:call(W, session_handles, get, [SessId1, HandleId2]), Attempts),
+            ?assertMatch(?ERR_NOT_FOUND, rpc:call(W, session_handles, get, [SessId1, HandleId2]), Attempts),
             ?assertMatch(false, rpc:call(W, file_handles, is_file_opened, [File2Uuid]), Attempts),
-            ?assertMatch(?ERROR_NOT_FOUND, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts);
+            ?assertMatch(?ERR_NOT_FOUND, GetAllProcessHandles(ProcMonitorOpeningFile), Attempts);
         Error2 ->
             ct:fail(Error2)
     end,

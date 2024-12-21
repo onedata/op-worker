@@ -69,7 +69,7 @@ create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_cre
 
             AtmTaskSchemaId = AtmTaskSchema#atm_task_schema.id,
             Error = ?examine_exception(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Error))
+            throw(?ERR_ATM_TASK_EXECUTION_CREATION_FAILED(?err_ctx(), AtmTaskSchemaId, Error))
         end
     end, [], lists:enumerate(1, AtmTaskSchemas)).
 
@@ -124,7 +124,7 @@ delete(AtmTaskExecutionId) ->
                 time_series_store_id = AtmTaskTSStoreId
             }),
             atm_task_execution:delete(AtmTaskExecutionId);
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ok
     end.
 

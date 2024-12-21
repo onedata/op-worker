@@ -1388,7 +1388,7 @@ mock_harvester_logic_get(Nodes, HarvestersConfig) ->
     ok = test_utils:mock_expect(Nodes, harvester_logic, get, fun(HarvesterId) ->
         case maps:get(HarvesterId, HarvestersConfig, undefined) of
             undefined ->
-                ?ERROR_NOT_FOUND;
+                ?ERR_NOT_FOUND;
             Doc = #document{} ->
                 {ok, Doc}
         end
@@ -1398,7 +1398,7 @@ mock_space_logic_get_harvesters(Nodes, SpacesConfig) ->
     ok = test_utils:mock_expect(Nodes, space_logic, get_harvesters, fun(SpaceId) ->
         case maps:get(SpaceId, SpacesConfig, undefined) of
             undefined ->
-                ?ERROR_NOT_FOUND;
+                ?ERR_NOT_FOUND;
             Harvesters when is_list(Harvesters) ->
                 {ok, Harvesters}
         end

@@ -148,7 +148,7 @@ run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
                 run_diagnostics_on_nodes_insecure(Nodes, Helper, ExtendedAdminCtx, Options)
         end
     catch throw:?OPERATION_FAILED(Operation, Reason) ->
-        {?ERROR_STORAGE_TEST_FAILED(Operation), Reason}
+        {?ERR_STORAGE_TEST_FAILED(?err_ctx(), Operation), Reason}
     end.
 
 

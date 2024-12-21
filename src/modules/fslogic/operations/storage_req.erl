@@ -77,7 +77,7 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
             #fuse_response{status = #status{code = ?EACCES}};
         {{ok, StorageData}, _} ->
             get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageData);
-        {?ERROR_NOT_FOUND, _} ->
+        {?ERR_NOT_FOUND, _} ->
             get_proxy_storage_helper_params(StorageId, undefined)
     end.
 

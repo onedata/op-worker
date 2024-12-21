@@ -934,7 +934,8 @@ socket_send(#state{
 
 
 %% @private
--spec to_serialized_data(state(), binary() | #client_message{} | #server_message{}) -> {ok, binary()} | errors:error().
+-spec to_serialized_data(state(), binary() | #client_message{} | #server_message{}) ->
+    {ok, binary()} | {error, serialization_failed} | errors:error().
 to_serialized_data(_State, Binary) when is_binary(Binary) ->
     {ok, Binary};
 to_serialized_data(#state{session_id = SessId} = State, Msg) ->
@@ -1001,7 +1002,7 @@ call_connection_process(ConnPid, Msg) ->
             ?debug("Timeout of connection process ~tp for message ~ts", [
                 ConnPid, maybe_stringify_msg(Msg)
             ]),
-            ?ERROR_TIMEOUT;
+            ?ERR_TIMEOUT(?err_ctx());
         Class:Reason:Stacktrace ->
             MsgStr = maybe_stringify_msg(Msg),
             ?error_exception(

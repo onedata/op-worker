@@ -159,8 +159,8 @@
 -type dir_status() :: flushed | unflushed | initializing.
 -type pruning_strategy() :: prune_flushed | prune_inactive.
 
--type collecting_status_error() :: ?ERROR_DIR_STATS_NOT_READY | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
--type error() :: collecting_status_error() | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
+-type collecting_status_error() :: od_error_dir_stats_not_ready:t() | od_error_dir_stats_disabled_for_space:t().
+-type error() :: collecting_status_error() | od_error_not_found:t() | od_error_internal_server_error:t().
 -export_type([collecting_status_error/0, error/0]).
 
 -type pid_to_notify() :: pid() | undefined.
@@ -206,14 +206,14 @@ get_stats(Guid, CollectionType, StatNames) ->
             },
             call_designated_node(Guid, submit_and_await, [?MODULE, Guid, Request]);
         {initializing, _} ->
-            ?ERROR_DIR_STATS_NOT_READY;
+            ?ERR_DIR_STATS_NOT_READY(?err_ctx());
         _ ->
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx())
     end.
 
 
 -spec update_stats_of_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
@@ -224,29 +224,29 @@ update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
 
 
 -spec update_stats_of_dir_without_state_check(file_id:file_guid(), dir_stats_collection:type(),
-    dir_stats_collection:collection()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    dir_stats_collection:collection()) -> ok | od_error_internal_server_error:t().
 update_stats_of_dir_without_state_check(Guid, CollectionType, CollectionUpdate) ->
     update_stats_of_dir(Guid, external, CollectionType, CollectionUpdate).
 
 
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate) ->
     update_stats_of_parent(Guid, CollectionType, CollectionUpdate, add_hook).
 
 
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection(),
-    add_hook | return_error) -> ok | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
+    add_hook | return_error) -> ok | od_error_not_found:t() | od_error_internal_server_error:t().
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandlingMethod) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case get_parent(Guid) of
                 {ok, ParentGuid} ->
                     update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate);
-                ?ERROR_NOT_FOUND when ParentErrorHandlingMethod =:= add_hook ->
+                ?ERR_NOT_FOUND when ParentErrorHandlingMethod =:= add_hook ->
                     add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate);
-                ?ERROR_NOT_FOUND ->
-                    ?ERROR_NOT_FOUND
+                ?ERR_NOT_FOUND = ErrorNotFound ->
+                    ErrorNotFound
             end;
         false ->
             ok
@@ -260,7 +260,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandli
 %% @end
 %%--------------------------------------------------------------------
 -spec update_stats_of_nearest_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     case dir_stats_service_state:is_active(SpaceId) of
@@ -273,7 +273,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                         _ ->
                             update_stats_of_parent_internal(get_parent(Doc, SpaceId), CollectionType, CollectionUpdate)
                     end;
-                ?ERROR_NOT_FOUND ->
+                ?ERR_NOT_FOUND ->
                     add_missing_file_meta_on_update_posthook(Guid, CollectionType, CollectionUpdate)
             end;
         false ->
@@ -282,16 +282,16 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 
 
 -spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) ->
-    ok | collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | collecting_status_error() | od_error_internal_server_error:t().
 flush_stats(Guid, CollectionType) ->
     case dir_stats_service_state:get_extended_status(file_id:guid_to_space_id(Guid)) of
         enabled -> request_flush(Guid, CollectionType, prune_inactive);
-        {initializing, _} -> ?ERROR_DIR_STATS_NOT_READY;
-        _ -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+        {initializing, _} -> ?ERR_DIR_STATS_NOT_READY(?err_ctx());
+        _ -> ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx())
     end.
 
 
--spec delete_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec delete_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | od_error_internal_server_error:t().
 delete_stats(Guid, CollectionType) ->
     % TODO VFS-9204 - delete only for directories
     % TODO VFS-9204 - delete collection when collecting was enabled in past
@@ -303,15 +303,15 @@ delete_stats(Guid, CollectionType) ->
             ok;
 %%            case request_flush(Guid, CollectionType, prune_flushed) of
 %%                ok -> CollectionType:delete(Guid);
-%%                ?ERROR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
-%%                ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
+%%                ?ERR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
+%%                ?ERR_INTERNAL_SERVER_ERROR = Error -> Error
 %%            end;
         false ->
             CollectionType:delete(Guid)
     end.
 
 
--spec initialize_collections(file_id:file_guid()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec initialize_collections(file_id:file_guid()) -> ok | od_error_internal_server_error:t().
 initialize_collections(Guid) ->
     call_designated_node(Guid, submit_and_await, [?MODULE, Guid, ?INITIALIZE_COLLECTIONS(Guid, self())]).
 
@@ -461,9 +461,9 @@ handle_call(#dsc_get_request{
             {ok, #cached_dir_stats{current_stats = _CurrentStats, collecting_status = initializing}},
             UpdatedState
         } ->
-            {?ERROR_DIR_STATS_NOT_READY, UpdatedState};
+            {?ERR_DIR_STATS_NOT_READY(?err_ctx()), UpdatedState};
         {
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+            ?ERR_DIR_STATS_DISABLED_FOR_SPACE,
             _UpdatedState
         } = Error ->
             Error
@@ -527,7 +527,7 @@ handle_cast(#dsc_update_request{
     end, State),
 
     case UpdateAns of
-        {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, UpdatedState} ->
+        {?ERR_DIR_STATS_DISABLED_FOR_SPACE, UpdatedState} ->
             UpdatedState;
         {{ok, #cached_dir_stats{collecting_status = initializing}}, UpdatedState} ->
             abort_collection_initialization(Guid, CollectionType, UpdatedState);
@@ -560,7 +560,7 @@ handle_cast(Info, State) ->
 %%%===================================================================
 
 -spec add_missing_file_meta_on_update_posthook(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 add_missing_file_meta_on_update_posthook(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     file_meta_posthooks:add_hook(?MISSING_FILE_META(FileUuid), generator:gen_name(),
@@ -588,7 +588,7 @@ decode_file_meta_posthook_args(update_stats_of_nearest_dir, EncodedArgs) ->
 
 %% @private
 -spec update_stats_of_dir(file_id:file_guid(), update_type(), dir_stats_collection:type(),
-    dir_stats_collection:collection()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    dir_stats_collection:collection()) -> ok | od_error_internal_server_error:t().
 update_stats_of_dir(Guid, UpdateType, CollectionType, CollectionUpdate) ->
     Request = #dsc_update_request{
         guid = Guid,
@@ -640,7 +640,7 @@ update_collection_in_cache(CollectionType, _UpdateType, CollectionUpdate, #cache
 
 %% @private
 -spec request_flush(file_id:file_guid(), dir_stats_collection:type(), PruningStrategy :: pruning_strategy()) ->
-    ok | ?ERROR_DIR_STATS_NOT_READY | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_dir_stats_not_ready:t() | od_error_internal_server_error:t().
 request_flush(Guid, CollectionType, PruningStrategy) ->
     Request = #dsc_flush_request{
         guid = Guid,
@@ -677,7 +677,7 @@ flush_all(#state{
 
 %% @private
 -spec flush_cached_dir_stats(cached_dir_stats_key(), pruning_strategy(), state()) ->
-    {ok | ?ERROR_DIR_STATS_NOT_READY | ?ERROR_INTERNAL_SERVER_ERROR, state()}.
+    {ok | od_error_dir_stats_not_ready:t() | od_error_internal_server_error:t(), state()}.
 flush_cached_dir_stats(CachedDirStatsKey, _, State) when not is_map_key(CachedDirStatsKey, State#state.dir_stats_cache) ->
     {ok, State}; % Key cannot be found - it has been flushed and pruned
 flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy, State) ->
@@ -694,7 +694,7 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
                 {flushed, prune_inactive} ->
                     {ok, update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, UpdatedState)};
                 {unflushed, _} ->
-                    {?ERROR_INTERNAL_SERVER_ERROR,
+                    {?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined),
                         update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, UpdatedState)}
             end;
         flushed ->
@@ -711,7 +711,7 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
                         CachedDirStatsKey, set_collecting_enabled(CachedDirStats, CollectionType), State),
                     flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, UpdatedState);
                 false ->
-                    {?ERROR_DIR_STATS_NOT_READY, State}
+                    {?ERR_DIR_STATS_NOT_READY(?err_ctx()), State}
             end
     end.
 
@@ -955,7 +955,7 @@ ensure_initialization_scheduled(State) ->
 
 %% @private
 -spec reset_last_used_timer(file_id:file_guid(), dir_stats_collection:type(), state()) ->
-    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE, state()} | no_return().
+    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | od_error_dir_stats_disabled_for_space:t(), state()} | no_return().
 reset_last_used_timer(Guid, CollectionType, State) ->
     update_in_cache(Guid, CollectionType, fun(CachedDirStats) -> CachedDirStats end, State).
 
@@ -963,7 +963,7 @@ reset_last_used_timer(Guid, CollectionType, State) ->
 %% @private
 -spec update_in_cache(file_id:file_guid(), dir_stats_collection:type(),
     fun((cached_dir_stats()) -> cached_dir_stats()), state()) ->
-    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE, state()} | no_return().
+    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | od_error_dir_stats_disabled_for_space:t(), state()} | no_return().
 update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCache} = State) ->
     CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
     FindAns = case maps:find(CachedDirStatsKey, DirStatsCache) of
@@ -995,12 +995,12 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
                         ))
                     };
                 {_, _, State2} ->
-                    {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, State2}
+                    {?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx()), State2}
             end
     end,
 
     case FindAns of
-        {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, _UpdatedState} ->
+        {?ERR_DIR_STATS_DISABLED_FOR_SPACE, _UpdatedState} ->
             FindAns;
         {CachedDirStats, UpdatedState} ->
             UpdatedCachedDirStats = Diff(CachedDirStats#cached_dir_stats{last_used = stopwatch:start()}),
@@ -1025,7 +1025,7 @@ update_cached_dir_stats(CachedDirStatsKey, CachedDirStats, #state{dir_stats_cach
 
 %% @private
 -spec update_stats_of_parent_internal(file_id:file_guid(), dir_stats_collection:type(),
-    dir_stats_collection:collection()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    dir_stats_collection:collection()) -> ok | od_error_internal_server_error:t().
 update_stats_of_parent_internal(<<"root_dir">> = _ParentGuid, _CollectionType, _CollectionUpdate) ->
     ok;
 update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
@@ -1085,7 +1085,7 @@ cache_parent(Guid, #cached_dir_stats{
                     pes:self_cast(?FILE_MOVED(Guid, ParentGuidToCache)),
                     CachedDirStats#cached_dir_stats{parent = OldParentGuid}
             end;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             CachedDirStats
     end;
 
@@ -1094,12 +1094,12 @@ cache_parent(_Guid, CachedDirStats) ->
 
 
 %% @private
--spec get_parent(file_id:file_guid()) -> {ok, file_id:file_guid()} | ?ERROR_NOT_FOUND.
+-spec get_parent(file_id:file_guid()) -> {ok, file_id:file_guid()} | od_error_not_found:t().
 get_parent(Guid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     case file_meta:get_including_deleted_local_or_remote(FileUuid, SpaceId) of
         {ok, Doc} -> {ok, get_parent(Doc, SpaceId)};
-        ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND
+        ?ERR_NOT_FOUND = ErrorNotFound -> ErrorNotFound
     end.
 
 
@@ -1139,7 +1139,7 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
 
 %% @private
 -spec add_hook_for_missing_doc(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | od_error_internal_server_error:t().
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     file_meta_posthooks:add_hook(?MISSING_FILE_META(FileUuid), generator:gen_name(), SpaceId,
@@ -1152,12 +1152,12 @@ add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
 call_designated_node(Guid, Function, Args) ->
     Node = consistent_hashing:get_assigned_node(Guid),
     case erpc:call(Node, pes, Function, Args) of
-        ?ERROR_DIR_STATS_NOT_READY -> ?ERROR_DIR_STATS_NOT_READY;
-        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
-        ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND;
+        ?ERR_DIR_STATS_NOT_READY = ErrorDirStatsNotReady -> ErrorDirStatsNotReady;
+        ?ERR_DIR_STATS_DISABLED_FOR_SPACE = ErrorDirStatsDisabledForSpace -> ErrorDirStatsDisabledForSpace;
+        ?ERR_NOT_FOUND = ErrorNotFound -> ErrorNotFound;
         {error, _} = Error ->
             ?error("Dir stats collector PES fun ~tp error: ~tp for guid ~tp", [Function, Error, Guid]),
-            ?ERROR_INTERNAL_SERVER_ERROR;
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined);
         Other ->
             Other
     end.
@@ -1228,7 +1228,7 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
             dir_stats_collector_metadata:update_parent(Guid, TargetParentGuid),
             UpdatedState2;
         {
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+            ?ERR_DIR_STATS_DISABLED_FOR_SPACE,
             UpdatedState
         } ->
             UpdatedState

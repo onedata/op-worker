@@ -49,7 +49,7 @@ unauthorized_access_error_test(Config) ->
     Config#cdmi_test_config.p1_selector),
     {ok, Code, _Headers, Response} =
         cdmi_test_utils:do_request(?WORKERS(Config), TestDirName, get, [], []),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_UNAUTHORIZED),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_UNAUTHORIZED(undefined)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
@@ -77,7 +77,7 @@ open_binary_file_without_permission_test(Config) ->
         ?ATTEMPTS
     ),
     ?assertMatch(ok, cdmi_test_utils:unmock_opening_file_without_perms(Config), ?ATTEMPTS),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}, ?ATTEMPTS).
 
 
@@ -109,7 +109,7 @@ open_cdmi_file_without_permission_test(Config) ->
         ?ATTEMPTS
     ),
     ?assertMatch(ok, cdmi_test_utils:unmock_opening_file_without_perms(Config), ?ATTEMPTS),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}, ?ATTEMPTS).
 
 
@@ -371,7 +371,7 @@ delete_dir_test(Config) ->
         ),
         {Code3, json_utils:decode(Response3)}
     end,
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EPERM)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?EPERM)),
     ?assertMatch(ExpRestError, GetResponseFun(), ?ATTEMPTS),
     ?assert(cdmi_test_utils:object_exists("/", Config)).
 
@@ -472,7 +472,7 @@ update_file_http_test(Config) ->
         cdmi_test_utils:do_request(WorkerP1, FilePath, put, [cdmi_test_utils:user_2_token_header() | RequestHeaders3],
             UpdateValue),
 
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(?HDR_CONTENT_RANGE)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(?HDR_CONTENT_RANGE)),
     ?assertMatch(ExpRestError, {Code3, json_utils:decode(Response3)}),
     ?assert(cdmi_test_utils:object_exists(FilePath, Config)),
     ?assertEqual(<<"12300content!">>,
@@ -492,7 +492,7 @@ use_unsupported_cdmi_version_test(Config) ->
     RequestHeaders = [{<<"X-CDMI-Specification-Version">>, <<"1.0.2">>}],
     {ok, Code, _ResponseHeaders, Response} =
         cdmi_test_utils:do_request(?WORKERS(Config), "/random", get, RequestHeaders),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
@@ -653,7 +653,7 @@ out_of_range_test(Config) ->
         ),
         {Code4, json_utils:decode(Response4)}
     end,
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"childrenrange">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(<<"childrenrange">>)),
 
     ?assertMatch(ExpRestError, GetResponseErrorFun(), ?ATTEMPTS).
 

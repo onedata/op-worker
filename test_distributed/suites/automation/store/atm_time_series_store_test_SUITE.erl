@@ -136,7 +136,7 @@ create_test(_Config) ->
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
 
     ?assertThrow(
-        ?ERROR_BAD_DATA(<<"initialContent">>, <<"Time series store does not accept initial content">>),
+        ?ERR_BAD_DATA(<<"initialContent">>, <<"Time series store does not accept initial content">>),
         ?erpc(atm_store_api:create(AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, [], AtmStoreSchema))
     ),
 
@@ -249,25 +249,25 @@ manage_content_test(_Config) ->
             AtmWorkflowExecutionAuth, InvalidData, ContentUpdateOpts, AtmStoreId
         )))
     end, [
-        {5, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(5, atm_time_series_measurement_type)},
-        {<<"BIN">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"BIN">>, atm_time_series_measurement_type)},
+        {5, ?ERR_ATM_DATA_TYPE_UNVERIFIED(5, atm_time_series_measurement_type)},
+        {<<"BIN">>, ?ERR_ATM_DATA_TYPE_UNVERIFIED(<<"BIN">>, atm_time_series_measurement_type)},
         {
             [#{<<"ts">> => <<"name">>}],
-            ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 [#{<<"ts">> => <<"name">>}],
                 atm_array_type,
-                #{<<"$[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                #{<<"$[0]">> => errors:to_json(?ERR_ATM_DATA_TYPE_UNVERIFIED(
                     #{<<"ts">> => <<"name">>}, atm_time_series_measurement_type
                 ))}
             )
         },
         {
             [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
-            ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
                 atm_array_type,
                 #{<<"$[1]">> => errors:to_json(
-                    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(10, atm_time_series_measurement_type)
+                    ?ERR_ATM_DATA_TYPE_UNVERIFIED(10, atm_time_series_measurement_type)
                 )}
             )
         }
@@ -391,7 +391,7 @@ manage_content_test(_Config) ->
             }
         ]
     },
-    ExpError = ?ERROR_BAD_DATA(<<"dispatchRules">>, <<
+    ExpError = ?ERR_BAD_DATA(<<"dispatchRules">>, <<
         "Time series name generator 'shroedinger_' specified in one of the dispatch rules "
         "does not reference any defined time series schema"
     >>),

@@ -85,7 +85,7 @@ ensure_dataset_archives_dir_exists(DatasetId, SpaceId) ->
     ),
     case create_file_meta(ArchivesRootDirUuid, DatasetArchivesDirDoc) of
         ok -> ok;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             {ok, _} = ensure_archives_root_dir_exists(SpaceId),
             ok = create_file_meta(ArchivesRootDirUuid, DatasetArchivesDirDoc)
     end,
@@ -112,7 +112,7 @@ create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
     case create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc) of
         ok ->
             ok;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             {ok, _} = ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
             ok = create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc)
     end,
@@ -158,7 +158,7 @@ is_in_archive(CanonicalPath) ->
     end.
 
 
--spec extract_archive_id(file_meta:path()) -> {ok, archive:id()} | {error, term()}.
+-spec extract_archive_id(file_meta:path()) -> {ok, archive:id()} | od_error_not_found:t().
 extract_archive_id(CanonicalPath) ->
     ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
     case filename:split(CanonicalPath) of
@@ -171,7 +171,7 @@ extract_archive_id(CanonicalPath) ->
         ] ->
             {ok, ArchiveId};
         _ ->
-            ?ERROR_NOT_FOUND
+            ?ERR_NOT_FOUND(?err_ctx())
     end.
 
 

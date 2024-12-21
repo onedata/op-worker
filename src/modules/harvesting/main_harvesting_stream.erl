@@ -217,7 +217,7 @@ custom_error_handling(State = #hs_state{
                         last_persisted_seq = MaxSeenSeq,
                         last_harvest_timestamp = global_clock:timestamp_seconds()
                     })};
-                ?ERROR_NOT_FOUND ->
+                ?ERR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end;
         {false, true} ->
@@ -239,7 +239,7 @@ custom_error_handling(State = #hs_state{
                         last_persisted_seq = MaxSuccessfulSeq,
                         batch = harvesting_batch:strip(Batch, MaxSuccessfulSeq)
                     })};
-                ?ERROR_NOT_FOUND ->
+                ?ERR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end;
         {false, false} ->
@@ -262,17 +262,17 @@ start_aux_streams_according_to_summary(State = #hs_state{
     MaxSuccessfulSeq = harvesting_result:get_max_successful_seq(Result),
     Summary = harvesting_result:get_summary(Result),
     maps:fold(fun
-        (?ERROR_NOT_FOUND, _ErrorDest, AccIn) ->
+        (?ERR_NOT_FOUND, _ErrorDest, AccIn) ->
             % Harvesters in _ErrorDest were deleted
             % we can ignore this error
             AccIn;
 
-        (?ERROR_FORBIDDEN, _ErrorDest, AccIn) ->
+        (?ERR_FORBIDDEN, _ErrorDest, AccIn) ->
             % Harvesters in _ErrorDest were deleted from space
             % we can ignore this error
             AccIn;
 
-        (?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName), ErrorDest, {DestIn, AuxDestIn}) ->
+        (?ERR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName), ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
                 ?warning(
                     "An error occured for harvester ~tp due to a failed external service (~ts) operation. "
@@ -285,7 +285,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
             end, ErrorDest),
             {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
 
-        (?ERROR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
+        (?ERR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
                 ?warning("Harvester ~tp is temporarily unavailable. "
                 "Starting aux_harvesting_streams", [HarvesterId]),
@@ -318,7 +318,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
                             harvesting_stream_sup:start_aux_stream(SpaceId,
                                 HarvesterId, IndexId, MaxSuccessfulSeq)
                         end, Indices);
-                    ?ERROR_NOT_FOUND ->
+                    ?ERR_NOT_FOUND ->
                         harvesting_stream:throw_harvesting_not_found_exception(State)
                 end
             end, Dest),
@@ -572,10 +572,10 @@ remove_harvester(HarvesterId, State) ->
         {ok, _} ->
             % harvester doesn't have space handled by this stream
             false;
-        ?ERROR_FORBIDDEN ->
+        ?ERR_FORBIDDEN ->
             % harvester doesn't have spaces supported by this provider
             false;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             % harvester was permanently deleted in onezone
             true
     end,

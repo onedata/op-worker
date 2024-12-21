@@ -103,7 +103,7 @@ create(#atm_store_container_creation_args{
 
 -spec copy(record()) -> no_return().
 copy(_) ->
-    throw(?ERROR_NOT_SUPPORTED).
+    throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 -spec get_config(record()) -> atm_audit_log_store_config:record().
@@ -259,7 +259,7 @@ sanitize_append_requests(
     Requests;
 
 sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogLevel, _LogContentDataSpec, Item) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Item, atm_array_type)).
+    throw(?ERR_ATM_DATA_TYPE_UNVERIFIED(?err_ctx(), Item, atm_array_type)).
 
 
 %% @private

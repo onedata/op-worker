@@ -134,7 +134,7 @@ save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _Gene
     % Spaces are handled specially so as to not overwrite file_meta if it already
     % exists ('ensure_space_docs_exist' may be called several times for each space)
     case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
-        ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
+        ?ERR_ALREADY_EXISTS -> file_meta:get(FileUuid);
         Result -> Result
     end;
 save(Doc, GeneratedKey) ->
@@ -445,7 +445,7 @@ get_child(ParentUuid, Name) ->
 trim_disambiguated_name_provider_suffix(Name, {all, ParentUuid}) ->
     TreeIds = case file_meta_forest:get_trees(ParentUuid) of
         {ok, T} -> T;
-        ?ERROR_NOT_FOUND -> []
+        ?ERR_NOT_FOUND -> []
     end,
     lists_utils:foldl_while(fun(TreeId, NameAcc) ->
         case trim_disambiguated_name_provider_suffix(NameAcc, TreeId) of
@@ -484,7 +484,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
                             _ -> false
                         end
                     end, TreeIds);
-                ?ERROR_NOT_FOUND ->
+                ?ERR_NOT_FOUND ->
                     []
             end,
             case MatchingTreeIds of
@@ -848,7 +848,7 @@ new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
             provider_id = oneprovider:get_id(),
             deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> false;
-                ?ERROR_NOT_FOUND -> true
+                ?ERR_NOT_FOUND -> true
             end
         },
         scope = SpaceId
@@ -982,7 +982,7 @@ validate_protection_flags(ProtectionFlags) when
     ?has_all_flags(ProtectionFlags, ?METADATA_PROTECTION),
     ?has_no_flags(ProtectionFlags, ?DATA_PROTECTION)
 ->
-    ?ERROR_BAD_DATA(<<"protectionFLags">>, str_utils:format_bin("Cannot set ~ts without ~ts", [
+    ?ERR_BAD_DATA(?err_ctx(), <<"protectionFLags">>, str_utils:format_bin("Cannot set ~ts without ~ts", [
         ?METADATA_PROTECTION_BIN, ?DATA_PROTECTION_BIN
     ]));
 validate_protection_flags(_) ->

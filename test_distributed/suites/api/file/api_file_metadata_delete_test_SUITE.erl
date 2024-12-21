@@ -111,13 +111,13 @@ delete_file_xattrs(Config) ->
             [?RDF_METADATA_KEY, ?JSON_METADATA_KEY, ?ACL_KEY, ?XATTR_1_KEY, <<"dummy.xattr">>]
         ]},
         bad_values = [
-            {<<"keys">>, <<"aaa">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"keys">>)},
-            {<<"keys">>, [<<?ONEDATA_PREFIX/binary, "xattr">>], ?ERROR_POSIX(?EPERM)},
+            {<<"keys">>, <<"aaa">>, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"keys">>)},
+            {<<"keys">>, [<<?ONEDATA_PREFIX/binary, "xattr">>], ?ERR_POSIX(?EPERM)},
             % Cdmi xattrs (other than acl) can't be deleted via xattr api
-            {<<"keys">>, [?MIMETYPE_KEY], ?ERROR_POSIX(?EPERM)},
-            {<<"keys">>, [?TRANSFER_ENCODING_KEY], ?ERROR_POSIX(?EPERM)},
-            {<<"keys">>, [?CDMI_COMPLETION_STATUS_KEY], ?ERROR_POSIX(?EPERM)},
-            {<<"keys">>, [<<?CDMI_PREFIX/binary, "xattr">>], ?ERROR_POSIX(?EPERM)}
+            {<<"keys">>, [?MIMETYPE_KEY], ?ERR_POSIX(?EPERM)},
+            {<<"keys">>, [?TRANSFER_ENCODING_KEY], ?ERR_POSIX(?EPERM)},
+            {<<"keys">>, [?CDMI_COMPLETION_STATUS_KEY], ?ERR_POSIX(?EPERM)},
+            {<<"keys">>, [<<?CDMI_PREFIX/binary, "xattr">>], ?ERR_POSIX(?EPERM)}
         ]
     },
 
@@ -206,7 +206,7 @@ delete_metadata_test_base(
                 MetadataType, FileShareGuid, public
             ),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
+                ?assertEqual(?ERR_NOT_SUPPORTED, Result)
             end,
             data_spec = DataSpec
         }
@@ -257,7 +257,7 @@ build_verify_fun(preset_initial_metadata, FileGuid, MetadataType, ExpMetadata, N
         (expected_success, _) ->
             lists:foreach(fun(Node) ->
                 ?assertMatch(
-                    ?ERROR_POSIX(?ENODATA),
+                    ?ERR_POSIX(?ENODATA),
                     api_test_utils:get_metadata(Node, FileGuid, MetadataType),
                     ?ATTEMPTS
                 )
@@ -268,7 +268,7 @@ build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Node
     fun(_, _) ->
         lists:foreach(fun(Node) ->
             ?assertMatch(
-                ?ERROR_POSIX(?ENODATA),
+                ?ERR_POSIX(?ENODATA),
                 api_test_utils:get_metadata(Node, FileGuid, MetadataType),
                 ?ATTEMPTS
             )

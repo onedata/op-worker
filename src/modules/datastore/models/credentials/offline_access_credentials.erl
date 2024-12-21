@@ -44,11 +44,11 @@ save(Id, Record) ->
     ok.
 
 
--spec get(id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+-spec get(id()) -> {ok, record()} | od_error_not_found:t().
 get(Id) ->
     case datastore_model:get(?CTX, Id) of
         {ok, Doc} -> {ok, Doc#document.value};
-        {error, not_found} -> ?ERROR_NOT_FOUND
+        {error, not_found} -> ?ERR_NOT_FOUND(?err_ctx())
     end.
 
 

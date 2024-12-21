@@ -90,8 +90,8 @@ gather_storage_locations(UserCtx, FileCtx0) ->
     {FileType, FileCtx3} = file_ctx:get_type(FileCtx2),
     
     case FileType of
-        ?DIRECTORY_TYPE -> ?ERROR_NOT_SUPPORTED;
-        ?SYMLINK_TYPE -> ?ERROR_NOT_SUPPORTED;
+        ?DIRECTORY_TYPE -> ?ERR_NOT_SUPPORTED(?err_ctx());
+        ?SYMLINK_TYPE -> ?ERR_NOT_SUPPORTED(?err_ctx());
         _ -> {ok, gather_reg_storage_locations(FileCtx3)}
     end.
 

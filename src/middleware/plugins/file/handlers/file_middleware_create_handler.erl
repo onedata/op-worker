@@ -45,7 +45,7 @@ assert_operation_supported(json_metadata, private)         -> ok;    % REST/gs
 assert_operation_supported(rdf_metadata, private)          -> ok;    % REST/gs
 assert_operation_supported(register_file, private)         -> ok;
 assert_operation_supported(cancel_archive_recall, private) -> ok;
-assert_operation_supported(_, _)                           -> throw(?ERROR_NOT_SUPPORTED).
+assert_operation_supported(_, _)                           -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -72,7 +72,7 @@ data_spec(#gri{aspect = instance}, Data) ->
                 #gri{type = op_file, id = ParentGuid, aspect = instance} ->
                     {true, ParentGuid};
                 _ ->
-                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"parent">>))
+                    throw(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), <<"parent">>))
             catch _:_ ->
                 false
             end
@@ -109,9 +109,9 @@ data_spec(#gri{aspect = attrs}, _) ->
                     ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
                         {true, ValidMode};
                     _ ->
-                        throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#1777))
+                        throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), ModeParam, 0, 8#1777))
                 catch _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
+                    throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), ModeParam))
                 end
             end}
         }
@@ -283,7 +283,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json
         {undefined, _} ->
             [];
         {<<"keypath">>, undefined} ->
-            throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+            throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"filter">>));
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
     end,
@@ -315,7 +315,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
         throw:{error, _} = Error ->
             throw(Error);
         throw:PosixErrno ->
-            throw(?ERROR_POSIX(PosixErrno))
+            throw(?ERR_POSIX(?err_ctx(), PosixErrno))
     end;
 
 create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = cancel_archive_recall}}) ->
@@ -357,7 +357,7 @@ delete(_) ->
 ) ->
     {ok, file_id:file_guid()} | no_return().
 create_file(_, _, _, _, _, Counter, Attempts) when Counter >= Attempts ->
-    throw(?ERROR_POSIX(?EEXIST));
+    throw(?ERR_POSIX(?err_ctx(), ?EEXIST));
 create_file(SessId, ParentGuid, OriginalName, Type, Target, Counter, Attempts) ->
     Name = maybe_add_file_suffix(OriginalName, Counter),
     case create_file(SessId, ParentGuid, Name, Type, Target) of

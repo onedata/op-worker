@@ -53,7 +53,7 @@ acquire_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
             )}
         catch Type:Reason:Stacktrace ->
             Error = ?examine_exception(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Error))
+            throw(?ERR_ATM_TASK_ARG_MAPPING_FAILED(?err_ctx(), ArgName, Error))
         end
     end, #{<<"__meta">> => #{<<"traceId">> => TraceId}}, AtmTaskExecutionArgSpecs).
 
@@ -131,11 +131,11 @@ build_specs(
     _AtmTaskSchemaArgMappers,
     _AtmTaskExecutionArgSpecs
 ) ->
-    throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_REQUIRED_LAMBDA_ARG_MISSING(Name));
+    throw(?ERR_ATM_TASK_ARG_MAPPER_FOR_REQUIRED_LAMBDA_ARG_MISSING(?err_ctx(), Name));
 
 build_specs(
     [],
     [#atm_task_schema_argument_mapper{argument_name = Name} | _],
     _AtmTaskExecutionArgSpecs
 ) ->
-    throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
+    throw(?ERR_ATM_TASK_ARG_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(?err_ctx(), Name)).

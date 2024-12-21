@@ -80,7 +80,7 @@ get_current_run(SpaceId) ->
 create_or_update(SpaceId, NewConfiguration) ->
     SupportSize = case provider_logic:get_support_size(SpaceId) of
         {ok, S} -> S;
-        {error, not_found} -> 0
+        ?ERR_NOT_FOUND -> 0
     end,
     case autocleaning:get(SpaceId) of
         {error, not_found} ->

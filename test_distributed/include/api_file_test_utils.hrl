@@ -36,7 +36,7 @@
     ],
     unauthorized = [nobody],
     forbidden_not_in_space = [user1],
-    forbidden_in_space = [{user4, ?ERROR_POSIX(__ERRNO)}]
+    forbidden_in_space = [{user4, ?ERR_POSIX(__ERRNO)}]
 }).
 -define(CLIENT_SPEC_FOR_SPACE_KRK_PAR, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EACCES)).
 

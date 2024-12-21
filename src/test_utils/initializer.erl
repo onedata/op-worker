@@ -572,7 +572,7 @@ mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
                                     Err1
                             end;
                         false ->
-                            ?ERROR_USER_NOT_SUPPORTED
+                            ?ERR_USER_NOT_SUPPORTED(?err_ctx())
                     end;
                 {error, _} = Err2 ->
                     Err2
@@ -1526,7 +1526,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         (?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)) ->
             {ok, ?SUB(?ONEPROVIDER, ProviderId)};
         (_) ->
-            ?ERROR_BAD_TOKEN
+            ?ERR_BAD_TOKEN(?err_ctx())
     end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),

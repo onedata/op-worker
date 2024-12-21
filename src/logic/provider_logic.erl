@@ -94,7 +94,7 @@ get(ProviderId) ->
     {ok, od_provider:doc()} | errors:error().
 get(SessionId, ?SELF) ->
     case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_ONEPROVIDER;
+        undefined -> ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         ProviderId -> get(SessionId, ProviderId)
     end;
 get(SessionId, ProviderId) ->
@@ -113,7 +113,7 @@ get(SessionId, ProviderId) ->
     {ok, od_provider:doc()} | errors:error().
 get_protected_data(SessionId, ?SELF) ->
     case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_ONEPROVIDER;
+        undefined -> ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         ProviderId -> get_protected_data(SessionId, ProviderId)
     end;
 get_protected_data(SessionId, ProviderId) ->
@@ -333,14 +333,14 @@ supports_space(SessionId, ProviderId, SpaceId) ->
     end.
 
 
--spec get_support_size(od_space:id()) -> {ok, integer()} | errors:error().
+-spec get_support_size(od_space:id()) -> {ok, integer()} | {error, term()}.
 get_support_size(SpaceId) ->
     case get(?ROOT_SESS_ID, ?SELF) of
         {ok, #document{value = #od_provider{eff_spaces = #{SpaceId := SupportSize}}}} ->
             {ok, SupportSize};
         {ok, #document{value = #od_provider{}}} ->
-            ?ERROR_NOT_FOUND;
-        {error, _} = Error ->
+            ?ERR_NOT_FOUND(?err_ctx());
+        ?ERR = Error ->
             Error
     end.
 
@@ -786,7 +786,7 @@ verify_provider_identity(ProviderId, IdentityToken) ->
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             ok;
         {ok, _} ->
-            ?ERROR_TOKEN_SUBJECT_INVALID;
+            ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx());
         {error, _} = Error ->
             Error
     end.

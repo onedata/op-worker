@@ -416,7 +416,7 @@ init_service(Id, Options) ->
                 {true, CheckPeriod} -> workflow_timeout_monitor:init(Id, CheckPeriod);
                 false -> ok
             end;
-        ?ERROR_ALREADY_EXISTS ->
+        ?ERR_ALREADY_EXISTS ->
             ok
     end.
 
@@ -504,7 +504,7 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
                             schedule_next_job_insecure(EngineId, [ExecutionId | DeferredExecutions]);
                         ?RETRY_EXECUTION ->
                             schedule_next_job_insecure(EngineId, DeferredExecutions);
-                        ?ERROR_NOT_FOUND ->
+                        ?ERR_NOT_FOUND ->
                             % Race with execution deletion
                             schedule_next_job_insecure(EngineId, [ExecutionId | DeferredExecutions])
                     end;
@@ -513,7 +513,7 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
                     % added to DeferredExecutions) but new jobs will appear in future
                     ?WF_ERROR_NOTHING_TO_START
             end;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ?WF_ERROR_NOTHING_TO_START
     end.
 

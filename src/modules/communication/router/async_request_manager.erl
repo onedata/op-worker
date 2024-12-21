@@ -502,7 +502,7 @@ call_async_request_manager(AsyncReqManager, Msg) ->
             {error, no_async_req_manager};
         exit:{timeout, _} ->
             ?debug("Timeout of request manager process ~tp", [AsyncReqManager]),
-            ?ERROR_TIMEOUT;
+            ?ERR_TIMEOUT(?err_ctx());
         Type:Reason ->
             ?error("Cannot call request manager ~tp due to ~tp:~tp", [
                 AsyncReqManager, Type, Reason

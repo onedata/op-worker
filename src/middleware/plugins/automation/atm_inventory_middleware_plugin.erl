@@ -44,7 +44,7 @@
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, atm_workflow_schemas, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -75,7 +75,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmInventoryId, scope = private}}) ->
     case atm_inventory_logic:get(Auth#auth.session_id, AtmInventoryId) of
@@ -124,7 +124,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -149,7 +149,7 @@ get(#op_req{gri = #gri{aspect = atm_workflow_schemas, scope = private}}, #od_atm
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -159,4 +159,4 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).

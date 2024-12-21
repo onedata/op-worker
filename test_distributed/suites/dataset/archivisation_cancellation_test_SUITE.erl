@@ -472,7 +472,7 @@ assert_stats_not_full(ArchiveList) ->
 assert_archives_deleted(ArchivesToCheck) ->
     lists:foreach(fun(ProviderId) ->
         lists:foreach(fun(ArchiveId) ->
-            ?assertEqual(?ERROR_NOT_FOUND, get_archive_info(ProviderId, ArchiveId), ?ATTEMPTS)
+            ?assertEqual(?ERR_NOT_FOUND, get_archive_info(ProviderId, ArchiveId), ?ATTEMPTS)
         end, ArchivesToCheck)
     end, oct_background:get_provider_ids()).
 

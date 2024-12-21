@@ -180,10 +180,10 @@
     ])]
 )).
 
--define(EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED, ?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
-    <<"value">>, ?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(
+-define(EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED, ?ERR_ATM_TASK_RESULT_MAPPING_FAILED(
+    <<"value">>, ?ERR_ATM_TASK_RESULT_DISPATCH_FAILED(
         ?TARGET_STORE_SCHEMA_ID,
-        ?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
+        ?ERR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
             "Time series name generator '~ts' specified in one of the dispatch rules "
             "does not reference any defined time series schema",
             [?MISSING_TS_NAME_GENERATOR]
@@ -307,8 +307,8 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
-                        ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                    <<"reason">> => errors:to_json(?ERR_ATM_TASK_ARG_MAPPING_FAILED(
+                        ?ECHO_ARG_NAME, ?ERR_ATM_DATA_TYPE_UNVERIFIED(
                             IncorrectConst, atm_time_series_measurement_type
                         )
                     ))
@@ -340,8 +340,8 @@ fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
-                        ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
+                    <<"reason">> => errors:to_json(?ERR_ATM_TASK_ARG_MAPPING_FAILED(
+                        ?ECHO_ARG_NAME, ?ERR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
                             Item#atm_item_execution.value, IteratedItemQuery
                         )
                     ))
@@ -371,8 +371,8 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
-                        ?ECHO_ARG_NAME, ?ERROR_ATM_STORE_CONTENT_NOT_SET(
+                    <<"reason">> => errors:to_json(?ERR_ATM_TASK_ARG_MAPPING_FAILED(
+                        ?ECHO_ARG_NAME, ?ERR_ATM_STORE_CONTENT_NOT_SET(
                             ?SV_STORE_SCHEMA_ID
                         )
                     ))
@@ -397,7 +397,7 @@ fail_atm_workflow_execution_due_to_job_timeout() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
+                    <<"reason">> => errors:to_json(?ERR_TIMEOUT)
                 },
                 <<"referencedElements">> => #{
                     <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]
@@ -447,7 +447,7 @@ fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MISSING(
+                        <<"reason">> => errors:to_json(?ERR_ATM_TASK_RESULT_MISSING(
                             <<"value">>, [<<"schrodinger_cat">>, <<"schrodinger_dog">>]
                         ))
                     },
@@ -473,8 +473,8 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"details">> => #{
-                        <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
-                            <<"value">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                        <<"reason">> => errors:to_json(?ERR_ATM_TASK_RESULT_MAPPING_FAILED(
+                            <<"value">>, ?ERR_ATM_DATA_TYPE_UNVERIFIED(
                                 ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE,
                                 atm_time_series_measurement_type
                             )

@@ -606,7 +606,7 @@ qos_entry_deletion_test_base(DeletionType) ->
     
     % check that qos_entry document is deleted
     lists:foreach(fun(Node) ->
-        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
+        ?assertEqual(?ERR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
     end, oct_background:get_all_providers_nodes()),
     
     % finish transfers to unlock waiting slave job processes

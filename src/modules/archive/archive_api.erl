@@ -123,7 +123,7 @@ start_archivisation(
                     Error
             end;
         ?DETACHED_DATASET ->
-            ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)
+            ?ERR_BAD_DATA(?err_ctx(), <<"datasetId">>, <<"Detached dataset cannot be modified.">>)
     end.
 
 
@@ -142,7 +142,7 @@ recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
         {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
         {ok, #document{value = #archive{state = State}}} ->
-            ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, [?ARCHIVE_PRESERVED]);
+            ?ERR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?err_ctx(), State, [?ARCHIVE_PRESERVED]);
         {error, _} = Error ->
             Error
     end.
@@ -249,7 +249,7 @@ delete_archive_recursive(#document{} = ArchiveDoc) ->
 delete_archive_recursive(ArchiveId) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> delete_archive_recursive(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok
+        ?ERR_NOT_FOUND -> ok
     end.
 
 
@@ -275,14 +275,14 @@ delete_single_archive(ArchiveDoc = #document{}) ->
             % NOTE: permission to delete archive were already checked, ignore check on directory deletion
             delete_req:delete_using_trash_insecure(user_ctx:new(?ROOT_USER_ID), ArchiveDocCtx, true),
             ok;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             % there was race with other process removing the archive
             ok
     end;
 delete_single_archive(ArchiveId) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> delete_single_archive(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok
+        ?ERR_NOT_FOUND -> ok
     end.
 
 
@@ -422,11 +422,11 @@ ensure_base_archive_is_set_if_applicable(Config) ->
     case archive_config:is_incremental(Config) of
         true ->
             case archive_config:get_incremental_based_on(Config) of
-                undefined -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.basedOn">>));
+                undefined -> throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"config.incremental.basedOn">>));
                 BaseArchiveId ->
                     case archive:get(BaseArchiveId) of
                         {ok, _} -> BaseArchiveId;
-                        {error, not_found} -> throw(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"config.incremental.basedOn">>))
+                        {error, not_found} -> throw(?ERR_BAD_VALUE_ID_NOT_FOUND(?err_ctx(), <<"config.incremental.basedOn">>))
                     end
             end;
         false ->

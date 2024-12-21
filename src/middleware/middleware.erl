@@ -126,7 +126,7 @@ handle(#op_req{} = OpReq, VersionedEntity) ->
         % to client instead
         Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~tp - ~tp:~tp", [?MODULE, Type, Reason], Stacktrace),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
     end.
 
 
@@ -193,7 +193,7 @@ get_handler(#op_req{operation = Operation, gri = #gri{
     catch _:_ ->
         % No need for log here, 'resolve_handler' may crash depending on
         % what the request contains and this is expected.
-        throw(?ERROR_NOT_SUPPORTED)
+        throw(?ERR_NOT_SUPPORTED(?err_ctx()))
     end.
 
 
@@ -220,7 +220,7 @@ get_router(op_space) -> space_middleware_router;
 get_router(op_storage) -> storage_middleware_plugin;
 get_router(op_transfer) -> transfer_middleware_plugin;
 get_router(op_user) -> user_middleware_plugin;
-get_router(_) -> throw(?ERROR_NOT_SUPPORTED).
+get_router(_) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%--------------------------------------------------------------------
@@ -244,7 +244,7 @@ sanitize_request(#req_ctx{handler = Handler, req = #op_req{
                 _ when is_map(RawData) ->
                     RawData#{id => Id, aspect => Aspect};
                 _ ->
-                    throw(?ERROR_MALFORMED_DATA)
+                    throw(?ERR_MALFORMED_DATA(?err_ctx()))
             end,
             SanitizedData = middleware_sanitizer:sanitize_data(
                 RawDataWithIdAndAspect, DataSpec
@@ -271,7 +271,7 @@ maybe_fetch_entity(#req_ctx{req = #op_req{operation = create, gri = #gri{id = un
     % Skip when creating an instance with predefined Id, set revision to 1
     ReqCtx#req_ctx{versioned_entity = {undefined, 1}};
 maybe_fetch_entity(#req_ctx{req = #op_req{operation = get, gri = #gri{id = undefined, aspect = instance}}}) ->
-    throw(?ERROR_NOT_FOUND);
+    throw(?ERR_NOT_FOUND(?err_ctx()));
 maybe_fetch_entity(#req_ctx{handler = Handler, req = Req} = ReqCtx) ->
     case Handler:fetch_entity(Req) of
         {ok, {_Entity, _Revision} = VersionedEntity} ->
@@ -317,11 +317,11 @@ ensure_authorized(#req_ctx{
             case Auth of
                 ?GUEST ->
                     % The client was not authenticated -> unauthorized
-                    throw(?ERROR_UNAUTHORIZED);
+                    throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
                 _ ->
                     % The client was authenticated but cannot access the
                     % aspect -> forbidden
-                    throw(?ERROR_FORBIDDEN)
+                    throw(?ERR_FORBIDDEN(?err_ctx()))
             end
     end.
 

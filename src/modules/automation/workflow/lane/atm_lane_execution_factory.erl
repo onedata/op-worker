@@ -54,13 +54,14 @@ create_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     try
         create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+        throw:?ERR_ATM_WORKFLOW_EXECUTION_STOPPING = ErrorAtmWorkflowExecutionStopping ->
+            throw(ErrorAtmWorkflowExecutionStopping);
 
         Type:Reason:Stacktrace ->
             AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
 
-            throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
+            throw(?ERR_ATM_LANE_EXECUTION_CREATION_FAILED(
+                ?err_ctx(),
                 atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
                 ?examine_exception(Type, Reason, Stacktrace)
             ))
@@ -353,5 +354,5 @@ complement_run(AtmLaneRunSelector, AtmWorkflowExecution, #run_creation_ctx{
                 parallel_boxes = AtmParallelBoxExecutions
             }};
         (_) ->
-            ?ERROR_ALREADY_EXISTS
+            ?ERR_ALREADY_EXISTS(?err_ctx())
     end, AtmWorkflowExecution).

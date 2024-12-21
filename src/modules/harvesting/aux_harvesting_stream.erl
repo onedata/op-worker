@@ -129,13 +129,13 @@ custom_error_handling(State = #hs_state{
 }, Result) ->
     % for aux_stream we are sure that there is only one key and one value
     case hd(maps:keys(harvesting_result:get_summary(Result))) of
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             % harvester was deleted, stream should be stopped
             {stop, normal, State};
-        ?ERROR_FORBIDDEN ->
+        ?ERR_FORBIDDEN ->
             % harvester was deleted from space, stream should be stopped
             {stop, normal, State};
-        ?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName) ->
+        ?ERR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName) ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
             ErrorLog =  str_utils:format_bin(
                 "An error occured for harvester ~tp due to a failed external service (~ts) operation.",
@@ -145,7 +145,7 @@ custom_error_handling(State = #hs_state{
                 error_log = ErrorLog,
                 log_level = warning
             })};
-        ?ERROR_TEMPORARY_FAILURE ->
+        ?ERR_TEMPORARY_FAILURE ->
             [HarvesterId] = harvesting_destination:get_harvesters(Destination),
             ErrorLog =  str_utils:format_bin("Harvester ~tp is temporarily unavailable.", [HarvesterId]),
             {noreply, harvesting_stream:enter_retrying_mode(State#hs_state{
@@ -175,7 +175,7 @@ custom_error_handling(State = #hs_state{
                         log_level = error,
                         last_persisted_seq = LastSuccessfulSeq
                     })};
-                ?ERROR_NOT_FOUND ->
+                ?ERR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end
     end.

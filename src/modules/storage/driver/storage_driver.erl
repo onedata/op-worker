@@ -601,14 +601,14 @@ fsync(SDHandle, DataOnly) ->
 %% (hardlinks and symlinks are metadata-only structures).
 %% @end
 %%--------------------------------------------------------------------
--spec infer_type(Mode :: non_neg_integer()) -> {ok, onedata_file:type()} | ?ERROR_NOT_SUPPORTED.
+-spec infer_type(Mode :: non_neg_integer()) -> {ok, onedata_file:type()} | od_error_not_supported:t().
 infer_type(Mode) ->
     IsRegFile = (Mode band 8#100000) =/= 0,
     IsDir = (Mode band 8#40000) =/= 0,
     case {IsRegFile, IsDir} of
         {true, false} -> {ok, ?REGULAR_FILE_TYPE};
         {false, true} -> {ok, ?DIRECTORY_TYPE};
-        {false, false} -> ?ERROR_NOT_SUPPORTED
+        {false, false} -> ?ERR_NOT_SUPPORTED(?err_ctx())
     end.
 
 

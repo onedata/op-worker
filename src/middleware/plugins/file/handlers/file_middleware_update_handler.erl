@@ -38,7 +38,7 @@
     ok | no_return().
 assert_operation_supported(instance, private) -> ok;              % gs only
 assert_operation_supported(acl, private)      -> ok;
-assert_operation_supported(_, _)              -> throw(?ERROR_NOT_SUPPORTED).
+assert_operation_supported(_, _)              -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -56,9 +56,9 @@ data_spec(#op_req{gri = #gri{aspect = instance}}) ->
                 ValidMode when ValidMode >= 0 andalso ValidMode =< 8#777 ->
                     {true, ValidMode};
                 _ ->
-                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#777))
+                    throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), ModeParam, 0, 8#777))
             catch _:_ ->
-                throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
+                throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), ModeParam))
             end
         end}
     }};
@@ -70,7 +70,7 @@ data_spec(#op_req{gri = #gri{aspect = acl}}) -> #{
             try
                 {true, acl:from_json(JsonAcl, gui)}
             catch throw:{error, Errno} ->
-                throw(?ERROR_POSIX(Errno))
+                throw(?ERR_POSIX(?err_ctx(), Errno))
             end
         end}
     }

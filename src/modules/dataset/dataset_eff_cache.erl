@@ -74,10 +74,10 @@ init(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun init/1, SpaceIds);
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize datasets effective cache due to: ~tp", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize datasets effective cache due to: ~tp", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) = ErrorNoConnectionToOnezone ->
+            ?debug("Unable to initialize datasets effective cache due to: ~tp", [ErrorNoConnectionToOnezone]);
+        ?ERR_UNREGISTERED_ONEPROVIDER = ErrorUnregisteredOneprovider ->
+            ?debug("Unable to initialize datasets effective cache due to: ~tp", [ErrorUnregisteredOneprovider]);
         Error = {error, _} ->
             ?critical("Unable to initialize datasets effective cache due to: ~tp", [Error])
     catch
@@ -210,7 +210,7 @@ get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFl
                 {ok, Entry, _} ->
                     {ok, Entry};
                 {error, ?MISSING_FILE_META(_)} ->
-                    ?ERROR_NOT_FOUND
+                    ?ERR_NOT_FOUND(?err_ctx())
             end
     end.
 

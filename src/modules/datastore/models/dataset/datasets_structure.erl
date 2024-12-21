@@ -136,7 +136,7 @@ delete(SpaceId, ForestType, DatasetPath) ->
                 true -> delete_local(SpaceId, ForestType, DatasetPath, Rev);
                 false -> delete_remote(SpaceId, ForestType, TreeId, DatasetPath, Rev)
             end;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ok
     end.
 
@@ -437,9 +437,9 @@ sanitize_limit(Opts) ->
         Limit when is_integer(Limit) andalso Limit > 0 ->
             Limit;
         Limit when is_integer(Limit) ->
-            throw(?ERROR_BAD_VALUE_TOO_LOW(limit, 1));
+            throw(?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), limit, 1));
         _ ->
-            throw(?ERROR_BAD_VALUE_INTEGER(limit))
+            throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), limit))
     end.
 
 
@@ -460,10 +460,10 @@ sanitize_offset(Opts, AllowNegative) ->
                     Offset;
                 {false, false} ->
                     % if LastName is undefined, Offset cannot be negative
-                    throw(?ERROR_BAD_VALUE_TOO_LOW(offset, 0))
+                    throw(?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), offset, 0))
             end;
         _ ->
-            throw(?ERROR_BAD_VALUE_INTEGER(offset))
+            throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), offset))
     end.
 
 
@@ -475,7 +475,7 @@ sanitize_start_index(Opts) ->
         Binary when is_binary(Binary) ->
             Binary;
         _ ->
-            throw(?ERROR_BAD_VALUE_BINARY(start_index))
+            throw(?ERR_BAD_VALUE_STRING(?err_ctx(), start_index))
     end.
 
 

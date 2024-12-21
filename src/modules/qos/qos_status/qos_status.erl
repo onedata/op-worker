@@ -226,7 +226,7 @@ check_internal(FileCtx, #document{key = QosEntryId} = QosEntryDoc) ->
 check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta_hardlinks:inspect_references(FileDoc) of    
-        no_references_left -> throw(?ERROR_NOT_FOUND);
+        no_references_left -> throw(?ERR_NOT_FOUND(?err_ctx()));
         has_at_least_one_reference -> ok
     end,
     (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse

@@ -49,7 +49,7 @@ resolve_handler(update, instance, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -114,7 +114,7 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     end;
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId, SessionId), gri = #gri{
     id = ShareId,

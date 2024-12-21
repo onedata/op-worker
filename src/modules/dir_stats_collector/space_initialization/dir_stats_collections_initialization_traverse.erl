@@ -55,7 +55,7 @@ stop_pool() ->
     tree_traverse:stop(?MODULE).
 
 
--spec run(file_id:space_id(), non_neg_integer()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec run(file_id:space_id(), non_neg_integer()) -> ok | od_error_internal_server_error:t().
 run(SpaceId, Incarnation) ->
     try
         Options = #{
@@ -72,7 +72,7 @@ run(SpaceId, Incarnation) ->
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Error starting stats initialization traverse for space ~tp (incarnation ~tp): ~tp:~tp",
                 [SpaceId, Incarnation, Error, Reason], Stacktrace),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
     end.
 
 
@@ -80,7 +80,7 @@ run(SpaceId, Incarnation) ->
 cancel(SpaceId, Incarnation) ->
     case tree_traverse:cancel(?MODULE, gen_task_id(SpaceId, Incarnation)) of
         ok -> ok;
-        ?ERROR_NOT_FOUND -> ok
+        ?ERR_NOT_FOUND -> ok
     end.
 
 

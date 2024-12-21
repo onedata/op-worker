@@ -306,7 +306,7 @@ gui_download_incorrect_uuid_test(Config) ->
     ValidateCallResultFun = fun(#api_test_ctx{node = DownloadNode}, Result) ->
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
         ?assertMatch(
-            ?ERROR_POSIX(?ENOENT),
+            ?ERR_POSIX(?ENOENT),
             download_file_using_download_code_with_resumes(MemRef, DownloadNode, FileDownloadUrl)
         )
     end,
@@ -483,15 +483,15 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             <<"follow_symlinks">> => [true, false]
         },
         bad_values = [
-            {<<"file_ids">>, [<<"incorrect_guid">>], ?ERROR_BAD_VALUE_IDENTIFIER(<<"file_ids">>)},
+            {<<"file_ids">>, [<<"incorrect_guid">>], ?ERR_BAD_VALUE_IDENTIFIER(<<"file_ids">>)},
             {<<"file_ids">>, [file_id:pack_guid(<<"uuid">>, <<"incorrent_space_id">>)],
                 {error_fun,
                     fun(#api_test_ctx{node = Node}) ->
-                        ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ?GET_DOMAIN_BIN(Node))
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, ?GET_DOMAIN_BIN(Node))
                     end}
             },
-            {<<"file_ids">>, <<"not_a_list">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"file_ids">>)},
-            {<<"follow_symlinks">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_symlinks">>)}
+            {<<"file_ids">>, <<"not_a_list">>, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"file_ids">>)},
+            {<<"follow_symlinks">>, <<"not_a_boolean">>, ?ERR_BAD_VALUE_BOOLEAN(<<"follow_symlinks">>)}
         ]
     },
     ?assert(onenv_api_test_runner:run_tests([
@@ -530,8 +530,8 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
             prepare_args_fun = build_get_download_url_prepare_gs_args_fun(MemRef, share_mode, private),
             validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
                 case Client of
-                    ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-                    _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+                    ?NOBODY -> ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result);
+                    _ -> ?assertEqual(?ERR_FORBIDDEN, Result)
                 end
             end,
             data_spec = DataSpec
@@ -606,7 +606,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                     ?USER(User4Id) -> ok;
                     _ ->
                         block_file_streaming(DownloadNode, Guid),
-                        ?assertEqual(?ERROR_POSIX(?EAGAIN), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
+                        ?assertEqual(?ERR_POSIX(?EAGAIN), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
                         unblock_file_streaming(DownloadNode, Guid),
                         ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory))
                 end,
@@ -629,8 +629,8 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 end,
                 % file download code is still usable for some time to allow for resuming after download of last chunk failed
                 timer:sleep(timer:seconds(?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS)),
-                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
-                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
+                ?assertEqual(?ERR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
 
                 api_test_memory:set(MemRef, download_succeeded, true);
             2 ->
@@ -640,15 +640,15 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 % File download code should be deleted from db but stay in memory as couch
                 % unfortunately doesn't remove expired docs from memory
                 ?assertMatch(
-                    ?ERROR_NOT_FOUND,
+                    ?ERR_NOT_FOUND,
                     get_file_download_code_doc(DownloadNode, DownloadCode, disc),
                     ?ATTEMPTS
                 ),
                 ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 % Still after request, which will fail, it should be deleted also from memory
-                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
-                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
+                ?assertEqual(?ERR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
+                ?assertMatch(?ERR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 api_test_memory:set(MemRef, download_succeeded, false)
         end
@@ -1652,7 +1652,7 @@ init_per_suite(Config) ->
                         node_cache:get({block_file, Uuid}, false)
                     end, utils:ensure_list(FileAttrs)),
                     case ShouldBlock of
-                        true -> http_req:send_error(?ERROR_POSIX(?EAGAIN), Req);
+                        true -> http_req:send_error(?ERR_POSIX(?EAGAIN), Req);
                         false -> passthrough
                     end
                 end,

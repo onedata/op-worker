@@ -124,12 +124,12 @@ consume_measurements(CollectionId, ConsumeSpec, Retries) ->
     case datastore_time_series_collection:consume_measurements(?CTX, CollectionId, ConsumeSpec) of
         ok ->
             ok;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             % There is a chance that transfer started for legacy QoS entry for which time 
             % series collection was not initialized. Create it and try again.
             ok = ensure_exists_internal(CollectionId),
             consume_measurements(CollectionId, ConsumeSpec, Retries - 1);
-        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+        ?ERR_TSC_MISSING_LAYOUT(MissingLayout) ->
             MissingConfig = config_with_time_series(maps:keys(MissingLayout)),
             ok = datastore_time_series_collection:incorporate_config(?CTX, CollectionId, MissingConfig),
             consume_measurements(CollectionId, ConsumeSpec, Retries - 1)

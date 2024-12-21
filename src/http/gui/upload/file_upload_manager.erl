@@ -160,7 +160,7 @@ handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads}
             ?debug("Failed to start upload by user ~tp as it is already registered by user ~tp", [
                 UserId, OtherUserId
             ]),
-            reply(?ERROR_FORBIDDEN, State);
+            reply(?ERR_FORBIDDEN(?err_ctx()), State);
         error ->
             UploadCtx = #upload_ctx{
                 user_id = UserId,
@@ -362,13 +362,13 @@ call_server(Request) ->
     catch
         exit:{noproc, _} ->
             ?debug("Process '~tp' does not exist", [?MODULE]),
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         exit:{normal, _} ->
             ?debug("Exit of '~tp' process", [?MODULE]),
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         exit:{timeout, _} ->
             ?debug("Timeout of '~tp' process", [?MODULE]),
-            ?ERROR_TIMEOUT;
+            ?ERR_TIMEOUT(?err_ctx());
         Type:Reason ->
             ?error("Cannot call '~tp' due to ~tp:~tp", [?MODULE, Type, Reason]),
             {error, Reason}

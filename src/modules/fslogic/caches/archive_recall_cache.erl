@@ -57,10 +57,10 @@ init(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun init/1, SpaceIds);
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize archive recall caches due to: ~tp", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize archive recall caches due to: ~tp", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) = ErrorNoConnectionToOnezone ->
+            ?debug("Unable to initialize archive recall caches due to: ~tp", [ErrorNoConnectionToOnezone]);
+        ?ERR_UNREGISTERED_ONEPROVIDER = ErrorUnregisteredProvider ->
+            ?debug("Unable to initialize archive recall caches due to: ~tp", [ErrorUnregisteredProvider]);
         Error = {error, _} ->
             ?critical("Unable to initialize archive recall caches due to: ~tp", [Error])
     catch
@@ -127,7 +127,7 @@ get(SpaceId, Doc = #document{value = #file_meta{}}) ->
 get(SpaceId, Uuid) ->
     case file_meta:get_including_deleted(Uuid) of
         {ok, Doc} -> get(SpaceId, Doc);
-        ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
+        ?ERR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
         {error, _} = Error -> Error
     end.
 

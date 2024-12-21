@@ -165,7 +165,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of the
     % data access caveat
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, handle_service_logic, get_public_data, [TokenCredentials, ?HANDLE_SERVICE_1])
     ),
     % Nevertheless, following requests should be made:

@@ -1426,7 +1426,7 @@ cancel_transfer_by_rest(Worker, SchedulingUser, CancellingUser, TransferType, Ti
                     migration -> lists:sort([?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION])
                 end,
                 SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-                ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+                ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
 
                 lists:foreach(fun
                     (PrivsToAdd) when PrivsToAdd =:= RequiredPrivs ->
@@ -1476,7 +1476,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
     SpacePrivs = AllSpacePrivs -- RequiredPrivs,
     UserSpacePrivs = get_privileges(Config, Worker, SpaceId, UserId),
     SortedRequiredPrivs = lists:sort(RequiredPrivs),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
 
     case rpc:call(Worker, provider_logic, supports_space, [SpaceId]) of
         true ->
@@ -1507,7 +1507,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
             {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
             ?assertMatch(400, Code),
             ?assertMatch(
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(_, _),
+                ?ERR_SPACE_NOT_SUPPORTED_BY(_, _),
                 errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)))
             )
     end.

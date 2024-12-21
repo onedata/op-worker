@@ -84,7 +84,7 @@ assert_operation_supported(api_samples, public)                      -> ok;
 assert_operation_supported(api_samples, private)                     -> ok;
 assert_operation_supported(dir_size_stats_collection_schema, public) -> ok;
 assert_operation_supported({dir_size_stats_collection, _}, private)  -> ok;
-assert_operation_supported(_, _)                                     -> throw(?ERROR_NOT_SUPPORTED).
+assert_operation_supported(_, _)                                     -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -448,7 +448,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
         {undefined, _} ->
             [];
         {<<"keypath">>, undefined} ->
-            throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+            throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"filter">>));
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
     end,
@@ -529,7 +529,7 @@ get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
     SecondReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
     case SecondReferencedUuid of
         FirstReferencedUuid -> {ok, #{}};
-        _ -> ?ERROR_NOT_FOUND
+        _ -> ?ERR_NOT_FOUND(?err_ctx())
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->
@@ -599,7 +599,7 @@ build_listing_start_point_param_spec(Key) ->
         (undefined) ->
             true;
         (<<>>) ->
-            throw(?ERROR_BAD_VALUE_EMPTY(Key));
+            throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), Key));
         (Binary) when is_binary(Binary) ->
             true;
         (_) ->

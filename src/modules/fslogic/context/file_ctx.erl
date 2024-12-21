@@ -481,7 +481,7 @@ get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
 
     case {IsDeleted, IncludingDeleted} of
         {true, false} ->
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         _ ->
             {ok, ShareRootDirDoc}
     end.
@@ -602,7 +602,7 @@ get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     case space_logic:get_name(SessionId, SpaceId) of
         {ok, SpaceName} ->
             {SpaceName, FileCtx#file_ctx{space_name = SpaceName}};
-        ?ERROR_FORBIDDEN when SessionId == ?ROOT_SESS_ID ->
+        ?ERR_FORBIDDEN when SessionId == ?ROOT_SESS_ID ->
             % Fetching space name from oz as provider is forbidden if provider
             % doesn't support space. Such requests are made e.g. when executing
             % file_meta:ensure_space_docs_exist (all user space dirs, supported or not,
@@ -1218,7 +1218,7 @@ file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
 
             case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> true;
-                ?ERROR_NOT_FOUND -> false
+                ?ERR_NOT_FOUND -> false
             end;
         false ->
             file_meta:exists(FileUuid)

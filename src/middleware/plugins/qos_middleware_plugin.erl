@@ -56,7 +56,7 @@ resolve_handler(get, {transfer_stats_collection, ?FILES_STATS}, private) -> ?MOD
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -271,7 +271,7 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = {transfer_stats_collection, Typ
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------

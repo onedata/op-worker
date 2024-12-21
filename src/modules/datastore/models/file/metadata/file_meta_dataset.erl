@@ -40,7 +40,7 @@ establish(Uuid, ProtectionFlags) ->
                         protection_flags = ProtectionFlags
                     }};
                 (_) ->
-                    ?ERROR_ALREADY_EXISTS
+                    ?ERR_ALREADY_EXISTS(?err_ctx())
             end));
         {error, _} = Error ->
             Error
@@ -67,10 +67,10 @@ reattach(Uuid, FlagsToSet, FlagsToUnset) ->
                     Error
             end;
         (#file_meta{dataset_state = undefined}) ->
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         (#file_meta{dataset_state = ?ATTACHED_DATASET}) ->
             % attached dataset cannot be reattached
-            ?ERROR_ALREADY_EXISTS
+            ?ERR_ALREADY_EXISTS(?err_ctx())
     end),
 
     case UpdateAns of
@@ -85,10 +85,10 @@ detach(Uuid) ->
         (FileMeta = #file_meta{dataset_state = ?ATTACHED_DATASET}) ->
             {ok, FileMeta#file_meta{dataset_state = ?DETACHED_DATASET}};
         (#file_meta{dataset_state = undefined}) ->
-            ?ERROR_NOT_FOUND;
+            ?ERR_NOT_FOUND(?err_ctx());
         (#file_meta{dataset_state = ?DETACHED_DATASET}) ->
             % detached dataset cannot be detached
-            ?ERROR_ALREADY_EXISTS
+            ?ERR_ALREADY_EXISTS(?err_ctx())
     end)).
 
 
@@ -102,7 +102,7 @@ remove(Uuid) ->
     end)),
     case Result of
         ok -> ok;
-        ?ERROR_NOT_FOUND -> ok
+        ?ERR_NOT_FOUND -> ok
     end.
 
 

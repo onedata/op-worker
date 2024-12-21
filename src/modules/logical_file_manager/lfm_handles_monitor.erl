@@ -195,7 +195,7 @@ call_lfm_handles_monitor(Msg) ->
             {error, no_lfm_handles_monitor};
         exit:{timeout, _} ->
             ?error("Timeout of lfm handles monitor process"),
-            ?ERROR_TIMEOUT;
+            ?ERR_TIMEOUT(?err_ctx());
         Type:Reason:Stacktrace ->
             ?error_stacktrace("Cannot call lfm handles monitor due to ~tp:~tp", [Type, Reason], Stacktrace),
             {error, Reason}

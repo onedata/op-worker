@@ -113,13 +113,13 @@ establish_dataset_test(Config) ->
                             <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
                         },
                         bad_values = [
-                            {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
-                            {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
-                            {<<"protectionFlags">>, [?METADATA_PROTECTION_BIN], ?ERROR_BAD_DATA(
+                            {<<"rootFileId">>, FileObjectId, ?ERR_ALREADY_EXISTS},
+                            {<<"protectionFlags">>, 100, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"protectionFlags">>)},
+                            {<<"protectionFlags">>, [?METADATA_PROTECTION_BIN], ?ERR_BAD_DATA(
                                 <<"protectionFLags">>,
                                 <<"Cannot set metadata_protection without data_protection">>
                             )},
-                            {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                            {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERR_BAD_VALUE_LIST_NOT_ALLOWED(
                                 <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                             )}
                         ]
@@ -389,7 +389,7 @@ get_dataset_test_base(
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, ?NON_EXISTENT_DATASET_ID, ?ERROR_NOT_FOUND}]
+                bad_values = [{bad_id, ?NON_EXISTENT_DATASET_ID, ?ERR_NOT_FOUND}]
             }
         }
     ])).
@@ -495,19 +495,19 @@ update_dataset_test(Config) ->
                     <<"unsetProtectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
                 },
                 bad_values = [
-                    {<<"state">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"state">>)},
-                    {<<"state">>, <<"dummy">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(
+                    {<<"state">>, 100, ?ERR_BAD_VALUE_STRING(<<"state">>)},
+                    {<<"state">>, <<"dummy">>, ?ERR_BAD_VALUE_NOT_ALLOWED(
                         <<"state">>, [<<"attached">>, <<"detached">>]
                     )},
-                    {<<"setProtectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"setProtectionFlags">>)},
-                    {<<"setProtectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                    {<<"setProtectionFlags">>, 100, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"setProtectionFlags">>)},
+                    {<<"setProtectionFlags">>, [<<"dummyFlag">>], ?ERR_BAD_VALUE_LIST_NOT_ALLOWED(
                         <<"setProtectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                     )},
-                    {<<"unsetProtectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"unsetProtectionFlags">>)},
-                    {<<"unsetProtectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                    {<<"unsetProtectionFlags">>, 100, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"unsetProtectionFlags">>)},
+                    {<<"unsetProtectionFlags">>, [<<"dummyFlag">>], ?ERR_BAD_VALUE_LIST_NOT_ALLOWED(
                         <<"unsetProtectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                     )},
-                    {bad_id, ?NON_EXISTENT_DATASET_ID, ?ERROR_NOT_FOUND}
+                    {bad_id, ?NON_EXISTENT_DATASET_ID, ?ERR_NOT_FOUND}
                 ]
             }
         }
@@ -597,13 +597,13 @@ get_exp_update_result(MemRef, Data) ->
         {_, undefined, [], []} ->
             ok;
         {SameState, SameState, _, _} ->
-            ?ERROR_ALREADY_EXISTS;
+            ?ERR_ALREADY_EXISTS;
         {<<"attached">>, <<"detach">>, [], []} ->
             ok;
         {<<"attached">>, <<"detach">>, _, _} ->
-            ?ERROR_POSIX(?EINVAL);
+            ?ERR_POSIX(?EINVAL);
         {<<"detached">>, undefined, _, _} ->
-            ?ERROR_BAD_DATA(<<"state">>, <<"Detached dataset cannot be modified.">>);
+            ?ERR_BAD_DATA(<<"state">>, <<"Detached dataset cannot be modified.">>);
         _ ->
             ok
     end.
@@ -657,7 +657,7 @@ delete_dataset_test(Config) ->
             ],
             data_spec = #data_spec{
                 bad_values = [
-                    {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}
+                    {bad_id, <<"NonExistentDataset">>, ?ERR_NOT_FOUND}
                 ]
             }
         }
@@ -740,7 +740,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual(?ERROR_NOT_FOUND, GetDatasetInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERR_NOT_FOUND, GetDatasetInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(DatasetId, ListDatasetsFun())),
                             api_test_memory:set(MemRef, datasets, lists:delete(
                                 DatasetId, api_test_memory:get(MemRef, datasets)

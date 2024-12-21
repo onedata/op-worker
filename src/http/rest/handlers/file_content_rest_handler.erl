@@ -96,7 +96,7 @@ ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
 ensure_operation_supported(get, file_at_path, private) -> true;
 ensure_operation_supported(delete, file_at_path, private) -> true;
-ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+ensure_operation_supported(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %% @private
@@ -126,7 +126,7 @@ sanitize_params(#op_req{
                 #{<<"create_parents">> => {boolean, any}},
                 #{path => {list_of_binaries, fun
                     ([]) ->
-                        throw(?ERROR_MISSING_REQUIRED_VALUE(<<"path">>));
+                        throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"path">>));
                     (PathTokens) ->
                         assert_valid_file_path(PathTokens),
                         {true, PathTokens}
@@ -151,7 +151,7 @@ sanitize_params(#op_req{
             try
                 {true, onedata_file:type_from_json(TypeBinary)}
             catch _:_ ->
-                throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, lists:map(fun onedata_file:type_to_json/1, [
+                throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"type">>, lists:map(fun onedata_file:type_to_json/1, [
                     ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
                 ])))
             end
@@ -161,11 +161,11 @@ sanitize_params(#op_req{
                 ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
                     {true, ValidMode};
                 _ ->
-                    % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
-                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777))
+                    % TODO VFS-7536 add basis of number system to ?ERR_BAD_VALUE_NOT_IN_RANGE
+                    throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), <<"mode">>, 0, 8#1777))
             catch _:_ ->
-                % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
-                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+                % TODO VFS-7536 add basis of number system to ?ERR_BAD_VALUE_NOT_IN_RANGE
+                throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), <<"mode">>))
             end
         end},
         <<"offset">> => {integer, {not_lower_than, 0}},
@@ -199,11 +199,11 @@ sanitize_params(#op_req{
 %% @private
 -spec ensure_has_access_to_file(middleware:req()) -> true | no_return().
 ensure_has_access_to_file(#op_req{operation = get, auth = ?GUEST, gri = #gri{id = Guid, scope = public}}) ->
-    file_id:is_share_guid(Guid) orelse throw(?ERROR_UNAUTHORIZED);
+    file_id:is_share_guid(Guid) orelse throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
 ensure_has_access_to_file(#op_req{auth = ?GUEST}) ->
-    throw(?ERROR_UNAUTHORIZED);
+    throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
 ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
-    middleware_utils:has_access_to_file_space(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
+    middleware_utils:has_access_to_file_space(Auth, Guid) orelse throw(?ERR_FORBIDDEN(?err_ctx())).
 
 
 %% @private
@@ -347,7 +347,7 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 -spec assert_valid_file_path([binary()]) -> true | no_return().
 assert_valid_file_path(PathTokens) ->
     case filepath_utils:sanitize(filepath_utils:join(PathTokens)) of
-        {error, _} -> throw(?ERROR_BAD_VALUE_FILE_PATH);
+        {error, _} -> throw(?ERR_BAD_VALUE_FILE_PATH(?err_ctx()));
         {ok, _} -> true
     end.
 
@@ -378,7 +378,7 @@ resolve_target_file(#op_req{
 
     case Result of
         {ok, ResolvedGuid} -> ResolvedGuid;
-        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+        {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
     end;
 resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
     TargetFileGuid.
@@ -406,7 +406,7 @@ create(CreateFun, SessionId, ParentGuid, Name, Mode, true) ->
             ?lfm_check(lfm:set_perms(SessionId, ?FILE_REF(ResolvedGuid), Mode)),
             {ResolvedGuid, NewFileCreated};
         {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
+            throw(?ERR_POSIX(?err_ctx(), Errno))
     end.
 
 
@@ -425,7 +425,7 @@ create_link(CreateFun, SessionId, ParentGuid, Name, true) ->
             delete_file(SessionId, ParentGuid, Name),
             create_link(CreateFun, SessionId, ParentGuid, Name, true);
         {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
+            throw(?ERR_POSIX(?err_ctx(), Errno))
     end.
 
 
@@ -438,8 +438,8 @@ delete_file(SessionId, ParentGuid, Name) ->
             case lfm:unlink(SessionId, ?FILE_REF(ResolvedGuid), false) of
                 ok -> ok;
                 {error, ?ENOENT} -> ok;
-                ?ERROR_NOT_FOUND -> ok;
-                {error, Errno} -> throw(?ERROR_POSIX(Errno))
+                ?ERR_NOT_FOUND -> ok;
+                {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
             end
     end.
 
@@ -451,6 +451,6 @@ resolve_guid(SessionId, ParentGuid, Name, Fallback) ->
     case lfm:resolve_guid_by_relative_path(SessionId, ParentGuid, Name) of
         {ok, ResolvedGuid} -> ResolvedGuid;
         {error, ?ENOENT} -> Fallback();
-        ?ERROR_NOT_FOUND -> Fallback();
-        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+        ?ERR_NOT_FOUND -> Fallback();
+        {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
     end.

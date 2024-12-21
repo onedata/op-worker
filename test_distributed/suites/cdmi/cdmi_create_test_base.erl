@@ -155,7 +155,7 @@ create_cdmi_file_version_header_test(Config) ->
         ?WORKERS(Config), ?build_test_root_path(Config), put,
         [cdmi_test_utils:user_2_token_header(), ?CDMI_OBJECT_CONTENT_TYPE_HEADER], <<"{}">>
     ),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_MISSING_REQUIRED_VALUE(<<"version">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
@@ -221,7 +221,7 @@ missing_parent_create_dir_test(Config) ->
     {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
         ?WORKERS(Config), DirWithoutParentName, put, RequestHeaders, []
     ),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?ENOENT)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?ENOENT)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
@@ -252,7 +252,7 @@ create_cdmi_dir_version_header_failure_test(Config) ->
         ?WORKERS(Config), ?build_test_root_path(Config) ++ "/", put,
         [cdmi_test_utils:user_2_token_header(), ?CDMI_CONTAINER_CONTENT_TYPE_HEADER]
     ),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_MISSING_REQUIRED_VALUE(<<"version">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 
@@ -404,7 +404,7 @@ wrong_create_path_error_test(Config) ->
     ],
     {ok, Code, _Headers, Response} =
         cdmi_test_utils:do_request(?WORKERS(Config), ?build_test_root_path(Config), put, RequestHeaders, []),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_VALUE_IDENTIFIER(<<"path">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}),
 
     %%---- wrong create path 2 -----
@@ -415,7 +415,7 @@ wrong_create_path_error_test(Config) ->
     ],
     {ok, Code, _Headers2, Response2} =
         cdmi_test_utils:do_request(?WORKERS(Config), ?build_test_root_path(Config) ++ "/", put, RequestHeaders2, []),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_VALUE_IDENTIFIER(<<"path">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response2)}).
 
 
@@ -433,7 +433,7 @@ wrong_base_error_test(Config) ->
     {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
         ?WORKERS(Config), filename:join(RootPath,  "some_file_b64"), put, RequestHeaders, RequestBody
     ),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_DATA(<<"base64">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(<<"base64">>)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 

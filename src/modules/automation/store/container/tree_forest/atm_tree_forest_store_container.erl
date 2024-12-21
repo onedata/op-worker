@@ -77,7 +77,7 @@ create(CreationArgs = #atm_store_container_creation_args{store_config = AtmStore
 
 -spec copy(record()) -> no_return().
 copy(_) ->
-    throw(?ERROR_NOT_SUPPORTED).
+    throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 -spec get_config(record()) -> atm_tree_forest_store_config:record().

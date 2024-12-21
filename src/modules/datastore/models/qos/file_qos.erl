@@ -417,7 +417,7 @@ merge_file_qos(FirstEffQos, SecondEffQos) ->
 get_effective(FileUuid, Options) when is_binary(FileUuid) ->
     case file_meta:get(FileUuid) of
         {ok, FileDoc} -> get_effective(FileDoc, Options);
-        ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(FileUuid)}
+        ?ERR_NOT_FOUND -> {error, ?MISSING_FILE_META(FileUuid)}
     end;
 get_effective(#document{} = FileDoc, Options) ->
     get_effective(FileDoc, undefined, Options).
@@ -437,7 +437,7 @@ get_effective(#document{} = FileDoc, OriginalParentDoc, Options) ->
                     {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
                 false ->
                     case get_direct(Uuid) of
-                        ?ERROR_NOT_FOUND ->
+                        ?ERR_NOT_FOUND ->
                             {ok, ParentEffQos, CalculationInfo};
                         {ok, #document{value = FileQos}} ->
                             EffQos = merge_file_qos(ParentEffQos, FileQos),

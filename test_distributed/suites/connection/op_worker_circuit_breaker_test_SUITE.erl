@@ -52,7 +52,7 @@ rest_handler_circuit_breaker_test(_Config) ->
     ?assertMatch(ok, get_rest_response()),
 
     set_circuit_breaker_state(op_worker, open),
-    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, get_rest_response()),
+    ?assertMatch(?ERR_SERVICE_UNAVAILABLE, get_rest_response()),
 
     set_circuit_breaker_state(op_worker, closed),
     ?assertMatch(ok, get_rest_response()).
@@ -63,7 +63,7 @@ cdmi_handler_circuit_breaker_test(_Config) ->
     ?assertMatch(ok, get_cdmi_response()),
 
     set_circuit_breaker_state(op_worker, open),
-    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, get_cdmi_response()),
+    ?assertEqual(?ERR_SERVICE_UNAVAILABLE, get_cdmi_response()),
 
     set_circuit_breaker_state(op_worker, closed),
     ?assertMatch(ok, get_cdmi_response()).
@@ -82,8 +82,8 @@ gs_circuit_breaker_test(_Config) ->
     ?assertMatch({ok, _}, gs_test_utils:gs_request(GsClient, GsArgs)),
 
     set_circuit_breaker_state(op_worker, open),
-    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, gs_test_utils:gs_request(GsClient, GsArgs)),
-    ?assertMatch(?ERROR_SERVICE_UNAVAILABLE, gs_test_utils:connect_via_gs(Node, ?NOBODY)),
+    ?assertEqual(?ERR_SERVICE_UNAVAILABLE, gs_test_utils:gs_request(GsClient, GsArgs)),
+    ?assertEqual(?ERR_SERVICE_UNAVAILABLE, gs_test_utils:connect_via_gs(Node, ?NOBODY)),
 
     set_circuit_breaker_state(op_worker, closed),
     ?assertMatch({ok, _}, gs_test_utils:gs_request(GsClient, GsArgs)),
@@ -162,6 +162,7 @@ process_http_response(Response) ->
             ok;
         {ok, _, _, ErrorBody} ->
             #{<<"error">> := ErrorJson} = json_utils:decode(ErrorBody),
+            % TODO
             errors:from_json(ErrorJson)
     end.
 

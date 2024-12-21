@@ -154,7 +154,7 @@ write_acl_metadata_test(Config) ->
         ),
         {Code7, json_utils:decode(Response7)}
     end,
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)),
     ?assertMatch(ExpRestError, Fun2(), ?ATTEMPTS).
 
 
@@ -172,7 +172,7 @@ acl_read_file_test(Config) ->
         }, Config#cdmi_test_config.p1_selector
     ),
 
-    EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    EaccesError = rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)),
 
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_test_utils:do_request(
@@ -221,7 +221,7 @@ acl_write_file_test(Config) ->
         }, Config#cdmi_test_config.p1_selector
     ),
     RequestHeaders = [cdmi_test_utils:user_2_token_header(), ?CDMI_VERSION_HEADER, ?CDMI_OBJECT_CONTENT_TYPE_HEADER],
-    EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    EaccesError = rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)),
 
     % set acl to 'read&write' and test cdmi/non-cdmi put request (should succeed)
     {ok, ?HTTP_204_NO_CONTENT, _, _} = cdmi_test_utils:do_request(
@@ -341,7 +341,7 @@ acl_read_write_dir_test(Config) ->
         <<"metadata">> => #{<<"cdmi_acl">> => [DirWrite]}
     }),
     Dirname = filename:join(RootPath, "acl_test_dir1") ++ "/",
-    EaccesError = rest_test_utils:get_rest_error(?ERROR_POSIX(?EACCES)),
+    EaccesError = rest_test_utils:get_rest_error(?ERR_POSIX(?EACCES)),
 
     %%--- read write dir test ------
     ?assert(not cdmi_test_utils:object_exists(Dirname, Config)),

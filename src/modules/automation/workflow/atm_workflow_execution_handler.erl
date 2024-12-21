@@ -576,7 +576,7 @@ handle_exception(
 
         % if last lane run already stopped then abrupt stopping hasn't crashed
         % and only workflow needs to be marked as stopped
-        ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?STOPPING_STATUS) ->
+        ?ERR_ATM_INVALID_STATUS_TRANSITION(Status, ?STOPPING_STATUS) ->
             LastAtmLaneRunPhase = atm_lane_execution_status:status_to_phase(Status),
             case lists:member(LastAtmLaneRunPhase, [?SUSPENDED_PHASE, ?ENDED_PHASE]) of
                 true -> AbruptStoppingReason;
@@ -771,7 +771,7 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
                     ?ENDED_PHASE ->
                         ok
                 end;
-            ?ERROR_NOT_FOUND ->
+            ?ERR_NOT_FOUND ->
                 ok
         end
     end, lists:seq(CurrentAtmLaneIndex, AtmLanesCount)).
@@ -808,7 +808,7 @@ delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExec
                 {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 
             (_) ->
-                ?ERROR_NOT_FOUND
+                ?ERR_NOT_FOUND(?err_ctx())
         end,
         {NewAtmWorkflowExecution, Indices} = lists_utils:foldl_while(fun
             (AtmLaneIndex, Acc = {AtmWorkflowExecutionAcc, IndicesAcc}) ->
@@ -817,7 +817,7 @@ delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExec
                 ) of
                     {ok, NewAtmWorkflowExecutionAcc} ->
                         {cont, {NewAtmWorkflowExecutionAcc, [AtmLaneIndex | IndicesAcc]}};
-                    ?ERROR_NOT_FOUND ->
+                    ?ERR_NOT_FOUND ->
                         {halt, Acc}
                 end
         end, {AtmWorkflowExecution, []}, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),

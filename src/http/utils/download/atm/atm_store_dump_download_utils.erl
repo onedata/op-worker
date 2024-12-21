@@ -47,7 +47,7 @@ assert_operation_supported(#atm_store_ctx{store = #atm_store{
     %% TODO VFS-11424 add store dump iterators for other stores
     case atm_store_container:get_store_type(AtmStoreContainer) of
         audit_log -> ok;
-        _ -> throw(?ERROR_NOT_SUPPORTED)
+        _ -> throw(?ERR_NOT_SUPPORTED(?err_ctx()))
     end.
 
 

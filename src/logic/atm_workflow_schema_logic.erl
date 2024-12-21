@@ -43,13 +43,13 @@ get(SessionId, AtmWorkflowSchemaId) ->
     atm_workflow_schema_revision:revision_number(),
     od_atm_workflow_schema:record() | od_atm_workflow_schema:doc()
 ) ->
-    {ok, atm_workflow_schema_revision:record()} | ?ERROR_NOT_FOUND.
+    {ok, atm_workflow_schema_revision:record()} | od_error_not_found:t().
 get_revision(RevisionNumber, #od_atm_workflow_schema{revision_registry = RevisionRegistry}) ->
     case atm_workflow_schema_revision_registry:has_revision(RevisionNumber, RevisionRegistry) of
         true ->
             {ok, atm_workflow_schema_revision_registry:get_revision(RevisionNumber, RevisionRegistry)};
         false ->
-            ?ERROR_NOT_FOUND
+            ?ERR_NOT_FOUND(?err_ctx())
     end;
 get_revision(RevisionNumber, #document{value = AtmWorkflowSchema}) ->
     get_revision(RevisionNumber, AtmWorkflowSchema).
@@ -64,7 +64,7 @@ get_revision(RevisionNumber, #document{value = AtmWorkflowSchema}) ->
 -spec assert_executable_revision(atm_workflow_schema_revision:record()) ->
     ok | no_return().
 assert_executable_revision(#atm_workflow_schema_revision{lanes = []}) ->
-    throw(?ERROR_ATM_WORKFLOW_EMPTY);
+    throw(?ERR_ATM_WORKFLOW_EMPTY(?err_ctx()));
 
 assert_executable_revision(#atm_workflow_schema_revision{lanes = AtmLaneSchemas}) ->
     lists:foreach(fun assert_lane_schema_executable/1, AtmLaneSchemas).
@@ -78,7 +78,7 @@ assert_executable_revision(#atm_workflow_schema_revision{lanes = AtmLaneSchemas}
 %% @private
 -spec assert_lane_schema_executable(atm_lane_schema:record()) -> ok | no_return().
 assert_lane_schema_executable(#atm_lane_schema{id = AtmLaneSchemaId, parallel_boxes = []}) ->
-    throw(?ERROR_ATM_LANE_EMPTY(AtmLaneSchemaId));
+    throw(?ERR_ATM_LANE_EMPTY(?err_ctx(), AtmLaneSchemaId));
 
 assert_lane_schema_executable(#atm_lane_schema{parallel_boxes = AtmParallelBoxSchemas}) ->
     lists:foreach(fun assert_parallel_box_schema_executable/1, AtmParallelBoxSchemas).
@@ -91,7 +91,7 @@ assert_parallel_box_schema_executable(#atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId,
     tasks = []
 }) ->
-    throw(?ERROR_ATM_PARALLEL_BOX_EMPTY(AtmParallelBoxSchemaId));
+    throw(?ERR_ATM_PARALLEL_BOX_EMPTY(?err_ctx(), AtmParallelBoxSchemaId));
 
 assert_parallel_box_schema_executable(#atm_parallel_box_schema{}) ->
     ok.

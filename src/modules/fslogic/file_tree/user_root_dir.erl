@@ -188,9 +188,9 @@ ensure_cache_updated() ->
                             gb_sets:add(SpaceId, AccFetchedSpaces)
                     end
                 end, AlreadyFetchedSpaces, SpaceIds);
-            ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
+            ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) ->
                 AlreadyFetchedSpaces;
-            ?ERROR_TOKEN_INVALID ->
+            ?ERR_TOKEN_INVALID ->
                 AlreadyFetchedSpaces;
             {error, _} = Error ->
                 ?warning(?autoformat_with_msg("Could not fetch spaces", [UserId, Error])),
@@ -269,8 +269,8 @@ get_user_supported_spaces(UserCtx) ->
 get_user_supported_spaces(SessId, UserId) ->
     case user_logic:get_eff_spaces(SessId, UserId) of
         {ok, AllUserSpaceIds} -> filter_spaces_with_support(SessId, AllUserSpaceIds);
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) -> []; % race with token invalidation
-        ?ERROR_TOKEN_INVALID -> []
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) -> []; % race with token invalidation
+        ?ERR_TOKEN_INVALID -> []
     end.
 
 
@@ -298,9 +298,9 @@ group_spaces_by_name(SessId, SpaceIds) ->
         case space_logic:get_name(SessId, SpaceId) of
             {ok, SpaceName} ->
                 Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]};
-            ?ERROR_NOT_FOUND ->
+            ?ERR_NOT_FOUND ->
                 Acc;
-            ?ERROR_FORBIDDEN ->
+            ?ERR_FORBIDDEN ->
                 Acc
         end
     end, #{}, SpaceIds).

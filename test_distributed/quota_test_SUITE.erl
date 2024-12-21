@@ -541,8 +541,8 @@ replication_of_file_bigger_than_support_should_fail(Config) ->
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 0}, #{<<"totalBlocksSize">> := FileSize}]},
         opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
-    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))).
+    ?assertMatch(?ERR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
+    ?assertMatch(?ERR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))).
 
 migration_of_file_bigger_than_support_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
@@ -556,10 +556,10 @@ migration_of_file_bigger_than_support_should_fail(Config) ->
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 0}, #{<<"totalBlocksSize">> := FileSize}]},
         opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
+    ?assertMatch(?ERR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
     )),
-    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
+    ?assertMatch(?ERR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
     )).
 

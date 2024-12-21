@@ -188,7 +188,7 @@ request(Client, Req, Timeout) ->
                         Err1
                 end;
             true ->
-                ?ERROR_NO_CONNECTION_TO_ONEZONE
+                ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain())
         end
     catch
         throw:{error, _} = Err2 ->
@@ -197,7 +197,7 @@ request(Client, Req, Timeout) ->
             ?error_stacktrace("Unexpected error while processing GS request - ~tp:~tp", [
                 Type, Reason
             ], Stacktrace),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
     end.
 
 
@@ -308,7 +308,7 @@ init([]) ->
             ?notice("Onezone connection established: ~tp", [ClientRef]),
             yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
             {ok, #state{client_ref = ClientRef}};
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             gs_hooks:handle_deregistered_from_oz(),
             {stop, normal};
@@ -338,7 +338,7 @@ init([]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_call({async_request, _, _}, _From, #state{client_ref = undefined} = State) ->
-    {reply, ?ERROR_NO_CONNECTION_TO_ONEZONE, State};
+    {reply, ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()), State};
 
 handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = ClientRef, promises = Promises} = State) ->
     ReqId = gs_client:async_request(ClientRef, GsReq),
@@ -396,16 +396,16 @@ handle_info({response, ReqId, Response}, #state{promises = Promises} = State) ->
             {noreply, State#state{promises = NewPromises}};
         error ->
             % Possible if 'check_timeout' for the request has fired and
-            % ?ERROR_TIMEOUT was sent back to the caller pid, in such case just
+            % ?ERR_TIMEOUT was sent back to the caller pid, in such case just
             % ignore the result
             {noreply, State}
     end;
 % Async check if the request has timed out (there has been no response received)
-% in such case, returns ?ERROR_TIMEOUT to the pid waiting for the response.
+% in such case, returns ?ERR_TIMEOUT to the pid waiting for the response.
 handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     case maps:take(ReqId, Promises) of
         {Pid, NewPromises} ->
-            Pid ! {response, ReqId, ?ERROR_TIMEOUT},
+            Pid ! {response, ReqId, ?ERR_TIMEOUT(?err_ctx())},
             {noreply, State#state{promises = NewPromises}};
         error ->
             % There is no promise for the ReqId anymore, which means the request
@@ -590,7 +590,7 @@ do_request(Client, #gs_req_graph{} = GraphReq, Timeout, _) ->
 call_onezone(Client, Request, Timeout) ->
     case get_connection_pid() of
         undefined ->
-            ?ERROR_NO_CONNECTION_TO_ONEZONE;
+            ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain());
         Pid ->
             call_onezone(Pid, Client, Request, Timeout)
     end.
@@ -620,18 +620,18 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
                 after
                 % the gen_server uses Timeout internally, allow some larger margin
                     Timeout + 5000 ->
-                        ?ERROR_TIMEOUT
+                        ?ERR_TIMEOUT(?err_ctx())
                 end
         end
     catch
-        exit:{timeout, _} -> ?ERROR_TIMEOUT;
-        exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_ONEZONE;
+        exit:{timeout, _} -> ?ERR_TIMEOUT(?err_ctx());
+        exit:{normal, _} -> ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain());
         throw:{error, _} = Err -> Err;
         Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error during call to gs_client_worker - ~tp:~tp", [
                 Type, Reason
             ], Stacktrace),
-            throw(?ERROR_INTERNAL_SERVER_ERROR)
+            throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
     end.
 
 
@@ -659,7 +659,7 @@ maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{type = Type, aspect = As
                         unknown ->
                             false;
                         false ->
-                            ?ERROR_FORBIDDEN;
+                            ?ERR_FORBIDDEN(?err_ctx());
                         true ->
                             Result = case Scope of
                                 CachedScope ->
@@ -761,7 +761,7 @@ get_from_cache(#gri{type = Type, id = Id}) ->
 client_to_credentials(SessionId) when is_binary(SessionId) ->
     case session:get_credentials(SessionId) of
         {ok, Credentials} -> Credentials;
-        {error, not_found} -> throw(?ERROR_UNAUTHORIZED)
+        {error, not_found} -> throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined))
     end;
 client_to_credentials(Credentials) ->
     Credentials.

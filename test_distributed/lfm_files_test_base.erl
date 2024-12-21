@@ -1878,7 +1878,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1886,7 +1886,7 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        ?ERROR_POSIX(?EPERM),
+        ?ERR_POSIX(?EPERM),
         opt_shares:create(W, SessId, ?FILE_REF(fslogic_file_id:user_root_dir_guid(UserId)), <<"share_name">>)
     ),
     % But space dir can
@@ -1918,7 +1918,7 @@ create_share_file(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1947,7 +1947,7 @@ remove_share(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:remove(W, SessId, ShareId1)),
+    ?assertMatch(?ERR_POSIX(?EPERM), opt_shares:remove(W, SessId, ShareId1)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1956,7 +1956,7 @@ remove_share(Config) ->
     % Remove share by share Id
     ?assertMatch(ok, opt_shares:remove(W, SessId, ShareId1)),
     % ShareId no longer exists -> {error, not_found}
-    ?assertMatch(?ERROR_NOT_FOUND, opt_shares:remove(W, SessId, ShareId1)).
+    ?assertMatch(?ERR_NOT_FOUND, opt_shares:remove(W, SessId, ShareId1)).
 
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

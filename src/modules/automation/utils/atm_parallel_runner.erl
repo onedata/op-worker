@@ -72,5 +72,5 @@ map(Callback, Elements) ->
                 [?MODULE, ?FUNCTION_NAME, Class, Reason],
                 Stacktrace
             ),
-            throw(?ERROR_INTERNAL_SERVER_ERROR)
+            throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
     end.

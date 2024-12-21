@@ -96,7 +96,7 @@ resolve_handler(get, configuration, public) -> ?MODULE;
 resolve_handler(get, test_image, public) -> ?MODULE;
 resolve_handler(get, health, public) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
 
 
 %%%===================================================================
@@ -135,7 +135,7 @@ fetch_entity(#op_req{gri = #gri{aspect = As, scope = public}}) when
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri = #gri{
     id = ProviderId,
@@ -150,7 +150,7 @@ fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri
     end;
 
 fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    ?ERR_FORBIDDEN(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -194,7 +194,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = health}}, _) ->
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -220,7 +220,7 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
 get(#op_req{gri = #gri{aspect = health}}, _) ->
     case node_manager:is_cluster_healthy() of
         true -> {ok, value, #{<<"status">> => <<"healthy">>}};
-        false -> throw(?ERROR_INTERNAL_SERVER_ERROR)
+        false -> throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
     end.
 
 %%--------------------------------------------------------------------
@@ -230,7 +230,7 @@ get(#op_req{gri = #gri{aspect = health}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -240,7 +240,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+    ?ERR_NOT_SUPPORTED(?err_ctx()).
 
 
 %%%===================================================================

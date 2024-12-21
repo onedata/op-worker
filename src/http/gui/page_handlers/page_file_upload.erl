@@ -63,7 +63,7 @@ handle(<<"POST">>, InitialReq) ->
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
                 throw:upload_not_authorized ->
-                    reply_with_error(?ERROR_FORBIDDEN, Req);
+                    reply_with_error(?ERR_FORBIDDEN(?err_ctx()), Req);
                 throw:Error ->
                     reply_with_error(Error, Req);
                 Type:Message:Stacktrace ->
@@ -72,10 +72,10 @@ handle(<<"POST">>, InitialReq) ->
                         [UserId, Type, Message],
                         Stacktrace
                     ),
-                    reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
+                    reply_with_error(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined), Req)
             end;
         {ok, ?GUEST} ->
-            reply_with_error(?ERROR_UNAUTHORIZED, Req);
+            reply_with_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req);
         {error, _} = Error ->
             reply_with_error(Error, Req)
     end.

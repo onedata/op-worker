@@ -213,7 +213,7 @@ acquire_offline_user_access_token(TokenCredentials = #token_credentials{
                     AcquireError
             end;
         {ok, _, _} ->
-            ?ERROR_TOKEN_SUBJECT_INVALID;
+            ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx());
         {error, _} = VerificationError ->
             VerificationError
     end.
@@ -238,7 +238,7 @@ verify_credentials(TokenCredentials) ->
     case auth_cache:get_token_credentials_verification_result(TokenCredentials) of
         {ok, CachedVerificationResult} ->
             CachedVerificationResult;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             try
                 {TokenRef, VerificationResult} = verify_token_credentials(TokenCredentials),
                 auth_cache:save_token_credentials_verification_result(
@@ -249,7 +249,7 @@ verify_credentials(TokenCredentials) ->
                 ?error_stacktrace("Cannot verify user credentials due to ~tp:~tp", [
                     Type, Reason
                 ], Stacktrace),
-                ?ERROR_INTERNAL_SERVER_ERROR
+                ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
             end
     end.
 
@@ -288,14 +288,14 @@ verify_token_credentials(#token_credentials{
                 end,
                 TokenRef = auth_cache:get_token_ref(Subject, Token),
                 {TokenRef, {ok, Auth, TokenExpiration}};
-            ?ERROR_TOKEN_SERVICE_FORBIDDEN(?SERVICE(?OP_WORKER, _)) = ServiceForbiddenError ->
+            ?ERR_TOKEN_SERVICE_FORBIDDEN(?SERVICE(?OP_WORKER, _)) = ServiceForbiddenError ->
                 % this error may be generated when the user is not supported by the
                 % provider - check if this is the case and return a clearer error
                 case Token#token.subject of
                     ?SUB(user, UserId) ->
                         case provider_logic:has_eff_user(UserId) of
                             true -> {undefined, ServiceForbiddenError};
-                            false -> {undefined, ?ERROR_USER_NOT_SUPPORTED}
+                            false -> {undefined, ?ERR_USER_NOT_SUPPORTED(?err_ctx())}
                         end;
                     _ ->
                         {undefined, ServiceForbiddenError}
@@ -323,7 +323,7 @@ try_to_deserialize_token(SerializedToken) ->
 ensure_subject_is_a_supported_user(?SUB(user, UserId)) ->
     case provider_logic:has_eff_user(UserId) of
         true -> ok;
-        false -> throw(?ERROR_USER_NOT_SUPPORTED)
+        false -> throw(?ERR_USER_NOT_SUPPORTED(?err_ctx()))
     end;
 ensure_subject_is_a_supported_user(_) ->
-    throw(?ERROR_TOKEN_SUBJECT_INVALID).
+    throw(?ERR_TOKEN_SUBJECT_INVALID(?err_ctx())).

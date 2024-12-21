@@ -75,7 +75,7 @@ schedule_atm_workflow_with_no_lanes() ->
     }),
 
     ?assertThrow(
-        ?ERROR_ATM_WORKFLOW_EMPTY,
+        ?ERR_ATM_WORKFLOW_EMPTY,
         try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)
     ).
 
@@ -100,7 +100,7 @@ schedule_atm_workflow_with_empty_lane() ->
     ),
 
     ?assertThrow(
-        ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
+        ?ERR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
         try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)
     ).
 
@@ -127,7 +127,7 @@ schedule_atm_workflow_with_empty_parallel_box() ->
     ),
 
     ?assertThrow(
-        ?ERROR_ATM_PARALLEL_BOX_EMPTY(EmptyAtmParallelBoxSchemaId),
+        ?ERR_ATM_PARALLEL_BOX_EMPTY(EmptyAtmParallelBoxSchemaId),
         try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)
     ).
 
@@ -142,11 +142,11 @@ schedule_incompatible_atm_workflow() ->
     ),
 
     patch_workflow_schema_compatibility(AtmWorkflowSchemaId, false),
-    ?assertThrow(?ERROR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)),
+    ?assertThrow(?ERR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)),
 
     patch_workflow_schema_compatibility(AtmWorkflowSchemaId, true),
     patch_lambda_compatibility(AtmLambdaId, false),
-    ?assertThrow(?ERROR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)).
+    ?assertThrow(?ERR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)).
 
 
 schedule_atm_workflow_with_openfaas_not_configured() ->
@@ -155,7 +155,7 @@ schedule_atm_workflow_with_openfaas_not_configured() ->
     ),
 
     ?assertThrow(
-        ?ERROR_ATM_OPENFAAS_NOT_CONFIGURED,
+        ?ERR_ATM_OPENFAAS_NOT_CONFIGURED,
         try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)
     ).
 
@@ -169,10 +169,10 @@ schedule_atm_workflow_with_invalid_initial_store_content() ->
     ),
     InvalidInitialItem = <<"STR">>,
 
-    ExpError = ?ERROR_ATM_STORE_CREATION_FAILED(
+    ExpError = ?ERR_ATM_STORE_CREATION_FAILED(
         <<"st_src">>,
-        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([InvalidInitialItem], atm_array_type, #{
-            <<"$[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+        ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([InvalidInitialItem], atm_array_type, #{
+            <<"$[0]">> => errors:to_json(?ERR_ATM_DATA_TYPE_UNVERIFIED(
                 InvalidInitialItem, atm_number_type
             ))
         })

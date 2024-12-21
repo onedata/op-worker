@@ -65,7 +65,7 @@ on_collection_move(CollectionType, Collection) ->
     end, ignore, Collection).
 
 
--spec with_all(stats_selector(), collection()) -> {ok, collection()} | ?ERROR_NOT_FOUND.
+-spec with_all(stats_selector(), collection()) -> {ok, collection()} | od_error_not_found:t().
 with_all(all, Collection) ->
     {ok, Collection};
 with_all(StatNames, Collection) ->
@@ -73,7 +73,7 @@ with_all(StatNames, Collection) ->
     FilteredMap = maps:with(StatNames, Collection),
     case maps:size(FilteredMap) of
         StatsCount -> {ok, FilteredMap};
-        _ -> ?ERROR_NOT_FOUND
+        _ -> ?ERR_NOT_FOUND(?err_ctx())
     end.
 
 

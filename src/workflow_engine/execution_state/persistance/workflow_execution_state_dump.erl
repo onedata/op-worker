@@ -72,13 +72,13 @@ dump_workflow_execution_state(ExecutionId) ->
             }},
             {ok, _} = datastore_model:save(?CTX, Doc),
             ok;
-        ?ERROR_NOT_FOUND ->
+        ?ERR_NOT_FOUND ->
             ok
     end.
 
 
 -spec restore_workflow_execution_state_from_dump(workflow_execution_state:doc(), iterator:iterator()) ->
-    ok | ?ERROR_NOT_FOUND.
+    ok | od_error_not_found:t().
 restore_workflow_execution_state_from_dump(
     #document{key = ExecutionId, value = #workflow_execution_state{incarnation_tag = Tag} = StateBase} = DocBase,
     Iterator
@@ -109,8 +109,8 @@ restore_workflow_execution_state_from_dump(
 
             workflow_execution_state:save(Doc),
             delete(ExecutionId);
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 
@@ -123,7 +123,7 @@ delete(ExecutionId) ->
 %%% Test API
 %%%===================================================================
 
--spec get(workflow_engine:execution_id()) -> {ok, datastore_doc:doc(#workflow_execution_state_dump{})} | ?ERROR_NOT_FOUND.
+-spec get(workflow_engine:execution_id()) -> {ok, datastore_doc:doc(#workflow_execution_state_dump{})} | od_error_not_found:t().
 get(ExecutionId) ->
     datastore_model:get(?CTX, ExecutionId).
 

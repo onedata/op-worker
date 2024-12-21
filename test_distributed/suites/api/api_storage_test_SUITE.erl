@@ -104,7 +104,7 @@ get_shared_storage_test_base(TargetProviders, SpaceId, StorageId, StorageName, P
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistentStorage">>, ?ERROR_NOT_FOUND}]
+                bad_values = [{bad_id, <<"NonExistentStorage">>, ?ERR_NOT_FOUND}]
             }
         }
     ])).

@@ -367,7 +367,7 @@ check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
             check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
         {ok, ?REGULAR_FILE_TYPE} ->
             check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
-        ?ERROR_NOT_SUPPORTED ->
+        ?ERR_NOT_SUPPORTED ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
@@ -529,7 +529,7 @@ check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = File
                 {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
                     {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
             end;
-        ?ERROR_NOT_SUPPORTED ->
+        ?ERR_NOT_SUPPORTED ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
@@ -682,7 +682,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
             {?FILE_CREATED, FileCtx2, StorageFileCtx6};
-        {?ERROR_NOT_SUPPORTED, StorageFileCtx3} ->
+        {?ERR_NOT_SUPPORTED, StorageFileCtx3} ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx3}
     end.
 
@@ -707,7 +707,7 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
 
 
 -spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) ->
-    {ok | ?ERROR_NOT_SUPPORTED, storage_file_ctx:ctx()}.
+    {ok | od_error_not_supported:t(), storage_file_ctx:ctx()}.
 create_location(FileUuid, StorageFileCtx, OwnerId) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -723,8 +723,8 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
             create_file_location(FileUuid, OwnerId, StorageFileCtx2);
         {ok, ?DIRECTORY_TYPE} ->
             create_dir_location(FileUuid, StorageFileCtx2);
-        ?ERROR_NOT_SUPPORTED ->
-            {?ERROR_NOT_SUPPORTED, StorageFileCtx2}
+        ?ERR_NOT_SUPPORTED = ErrorNotSupported ->
+            {ErrorNotSupported, StorageFileCtx2}
 
     end.
 
@@ -1345,7 +1345,7 @@ is_suffixed(FileName) ->
     end.
 
 %% @private
--spec get_file_type(storage_file_ctx:ctx()) -> {{ok, onedata_file:type()} | ?ERROR_NOT_SUPPORTED, storage_file_ctx:ctx()}.
+-spec get_file_type(storage_file_ctx:ctx()) -> {{ok, onedata_file:type()} | od_error_not_supported:t(), storage_file_ctx:ctx()}.
 get_file_type(StorageFileCtx) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     InferTypeAns = storage_driver:infer_type(StMode),

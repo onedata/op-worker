@@ -375,6 +375,6 @@ get_space_dir_event_details(SpaceId, SessionId) ->
             end;
         {ok, #document{value = #od_space{providers = Providers}}} when map_size(Providers) == 0 ->
             not_applicable;
-        ?ERROR_FORBIDDEN ->
+        ?ERR_FORBIDDEN ->
             not_applicable
     end.

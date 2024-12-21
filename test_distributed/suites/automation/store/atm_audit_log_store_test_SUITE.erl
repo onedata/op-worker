@@ -210,7 +210,7 @@ expiration_test(_Config) ->
     end,
 
     % the underlying log should not be created until the first log is appended
-    ?assertEqual(?ERROR_NOT_FOUND, CallBrowseContent()),
+    ?assertEqual(?ERR_NOT_FOUND, CallBrowseContent()),
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
         AtmWorkflowExecutionAuth, #{<<"value">> => ?RAND_STR()}, build_content_update_options(append), AtmStoreId
     ))),
@@ -218,7 +218,7 @@ expiration_test(_Config) ->
     % simulate expiration of the audit log
     {ok, #atm_store{container = {_, _, _, BackendId}}} = ?rpc(atm_store_api:get(AtmStoreId)),
     ?rpc(audit_log:delete(BackendId)),
-    ?assertEqual(?ERROR_NOT_FOUND, CallBrowseContent()),
+    ?assertEqual(?ERR_NOT_FOUND, CallBrowseContent()),
     % any append should cause log recreation
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
         AtmWorkflowExecutionAuth, #{<<"value">> => ?RAND_STR()}, build_content_update_options(append), AtmStoreId
@@ -282,7 +282,7 @@ logging_level_test(_Config) ->
         ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
     end,
     case ExpEntries of
-        [] -> ?assertThrow(?ERROR_NOT_FOUND, BrowseFun());
+        [] -> ?assertThrow(?ERR_NOT_FOUND, BrowseFun());
         _ -> ?assertEqual(ExpContentBrowseResult, BrowseFun())
     end.
 
@@ -407,7 +407,7 @@ browse_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
             <<"isLast">> := true
         }} = ?erpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId)),
         Logs
-    catch throw:?ERROR_NOT_FOUND ->
+    catch throw:?ERR_NOT_FOUND ->
         % possible when the underlying log hasn't been created yet (no appends were done)
         []
     end.
