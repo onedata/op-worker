@@ -62,12 +62,12 @@ handle_error(Request, Type, Error, Stacktrace) ->
     {MsgFormat, FormatArgs} = case LogRequest of
         true ->
             MF = "Cannot process request ~tp (code: ~tp)~nStacktrace: ~ts",
-            FA = [lager:pr(Request, ?MODULE), Code,
-                iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error}))],
+            FA = [str_utils:format("~tp", [Request]), Code,
+                iolist_to_binary(?pr_stacktrace(Stacktrace, {Type, Error}))],
             {MF, FA};
         _ ->
             MF = "Cannot process request: code: ~tp~nStacktrace: ~ts",
-            FA = [Code, iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error}))],
+            FA = [Code, iolist_to_binary(?pr_stacktrace(Stacktrace, {Type, Error}))],
             {MF, FA}
     end,
     case LogLevel of

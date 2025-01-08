@@ -88,7 +88,7 @@ infer_error(Error) ->
 format_log_message(SessionId, RequestTerm) ->
     AutoformattedDetails = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->
-            Request = lager:pr(RequestTerm, ?MODULE),
+            Request = str_utils:format("~tp", [RequestTerm]),
             ?notice(?autoformat(SessionId, Request));
         false ->
             ?notice(?autoformat(SessionId))

@@ -13,6 +13,8 @@
 -module(test_websocket_client).
 -author("Lukasz Opiola").
 
+-include_lib("ctool/include/logging.hrl").
+
 -export([connect_to_provider_node/4]).
 -export([connect_to_url/4]).
 -export([send/2]).
@@ -108,7 +110,7 @@ websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushM
                 "Stacktrace: ~ts~n"
                 "Payload: ~ts", [
                     ?MODULE, ?FUNCTION_NAME, Class, Reason,
-                    lager:pr_stacktrace(Stacktrace),
+                    ?pr_stacktrace(Stacktrace),
                     Payload
                 ]
             ),
