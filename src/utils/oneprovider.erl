@@ -36,9 +36,8 @@
 % Developer functions
 -export([register_in_oz_dev/3]).
 
--define(GUI_UPLOAD_RETRY_INTERVAL_SECONDS, op_worker:get_env(gui_upload_retry_interval_seconds, 300)).
 -define(GUI_PACKAGE_PATH, op_worker:get_env(gui_package_path)).
--define(OZ_VERSION_CACHE_TTL, timer:minutes(5)).
+-define(GUI_UPLOAD_RETRY_BACKOFF_SEC, op_worker:get_env(gui_upload_retry_backoff_seconds, 300)).
 
 %%%===================================================================
 %%% API
@@ -179,29 +178,35 @@ get_oz_providers_page() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets up Oneprovider worker service in Onezone - updates version info
-%% (release, build and GUI versions). If given GUI version is not present in
-%% Onezone, the GUI package is uploaded first. If any errors occur during
-%% upload, the Oneprovider continues to operate, but its GUI might not be
-%% functional.
+%% If needed, updates the cluster version info (release, build and GUI versions)
+%% in Onezone. If given GUI version is not present in Onezone, the GUI package
+%% is uploaded first. If any errors occur during the upload, the Oneprovider
+%% continues to operate, but its GUI will be nonfunctional. Failed upload will be
+%% retried with a backoff.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_service_set_up_in_onezone() -> ok.
 ensure_service_set_up_in_onezone() ->
-    Release = op_worker:get_release_version(),
-    Build = op_worker:get_build_version(),
-    {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
-    {ok, #document{value = #od_cluster{
-        worker_release_version = WorkerReleaseVersion,
-        worker_build_version = WorkerBuildVersion,
-        worker_gui_hash = WorkerGuiHash
-    }}} = cluster_logic:get(),
-    case {Release, Build, GuiHash} of
-        {WorkerReleaseVersion, WorkerBuildVersion, WorkerGuiHash} ->
-            ok;
-        _ ->
-            set_up_service_in_onezone(Release, Build, GuiHash)
-    end.
+    ConnPid = gs_client_worker:get_connection_pid(),
+    utils:throttle({?FUNCTION_NAME, ConnPid}, ?GUI_UPLOAD_RETRY_BACKOFF_SEC, fun() ->
+        case is_service_set_up_in_onezone() of
+            true ->
+                ok;
+            false ->
+                case ?catch_exceptions(attempt_to_set_up_service_in_onezone()) of
+                    ok ->
+                        ?info("Oneprovider worker service successfully set up in Onezone");
+                    Error ->
+                        ?alert(?autoformat_with_msg(
+                            "Oneprovider worker service could not be successfully set "
+                            "up in Onezone. The Web GUI might be non-functional. Next "
+                            "attempt in about ~B seconds.", [?GUI_UPLOAD_RETRY_BACKOFF_SEC],
+                            [Error]
+                        ))
+                end
+        end
+    end),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -247,10 +252,7 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Returns a list of all nodes IP addresses.
-%% @end
-%%--------------------------------------------------------------------
+%% @private
 -spec get_all_nodes_ips(NodeList :: [node()]) -> [binary()].
 get_all_nodes_ips(NodeList) ->
     lists_utils:pmap(fun(Node) ->
@@ -259,28 +261,37 @@ get_all_nodes_ips(NodeList) ->
     end, NodeList).
 
 
--spec set_up_service_in_onezone(onedata:release_version(), binary(), onedata:gui_hash()) -> ok.
-set_up_service_in_onezone(Release, Build, GuiHash) ->
-    ?info("Setting up Oneprovider worker service in Onezone"),
-    case cluster_logic:update_version_info(Release, Build, GuiHash) of
-        ok ->
-            ?info("Skipping GUI upload as it is already present in Onezone"),
-            ?info("Oneprovider worker service successfully set up in Onezone");
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
-            ?info("Uploading GUI to Onezone (~ts)", [GuiHash]),
+%% @private
+-spec is_service_set_up_in_onezone() -> boolean().
+is_service_set_up_in_onezone() ->
+    {ok, #document{value = #od_cluster{
+        worker_release_version = ClusterReleaseVsn,
+        worker_build_version = ClusterBuildVsn,
+        worker_gui_hash = ClusterGuiHash
+    }}} = cluster_logic:get(),
+    {ClusterReleaseVsn, ClusterBuildVsn, ClusterGuiHash} == current_version_info().
 
-            utils:throttle(?GUI_UPLOAD_RETRY_INTERVAL_SECONDS, fun() ->
-                case cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH) of
-                    ok ->
-                        ?info("GUI uploaded succesfully"),
-                        ok = cluster_logic:update_version_info(Release, Build, GuiHash),
-                        ?info("Oneprovider worker service successfully set up in Onezone");
-                    {error, _} = Error ->
-                        ?alert(
-                            "Oneprovider worker service could not be successfully set "
-                            "up in Onezone due to an error during GUI package upload. "
-                            "The Web GUI might be non-functional.~nError was: ~tp", [Error]
-                        )
-                end
-            end)
+
+%% @private
+-spec attempt_to_set_up_service_in_onezone() -> ok | errors:error().
+attempt_to_set_up_service_in_onezone() ->
+    ?info("Setting up Oneprovider worker service in Onezone..."),
+    {ReleaseVsn, BuildVsn, GuiHash} = current_version_info(),
+    case cluster_logic:update_version_info(ReleaseVsn, BuildVsn, GuiHash) of
+        ok ->
+            ?info("Skipping GUI upload as it is already present in Onezone");
+        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
+            ?info("Uploading GUI files to Onezone (~ts)...", [GuiHash]),
+            ?check(cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH)),
+            ?info("GUI uploaded succesfully"),
+            ?check(cluster_logic:update_version_info(ReleaseVsn, BuildVsn, GuiHash))
     end.
+
+
+%% @private
+-spec current_version_info() -> {onedata:release_version(), binary(), onedata:gui_hash()}.
+current_version_info() ->
+    ReleaseVsn = op_worker:get_release_version(),
+    BuildVsn = op_worker:get_build_version(),
+    {ok, GuiHash} = gui:package_hash(?GUI_PACKAGE_PATH),
+    {ReleaseVsn, BuildVsn, GuiHash}.
