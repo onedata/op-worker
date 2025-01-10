@@ -251,7 +251,6 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
 %% @private
 -spec get_all_nodes_ips(NodeList :: [node()]) -> [binary()].
 get_all_nodes_ips(NodeList) ->
