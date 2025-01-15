@@ -80,7 +80,7 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec reload_web_certs() -> ok | {error, term()}.
 reload_web_certs() ->
-    gui:reload_web_certs(gui_config()).
+    gui:reload_web_certs(get_chain_file()).
 
 
 %%--------------------------------------------------------------------
@@ -114,7 +114,7 @@ gui_config() ->
     % Get certs
     KeyFile = op_worker:get_env(web_key_file),
     CertFile = op_worker:get_env(web_cert_file),
-    ChainFile = op_worker:get_env(web_cert_chain_file, undefined),
+    ChainFile = get_chain_file(),
 
     CustomCowboyRoutes = lists:flatten([
         {?NAGIOS_PATH, nagios_handler, []},
@@ -151,3 +151,9 @@ gui_config() ->
         dynamic_pages = DynamicPageRoutes,
         custom_cowboy_routes = CustomCowboyRoutes
     }.
+
+
+%% @private
+-spec get_chain_file() -> undefined | file:filename().
+get_chain_file() ->
+    op_worker:get_env(web_cert_chain_file, undefined).

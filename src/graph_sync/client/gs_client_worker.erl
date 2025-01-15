@@ -936,12 +936,6 @@ is_root_authorized_to_get(_, #gri{type = od_provider, scope = protected}, _) ->
 is_root_authorized_to_get(_, #gri{type = od_cluster, scope = private}, _) ->
     true;
 
-is_root_authorized_to_get(_, #gri{type = od_handle_service, scope = private}, _) ->
-    false;
-
-is_root_authorized_to_get(_, #gri{type = od_handle, scope = private}, _) ->
-    false;
-
 is_root_authorized_to_get(_, _, _) ->
     false.
 
@@ -1015,12 +1009,6 @@ is_user_authorized_to_get(UserId, Client, AuthHint, #gri{type = od_provider, id 
 
 is_user_authorized_to_get(_UserId, _, _, #gri{type = od_cluster, scope = private}, _) ->
     false;
-
-is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle_service, scope = private}, CachedDoc) ->
-    handle_service_logic:has_eff_user(CachedDoc, UserId);
-
-is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
-    handle_logic:has_eff_user(CachedDoc, UserId);
 
 is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_inventory, scope = private}, CachedDoc) ->
     user_logic:has_eff_atm_inventory(SessionId, UserId, CachedDoc#document.key);

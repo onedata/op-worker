@@ -47,7 +47,8 @@
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
 % Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
-% Human readable version is included to for logging purposes.
+% Human readable version is included to for logging purposes. It's the last version
+% where this cluster generation was the current one.
 -define(CLUSTER_GENERATIONS, [
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},

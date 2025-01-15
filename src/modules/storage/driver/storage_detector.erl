@@ -35,8 +35,9 @@
 
 -type operation() :: access | create | write | read | remove.
 -type diagnostic_opts() :: #{read_write_test := boolean()}.
+-type diagnostic_error_details() :: any().
 
--export_type([diagnostic_opts/0]).
+-export_type([diagnostic_opts/0, diagnostic_error_details/0]).
 
 -define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
 -define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
@@ -45,12 +46,14 @@
 % flag intended only for acceptance testing, should never be used in the production.
 -define(SKIP_STORAGE_DETECTION, op_worker:get_env(skip_storage_detection, false)).
 
+-define(OPERATION_FAILED(Operation, Reason), {operation_failed, Operation, Reason}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 -spec run_diagnostics(all_nodes | this_node, helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
-    ok | errors:error().
+    ok | {errors:error(), diagnostic_error_details()}.
 run_diagnostics(all_nodes, Helper, LumaFeed, Opts) ->
     Nodes = consistent_hashing:get_all_nodes(),
     run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Opts);
@@ -62,7 +65,7 @@ run_diagnostics(this_node, Helper, LumaFeed, Opts) ->
     ok | {error, term()}.
 check_storage_access(Helper, UserCtx) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
-    helpers:check_storage_availability(Handle).
+    ok = helpers:check_storage_availability(Handle).
 
 
 -spec create_test_file(helpers:helper(), helper:user_ctx()) ->
@@ -119,11 +122,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     case helpers:unlink(Handle, FileId, Size) of
         ok -> ok;
-        {error, ?ENOENT} -> ok;
-        {error, Reason} ->
-            Operation = remove,
-            ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation))
+        {error, ?ENOENT} -> ok
     end.
 
 
@@ -133,7 +132,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 
 %% @private
 -spec run_diagnostics_on_nodes([node()], helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
-    ok | errors:error().
+    ok | {errors:error(), diagnostic_error_details()}.
 run_diagnostics_on_nodes(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
     ok;
 run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
@@ -148,8 +147,8 @@ run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
                 ),
                 run_diagnostics_on_nodes_insecure(Nodes, Helper, ExtendedAdminCtx, Options)
         end
-    catch throw:?ERROR_STORAGE_TEST_FAILED(Operation) ->
-        ?ERROR_STORAGE_TEST_FAILED(Operation)
+    catch throw:?OPERATION_FAILED(Operation, Reason) ->
+        {?ERROR_STORAGE_TEST_FAILED(Operation), Reason}
     end.
 
 
@@ -204,15 +203,8 @@ check_call_result(Result, Operation) ->
             ok;
         {ok, R} ->
             R;
-        ?ERROR_STORAGE_TEST_FAILED(Operation) ->
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation));
-        {Class, {Reason, Stacktrace}} ->
-            ?error_exception(?autoformat_with_msg("Storage verification failed:", Operation),
-                Class, Reason, Stacktrace),
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation));
-        {_Class, Reason} ->
-            ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation))
+        {_Class, {Reason, _Stacktrace}} ->
+            throw(?OPERATION_FAILED(Operation, Reason))
     end.
 
 

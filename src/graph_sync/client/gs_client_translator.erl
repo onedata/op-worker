@@ -149,6 +149,8 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
             storages_by_provider = StoragesByProvider,
 
             providers = maps:get(<<"providers">>, Result),
+            % NOTE: at some point, providers should list shares by batches
+            % as this list may be very big
             shares = maps:get(<<"shares">>, Result),
             harvesters = maps:get(<<"harvesters">>, Result),
 
@@ -167,7 +169,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
             public_url = maps:get(<<"publicUrl">>, Result),
             public_rest_url = maps:get(<<"publicRestUrl">>, Result),
             root_file = maps:get(<<"rootFileId">>, Result),
-            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
+            file_type = translate_share_file_type(Result),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
@@ -181,7 +183,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
             public_url = maps:get(<<"publicUrl">>, Result),
             public_rest_url = maps:get(<<"publicRestUrl">>, Result),
             root_file = maps:get(<<"rootFileId">>, Result),
-            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
+            file_type = translate_share_file_type(Result),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result))
         }
     };
@@ -231,16 +233,6 @@ translate(#gri{type = od_provider, id = _Id, aspect = domain_config}, Result) ->
             Result
     end;
 
-translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = private}, Result) ->
-    #document{
-        key = Id,
-        value = #od_handle_service{
-            name = maps:get(<<"name">>, Result),
-            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
-            eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result))
-        }
-    };
-
 translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = public}, Result) ->
     #document{
         key = Id,
@@ -249,19 +241,15 @@ translate(#gri{type = od_handle_service, id = Id, aspect = instance, scope = pub
         }
     };
 
+%% private scope is returned only from create operation and never fetched
 translate(#gri{type = od_handle, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
         value = #od_handle{
             public_handle = maps:get(<<"publicHandle">>, Result),
-            resource_type = maps:get(<<"resourceType">>, Result),
-            resource_id = maps:get(<<"resourceId">>, Result),
             metadata_prefix = maps:get(<<"metadataPrefix">>, Result),
             metadata = maps:get(<<"metadata">>, Result),
-            handle_service = maps:get(<<"handleServiceId">>, Result),
-
-            eff_users = privileges_to_atoms(maps:get(<<"effectiveUsers">>, Result)),
-            eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result))
+            handle_service = maps:get(<<"handleServiceId">>, Result)
         }
     };
 
@@ -476,24 +464,13 @@ apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) 
         }
     };
 
-apply_scope_mask(Doc = #document{value = Handle = #od_handle_service{}}, public) ->
-    Doc#document{
-        value = Handle#od_handle_service{
-            eff_users = #{},
-            eff_groups = #{}
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_handle_service{}}, public) ->
+    % public scope is the same as private scope
+    Doc;
 
-apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
-    Doc#document{
-        value = Handle#od_handle{
-            resource_type = undefined,
-            resource_id = undefined,
-
-            eff_users = #{},
-            eff_groups = #{}
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_handle{}}, public) ->
+    % public scope is the same as private scope
+    Doc;
 
 apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     Doc#document{
@@ -504,9 +481,24 @@ apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     }.
 
 
+%%%===================================================================
+%%% Helpers
+%%%===================================================================
+
+
+%% @private
 -spec privileges_to_atoms(#{binary() => binary()}) -> #{binary() => atom()}.
 privileges_to_atoms(Map) ->
     maps:map(
         fun(_Key, Privileges) ->
             [binary_to_atom(P, utf8) || P <- Privileges]
         end, Map).
+
+
+%% @private
+% TODO VFS-VFS-12490 [file, dir] deprecated, left for BC, can be removed in 23.02.*
+-spec translate_share_file_type(json_utils:json_map()) -> onedata_file:type().
+translate_share_file_type(#{<<"fileType">> := <<"file">>}) -> ?REGULAR_FILE_TYPE;
+translate_share_file_type(#{<<"fileType">> := <<"REG">>}) -> ?REGULAR_FILE_TYPE;
+translate_share_file_type(#{<<"fileType">> := <<"dir">>}) -> ?DIRECTORY_TYPE;
+translate_share_file_type(#{<<"fileType">> := <<"DIR">>}) -> ?DIRECTORY_TYPE.

@@ -26,7 +26,7 @@
 
 -type name() :: binary().
 -type description() :: binary().
--type file_type() :: file | dir.
+-type file_type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE.
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
 % Apart from FileUuid and SpaceId, it contains also ShareId.

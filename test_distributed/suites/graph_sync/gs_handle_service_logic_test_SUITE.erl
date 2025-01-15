@@ -18,80 +18,20 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    get_test/1,
     get_public_data_test/1,
-    mixed_get_test/1,
     subscribe_test/1,
-    convenience_functions_test/1,
     confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
-    get_test,
     get_public_data_test,
-    mixed_get_test,
     subscribe_test,
-    convenience_functions_test,
     confined_access_token_test
 ]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
-
-get_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-    % User 3 does not belong to the handle service
-    User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
-    
-    HServiceGriMatcher = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, _ = '_'},
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher),
-
-    ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-
-    % Handle service private data should now be cached
-
-    ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-
-    % Make sure that provider and other users cannot access cached data
-    ?assertMatch(
-        ?ERROR_FORBIDDEN,
-        rpc:call(Node, handle_service_logic, get, [?ROOT_SESS_ID, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-
-    ?assertMatch(
-        ?ERROR_FORBIDDEN,
-        rpc:call(Node, handle_service_logic, get, [User3Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-
-    % Make sure that provider and other users cannot access non-cached data
-    logic_tests_common:invalidate_cache(Config, od_handle_service, ?HANDLE_SERVICE_1),
-    ?assertMatch(
-        ?ERROR_FORBIDDEN,
-        rpc:call(Node, handle_service_logic, get, [?ROOT_SESS_ID, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-
-    ?assertMatch(
-        ?ERROR_FORBIDDEN,
-        rpc:call(Node, handle_service_logic, get, [User3Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-
-    ok.
-
 
 get_public_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
@@ -148,48 +88,6 @@ get_public_data_test(Config) ->
     ok.
 
 
-mixed_get_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-
-    HServiceGriMatcher = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, _ = '_'},
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher),
-    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher),
-
-    % Fetching rising scopes should cause an unsub and new fetch every time
-    ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
-
-    ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
-
-    % When private data is cached, any scope should always be fetched from cache
-    ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
-
-    ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, HServiceGriMatcher)),
-
-    ok.
-
-
 subscribe_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
@@ -198,33 +96,32 @@ subscribe_test(Config) ->
     HServiceGriMatcher = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, _ = '_'},
     GraphCalls = logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher),
 
-    % Simulate received updates on private scope
-    HService1PrivateGRI = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, scope = private},
-    HService1PrivateData = ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(?HANDLE_SERVICE_1),
+    HService1PublicGRI = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, scope = public},
+    HService1PublicData = ?HANDLE_SERVICE_PUBLIC_DATA_VALUE(?HANDLE_SERVICE_1),
 
     ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
 
-    ChangedData = HService1PrivateData#{
+    ChangedData = HService1PublicData#{
         <<"revision">> => 19,
         <<"name">> => <<"changedName">>
     },
-    PushMessage = #gs_push_graph{gri = HService1PrivateGRI, data = ChangedData, change_type = updated},
+    PushMessage = #gs_push_graph{gri = HService1PublicGRI, data = ChangedData, change_type = updated},
     logic_tests_common:simulate_push(Config, PushMessage),
     ?assertMatch(
         {ok, #document{key = ?HANDLE_SERVICE_1, value = #od_handle_service{
             name = <<"changedName">>,
             cache_state = #{revision := 19}
         }}},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
-    PushMessage2 = #gs_push_graph{gri = HService1PrivateGRI, change_type = deleted},
+    PushMessage2 = #gs_push_graph{gri = HService1PublicGRI, change_type = deleted},
     logic_tests_common:simulate_push(Config, PushMessage2),
     ?assertMatch(
         {error, not_found},
@@ -235,45 +132,16 @@ subscribe_test(Config) ->
     % record first.
     logic_tests_common:invalidate_cache(Config, od_handle_service, ?HANDLE_SERVICE_1),
     ?assertMatch(
-        {ok, ?HANDLE_SERVICE_PRIVATE_DATA_MATCHER(?HANDLE_SERVICE_1)},
-        rpc:call(Node, handle_service_logic, get, [User1Sess, ?HANDLE_SERVICE_1])
+        {ok, ?HANDLE_SERVICE_PUBLIC_DATA_MATCHER(?HANDLE_SERVICE_1)},
+        rpc:call(Node, handle_service_logic, get_public_data, [User1Sess, ?HANDLE_SERVICE_1])
     ),
 
-    PushMessage3 = #gs_push_nosub{gri = HService1PrivateGRI, reason = forbidden},
+    PushMessage3 = #gs_push_nosub{gri = HService1PublicGRI, reason = forbidden},
     logic_tests_common:simulate_push(Config, PushMessage3),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle_service, get_from_cache, [?HANDLE_SERVICE_1])
     ),
-
-    ok.
-
-
-convenience_functions_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-    
-    HServiceGriMatcher = #gri{type = od_handle_service, id = ?HANDLE_SERVICE_1, aspect = instance, _ = '_'},
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher),
-
-    % Test convenience functions and if they fetch correct scopes
-    % Eff users are within private scope
-    ?assertMatch(
-        true,
-        rpc:call(Node, handle_service_logic, has_eff_user, [User1Sess, ?HANDLE_SERVICE_1, ?USER_1])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-    ?assertMatch(
-        true,
-        rpc:call(Node, handle_service_logic, has_eff_user, [User1Sess, ?HANDLE_SERVICE_1, ?USER_2])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
-    ?assertMatch(
-        false,
-        rpc:call(Node, handle_service_logic, has_eff_user, [User1Sess, ?HANDLE_SERVICE_1, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HServiceGriMatcher)),
 
     ok.
 
@@ -298,7 +166,7 @@ confined_access_token_test(Config) ->
     % data access caveat
     ?assertMatch(
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
-        rpc:call(Node, handle_service_logic, get, [TokenCredentials, ?HANDLE_SERVICE_1])
+        rpc:call(Node, handle_service_logic, get_public_data, [TokenCredentials, ?HANDLE_SERVICE_1])
     ),
     % Nevertheless, following requests should be made:
     % - first to verify token credentials,

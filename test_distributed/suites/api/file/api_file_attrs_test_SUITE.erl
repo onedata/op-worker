@@ -1071,8 +1071,8 @@ get_symlink_distribution_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
     
-    #object{guid = SymGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>, shares = [#share_spec{}]}
+    #object{guid = SymGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
     
     ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
@@ -1091,7 +1091,7 @@ get_symlink_distribution_test(Config) ->
         unauthorized = [nobody],
         forbidden_not_in_space = [user1]
     },
-    get_distribution_test_base(FileType, SymGuid, ShareId, ExpDist, Config, ClientSpec).
+    get_distribution_test_base(FileType, SymGuid, undefined, ExpDist, Config, ClientSpec).
 
 %% @private
 -spec enable_dir_stats_collecting_for_space(

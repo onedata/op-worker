@@ -181,27 +181,17 @@
 -record(od_handle_service, {
     name :: od_handle_service:name() | undefined,
 
-    % Effective relations to other entities
-    eff_users = #{} :: #{od_user:id() => [privileges:handle_service_privilege()]},
-    eff_groups = #{} :: #{od_group:id() => [privileges:handle_service_privilege()]},
-
     cache_state = #{} :: cache_state()
 }).
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
     public_handle :: od_handle:public_handle(),
-    resource_type :: od_handle:resource_type() | undefined,
-    resource_id :: od_handle:resource_id() | undefined,
     metadata_prefix :: od_handle:metadata_prefix() | undefined,
     metadata :: od_handle:metadata() | undefined,
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
-
-    % Effective relations to other entities
-    eff_users = #{} :: #{od_user:id() => [privileges:handle_privilege()]},
-    eff_groups = #{} :: #{od_group:id() => [privileges:handle_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
