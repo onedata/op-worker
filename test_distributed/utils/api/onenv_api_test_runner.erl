@@ -170,7 +170,7 @@ run_tests(SpecTemplates) ->
                 false;
             Type:Reason:Stacktrace ->
                 ct:pal("Unexpected error while running test suite ~w:~tp~nStacktrace: ~ts", [
-                    Type, Reason, ?pr_stacktrace(Stacktrace)
+                    Type, Reason, onedata_logger:pr_stacktrace(Stacktrace)
                 ]),
                 false
         end
@@ -689,7 +689,7 @@ log_failure(
         Expected,
         Got,
         ErrType, ErrReason,
-        ?pr_stacktrace(Stacktrace)
+        onedata_logger:pr_stacktrace(Stacktrace)
     ]).
 
 

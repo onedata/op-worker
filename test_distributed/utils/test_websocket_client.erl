@@ -110,7 +110,7 @@ websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushM
                 "Stacktrace: ~ts~n"
                 "Payload: ~ts", [
                     ?MODULE, ?FUNCTION_NAME, Class, Reason,
-                    ?pr_stacktrace(Stacktrace),
+                    onedata_logger:pr_stacktrace(Stacktrace),
                     Payload
                 ]
             ),
