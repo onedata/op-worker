@@ -65,9 +65,7 @@ run_suite(Config, SuiteSpec) ->
         throw:fail ->
             false;
         Type:Reason:Stacktrace ->
-            ct:pal("Unexpected error while running test suite ~w:~tp~nStacktrace: ~ts", [
-                Type, Reason, ?pr_stacktrace(Stacktrace)
-            ]),
+            ?error_exception("Unexpected error while running test suite", Type, Reason, Stacktrace),
             false
     end.
 
@@ -533,7 +531,7 @@ log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Arg
         Expected,
         Got,
         ErrType, ErrReason,
-        ?pr_stacktrace(Stacktrace)
+        onedata_logger:pr_stacktrace(Stacktrace)
     ]).
 
 

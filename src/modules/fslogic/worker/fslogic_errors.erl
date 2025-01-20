@@ -63,11 +63,11 @@ handle_error(Request, Type, Error, Stacktrace) ->
         true ->
             MF = "Cannot process request ~tp (code: ~tp)~nStacktrace: ~ts",
             FA = [str_utils:format("~tp", [Request]), Code,
-                iolist_to_binary(?pr_stacktrace(Stacktrace, {Type, Error}))],
+                iolist_to_binary(onedata_logger:pr_stacktrace(Stacktrace, {Type, Error}))],
             {MF, FA};
         _ ->
             MF = "Cannot process request: code: ~tp~nStacktrace: ~ts",
-            FA = [Code, iolist_to_binary(?pr_stacktrace(Stacktrace, {Type, Error}))],
+            FA = [Code, iolist_to_binary(onedata_logger:pr_stacktrace(Stacktrace, {Type, Error}))],
             {MF, FA}
     end,
     case LogLevel of

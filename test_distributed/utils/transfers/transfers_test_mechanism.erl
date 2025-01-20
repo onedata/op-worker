@@ -112,20 +112,20 @@ run_test(Config, #transfer_test_spec{
         throw:{test_timeout, Function}:Stacktrace ->
             ct:fail(
                 "Test timeout in function ~tp:~tp.~n~nStacktrace: ~ts",
-                [?MODULE, Function, ?pr_stacktrace(Stacktrace)]
+                [?MODULE, Function, onedata_logger:pr_stacktrace(Stacktrace)]
             );
         throw:{wrong_assertion_key, Key, List}:Stacktrace ->
             ct:fail(
                 "Assertion key: ~tp not found in list of keys: ~tp~n"
                 "Stacktrace: ~ts",
-                [Key, List, ?pr_stacktrace(Stacktrace)]
+                [Key, List, onedata_logger:pr_stacktrace(Stacktrace)]
             );
         exit:{test_case_failed, _} = Reason ->
             erlang:exit(Reason);
         Type:Message:Stacktrace ->
             ct:fail(
                 "Unexpected error in ~tp:run_scenario - ~tp:~tp~nStacktrace: ~ts",
-                [?MODULE, Type, Message, ?pr_stacktrace(Stacktrace)]
+                [?MODULE, Type, Message, onedata_logger:pr_stacktrace(Stacktrace)]
             )
     end.
 

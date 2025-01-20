@@ -105,15 +105,9 @@ websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushM
         end
     catch
         Class:Reason:Stacktrace ->
-            ct:print(
-                "UNEXPECTED ERROR in ~w:~w - ~w:~tp~n"
-                "Stacktrace: ~ts~n"
-                "Payload: ~ts", [
-                    ?MODULE, ?FUNCTION_NAME, Class, Reason,
-                    ?pr_stacktrace(Stacktrace),
-                    Payload
-                ]
-            ),
+            ?error_exception(
+                ?autoformat_with_msg("UNEXPECTED ERROR:", [?MODULE, ?FUNCTION_NAME, Payload]),
+            Class, Reason, Stacktrace),
             {ok, State}
     end;
 
