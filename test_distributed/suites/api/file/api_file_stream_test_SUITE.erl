@@ -1613,7 +1613,7 @@ make_symlink_target(SpaceId, ParentPath, Name) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils, space_setup_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [
             {op_worker, op_worker, [
@@ -1672,6 +1672,9 @@ init_per_suite(Config) ->
                         end
                     end)
             end, ProviderNodes),
+            % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+            space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
+
             NewConfig
         end
     }).

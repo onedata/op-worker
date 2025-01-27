@@ -148,14 +148,20 @@ qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test(_Con
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils, space_setup_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {provider_token_ttl_sec, 24 * 60 * 60},
                 {qos_retry_failed_files_interval_seconds, 5}
-            ]}]
+            ]}],
+            posthook = fun(NewConfig) ->
+                % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+                space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
+                NewConfig
+            end
+
         }).
 
 

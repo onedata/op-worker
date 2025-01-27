@@ -798,7 +798,7 @@ generate_random_dir_path() ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [space_setup_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
@@ -807,6 +807,9 @@ init_per_suite(Config) ->
             ozt_spaces:set_privileges(SpaceId, User3Id, [
                 ?SPACE_MANAGE_SHARES | privileges:space_member()
             ]),
+            % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+            space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
+
             NewConfig
         end
     }).

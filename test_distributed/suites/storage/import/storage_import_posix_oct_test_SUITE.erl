@@ -85,7 +85,7 @@ import_file_with_content_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, sd_test_utils, storage_import_oct_test_base],
+    ModulesToLoad = [?MODULE, sd_test_utils, storage_import_oct_test_base, space_setup_utils],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
@@ -97,6 +97,10 @@ init_per_suite(Config) ->
         ]}],
         posthook = fun(NewConfig) ->
             storage_import_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+
+            % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+            space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
+
             NewConfig
         end
     }).

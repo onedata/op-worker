@@ -303,7 +303,7 @@ create_and_sync_shared_file_of_random_type() ->
 
 
 init_per_suite(Config) ->
-    LoadModules = [opt_handles, ozt_handles, ozt_handle_services],
+    LoadModules = [opt_handles, ozt_handles, ozt_handle_services, space_setup_utils],
     oct_background:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
         onenv_scenario = "1op-handle-proxy",
         posthook = fun(NewConfig) ->
@@ -319,6 +319,8 @@ init_per_suite(Config) ->
             ozt_handle_services:add_user_to_all_handle_services(
                 ?NON_SPACE_MEMBER_AND_HS_ADMIN, privileges:handle_service_admin()
             ),
+            % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+            space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
             NewConfig
         end
     }).

@@ -1013,6 +1013,7 @@ restart_op_worker_after_graceful_stop(Config) ->
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE,
+        space_setup_utils,
         atm_workflow_execution_scheduling_tests,
         atm_workflow_execution_mapping_tests,
         atm_workflow_execution_gc_tests,
@@ -1040,6 +1041,9 @@ init_per_suite(Config) ->
                     ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
                     | privileges:space_member()
                 ]),
+                % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+                space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
+
                 NewConfig
             end
         }
