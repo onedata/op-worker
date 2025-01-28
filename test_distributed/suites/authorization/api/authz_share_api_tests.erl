@@ -40,7 +40,7 @@ test_create_share(SpaceId) ->
         blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EAGAIN)},
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -72,7 +72,7 @@ test_remove_share(SpaceId) ->
         blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EACCES)},
         available_in_readonly_mode = false,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),

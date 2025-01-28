@@ -38,7 +38,7 @@
 ]).
 -export([is_space_owner/2]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
--export([is_in_open_handle_mode/1, get_session_mode/1, set_session_mode/2]).
+-export([is_in_public_data_mode/1, get_session_mode/1, set_session_mode/2]).
 
 %%%===================================================================
 %%% API functions
@@ -195,9 +195,9 @@ is_direct_io(#user_ctx{session = #document{
 is_direct_io(_, _) ->
     false.
 
--spec is_in_open_handle_mode(ctx()) -> boolean().
-is_in_open_handle_mode(UserCtx) ->
-    get_session_mode(UserCtx) =:= open_handle.
+-spec is_in_public_data_mode(ctx()) -> boolean().
+is_in_public_data_mode(UserCtx) ->
+    get_session_mode(UserCtx) =:= public_data.
 
 -spec get_session_mode(ctx()) -> session:mode().
 get_session_mode(#user_ctx{session = #document{value = #session{mode = SessMode}}}) ->
