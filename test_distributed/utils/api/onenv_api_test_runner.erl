@@ -169,7 +169,9 @@ run_tests(SpecTemplates) ->
             throw:fail ->
                 false;
             Type:Reason:Stacktrace ->
-                ?error_exception("Unexpected error while running test suite", Type, Reason, Stacktrace),
+                ct:pal("Unexpected error while running test suite ~w:~tp~nStacktrace: ~ts", [
+                    Type, Reason, onedata_logger:pr_stacktrace(Stacktrace)
+                ]),
                 false
         end
     end, true, SpecTemplates).

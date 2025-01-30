@@ -562,9 +562,9 @@ call_hook_if_defined(HookFun, Input, TestCtx) ->
         HookFun(Input),
         ok
     catch Type:Error:Stacktrace ->
-        ?error_exception(
-            "Unexpected exception when calling test hook:", Type, Error, Stacktrace
-        ),
+        ct:pal("Unexpected exception when calling test hook: ~ts", [
+            iolist_to_binary(onedata_logger:pr_stacktrace(Stacktrace, {Type, Error}))
+        ]),
         fail_test(TestCtx)
     end.
 
