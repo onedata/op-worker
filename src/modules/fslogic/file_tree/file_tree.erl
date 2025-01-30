@@ -58,15 +58,15 @@
 %%%             All documents associated with it (and files/dirs inside of it)
 %%%             are synchronized among providers supporting this space.
 %%% 4) ^share - share root directory. It is virtual directory (there are no associated
-%%%             documents in the db) that is being used in 'open_handle' mode. In that
+%%%             documents in the db) that is being used in 'public_data' mode. In that
 %%%             mode listing space directory returns list of share root dirs instead
 %%%             of regular files/dirs in the space so that only shared content can be
 %%%             viewed (from this point down the tree the context is changed to shared one).
 %%%             In the future it will be used as mount root when mounting Oneclient
-%%%             for share with open handle (in such case it will be treated as root
+%%%             for share exposed as public data (in such case it will be treated as root
 %%%             dir with no parent).
 %%% 5) *file -  share root file. It is directly shared file or directory or space and
-%%%             the only child of share root dir (in 'open_handle' mode)
+%%%             the only child of share root dir (in 'public_data' mode)
 %%% 6) &special_space_directory - special directory that is created for each space, however
 %%%             is not part of this space file_tree. There are 3 types of special directories:
 %%%                 * trash - space trash directory, to which deleted files are temporarily moved
@@ -194,7 +194,7 @@ get_child(FileCtx, Name, UserCtx) ->
                 true ->
                     get_share_root_dir_child(UserCtx, FileCtx, Name);
                 false ->
-                    case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
+                    case is_space_dir_accessed_in_public_data_mode(UserCtx, FileCtx) of
                         true ->
                             get_space_share_child(FileCtx, Name, UserCtx);
                         false ->
@@ -216,9 +216,9 @@ list_children(FileCtx, UserCtx, ListOpts) ->
                 true ->
                     list_share_root_dir_children(UserCtx, FileCtx, maps:get(whitelist, ListOpts, undefined));
                 false ->
-                    case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
+                    case is_space_dir_accessed_in_public_data_mode(UserCtx, FileCtx) of
                         true ->
-                            get_space_open_handle_shares(UserCtx, FileCtx, ListOpts);
+                            get_space_public_data_shares(UserCtx, FileCtx, ListOpts);
                         false ->
                             list_file_children(FileCtx, ListOpts)
                     end
@@ -252,10 +252,10 @@ get_parent_internal(FileCtx, UserCtx) ->
     Parent = case {
         fslogic_file_id:is_root_dir_uuid(ParentUuid),
         IsShareRootFile,
-        (UserCtx =/= undefined andalso user_ctx:is_in_open_handle_mode(UserCtx))
+        (UserCtx =/= undefined andalso user_ctx:is_in_public_data_mode(UserCtx))
     } of
         {_, true, true} ->
-            % Share root file shall point to virtual share root dir in open handle mode
+            % Share root file shall point to virtual share root dir in public data mode
             ShareRootDirUuid = fslogic_file_id:shareid_to_share_root_dir_uuid(ShareId),
             file_ctx:new_by_uuid(ShareRootDirUuid, SpaceId, ShareId);
         {true, false, _} ->
@@ -282,10 +282,10 @@ get_parent_internal(FileCtx, UserCtx) ->
                     % userRootDir and globalRootDir can not be shared
                     throw(?EINVAL)
             end;
-        {false, false, IsInOpenHandleMode} ->
+        {false, false, IsInPublicDataMode} ->
             case file_ctx:is_share_root_dir_const(FileCtx2) of
                 true ->
-                    case IsInOpenHandleMode of
+                    case IsInPublicDataMode of
                         true ->
                             % Virtual share root dir should point to normal space dir
                             file_ctx:new_by_uuid(ParentUuid, SpaceId);
@@ -360,13 +360,13 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 
 
 %% @private
--spec get_space_open_handle_shares(
+-spec get_space_public_data_shares(
     user_ctx:ctx(),
     file_ctx:ctx(),
     file_listing:options()
 ) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts) ->
+get_space_public_data_shares(UserCtx, SpaceDirCtx, ListOpts) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
     Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
@@ -375,7 +375,7 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
     {ok, AllSpaceShares} = space_logic:get_shares(SessId, SpaceId),
 
-    IsOpenHandleShare = fun(ShareId) ->
+    IsPublicDataShare = fun(ShareId) ->
         case share_logic:get(SessId, ShareId) of
             {ok, #document{value = #od_share{handle = <<_/binary>>}}} -> true;
             _ -> false
@@ -384,10 +384,10 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts) ->
     ShareWhiteList = maps:get(whitelist, ListOpts, undefined),
     FilteredShares = case ShareWhiteList of
         undefined ->
-            lists:filter(IsOpenHandleShare, AllSpaceShares);
+            lists:filter(IsPublicDataShare, AllSpaceShares);
         _ ->
             lists:filter(fun(ShareId) ->
-                lists:member(ShareId, ShareWhiteList) andalso IsOpenHandleShare(ShareId)
+                lists:member(ShareId, ShareWhiteList) andalso IsPublicDataShare(ShareId)
             end, AllSpaceShares)
     end,
 
@@ -496,14 +496,14 @@ list_file_children(FileCtx, ListOpts) ->
 
 
 %% @private
--spec is_space_dir_accessed_in_open_handle_mode(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec is_space_dir_accessed_in_public_data_mode(user_ctx:ctx(), file_ctx:ctx()) ->
     boolean().
-is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) ->
+is_space_dir_accessed_in_public_data_mode(UserCtx, FileCtx) ->
     ShareId = file_ctx:get_share_id_const(FileCtx),
     IsSpaceDir = file_ctx:is_space_dir_const(FileCtx),
-    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
+    IsInPublicDataMode = user_ctx:is_in_public_data_mode(UserCtx),
 
-    IsSpaceDir andalso IsInOpenHandleMode andalso ShareId == undefined.
+    IsSpaceDir andalso IsInPublicDataMode andalso ShareId == undefined.
 
 
 %% @private

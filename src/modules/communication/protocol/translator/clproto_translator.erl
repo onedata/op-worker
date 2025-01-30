@@ -156,7 +156,7 @@ from_protobuf(undefined) -> undefined;
 from_protobuf(Message) when is_tuple(Message) -> throw({unrecognized_message, element(1, Message)}).
 
 
--spec session_mode_from_protobuf(undefined | 'NORMAL' | 'OPEN_HANDLE') ->
+-spec session_mode_from_protobuf(undefined | 'NORMAL' | 'OPEN_HANDLE') ->  % TODO VFS-12625 rework to PUBLIC_DATA
     session:mode().
 session_mode_from_protobuf(Mode) ->
     clproto_connection_translator:session_mode_from_protobuf(Mode).
@@ -279,7 +279,7 @@ to_protobuf(undefined) -> undefined.
 
 
 -spec session_mode_to_protobuf(undefined | session:mode()) ->
-    'NORMAL' | 'OPEN_HANDLE'.
+    'NORMAL' | 'OPEN_HANDLE'.  % TODO VFS-12625 rework to PUBLIC_DATA
 session_mode_to_protobuf(Mode) ->
     clproto_connection_translator:session_mode_to_protobuf(Mode).
 

@@ -38,7 +38,7 @@ test_get_parent(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -57,7 +57,7 @@ test_get_file_path(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = false, % TODO VFS-6057
-        available_in_open_handle_mode = false, % TODO VFS-6057
+        available_in_public_data_mode = false, % TODO VFS-6057
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
@@ -76,7 +76,7 @@ test_resolve_guid(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             lfm_proxy:resolve_guid(Node, SessionId, FilePath)
@@ -117,7 +117,7 @@ test_stat(SpaceId) ->
         acl_requires_space_privs = RequiredSpacePrivs,
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
