@@ -290,8 +290,8 @@ reuse_or_create_session(SessId, SessType, SessMode, Identity, Credentials, Proxy
             case data_constraints:get(Caveats) of
                 {ok, DataConstraints} ->
                     case {SessMode, data_constraints:has_no_constraints(DataConstraints)} of
-                        {open_handle, false} ->
-                            % Data constraints are not allowed in 'open_handle' mode
+                        {public_data, false} ->
+                            % Data constraints are not allowed in 'public_data' mode
                             {error, invalid_token};
                         _ ->
                             reuse_or_create_session(
