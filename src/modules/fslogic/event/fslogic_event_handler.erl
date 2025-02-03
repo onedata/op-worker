@@ -189,7 +189,7 @@ handle_file_read_event(#file_read_event{
     case session:get_user_id(SessId) of
         {ok, UserId} ->
             monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ok
     end,
     times_api:touch(FileCtx, [?attr_atime]).

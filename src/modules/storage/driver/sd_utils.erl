@@ -75,7 +75,7 @@ chmod(UserCtx, FileCtx, Mode) ->
                                 end
                         end
                     catch
-                        throw:?ERR_NOT_FOUND ->
+                        throw:?ERROR_NOT_FOUND ->
                             {ok, FileCtx};
                         throw:{error, ?MISSING_FILE_META(_MissingUuid)} ->
                             {ok, FileCtx}

@@ -115,7 +115,7 @@ init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
-            {gui_upload_retry_interval_seconds, ?LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS}
+            {gui_upload_retry_backoff_seconds, ?LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS}
         ]}]
     }).
 
@@ -162,7 +162,6 @@ process_http_response(Response) ->
             ok;
         {ok, _, _, ErrorBody} ->
             #{<<"error">> := ErrorJson} = json_utils:decode(ErrorBody),
-            % TODO
             errors:from_json(ErrorJson)
     end.
 

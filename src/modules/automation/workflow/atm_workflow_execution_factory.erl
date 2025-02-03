@@ -83,7 +83,7 @@ create(
     {ok, #document{value = AtmWorkflowSchema} = AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(
         SessionId, AtmWorkflowSchemaId
     ),
-    AtmWorkflowSchema#od_atm_workflow_schema.compatible orelse throw(?ERR_NOT_SUPPORTED(?err_ctx())),
+    AtmWorkflowSchema#od_atm_workflow_schema.compatible orelse throw(?ERROR_NOT_SUPPORTED),
 
     {ok, AtmWorkflowSchemaRevision} = atm_workflow_schema_logic:get_revision(
         AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaDoc
@@ -197,7 +197,7 @@ fetch_executable_lambdas_with_referenced_revisions(SessionId, AtmWorkflowSchemaR
             }
         }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
-        IsCompatible orelse throw(?ERR_NOT_SUPPORTED(?err_ctx())),
+        IsCompatible orelse throw(?ERROR_NOT_SUPPORTED),
 
         AtmLambdaWithReferencedRevisions = AtmLambda#od_atm_lambda{
             revision_registry = atm_lambda_revision_registry:with(

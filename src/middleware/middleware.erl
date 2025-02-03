@@ -193,7 +193,7 @@ get_handler(#op_req{operation = Operation, gri = #gri{
     catch _:_ ->
         % No need for log here, 'resolve_handler' may crash depending on
         % what the request contains and this is expected.
-        throw(?ERR_NOT_SUPPORTED(?err_ctx()))
+        throw(?ERROR_NOT_SUPPORTED)
     end.
 
 
@@ -220,7 +220,7 @@ get_router(op_space) -> space_middleware_router;
 get_router(op_storage) -> storage_middleware_plugin;
 get_router(op_transfer) -> transfer_middleware_plugin;
 get_router(op_user) -> user_middleware_plugin;
-get_router(_) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+get_router(_) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%--------------------------------------------------------------------
@@ -271,7 +271,7 @@ maybe_fetch_entity(#req_ctx{req = #op_req{operation = create, gri = #gri{id = un
     % Skip when creating an instance with predefined Id, set revision to 1
     ReqCtx#req_ctx{versioned_entity = {undefined, 1}};
 maybe_fetch_entity(#req_ctx{req = #op_req{operation = get, gri = #gri{id = undefined, aspect = instance}}}) ->
-    throw(?ERR_NOT_FOUND(?err_ctx()));
+    throw(?ERROR_NOT_FOUND);
 maybe_fetch_entity(#req_ctx{handler = Handler, req = Req} = ReqCtx) ->
     case Handler:fetch_entity(Req) of
         {ok, {_Entity, _Revision} = VersionedEntity} ->

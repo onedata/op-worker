@@ -61,7 +61,7 @@ get_parent(Guid) ->
     case datastore_model:get(?CTX#{include_deleted => true}, file_id:guid_to_uuid(Guid)) of
         {ok, #document{value = #dir_stats_collector_metadata{parent = Parent}}} ->
             Parent;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             undefined
     end.
 
@@ -89,7 +89,7 @@ get_dir_update_time_stats(Guid) ->
     case datastore_model:get(?CTX#{include_deleted => true}, file_id:guid_to_uuid(Guid)) of
         {ok, #document{value = #dir_stats_collector_metadata{dir_update_time_stats = Stats}}} ->
             Stats;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             undefined
     end.
 
@@ -102,7 +102,7 @@ delete_dir_update_time_stats(Guid) ->
 
     case datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff) of
         {ok, _} -> ok;
-        ?ERR_NOT_FOUND -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 

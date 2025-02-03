@@ -179,7 +179,7 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -189,4 +189,4 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.

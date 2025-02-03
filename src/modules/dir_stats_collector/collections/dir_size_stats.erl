@@ -340,7 +340,7 @@ report_remote_links_change(Uuid, SpaceId) ->
                         _ ->
                             ok
                     end;
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     ok
             end
     end.
@@ -512,7 +512,7 @@ save(Guid, Collection, Incarnation) ->
 delete(Guid) ->
     case datastore_time_series_collection:delete(?CTX, file_id:guid_to_uuid(Guid)) of
         ok -> ok;
-        ?ERR_NOT_FOUND -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 
@@ -546,7 +546,7 @@ init_child(Guid, IncludeDeleted) ->
                 false ->
                     init_existing_child(Guid, Doc)
             end;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             % Race with file deletion - stats will be invalidated by next update
             gen_empty_current_stats_and_handle_errors(Guid)
     end.
@@ -674,7 +674,7 @@ stat_names(Guid) ->
         {ok, StorageId} ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERROR_COUNT, ?DIR_ERROR_COUNT,
                 ?VIRTUAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
                 false -> throw({error, space_unsupported})

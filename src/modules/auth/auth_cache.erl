@@ -195,7 +195,7 @@ get_token_credentials_verification_result(TokenCredentials) ->
         [#cache_entry{} = Entry] ->
             case has_cache_entry_expired(Entry) of
                 true ->
-                    ?ERR_NOT_FOUND(?err_ctx());
+                    ?ERROR_NOT_FOUND;
                 false ->
                     case Entry#cache_entry.token_revoked of
                         true -> {ok, ?ERR_TOKEN_REVOKED(?err_ctx())};
@@ -203,12 +203,12 @@ get_token_credentials_verification_result(TokenCredentials) ->
                     end
             end;
         _ ->
-            ?ERR_NOT_FOUND(?err_ctx())
+            ?ERROR_NOT_FOUND
     catch Type:Reason ->
         ?warning("Failed to lookup ~tp cache (ets table) due to ~tp:~tp", [
             ?CACHE_NAME, Type, Reason
         ]),
-        ?ERR_NOT_FOUND(?err_ctx())
+        ?ERROR_NOT_FOUND
     end.
 
 

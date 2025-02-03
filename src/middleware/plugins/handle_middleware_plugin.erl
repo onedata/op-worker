@@ -47,7 +47,7 @@ resolve_handler(get, instance, public) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -196,7 +196,7 @@ update(#op_req{auth = #auth{session_id = SessionId}, data = Data, gri = #gri{id 
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %% @private

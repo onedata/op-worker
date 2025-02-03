@@ -604,13 +604,13 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ok = opt_archives:delete(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_DELETED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
-    ?assertEqual(?ERR_NOT_FOUND,
+    ?assertEqual(?ERROR_NOT_FOUND,
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, {[], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
 
     % verify whether Archive has been removed in the remote provider
-    ?assertEqual(?ERR_NOT_FOUND,
+    ?assertEqual(?ERROR_NOT_FOUND,
         opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, {[], true}},
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).

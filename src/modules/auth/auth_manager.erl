@@ -238,7 +238,7 @@ verify_credentials(TokenCredentials) ->
     case auth_cache:get_token_credentials_verification_result(TokenCredentials) of
         {ok, CachedVerificationResult} ->
             CachedVerificationResult;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             try
                 {TokenRef, VerificationResult} = verify_token_credentials(TokenCredentials),
                 auth_cache:save_token_credentials_verification_result(

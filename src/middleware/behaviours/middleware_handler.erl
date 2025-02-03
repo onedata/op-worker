@@ -37,7 +37,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves an entity and its revision from datastore based on EntityId.
-%% Should return ?ERR_NOT_FOUND if the entity does not exist.
+%% Should return ?ERROR_NOT_FOUND if the entity does not exist.
 %% @end
 %%--------------------------------------------------------------------
 -callback fetch_entity(middleware:req()) ->

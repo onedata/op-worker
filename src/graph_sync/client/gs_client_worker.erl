@@ -396,16 +396,16 @@ handle_info({response, ReqId, Response}, #state{promises = Promises} = State) ->
             {noreply, State#state{promises = NewPromises}};
         error ->
             % Possible if 'check_timeout' for the request has fired and
-            % ?ERR_TIMEOUT was sent back to the caller pid, in such case just
+            % ?ERROR_TIMEOUT was sent back to the caller pid, in such case just
             % ignore the result
             {noreply, State}
     end;
 % Async check if the request has timed out (there has been no response received)
-% in such case, returns ?ERR_TIMEOUT to the pid waiting for the response.
+% in such case, returns ?ERROR_TIMEOUT to the pid waiting for the response.
 handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     case maps:take(ReqId, Promises) of
         {Pid, NewPromises} ->
-            Pid ! {response, ReqId, ?ERR_TIMEOUT(?err_ctx())},
+            Pid ! {response, ReqId, ?ERROR_TIMEOUT},
             {noreply, State#state{promises = NewPromises}};
         error ->
             % There is no promise for the ReqId anymore, which means the request
@@ -620,11 +620,11 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
                 after
                 % the gen_server uses Timeout internally, allow some larger margin
                     Timeout + 5000 ->
-                        ?ERR_TIMEOUT(?err_ctx())
+                        ?ERROR_TIMEOUT
                 end
         end
     catch
-        exit:{timeout, _} -> ?ERR_TIMEOUT(?err_ctx());
+        exit:{timeout, _} -> ?ERROR_TIMEOUT;
         exit:{normal, _} -> ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain());
         throw:{error, _} = Err -> Err;
         Type:Reason:Stacktrace ->

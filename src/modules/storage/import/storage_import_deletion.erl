@@ -379,7 +379,7 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
         throw:?ENOENT ->
             storage_import_monitoring:mark_processed_job(SpaceId),
             ok;
-        error:{badmatch, ?ERR_NOT_FOUND} ->
+        error:{badmatch, ?ERROR_NOT_FOUND} ->
             storage_import_monitoring:mark_processed_job(SpaceId),
             ok;
         Error:Reason:Stacktrace ->

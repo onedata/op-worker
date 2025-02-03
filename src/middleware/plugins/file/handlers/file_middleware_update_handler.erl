@@ -38,7 +38,7 @@
     ok | no_return().
 assert_operation_supported(instance, private) -> ok;              % gs only
 assert_operation_supported(acl, private)      -> ok;
-assert_operation_supported(_, _)              -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+assert_operation_supported(_, _)              -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================

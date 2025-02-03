@@ -49,7 +49,7 @@ is_file_access_error(?ERR_POSIX(?EPERM)) -> true;
 is_file_access_error(?ERR_POSIX(?ENOENT)) -> true;
 is_file_access_error(?ERR_UNAUTHORIZED(_)) -> true;
 is_file_access_error(?ERR_FORBIDDEN) -> true;
-is_file_access_error(?ERR_NOT_FOUND) -> true;
+is_file_access_error(?ERROR_NOT_FOUND) -> true;
 is_file_access_error({error, ?MISSING_FILE_META(_Uuid)}) -> true; % error thrown by paths_cache
 is_file_access_error(_) -> false.
 

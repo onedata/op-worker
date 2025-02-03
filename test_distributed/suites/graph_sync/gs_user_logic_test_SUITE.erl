@@ -550,13 +550,13 @@ fetch_idp_access_token_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
 
     ?assertMatch(
-        ?ERR_NOT_FOUND,
+        ?ERROR_NOT_FOUND,
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, <<"wrongId">>, ?MOCK_IDP])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),
 
     ?assertMatch(
-        ?ERR_NOT_FOUND,
+        ?ERROR_NOT_FOUND,
         rpc:call(Node, user_logic, fetch_idp_access_token, [User1Sess, ?USER_1, <<"wrongId">>])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, UserGriMatcher)),

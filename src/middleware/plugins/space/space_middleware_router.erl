@@ -80,4 +80,4 @@ resolve_handler(update, dir_stats_service_state, private) -> ?SPACE_STATS_MIDDLE
 resolve_handler(delete, {view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
 resolve_handler(delete, {view_reduce_function, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).

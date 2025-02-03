@@ -771,7 +771,7 @@ ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
                     ?ENDED_PHASE ->
                         ok
                 end;
-            ?ERR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND ->
                 ok
         end
     end, lists:seq(CurrentAtmLaneIndex, AtmLanesCount)).
@@ -808,7 +808,7 @@ delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExec
                 {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 
             (_) ->
-                ?ERR_NOT_FOUND(?err_ctx())
+                ?ERROR_NOT_FOUND
         end,
         {NewAtmWorkflowExecution, Indices} = lists_utils:foldl_while(fun
             (AtmLaneIndex, Acc = {AtmWorkflowExecutionAcc, IndicesAcc}) ->
@@ -817,7 +817,7 @@ delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId, AtmWorkflowExec
                 ) of
                     {ok, NewAtmWorkflowExecutionAcc} ->
                         {cont, {NewAtmWorkflowExecutionAcc, [AtmLaneIndex | IndicesAcc]}};
-                    ?ERR_NOT_FOUND ->
+                    ?ERROR_NOT_FOUND ->
                         {halt, Acc}
                 end
         end, {AtmWorkflowExecution, []}, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),

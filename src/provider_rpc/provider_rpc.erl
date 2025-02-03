@@ -75,7 +75,7 @@ call(ProviderId, FileGuid, Request) ->
         {ok, #provider_rpc_response{result = Error, status = error}} ->
             Error;
         {ok, #status{code = ?EBADMSG}} ->
-            ?ERR_NOT_SUPPORTED(?err_ctx());
+            ?ERROR_NOT_SUPPORTED;
         {error, _} = Error ->
             Error
     end.

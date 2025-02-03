@@ -354,5 +354,5 @@ complement_run(AtmLaneRunSelector, AtmWorkflowExecution, #run_creation_ctx{
                 parallel_boxes = AtmParallelBoxExecutions
             }};
         (_) ->
-            ?ERR_ALREADY_EXISTS(?err_ctx())
+            ?ERROR_ALREADY_EXISTS
     end, AtmWorkflowExecution).

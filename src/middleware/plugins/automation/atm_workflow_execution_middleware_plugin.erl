@@ -59,7 +59,7 @@ resolve_handler(get, summary, private) -> ?MODULE;
 resolve_handler(delete, instance, private) -> ?MODULE;
 resolve_handler(delete, batch, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -312,7 +312,7 @@ get(#op_req{gri = #gri{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------

@@ -142,11 +142,11 @@ schedule_incompatible_atm_workflow() ->
     ),
 
     patch_workflow_schema_compatibility(AtmWorkflowSchemaId, false),
-    ?assertThrow(?ERR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)),
+    ?assertThrow(?ERROR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)),
 
     patch_workflow_schema_compatibility(AtmWorkflowSchemaId, true),
     patch_lambda_compatibility(AtmLambdaId, false),
-    ?assertThrow(?ERR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)).
+    ?assertThrow(?ERROR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)).
 
 
 schedule_atm_workflow_with_openfaas_not_configured() ->

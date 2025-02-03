@@ -165,7 +165,7 @@ is_valid_base_archive(ArchiveId) ->
     case archive:get_state(ArchiveId) of
         {ok, ?ARCHIVE_PRESERVED} -> {true, ArchiveId};
         {ok, _OtherState} -> false;
-        ?ERR_NOT_FOUND -> false
+        ?ERROR_NOT_FOUND -> false
     end.
 
 

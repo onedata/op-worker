@@ -367,7 +367,7 @@ check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
             check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
         {ok, ?REGULAR_FILE_TYPE} ->
             check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
-        ?ERR_NOT_SUPPORTED ->
+        ?ERROR_NOT_SUPPORTED ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
@@ -529,7 +529,7 @@ check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = File
                 {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
                     {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
             end;
-        ?ERR_NOT_SUPPORTED ->
+        ?ERROR_NOT_SUPPORTED ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
@@ -682,7 +682,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
             {?FILE_CREATED, FileCtx2, StorageFileCtx6};
-        {?ERR_NOT_SUPPORTED, StorageFileCtx3} ->
+        {?ERROR_NOT_SUPPORTED, StorageFileCtx3} ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx3}
     end.
 
@@ -723,7 +723,7 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
             create_file_location(FileUuid, OwnerId, StorageFileCtx2);
         {ok, ?DIRECTORY_TYPE} ->
             create_dir_location(FileUuid, StorageFileCtx2);
-        ?ERR_NOT_SUPPORTED = ErrorNotSupported ->
+        ?ERROR_NOT_SUPPORTED = ErrorNotSupported ->
             {ErrorNotSupported, StorageFileCtx2}
 
     end.

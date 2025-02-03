@@ -651,5 +651,5 @@ check_result(ok) -> ok;
 check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
-check_result(?ERR_NOT_FOUND = ErrorNotFound) -> throw(ErrorNotFound);
+check_result(?ERROR_NOT_FOUND = ErrorNotFound) -> throw(ErrorNotFound);
 check_result({error, Errno}) -> throw(?ERR_POSIX(?err_ctx(), Errno)).

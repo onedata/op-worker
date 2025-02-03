@@ -134,7 +134,7 @@ save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _Gene
     % Spaces are handled specially so as to not overwrite file_meta if it already
     % exists ('ensure_space_docs_exist' may be called several times for each space)
     case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
-        ?ERR_ALREADY_EXISTS -> file_meta:get(FileUuid);
+        ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
         Result -> Result
     end;
 save(Doc, GeneratedKey) ->
@@ -445,7 +445,7 @@ get_child(ParentUuid, Name) ->
 trim_disambiguated_name_provider_suffix(Name, {all, ParentUuid}) ->
     TreeIds = case file_meta_forest:get_trees(ParentUuid) of
         {ok, T} -> T;
-        ?ERR_NOT_FOUND -> []
+        ?ERROR_NOT_FOUND -> []
     end,
     lists_utils:foldl_while(fun(TreeId, NameAcc) ->
         case trim_disambiguated_name_provider_suffix(NameAcc, TreeId) of
@@ -484,7 +484,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
                             _ -> false
                         end
                     end, TreeIds);
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     []
             end,
             case MatchingTreeIds of
@@ -848,7 +848,7 @@ new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
             provider_id = oneprovider:get_id(),
             deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> false;
-                ?ERR_NOT_FOUND -> true
+                ?ERROR_NOT_FOUND -> true
             end
         },
         scope = SpaceId

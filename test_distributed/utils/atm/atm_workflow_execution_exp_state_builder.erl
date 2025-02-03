@@ -784,7 +784,7 @@ expect_lane_run_started_preparing_in_advance(
                 Run#{<<"status">> => <<"preparing">>},
                 LaneRunPath
             );
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             AtmLaneIndex = resolve_lane_selector(AtmLaneSelector, ExpStateCtx),
             AtmLanePath = ?JSON_PATH("lanes.[~B].runs", [AtmLaneIndex - 1]),
             {ok, PrevRuns} = json_utils:query(ExpAtmWorkflowExecutionState0, AtmLanePath),
@@ -1137,7 +1137,7 @@ locate_lane_run({AtmLaneSelector, AtmRunSelector}, ExpStateCtx = #exp_workflow_e
         (Run = #{<<"runNumber">> := RunNum}, Acc) when RunNum =:= TargetRunNum ->
             {halt, {ok, Acc + 1, Run}};
         (#{<<"runNumber">> := RunNum}, _) when RunNum < TargetRunNum ->
-            {halt, ?ERR_NOT_FOUND};
+            {halt, ?ERROR_NOT_FOUND};
         (_, Acc) ->
             {cont, Acc + 1}
     end, 0, maps:get(<<"runs">>, lists:nth(AtmLaneIndex, AtmLaneExecutions))),
@@ -1147,7 +1147,7 @@ locate_lane_run({AtmLaneSelector, AtmRunSelector}, ExpStateCtx = #exp_workflow_e
             Path = ?JSON_PATH("lanes.[~B].runs.[~B]", [AtmLaneIndex - 1, AtmRunIndex - 1]),
             {ok, {Path, AtmLaneRun}};
         _ ->
-            ?ERR_NOT_FOUND
+            ?ERROR_NOT_FOUND
     end.
 
 
@@ -1423,7 +1423,7 @@ assert_workflow_related_docs_deleted(#exp_workflow_execution_state_ctx{
         )),
 
         ?assertEqual(
-            ?ERR_NOT_FOUND,
+            ?ERROR_NOT_FOUND,
             ?rpc(ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId, include_discarded))
         ),
 
@@ -1469,7 +1469,7 @@ assert_task_related_docs_deleted(#exp_workflow_execution_state_ctx{
     }}) ->
         try
             ?assertEqual(
-                ?ERR_NOT_FOUND,
+                ?ERROR_NOT_FOUND,
                 ?rpc(ProviderSelector, atm_task_execution:get(AtmTaskExecutionId))
             ),
             assert_store_related_docs_deleted(ProviderSelector, AtmTaskAuditLogStoreId),
@@ -1492,7 +1492,7 @@ assert_store_related_docs_deleted(_ProviderSelector, null) ->
 assert_store_related_docs_deleted(_ProviderSelector, undefined) ->
     ok;
 assert_store_related_docs_deleted(ProviderSelector, AtmStoreId) ->
-    ?assertEqual(?ERR_NOT_FOUND, ?rpc(ProviderSelector, atm_store:get(AtmStoreId))).
+    ?assertEqual(?ERROR_NOT_FOUND, ?rpc(ProviderSelector, atm_store:get(AtmStoreId))).
 
 
 %% @private

@@ -80,7 +80,7 @@ run(SpaceId, Incarnation) ->
 cancel(SpaceId, Incarnation) ->
     case tree_traverse:cancel(?MODULE, gen_task_id(SpaceId, Incarnation)) of
         ok -> ok;
-        ?ERR_NOT_FOUND -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 

@@ -90,7 +90,7 @@ get(AtmStoreId) ->
     case atm_store:get(AtmStoreId) of
         {ok, #document{value = AtmStore}} ->
             {ok, AtmStore};
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 
@@ -106,10 +106,10 @@ get_ctx(AtmStoreId) ->
                         store = AtmStore,
                         workflow_execution = AtmWorkflowExecution
                     }};
-                ?ERR_NOT_FOUND = ErrorNotFound1 ->
+                ?ERROR_NOT_FOUND = ErrorNotFound1 ->
                     ErrorNotFound1
             end;
-        ?ERR_NOT_FOUND = ErrorNotFound2 ->
+        ?ERROR_NOT_FOUND = ErrorNotFound2 ->
             ErrorNotFound2
     end.
 
@@ -169,7 +169,7 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
     case get(AtmStoreId) of
         {ok, AtmStore} ->
             browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore);
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             throw(ErrorNotFound)
     end.
 
@@ -216,7 +216,7 @@ delete(AtmStoreId) ->
         {ok, #atm_store{container = AtmStoreContainer}} ->
             atm_store_container:delete(AtmStoreContainer),
             atm_store:delete(AtmStoreId);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ok
     end.
 

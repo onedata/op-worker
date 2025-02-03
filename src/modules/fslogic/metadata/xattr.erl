@@ -58,11 +58,11 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
     case get_xattr(UserCtx, FileCtx0, XattrName) of
         {ok, _} = Result ->
             Result;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
             case file_ctx:equals(FileCtx1, ParentCtx) of
-                true -> ?ERR_NOT_FOUND(?err_ctx());
+                true -> ?ERROR_NOT_FOUND;
                 false -> get(UserCtx, ParentCtx, XattrName, Inherited)
             end
     end.

@@ -113,7 +113,7 @@ get(SpaceId, Doc = #document{value = #file_meta{}}, PathType) ->
 get(SpaceId, Uuid, PathType) ->
     case file_meta:get_including_deleted(Uuid) of
         {ok, Doc} -> get(SpaceId, Doc, PathType);
-        ?ERR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
+        ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
         {error, _} = Error -> Error
     end.
 

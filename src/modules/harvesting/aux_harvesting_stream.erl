@@ -129,7 +129,7 @@ custom_error_handling(State = #hs_state{
 }, Result) ->
     % for aux_stream we are sure that there is only one key and one value
     case hd(maps:keys(harvesting_result:get_summary(Result))) of
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             % harvester was deleted, stream should be stopped
             {stop, normal, State};
         ?ERR_FORBIDDEN ->
@@ -175,7 +175,7 @@ custom_error_handling(State = #hs_state{
                         log_level = error,
                         last_persisted_seq = LastSuccessfulSeq
                     })};
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end
     end.

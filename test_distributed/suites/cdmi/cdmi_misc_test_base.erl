@@ -472,7 +472,7 @@ update_file_http_test(Config) ->
         cdmi_test_utils:do_request(WorkerP1, FilePath, put, [cdmi_test_utils:user_2_token_header() | RequestHeaders3],
             UpdateValue),
 
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(?HDR_CONTENT_RANGE)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(?HDR_CONTENT_RANGE, undefined)),
     ?assertMatch(ExpRestError, {Code3, json_utils:decode(Response3)}),
     ?assert(cdmi_test_utils:object_exists(FilePath, Config)),
     ?assertEqual(<<"12300content!">>,
@@ -653,7 +653,7 @@ out_of_range_test(Config) ->
         ),
         {Code4, json_utils:decode(Response4)}
     end,
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(<<"childrenrange">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(<<"childrenrange">>, undefined)),
 
     ?assertMatch(ExpRestError, GetResponseErrorFun(), ?ATTEMPTS).
 

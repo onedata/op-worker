@@ -342,7 +342,7 @@ get_data_source_dependent_data_spec_aspects(<<"view">>) ->
             ?ERR_VIEW_NOT_EXISTS_ON(?GET_DOMAIN_BIN(Node))
         end}},
 
-        {<<"queryViewParams">>, #{<<"bbox">> => 123}, ?ERR_BAD_DATA(<<"bbox">>)},
+        {<<"queryViewParams">>, #{<<"bbox">> => 123}, ?ERR_BAD_DATA(<<"bbox">>, undefined)},
         {<<"queryViewParams">>, #{<<"descending">> => <<"ascending">>}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
         {<<"queryViewParams">>, #{<<"limit">> => <<"inf">>}, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
         {<<"queryViewParams">>, #{<<"limit">> => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},

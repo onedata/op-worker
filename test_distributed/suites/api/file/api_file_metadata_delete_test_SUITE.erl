@@ -206,7 +206,7 @@ delete_metadata_test_base(
                 MetadataType, FileShareGuid, public
             ),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERR_NOT_SUPPORTED, Result)
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
             data_spec = DataSpec
         }

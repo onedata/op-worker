@@ -163,8 +163,8 @@ create_archive(_Config) ->
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
                         ?ERR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERR_BAD_VALUE_STRING(<<"description">>)},
-                    {<<"preservedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"preservedCallback">>)},
-                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"deletedCallback">>)}
+                    {<<"preservedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"preservedCallback">>, undefined)},
+                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"deletedCallback">>, undefined)}
                 ]
             }
         }
@@ -417,7 +417,7 @@ get_archive_info(_Config) ->
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERR_NOT_FOUND}]
+                bad_values = [{bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND}]
             }
         }
     ])).
@@ -500,7 +500,7 @@ modify_archive_description(_Config) ->
                 },
                 bad_values = [
                     {<<"description">>, 100, ?ERR_BAD_VALUE_STRING(<<"description">>)},
-                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERR_NOT_FOUND}
+                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND}
                 ]
             }
         }
@@ -638,7 +638,7 @@ get_dataset_archives(_Config) ->
                     <<"token">> => [<<"null">>, null | [http_utils:base64url_encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
-                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERR_NOT_FOUND},
+                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
                     {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
                     {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
                     {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
@@ -791,8 +791,8 @@ init_archive_delete_test(_Config) ->
                     <<"deletedCallback">> => [?ARCHIVE_DELETED_CALLBACK_URL()]
                 },
                 bad_values = [
-                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERR_NOT_FOUND},
-                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"deletedCallback">>)}
+                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
+                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"deletedCallback">>, undefined)}
                 ]
             }
         }
@@ -871,7 +871,7 @@ build_verify_archive_deleted_fun(MemRef, Providers, DatasetId) ->
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual(?ERR_NOT_FOUND, GetArchiveInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERROR_NOT_FOUND, GetArchiveInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(ArchiveId, ListArchiveFun()), ?ATTEMPTS);
                         expected_failure ->
                             ?assertMatch({ok, _}, GetArchiveInfo(), ?ATTEMPTS),
@@ -946,7 +946,7 @@ init_archive_recall_test(_Config) ->
                     <<"targetFileName">> => [?RANDOM_FILE_NAME()]
                 },
                 bad_values = [
-                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERR_NOT_FOUND},
+                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
                     {<<"parentDirectoryId">>, ?NON_EXISTENT_FILE_ID, ?ERR_BAD_VALUE_IDENTIFIER(<<"parentDirectoryId">>)},
                     {<<"targetFileName">>, 8, ?ERR_BAD_VALUE_STRING(<<"targetFileName">>)},
                     {<<"targetFileName">>, <<>>, ?ERR_BAD_VALUE_EMPTY(<<"targetFileName">>)}
@@ -1236,7 +1236,7 @@ validate_archivisation_audit_log_fun_gs(MemRef) ->
     fun(_, RespBody) ->
         case api_test_memory:get(MemRef, audit_log_deleted) of
             true ->
-                ?assertMatch(?ERR_NOT_FOUND, RespBody);
+                ?assertMatch(?ERROR_NOT_FOUND, RespBody);
             false ->
                 ?assertMatch({ok, #{
                     <<"isLast">> := true,

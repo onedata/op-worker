@@ -221,14 +221,14 @@ async_request_handling_test(Config) ->
     logic_tests_common:set_request_timeout(Config, 1000),
     logic_tests_common:mock_request_processing_time(Config, 1500, 2000),
     ?assertEqual(
-        ?ERR_TIMEOUT,
+        ?ERROR_TIMEOUT,
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
     ),
 
     logic_tests_common:set_harvest_request_timeout(Config, 10000),
     logic_tests_common:mock_harvest_request_processing_time(Config, 15000, 20000),
     ?assertEqual(
-        ?ERR_TIMEOUT,
+        ?ERROR_TIMEOUT,
         rpc:call(Node, space_logic, harvest_metadata, [?SPACE_1, #{}, [], 100, 100])
     ),
     ok.

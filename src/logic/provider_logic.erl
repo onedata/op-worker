@@ -339,8 +339,8 @@ get_support_size(SpaceId) ->
         {ok, #document{value = #od_provider{eff_spaces = #{SpaceId := SupportSize}}}} ->
             {ok, SupportSize};
         {ok, #document{value = #od_provider{}}} ->
-            ?ERR_NOT_FOUND(?err_ctx());
-        ?ERR = Error ->
+            ?ERROR_NOT_FOUND;
+        {error, _} = Error ->
             Error
     end.
 

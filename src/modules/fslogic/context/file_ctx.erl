@@ -481,7 +481,7 @@ get_share_root_dir_doc(FileCtx, IncludingDeleted) ->
 
     case {IsDeleted, IncludingDeleted} of
         {true, false} ->
-            ?ERR_NOT_FOUND(?err_ctx());
+            ?ERROR_NOT_FOUND;
         _ ->
             {ok, ShareRootDirDoc}
     end.
@@ -1218,7 +1218,7 @@ file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
 
             case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> true;
-                ?ERR_NOT_FOUND -> false
+                ?ERROR_NOT_FOUND -> false
             end;
         false ->
             file_meta:exists(FileUuid)

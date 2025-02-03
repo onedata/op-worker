@@ -362,13 +362,13 @@ call_server(Request) ->
     catch
         exit:{noproc, _} ->
             ?debug("Process '~tp' does not exist", [?MODULE]),
-            ?ERR_NOT_FOUND(?err_ctx());
+            ?ERROR_NOT_FOUND;
         exit:{normal, _} ->
             ?debug("Exit of '~tp' process", [?MODULE]),
-            ?ERR_NOT_FOUND(?err_ctx());
+            ?ERROR_NOT_FOUND;
         exit:{timeout, _} ->
             ?debug("Timeout of '~tp' process", [?MODULE]),
-            ?ERR_TIMEOUT(?err_ctx());
+            ?ERROR_TIMEOUT;
         Type:Reason ->
             ?error("Cannot call '~tp' due to ~tp:~tp", [?MODULE, Type, Reason]),
             {error, Reason}

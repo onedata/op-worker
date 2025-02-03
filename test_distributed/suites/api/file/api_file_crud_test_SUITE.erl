@@ -557,7 +557,7 @@ update_file_instance_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_update_file_instance_test_prepare_gs_args_fun(ShareGuid, public),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERR_NOT_SUPPORTED, Result)
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
             data_spec = update_file_instance_test_data_spec()
         }
@@ -700,8 +700,8 @@ delete_file_instance_test(Config) ->
                     type = rest_not_supported,
                     prepare_args_fun = build_delete_instance_test_prepare_rest_args_fun({guid, TopDirShareGuid}),
                     validate_result_fun = fun(_TestCaseCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-                        ?assertEqual(errors:to_http_code(?ERR_NOT_SUPPORTED), RespCode),
-                        ?assertEqual(?REST_ERROR(?ERR_NOT_SUPPORTED), RespBody)
+                        ?assertEqual(errors:to_http_code(?ERROR_NOT_SUPPORTED), RespCode),
+                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), RespBody)
                     end
                 }
                 #scenario_template{
@@ -709,7 +709,7 @@ delete_file_instance_test(Config) ->
                     type = gs_not_supported,
                     prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, TopDirShareGuid}, public),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
-                        ?assertEqual(?ERR_NOT_SUPPORTED, Result)
+                        ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
                     end
                 }
             ]

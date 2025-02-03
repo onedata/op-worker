@@ -769,8 +769,8 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     onenv_api_test_runner:data_spec().
 replace_enoent_with_error_not_found_in_error_expectations(DataSpec = #data_spec{bad_values = BadValues}) ->
     DataSpec#data_spec{bad_values = lists:map(fun
-        ({Key, Value, ?ERR_POSIX(?ENOENT)}) -> {Key, Value, ?ERR_NOT_FOUND};
-        ({Key, Value, {Interface, ?ERR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERR_NOT_FOUND}};
+        ({Key, Value, ?ERR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
+        ({Key, Value, {Interface, ?ERR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};
         (Spec) -> Spec
     end, BadValues)}.
 
@@ -826,7 +826,7 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
         % - gs: scope is left intact (in contrast to rest) but client is changed
         %   to ?GUEST. Then it fails middleware auth checks (whether user belongs
         %   to space or has some space privileges)
-        {bad_id, ShareFileObjectId, {rest, ?ERR_NOT_SUPPORTED}},
+        {bad_id, ShareFileObjectId, {rest, ?ERROR_NOT_SUPPORTED}},
         {bad_id, ShareFileGuid, {gs, ?ERR_UNAUTHORIZED(undefined)}}
 
         | Errors

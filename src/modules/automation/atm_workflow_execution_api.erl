@@ -177,7 +177,7 @@ get(AtmWorkflowExecutionId) ->
     case atm_workflow_execution:get(AtmWorkflowExecutionId) of
         {ok, #document{value = AtmWorkflowExecution}} ->
             {ok, AtmWorkflowExecution};
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 

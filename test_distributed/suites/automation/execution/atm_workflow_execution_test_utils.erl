@@ -477,7 +477,7 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
     AtmStoreContent = try
         atm_store_api:browse_content(AtmWorkflowExecutionAuth, AtmStoreBrowseOpts, AtmStore)
     catch
-        throw:?ERR_NOT_FOUND when AtmStoreType == audit_log ->
+        throw:?ERROR_NOT_FOUND when AtmStoreType == audit_log ->
             % audit log may not exist because of:
             % 1. it is created only at first append
             % 2. it may have been purged

@@ -73,7 +73,7 @@ with_all(StatNames, Collection) ->
     FilteredMap = maps:with(StatNames, Collection),
     case maps:size(FilteredMap) of
         StatsCount -> {ok, FilteredMap};
-        _ -> ?ERR_NOT_FOUND(?err_ctx())
+        _ -> ?ERROR_NOT_FOUND
     end.
 
 

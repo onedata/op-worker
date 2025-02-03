@@ -608,7 +608,7 @@ infer_type(Mode) ->
     case {IsRegFile, IsDir} of
         {true, false} -> {ok, ?REGULAR_FILE_TYPE};
         {false, true} -> {ok, ?DIRECTORY_TYPE};
-        {false, false} -> ?ERR_NOT_SUPPORTED(?err_ctx())
+        {false, false} -> ?ERROR_NOT_SUPPORTED
     end.
 
 

@@ -124,7 +124,7 @@ consume_measurements(CollectionId, ConsumeSpec, Retries) ->
     case datastore_time_series_collection:consume_measurements(?CTX, CollectionId, ConsumeSpec) of
         ok ->
             ok;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             % There is a chance that transfer started for legacy QoS entry for which time 
             % series collection was not initialized. Create it and try again.
             ok = ensure_exists_internal(CollectionId),

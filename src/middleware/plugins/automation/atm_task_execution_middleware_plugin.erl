@@ -55,7 +55,7 @@ resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, openfaas_function_pod_status_registry, private) -> ?MODULE;
 resolve_handler(get, {openfaas_function_pod_event_log, _}, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -153,7 +153,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = Aspect}}, _) when
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -179,7 +179,7 @@ get(
 
     case atm_openfaas_function_pod_status_registry:find_summary(PodId, PodStatusRegistry) of
         error ->
-            ?ERR_NOT_FOUND(?err_ctx());
+            ?ERROR_NOT_FOUND;
         {ok, #atm_openfaas_function_pod_status_summary{event_log_id = EventLogId}} ->
             BrowseOpts = audit_log_browse_opts:from_json(Data),
             case atm_openfaas_function_pod_status_registry:browse_pod_event_log(EventLogId, BrowseOpts) of
@@ -198,7 +198,7 @@ get(
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -208,7 +208,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%%===================================================================

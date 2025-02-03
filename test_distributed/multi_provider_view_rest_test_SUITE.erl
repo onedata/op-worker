@@ -403,7 +403,7 @@ overwriting_view_should_fail(Config) ->
     end, Workers),
 
     % overwrite
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_ALREADY_EXISTS),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_ALREADY_EXISTS),
     ?assertMatch(ExpRestError, create_view_via_rest(
         Config, WorkerP1, ?SPACE_ID, ViewName,
         ?SPATIAL_MAP_FUNCTION, true, [], #{}
@@ -542,7 +542,7 @@ create_get_delete_reduce_fun(Config) ->
 getting_nonexistent_view_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ViewName = ?VIEW_NAME(?FUNCTION_NAME),
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_NOT_FOUND),
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
 
     lists:foreach(fun(Worker) ->
         ?assertMatch(ExpRestError, get_view_via_rest(
@@ -621,7 +621,7 @@ query_view(Config) ->
     Query = query_filter(Config, SpaceId, ViewName),
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
-    ErrorNotFound = rest_test_utils:get_rest_error(?ERR_NOT_FOUND),
+    ErrorNotFound = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
     ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
     ExpGuids = lists:sort(Guids),
 
@@ -690,8 +690,8 @@ querying_view_with_invalid_params_should_fail(Config) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpRestError, Query(Worker, Options))
     end, [
-        {#{bbox => ok}, ?ERR_BAD_DATA(<<"bbox">>)},
-        {#{bbox => 1}, ?ERR_BAD_DATA(<<"bbox">>)},
+        {#{bbox => ok}, ?ERR_BAD_DATA(<<"bbox">>, undefined)},
+        {#{bbox => 1}, ?ERR_BAD_DATA(<<"bbox">>, undefined)},
 
         {#{descending => ok}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
         {#{descending => 1}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
@@ -900,7 +900,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpMapFun2 = view_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
 
-    ExpError = rest_test_utils:get_rest_error(?ERR_NOT_FOUND),
+    ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
     ExpError2 = rest_test_utils:get_rest_error(?ERR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>)),
 
     % get by simple name

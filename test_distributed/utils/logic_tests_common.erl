@@ -328,7 +328,7 @@ mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, 
                 <<"token">> => ?MOCK_IDP_ACCESS_TOKEN, <<"ttl">> => 3600
             }}};
         _ ->
-            ?ERR_NOT_FOUND
+            ?ERROR_NOT_FOUND
     end;
 
 mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
@@ -407,7 +407,7 @@ mock_graph_delete(#gri{type = od_share, id = ShareId, aspect = instance}, #auth_
         true ->
             {ok, #gs_resp_graph{}};
         false ->
-            ?ERR_NOT_FOUND
+            ?ERROR_NOT_FOUND
     end.
 
 
@@ -425,7 +425,7 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, AuthOverr
                 #auth_override{client_auth = {token, _}} ->
                     ClientUserId;
                 _ ->
-                    ?ERR_NOT_FOUND
+                    ?ERROR_NOT_FOUND
             end;
         _ ->
             Id
@@ -618,7 +618,7 @@ mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = sh
                 true ->
                     {ok, #gs_resp_graph{data_format = resource, data = ?TOKEN_SHARED_DATA_VALUE(TokenId)}};
                 _ ->
-                    ?ERR_NOT_FOUND
+                    ?ERROR_NOT_FOUND
             end;
         false ->
             ?ERR_FORBIDDEN

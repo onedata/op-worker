@@ -298,7 +298,7 @@ group_spaces_by_name(SessId, SpaceIds) ->
         case space_logic:get_name(SessId, SpaceId) of
             {ok, SpaceName} ->
                 Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]};
-            ?ERR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND ->
                 Acc;
             ?ERR_FORBIDDEN ->
                 Acc

@@ -52,7 +52,7 @@ get(UserCtx, FileCtx, Query, Inherited) ->
             % Note: in case of link, its ancestors will be used instead of original file ancestors.
             case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
                 {ok, []} ->
-                    ?ERR_NOT_FOUND(?err_ctx());
+                    ?ERROR_NOT_FOUND;
                 {ok, GatheredJsons} ->
                     {ok, json_utils:merge(GatheredJsons)}
             end;
@@ -63,7 +63,7 @@ get(UserCtx, FileCtx, Query, Inherited) ->
         {ok, Json} ->
             case json_utils:query(Json, Query) of
                 {ok, _} = Ans -> Ans;
-                error -> ?ERR_NOT_FOUND(?err_ctx())
+                error -> ?ERROR_NOT_FOUND
             end;
         {error, _} = Error ->
             Error
@@ -113,7 +113,7 @@ gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
     AllMetadata = case get_direct_json_metadata(UserCtx, FileCtx0) of
         {ok, Metadata} ->
             [Metadata | GatheredMetadata];
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             GatheredMetadata
     end,
 

@@ -53,7 +53,7 @@ resolve_handler(get, audit_log, private) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -291,7 +291,7 @@ update(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}, data 
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{}) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%%===================================================================

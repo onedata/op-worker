@@ -558,7 +558,7 @@ maybe_persist_last_seen_seq(State = #hs_state{
     case harvesting_state:set_seen_seq(SpaceId, Destination, LastSeenSeq) of
         ok ->
             State#hs_state{last_persisted_seq = LastSeenSeq};
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             throw_harvesting_not_found_exception(State)
     end;
 maybe_persist_last_seen_seq(State) ->
@@ -591,7 +591,7 @@ harvest_and_handle_errors(State = #hs_state{
     ProcessedResult = harvesting_result:process(Result, Destination, PreparedBatch),
     LastBatchSeq = harvesting_batch:get_last_seq(PreparedBatch),
     case harvesting_result:get_summary(ProcessedResult) of
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?debug("Space ~tp was deleted. Stopping harvesting_stream ~tp", [SpaceId, Name]),
             {stop, normal, State2};
         Error = {error, _} ->
@@ -626,7 +626,7 @@ on_successful_result(State = #hs_state{
                 last_sent_max_stream_seq = LastSeenSeq
             },
             {noreply, enter_streaming_mode(State2)};
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             throw_harvesting_not_found_exception(State)
     end.
 

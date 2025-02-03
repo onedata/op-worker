@@ -442,7 +442,7 @@ randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecution
         1 ->
             SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
             ?rpc(ProviderSelector, mi_datasets:remove(SessionId, maps:get(<<"datasetId">>, Item))),
-            {true, ?ERR_NOT_FOUND};
+            {true, ?ERROR_NOT_FOUND};
         _ ->
             false
     end;

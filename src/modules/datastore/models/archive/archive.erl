@@ -270,7 +270,7 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
                         ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
                         case lfm:resolve_symlink(SessionId, ?FILE_REF(ChildGuid)) of
                             {ok, Guid} -> {ok, file_ctx:new_by_guid(Guid)};
-                            {error, ?ENOENT} -> ?ERR_NOT_FOUND(?err_ctx())
+                            {error, ?ENOENT} -> ?ERROR_NOT_FOUND
                         end;
                     false ->
                         {ok, ChildCtx}
@@ -280,7 +280,7 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
         end, {ok, DataDirCtx}, RelativeFilePathTokens)
     catch
         throw:?ENOENT ->
-            ?ERR_NOT_FOUND(?err_ctx())
+            ?ERROR_NOT_FOUND
     end.
 
 %%%===================================================================

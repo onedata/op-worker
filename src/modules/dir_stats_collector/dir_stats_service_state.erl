@@ -165,7 +165,7 @@ get_extended_status(SpaceId) ->
     case get(SpaceId) of
         {ok, State} ->
             get_extended_status(State);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             disabled
     end.
 
@@ -202,7 +202,7 @@ get_last_initialization_timestamp_if_in_enabled_status(SpaceId) ->
     case get(SpaceId) of
         {ok, State} ->
             get_last_initialization_timestamp_if_in_enabled_status(State);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx())
     end.
 
@@ -212,7 +212,7 @@ get_status_change_timestamps(SpaceId) ->
     case get(SpaceId) of
         {ok, #dir_stats_service_state{status_change_timestamps = Timestamps}} ->
             Timestamps;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             []
     end.
 
@@ -340,7 +340,7 @@ disable(SpaceId) ->
             report_status_change_to_oz(SpaceId, disabled);
         {error, no_action_needed} ->
             ok;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?warning("Disabling space ~tp without dir stats service state document", [SpaceId]);
         ?ERR_FORBIDDEN = ErrorForbidden ->
             ErrorForbidden
@@ -374,7 +374,7 @@ report_collections_initialization_finished(SpaceId) ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~tp enabling finished when space has status ~tp", [SpaceId, WrongStatus]);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?warning("Reporting space ~tp enabling finished when space has no dir stats service state document", [SpaceId])
     end.
 
@@ -413,7 +413,7 @@ report_collectors_stopped(SpaceId) ->
         % Log errors on debug as they can appear at node restart
         {error, {wrong_status, WrongStatus}} ->
             ?debug("Reporting space ~tp disabling finished when space has status ~tp", [SpaceId, WrongStatus]);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?debug("Reporting space ~tp disabling finished when space has no dir stats service state document", [SpaceId])
     end.
 
@@ -551,7 +551,7 @@ run_initialization_traverse(SpaceId, Incarnation) ->
                 {error, {wrong_status, WrongStatus}} ->
                     ?warning("Reporting space ~tp initialization traverse failure when space has status ~tp",
                         [SpaceId, WrongStatus]);
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     ?warning("Reporting space ~tp initialization traverse failure when "
                     "space has no dir stats service state document", [SpaceId])
             end,

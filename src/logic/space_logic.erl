@@ -374,7 +374,7 @@ is_supported(SessionId, SpaceId, ProviderId) ->
     case get(SessionId, SpaceId) of
         {ok, SpaceDoc = #document{}} ->
             is_supported(SpaceDoc, ProviderId);
-        ?ERR_NOT_FOUND ->  % the space has been deleted or never existed
+        ?ERROR_NOT_FOUND ->  % the space has been deleted or never existed
             false;
         ?ERR_FORBIDDEN ->  % forbidden access due to lack of support
             false

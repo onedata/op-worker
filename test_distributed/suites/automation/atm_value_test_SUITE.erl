@@ -405,7 +405,7 @@ atm_dataset_value_describe_test(_Config) ->
     atm_value_describe_test_base(#atm_value_describe_testcase{
         data_spec = #atm_dataset_data_spec{},
         values = lists:flatten([
-            {error, #{<<"datasetId">> => <<"RemovedDatasetId">>}, ?ERR_NOT_FOUND},
+            {error, #{<<"datasetId">> => <<"RemovedDatasetId">>}, ?ERROR_NOT_FOUND},
 
             lists:map(fun(DatasetId) ->
                 DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
@@ -683,7 +683,7 @@ atm_group_value_describe_test(_Config) ->
             attributes = ?RAND_SUBLIST(atm_group_data_spec:allowed_group_attributes())
         },
         values = lists:flatten([
-            {error, #{<<"groupId">> => <<"RemovedGroupId">>}, ?ERR_NOT_FOUND},
+            {error, #{<<"groupId">> => <<"RemovedGroupId">>}, ?ERROR_NOT_FOUND},
 
             lists:map(fun(GroupId) ->
                 GroupInfo = resolve_group(SessionId, GroupId, SpaceKrkId),

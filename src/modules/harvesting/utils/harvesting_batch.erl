@@ -286,10 +286,10 @@ prepare_archive_details(#document{scope = SpaceId} = FileMetaDoc) ->
                             <<"archiveDescription">> => Description,
                             <<"archiveCreationTime">> => CreationTime
                         };
-                    ?ERR_NOT_FOUND->
+                    ?ERROR_NOT_FOUND->
                         #{}
                 end;
-            ?ERR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND ->
                 #{}
         end
     catch _:_ ->

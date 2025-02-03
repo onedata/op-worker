@@ -142,7 +142,7 @@ get(SpaceId, Doc = #document{value = #file_meta{}, scope = Scope}, Opts) ->
 get(SpaceId, Uuid, Opts) ->
     case file_meta:get_including_deleted_local_or_remote(Uuid, SpaceId) of
         {ok, Doc} -> get(SpaceId, Doc, Opts);
-        ?ERR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
+        ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(Uuid)};
         {error, _} = Error -> Error
     end.
 

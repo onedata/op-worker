@@ -612,7 +612,7 @@ schedule_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution 
             rerun -> Run#atm_lane_execution_run.iterated_store_id
         end
     },
-    Diff = fun(_Run) -> ?ERR_ALREADY_EXISTS(?err_ctx()) end,
+    Diff = fun(_Run) -> ?ERROR_ALREADY_EXISTS end,
 
     NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
         current_lane_index = AtmLaneIndex,

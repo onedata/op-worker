@@ -167,7 +167,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
         LogId = Summary#atm_openfaas_function_pod_status_summary.event_log_id,
         ?rpc(audit_log:delete(LogId)),
         % browsing should return a proper error
-        ?assertEqual(?ERR_NOT_FOUND, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{}))),
+        ?assertEqual(?ERROR_NOT_FOUND, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{}))),
         % the log should be recreated upon new activity
         submit_pod_status_reports(Client, [gen_pod_status_report(FunctionId, PodId)]),
         ?assertMatch({ok, _}, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{})), ?ATTEMPTS)
@@ -186,7 +186,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
         event_log_id = PodEventLogId
     }) ->
         ?assertEqual(
-            ?ERR_NOT_FOUND,
+            ?ERROR_NOT_FOUND,
             ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(PodEventLogId, #{}))
         )
     end, PodStatusRegistry).
@@ -344,7 +344,7 @@ result_stream_conclusion_timeout_test(_Config) ->
 
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
-    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERR_TIMEOUT})),
+    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_TIMEOUT})),
     % the registry should be cleaned even if there were conclusion errors
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})),
 
@@ -381,7 +381,7 @@ result_stream_registration_during_conclusion_test(_Config) ->
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
 
     % as client beta has never deregistered, the stream should fail to conclude
-    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERR_TIMEOUT})),
+    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_TIMEOUT})),
     % the registry should be cleaned even if there were conclusion errors
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})),
 

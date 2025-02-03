@@ -134,7 +134,7 @@ get_xattr_internal(UserCtx, FileCtx, XattrName, Inherited) ->
                 status = #status{code = ?OK},
                 fuse_response = ?XATTR(XattrName, XattrValue)
             };
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             #fuse_response{status = #status{code = ?ENOATTR}}
     end.
 

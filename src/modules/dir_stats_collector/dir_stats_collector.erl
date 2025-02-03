@@ -243,9 +243,9 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandli
             case get_parent(Guid) of
                 {ok, ParentGuid} ->
                     update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate);
-                ?ERR_NOT_FOUND when ParentErrorHandlingMethod =:= add_hook ->
+                ?ERROR_NOT_FOUND when ParentErrorHandlingMethod =:= add_hook ->
                     add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate);
-                ?ERR_NOT_FOUND = ErrorNotFound ->
+                ?ERROR_NOT_FOUND = ErrorNotFound ->
                     ErrorNotFound
             end;
         false ->
@@ -273,7 +273,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                         _ ->
                             update_stats_of_parent_internal(get_parent(Doc, SpaceId), CollectionType, CollectionUpdate)
                     end;
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     add_missing_file_meta_on_update_posthook(Guid, CollectionType, CollectionUpdate)
             end;
         false ->
@@ -1085,7 +1085,7 @@ cache_parent(Guid, #cached_dir_stats{
                     pes:self_cast(?FILE_MOVED(Guid, ParentGuidToCache)),
                     CachedDirStats#cached_dir_stats{parent = OldParentGuid}
             end;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             CachedDirStats
     end;
 
@@ -1099,7 +1099,7 @@ get_parent(Guid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     case file_meta:get_including_deleted_local_or_remote(FileUuid, SpaceId) of
         {ok, Doc} -> {ok, get_parent(Doc, SpaceId)};
-        ?ERR_NOT_FOUND = ErrorNotFound -> ErrorNotFound
+        ?ERROR_NOT_FOUND = ErrorNotFound -> ErrorNotFound
     end.
 
 
@@ -1154,7 +1154,7 @@ call_designated_node(Guid, Function, Args) ->
     case erpc:call(Node, pes, Function, Args) of
         ?ERR_DIR_STATS_NOT_READY = ErrorDirStatsNotReady -> ErrorDirStatsNotReady;
         ?ERR_DIR_STATS_DISABLED_FOR_SPACE = ErrorDirStatsDisabledForSpace -> ErrorDirStatsDisabledForSpace;
-        ?ERR_NOT_FOUND = ErrorNotFound -> ErrorNotFound;
+        ?ERROR_NOT_FOUND = ErrorNotFound -> ErrorNotFound;
         {error, _} = Error ->
             ?error("Dir stats collector PES fun ~tp error: ~tp for guid ~tp", [Function, Error, Guid]),
             ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined);

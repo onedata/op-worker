@@ -259,7 +259,7 @@ await_response(MsgId) ->
         #server_message{message_id = MsgId} = ServerMsg ->
             {ok, ServerMsg}
     after ?RESPONSE_AWAITING_PERIOD ->
-        ?ERR_TIMEOUT(?err_ctx())
+        ?ERROR_TIMEOUT
     end.
 
 

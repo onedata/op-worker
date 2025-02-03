@@ -48,7 +48,7 @@ save(Id, Record) ->
 get(Id) ->
     case datastore_model:get(?CTX, Id) of
         {ok, Doc} -> {ok, Doc#document.value};
-        {error, not_found} -> ?ERR_NOT_FOUND(?err_ctx())
+        {error, not_found} -> ?ERROR_NOT_FOUND
     end.
 
 

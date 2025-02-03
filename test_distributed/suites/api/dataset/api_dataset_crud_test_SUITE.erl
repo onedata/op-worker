@@ -113,7 +113,7 @@ establish_dataset_test(Config) ->
                             <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
                         },
                         bad_values = [
-                            {<<"rootFileId">>, FileObjectId, ?ERR_ALREADY_EXISTS},
+                            {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
                             {<<"protectionFlags">>, 100, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"protectionFlags">>)},
                             {<<"protectionFlags">>, [?METADATA_PROTECTION_BIN], ?ERR_BAD_DATA(
                                 <<"protectionFLags">>,
@@ -389,7 +389,7 @@ get_dataset_test_base(
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, ?NON_EXISTENT_DATASET_ID, ?ERR_NOT_FOUND}]
+                bad_values = [{bad_id, ?NON_EXISTENT_DATASET_ID, ?ERROR_NOT_FOUND}]
             }
         }
     ])).
@@ -507,7 +507,7 @@ update_dataset_test(Config) ->
                     {<<"unsetProtectionFlags">>, [<<"dummyFlag">>], ?ERR_BAD_VALUE_LIST_NOT_ALLOWED(
                         <<"unsetProtectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                     )},
-                    {bad_id, ?NON_EXISTENT_DATASET_ID, ?ERR_NOT_FOUND}
+                    {bad_id, ?NON_EXISTENT_DATASET_ID, ?ERROR_NOT_FOUND}
                 ]
             }
         }
@@ -597,7 +597,7 @@ get_exp_update_result(MemRef, Data) ->
         {_, undefined, [], []} ->
             ok;
         {SameState, SameState, _, _} ->
-            ?ERR_ALREADY_EXISTS;
+            ?ERROR_ALREADY_EXISTS;
         {<<"attached">>, <<"detach">>, [], []} ->
             ok;
         {<<"attached">>, <<"detach">>, _, _} ->
@@ -657,7 +657,7 @@ delete_dataset_test(Config) ->
             ],
             data_spec = #data_spec{
                 bad_values = [
-                    {bad_id, <<"NonExistentDataset">>, ?ERR_NOT_FOUND}
+                    {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND}
                 ]
             }
         }
@@ -740,7 +740,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual(?ERR_NOT_FOUND, GetDatasetInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERROR_NOT_FOUND, GetDatasetInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(DatasetId, ListDatasetsFun())),
                             api_test_memory:set(MemRef, datasets, lists:delete(
                                 DatasetId, api_test_memory:get(MemRef, datasets)

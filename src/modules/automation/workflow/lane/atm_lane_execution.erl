@@ -197,7 +197,7 @@ update_run({AtmLaneSelector, RunSelector}, Diff, Default, AtmWorkflowExecution =
                     Error1
             end;
 
-        ?ERR_NOT_FOUND when Default /= undefined andalso CurrentRunNum =< RunNum ->
+        ?ERROR_NOT_FOUND when Default /= undefined andalso CurrentRunNum =< RunNum ->
             NewAtmLaneExecution = add_new_run(Default, AtmLaneExecution),
             {ok, replace(AtmLaneIndex, NewAtmLaneExecution, AtmWorkflowExecution)};
 
@@ -210,7 +210,7 @@ update_run({AtmLaneSelector, RunSelector}, Diff, Default, AtmWorkflowExecution =
 get(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
     case maps:find(resolve_selector(AtmLaneSelector, AtmWorkflowExecution), AtmLaneExecutions) of
         {ok, _} = Result -> Result;
-        error -> ?ERR_NOT_FOUND(?err_ctx())
+        error -> ?ERROR_NOT_FOUND
     end.
 
 
@@ -428,13 +428,13 @@ locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution = #atm_workflow_e
         (#atm_lane_execution_run{run_num = RunNum} = Run, Acc) when RunNum =:= TargetRunNum ->
             {halt, {ok, Acc + 1, Run}};
         (#atm_lane_execution_run{run_num = RunNum}, _) when RunNum < TargetRunNum ->
-            {halt, ?ERR_NOT_FOUND(?err_ctx())};
+            {halt, ?ERROR_NOT_FOUND};
         (_, Acc) ->
             {cont, Acc + 1}
     end, 0, AtmLaneExecution#atm_lane_execution.runs),
 
     case is_integer(Result) of
-        true -> ?ERR_NOT_FOUND(?err_ctx());
+        true -> ?ERROR_NOT_FOUND;
         false -> Result
     end.
 

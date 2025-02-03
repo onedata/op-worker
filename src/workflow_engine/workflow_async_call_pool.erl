@@ -44,7 +44,7 @@ init(Id, SlotsLimit) ->
     Doc = #document{key = Id, value = #workflow_async_call_pool{slots_limit = SlotsLimit}},
     case datastore_model:create(?CTX, Doc) of
         {ok, _} -> ok;
-        ?ERR_ALREADY_EXISTS -> ok
+        ?ERROR_ALREADY_EXISTS -> ok
     end.
 
 -spec increment_slot_usage(id()) -> ok | ?WF_ERROR_LIMIT_REACHED.

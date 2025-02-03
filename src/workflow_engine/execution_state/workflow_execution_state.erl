@@ -251,9 +251,9 @@ resume_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, Ini
             },
             case workflow_execution_state_dump:restore_workflow_execution_state_from_dump(Doc, Iterator) of
                 ok -> ok;
-                ?ERR_NOT_FOUND -> save(Doc)
+                ?ERROR_NOT_FOUND -> save(Doc)
             end;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             init(ExecutionId, EngineId, Handler, Context, InitialLaneId, InitialNextLaneId, SnapshotMode)
     end.
 
@@ -261,7 +261,7 @@ resume_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, Ini
 init_cancel(ExecutionId, Pred) ->
     case update(ExecutionId, fun(State) -> handle_execution_cancel_init(State, Pred) end) of
         {ok, _} -> ok;
-        ?ERR_NOT_FOUND -> ok;
+        ?ERROR_NOT_FOUND -> ok;
         ?WF_ERROR_PRED_NOT_MEET -> ?WF_ERROR_PRED_NOT_MEET
     end.
 
@@ -270,7 +270,7 @@ init_cancel(ExecutionId, Pred) ->
 finish_cancel(ExecutionId) ->
     case update(ExecutionId, fun handle_execution_cancel_finish/1) of
         {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} -> {ok, EngineId};
-        ?ERR_NOT_FOUND -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
+        ?ERROR_NOT_FOUND -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
         ?WF_ERROR_WORKFLOW_INTERRUPTED -> ?WF_ERROR_WORKFLOW_INTERRUPTED
     end.
@@ -283,7 +283,7 @@ wait_for_pending_callbacks(ExecutionId) ->
         {ok, _} ->
             timer:sleep(200),
             wait_for_pending_callbacks(ExecutionId);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ok
     end.
 
@@ -305,7 +305,7 @@ execute_exception_handler_if_waiting(ExecutionId) ->
                 executed,
                 workflow_engine:execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace)
             };
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             not_waiting
     end.
 
@@ -314,7 +314,7 @@ abandon(ExecutionId, InterruptReason) ->
     case update(ExecutionId, fun(State) -> mark_workflow_abandoned(State, InterruptReason) end) of
         {ok, _} ->
             ok;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?warning("Ignoring abandon for not existing workflow execution ~tp", [ExecutionId]),
             ok
     end.
@@ -356,7 +356,7 @@ prepare_next_job(ExecutionId) ->
                 remove_pending_callback(State, ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR)
             end),
             ?RETRY_EXECUTION;
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound % Race with execution deletion
     end.
 
@@ -412,7 +412,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
         ?WF_ERROR_JOB_NOT_FOUND ->
             ?debug("Result for not found job ~tp of execution ~tp", [JobIdentifier, ExecutionId]),
             {?WF_ERROR_JOB_NOT_FOUND, undefined, []};
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ?debug("Result for job ~tp of ended execution ~tp", [JobIdentifier, ExecutionId]),
             {?WF_ERROR_JOB_NOT_FOUND, undefined, []}
     end,
@@ -598,7 +598,7 @@ check_timeouts(ExecutionId) ->
             maps:size(AsyncPoolsSlotsToFree) =/= 0;
         ?WF_ERROR_NOTHING_CHANGED  ->
             false;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             false
     end.
 
@@ -606,7 +606,7 @@ check_timeouts(ExecutionId) ->
 reset_keepalive_timer(ExecutionId, JobIdentifier) ->
     case update(ExecutionId, fun(State) -> reset_keepalive_timer_internal(State, JobIdentifier) end) of
         {ok, _} -> ok;
-        ?ERR_NOT_FOUND -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 -spec get_result_processing_data(workflow_engine:execution_id(), workflow_jobs:job_identifier()) ->
@@ -625,7 +625,7 @@ get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{value = State}} ->
             {ok, State};
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 
@@ -843,7 +843,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         ?WF_ERROR_RACE_CONDITION ->
             maybe_delete_prefetched_iteration_step(NextIterationStep),
             prepare_next_job_for_current_lane(ExecutionId);
-        ?ERR_NOT_FOUND = ErrorNotFound -> % Race with execution deletion
+        ?ERROR_NOT_FOUND = ErrorNotFound -> % Race with execution deletion
             maybe_delete_prefetched_iteration_step(NextIterationStep),
             ErrorNotFound
     end.
@@ -1052,12 +1052,12 @@ maybe_report_item_error(#document{key = ExecutionId, value = #workflow_execution
                     update_report = ?DELETE_ITEM
                 }};
             undefined ->
-                ?ERR_NOT_FOUND(?err_ctx())
+                ?ERROR_NOT_FOUND
         end
     end) of
         {ok, #document{value = #workflow_execution_state{update_report = ?DELETE_ITEM}} = UpdatedDoc} ->
             delete_item_callback(UpdatedDoc, ItemIdToReportError);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             delete_item_callback(Doc, ItemIdToReportError);
         _ ->
             {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, ItemIdToReportError) end),
@@ -1079,12 +1079,12 @@ maybe_delete_item(ExecutionId, ItemId) ->
             [report, delete] ->
                 ?WF_ERROR_RACE_CONDITION;
             undefined ->
-                ?ERR_NOT_FOUND(?err_ctx())
+                ?ERROR_NOT_FOUND
         end
     end) of
         {ok, _} -> ok;
         ?WF_ERROR_RACE_CONDITION -> ok;
-        ?ERR_NOT_FOUND -> workflow_cached_item:delete(ItemId)
+        ?ERROR_NOT_FOUND -> workflow_cached_item:delete(ItemId)
     end.
 
 -spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), task_status()) -> ok.
@@ -1272,7 +1272,7 @@ check_waiting_exception_handler(#workflow_execution_state{
         update_report = ?EXECUTE_DELAYED_CALLBACKS([ExceptionCallback])
     }};
 check_waiting_exception_handler(_) ->
-    ?ERR_NOT_FOUND(?err_ctx()).
+    ?ERROR_NOT_FOUND.
 
 -spec mark_workflow_abandoned(state(), workflow_handler:abrupt_stop_reason()) -> {ok, state()}.
 mark_workflow_abandoned(
@@ -1602,7 +1602,7 @@ check_timeouts_internal(State = #workflow_execution_state{
         _ ->
             {FinalState, AsyncPoolsSlotsToFree} = lists:foldl(fun(JobIdentifier, {TmpState, TmpAsyncPoolsSlotsToFree}) ->
                 {ok, NewTmpState} = report_execution_status_update_internal(
-                    TmpState, JobIdentifier, ?ASYNC_CALL_ENDED, ?ERR_TIMEOUT(?err_ctx())),
+                    TmpState, JobIdentifier, ?ASYNC_CALL_ENDED, ?ERROR_TIMEOUT),
 
                 {_, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
                 NewTmpAsyncPoolsSlotsToFree = lists:foldl(fun(AsyncPoolId, InternalTmpAsyncPoolsChange) ->
@@ -1678,7 +1678,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
     case prepare_next_streamed_task_data(State) of
         {ok, UpdatedState} ->
             {ok, UpdatedState};
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             case workflow_iteration_state:can_process_items(IterationState) of
                 true ->
                     case workflow_jobs:prepare_next_waiting_job(Jobs) of
@@ -1704,7 +1704,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                         undefined -> % iteration has finished
                             % Iteration should not be finished when workflow_iteration_state:can_process_items returns false
                             ?warning("Unexpected workflow_iteration_state"),
-                            handle_no_waiting_items_error(State, ?ERR_NOT_FOUND(?err_ctx()));
+                            handle_no_waiting_items_error(State, ?ERROR_NOT_FOUND);
                         ItemIndex ->
                             ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Handler, Context)
                     end
@@ -1779,7 +1779,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                     task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
                 jobs = NewJobs
             }};
-        {?ERR_NOT_FOUND = ErrorNotFound, NewJobs} ->
+        {?ERROR_NOT_FOUND = ErrorNotFound, NewJobs} ->
             verify_ongoing_when_execution_is_cancelled(ErrorNotFound, NewJobs, State);
         ?WF_ERROR_ITERATION_FINISHED ->
             verify_ongoing_when_execution_is_cancelled(?WF_ERROR_ITERATION_FINISHED, Jobs, State)
@@ -1871,7 +1871,7 @@ verify_ongoing_when_execution_is_cancelled(Error, NewJobs, State = #workflow_exe
     pending_callbacks = PendingCallbacks
 }) ->
     case {workflow_jobs:has_ongoing_jobs(NewJobs) orelse PendingCallbacks =/= [], Error} of
-        {true, ?ERR_NOT_FOUND} ->
+        {true, ?ERROR_NOT_FOUND} ->
             {ok, State#workflow_execution_state{jobs = NewJobs, update_report = ?WF_ERROR_NO_WAITING_ITEMS}};
         {true, ?WF_ERROR_ITERATION_FINISHED} ->
             ?WF_ERROR_NO_WAITING_ITEMS;
@@ -1896,7 +1896,7 @@ verify_streams_when_execution_is_cancelled(State = #workflow_execution_state{
     case prepare_next_streamed_task_data(State) of
         {ok, UpdatedState} ->
             {ok, UpdatedState};
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             case are_all_data_streams_finalized(State) of
                 true when NextLaneStatus =:= ?PREPARING ->
                     {ItemIds, UpdatedIterationState} = workflow_iteration_state:finalize(IterationState),
@@ -2064,7 +2064,7 @@ prepare_next_streamed_task_data(State = #workflow_execution_state{tasks_data_reg
                     task_id = TaskId, subject_id = CachedTaskDataId},
                 tasks_data_registry = UpdatedTasksDataRegistry
             }};
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 
@@ -2202,7 +2202,7 @@ handle_no_waiting_items_error(#workflow_execution_state{
         id = LaneId,
         execution_context = LaneContext
     }
-} = State, ?ERR_NOT_FOUND) ->
+} = State, ?ERROR_NOT_FOUND) ->
     case are_all_data_streams_finalized(State) of
         true ->
             {ok, State#workflow_execution_state{

@@ -470,7 +470,7 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             end,
             StatsResult = case dir_size_stats:get_stats(Guid, StatsToGet) of
                 {ok, StatsMap} -> StatsMap;
-                ?ERR_NOT_FOUND -> #{};
+                ?ERROR_NOT_FOUND -> #{};
                 ?ERR_DIR_STATS_DISABLED_FOR_SPACE -> error;
                 ?ERR_DIR_STATS_NOT_READY -> error
             end,

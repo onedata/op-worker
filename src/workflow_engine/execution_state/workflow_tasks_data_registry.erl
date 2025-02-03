@@ -78,7 +78,7 @@ put(TaskId, CachedTaskDataId, #registry{waiting = Waiting, task_execution_order 
 -spec take_for_processing(registry()) ->
     {ok, workflow_engine:task_id(), workflow_cached_task_data:id(), registry()} | od_error_not_found:t().
 take_for_processing(#registry{task_execution_order = []}) ->
-    ?ERR_NOT_FOUND(?err_ctx());
+    ?ERROR_NOT_FOUND;
 take_for_processing(#registry{waiting = Waiting, task_execution_order = [NextTaskId | Order]} = Registry) ->
     case maps:get(NextTaskId, Waiting) of
         [CachedTaskDataId] ->

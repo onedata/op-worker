@@ -90,7 +90,7 @@ replicate_stage_test(Config) ->
     
     ok = rpc:yield(Promise),
     
-    ?assertEqual(?ERR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
+    ?assertEqual(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
     
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
@@ -125,7 +125,7 @@ replicate_stage_persistence_test(Config) ->
     test_utils:mock_assert_num_calls(Worker1, qos_entry, create, 7, 0, 1),
     test_utils:mock_unload(Worker1, [qos_entry]),
     
-    ?assertEqual(?ERR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
+    ?assertEqual(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
 
 
 cleanup_traverse_stage_test(Config) ->
@@ -480,7 +480,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
                 rpc:call(Worker, DiscDriver, get, [DiscDriverCtx, Keys])
         end,
         AccOut and lists:foldl(
-            fun (?ERR_NOT_FOUND, AccIn) -> AccIn;
+            fun (?ERROR_NOT_FOUND, AccIn) -> AccIn;
                 ({ok, _, #document{scope = S}}, AccIn) when S =/= Scope -> AccIn;
                 ({ok, _, #document{deleted = true}}, AccIn) -> AccIn;
                 ({ok, _, #document{value = #links_forest{}}}, AccIn) -> AccIn; %% @TODO VFS-6278 Sometimes links_forest documents are not properly deleted

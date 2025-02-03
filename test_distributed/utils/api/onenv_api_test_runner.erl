@@ -59,7 +59,7 @@
     % Tests the Onezone's public shared data redirector, that should
     % redirect to the corresponding endpoint in a suitable Oneprovider.
     {rest_with_shared_guid, od_space:id()} |
-    % Rest scenario that results in ?ERR_NOT_SUPPORTED regardless
+    % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of request auth and parameters.
     rest_not_supported |
     % Standard graph sync scenario
@@ -68,7 +68,7 @@
     % Such requests should be rejected at auth steps resulting in
     % ?ERR_UNAUTHORIZED.
     gs_with_shared_guid_and_aspect_private |
-    % Gs scenario that results in ?ERR_NOT_SUPPORTED regardless
+    % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of test case due to for example invalid aspect.
     gs_not_supported.
 %% @formatter:on
@@ -253,11 +253,11 @@ get_invalid_clients(forbidden_in_space, #client_spec{forbidden_in_space = Client
 get_scenario_specific_error_for_invalid_client(rest_not_supported, _ClientType, ClientAndError) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
-    {extract_client(ClientAndError), ?ERR_NOT_SUPPORTED};
+    {extract_client(ClientAndError), ?ERROR_NOT_SUPPORTED};
 get_scenario_specific_error_for_invalid_client(gs_not_supported, _ClientType, ClientAndError) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
-    {extract_client(ClientAndError), ?ERR_NOT_SUPPORTED};
+    {extract_client(ClientAndError), ?ERROR_NOT_SUPPORTED};
 get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, ClientAndError) when
     ClientType =:= unauthorized;
     ClientType =:= forbidden_not_in_space
@@ -361,11 +361,11 @@ get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _, _
 get_expected_malformed_data_error(_, rest_not_supported, _) ->
     % Operation not supported errors takes precedence over any data sanitization
     % or auth checks errors as it is done earlier
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_expected_malformed_data_error(_, gs_not_supported, _) ->
     % Operation not supported errors takes precedence over any data sanitization
     % or auth checks errors as it is done earlier
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_expected_malformed_data_error({error, _} = Error, _, _) ->
     Error;
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
@@ -454,11 +454,11 @@ run_missing_required_data_test_cases(#suite_spec{
 get_scenario_specific_error_for_missing_data(rest_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_scenario_specific_error_for_missing_data(gs_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_scenario_specific_error_for_missing_data(_ScenarioType, Error) ->
     Error.
 
@@ -995,7 +995,7 @@ should_expect_lack_of_support_error({rest_with_shared_guid, SpaceId}, _Auth, Nod
 should_expect_lack_of_support_error(_ScenarioType, ?NOBODY, _Node) ->
     false;
 should_expect_lack_of_support_error(rest_not_supported, _Auth, _Node) ->
-    {true, ?ERR_NOT_SUPPORTED};
+    {true, ?ERROR_NOT_SUPPORTED};
 should_expect_lack_of_support_error(_ScenarioType, ?USER(UserId), Node) ->
     ProvId = opw_test_rpc:get_provider_id(Node),
     case lists:member(UserId, oct_background:get_provider_eff_users(ProvId)) of

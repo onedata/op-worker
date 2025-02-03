@@ -198,7 +198,7 @@ offline_session_should_properly_react_to_time_warps_test(_Config) ->
 
     % After offline session credentials are deleted it should be impossible to
     % recreate offline session
-    ?assertMatch(?ERR_NOT_FOUND, get_offline_session_id(JobId)),
+    ?assertMatch(?ERROR_NOT_FOUND, get_offline_session_id(JobId)),
     ?assertEqual(false, session_exists(SessionId)),
     ?assertEqual(false, offline_credentials_exist(JobId)),
 
@@ -271,7 +271,7 @@ get_session_doc(SessionId) ->
 offline_credentials_exist(JobId) ->
     case rpc:call(?NODE, offline_access_credentials, get, [JobId]) of
         {ok, _} -> true;
-        ?ERR_NOT_FOUND -> false
+        ?ERROR_NOT_FOUND -> false
     end.
 
 

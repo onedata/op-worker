@@ -113,7 +113,7 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
                         SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx2, UserCtx),
                     {ok, RootFileGuid};
                 {error, eexist} ->
-                    ?ERR_ALREADY_EXISTS(?err_ctx());
+                    ?ERROR_ALREADY_EXISTS;
                 {error, Reason} ->
                     ?ERR_POSIX(?err_ctx(), Reason)
             end;

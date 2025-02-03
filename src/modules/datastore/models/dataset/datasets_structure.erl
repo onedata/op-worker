@@ -136,7 +136,7 @@ delete(SpaceId, ForestType, DatasetPath) ->
                 true -> delete_local(SpaceId, ForestType, DatasetPath, Rev);
                 false -> delete_remote(SpaceId, ForestType, TreeId, DatasetPath, Rev)
             end;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ok
     end.
 

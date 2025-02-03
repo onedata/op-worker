@@ -134,7 +134,7 @@ validate(#op_req{operation = get, gri = #gri{
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -253,7 +253,7 @@ get(#op_req{data = Data, gri = #gri{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -263,4 +263,4 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.

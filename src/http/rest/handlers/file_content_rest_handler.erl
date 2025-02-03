@@ -96,7 +96,7 @@ ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
 ensure_operation_supported(get, file_at_path, private) -> true;
 ensure_operation_supported(delete, file_at_path, private) -> true;
-ensure_operation_supported(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
@@ -438,7 +438,7 @@ delete_file(SessionId, ParentGuid, Name) ->
             case lfm:unlink(SessionId, ?FILE_REF(ResolvedGuid), false) of
                 ok -> ok;
                 {error, ?ENOENT} -> ok;
-                ?ERR_NOT_FOUND -> ok;
+                ?ERROR_NOT_FOUND -> ok;
                 {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
             end
     end.
@@ -451,6 +451,6 @@ resolve_guid(SessionId, ParentGuid, Name, Fallback) ->
     case lfm:resolve_guid_by_relative_path(SessionId, ParentGuid, Name) of
         {ok, ResolvedGuid} -> ResolvedGuid;
         {error, ?ENOENT} -> Fallback();
-        ?ERR_NOT_FOUND -> Fallback();
+        ?ERROR_NOT_FOUND -> Fallback();
         {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
     end.

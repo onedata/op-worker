@@ -40,7 +40,7 @@ init(EngineId, SlotsLimit) ->
     Doc = #document{key = EngineId, value = #workflow_engine_state{slots_limit = SlotsLimit}},
     case datastore_model:create(?CTX, Doc) of
         {ok, _} -> ok;
-        ?ERR_ALREADY_EXISTS = ErrorAlreadyExist -> ErrorAlreadyExist
+        ?ERROR_ALREADY_EXISTS = ErrorAlreadyExist -> ErrorAlreadyExist
     end.
 
 % TODO VFS-7787 - acquire slot if it is free (optimization - one call instead of two)
@@ -74,7 +74,7 @@ poll_next_execution_id(EngineId) ->
     % (do not update document if list has only one element)
     Diff = fun
         (#workflow_engine_state{executions = []}) ->
-            ?ERR_NOT_FOUND(?err_ctx());
+            ?ERROR_NOT_FOUND;
         (#workflow_engine_state{executions = [ExecutionId]}) ->
             {error, {single_execution, ExecutionId}};
         (#workflow_engine_state{executions = ExecutionIds} = Record) ->
@@ -87,7 +87,7 @@ poll_next_execution_id(EngineId) ->
             {ok, Next};
         {error, {single_execution, ExecutionId}} ->
             {ok, ExecutionId};
-        ?ERR_NOT_FOUND = NotFound ->
+        ?ERROR_NOT_FOUND = NotFound ->
             NotFound
     end.
 

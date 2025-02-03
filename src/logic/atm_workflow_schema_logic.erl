@@ -49,7 +49,7 @@ get_revision(RevisionNumber, #od_atm_workflow_schema{revision_registry = Revisio
         true ->
             {ok, atm_workflow_schema_revision_registry:get_revision(RevisionNumber, RevisionRegistry)};
         false ->
-            ?ERR_NOT_FOUND(?err_ctx())
+            ?ERROR_NOT_FOUND
     end;
 get_revision(RevisionNumber, #document{value = AtmWorkflowSchema}) ->
     get_revision(RevisionNumber, AtmWorkflowSchema).

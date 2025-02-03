@@ -36,7 +36,7 @@
 %%%===================================================================
 
 -spec put(workflow_handler:async_processing_result()) -> result_ref().
-put(?ERR_TIMEOUT = ErrorTimeout) ->
+put(?ERROR_TIMEOUT = ErrorTimeout) ->
     ErrorTimeout;
 put(ProcessingResult) ->
     Doc = #document{value = #workflow_cached_async_result{result = ProcessingResult}},
@@ -44,7 +44,7 @@ put(ProcessingResult) ->
     Id.
 
 -spec take(result_ref()) -> workflow_handler:async_processing_result().
-take(?ERR_TIMEOUT = ErrorTimeout) ->
+take(?ERROR_TIMEOUT = ErrorTimeout) ->
     ErrorTimeout;
 take(Id) ->
     {ok, #document{value = #workflow_cached_async_result{result = ProcessingResult}}} = datastore_model:get(?CTX, Id),
@@ -52,7 +52,7 @@ take(Id) ->
     ProcessingResult.
 
 -spec delete(result_ref()) -> ok.
-delete(?ERR_TIMEOUT) ->
+delete(?ERROR_TIMEOUT) ->
     ok;
 delete(Id) ->
     ok = datastore_model:delete(?CTX, Id).

@@ -360,7 +360,7 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                     <<"token">> => [<<"null">>, null | [http_utils:base64url_encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
-                    {bad_id, <<"NonExistentDataset">>, ?ERR_NOT_FOUND},
+                    {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
                     {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
                     {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
                     {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},

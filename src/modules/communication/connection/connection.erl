@@ -1002,7 +1002,7 @@ call_connection_process(ConnPid, Msg) ->
             ?debug("Timeout of connection process ~tp for message ~ts", [
                 ConnPid, maybe_stringify_msg(Msg)
             ]),
-            ?ERR_TIMEOUT(?err_ctx());
+            ?ERROR_TIMEOUT;
         Class:Reason:Stacktrace ->
             MsgStr = maybe_stringify_msg(Msg),
             ?error_exception(

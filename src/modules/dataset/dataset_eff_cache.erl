@@ -210,7 +210,7 @@ get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFl
                 {ok, Entry, _} ->
                     {ok, Entry};
                 {error, ?MISSING_FILE_META(_)} ->
-                    ?ERR_NOT_FOUND(?err_ctx())
+                    ?ERROR_NOT_FOUND
             end
     end.
 

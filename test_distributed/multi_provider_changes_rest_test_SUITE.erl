@@ -130,7 +130,7 @@ invalid_request_should_fail(Config) ->
         {#{}, ?ERR_BAD_VALUE_EMPTY(<<"changesSpecification">>)},
         {#{<<"triggers">> => <<"ASD">>}, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"triggers">>)},
         {#{<<"triggers">> => [<<"ASD">>]}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, [<<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>])},
-        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERR_BAD_DATA(<<"fielMeta">>)},
+        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERR_BAD_DATA(<<"fielMeta">>, undefined)},
         {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"fileMeta.fields">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
             <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,

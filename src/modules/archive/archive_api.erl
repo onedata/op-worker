@@ -249,7 +249,7 @@ delete_archive_recursive(#document{} = ArchiveDoc) ->
 delete_archive_recursive(ArchiveId) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> delete_archive_recursive(ArchiveDoc);
-        ?ERR_NOT_FOUND -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 
@@ -275,14 +275,14 @@ delete_single_archive(ArchiveDoc = #document{}) ->
             % NOTE: permission to delete archive were already checked, ignore check on directory deletion
             delete_req:delete_using_trash_insecure(user_ctx:new(?ROOT_USER_ID), ArchiveDocCtx, true),
             ok;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             % there was race with other process removing the archive
             ok
     end;
 delete_single_archive(ArchiveId) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> delete_single_archive(ArchiveDoc);
-        ?ERR_NOT_FOUND -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 

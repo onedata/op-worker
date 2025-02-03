@@ -76,5 +76,5 @@ get_parent_helper(_SpaceId, [<<?DIRECTORY_SEPARATOR>>]) ->
 get_parent_helper(SpaceId, PathTokensReversed = [_Head | Tail]) ->
     case get(SpaceId, filename:join(lists:reverse(PathTokensReversed))) of
         {ok, {DatasetId, _DatasetName, _}} -> DatasetId;
-        ?ERR_NOT_FOUND -> get_parent_helper(SpaceId, Tail)
+        ?ERROR_NOT_FOUND -> get_parent_helper(SpaceId, Tail)
     end.

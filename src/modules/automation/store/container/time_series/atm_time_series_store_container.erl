@@ -156,7 +156,7 @@ browse_content(Record, #atm_store_content_browse_req{
     ) of
         {ok, SliceResult} ->
             #atm_time_series_store_content_browse_result{result = SliceResult};
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             throw(ErrorNotFound);
         ?ERR_TSC_MISSING_LAYOUT(_MissingLayout) = ErrorTscMissingLayout ->
             throw(ErrorTscMissingLayout)

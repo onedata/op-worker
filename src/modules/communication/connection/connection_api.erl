@@ -127,7 +127,7 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
 log_sending_msg_error(SessionId, _Msg, {error, no_connections}) ->
     ?debug("Failed to send msg to ~tp due to lack of available connections", [SessionId]);
 
-log_sending_msg_error(SessionId, _Msg, ?ERR_NOT_FOUND) ->
+log_sending_msg_error(SessionId, _Msg, ?ERROR_NOT_FOUND) ->
     % there is no registry of tasks for session and therefore they are not
     % interrupted even if session dies. As such it is possible for them to try
     % send response long after session died

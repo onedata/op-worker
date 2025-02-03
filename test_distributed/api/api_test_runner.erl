@@ -128,11 +128,11 @@ get_invalid_clients(forbidden_in_space, #suite_spec{client_spec = #client_spec{
 get_scenario_specific_error_for_invalid_clients(rest_not_supported, _InvalidClientsType) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_scenario_specific_error_for_invalid_clients(gs_not_supported, _InvalidClientsType) ->
     % Error thrown by middleware when checking if operation is supported -
     % before auth checks could be performed
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_scenario_specific_error_for_invalid_clients(rest_with_file_path, InvalidClientsType) when
     InvalidClientsType =:= unauthorized;
     InvalidClientsType =:= forbidden_not_in_space
@@ -215,11 +215,11 @@ get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _, _
 get_expected_malformed_data_error(_, rest_not_supported, _) ->
     % Operation not supported errors takes precedence over any data sanitization
     % or auth checks errors as it is done earlier
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_expected_malformed_data_error(_, gs_not_supported, _) ->
     % Operation not supported errors takes precedence over any data sanitization
     % or auth checks errors as it is done earlier
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_expected_malformed_data_error({error, _} = Error, _, _) ->
     Error;
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
@@ -304,11 +304,11 @@ run_missing_required_data_test_cases(Config, #suite_spec{
 get_scenario_specific_error_for_missing_data(rest_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_scenario_specific_error_for_missing_data(gs_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
-    ?ERR_NOT_SUPPORTED;
+    ?ERROR_NOT_SUPPORTED;
 get_scenario_specific_error_for_missing_data(_ScenarioType, Error) ->
     Error.
 

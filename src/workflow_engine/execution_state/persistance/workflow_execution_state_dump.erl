@@ -72,7 +72,7 @@ dump_workflow_execution_state(ExecutionId) ->
             }},
             {ok, _} = datastore_model:save(?CTX, Doc),
             ok;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ok
     end.
 
@@ -109,7 +109,7 @@ restore_workflow_execution_state_from_dump(
 
             workflow_execution_state:save(Doc),
             delete(ExecutionId);
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 

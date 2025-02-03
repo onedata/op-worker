@@ -124,7 +124,7 @@ delete(AtmTaskExecutionId) ->
                 time_series_store_id = AtmTaskTSStoreId
             }),
             atm_task_execution:delete(AtmTaskExecutionId);
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             ok
     end.
 

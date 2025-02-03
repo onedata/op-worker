@@ -116,7 +116,7 @@
     get_child_attr,
     get_file_children_attrs
 ]).
--define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+-define(AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE, [
     % Necessary operations for direct-io to work (contains private information
     % like storage id, etc.)
     get_file_location,
@@ -382,15 +382,15 @@ infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
         _ -> file_partial_ctx:get_share_id_const(FilePartialCtx)
     end,
 
-    case {user_ctx:is_in_open_handle_mode(UserCtx), ShareId} of
+    case {user_ctx:is_in_public_data_mode(UserCtx), ShareId} of
         {false, undefined} ->
             UserCtx;
-        {IsInOpenHandleMode, _} ->
-            case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
+        {IsInPublicDataMode, _} ->
+            case is_operation_available_in_share_mode(Request, IsInPublicDataMode) of
                 true -> ok;
                 false -> throw(?EPERM)
             end,
-            case IsInOpenHandleMode of
+            case IsInPublicDataMode of
                 true ->
                     UserCtx;
                 false ->
@@ -404,7 +404,7 @@ infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
 
 
 %% @private
--spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+-spec is_operation_available_in_share_mode(request(), IsInPublicDataMode :: boolean()) ->
     boolean().
 is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
     file_request = #open_file{flag = Flag}
@@ -419,7 +419,7 @@ is_operation_available_in_share_mode(#provider_request{
 }, _) ->
     Flag == read;
 is_operation_available_in_share_mode(Request, true) ->
-    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
 is_operation_available_in_share_mode(Request, false) ->
     lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 

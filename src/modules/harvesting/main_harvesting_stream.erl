@@ -217,7 +217,7 @@ custom_error_handling(State = #hs_state{
                         last_persisted_seq = MaxSeenSeq,
                         last_harvest_timestamp = global_clock:timestamp_seconds()
                     })};
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end;
         {false, true} ->
@@ -239,7 +239,7 @@ custom_error_handling(State = #hs_state{
                         last_persisted_seq = MaxSuccessfulSeq,
                         batch = harvesting_batch:strip(Batch, MaxSuccessfulSeq)
                     })};
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     harvesting_stream:throw_harvesting_not_found_exception(State)
             end;
         {false, false} ->
@@ -262,7 +262,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
     MaxSuccessfulSeq = harvesting_result:get_max_successful_seq(Result),
     Summary = harvesting_result:get_summary(Result),
     maps:fold(fun
-        (?ERR_NOT_FOUND, _ErrorDest, AccIn) ->
+        (?ERROR_NOT_FOUND, _ErrorDest, AccIn) ->
             % Harvesters in _ErrorDest were deleted
             % we can ignore this error
             AccIn;
@@ -318,7 +318,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
                             harvesting_stream_sup:start_aux_stream(SpaceId,
                                 HarvesterId, IndexId, MaxSuccessfulSeq)
                         end, Indices);
-                    ?ERR_NOT_FOUND ->
+                    ?ERROR_NOT_FOUND ->
                         harvesting_stream:throw_harvesting_not_found_exception(State)
                 end
             end, Dest),
@@ -575,7 +575,7 @@ remove_harvester(HarvesterId, State) ->
         ?ERR_FORBIDDEN ->
             % harvester doesn't have spaces supported by this provider
             false;
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             % harvester was permanently deleted in onezone
             true
     end,

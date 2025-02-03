@@ -43,7 +43,7 @@
     module() | no_return().
 resolve_handler(get, instance, shared) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -117,7 +117,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -143,7 +143,7 @@ get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_storage{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -153,4 +153,4 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.

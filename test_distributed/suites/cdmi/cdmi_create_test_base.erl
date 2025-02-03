@@ -433,7 +433,7 @@ wrong_base_error_test(Config) ->
     {ok, Code, _Headers, Response} = cdmi_test_utils:do_request(
         ?WORKERS(Config), filename:join(RootPath,  "some_file_b64"), put, RequestHeaders, RequestBody
     ),
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(<<"base64">>)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_BAD_DATA(<<"base64">>, undefined)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 

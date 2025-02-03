@@ -120,7 +120,7 @@ handle_client_handshake(#client_handshake_request{
             throw(invalid_provider);
         ?ERR_TOKEN_CAVEAT_UNVERIFIED(#cv_service{}) ->
             throw(invalid_provider);
-        ?ERR = Error ->
+        {error, _} = Error ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
                     ?debug("Cannot authorize subject ~w based on token (id: ~ts) "

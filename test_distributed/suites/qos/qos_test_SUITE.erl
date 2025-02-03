@@ -325,7 +325,7 @@ qos_audit_log_test_base(ExpectedStatus, Type) ->
     % simulate expiration of the audit log
     opw_test_rpc:call(Node, audit_log, delete, [QosEntryId]),
     % browsing should return a proper error
-    ?assertEqual(?ERR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}])),
+    ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}])),
     % the log should be recreated upon new activity; simulate a new log being appended
     % NOTE: it would be useful to create multi provider qos audit log tests that would check
     % this without simulation (but simply modifying a remote replica)

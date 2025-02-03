@@ -84,7 +84,7 @@ assert_operation_supported(api_samples, public)                      -> ok;
 assert_operation_supported(api_samples, private)                     -> ok;
 assert_operation_supported(dir_size_stats_collection_schema, public) -> ok;
 assert_operation_supported({dir_size_stats_collection, _}, private)  -> ok;
-assert_operation_supported(_, _)                                     -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+assert_operation_supported(_, _)                                     -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -529,7 +529,7 @@ get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
     SecondReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
     case SecondReferencedUuid of
         FirstReferencedUuid -> {ok, #{}};
-        _ -> ?ERR_NOT_FOUND(?err_ctx())
+        _ -> ?ERROR_NOT_FOUND
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->

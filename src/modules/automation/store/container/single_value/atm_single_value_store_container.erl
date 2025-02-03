@@ -87,7 +87,7 @@ create(#atm_store_container_creation_args{
 
 -spec copy(record()) -> no_return().
 copy(_) ->
-    throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+    throw(?ERROR_NOT_SUPPORTED).
 
 
 -spec get_config(record()) -> atm_single_value_store_config:record().

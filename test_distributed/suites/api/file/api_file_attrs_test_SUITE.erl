@@ -327,7 +327,7 @@ test_for_hardlink_between_files_test(_Config) ->
                 _ -> Result
             end, 
             Guid = api_test_memory:get(MemRef, <<"guid">>),
-            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERR_NOT_FOUND, ?ERR_BAD_VALUE_IDENTIFIER(<<"guid">>))
+            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERROR_NOT_FOUND, ?ERR_BAD_VALUE_IDENTIFIER(<<"guid">>))
     end,
     
     ValidateRestCallResultFun = fun
@@ -621,7 +621,7 @@ get_file_shares_test(_Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_get_shares_prepare_gs_args_fun(ShareGuid1, public),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERR_NOT_SUPPORTED, Result)
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
             data_spec = undefined
         }
@@ -730,7 +730,7 @@ set_file_mode_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_set_mode_prepare_gs_args_fun(ShareGuid, public),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERR_NOT_SUPPORTED, Result)
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
             data_spec = set_mode_data_spec()
         }

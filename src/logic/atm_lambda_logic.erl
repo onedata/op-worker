@@ -57,7 +57,7 @@ assert_executable_revisions(RevisionNums, #od_atm_lambda{revision_registry = Rev
                     RevisionNum, RevisionRegistry
                 ));
             false ->
-                throw(?ERR_NOT_FOUND(?err_ctx()))
+                throw(?ERROR_NOT_FOUND)
         end
     end, RevisionNums);
 

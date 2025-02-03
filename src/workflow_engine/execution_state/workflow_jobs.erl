@@ -125,7 +125,7 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
             {ok, JobIdentifier, maybe_remove_async_cached_result(NewJobs, JobIdentifier)};
         true ->
             case gb_sets:is_empty(Ongoing) of
-                true -> ?ERR_NOT_FOUND(?err_ctx());
+                true -> ?ERROR_NOT_FOUND;
                 false -> ?WF_ERROR_NO_WAITING_ITEMS
             end
     end.
@@ -150,7 +150,7 @@ prepare_next_waiting_result(Jobs = #workflow_jobs{
         {_, NextIterator} ->
             prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = NextIterator});
         none ->
-            {?ERR_NOT_FOUND(?err_ctx()), Jobs#workflow_jobs{results_iterator = ?ITERATION_FINISHED}}
+            {?ERROR_NOT_FOUND, Jobs#workflow_jobs{results_iterator = ?ITERATION_FINISHED}}
     end.
 
 -spec populate_with_jobs_for_item(

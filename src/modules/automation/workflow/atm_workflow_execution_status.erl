@@ -520,7 +520,7 @@ handle_forced_continue(AtmWorkflowExecutionId) ->
                 run_num = CurrentAtmRunNum,
                 status = ?SCHEDULED_STATUS
             },
-            Diff = fun(_Run) -> ?ERR_ALREADY_EXISTS(?err_ctx()) end,
+            Diff = fun(_Run) -> ?ERROR_ALREADY_EXISTS end,
 
             NewAtmWorkflowExecution = Record#atm_workflow_execution{
                 status = ?RESUMING_STATUS,

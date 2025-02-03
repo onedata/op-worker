@@ -629,7 +629,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 end,
                 % file download code is still usable for some time to allow for resuming after download of last chunk failed
                 timer:sleep(timer:seconds(?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS)),
-                ?assertMatch(?ERR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
                 ?assertEqual(?ERR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
 
                 api_test_memory:set(MemRef, download_succeeded, true);
@@ -640,7 +640,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 % File download code should be deleted from db but stay in memory as couch
                 % unfortunately doesn't remove expired docs from memory
                 ?assertMatch(
-                    ?ERR_NOT_FOUND,
+                    ?ERROR_NOT_FOUND,
                     get_file_download_code_doc(DownloadNode, DownloadCode, disc),
                     ?ATTEMPTS
                 ),
@@ -648,7 +648,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
 
                 % Still after request, which will fail, it should be deleted also from memory
                 ?assertEqual(?ERR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
-                ?assertMatch(?ERR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
+                ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 api_test_memory:set(MemRef, download_succeeded, false)
         end

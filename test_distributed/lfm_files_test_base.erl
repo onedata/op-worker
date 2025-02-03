@@ -1956,7 +1956,7 @@ remove_share(Config) ->
     % Remove share by share Id
     ?assertMatch(ok, opt_shares:remove(W, SessId, ShareId1)),
     % ShareId no longer exists -> {error, not_found}
-    ?assertMatch(?ERR_NOT_FOUND, opt_shares:remove(W, SessId, ShareId1)).
+    ?assertMatch(?ERROR_NOT_FOUND, opt_shares:remove(W, SessId, ShareId1)).
 
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

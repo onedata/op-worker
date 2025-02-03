@@ -45,7 +45,7 @@ assert_operation_supported(json_metadata, private)         -> ok;    % REST/gs
 assert_operation_supported(rdf_metadata, private)          -> ok;    % REST/gs
 assert_operation_supported(register_file, private)         -> ok;
 assert_operation_supported(cancel_archive_recall, private) -> ok;
-assert_operation_supported(_, _)                           -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+assert_operation_supported(_, _)                           -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================

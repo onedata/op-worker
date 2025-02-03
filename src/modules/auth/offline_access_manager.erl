@@ -112,7 +112,7 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                         {ok, NewOfflineCredentials} ->
                             {ok, NewOfflineCredentials};
                         ?ERR(ErrorType) when
-                            ErrorType =:= ?ERR_TIMEOUT_TYPE;
+                            ErrorType =:= ?ERROR_TIMEOUT_TYPE;
                             ErrorType =:= ?ERR_NO_CONNECTION_TO_ONEZONE_TYPE;
                             ErrorType =:= ?ERR_TEMPORARY_FAILURE_TYPE;
                             ErrorType =:= ?ERR_INTERNAL_SERVER_ERROR_TYPE
@@ -127,7 +127,7 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
             end;
         {ok, #offline_access_credentials{valid_until = ValidUntil}} ->
             ?ERR_TOKEN_CAVEAT_UNVERIFIED(?err_ctx(), #cv_time{valid_until = ValidUntil});
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 

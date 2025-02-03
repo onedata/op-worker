@@ -55,7 +55,7 @@ resolve_handler(get, throughput_charts, private) -> ?MODULE;
 
 resolve_handler(delete, cancel, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -162,7 +162,7 @@ fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
             % so if it was fetched then space must be supported locally
             {ok, {Transfer, 1}};
         _ ->
-            ?ERR_NOT_FOUND(?err_ctx())
+            ?ERROR_NOT_FOUND
     end.
 
 
@@ -394,7 +394,7 @@ get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------

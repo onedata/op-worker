@@ -64,7 +64,7 @@ find_base_for_nested_archive(NestedArchiveDoc, ParentBaseArchiveDoc, UserCtx) ->
                         false ->
                             undefined
                     end;
-                ?ERR_NOT_FOUND ->
+                ?ERROR_NOT_FOUND ->
                     undefined
             end;
         {error, _} ->

@@ -51,7 +51,7 @@ resolve_handler(get, content, private) -> ?MODULE;
 resolve_handler(get, dump_download_url, private) -> ?MODULE;
 resolve_handler(get, indices_by_trace_ids, private) -> ?MODULE;  %% supported only by exception store
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -99,7 +99,7 @@ fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
             assert_operation_supported(OpReq, AtmStore),
             {ok, {AtmStoreCtx, 1}};
 
-        ?ERR_NOT_FOUND = ErrorNotFound ->
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
             ErrorNotFound
     end.
 
@@ -151,7 +151,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = dump_download_url}}, AtmSt
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -200,7 +200,7 @@ get(#op_req{data = Data, gri = #gri{aspect = indices_by_trace_ids, scope = priva
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -210,7 +210,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%%===================================================================
@@ -227,7 +227,7 @@ assert_operation_supported(
 ) ->
     case atm_store_container:get_store_type(AtmStoreContainer) of
         exception -> ok;
-        _ -> throw(?ERR_NOT_SUPPORTED(?err_ctx()))
+        _ -> throw(?ERROR_NOT_SUPPORTED)
     end;
 
 assert_operation_supported(_, _) ->

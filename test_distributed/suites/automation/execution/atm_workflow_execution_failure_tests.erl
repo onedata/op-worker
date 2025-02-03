@@ -397,7 +397,7 @@ fail_atm_workflow_execution_due_to_job_timeout() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"details">> => #{
-                    <<"reason">> => errors:to_json(?ERR_TIMEOUT)
+                    <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
                 },
                 <<"referencedElements">> => #{
                     <<"itemTraceIds">> => [Item#atm_item_execution.trace_id || Item <- ItemBatch]

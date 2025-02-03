@@ -105,7 +105,6 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
     CodeMatched andalso BodyMatched.
 
 get_rest_error(Error) ->
-    % TODO
     #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
     {ExpCode, ExpBody}.
 

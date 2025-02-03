@@ -787,7 +787,7 @@ verify_exp_target_store_content(
                 )
             );
         _ ->
-            ?assertMatch(?ERR_NOT_SUPPORTED, atm_workflow_execution_test_utils:download_store_dump(
+            ?assertMatch(?ERROR_NOT_SUPPORTED, atm_workflow_execution_test_utils:download_store_dump(
                 TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
             ))
     end.

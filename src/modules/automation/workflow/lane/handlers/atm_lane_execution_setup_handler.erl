@@ -471,7 +471,7 @@ stop_lane_run(AtmLaneRunSelector, StoppingReason, AtmWorkflowExecutionId, AtmWor
             ),
             ok;
 
-        ?ERR_NOT_FOUND ->
+        ?ERROR_NOT_FOUND ->
             % failed to create lane run in advance
             ok
     end.

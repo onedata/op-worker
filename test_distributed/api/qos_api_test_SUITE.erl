@@ -160,7 +160,7 @@ get_qos_test(Config) ->
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERR_NOT_FOUND}]
+                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERROR_NOT_FOUND}]
             }
         }
     ])),
@@ -197,7 +197,7 @@ delete_qos_test(Config) ->
                 }
             ],
             data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERR_NOT_FOUND}]
+                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERROR_NOT_FOUND}]
             }
         }
     ])),
@@ -712,7 +712,7 @@ validate_result_fun_rest(MemRef, qos_audit_log) ->
         case api_test_memory:get(MemRef, audit_log_deleted) of
             true ->
                 ?assertEqual(?HTTP_404_NOT_FOUND, RespCode),
-                ?assertEqual(?ERR_NOT_FOUND, errors:from_json(maps:get(<<"error">>, RespBody)));
+                ?assertEqual(?ERROR_NOT_FOUND, errors:from_json(maps:get(<<"error">>, RespBody)));
             false ->
                 ?assertEqual(?HTTP_200_OK, RespCode),
                 ?assertMatch(#{

@@ -601,7 +601,7 @@ recall_test_base(StructureSpec, SymlinkResolutionMode) ->
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
     archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessId, 
         get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkResolutionMode, ?ATTEMPTS),
-    ?assertEqual(?ERR_ALREADY_EXISTS, opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, default)).
+    ?assertEqual(?ERROR_ALREADY_EXISTS, opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, default)).
 
 recall_test_setup(StructureSpec) ->
     recall_test_setup(StructureSpec, default).
@@ -677,7 +677,7 @@ recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
         <<"filesCopied">> := TotalFileCount,
         <<"filesFailed">> := 0
     }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
-    ?assertEqual(?ERR_NOT_FOUND, opt_archives:get_recall_progress(paris, SessId(paris), RecallRootFileGuid)),
+    ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_recall_progress(paris, SessId(paris), RecallRootFileGuid)),
     
     time_test_utils:simulate_millis_passing(8),
     FinishTimestamp = Timestamp + 8,
@@ -728,7 +728,7 @@ recall_to_recalling_dir_test_base(Method) ->
 recall_error_test_base(Spec, FunName) ->
     SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
     Errors = [
-        {?ERR_NOT_FOUND, errors:to_json(?ERR_NOT_FOUND)},
+        {?ERROR_NOT_FOUND, errors:to_json(?ERROR_NOT_FOUND)},
         {{badmatch, {error, ?EPERM}}, errors:to_json(?ERR_POSIX(?EPERM))}
     ],
     lists:foreach(fun({Error, ExpectedReason}) ->
@@ -747,7 +747,7 @@ recall_error_test_base(Spec, FunName) ->
         % simulate expiration of the audit log
         opw_test_rpc:call(krakow, audit_log, delete, [<<(file_id:guid_to_uuid(RecallRootFileGuid))/binary, "el">>]),
         % browsing should return a proper error
-        ?assertEqual(?ERR_NOT_FOUND, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}))
+        ?assertEqual(?ERROR_NOT_FOUND, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}))
     end, Errors).
 
 

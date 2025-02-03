@@ -357,7 +357,7 @@ create_update_delete_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
-        ?ERR_NOT_FOUND,
+        ?ERROR_NOT_FOUND,
         rpc:call(Node, share_logic, delete, [User1Sess, <<"wrongId">>])
     ),
     ?assertEqual(GraphCalls + 9, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),

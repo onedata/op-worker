@@ -53,7 +53,7 @@
 resolve_handler(get, space, private) -> ?MODULE;
 resolve_handler(get, {user, _}, private) -> ?MODULE;
 
-resolve_handler(_, _, _) -> throw(?ERR_NOT_SUPPORTED(?err_ctx())).
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%%===================================================================
@@ -150,7 +150,7 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}},
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -177,7 +177,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = SpaceId, aspect = {user, U
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -187,7 +187,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
-    ?ERR_NOT_SUPPORTED(?err_ctx()).
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%%===================================================================

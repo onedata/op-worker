@@ -94,7 +94,7 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
             {_, undefined, ?no_flags_mask, ?no_flags_mask} ->
                 ok;
             {SameState, SameState, _, _} ->
-                ?ERR_ALREADY_EXISTS(?err_ctx());
+                ?ERROR_ALREADY_EXISTS;
             {?DETACHED_DATASET, ?ATTACHED_DATASET, _, _} ->
                 reattach(DatasetId, FlagsToSet, FlagsToUnset);
             {?DETACHED_DATASET, undefined, _, _} ->

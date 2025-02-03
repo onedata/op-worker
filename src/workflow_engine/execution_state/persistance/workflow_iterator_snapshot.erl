@@ -74,7 +74,7 @@ save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
 get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{value = Record}} -> {ok, Record};
-        ?ERR_NOT_FOUND = ErrorNotFound -> ErrorNotFound
+        ?ERROR_NOT_FOUND = ErrorNotFound -> ErrorNotFound
     end.
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
