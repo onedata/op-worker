@@ -793,8 +793,8 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
 
         % throw to repeat init by collector
         repeat ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone ->
+            case {error, datastore_runner:normalize_error(Reason)} of
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     ok;
                 _ ->
                     ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
@@ -805,10 +805,10 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
             throw(dir_size_stats_init_error);
 
         repeat_connection_errors ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone ->
+            case {error, datastore_runner:normalize_error(Reason)} of
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) = ErrorNoConnectionToOnezone ->
                     % Collector handles problems with zone connection
-                    throw(no_connection_to_onezone);
+                    throw(ErrorNoConnectionToOnezone);
                 _ ->
                     ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
                         [Guid, Error, Reason], Stacktrace)

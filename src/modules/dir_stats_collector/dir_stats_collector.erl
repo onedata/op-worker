@@ -781,10 +781,10 @@ continue_collections_initialization_for_dir(
         end
     catch
         Error:Reason:Stacktrace ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone ->
+            case {error, datastore_runner:normalize_error(Reason)} of
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     ok;
-                dir_size_stats_init_error ->
+                {error, dir_size_stats_init_error} ->
                     ok; % Error has been logged by dir_size_stats module
                 _ ->
                     ?error_stacktrace("Dir stats collector ~tp error for ~tp: ~tp:~tp",

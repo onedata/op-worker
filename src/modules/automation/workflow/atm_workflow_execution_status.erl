@@ -116,7 +116,7 @@
 % Function taking as argument entire atm_workflow_execution record, modifying lane run
 % and returning updated atm_workflow_execution record (or record)
 -type lane_run_diff() :: fun((atm_workflow_execution:record()) ->
-    {ok, atm_workflow_execution:record()} | errors:error()
+    {ok, atm_workflow_execution:record()} | {error, already_stopping} | errors:error()
 ).
 
 
@@ -296,7 +296,7 @@ handle_lane_run_resumed(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
-    {ok, atm_workflow_execution:doc()} | errors:error().
+    {ok, atm_workflow_execution:doc()} | {error, already_stopping} | errors:error().
 handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status}) when

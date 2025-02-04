@@ -274,6 +274,7 @@ qos_audit_log_test_base(ExpectedStatus, Type) ->
                 #{
                     % error mocked in init_per_testcase
                     <<"reason">> => #{
+                        <<"ctx">> => null,
                         <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
                         <<"details">> => #{<<"errno">> => <<"enoent">>},
                         <<"id">> => <<"posix">>
@@ -396,7 +397,8 @@ audit_log_tests_init_per_testcase(Config, ExpectedSynchronizer) ->
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    test_utils:mock_unload(Nodes).
+    clock_freezer_mock:teardown_for_ct(Nodes),
+    test_utils:mock_unload(Nodes, [replica_synchronizer]).
 
 
 %%%===================================================================

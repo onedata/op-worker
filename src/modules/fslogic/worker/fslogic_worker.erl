@@ -213,8 +213,8 @@ init(_Args) ->
     UnhealthyStorageIds = try
          storage_monitoring:perform_regular_checks([])
     catch Class:Reason ->
-        case datastore_runner:normalize_error(Reason) of
-            no_connection_to_onezone -> [];
+        case {error, datastore_runner:normalize_error(Reason)} of
+            ?ERR_NO_CONNECTION_TO_ONEZONE(_) -> [];
             _ -> erlang:apply(erlang, Class, [Reason])
         end
     end,
