@@ -130,11 +130,11 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
 
-    OpenDataXrootdServerDomain = case XrootdStatus of
+    PublicDataXrootdServerDomain = case XrootdStatus of
         xrootd_enabled -> ?DUMMY_XROOTD_SERVER_DOMAIN;
         xrootd_disabled -> undefined
     end,
-    ozw_test_rpc:set_env(open_data_xrootd_server_domain, OpenDataXrootdServerDomain),
+    ozw_test_rpc:set_env(public_data_xrootd_server_domain, PublicDataXrootdServerDomain),
 
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     SpaceId = oct_background:get_space_id(space_krk_par),

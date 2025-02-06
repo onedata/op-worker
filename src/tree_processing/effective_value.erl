@@ -32,6 +32,7 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -288,7 +289,7 @@ calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
             case get_file_meta(ParentUuid, Options) of
                 {ok, ParentDoc} -> get_or_calculate(Cache, ParentDoc, CalculateCallback, Options);
                 {error, not_found} ->
-                    {error, {file_meta_missing, ParentUuid}}
+                    {error, ?MISSING_FILE_META(ParentUuid)}
             end;
         {error, _} = Error ->
             Error
@@ -353,7 +354,7 @@ force_execution_on_referenced_key(INodeKey, CalculateCallback, MergeCallback, Ca
                 {error, _} = Error -> Error
             end;
         _ ->
-            {error, {file_meta_missing, INodeKey}}
+            {error, ?MISSING_FILE_META(INodeKey)}
     end.
 
 %%--------------------------------------------------------------------
@@ -371,7 +372,7 @@ get_parent_uuid(Key, _FileDoc) ->
     case file_meta:get_parent_uuid(Key) of
         {ok, ParentUuid} -> {ok, ParentUuid};
         {error, not_found} ->
-            {error, {file_meta_missing, Key}}
+            {error, ?MISSING_FILE_META(Key)}
     end.
 
 %%--------------------------------------------------------------------

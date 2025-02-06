@@ -41,7 +41,10 @@
 %%--------------------------------------------------------------------
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
+resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, instance, shared) -> ?MODULE;
+
+resolve_handler(get, eff_users, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -57,7 +60,10 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= instance;
+    As =:= eff_users
+->
     undefined.
 
 
@@ -70,15 +76,24 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId}}) ->
+fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId, scope = shared}}) ->
     case group_logic:get_shared_data(Auth#auth.session_id, GroupId, AuthHint) of
         {ok, #document{value = Group}} ->
             {ok, {Group, 1}};
         {error, _} = Error ->
             Error
     end;
-fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
+fetch_entity(#op_req{auth = Auth, gri = #gri{id = GroupId, scope = private}}) ->
+    case group_logic:get(Auth#auth.session_id, GroupId) of
+        {ok, #document{value = Group}} ->
+            {ok, {Group, 1}};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -90,9 +105,12 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}}, _) ->
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
-    true.
+    true;
+
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{aspect = eff_users}}, Group) ->
+    group_logic:has_eff_privilege(Group, UserId, ?GROUP_VIEW).
 
 
 %%--------------------------------------------------------------------
@@ -101,7 +119,10 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= eff_users
+->
     % validation was checked by oz in `fetch_entity`
     ok.
 
@@ -122,6 +143,8 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, Group) ->
+    {ok, Group};
 get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_group{
     name = Name,
     type = Type
@@ -129,7 +152,12 @@ get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_group{
     {ok, #{
         <<"name">> => Name,
         <<"type">> => Type
-    }}.
+    }};
+
+get(#op_req{gri = #gri{aspect = eff_users, scope = private}}, #od_group{
+    eff_users = EffUsers
+}) ->
+    {ok, maps:keys(EffUsers)}.
 
 
 %%--------------------------------------------------------------------

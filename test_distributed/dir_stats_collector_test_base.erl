@@ -1054,7 +1054,7 @@ local_opened_file_deletion_closing_race_base(Config, FilesNum) ->
     ?assertMatch({ok, #{?VIRTUAL_SIZE := ExpectedSize, ?LOGICAL_SIZE := ExpectedSize}},
         rpc:call(Node, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS),
     lists_utils:pforeach(fun(Fun) -> Fun() end, Funs),
-    ?assertMatch({ok, #{?VIRTUAL_SIZE := 0, ?LOGICAL_SIZE := 0}}, rpc:call(Node, dir_size_stats, get_stats, [SpaceGuid])).
+    ?assertMatch({ok, #{?VIRTUAL_SIZE := 0, ?LOGICAL_SIZE := 0}}, rpc:call(Node, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS).
 
 
 %%%===================================================================

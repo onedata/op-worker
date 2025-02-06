@@ -21,10 +21,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 
-%% Onepanel RPC
--export([verify_storage_availability_on_all_nodes/2]).
-
 %% API
+-export([
+    run_diagnostics/4
+]).
 -export([
     check_storage_access/2,
     create_test_file/2, create_test_file/3,
@@ -34,6 +34,10 @@
 ]).
 
 -type operation() :: access | create | write | read | remove.
+-type diagnostic_opts() :: #{read_write_test := boolean()}.
+-type diagnostic_error_details() :: any().
+
+-export_type([diagnostic_opts/0, diagnostic_error_details/0]).
 
 -define(DUMMY_SPACE_DIR_NAME, <<"test_space_name">>).
 -define(TEST_FILE_NAME_LEN, op_worker:get_env(storage_test_file_name_size, 32)).
@@ -42,36 +46,26 @@
 % flag intended only for acceptance testing, should never be used in the production.
 -define(SKIP_STORAGE_DETECTION, op_worker:get_env(skip_storage_detection, false)).
 
+-define(OPERATION_FAILED(Operation, Reason), {operation_failed, Operation, Reason}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec verify_storage_availability_on_all_nodes(helpers:helper(), luma_config:feed()) ->
-    ok | errors:error().
-verify_storage_availability_on_all_nodes(#helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed) ->
-    ok;
-verify_storage_availability_on_all_nodes(Helper, LumaFeed) ->
-    try
-        case ?SKIP_STORAGE_DETECTION of
-            true ->
-                ok;
-            false ->
-                AdminCtx = helper:get_admin_ctx(Helper),
-                {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
-                    ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
-                ),
-                verify_storage_availability_on_all_nodes_insecure(Helper, ExtendedAdminCtx)
-        end
-    catch throw:?ERROR_STORAGE_TEST_FAILED(Operation) ->
-        ?ERROR_STORAGE_TEST_FAILED(Operation)
-    end.
+-spec run_diagnostics(all_nodes | this_node, helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
+    ok | {errors:error(), diagnostic_error_details()}.
+run_diagnostics(all_nodes, Helper, LumaFeed, Opts) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Opts);
+run_diagnostics(this_node, Helper, LumaFeed, Opts) ->
+    run_diagnostics_on_nodes([node()], Helper, LumaFeed, Opts).
 
 
 -spec check_storage_access(helpers:helper(), helper:user_ctx()) ->
     ok | {error, term()}.
 check_storage_access(Helper, UserCtx) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
-    helpers:check_storage_availability(Handle).
+    ok = helpers:check_storage_availability(Handle).
 
 
 -spec create_test_file(helpers:helper(), helper:user_ctx()) ->
@@ -128,11 +122,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     case helpers:unlink(Handle, FileId, Size) of
         ok -> ok;
-        {error, ?ENOENT} -> ok;
-        {error, Reason} ->
-            Operation = remove,
-            ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
-            throw(?ERROR_STORAGE_TEST_FAILED(remove))
+        {error, ?ENOENT} -> ok
     end.
 
 
@@ -141,14 +131,36 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %%%===================================================================
 
 %% @private
--spec verify_storage_availability_on_all_nodes_insecure(helpers:helper(), helper:user_ctx()) -> ok.
-verify_storage_availability_on_all_nodes_insecure(Helper, UserCtx) ->
-    Nodes = consistent_hashing:get_all_nodes(),
+-spec run_diagnostics_on_nodes([node()], helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
+    ok | {errors:error(), diagnostic_error_details()}.
+run_diagnostics_on_nodes(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
+    ok;
+run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
+    try
+        case ?SKIP_STORAGE_DETECTION of
+            true ->
+                ok;
+            false ->
+                AdminCtx = helper:get_admin_ctx(Helper),
+                {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
+                    ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
+                ),
+                run_diagnostics_on_nodes_insecure(Nodes, Helper, ExtendedAdminCtx, Options)
+        end
+    catch throw:?OPERATION_FAILED(Operation, Reason) ->
+        {?ERROR_STORAGE_TEST_FAILED(Operation), Reason}
+    end.
+
+
+%% @private
+-spec run_diagnostics_on_nodes_insecure([node()], helpers:helper(), helper:user_ctx(), diagnostic_opts()) ->
+    ok.
+run_diagnostics_on_nodes_insecure(Nodes, Helper, UserCtx, Opts) ->
     BasicArgList = [[Helper, UserCtx] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
-    case Helper of
-        #helper{args = #{<<"readonly">> := <<"true">>}} -> ok;
-        _ -> perform_read_write_test(Nodes, BasicArgList)
+    case maps:get(read_write_test, Opts) of
+        true -> perform_read_write_test(Nodes, BasicArgList);
+        false -> ok
     end.
 
 
@@ -191,15 +203,8 @@ check_call_result(Result, Operation) ->
             ok;
         {ok, R} ->
             R;
-        ?ERROR_STORAGE_TEST_FAILED(Operation) ->
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation));
-        {Class, {Reason, Stacktrace}} ->
-            ?error_exception(?autoformat_with_msg("Storage verification failed:", Operation),
-                Class, Reason, Stacktrace),
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation));
-        {_Class, Reason} ->
-            ?error(?autoformat_with_msg("Storage verification failed:", [Operation, Reason])),
-            throw(?ERROR_STORAGE_TEST_FAILED(Operation))
+        {_Class, {Reason, _Stacktrace}} ->
+            throw(?OPERATION_FAILED(Operation, Reason))
     end.
 
 

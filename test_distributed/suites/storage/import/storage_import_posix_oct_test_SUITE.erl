@@ -23,13 +23,22 @@
 
 %% tests
 -export([
-    empty_import_test/1,
-    create_directory_import_test/1
+    import_empty_storage_test/1,
+    import_empty_directory_test/1,
+    import_directory_error_test/1,
+    import_directory_check_user_id_test/1,
+
+    import_empty_file_test/1,
+    import_file_with_content_test/1
 ]).
 
 all() -> [
-    empty_import_test,
-    create_directory_import_test
+    import_empty_storage_test,
+    import_empty_directory_test,
+    import_directory_error_test,
+    import_directory_check_user_id_test,
+    import_empty_file_test,
+    import_file_with_content_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -46,11 +55,27 @@ all() -> [
 %%%===================================================================
 
 
-empty_import_test(_Config) ->
+import_empty_storage_test(_Config) ->
     ?run_test().
 
 
-create_directory_import_test(_Config) ->
+import_empty_directory_test(_Config) ->
+    ?run_test().
+
+
+import_directory_error_test(_Config) ->
+    ?run_test().
+
+
+import_directory_check_user_id_test(_Config) ->
+    ?run_test().
+
+
+import_empty_file_test(_Config) ->
+    ?run_test().
+
+
+import_file_with_content_test(_Config) ->
     ?run_test().
 
 
@@ -82,8 +107,9 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    Config.
+    storage_import_oct_test_base:init_per_testcase(Config).
 
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(Case, Config) ->
+    storage_import_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
+

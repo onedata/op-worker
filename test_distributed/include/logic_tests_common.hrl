@@ -137,7 +137,7 @@
 -define(SHARE_DESCRIPTION(__Share), __Share).
 -define(SHARE_PUBLIC_URL(__Share), __Share).
 -define(SHARE_PUBLIC_REST_URL(__Share), __Share).
--define(SHARE_FILE_TYPE(__Share), dir).
+-define(SHARE_FILE_TYPE(__Share), ?DIRECTORY_TYPE).
 -define(SHARE_SPACE(__Share), ?SPACE_1).
 -define(SHARE_HANDLE(__Share), ?HANDLE_1).
 -define(SHARE_ROOT_FILE(__Share), __Share).
@@ -163,10 +163,6 @@ end).
 
 % Mocked handle service data
 -define(HANDLE_SERVICE_NAME(__HService), __HService).
--define(HANDLE_SERVICE_EFF_USERS_VALUE(__HService), ?USER_PERMS_IN_HSERVICE_VALUE_BINARIES).
--define(HANDLE_SERVICE_EFF_USERS_MATCHER(__HService), ?USER_PERMS_IN_HSERVICE_MATCHER_ATOMS).
--define(HANDLE_SERVICE_EFF_GROUPS_VALUE(__HService), ?GROUP_PERMS_IN_HSERVICE_VALUE_BINARIES).
--define(HANDLE_SERVICE_EFF_GROUPS_MATCHER(__HService), ?GROUP_PERMS_IN_HSERVICE_MATCHER_ATOMS).
 
 % Mocked handle data
 -define(HANDLE_PUBLIC_HANDLE(__Handle), __Handle).
@@ -175,10 +171,6 @@ end).
 -define(HANDLE_METADATA_PREFIX(__Handle), <<"oai_dc">>).
 -define(HANDLE_METADATA(__Handle), __Handle).
 -define(HANDLE_H_SERVICE(__Handle), ?HANDLE_SERVICE_1).
--define(HANDLE_EFF_USERS_VALUE(__Handle), ?USER_PERMS_IN_HANDLE_VALUE_BINARIES).
--define(HANDLE_EFF_USERS_MATCHER(__Handle), ?USER_PERMS_IN_HANDLE_MATCHER_ATOMS).
--define(HANDLE_EFF_GROUPS_VALUE(__Handle), ?GROUP_PERMS_IN_HANDLE_VALUE_BINARIES).
--define(HANDLE_EFF_GROUPS_MATCHER(__Handle), ?GROUP_PERMS_IN_HANDLE_MATCHER_ATOMS).
 
 % Mocked harvester data
 -define(HARVESTER_SPACE1(__Harvester), <<"harvesterSpace1">>).
@@ -573,33 +565,16 @@ end).
 }}).
 
 
--define(HANDLE_SERVICE_PRIVATE_DATA_MATCHER(__HService), #document{key = __HService, value = #od_handle_service{
-    name = ?HANDLE_SERVICE_NAME(__HService),
-    eff_users = ?HANDLE_SERVICE_EFF_USERS_MATCHER(__HService),
-    eff_groups = ?HANDLE_SERVICE_EFF_GROUPS_MATCHER(__HService)
+-define(HANDLE_SERVICE_PUBLIC_DATA_MATCHER(__HService), #document{key = __HService, value = #od_handle_service{
+    name = ?HANDLE_SERVICE_NAME(__HService)
 }}).
 
 
--define(HANDLE_PRIVATE_DATA_MATCHER(__Handle), #document{key = __Handle, value = #od_handle{
-    public_handle = ?HANDLE_PUBLIC_HANDLE(__Handle),
-    resource_type = ?HANDLE_RESOURCE_TYPE(__Handle),
-    resource_id = ?HANDLE_RESOURCE_ID(__Handle),
-    metadata_prefix = ?HANDLE_METADATA_PREFIX(__Handle),
-    metadata = ?HANDLE_METADATA(__Handle),
-    handle_service = ?HANDLE_H_SERVICE(__Handle),
-    eff_users = ?HANDLE_EFF_USERS_MATCHER(__HService),
-    eff_groups = ?HANDLE_EFF_GROUPS_MATCHER(__HService)
-}}).
 -define(HANDLE_PUBLIC_DATA_MATCHER(__Handle), #document{key = __Handle, value = #od_handle{
     public_handle = ?HANDLE_PUBLIC_HANDLE(__Handle),
-    resource_type = undefined,
-    resource_id = undefined,
     metadata_prefix = ?HANDLE_METADATA_PREFIX(__Handle),
     metadata = ?HANDLE_METADATA(__Handle),
-    handle_service = undefined,
-    eff_users = #{},
-    eff_groups = #{}
-
+    handle_service = ?HANDLE_H_SERVICE(__Handle)
 }}).
 
 -define(HARVESTER_PRIVATE_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
@@ -764,33 +739,22 @@ end).
 end).
 
 
--define(HANDLE_SERVICE_PRIVATE_DATA_VALUE(__HServiceId), #{
+-define(HANDLE_SERVICE_PUBLIC_DATA_VALUE(__HServiceId), #{
     <<"revision">> => 1,
-    <<"gri">> => gri:serialize(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = private}),
-    <<"name">> => ?HANDLE_SERVICE_NAME(__HServiceId),
-    <<"effectiveUsers">> => ?HANDLE_SERVICE_EFF_USERS_VALUE(__HServiceId),
-    <<"effectiveGroups">> => ?HANDLE_SERVICE_EFF_GROUPS_VALUE(__HServiceId)
+    <<"gri">> => gri:serialize(#gri{type = od_handle_service, id = __HServiceId, aspect = instance, scope = public}),
+    <<"name">> => ?HANDLE_SERVICE_NAME(__HServiceId)
 }).
 
 
 -define(HANDLE_PUBLIC_DATA_VALUE(__HandleId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
+    <<"handleServiceId">> => ?HANDLE_H_SERVICE(__HandleId),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
     <<"metadataPrefix">> => ?HANDLE_METADATA_PREFIX(__HandleId),
     <<"metadata">> => ?HANDLE_METADATA(__HandleId)
 }).
--define(HANDLE_PRIVATE_DATA_VALUE(__HandleId), begin
-    __PublicData = ?HANDLE_PUBLIC_DATA_VALUE(__HandleId),
-    __PublicData#{
-        <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = private}),
-        <<"resourceType">> => ?HANDLE_RESOURCE_TYPE(__HandleId),
-        <<"resourceId">> => ?HANDLE_RESOURCE_ID(__HandleId),
-        <<"handleServiceId">> => ?HANDLE_H_SERVICE(__HandleId),
-        <<"effectiveUsers">> => ?HANDLE_EFF_USERS_VALUE(__HandleId),
-        <<"effectiveGroups">> => ?HANDLE_EFF_GROUPS_VALUE(__HandleId)
-    }
-end).
+
 
 -define(HARVESTER_PRIVATE_DATA_VALUE(__HarvesterId), #{
     <<"revision">> => 1,

@@ -35,7 +35,6 @@
 }.
 %% @formatter:on
 
-
 %%%===================================================================
 %%% Records synchronized via Graph Sync
 %%%===================================================================
@@ -103,6 +102,8 @@
 -record(od_group, {
     name :: undefined | binary(),
     type = role :: od_group:type(),
+
+    eff_users = #{} :: #{od_user:id() => [privileges:group_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
@@ -180,27 +181,17 @@
 -record(od_handle_service, {
     name :: od_handle_service:name() | undefined,
 
-    % Effective relations to other entities
-    eff_users = #{} :: #{od_user:id() => [privileges:handle_service_privilege()]},
-    eff_groups = #{} :: #{od_group:id() => [privileges:handle_service_privilege()]},
-
     cache_state = #{} :: cache_state()
 }).
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
     public_handle :: od_handle:public_handle(),
-    resource_type :: od_handle:resource_type() | undefined,
-    resource_id :: od_handle:resource_id() | undefined,
     metadata_prefix :: od_handle:metadata_prefix() | undefined,
     metadata :: od_handle:metadata() | undefined,
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
-
-    % Effective relations to other entities
-    eff_users = #{} :: #{od_user:id() => [privileges:handle_privilege()]},
-    eff_groups = #{} :: #{od_group:id() => [privileges:handle_privilege()]},
 
     cache_state = #{} :: cache_state()
 }).
@@ -263,6 +254,13 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_cluster, {
+    worker_release_version :: onedata:release_version(),
+    worker_build_version :: binary(),
+    worker_gui_hash :: onedata:gui_hash(),
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -303,6 +301,8 @@
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),
+    % incoming_session_watcher for incoming sessions
+    % outgoing_connection_manager for provider outgoing sessions
     watcher :: undefined | pid(),
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),
@@ -858,9 +858,10 @@
 
 %% Model that holds file timestamps
 -record(times, {
-    atime = 0 :: times:time(),
-    ctime = 0 :: times:time(),
-    mtime = 0 :: times:time()
+    creation_time = 0 :: times:creation_time(),
+    atime = 0 :: times:a_time(),
+    mtime = 0 :: times:m_time(),
+    ctime = 0 :: times:c_time()
 }).
 
 %% Model that tracks popularity of file

@@ -83,11 +83,18 @@
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
-        undefined -> RequestedAttributes;
+        undefined ->
+            RequestedAttributes;
         %% @TODO VFS-11299 left for compatibility with oneclient
         % at the moment oneclient depends on receiving all attrs specified in ?ONECLIENT_FILE_ATTRS.
         % It does not influence rest output, as it is later cut out in translation (see file_attr_translator.erl).
-        _ -> lists_utils:intersect(RequestedAttributes, lists_utils:union(?PUBLIC_API_FILE_ATTRS, ?ONECLIENT_FILE_ATTRS))
+        _ ->
+            AttrsBase = lists_utils:intersect(RequestedAttributes,
+                lists_utils:union(?PUBLIC_API_FILE_ATTRS, ?ONECLIENT_FILE_ATTRS)),
+            case should_fetch_xattrs(RequestedAttributes) of
+                {true, Xattrs} -> [{xattrs, Xattrs} | AttrsBase];
+                false -> AttrsBase
+            end
     end,
     InitialState = #state{
         file_ctx = FileCtx,
@@ -163,9 +170,15 @@ resolve_name_attrs(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
 
 %% @private
 -spec resolve_times_attrs(state()) -> {state(), record()}.
-resolve_times_attrs(#state{file_ctx = FileCtx} = State) ->
-    {{ATime, CTime, MTime}, FileCtx2} = file_ctx:get_times(FileCtx),
+resolve_times_attrs(#state{file_ctx = FileCtx, current_stage_attrs = RequestedTimes} = State) ->
+    {#times{
+        creation_time = CreationTime,
+        atime = ATime,
+        mtime = MTime,
+        ctime = CTime
+    }, FileCtx2} = file_ctx:get_times(FileCtx, RequestedTimes),
     {State#state{file_ctx = FileCtx2}, #file_attr{
+        creation_time = CreationTime,
         atime = ATime,
         mtime = MTime,
         ctime = CTime
@@ -516,7 +529,7 @@ resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = Sta
         are_any_attrs_requested([?attr_conflicting_name, ?attr_conflicting_files], State) orelse
             read_option(name_conflicts_resolution_policy, State, resolve_name_conflicts) == resolve_name_conflicts,
 
-    case ShouldCalculateConflicts andalso not file_ctx:is_space_dir_const(FileCtx) of
+    case ShouldCalculateConflicts of
         true ->
             resolve_name_attrs_conflicts(State);
         false ->
@@ -530,32 +543,43 @@ resolve_name_attrs_internal(#state{file_ctx = FileCtx, user_ctx = UserCtx} = Sta
 resolve_name_attrs_conflicts(State) ->
     {FileDoc, #state{file_ctx = FileCtx} = UpdatedState} = get_file_doc(State),
     {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
-    FileName = file_meta:get_name(FileDoc),
     ProviderId = file_meta:get_provider_id(FileDoc),
     Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
     case fslogic_file_id:is_space_dir_uuid(FileUuid) of
         true ->
             #state{user_ctx = UserCtx} = UpdatedState,
-            {Name, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, FileName,
+            {SpaceName, FileCtx2} = file_ctx:get_space_name(FileCtx, UserCtx),
+            {ExtendedName, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, SpaceName,
                 fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
-            {UpdatedState#state{file_ctx = file_ctx:cache_name(Name, FileCtx)}, #file_attr{
-                name = Name,
-                conflicting_name = FileName,
-                conflicting_files = Conflicts
-            }};
+            case Conflicts of
+                [] ->
+                    {UpdatedState, #file_attr{name = SpaceName}};
+                [_ | _] ->
+                    handle_conflicting_name(UpdatedState, FileCtx2, ExtendedName, SpaceName, Conflicts)
+            end;
         false ->
+            FileName = file_meta:get_name(FileDoc),
             case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId, Scope) of
                 {conflicting, ExtendedName, ConflictingFiles} ->
-                    {UpdatedState#state{file_ctx = file_ctx:cache_name(ExtendedName, FileCtx)}, #file_attr{
-                        name = ExtendedName,
-                        conflicting_name = FileName,
-                        conflicting_files = ConflictingFiles
-                    }};
+                    handle_conflicting_name(UpdatedState, FileCtx, ExtendedName, FileName, ConflictingFiles);
                 _ ->
                     {UpdatedState, #file_attr{name = FileName}}
             end
     end.
+
+
+%% @private
+-spec handle_conflicting_name(state(), file_ctx:ctx(), file_meta:disambiguated_name(), file_meta:name(),
+    file_meta:conflicts()) -> {state(), record()}.
+handle_conflicting_name(State, FileCtx, ExtendedName, ConflictingName, ConflictingFiles) ->
+    UpdatedState = State#state{file_ctx = file_ctx:cache_name(ExtendedName, FileCtx)},
+    FileAttr = #file_attr{
+        name = ExtendedName,
+        conflicting_name = ConflictingName,
+        conflicting_files = ConflictingFiles
+    },
+    {UpdatedState, FileAttr}.
 
 
 %% @private

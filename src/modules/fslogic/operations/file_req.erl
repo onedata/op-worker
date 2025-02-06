@@ -281,12 +281,12 @@ release(UserCtx, FileCtx, HandleId) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    % call via module to mock in tests
-    {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
+    % call via ?MODULE to mock in tests
+    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, Flag, undefined, true, false),
-        fslogic_times:update_mtime_ctime(ParentFileCtx3),
+        times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
@@ -309,9 +309,9 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             ?error_stacktrace("create_file_insecure error: ~tp:~tp", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
-            times:delete(FileUuid),
             case Reason of
                 {badmatch, {error, not_found}} -> erlang:Error(?ECANCELED);
                 _ -> erlang:Error(Reason)
@@ -379,11 +379,11 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    % call via module to mock in tests
-    {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
+    % call via ?MODULE to mock in tests
+    {FileCtx, ParentFileCtx3} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true, 0),
-        fslogic_times:update_mtime_ctime(ParentFileCtx3),
+        times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
             name_conflicts_resolution_policy => allow_name_conflicts,
@@ -397,9 +397,9 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Class:Reason:Stacktrace ->
             ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            catch times_api:report_file_deleted(FileCtx),
             file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
-            times:delete(FileUuid),
             erlang:Class(Reason)
     end.
 
@@ -429,7 +429,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 hardlink_registry_utils:register(TargetFileCtx, TargetParentGuid, LinkUuid),
 
                 FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
-                fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
+                times_api:touch(TargetParentFileCtx3, [?attr_mtime, ?attr_ctime]),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     name_conflicts_resolution_policy => allow_name_conflicts,
@@ -465,10 +465,10 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                {ok, _} = times:save_with_current_times(SymlinkUuid, SpaceId, false),
-                fslogic_times:update_mtime_ctime(ParentFileCtx3),
+                FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
+                times_api:report_file_created(FileCtx),
+                times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
 
-                FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
                     name_conflicts_resolution_policy => allow_name_conflicts,
@@ -762,11 +762,10 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
             {IsSyncEnabled, ParentFileCtx3} = file_ctx:is_synchronization_enabled(ParentFileCtx2),
             File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, not IsSyncEnabled),
-            {ok, #document{key = FileUuid} = SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
-            {ok, _} = times:save_with_current_times(FileUuid, SpaceId, not IsSyncEnabled),
-
-            FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
-            {file_ctx:set_file_doc(FileCtx, SavedFileDoc), ParentFileCtx3};
+            {ok, SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
+            FileCtx = file_ctx:new_by_doc(SavedFileDoc, SpaceId),
+            times_api:report_file_created(FileCtx),
+            {FileCtx, ParentFileCtx3};
         {false, _} ->
             throw(?ENOTDIR)
     end.

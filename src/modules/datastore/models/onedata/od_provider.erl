@@ -47,7 +47,13 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
-    datastore_model:update(?CTX, Id, Diff, Default).
+    case datastore_model:update(?CTX, Id, Diff, Default) of
+        {ok, #document{value = #od_provider{online = true}} = Doc} ->
+            ensure_connected_to_peer(Id),
+            {ok, Doc};
+        Other ->
+            Other
+    end.
 
 
 -spec get_from_cache(id()) -> {ok, doc()} | {error, term()}.
@@ -76,3 +82,22 @@ list() ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+
+-spec ensure_connected_to_peer(id()) -> ok.
+ensure_connected_to_peer(ProviderId) ->
+    try
+        case provider_auth:get_provider_id() of
+            {ok, ProviderId} ->
+                ok;
+            ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ok;
+            _ ->
+                SessId = session_utils:get_provider_session_id(outgoing, ProviderId),
+                {ok, _} = session_connections:ensure_connected(SessId),
+                ok
+        end
+    catch Class:Reason:Stacktrace ->
+        ?error_exception("Could not ensure connection to provider ~ts",
+            [provider_logic:to_printable(ProviderId)], Class, Reason, Stacktrace)
+    end.

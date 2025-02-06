@@ -639,10 +639,7 @@ generate_random_file_spec(ShareSpecs) ->
 verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId) ->
     ExpPublicUrl = build_share_public_url(ShareId),
     ExpPublicRestUrl = build_share_public_rest_url(ShareId),
-    ExpFileType = case FileType of
-        <<"REG">> -> file;
-        <<"DIR">> -> dir
-    end,
+    ExpFileType = binary_to_atom(FileType),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     lists:foreach(fun(Provider) ->

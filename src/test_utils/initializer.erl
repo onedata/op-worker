@@ -1265,6 +1265,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         maps:is_key(ProviderId, Providers)
     end),
 
+    test_utils:mock_expect(Workers, space_logic, is_supported, fun
+        (SpaceId, ProviderId) when is_binary(SpaceId) -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId);
+        (DocOrRecord, ProviderId) -> meck:passthrough([DocOrRecord, ProviderId])
+    end),
+
     test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, UserId) ->
         lists:member(UserId, SpacesOwners)
     end),

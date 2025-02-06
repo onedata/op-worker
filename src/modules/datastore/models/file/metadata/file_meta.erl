@@ -23,7 +23,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 
--export([is_valid_filename/1]).
 -export([save/1, create/2, save/2, get/1, exists/1, update/2, update/3, update_including_deleted/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
@@ -66,7 +65,6 @@
 -type entry() :: uuid_or_path() | doc().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
--type time() :: non_neg_integer().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
@@ -76,7 +74,7 @@
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, disambiguated_name/0,
-    uuid_or_path/0, entry/0,  size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    uuid_or_path/0, entry/0,  size/0, mode/0, posix_permissions/0, permissions_type/0,
     conflicts/0, path_type/0, link/0
 ]).
 
@@ -115,27 +113,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if given term is valid path()
-%% @end
-%%--------------------------------------------------------------------
--spec is_valid_filename(term()) -> boolean().
-is_valid_filename(FileName) when not is_binary(FileName) ->
-    false;
-is_valid_filename(<<"">>) ->
-    false;
-is_valid_filename(<<?CURRENT_DIRECTORY>>) ->
-    false;
-is_valid_filename(<<?PARENT_DIRECTORY>>) ->
-    false;
-is_valid_filename(FileName) when is_binary(FileName) ->
-    % Ensure name contains no POSIX forbidden characters (/ or \0)
-    case binary:matches(FileName, [<<?DIRECTORY_SEPARATOR>>, <<0>>]) of
-        [] -> true;
-        _ -> false
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -188,7 +165,7 @@ create({uuid, ParentUuid}, FileDoc = #document{
     ignore_in_changes = IgnoreInChanges
 }, TreesToCheck) ->
     ?run(begin
-        is_valid_filename(FileName) orelse error({error, ?EINVAL}),
+        onedata_file:is_valid_filename(FileName) orelse error({error, ?EINVAL}),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),
@@ -775,8 +752,8 @@ get_shares(#file_meta{shares = Shares}) ->
 -spec ensure_space_doc_exist(SpaceId :: od_space:id()) -> ok | no_return().
 ensure_space_doc_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
-        {ok, #document{key = SpaceDirUuid}} ->
-            ok = ?extract_ok(times:save_with_current_times(SpaceDirUuid, SpaceId, false));
+        {ok, Doc} ->
+            ok = times_api:report_file_created(file_ctx:new_by_doc(Doc, SpaceId));
         {error, already_exists} ->
             ok
     end.
@@ -791,11 +768,11 @@ ensure_tmp_dir_exists(SpaceId) ->
     ),
     ensure_tmp_dir_link_exists(SpaceId),
     case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
-        {ok, _} ->
-            case times:save_with_current_times(TmpDirUuid, SpaceId, true) of
-                {ok, _} -> created;
-                {error, already_exists} -> created
-            end;
+        {ok, CreatedDoc} ->
+            ok = ?ok_if_exists(
+                times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
+            ),
+            created;
         {error, already_exists} ->
             already_exists
     end.
@@ -815,12 +792,11 @@ ensure_opened_deleted_files_dir_exists(SpaceId) ->
         ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId
     ),
     case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
-        {ok, _} ->
+        {ok, CreatedDoc} ->
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
-            case times:save_with_current_times(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId, true) of
-                {ok, _} -> ok;
-                {error, already_exists} -> ok
-            end;
+            ok = ?ok_if_exists(
+                times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
+            );
         {error, already_exists} ->
             ok
     end.

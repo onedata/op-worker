@@ -124,8 +124,8 @@ list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
     {ChildrenAttrs, PaginationToken, FileCtx3} = list_children_attrs_internal(
         UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}, Attributes, []),
     
-    fslogic_times:update_atime(FileCtx3),
-    
+    times_api:touch(FileCtx3, [?attr_atime]),
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
@@ -177,9 +177,8 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId, not IsSyncEnabled),
-        dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(FileCtx), Time),
-        fslogic_times:update_mtime_ctime(ParentFileCtx4),
+        times_api:report_file_created(FileCtx),
+        times_api:touch(ParentFileCtx4, [?attr_mtime, ?attr_ctime]),
 
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
@@ -197,8 +196,8 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Class:Reason:Stacktrace ->
             ?error_exception(Class, Reason, Stacktrace),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            catch times_api:report_file_deleted(FileCtx),
             file_meta:delete(FileUuid),
-            times:delete(FileUuid),
             erlang:Class(Reason)
     end.
 
@@ -261,7 +260,7 @@ list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
             attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{attributes => Attributes}),
         FileAttr
     end,
-    
+
     ChildrenAttrs = gather_attributes(MapperFun, Children),
     
     case infer_listing_finished(length(ChildrenAttrs), NextToken, ListOpts) of

@@ -295,7 +295,6 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     name = NameOrUndefined,
-    shares = ShareSpecs,
     symlink_value = SymlinkValue,
     dataset = DatasetSpec,
     custom_label = CustomLabel
@@ -320,7 +319,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         guid = SymlinkGuid,
         name = FileName,
         type = ?SYMLINK_TYPE,
-        shares = create_shares(CreationProvider, UserSessId, SymlinkGuid, ShareSpecs),
+        shares = [],
         children = undefined,
         content = undefined,
         dataset = DatasetObj,

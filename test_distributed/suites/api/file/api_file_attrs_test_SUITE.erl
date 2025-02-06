@@ -124,17 +124,22 @@ get_file_attrs_with_xattrs_test(Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     
-    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
+    {FileType, _FilePath, FileGuid, _ShareId} =
+        api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
     ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name">>, <<"xattr_value">>),
     ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name2">>, <<"xattr_value2">>),
     file_test_utils:await_xattr(P2Node, FileGuid, [<<"xattr_name">>, <<"xattr_name2">>], ?ATTEMPTS),
-    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
+    {ok, #file_attr{ctime = CTime} = FileAttrs} = file_test_utils:get_attrs(P1Node, FileGuid),
+    file_test_utils:await_attrs(P2Node, FileGuid, #{?attr_ctime => CTime}, ?ATTEMPTS),
     
     DataSpec = #data_spec{
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => [<<"xattr.xattr_name">>]}
     },
-    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs#file_attr{xattrs = #{<<"xattr_name">> => <<"xattr_value">>}}).
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs#file_attr{
+        ctime = CTime,
+        xattrs = #{<<"xattr_name">> => <<"xattr_value">>}
+    }).
 
 
 get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs) ->
@@ -482,7 +487,11 @@ build_get_attrs_validate_rest_call_fun(FileAttr, ShareId) ->
     fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         case get_attrs_exp_result(TestCtx, FileAttr, ShareId, rest) of
             {ok, ExpAttrs} ->
-                ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
+                ?assertEqual(
+                    % do not check creation time, as it is not synchronized in line 21.*
+                    {?HTTP_200_OK, maps:remove(<<"creationTime">>, ExpAttrs)},
+                    {RespCode, maps:remove(<<"creationTime">>, RespBody)}
+                );
             {error, _} = Error ->
                 ?assertEqual({?HTTP_400_BAD_REQUEST, #{<<"error">> => errors:to_json(Error)}}, {RespCode, RespBody})
         end
@@ -497,7 +506,11 @@ build_get_attrs_validate_gs_call_fun(FileAttr, ShareId) ->
         case get_attrs_exp_result(TestCtx, FileAttr, ShareId, gs) of
             {ok, ExpAttrs} ->
                 {ok, ResultMap} = ?assertMatch({ok, _}, Result),
-                ?assertEqual(ExpAttrs, maps:without([<<"gri">>, <<"revision">>], ResultMap));
+                ?assertEqual(
+                    % do not check creation time, as it is not synchronized in line 21.*
+                    maps:remove(<<"creationTime">>, ExpAttrs),
+                    maps:without([<<"gri">>, <<"revision">>, <<"creationTime">>], ResultMap)
+                );
             {error, _} = Error ->
                 ?assertEqual(Error, Result)
         end
@@ -1058,8 +1071,8 @@ get_symlink_distribution_test(Config) ->
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
     
-    #object{guid = SymGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>, shares = [#share_spec{}]}
+    #object{guid = SymGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
     
     ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
@@ -1078,7 +1091,7 @@ get_symlink_distribution_test(Config) ->
         unauthorized = [nobody],
         forbidden_not_in_space = [user1]
     },
-    get_distribution_test_base(FileType, SymGuid, ShareId, ExpDist, Config, ClientSpec).
+    get_distribution_test_base(FileType, SymGuid, undefined, ExpDist, Config, ClientSpec).
 
 %% @private
 -spec enable_dir_stats_collecting_for_space(

@@ -127,7 +127,7 @@ from_protobuf(undefined) -> undefined.
 
 -spec session_mode_from_protobuf(undefined | 'NORMAL' | 'OPEN_HANDLE') ->
     session:mode().
-session_mode_from_protobuf('OPEN_HANDLE') -> open_handle;
+session_mode_from_protobuf('OPEN_HANDLE') -> public_data;   % TODO VFS-12625 rework to PUBLIC_DATA
 session_mode_from_protobuf(_)             -> normal.
 
 
@@ -258,6 +258,6 @@ handshake_error_to_protobuf(_) ->
 
 
 -spec session_mode_to_protobuf(undefined | session:mode()) ->
-    'NORMAL' | 'OPEN_HANDLE'.
-session_mode_to_protobuf(open_handle) -> 'OPEN_HANDLE';
+    'NORMAL' | 'OPEN_HANDLE'.  % TODO VFS-12625 rework to PUBLIC_DATA
+session_mode_to_protobuf(public_data) -> 'OPEN_HANDLE';
 session_mode_to_protobuf(_)           -> 'NORMAL'.

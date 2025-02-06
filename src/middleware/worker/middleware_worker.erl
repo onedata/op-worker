@@ -173,7 +173,10 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         assert_has_access_to_space(UserCtx, FileCtx),
         middleware_utils:assert_file_managed_locally(FileGuid),
 
-        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
+        case fslogic_worker:is_storage_accessible(FileCtx) of
+            true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
+            false -> ?ERROR_SERVICE_UNAVAILABLE
+        end
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;
@@ -203,14 +206,14 @@ cleanup() ->
 infer_user_ctx(SessionId, FileCtx, Operation) ->
     UserCtx = user_ctx:new(SessionId),
 
-    assert_user_not_in_open_handle_mode(UserCtx),
+    assert_user_not_in_public_data_mode(UserCtx),
     ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation).
 
 
 %% @private
--spec assert_user_not_in_open_handle_mode(user_ctx:ctx()) -> ok | no_return().
-assert_user_not_in_open_handle_mode(UserCtx) ->
-    case user_ctx:is_in_open_handle_mode(UserCtx) of
+-spec assert_user_not_in_public_data_mode(user_ctx:ctx()) -> ok | no_return().
+assert_user_not_in_public_data_mode(UserCtx) ->
+    case user_ctx:is_in_public_data_mode(UserCtx) of
         true -> throw(?ERROR_POSIX(?EPERM));
         false -> ok
     end.

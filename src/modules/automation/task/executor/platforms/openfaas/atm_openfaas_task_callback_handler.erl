@@ -99,9 +99,9 @@ init(Req, State = #{type := heartbeat}) ->
 ) ->
     binary().
 build_url(AtmWorkflowExecutionId, AtmJobBatchId, TypeBin) ->
-    str_utils:format_bin("http://~ts:~B/automation/workflow/executions/~ts/jobs/~ts/~ts", [
+    str_utils:format_bin("https://~ts:~B/automation/workflow/executions/~ts/jobs/~ts/~ts", [
         oneprovider:get_domain(),
-        http_listener:port(),
+        https_listener:port(),
         AtmWorkflowExecutionId,
         AtmJobBatchId,
         TypeBin

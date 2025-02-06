@@ -82,11 +82,6 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    % gs_client requires successful setting of subdomain delegation IPs, but it cannot
-    % be achieved in test environment
-    ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun() ->
-        ok
-    end),
     % mock Onezone version and compatibility registry to be the same as provider's
     ok = test_utils:mock_expect(Nodes, provider_logic, get_service_configuration, fun(onezone) ->
         Resolver = compatibility:build_resolver([node()], []),
@@ -360,14 +355,14 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, #au
     } = Data,
     case lists:member(HandleServiceId, [?HANDLE_SERVICE_1, ?HANDLE_SERVICE_2]) of
         true ->
-            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PRIVATE_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
+            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PUBLIC_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
             ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end;
 mock_graph_create(#gri{type = od_space, id = _, aspect = harvest_metadata}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}}.
 
-mock_graph_update(#gri{type = od_space, id = _, aspect = {support_parameters, _}}, undefined, Data) ->
+mock_graph_update(#gri{type = od_space, id = _, aspect = {support_parameters, _}}, undefined, _Data) ->
     {ok, #gs_resp_graph{}};
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
     NameArgCheck = case maps:find(<<"name">>, Data) of
@@ -567,43 +562,11 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance, scope = private}, AuthOverride, _) ->
-    Authorized = case AuthOverride of
-        #auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)} ->
-            UserId = token_to_user_id(SerializedToken),
-            lists:member(atom_to_binary(?HANDLE_SERVICE_VIEW, utf8), maps:get(UserId, ?HANDLE_SERVICE_EFF_USERS_VALUE(HServiceId), []));
-        % undefined AuthOverride means asking with provider's auth
-        undefined ->
-            false
-    end,
-    case Authorized of
-        true ->
-            {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_SERVICE_PRIVATE_DATA_VALUE(HServiceId)}};
-        false ->
-            ?ERROR_FORBIDDEN
-    end;
+mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance}, _, _) ->
+    {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_SERVICE_PUBLIC_DATA_VALUE(HServiceId)}};
 
-mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, AuthOverride, _) ->
-    Authorized = case {AuthOverride, GRI#gri.scope} of
-        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, private} ->
-            UserId = token_to_user_id(SerializedToken),
-            lists:member(atom_to_binary(?HANDLE_VIEW, utf8), maps:get(UserId, ?HANDLE_EFF_USERS_VALUE(HandleId), []));
-        % undefined AuthOverride means asking with provider's auth
-        {undefined, private} ->
-            false;
-        {_, public} ->
-            true
-    end,
-    case Authorized of
-        true ->
-            Data = case GRI#gri.scope of
-                public -> ?HANDLE_PUBLIC_DATA_VALUE(HandleId);
-                private -> ?HANDLE_PRIVATE_DATA_VALUE(HandleId)
-            end,
-            {ok, #gs_resp_graph{data_format = resource, data = Data}};
-        false ->
-            ?ERROR_FORBIDDEN
-    end;
+mock_graph_get(#gri{type = od_handle, id = HandleId, aspect = instance}, _, _) ->
+    {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PUBLIC_DATA_VALUE(HandleId)}};
 
 mock_graph_get(GRI = #gri{type = od_harvester, id = HarvesterId, aspect = instance}, AuthOverride, _) ->
     Authorized = case {AuthOverride, GRI#gri.scope} of

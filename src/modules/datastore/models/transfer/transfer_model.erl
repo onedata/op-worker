@@ -349,6 +349,10 @@ get_record_struct(11) ->
         {query_view_params, [{term, term}]}
     ]};
 get_record_struct(12) ->
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    %%% WARNING: this is a synced model and MUST NOT be changed outside of a new major release!!!
+    %%% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
     % Removed fields: pid
     {record, [
         {file_uuid, string},

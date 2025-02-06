@@ -64,12 +64,14 @@ end)).
     metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
     % Custom label that can be provided in symlink/hardlink spec as target.
     % NOTE: link must be specified after this dir (i.e. further on the list) in file spec.
-    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label()
+    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label(),
+    %% TODO VFS-12179 handle uid/gid in creating test files utils
+    uid = undefined :: luma:uid(),
+    gid = undefined :: luma:gid()
 }).
 
 -record(symlink_spec, {
     name = undefined :: undefined | binary(),
-    shares = [] :: [onenv_file_test_utils:share_spec()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
     symlink_value :: binary() | {custom_label, onenv_file_test_utils:custom_label()},
     % Custom label that can be provided in symlink/hardlink spec as target.

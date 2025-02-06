@@ -30,20 +30,20 @@
 ]).
 
 -export([
-    consecutive_failures_to_verify_peer_should_terminate_session_test/1,
-    consecutive_failures_to_perform_handshake_should_terminate_session_test/1,
-    reconnects_should_be_performed_with_backoff_test/1,
+    consecutive_failures_to_verify_peer_should_not_terminate_session_test/1,
+    consecutive_failures_to_perform_handshake_should_not_terminate_session_test/1,
+    session_should_be_terminated_when_there_are_no_common_spaces_test/1,
     crashed_connection_should_be_restarted_test/1
 ]).
 
 all() -> [
-    consecutive_failures_to_verify_peer_should_terminate_session_test,
-    consecutive_failures_to_perform_handshake_should_terminate_session_test,
-    reconnects_should_be_performed_with_backoff_test,
+    consecutive_failures_to_verify_peer_should_not_terminate_session_test,
+    consecutive_failures_to_perform_handshake_should_not_terminate_session_test,
+%%    session_should_be_terminated_when_there_are_no_common_spaces_test, TODO VFS-5418 uncomment when proxy is no more
     crashed_connection_should_be_restarted_test
 ].
 
--define(ATTEMPTS, 40).
+-define(ATTEMPTS, 20).
 
 
 %%%===================================================================
@@ -52,7 +52,7 @@ all() -> [
 
 
 % identity verification is mocked in init_per_testcase to always fail
-consecutive_failures_to_verify_peer_should_terminate_session_test(_Config) ->
+consecutive_failures_to_verify_peer_should_not_terminate_session_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
@@ -63,14 +63,17 @@ consecutive_failures_to_verify_peer_should_terminate_session_test(_Config) ->
     start_outgoing_provider_session(KrakowNode, SessId),
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
-    % After reaching max backoff period session should be terminated
-    ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
+    % wait for connection manager to reach max backoff and see that session is not terminated
+    timer:sleep(timer:seconds(?ATTEMPTS)),
+
+    % After reaching max backoff period session should not be terminated
+    ?assertEqual(true, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
     ok.
 
 
 % handshake is mocked in init_per_testcase to always fail
-consecutive_failures_to_perform_handshake_should_terminate_session_test(_Config) ->
+consecutive_failures_to_perform_handshake_should_not_terminate_session_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
@@ -81,14 +84,17 @@ consecutive_failures_to_perform_handshake_should_terminate_session_test(_Config)
     start_outgoing_provider_session(KrakowNode, SessId),
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
-    % After reaching max backoff period session should be terminated
-    ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
+    % wait for connection manager to reach max backoff and see that session is not terminated
+    timer:sleep(timer:seconds(?ATTEMPTS)),
+
+    % After reaching max backoff period session should not be terminated
+    ?assertEqual(true, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
     ok.
 
 
-% handshake is mocked in init_per_testcase to succeed only after 2 retries
-reconnects_should_be_performed_with_backoff_test(_Config) ->
+% handshake is mocked in init_per_testcase to always fail
+session_should_be_terminated_when_there_are_no_common_spaces_test(_Config) ->
     ParisId = oct_background:get_provider_id(paris),
     [KrakowNode] = oct_background:get_provider_nodes(krakow),
 
@@ -99,14 +105,9 @@ reconnects_should_be_performed_with_backoff_test(_Config) ->
     start_outgoing_provider_session(KrakowNode, SessId),
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
-    % Normally session exists entire time while next connection retries are
-    % performed and terminates only after last failed attempt. Only if any
-    % connection attempt succeeded it will persist. So to check if backoff
-    % worked properly checking whether session exists must be performed after
-    % time the session could die
-    timer:sleep(timer:seconds(?ATTEMPTS)),
+    unmock_existence_of_common_spaces(KrakowNode),
 
-    ?assertEqual(true, session_exists(KrakowNode, SessId)),
+    ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
 
     ok.
 
@@ -162,9 +163,9 @@ init_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_ses
     mock_handshake_to_succeed_after_n_retries(Nodes, infinity),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(reconnects_should_be_performed_with_backoff_test = Case, Config) ->
+init_per_testcase(session_should_be_terminated_when_there_are_no_common_spaces_test = Case, Config) ->
     Nodes = oct_background:get_provider_nodes(paris),
-    mock_handshake_to_succeed_after_n_retries(Nodes, 2),
+    mock_handshake_to_succeed_after_n_retries(Nodes, infinity),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
@@ -174,6 +175,10 @@ init_per_testcase(_Case, Config) ->
 
     terminate_session(KrakowNode, SessId),
     ?assertEqual(false, session_exists(KrakowNode, SessId), ?ATTEMPTS),
+
+    % Environment is started without common spaces, so we can be certain that no connections are automatically set up.
+    % Mock provider into thinking there are common spaces so connection can be manually established.
+    mock_existence_of_common_spaces(KrakowNode),
 
     opw_test_rpc:set_env(KrakowNode, conn_manager_min_backoff_interval, 2000),  % 2 seconds
     opw_test_rpc:set_env(KrakowNode, conn_manager_max_backoff_interval, 10000),  % 10 seconds
@@ -192,12 +197,14 @@ end_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_sess
     unmock_provider_handshake(Nodes),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(reconnects_should_be_performed_with_backoff_test = Case, Config) ->
+end_per_testcase(session_should_be_terminated_when_there_are_no_common_spaces_test = Case, Config) ->
     Nodes = oct_background:get_provider_nodes(paris),
     unmock_provider_handshake(Nodes),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, _Config) ->
+    [KrakowNode] = oct_background:get_provider_nodes(krakow),
+    unmock_existence_of_common_spaces(KrakowNode),
     ok.
 
 
@@ -284,3 +291,19 @@ mock_handshake_to_succeed_after_n_retries(Nodes, MaxFailedAttempts) ->
 -spec unmock_provider_handshake([node()]) -> ok.
 unmock_provider_handshake(Nodes) ->
     ok = test_utils:mock_unload(Nodes, connection_auth).
+
+
+%% @private
+-spec mock_existence_of_common_spaces(node()) -> ok.
+mock_existence_of_common_spaces(Node) ->
+    test_utils:mock_new(Node, space_logic, [passthrough]),
+    test_utils:mock_expect(Node, space_logic, is_supported, fun
+        (SpaceId, _ProviderId) when is_binary(SpaceId) -> true;
+        (DocOrRecord, ProviderId) -> meck:passthrough([DocOrRecord, ProviderId])
+    end).
+
+
+%% @private
+-spec unmock_existence_of_common_spaces(node()) -> ok.
+unmock_existence_of_common_spaces(Node) ->
+    test_utils:mock_unload(Node, space_logic).

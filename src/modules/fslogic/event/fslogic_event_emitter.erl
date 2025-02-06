@@ -146,12 +146,17 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             ok;
         {#document{}, FileCtx2} ->
             RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            % root can't get a space name when provider does not support this space
+            Attributes = case file_ctx:is_space_dir_const(FileCtx2) of
+                true -> ?ONECLIENT_FILE_ATTRS -- [?attr_size, ?attr_name];
+                false -> ?ONECLIENT_FILE_ATTRS -- [?attr_size]
+            end,
             #fuse_response{
                 fuse_response = #file_attr{} = FileAttr
             } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
                 name_conflicts_resolution_policy => resolve_name_conflicts,
-                attributes => ?ONECLIENT_FILE_ATTRS -- [?attr_size]
+                attributes => Attributes
             }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
@@ -312,7 +317,8 @@ emit_helper_params_changed(StorageId) ->
 %% For #file_location_changed_event{} uuid should be used, guid for other events.
 %% @end
 %%--------------------------------------------------------------------
--spec clone_event(event:type(), subscription_manager:link_subscription_context()) -> event:type().
+-spec clone_event(event:type() | event:aggregated() | event:base(), subscription_manager:link_subscription_context()) ->
+    event:type() | event:aggregated() | event:base().
 clone_event(#file_perm_changed_event{} = Event, {guid, NewGuid}) ->
     Event#file_perm_changed_event{file_guid = NewGuid};
 clone_event(#file_location_changed_event{file_location = FileLocation} = Event, {uuid, NewUuid, _SpaceId}) ->
@@ -334,6 +340,10 @@ clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, {guid, NewGu
         provider_id = ProviderId
     },
     Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
+clone_event(#event{type = Event}, Context) ->
+    #event{type = clone_event(Event, Context)};
+clone_event({aggregated, Events}, Context) ->
+    {aggregated, [clone_event(Ev, Context) || Ev <- Events]};
 clone_event(Event, Context) ->
     ?error("Trying to clone event ~tp of type that cannot be cloned. Context ~tp.", [Event, Context]),
     throw(not_supported_event_cloning).

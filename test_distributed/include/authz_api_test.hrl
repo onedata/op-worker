@@ -153,8 +153,8 @@
     % (can't be called via shared guid == no share mode).
     available_for_share_guid = false :: boolean() | not_a_file_guid_based_operation,
 
-    % Tells whether operation should work in open handle mode.
-    available_in_open_handle_mode = false :: boolean(),
+    % Tells whether operation should work in public data mode.
+    available_in_public_data_mode = false :: boolean(),
 
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations

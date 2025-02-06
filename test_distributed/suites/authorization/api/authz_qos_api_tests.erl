@@ -36,7 +36,7 @@ test_add_qos_entry(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -64,7 +64,7 @@ test_get_qos_entry(SpaceId) ->
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -92,7 +92,7 @@ test_remove_qos_entry(SpaceId) ->
         }],
         available_in_readonly_mode = false,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -120,7 +120,7 @@ test_get_effective_file_qos(SpaceId) ->
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -148,7 +148,7 @@ test_check_qos_status(SpaceId) ->
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),

@@ -29,4 +29,7 @@
 translate_resource(#gri{aspect = instance, scope = private}, #od_handle_service{
     name = Name
 }) ->
-    #{<<"name">> => Name}.
+    #{<<"name">> => Name};
+
+translate_resource(#gri{aspect = instance, scope = public}, PublicData) ->
+    PublicData.

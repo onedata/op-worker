@@ -113,18 +113,9 @@ get_rest_error(Error) ->
 %%%===================================================================
 
 rest_endpoint(Node) ->
-    Port = case get(port) of
-        undefined ->
-            PStr = case opw_test_rpc:get_env(Node, https_server_port) of
-                443 -> <<"">>;
-                P when is_integer(P) -> <<":", (integer_to_binary(P))/binary>>
-            end,
-            put(port, PStr),
-            PStr;
-        P -> P
-    end,
+    Port = api_test_utils:get_https_server_port_str(Node),
     Domain = opw_test_rpc:get_provider_domain(Node),
-    <<"https://", (str_utils:to_binary(Domain))/binary, Port/binary, "/api/v3/oneprovider/">>.
+    str_utils:format_bin("https://~ts~ts/api/v3/oneprovider/", [Domain, Port]).
 
 print_request(URL, Method, Headers, Body, Opts) ->
     ct:pal("Failed for request: ~n"

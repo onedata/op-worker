@@ -779,6 +779,8 @@ put_cache_state(Share = #od_share{}, CacheState) ->
     Share#od_share{cache_state = CacheState};
 put_cache_state(Provider = #od_provider{}, CacheState) ->
     Provider#od_provider{cache_state = CacheState};
+put_cache_state(Cluster = #od_cluster{}, CacheState) ->
+    Cluster#od_cluster{cache_state = CacheState};
 put_cache_state(HService = #od_handle_service{}, CacheState) ->
     HService#od_handle_service{cache_state = CacheState};
 put_cache_state(Handle = #od_handle{}, CacheState) ->
@@ -812,6 +814,8 @@ get_cache_state(#od_space{cache_state = CacheState}) ->
 get_cache_state(#od_share{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_provider{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_cluster{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_handle_service{cache_state = CacheState}) ->
     CacheState;
@@ -854,6 +858,9 @@ cmp_scope(private, _) -> greater.
 -spec is_authorized_to_get(client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
 is_authorized_to_get(_, _, #gri{type = od_share, scope = public}, _) ->
+    true;
+
+is_authorized_to_get(_, _, #gri{type = od_handle_service, scope = public}, _) ->
     true;
 
 is_authorized_to_get(_, _, #gri{type = od_handle, scope = public}, _) ->
@@ -926,11 +933,8 @@ is_root_authorized_to_get(_, #gri{type = od_provider, scope = private}, _) ->
 is_root_authorized_to_get(_, #gri{type = od_provider, scope = protected}, _) ->
     true;
 
-is_root_authorized_to_get(_, #gri{type = od_handle_service, scope = private}, _) ->
-    false;
-
-is_root_authorized_to_get(_, #gri{type = od_handle, scope = private}, _) ->
-    false;
+is_root_authorized_to_get(_, #gri{type = od_cluster, scope = private}, _) ->
+    true;
 
 is_root_authorized_to_get(_, _, _) ->
     false.
@@ -962,11 +966,16 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_user, id = UserId, scope 
     true;
 is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_user, id = TargetUserId, scope = shared}, _) ->
     case AuthHint of
+        ?THROUGH_GROUP(GroupId) ->
+            group_logic:can_view_user_through_group(Client, GroupId, ClientUserId, TargetUserId);
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_user_through_space(Client, SpaceId, ClientUserId, TargetUserId);
         _ ->
             false
     end;
+
+is_user_authorized_to_get(ClientUserId, _, _, #gri{type = od_group, scope = private}, CachedDoc) ->
+    group_logic:has_eff_privilege(CachedDoc#document.value, ClientUserId, ?GROUP_VIEW);
 
 is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_group, id = GroupId, scope = shared}, _) ->
     case AuthHint of
@@ -998,11 +1007,8 @@ is_user_authorized_to_get(UserId, Client, AuthHint, #gri{type = od_provider, id 
             unknown
     end;
 
-is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle_service, scope = private}, CachedDoc) ->
-    handle_service_logic:has_eff_user(CachedDoc, UserId);
-
-is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
-    handle_logic:has_eff_user(CachedDoc, UserId);
+is_user_authorized_to_get(_UserId, _, _, #gri{type = od_cluster, scope = private}, _) ->
+    false;
 
 is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_inventory, scope = private}, CachedDoc) ->
     user_logic:has_eff_atm_inventory(SessionId, UserId, CachedDoc#document.key);

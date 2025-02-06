@@ -326,13 +326,14 @@ changes_stream_times_test(Config) ->
     File = filename:join(["/", SpaceName, "file5_cstt"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
-    Time = 1000,
+    
+    Time = opw_test_rpc:call(WorkerP1, global_clock, timestamp_seconds, []) + 1000,
 
     % when
     spawn(fun() ->
         timer:sleep(1000),
-        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time)
+        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time),
+        opw_test_rpc:call(WorkerP1, times_cache, flush, [])
     end),
 
     ChangesSpec = #{<<"times">> => #{
@@ -467,7 +468,7 @@ changes_stream_request_several_records_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    Time = 1000,
+    Time = opw_test_rpc:call(WorkerP1, global_clock, timestamp_seconds, []) + 1000,
     % when
     spawn(fun() ->
         timer:sleep(500),
@@ -475,7 +476,8 @@ changes_stream_request_several_records_test(Config) ->
             #xattr{name = <<"name">>, value = <<"value">>}
         ),
         timer:sleep(500),
-        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time)
+        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time),
+        opw_test_rpc:call(WorkerP1, times_cache, flush, [])
     end),
 
     ChangesSpec = #{

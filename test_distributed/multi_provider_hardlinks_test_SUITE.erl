@@ -39,7 +39,7 @@
 all() ->
     ?ALL(?TEST_CASES).
 
--define(GET_TIMES(Worker, Uuid), rpc:call(Worker, times, get, [Uuid])).
+-define(GET_TIMES(Worker, Uuid), rpc:call(Worker, times, get, [fslogic_file_id:ensure_referenced_uuid(Uuid)])).
 -define(GET_LOCATION(Worker, Uuid), rpc:call(Worker, file_location, get_local, [Uuid])).
 
 %%%===================================================================
@@ -86,12 +86,19 @@ basic_test(Config0) ->
 
     % Create link and verify its stats
     {Link, LinkAttr} = make_and_verify_link(Config, FileGuid, SpaceGuid, FileAttr),
+    GetAttrsFun = fun(Node, S, FileKey) ->
+        case lfm_proxy:stat(Node, S, FileKey) of
+            % do not check creation time, as it is not synchronized in line 21.*
+            {ok, FileAttrs} -> {ok, FileAttrs#file_attr{creation_time = 0}};
+            Other -> Other
+        end
+    end,
     % stat ignores fully_replicated field so use attrs without it in asserts
-    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{is_fully_replicated = undefined},
+    LinkAttrWithoutReplicationStatus = LinkAttr#file_attr{is_fully_replicated = undefined, creation_time = 0},
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
-        lfm_proxy:stat(Worker1, SessId(Worker1), {path, Link})),
+        GetAttrsFun(Worker1, SessId(Worker1), {path, Link})),
     ?assertEqual({ok, LinkAttrWithoutReplicationStatus},
-        lfm_proxy:stat(Worker2, SessId(Worker2), {path, Link}), Attempts),
+        GetAttrsFun(Worker2, SessId(Worker2), {path, Link}), Attempts),
 
     % Verify reading through link
     assert_size_and_content_identical(Worker1, SessId, Link, FileContent),
@@ -254,12 +261,12 @@ hardlink_reference_file_meta_race_test(Config) ->
     ?assertMatch({error, not_found}, rpc:call(Worker2, file_meta, get, [file_id:guid_to_uuid(HardlinkGuid)]), Attempts),
     Doc = wait_for_intercepted_dbsynced_file_meta(file_id:guid_to_uuid(FileGuid), Attempts),
     
-    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_events, hardlink_replicated, 2, 0),
+    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_file_meta_handler, hardlink_replicated, 2, 0),
 
     test_utils:mock_unload(Worker2, dbsync_changes),
     ok = rpc:call(Worker2, dbsync_changes, apply, [Doc]),
     
-    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_events, hardlink_replicated, 2, 1, Attempts).
+    test_utils:mock_assert_num_calls_sum(Workers2, dbsync_file_meta_handler, hardlink_replicated, 2, 1, Attempts).
     
 
 %%%===================================================================
@@ -276,7 +283,7 @@ end_per_suite(Config) ->
 init_per_testcase(hardlink_reference_file_meta_race_test = Case, Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, 60),
     mock_file_meta_dbsync_to_intercept_regular_files(?config(workers2, Config)),
-    test_utils:mock_new(?config(workers2, Config), dbsync_events, [passthrough]),
+    test_utils:mock_new(?config(workers2, Config), dbsync_file_meta_handler, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 30}),
