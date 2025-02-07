@@ -1632,6 +1632,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
         {ok, QosParameters}
     end,
 
+    % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
     ok = test_utils:mock_new(Workers, storage_monitoring),
     ok = test_utils:mock_expect(Workers, storage_monitoring, perform_regular_checks, fun(PreviousUnhealthyStorageIds) ->
         [<<"dummy_unhealthy_storage">> | meck:passthrough([PreviousUnhealthyStorageIds -- [<<"dummy_unhealthy_storage">>]])]

@@ -603,16 +603,13 @@ test_check_qos_status(Config) ->
 init_per_suite(Config) ->
     StorageType = ?RAND_ELEMENT([posix, s3]),
 
-    ModulesToLoad = [?MODULE, authz_api_test_runner, space_setup_utils],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+    ModulesToLoad = [?MODULE, authz_api_test_runner],
+    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op_s3",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}],
         posthook = fun(NewConfig) ->
-            % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
-            space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
-
             delete_spaces_from_previous_run(),
             [{storage_type, StorageType}, {storage_id, find_storage_id(StorageType)} | NewConfig]
         end

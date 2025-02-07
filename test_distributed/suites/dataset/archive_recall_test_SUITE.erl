@@ -910,20 +910,14 @@ check_mocked_slave_jobs_cancelled(SlaveJobsLeft, TimeoutSeconds) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils, space_setup_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {provider_token_ttl_sec, 24 * 60 * 60}
             ]}],
-            posthook = fun(NewConfig) ->
-                % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
-                space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
-
-                dir_stats_test_utils:disable_stats_counting_ct_posthook(NewConfig)
-            end
-
+            posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
         }).
 
 end_per_suite(Config) ->

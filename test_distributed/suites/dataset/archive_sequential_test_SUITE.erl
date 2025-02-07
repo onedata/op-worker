@@ -424,21 +424,15 @@ finalize_archive_creation(FunctionName) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(
-        [{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils, archive_sequential_test_base, space_setup_utils]} | Config],
+    opt:init_per_suite(
+        [{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils, archive_sequential_test_base]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-archive",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {provider_token_ttl_sec, 24 * 60 * 60},
                 {dir_stats_collector_race_preventing_time, 2000}
-            ]}],
-            posthook = fun(NewConfig) ->
-                % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
-                space_setup_utils:mock_existence_of_unhealthy_storage(?config(op_worker_nodes, NewConfig)),
-                NewConfig
-            end
-
+            ]}]
         }
     ).
 

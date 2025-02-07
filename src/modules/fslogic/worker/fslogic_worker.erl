@@ -170,6 +170,7 @@ is_storage_accessible(FileCtx) ->
                         {ok, StorageId} ->
                             not lists:member(StorageId, Storages);
                         {error, space_not_supported} ->
+                            %% @TODO VFS-12036 no longer needed when there is no proxy anymore
                             true % access via proxy
                     end
             end
