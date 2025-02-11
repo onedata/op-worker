@@ -53,6 +53,7 @@
     recall_root_id :: undefined | file_id:file_guid(),
     is_deleted :: undefined | boolean(),
     conflicting_files :: undefined | file_meta:conflicts(),
+    json_metadata :: undefined | json_utils:json_term(),
     xattrs :: undefined | #{onedata_file:xattr_name() => onedata_file:xattr_value()}
 }).
 

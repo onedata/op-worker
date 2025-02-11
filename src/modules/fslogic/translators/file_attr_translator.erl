@@ -119,7 +119,9 @@ get_attr_as_json(?attr_eff_qos_inheritance_path, #file_attr{eff_qos_inheritance_
 get_attr_as_json(?attr_qos_status, #file_attr{qos_status = QosStatus}) ->
     utils:convert_defined(QosStatus, fun atom_to_binary/1);
 get_attr_as_json(?attr_recall_root_id, #file_attr{recall_root_id = RecallRootId}) ->
-    RecallRootId.
+    RecallRootId;
+get_attr_as_json(?attr_json_metadata, #file_attr{json_metadata = JsonMetadata}) ->
+    JsonMetadata.
 
 
 %% @private

@@ -280,7 +280,8 @@ resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
             (?RDF_METADATA_KEY) -> true;
             (<<?ONEDATA_PREFIX_STR, _/binary>>) -> false;
             (_) -> true
-        end, maps:keys(AllXattrs))
+        end, maps:keys(AllXattrs)),
+        json_metadata = maps:get(?JSON_METADATA_KEY, AllXattrs, undefined)
     }}.
 
 

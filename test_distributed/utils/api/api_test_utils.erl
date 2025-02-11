@@ -436,6 +436,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     eff_qos_inheritance_path = EffQosInheritancePath,
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
+    json_metadata = JsonMetadata,
     xattrs = Xattrs
 }) ->
     % NOTE: this assumes that there were no remote file readings between creation and attrs check
@@ -502,7 +503,8 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"effDatasetInheritancePath">> => translate_membership(EffDatasetInheritancePath),
         <<"effQosInheritancePath">> => translate_membership(EffQosInheritancePath),
         <<"aggregateQosStatus">> => translate_qos_status(QosStatus),
-        <<"archiveRecallRootFileId">> => RecallRootId
+        <<"archiveRecallRootFileId">> => RecallRootId,
+        <<"jsonMetadata">> => utils:undefined_to_null(JsonMetadata)
     },
     FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
