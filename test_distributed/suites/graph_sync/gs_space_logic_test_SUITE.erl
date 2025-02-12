@@ -75,7 +75,7 @@ get_test(Config) ->
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
@@ -91,7 +91,7 @@ get_test(Config) ->
     % Make sure that other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
@@ -138,7 +138,7 @@ get_protected_data_test(Config) ->
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
@@ -146,7 +146,7 @@ get_protected_data_test(Config) ->
     % Make sure that other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
     ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
@@ -470,7 +470,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because the space in
     % objectid is different than requested
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, space_logic, get, [TokenCredentials, ?SPACE_2])
     ),
     % Nevertheless, following requests should be made:

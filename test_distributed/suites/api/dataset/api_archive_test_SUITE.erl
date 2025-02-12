@@ -149,22 +149,22 @@ create_archive(_Config) ->
                     <<"deletedCallback">> => [?ARCHIVE_DELETED_CALLBACK_URL()]
                 },
                 bad_values = [
-                    {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
+                    {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERR_FORBIDDEN},
                     {<<"datasetId">>, DetachedDatasetId,
-                        ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
-                    {<<"config">>, #{<<"incremental">> => <<"not json">>}, ?ERROR_BAD_VALUE_JSON(<<"config.incremental">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => <<"not a boolean">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental.enabled">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"not_enable">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.enabled">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.basedOn">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
-                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
+                        ?ERR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
+                    {<<"config">>, #{<<"incremental">> => <<"not json">>}, ?ERR_BAD_VALUE_JSON(<<"config.incremental">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => <<"not a boolean">>}}, ?ERR_BAD_VALUE_BOOLEAN(<<"config.incremental.enabled">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"not_enable">> => true}}, ?ERR_MISSING_REQUIRED_VALUE(<<"config.incremental.enabled">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true}}, ?ERR_MISSING_REQUIRED_VALUE(<<"config.incremental.basedOn">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
+                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
-                        ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
+                        ?ERR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
-                    {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
-                    {<<"preservedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)},
-                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"deletedCallback">>)}
+                        ?ERR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
+                    {<<"description">>, [123, 456], ?ERR_BAD_VALUE_STRING(<<"description">>)},
+                    {<<"preservedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"preservedCallback">>, undefined)},
+                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"deletedCallback">>, undefined)}
                 ]
             }
         }
@@ -499,7 +499,7 @@ modify_archive_description(_Config) ->
                     <<"description">> => [<<"">>, <<"NEW DESCRIPTION">>]
                 },
                 bad_values = [
-                    {<<"description">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
+                    {<<"description">>, 100, ?ERR_BAD_VALUE_STRING(<<"description">>)},
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND}
                 ]
             }
@@ -639,13 +639,13 @@ get_dataset_archives(_Config) ->
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-                    {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                    {<<"index">>, 1, {gs, ?ERROR_BAD_VALUE_BINARY(<<"index">>)}},
-                    {<<"token">>, 1, {gs, ?ERROR_BAD_VALUE_BINARY(<<"token">>)}}
+                    {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+                    {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"limit">>, 1001, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"offset">>, <<"abc">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
+                    {<<"index">>, 1, {gs, ?ERR_BAD_VALUE_STRING(<<"index">>)}},
+                    {<<"token">>, 1, {gs, ?ERR_BAD_VALUE_STRING(<<"token">>)}}
                 ]
             }
         }
@@ -792,7 +792,7 @@ init_archive_delete_test(_Config) ->
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"deletedCallback">>)}
+                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERR_BAD_DATA(<<"deletedCallback">>, undefined)}
                 ]
             }
         }
@@ -947,9 +947,9 @@ init_archive_recall_test(_Config) ->
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"parentDirectoryId">>, ?NON_EXISTENT_FILE_ID, ?ERROR_BAD_VALUE_IDENTIFIER(<<"parentDirectoryId">>)},
-                    {<<"targetFileName">>, 8, ?ERROR_BAD_VALUE_BINARY(<<"targetFileName">>)},
-                    {<<"targetFileName">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"targetFileName">>)}
+                    {<<"parentDirectoryId">>, ?NON_EXISTENT_FILE_ID, ?ERR_BAD_VALUE_IDENTIFIER(<<"parentDirectoryId">>)},
+                    {<<"targetFileName">>, 8, ?ERR_BAD_VALUE_STRING(<<"targetFileName">>)},
+                    {<<"targetFileName">>, <<>>, ?ERR_BAD_VALUE_EMPTY(<<"targetFileName">>)}
                 ]
             }
         }
@@ -1200,9 +1200,9 @@ get_archivisation_audit_log(_Config) ->
                 <<"offset">> => [0]
             },
             bad_values = [
-                {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
-                {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
-                {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+                {<<"timestamp">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                {<<"timestamp">>, -8, ?ERR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                {<<"offset">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)}
             ]
         }
     },

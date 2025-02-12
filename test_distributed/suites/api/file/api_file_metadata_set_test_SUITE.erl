@@ -90,7 +90,7 @@ set_file_rdf_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERR_POSIX(?ENODATA), get_rdf(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
             lists:foreach(fun(Node) ->
@@ -104,7 +104,7 @@ set_file_rdf_metadata_test(Config) ->
                     ?assertMatch(ok, remove_rdf(TestNode, FileGuid)),
                     % Wait for removal to be synced between providers.
                     lists:foreach(fun(Node) ->
-                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERR_POSIX(?ENODATA), get_rdf(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 false ->
                     ok
@@ -134,10 +134,10 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
         correct_values = #{<<"metadata">> => [?RDF_METADATA_1]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
-        ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(P1Node, FileGuid), ?ATTEMPTS),
+        ?assertMatch(?ERR_POSIX(?ENODATA), get_rdf(P1Node, FileGuid), ?ATTEMPTS),
         true
     end,
 
@@ -194,20 +194,20 @@ set_file_json_metadata_test(Config) ->
                     % invalid json error can be returned only for rest (invalid json is send as
                     % body without modification) and not gs (#{<<"metadata">> => some_binary} is send,
                     % so no matter what that some_binary is it will be treated as string)
-                    {<<"metadata">>, <<"aaa">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-                    {<<"metadata">>, <<"{">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+                    {<<"metadata">>, <<"aaa">>, {rest_handler, ?ERR_BAD_VALUE_JSON(<<"metadata">>)}},
+                    {<<"metadata">>, <<"{">>, {rest_handler, ?ERR_BAD_VALUE_JSON(<<"metadata">>)}},
                     {<<"metadata">>, <<"{\"aaa\": aaa}">>, {rest_handler,
-                        ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+                        ?ERR_BAD_VALUE_JSON(<<"metadata">>)}},
 
                     {<<"filter_type">>, <<"dummy">>,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+                        ?ERR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
 
                     % Below differences between error returned by rest and gs are results of sending
                     % parameters via qs in REST, so they lost their original type and are cast to binary
                     {<<"filter_type">>, 100, {rest,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                    {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-                    {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
+                        ?ERR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                    {<<"filter_type">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"filter_type">>)}},
+                    {<<"filter">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"filter">>)}}
                 ],
                 optional_values_data_sets = all_combinations
             }
@@ -222,13 +222,13 @@ set_file_json_metadata_test(Config) ->
             {undefined, _} ->
                 {ok, []};
             {<<"keypath">>, undefined} ->
-                ?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>);
+                ?ERR_MISSING_REQUIRED_VALUE(<<"filter">>);
             {<<"keypath">>, _} ->
                 case binary:split(Filter, <<".">>, [global]) of
                     [<<"[1]">>, <<"attr1">>, <<"[2]">>, <<"attr22">>] ->
                         % ?ENODATA is returned due to trying to set attribute in
                         % string (see data_spec and order of requests)
-                        ?ERROR_POSIX(?ENODATA);
+                        ?ERR_POSIX(?ENODATA);
                     ExistingPath ->
                         {ok, ExistingPath}
                 end
@@ -243,7 +243,7 @@ set_file_json_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode} = TestCtx) ->
             FilterOrError = GetRequestFilterArg(TestCtx),
@@ -254,15 +254,15 @@ set_file_json_metadata_test(Config) ->
             ExpResult = case FilterOrError of
                 {ok, []} ->
                     {ok, ExampleJson};
-                ?ERROR_MISSING_REQUIRED_VALUE(_) ->
+                ?ERR_MISSING_REQUIRED_VALUE(_) ->
                     % Test failed to set json because of specifying
                     % filter_type without specifying filter
-                    ?ERROR_POSIX(?ENODATA);
+                    ?ERR_POSIX(?ENODATA);
                 {ok, [<<"[1]">>]} ->
                     {ok, [null, ExampleJson]};
                 {ok, [<<"[1]">>, <<"attr1">>, <<"[1]">>]} ->
                     {ok, [null, #{<<"attr1">> => [0, ExampleJson, <<"val">>]}]};
-                ?ERROR_POSIX(?ENODATA) ->
+                ?ERR_POSIX(?ENODATA) ->
                     % Operation failed and nothing should be changed -
                     % it should match the same json as above
                     {ok, [null, #{<<"attr1">> => [0, ExampleJson, <<"val">>]}]};
@@ -299,7 +299,7 @@ set_file_json_metadata_test(Config) ->
                     % rather than above one as that will be the result of setting ExampleJson
                     % with attr1.[5] filter and no prior json set)
                     lists:foreach(fun(Node) ->
-                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 _ ->
                     ok
@@ -337,7 +337,7 @@ set_file_primitive_json_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
             ExpMetadata = json_utils:decode(Metadata),
@@ -351,7 +351,7 @@ set_file_primitive_json_metadata_test(Config) ->
                     % tests for next clients can start from setting rather then updating metadata
                     ?assertMatch(ok, remove_json(TestNode, FileGuid)),
                     lists:foreach(fun(Node) ->
-                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 _ ->
                     ok
@@ -381,10 +381,10 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
     },
 
     SpaceId = oct_background:get_space_id(space_krk),
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
-        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(P1Node, FileGuid), ?ATTEMPTS),
+        ?assertMatch(?ERR_POSIX(?ENODATA), get_json(P1Node, FileGuid), ?ATTEMPTS),
         true
     end,
 
@@ -434,13 +434,13 @@ set_file_xattrs_test(Config) ->
                 #{?RDF_METADATA_KEY => ?RDF_METADATA_1}
             ]},
             bad_values = [
-                {<<"metadata">>, <<"aaa">>, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)},
+                {<<"metadata">>, <<"aaa">>, ?ERR_BAD_VALUE_JSON(<<"metadata">>)},
                 % It should be impossible to set something other than binary as rdf metadata
-                {<<"metadata">>, #{?RDF_METADATA_KEY => ?JSON_METADATA_4}, ?ERROR_POSIX(?EINVAL)},
+                {<<"metadata">>, #{?RDF_METADATA_KEY => ?JSON_METADATA_4}, ?ERR_POSIX(?EINVAL)},
                 % Keys with prefixes `cdmi_` and `onedata_` are forbidden with exception
                 % for those listed in above correct_values
-                {<<"metadata">>, #{<<"cdmi_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)},
-                {<<"metadata">>, #{<<"onedata_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)}
+                {<<"metadata">>, #{<<"cdmi_attr">> => <<"val">>}, ?ERR_POSIX(?EPERM)},
+                {<<"metadata">>, #{<<"onedata_attr">> => <<"val">>}, ?ERR_POSIX(?EPERM)}
             ]
         }
     ),
@@ -449,7 +449,7 @@ set_file_xattrs_test(Config) ->
         case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
             {?USER(UserId), true} when UserId /= User2Id andalso UserId /= User3Id ->
                 % Only space owner or file owner can set acl in posix mode
-                ?ERROR_POSIX(?EACCES);
+                ?ERR_POSIX(?EACCES);
             _ ->
                 ok
         end
@@ -496,7 +496,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
         correct_values = #{<<"metadata">> => [#{?XATTR_1_KEY => ?XATTR_1_VALUE}]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
         ?assertMatch({error, ?ENODATA}, get_xattr(P1Node, FileGuid, ?XATTR_1_KEY), ?ATTEMPTS),

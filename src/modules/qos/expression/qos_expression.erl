@@ -167,7 +167,7 @@ call_expression_scanner(InfixExpression) ->
         {ok, Tokens, _} -> Tokens;
         {error, {_, _, ErrorDesc}, _} ->
             FormattedDesc = qos_expression_scanner:format_error(ErrorDesc),
-            throw(?ERROR_INVALID_QOS_EXPRESSION(str_utils:unicode_list_to_binary(FormattedDesc)))
+            throw(?ERR_INVALID_QOS_EXPRESSION(?err_ctx(), str_utils:unicode_list_to_binary(FormattedDesc)))
     end.
 
 %% @private
@@ -177,7 +177,7 @@ call_expression_parser(Tokens) ->
         {ok, Tree} -> Tree;
         {error, {_, _, ErrorDesc}} ->
             FormattedDesc = qos_expression_parser:format_error(ErrorDesc),
-            throw(?ERROR_INVALID_QOS_EXPRESSION(str_utils:unicode_list_to_binary(FormattedDesc)))
+            throw(?ERR_INVALID_QOS_EXPRESSION(?err_ctx(), str_utils:unicode_list_to_binary(FormattedDesc)))
     end).
 
 %% @private

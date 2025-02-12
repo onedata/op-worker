@@ -100,7 +100,7 @@ sanitize_listing_opts(Data, SupportedOptionsType) ->
                 _ = binary_to_integer(IndexBin),
                 true
             catch _:_ ->
-                throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
+                throw(?ERR_BAD_DATA(?err_ctx(), <<"index">>, <<"not numerical">>))
             end
         end},
         <<"offset">> => {integer, any},

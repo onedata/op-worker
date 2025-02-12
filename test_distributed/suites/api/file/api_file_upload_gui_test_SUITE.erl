@@ -75,7 +75,7 @@ registering_upload_for_directory_should_fail_test(_Config) ->
         user1, space_krk, #dir_spec{}
     ),
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"guid">>, <<"not a regular file">>),
+        ?ERR_BAD_DATA(<<"guid">>, <<"not a regular file">>),
         initialize_gui_upload(krakow, user1, DirGuid)
     ).
 
@@ -85,7 +85,7 @@ registering_upload_for_non_empty_file_should_fail_test(_Config) ->
         user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
     ),
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"guid">>, <<"file is not empty">>),
+        ?ERR_BAD_DATA(<<"guid">>, <<"file is not empty">>),
         initialize_gui_upload(krakow, user1, FileGuid)
     ).
 
@@ -95,7 +95,7 @@ registering_upload_for_not_owned_file_should_fail_test(_Config) ->
         user1, space_krk, #file_spec{}
     ),
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
+        ?ERR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
         initialize_gui_upload(krakow, user2, FileGuid)
     ).
 

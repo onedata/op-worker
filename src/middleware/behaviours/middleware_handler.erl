@@ -57,7 +57,7 @@
 %% @doc
 %% Determines if given request can be further processed
 %% (e.g. checks whether space is supported locally).
-%% Should throw custom error if not (e.g. ?ERROR_SPACE_NOT_SUPPORTED).
+%% Should throw custom error if not (e.g. ?ERR_SPACE_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
 -callback validate(middleware:req(), middleware:entity()) -> ok | no_return().

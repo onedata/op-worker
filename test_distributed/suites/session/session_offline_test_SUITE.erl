@@ -59,11 +59,11 @@ all() -> [
 
 
 offline_session_creation_for_root_should_fail_test(_Config) ->
-    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(?RAND_JOB_ID(), ?ROOT_CREDENTIALS)).
+    ?assertMatch(?ERR_TOKEN_SUBJECT_INVALID, init_offline_session(?RAND_JOB_ID(), ?ROOT_CREDENTIALS)).
 
 
 offline_session_creation_for_guest_should_fail_test(_Config) ->
-    ?assertMatch(?ERROR_TOKEN_SUBJECT_INVALID, init_offline_session(?RAND_JOB_ID(), ?GUEST_CREDENTIALS)).
+    ?assertMatch(?ERR_TOKEN_SUBJECT_INVALID, init_offline_session(?RAND_JOB_ID(), ?GUEST_CREDENTIALS)).
 
 
 offline_session_should_work_as_any_other_session_test(_Config) ->
@@ -178,7 +178,7 @@ offline_session_should_properly_react_to_time_warps_test(_Config) ->
     % time of inertia) but offline credentials docs are not automatically removed - it is
     % responsibility of offline job to do so by calling `offline_access_manager:close_session`.
     time_test_utils:simulate_seconds_passing(7 * ?DAY),
-    ?assertMatch(?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{}), get_offline_session_id(JobId)),
+    ?assertMatch(?ERR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{}), get_offline_session_id(JobId)),
     force_session_validity_check(SessionId),
     ?assertEqual(false, session_exists(SessionId), ?ATTEMPTS),
     ?assert(offline_credentials_exist(JobId)),
@@ -318,7 +318,7 @@ mock_acquire_offline_user_access_token_failure() ->
     test_utils:mock_new(?NODE, auth_manager, [passthrough]),
     test_utils:mock_expect(?NODE, auth_manager, acquire_offline_user_access_token, fun(_) ->
         Self ! acquire_offline_access_token,
-        ?ERROR_NO_CONNECTION_TO_ONEZONE
+        ?ERR_NO_CONNECTION_TO_ONEZONE(<<"...">>)
     end).
 
 

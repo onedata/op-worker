@@ -17,6 +17,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 get_supported_version_test() ->
   Binary00 = <<"">>,
@@ -38,27 +39,27 @@ get_supported_version_test() ->
   Binary41 = <<"aaa,aa,">>,
   Binary42 = <<"aaa,aa ">>,
 
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary00))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary01))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary02))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary00))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary01))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary02))),
 
   ?assertEqual(<<"1.1.1">>, cdmi_handler:get_supported_version(Binary10)),
   ?assertEqual(<<"1.1.1">>, cdmi_handler:get_supported_version(Binary11)),
 
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary20))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary21))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary22))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary23))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary20))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary21))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary22))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary23))),
 
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary30))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary31))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary32))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary33))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary34))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary35))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary30))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary31))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary32))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary33))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary34))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary35))),
 
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary40))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary41))),
-  ?assertEqual(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary42))).
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary40))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary41))),
+  ?assertEqual(?ERR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), (catch cdmi_handler:get_supported_version(Binary42))).
 
 -endif.

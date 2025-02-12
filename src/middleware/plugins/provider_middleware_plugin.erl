@@ -135,7 +135,7 @@ fetch_entity(#op_req{gri = #gri{aspect = As, scope = public}}) when
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri = #gri{
     id = ProviderId,
@@ -150,7 +150,7 @@ fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri
     end;
 
 fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    ?ERR_FORBIDDEN(?err_ctx()).
 
 
 %%--------------------------------------------------------------------
@@ -220,7 +220,7 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
 get(#op_req{gri = #gri{aspect = health}}, _) ->
     case node_manager:is_cluster_healthy() of
         true -> {ok, value, #{<<"status">> => <<"healthy">>}};
-        false -> throw(?ERROR_INTERNAL_SERVER_ERROR)
+        false -> throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
     end.
 
 %%--------------------------------------------------------------------

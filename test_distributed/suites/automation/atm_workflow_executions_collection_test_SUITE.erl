@@ -228,20 +228,20 @@ list_with_invalid_listing_opts_test(_Config) ->
     lists:foreach(fun({InvalidListingOpts, ExpError}) ->
         ?assertEqual(ExpError, list_links(KrkNode, SpaceId, Phase, all, InvalidListingOpts))
     end, [
-        {#{}, ?ERROR_MISSING_REQUIRED_VALUE(limit)},
-        {#{offset => 0}, ?ERROR_MISSING_REQUIRED_VALUE(limit)},
-        {#{start_index => 0}, ?ERROR_MISSING_REQUIRED_VALUE(limit)},
+        {#{}, ?ERR_MISSING_REQUIRED_VALUE(limit)},
+        {#{offset => 0}, ?ERR_MISSING_REQUIRED_VALUE(limit)},
+        {#{start_index => 0}, ?ERR_MISSING_REQUIRED_VALUE(limit)},
 
-        {#{limit => 10}, ?ERROR_MISSING_AT_LEAST_ONE_VALUE(lists:usort([offset, start_index]))},
+        {#{limit => 10}, ?ERR_MISSING_AT_LEAST_ONE_VALUE(lists:usort([offset, start_index]))},
 
-        {#{offset => 0, limit => -10}, ?ERROR_BAD_VALUE_TOO_LOW(limit, 1)},
-        {#{offset => 0, limit => 0}, ?ERROR_BAD_VALUE_TOO_LOW(limit, 1)},
-        {#{offset => 0, limit => all}, ?ERROR_BAD_VALUE_INTEGER(limit)},
+        {#{offset => 0, limit => -10}, ?ERR_BAD_VALUE_TOO_LOW(limit, 1)},
+        {#{offset => 0, limit => 0}, ?ERR_BAD_VALUE_TOO_LOW(limit, 1)},
+        {#{offset => 0, limit => all}, ?ERR_BAD_VALUE_INTEGER(limit)},
 
-        {#{offset => <<>>, limit => 10}, ?ERROR_BAD_VALUE_INTEGER(offset)},
-        {#{offset => -2.5, limit => 10}, ?ERROR_BAD_VALUE_INTEGER(offset)},
+        {#{offset => <<>>, limit => 10}, ?ERR_BAD_VALUE_INTEGER(offset)},
+        {#{offset => -2.5, limit => 10}, ?ERR_BAD_VALUE_INTEGER(offset)},
 
-        {#{start_index => 10, limit => 10}, ?ERROR_BAD_VALUE_BINARY(start_index)}
+        {#{start_index => 10, limit => 10}, ?ERR_BAD_VALUE_STRING(start_index)}
     ]).
 
 

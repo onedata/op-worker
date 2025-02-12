@@ -806,7 +806,7 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) 
 
 %% @private
 make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) ->
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
     AllSpacePrivs = privileges:space_privileges(),
     EncodedReqBody = json_utils:encode(ReqBody),
     UserId = oct_background:get_user_id(?USER_PLACEHOLDER),

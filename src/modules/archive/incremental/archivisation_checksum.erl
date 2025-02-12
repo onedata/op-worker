@@ -106,7 +106,7 @@ get_json_metadata(FileCtx, UserCtx) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     try
         mi_file_metadata:get_custom_metadata(SessionId, ?FILE_REF(FileGuid), json, [], false)
-    catch throw:?ERROR_POSIX(?ENODATA) ->
+    catch throw:?ERR_POSIX(?ENODATA) ->
         undefined
     end.
 

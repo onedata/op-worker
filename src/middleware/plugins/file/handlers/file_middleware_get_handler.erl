@@ -448,7 +448,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
         {undefined, _} ->
             [];
         {<<"keypath">>, undefined} ->
-            throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+            throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"filter">>));
         {<<"keypath">>, _} ->
             binary:split(Filter, <<".">>, [global])
     end,
@@ -599,7 +599,7 @@ build_listing_start_point_param_spec(Key) ->
         (undefined) ->
             true;
         (<<>>) ->
-            throw(?ERROR_BAD_VALUE_EMPTY(Key));
+            throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), Key));
         (Binary) when is_binary(Binary) ->
             true;
         (_) ->

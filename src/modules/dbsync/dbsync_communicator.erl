@@ -118,7 +118,7 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
         case Result of
             ok ->
                 ok;
-            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER ->
+            ?ERR_NO_CONNECTION_TO_PEER_ONEPROVIDER(_, _) ->
                 ?debug("Cannot broadcast changes batch to provider ~tp due to "
                        "no available connection", [ProviderId]);
             {error, Reason} ->

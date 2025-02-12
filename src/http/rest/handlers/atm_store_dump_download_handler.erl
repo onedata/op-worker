@@ -36,7 +36,7 @@ handle(#op_req{auth = AaiAuth = ?USER, gri = #gri{id = AtmStoreId}}, Req) ->
     end;
 
 handle(#op_req{auth = ?GUEST}, Req) ->
-    http_req:send_error(?ERROR_UNAUTHORIZED, Req).
+    http_req:send_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req).
 
 
 %%%===================================================================
@@ -61,4 +61,4 @@ handle_download(Req, AaiAuth = ?USER(_, SessionId), AtmStoreId) ->
 authorize_download(Auth, #atm_store_ctx{workflow_execution = AtmWorkflowExecution}) ->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
         Auth, AtmWorkflowExecution
-    ) orelse throw(?ERROR_FORBIDDEN).
+    ) orelse throw(?ERR_FORBIDDEN(?err_ctx())).

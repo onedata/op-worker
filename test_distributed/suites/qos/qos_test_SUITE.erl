@@ -274,6 +274,7 @@ qos_audit_log_test_base(ExpectedStatus, Type) ->
                 #{
                     % error mocked in init_per_testcase
                     <<"reason">> => #{
+                        <<"ctx">> => null,
                         <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
                         <<"details">> => #{<<"errno">> => <<"enoent">>},
                         <<"id">> => <<"posix">>
@@ -372,12 +373,12 @@ end_per_suite(_Config) ->
 init_per_testcase(Case, Config) when
     Case =:= qos_audit_log_transfer_error;
     Case =:= effective_qos_audit_log_transfer_error ->
-    audit_log_tests_init_per_testcase(Config, ?ERROR_POSIX(?ENOENT)),
+    audit_log_tests_init_per_testcase(Config, ?ERR_POSIX(?ENOENT)),
     init_per_testcase(default, Config);
 init_per_testcase(Case, Config) when
     Case =:= qos_audit_log_failure;
     Case =:= effective_qos_audit_log_failure ->
-    audit_log_tests_init_per_testcase(Config, {throw, ?ERROR_POSIX(?ENOENT)}),
+    audit_log_tests_init_per_testcase(Config, {throw, ?ERR_POSIX(?ENOENT)}),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
@@ -389,14 +390,15 @@ audit_log_tests_init_per_testcase(Config, ExpectedSynchronizer) ->
     test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
     qos_tests_utils:mock_replica_synchronizer(Nodes, ExpectedSynchronizer),
     % mock retry failed files, so there is only one failed entry in audit log
-    qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERROR_POSIX(?ENOENT)),
+    qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERR_POSIX(?ENOENT)),
     test_utils:mock_expect(Nodes, qos_logic, retry_failed_files, fun(_SpaceId) -> ok end).
 
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
-    test_utils:mock_unload(Nodes).
+    clock_freezer_mock:teardown_for_ct(Nodes),
+    test_utils:mock_unload(Nodes, [replica_synchronizer]).
 
 
 %%%===================================================================

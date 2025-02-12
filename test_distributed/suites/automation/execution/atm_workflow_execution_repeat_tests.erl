@@ -260,7 +260,7 @@ repeat_failed_while_preparing_atm_lane_run_execution() ->
                     #atm_lane_run_execution_test_spec{
                         selector = {1, 1},
                         create_run = #atm_step_mock_spec{
-                            strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                            strategy = {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                         },
                         prepare_lane = #atm_step_mock_spec{
                             after_step_exp_state_diff = no_diff
@@ -477,7 +477,7 @@ repeat_cancelled_atm_lane_run_execution() ->
     ok.
 assert_not_retriable(AtmLaneRunSelector, AtmMockCallCtx) ->
     ?assertThrow(
-        ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED,
+        ?ERR_ATM_LANE_EXECUTION_RETRY_FAILED,
         atm_workflow_execution_test_utils:repeat_workflow_execution(retry, AtmLaneRunSelector, AtmMockCallCtx)
     ).
 

@@ -41,7 +41,7 @@
 handle(<<"GET">>, Req) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
-            throw(?ERROR_UNAUTHORIZED);
+            throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
         PeerIdentityToken ->
             case token_logic:verify_provider_identity_token(PeerIdentityToken) of
                 {ok, ?SUB(?ONEPROVIDER, _PeerProviderId) = Consumer} ->
@@ -53,7 +53,7 @@ handle(<<"GET">>, Req) ->
                         Req
                     );
                 {ok, _} ->
-                    throw(?ERROR_TOKEN_SUBJECT_INVALID);
+                    throw(?ERR_TOKEN_SUBJECT_INVALID(?err_ctx()));
                 {error, _} = Error ->
                     throw(Error)
             end

@@ -327,7 +327,7 @@ result_stream_conclusion_mixed_test(_Config) ->
 result_stream_conclusion_with_no_registered_streamers_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
-    ?await(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_INTERNAL_SERVER_ERROR})).
+    ?await(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERR_INTERNAL_SERVER_ERROR(undefined)})).
 
 
 result_stream_conclusion_timeout_test(_Config) ->
@@ -561,7 +561,7 @@ result_streamer_error_handling_test(_Config) ->
 
     atm_openfaas_result_streamer_mock:send_text(ClientAlpha, <<"bad-message">>),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?ERROR_BAD_MESSAGE(<<"bad-message">>)
+        ?ERR_BAD_MESSAGE(<<"bad-message">>)
     ])),
 
     simulate_failure_of_next_report_processing(WorkflowExecutionId, TaskExecutionId),
@@ -570,8 +570,8 @@ result_streamer_error_handling_test(_Config) ->
     }),
     ?await(atm_openfaas_result_streamer_mock:has_received_internal_server_error_push_message(ClientGamma)),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?ERROR_BAD_MESSAGE(<<"bad-message">>),
-        ?ERROR_INTERNAL_SERVER_ERROR
+        ?ERR_BAD_MESSAGE(<<"bad-message">>),
+        ?ERR_INTERNAL_SERVER_ERROR(undefined)
     ])),
 
     % a result streamer client may not send pod status reports
@@ -580,9 +580,9 @@ result_streamer_error_handling_test(_Config) ->
         gen_pod_status_report(<<"c">>, <<"d">>)
     ]),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?ERROR_BAD_MESSAGE(<<"bad-message">>),
-        ?ERROR_INTERNAL_SERVER_ERROR,
-        ?ERROR_INTERNAL_SERVER_ERROR
+        ?ERR_BAD_MESSAGE(<<"bad-message">>),
+        ?ERR_INTERNAL_SERVER_ERROR(undefined),
+        ?ERR_INTERNAL_SERVER_ERROR(undefined)
     ])),
 
     % errors are streamed, but should not cause the stream to conclude by itself;

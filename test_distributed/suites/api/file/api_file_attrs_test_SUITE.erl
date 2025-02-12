@@ -187,8 +187,8 @@ get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, FileAttrs) ->
                     prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, public),
                     validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
                         case Client of
-                            ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-                            _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+                            ?NOBODY -> ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result);
+                            _ -> ?assertEqual(?ERR_FORBIDDEN, Result)
                         end
                     end
                 }
@@ -251,7 +251,7 @@ get_shared_file_attrs_test(_Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_get_attrs_prepare_gs_args_fun(ShareGuid, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result)
             end,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, ShareId1, get_attrs_data_spec(normal_mode)
@@ -268,11 +268,11 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
+        ExpError = ?REST_ERROR(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
+        ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -327,7 +327,7 @@ test_for_hardlink_between_files_test(_Config) ->
                 _ -> Result
             end, 
             Guid = api_test_memory:get(MemRef, <<"guid">>),
-            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERROR_NOT_FOUND, ?ERROR_BAD_VALUE_IDENTIFIER(<<"guid">>))
+            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERROR_NOT_FOUND, ?ERR_BAD_VALUE_IDENTIFIER(<<"guid">>))
     end,
     
     ValidateRestCallResultFun = fun
@@ -378,9 +378,9 @@ get_attrs_data_spec(normal_mode) ->
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => AllowedAttrsJson},
         bad_values = [
-            {<<"attributes">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
-            {<<"attributes">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}},
-            {<<"attributes">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}
+            {<<"attributes">>, true, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
+            {<<"attributes">>, 10, {gs, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}},
+            {<<"attributes">>, <<"NaN">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}
         ]
     };
 get_attrs_data_spec(share_mode) ->
@@ -389,10 +389,10 @@ get_attrs_data_spec(share_mode) ->
         optional = [<<"attributes">>],
         correct_values = #{<<"attributes">> => AllowedAttrsJson},
         bad_values = [
-            {<<"attributes">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
-            {<<"attributes">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}},
-            {<<"attributes">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
-            {<<"attributes">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}
+            {<<"attributes">>, true, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
+            {<<"attributes">>, 10, {gs, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}},
+            {<<"attributes">>, <<"NaN">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])},
+            {<<"attributes">>, <<"owner_id">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson ++ [<<"xattr.*">>])}
         ]
     }.
 
@@ -529,7 +529,7 @@ get_attrs_exp_result(#api_test_ctx{data = Data, client = Client, node = Node}, #
     User4Id = oct_background:get_user_id(user4),
     case {Client, is_acl_requested(Data), Acl} of
         {?USER(UserId), true, [_|_]} when UserId == User4Id ->
-            ?ERROR_POSIX(?EACCES);
+            ?ERR_POSIX(?EACCES);
         _ ->
             ProviderId = case ShareId of
                 undefined -> opw_test_rpc:get_provider_id(Node);
@@ -660,7 +660,7 @@ set_file_mode_test(Config) ->
         (#api_test_ctx{client = ?USER(UserId)}) when UserId == User2Id orelse UserId == User3Id ->
             ok;
         (_) ->
-            ?ERROR_POSIX(?EACCES)
+            ?ERR_POSIX(?EACCES)
     end,
     ValidateRestSuccessfulCallFun = fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx) of
@@ -750,11 +750,11 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
     DataSpecWithoutBadValues = DataSpec#data_spec{bad_values = []},
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
+        ExpError = ?REST_ERROR(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
+        ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     VerifyFun = fun(_, _) ->
@@ -798,11 +798,11 @@ set_mode_data_spec() ->
         required = [<<"mode">>],
         correct_values = #{<<"mode">> => [<<"0000">>, <<"0111">>, <<"0544">>, <<"0707">>]},
         bad_values = [
-            {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-            {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-            {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-            {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-            {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
+            {<<"mode">>, true, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
         ]
     }.
 
@@ -936,8 +936,8 @@ get_dir_distribution_1_test(Config) ->
 
     ExpDist = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            oct_background:get_provider_id(krakow) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
-            oct_background:get_provider_id(paris) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            oct_background:get_provider_id(krakow) => ?ERR_DIR_STATS_DISABLED_FOR_SPACE,
+            oct_background:get_provider_id(paris) => ?ERR_DIR_STATS_DISABLED_FOR_SPACE
         }
     }},
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist),
@@ -1036,7 +1036,7 @@ get_dir_distribution_3_test(Config) ->
                 logical_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
-            P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            P2Id => ?ERR_DIR_STATS_DISABLED_FOR_SPACE
         }
     }},
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
@@ -1055,7 +1055,7 @@ get_dir_distribution_3_test(Config) ->
                 logical_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
             },
-            P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            P2Id => ?ERR_DIR_STATS_DISABLED_FOR_SPACE
         }
     }},
     wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
@@ -1346,9 +1346,9 @@ get_historical_dir_size_stats_layout_test(Config) ->
         optional = [<<"mode">>],
         correct_values = #{<<"mode">> => [<<"layout">>]},
         bad_values = [
-            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
-            {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
-            {bad_id, FileGuid, {gs, ?ERROR_POSIX(?ENOTDIR)}}
+            {<<"mode">>, mode, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
+            {bad_id, FileObjectId, {rest, ?ERR_POSIX(?ENOTDIR)}},
+            {bad_id, FileGuid, {gs, ?ERR_POSIX(?ENOTDIR)}}
         ]}
     end,
     gather_historical_dir_size_stats_test_base(
@@ -1485,15 +1485,15 @@ get_historical_dir_size_stats_slice_test(Config) ->
             <<"stopTimestamp">> => [1687392000, 1687380000, 1689168660, 1689166650]
         },
         bad_values = [
-            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
-            {<<"layout">>, 8, {?ERROR_BAD_VALUE_JSON(<<"layout">>)}},
-            {<<"windowLimit">>, 0, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
-            {<<"windowLimit">>, 8888, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
-            {<<"windowLimit">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"windowLimit">>)}},
-            {<<"startTimestamp">>, -1, {?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)}},
-            {<<"startTimestamp">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)}},
-            {bad_id, FileObjectId, {rest, ?ERROR_POSIX(?ENOTDIR)}},
-            {bad_id, FileGuid, {gs, ?ERROR_POSIX(?ENOTDIR)}}
+            {<<"mode">>, mode, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
+            {<<"layout">>, 8, {?ERR_BAD_VALUE_JSON(<<"layout">>)}},
+            {<<"windowLimit">>, 0, {?ERR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
+            {<<"windowLimit">>, 8888, {?ERR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
+            {<<"windowLimit">>, atom, {?ERR_BAD_VALUE_INTEGER(<<"windowLimit">>)}},
+            {<<"startTimestamp">>, -1, {?ERR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)}},
+            {<<"startTimestamp">>, atom, {?ERR_BAD_VALUE_INTEGER(<<"startTimestamp">>)}},
+            {bad_id, FileObjectId, {rest, ?ERR_POSIX(?ENOTDIR)}},
+            {bad_id, FileGuid, {gs, ?ERR_POSIX(?ENOTDIR)}}
         ]
     }
     end,
@@ -1527,11 +1527,11 @@ get_historical_dir_size_stats_disabled_test(Config) ->
     }),
 
     ValidateGsErrorCallFun = fun(_TestCtx, Result) ->
-        ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE, Result)
+        ?assertEqual(?ERR_DIR_STATS_DISABLED_FOR_SPACE, Result)
     end,
     ValidateRestErrorCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
-        ?assertEqual(#{<<"error">> => errors:to_json(?ERROR_DIR_STATS_DISABLED_FOR_SPACE)}, RespBody)
+        ?assertEqual(#{<<"error">> => errors:to_json(?ERR_DIR_STATS_DISABLED_FOR_SPACE)}, RespBody)
     end,
 
     DataSpecFunLayout = fun(_) -> #data_spec{

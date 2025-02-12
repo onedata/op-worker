@@ -189,7 +189,7 @@ get_token_ref(?SUB(user, UserId), #token{persistence = {temporary, Generation}})
 
 
 -spec get_token_credentials_verification_result(auth_manager:token_credentials()) ->
-    {ok, auth_manager:verification_result()} | ?ERROR_NOT_FOUND.
+    {ok, auth_manager:verification_result()} | od_error_not_found:t().
 get_token_credentials_verification_result(TokenCredentials) ->
     try ets:lookup(?CACHE_NAME, TokenCredentials) of
         [#cache_entry{} = Entry] ->
@@ -198,7 +198,7 @@ get_token_credentials_verification_result(TokenCredentials) ->
                     ?ERROR_NOT_FOUND;
                 false ->
                     case Entry#cache_entry.token_revoked of
-                        true -> {ok, ?ERROR_TOKEN_REVOKED};
+                        true -> {ok, ?ERR_TOKEN_REVOKED(?err_ctx())};
                         false -> {ok, Entry#cache_entry.verification_result}
                     end
             end;
@@ -367,12 +367,13 @@ handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, true), State) ->
     ?debug("Received user access blocked event for user ~ts", [UserId]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
+    ErrorUserBlocked = ?ERR_USER_BLOCKED(?err_ctx()),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         verification_result = {ok, _, _},
         token_ref = {_, UId, _}
     } = CacheEntry) when UId == UserId ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_USER_BLOCKED,
+            verification_result = ErrorUserBlocked,
             token_revoked = false,
             cache_expiration = Expiration
         }
@@ -383,7 +384,7 @@ handle_cast(?USER_ACCESS_BLOCK_CHANGED_MSG(UserId, false), State) ->
     ?debug("Received user access unblocked event for user ~ts", [UserId]),
 
     ets:select_delete(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
-        verification_result = ?ERROR_USER_BLOCKED,
+        verification_result = ?ERR_USER_BLOCKED(_),
         token_ref = {_, UId, _}
     }) when UId == UserId ->
         true
@@ -422,11 +423,12 @@ handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
     ?debug("Received token deleted event for token ~ts", [TokenId]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
+    ErrorTokenInvalid = ?ERR_TOKEN_INVALID(?err_ctx()),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {named, _UId, TId}
     } = CacheEntry) when TId == TokenId ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_INVALID,
+            verification_result = ErrorTokenInvalid,
             token_revoked = false,
             cache_expiration = Expiration
         }
@@ -439,12 +441,13 @@ handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
     ]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
+    ErrorTokenRevoked = ?ERR_TOKEN_REVOKED(?err_ctx()),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         verification_result = {ok, _, _},
         token_ref = {temporary, Id, OldGeneration}
     } = CacheEntry) when Id == UserId andalso OldGeneration < Generation ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_REVOKED,
+            verification_result = ErrorTokenRevoked,
             token_revoked = false,
             cache_expiration = Expiration
         }
@@ -455,11 +458,12 @@ handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
     ?debug("Received temporary tokens deleted event for user ~ts", [UserId]),
 
     Expiration = ?DEFAULT_EXPIRATION_INTERVAL(),
+    ErrorTokenInvalid = ?ERR_TOKEN_INVALID(?err_ctx()),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {temporary, Id, _Generation}
     } = CacheEntry) when Id == UserId ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_INVALID,
+            verification_result = ErrorTokenInvalid,
             token_revoked = false,
             cache_expiration = Expiration
         }

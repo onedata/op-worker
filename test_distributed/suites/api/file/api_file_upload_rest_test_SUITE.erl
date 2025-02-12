@@ -94,7 +94,7 @@ create_file_test(_Config) ->
                 end,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_in_space = [{user4, ?ERR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             prepare_args_fun = build_create_file_prepare_args_fun(MemRef, DirObjectId),
@@ -128,27 +128,27 @@ create_file_test(_Config) ->
                                     % checks (file has 8#777 mode but this doesn't give anyone
                                     % ?add_subcontainer perm) rather than file type check which
                                     % is performed later
-                                    ?ERROR_POSIX(?EACCES);
+                                    ?ERR_POSIX(?EACCES);
                                 _ ->
-                                    ?ERROR_POSIX(?ENOTDIR)
+                                    ?ERR_POSIX(?ENOTDIR)
                             end
                         end}}},
 
-                        {<<"name">>, UsedFileName, ?ERROR_POSIX(?EEXIST)},
+                        {<<"name">>, UsedFileName, ?ERR_POSIX(?EEXIST)},
 
-                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
+                        {<<"type">>, <<"file">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
                             <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
                         ])},
 
-                        {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+                        {<<"mode">>, true, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
 
-                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
-                        {<<"update_existing">>, <<"asd">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"update_existing">>)}
+                        {<<"offset">>, <<"unicorns">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
+                        {<<"update_existing">>, <<"asd">>, ?ERR_BAD_VALUE_BOOLEAN(<<"update_existing">>)}
                     ]
                 }
             )
@@ -203,7 +203,7 @@ build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
                 % and uploading some data at the same time should result in error for any
                 % user not being space owner
                 ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode),
-                ?assertEqual(?REST_ERROR(?ERROR_POSIX(?EACCES)), RespBody),
+                ?assertEqual(?REST_ERROR(?ERR_POSIX(?EACCES)), RespBody),
                 api_test_memory:set(MemRef, success, false);
             _ ->
                 ?assertEqual(?HTTP_201_CREATED, RespCode),
@@ -329,7 +329,7 @@ create_file_at_path_test(_Config) ->
                 end,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_in_space = [{user4, ?ERR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             prepare_args_fun = build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid),
@@ -360,24 +360,24 @@ create_file_at_path_test(_Config) ->
                     },
 
                     bad_values = [
-                        {bad_id, ChildFileObjectId, ?ERROR_POSIX(?ENOTDIR)},
-                        {<<"path">>, filepath_utils:join([ChildFileName, <<"dir1/file.txt">>]), ?ERROR_POSIX(?ENOTDIR)},
-                        {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
-                        {<<"path">>, nonexistent_path_without_create_parents_flag_placeholder, ?ERROR_POSIX(?ENOENT)},
+                        {bad_id, ChildFileObjectId, ?ERR_POSIX(?ENOTDIR)},
+                        {<<"path">>, filepath_utils:join([ChildFileName, <<"dir1/file.txt">>]), ?ERR_POSIX(?ENOTDIR)},
+                        {<<"path">>, <<"/a/b/\0null\0/">>, ?ERR_BAD_VALUE_FILE_PATH},
+                        {<<"path">>, nonexistent_path_without_create_parents_flag_placeholder, ?ERR_POSIX(?ENOENT)},
 
-                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
+                        {<<"type">>, <<"file">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
                             <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
                         ])},
 
-                        {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                        {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+                        {<<"mode">>, true, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
 
-                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
-                        {<<"update_existing">>, <<"asd">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"update_existing">>)}
+                        {<<"offset">>, <<"unicorns">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
+                        {<<"update_existing">>, <<"asd">>, ?ERR_BAD_VALUE_BOOLEAN(<<"update_existing">>)}
                     ]
                 }
             )
@@ -548,7 +548,7 @@ update_file_content_test(_Config) ->
                 end,
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_in_space = [{user4, ?ERR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             setup_fun = build_update_file_content_setup_fun(MemRef, OriginalFileContent),
@@ -571,10 +571,10 @@ update_file_content_test(_Config) ->
                         ]
                     },
                     bad_values = [
-                        {bad_id, DirObjectId, {rest, ?ERROR_POSIX(?EISDIR)}},
+                        {bad_id, DirObjectId, {rest, ?ERR_POSIX(?EISDIR)}},
 
-                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                        {<<"offset">>, <<"unicorns">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
                     ]
                 }
             )

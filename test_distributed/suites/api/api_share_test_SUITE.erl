@@ -108,8 +108,8 @@ create_share_test(_Config) ->
                             <<"rootFileId">> => [FileObjectId]
                         },
                         bad_values = [
-                            {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
-                            {<<"description">>, 14, ?ERROR_BAD_VALUE_BINARY(<<"description">>)}
+                            {<<"name">>, 100, ?ERR_BAD_VALUE_STRING(<<"name">>)},
+                            {<<"description">>, 14, ?ERR_BAD_VALUE_STRING(<<"description">>)}
                         ]
                     }
                 )
@@ -401,9 +401,9 @@ update_share_test(_Config) ->
                     <<"description">> => [<<"">>, OriginalDescription]
                 },
                 bad_values = [
-                    {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
-                    {<<"name">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"name">>)},
-                    {<<"description">>, 90, ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
+                    {<<"name">>, 100, ?ERR_BAD_VALUE_STRING(<<"name">>)},
+                    {<<"name">>, <<>>, ?ERR_BAD_VALUE_EMPTY(<<"name">>)},
+                    {<<"description">>, 90, ?ERR_BAD_VALUE_STRING(<<"description">>)},
                     {bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}
                 ]
             }

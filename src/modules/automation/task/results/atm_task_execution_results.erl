@@ -82,8 +82,8 @@ consume_results(AtmWorkflowExecutionCtx, Type, ResultSpecs, ResultValues) ->
             {ok, ResultValue} ->
                 consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue);
             error ->
-                Type == item_related andalso throw(?ERROR_ATM_TASK_RESULT_MISSING(
-                    ResultName, maps:keys(ResultValues)
+                Type == item_related andalso throw(?ERR_ATM_TASK_RESULT_MISSING(
+                    ?err_ctx(), ResultName, maps:keys(ResultValues)
                 ))
         end
     end, ResultSpecs).
@@ -134,5 +134,5 @@ consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue) ->
         )
     catch Type:Reason:Stacktrace ->
         Error = ?examine_exception(Type, Reason, Stacktrace),
-        throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Error))
+        throw(?ERR_ATM_TASK_RESULT_MAPPING_FAILED(?err_ctx(), ResultName, Error))
     end.

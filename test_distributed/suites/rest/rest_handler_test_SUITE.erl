@@ -102,7 +102,7 @@ internal_error_when_handler_crashes_test(_Config) ->
 
 
 custom_error_when_handler_throws_error_test(_Config) ->
-    Error = ?ERROR_BAD_VALUE_JSON(<<"dummy">>),
+    Error = ?ERR_BAD_VALUE_JSON(<<"dummy">>),
 
     Node = oct_background:get_random_provider_node(krakow),
     test_utils:mock_expect(Node, space_oz_middleware_handler, get, fun(_, _) -> throw(Error) end),

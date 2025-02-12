@@ -199,7 +199,7 @@ delete_nested_archive_error(_Config) ->
         opt_archives:list(Node, SessionId, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     
     archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
-    ?assertEqual(?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(ParentArchiveId), opt_archives:delete(Node, SessionId, ArchiveId)),
+    ?assertEqual(?ERR_NESTED_ARCHIVE_DELETION_FORBIDDEN(ParentArchiveId), opt_archives:delete(Node, SessionId, ArchiveId)),
     ?assertEqual(ok, opt_archives:delete(Node, SessionId, ParentArchiveId)),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_info(Node, SessionId, ArchiveId)),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_info(Node, SessionId, ParentArchiveId)).
@@ -218,7 +218,7 @@ delete_not_finished_archive_error(_Config) ->
     ),
     
     % archive staying in pending state is mocked in init_per_test
-    ?assertEqual(?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?ARCHIVE_PENDING, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
+    ?assertEqual(?ERR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?ARCHIVE_PENDING, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
         ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]), opt_archives:delete(Node, SessionId, ArchiveId)),
     finalize_archive_creation(?FUNCTION_NAME),
     archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, 0, 0, ?ATTEMPTS),
@@ -288,7 +288,7 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
     end,
     
     % error mocked in mock_job_function_error/2
-    ErrorReasonJson = errors:to_json(?ERROR_POSIX(?ENOENT)),
+    ErrorReasonJson = errors:to_json(?ERR_POSIX(?ENOENT)),
     
     ExpectedLogsTemplates = case {ExpectedState, FailedFileType} of
         {?ARCHIVE_PRESERVED, _} -> [
@@ -392,8 +392,8 @@ mock_job_function_error(Module, FunctionName) ->
     test_utils:mock_new(Nodes, Module),
     {FunctionName, Arity} = lists:keyfind(FunctionName, 1, Module:module_info(exports)),
     MockFun = case Arity of
-        2 -> fun(_, _) -> error(?ERROR_POSIX(?ENOENT)) end;
-        3 -> fun(_, _, _) -> error(?ERROR_POSIX(?ENOENT)) end
+        2 -> fun(_, _) -> error(?ERR_POSIX(?ENOENT)) end;
+        3 -> fun(_, _, _) -> error(?ERR_POSIX(?ENOENT)) end
     end,
     test_utils:mock_expect(Nodes, Module, FunctionName, MockFun).
 

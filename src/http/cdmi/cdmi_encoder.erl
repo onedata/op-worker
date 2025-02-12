@@ -55,7 +55,7 @@ decode(Data, <<"base64">>) ->
     try
         base64:decode(Data)
     catch
-        _:_ -> throw(?ERROR_BAD_DATA(<<"base64">>))
+        _:_ -> throw(?ERR_BAD_DATA(?err_ctx(), <<"base64">>, undefined))
     end;
 decode(Data, _) ->
     Data.

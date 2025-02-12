@@ -599,7 +599,7 @@ replication_job_should_fail(Config) ->
             <<"totalBlocksSize">> := TestDataSize
         }
     ]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
+    ?assertEqual(?ERR_POSIX(?EROFS), opt_transfers:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
 
 
 eviction_job_should_succeed(Config) ->
@@ -656,7 +656,7 @@ migration_job_should_fail(Config) ->
             <<"totalBlocksSize">> := TestDataSize
         }
     ]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
+    ?assertEqual(?ERR_POSIX(?EROFS), opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
