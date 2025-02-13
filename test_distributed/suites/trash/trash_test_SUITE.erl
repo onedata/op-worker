@@ -658,7 +658,7 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-manual-import",
             posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1

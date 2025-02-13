@@ -186,7 +186,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op",
         envs = [
             {op_worker, op_worker, [{session_validity_check_interval_seconds, 1800}]},

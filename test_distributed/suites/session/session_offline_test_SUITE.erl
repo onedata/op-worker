@@ -371,7 +371,7 @@ get_offline_token_renewal_backoff_Intervals(Interval, Intervals) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [
             {oz_worker, oz_worker, [{offline_access_token_ttl, ?OFFLINE_ACCESS_TOKEN_TTL}]},

@@ -517,7 +517,7 @@ spatial_function_returning_string_key_should_return_error(_Config) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op"
     }).
 

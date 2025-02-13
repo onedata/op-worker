@@ -158,13 +158,22 @@ supervisor_children_spec() ->
 is_storage_accessible(undefined) ->
     true;
 is_storage_accessible(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
     case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
         [] ->
             true;
         Storages ->
-            {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-            not lists:member(StorageId, Storages)
+            case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
+                true -> true;
+                false ->
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    case space_logic:get_local_supporting_storage(SpaceId) of
+                        {ok, StorageId} ->
+                            not lists:member(StorageId, Storages);
+                        {error, space_not_supported} ->
+                            %% @TODO VFS-12036 no longer needed when there is no proxy anymore
+                            true % access via proxy
+                    end
+            end
     end.
 
 %%%===================================================================

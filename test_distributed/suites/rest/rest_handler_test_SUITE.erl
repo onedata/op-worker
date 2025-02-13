@@ -121,7 +121,7 @@ custom_error_when_handler_throws_error_test(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [?MODULE],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

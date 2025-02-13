@@ -25,6 +25,7 @@
 
 %% API
 -export([create_storage/2, set_up_space/1]).
+-export([mock_existence_of_unhealthy_storage/1]).
 
 
 %%%===================================================================
@@ -82,6 +83,14 @@ set_up_space(SpaceSpec = #space_spec{
     add_users_to_space(Users, SpaceId),
     force_fetch_entities(SpaceId, SpaceSpec),
     SpaceId.
+
+
+-spec mock_existence_of_unhealthy_storage([node()]) -> ok.
+mock_existence_of_unhealthy_storage(Nodes) ->
+    ok = test_utils:mock_new(Nodes, storage_monitoring),
+    ok = test_utils:mock_expect(Nodes, storage_monitoring, perform_regular_checks, fun(PreviousUnhealthyStorageIds) ->
+        [<<"dummy_unhealthy_storage">> | meck:passthrough([PreviousUnhealthyStorageIds -- [<<"dummy_unhealthy_storage">>]])]
+    end).
 
 
 %%%===================================================================

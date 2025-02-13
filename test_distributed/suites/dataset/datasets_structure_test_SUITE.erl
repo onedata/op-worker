@@ -938,7 +938,7 @@ list_children_with_prefix_names_using_start_index(_Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
         #onenv_test_config{onenv_scenario = "2op", posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1}).
 
 end_per_suite(Config) ->

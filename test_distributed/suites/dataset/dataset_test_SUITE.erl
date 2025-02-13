@@ -1145,7 +1145,7 @@ remove_hardlink_with_protection_flags(_Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op"}).
+    opt:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op"}).
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
