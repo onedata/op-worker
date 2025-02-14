@@ -201,37 +201,37 @@ map_acl_group_to_onedata_group_should_fail_on_storage_with_auto_feed_luma_base(C
 map_uid_to_onedata_user_should_fail_on_non_imported_posix_compatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertMatch(?ERROR_REQUIRES_IMPORTED_STORAGE(_),
+    ?assertMatch(?ERR_REQUIRES_IMPORTED_STORAGE(_),
         luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
 
 map_acl_user_to_onedata_user_should_fail_on_non_imported_posix_compatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertMatch(?ERROR_REQUIRES_IMPORTED_STORAGE(_),
+    ?assertMatch(?ERR_REQUIRES_IMPORTED_STORAGE(_),
         luma_test_utils:map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
 map_acl_group_to_onedata_group_should_fail_on_non_imported_posix_compatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertMatch(?ERROR_REQUIRES_IMPORTED_STORAGE(_),
+    ?assertMatch(?ERR_REQUIRES_IMPORTED_STORAGE(_),
         luma_test_utils:map_acl_group_to_onedata_group(Worker, ?ACL_GROUP0, Storage)).
 
 map_uid_to_onedata_user_should_fail_on_posix_incompatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertMatch(?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
+    ?assertMatch(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
         luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
 
 map_acl_user_to_onedata_user_should_fail_on_posix_incompatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertMatch(?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
+    ?assertMatch(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
         luma_test_utils:map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
 map_acl_group_to_onedata_group_should_fail_on_posix_incompatible_storages_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
-    ?assertMatch(?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
+    ?assertMatch(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(_, _),
         luma_test_utils:map_acl_group_to_onedata_group(Worker, ?ACL_GROUP0, Storage)).
 
 map_uid_to_onedata_user_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->

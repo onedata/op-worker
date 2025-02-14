@@ -99,30 +99,30 @@ sanitize(RawConfig) ->
                     {true, _} ->
                         SanitizedData;
                     false ->
-                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"incremental.basedOn">>))
+                        throw(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), <<"incremental.basedOn">>))
                 end;
             #{<<"enabled">> := false} ->
                 SanitizedData;
             #{<<"enabled">> := _NotBoolean} ->
-                throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enabled">>));
+                throw(?ERR_BAD_VALUE_BOOLEAN(?err_ctx(), <<"incremental.enabled">>));
             _ ->
-                throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enabled">>))
+                throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"incremental.enabled">>))
         end
     catch
         % config is a nested object of the archive object,
         % therefore catch errors and add "config." to name of the key associated with the error
-        throw:?ERROR_MISSING_REQUIRED_VALUE(Key) ->
-            throw(?ERROR_MISSING_REQUIRED_VALUE(str_utils:format_bin("config.~ts", [Key])));
-        throw:?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedVals) ->
-            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(str_utils:format_bin("config.~ts", [Key]), AllowedVals));
-        throw:?ERROR_BAD_VALUE_BOOLEAN(Key) ->
-            throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:format_bin("config.~ts", [Key])));
-        throw:?ERROR_BAD_VALUE_JSON(Key) ->
-            throw(?ERROR_BAD_VALUE_JSON(str_utils:format_bin("config.~ts", [Key])));
-        throw:?ERROR_BAD_VALUE_ATOM(Key) ->
-            throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~ts", [Key])));
-        throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(str_utils:format_bin("config.~ts", [Key])))
+        throw:?ERR_MISSING_REQUIRED_VALUE(ErrorCtx, Key) ->
+            throw(?ERR_MISSING_REQUIRED_VALUE(ErrorCtx, str_utils:format_bin("config.~ts", [Key])));
+        throw:?ERR_BAD_VALUE_NOT_ALLOWED(ErrorCtx, Key, AllowedVals) ->
+            throw(?ERR_BAD_VALUE_NOT_ALLOWED(ErrorCtx, str_utils:format_bin("config.~ts", [Key]), AllowedVals));
+        throw:?ERR_BAD_VALUE_BOOLEAN(ErrorCtx, Key) ->
+            throw(?ERR_BAD_VALUE_BOOLEAN(ErrorCtx, str_utils:format_bin("config.~ts", [Key])));
+        throw:?ERR_BAD_VALUE_JSON(ErrorCtx, Key) ->
+            throw(?ERR_BAD_VALUE_JSON(ErrorCtx, str_utils:format_bin("config.~ts", [Key])));
+        throw:?ERR_BAD_VALUE_STRING(ErrorCtx, Key) ->
+            throw(?ERR_BAD_VALUE_STRING(ErrorCtx, str_utils:format_bin("config.~ts", [Key])));
+        throw:?ERR_BAD_VALUE_IDENTIFIER(ErrorCtx, Key) ->
+            throw(?ERR_BAD_VALUE_IDENTIFIER(ErrorCtx, str_utils:format_bin("config.~ts", [Key])))
     end.
 
 

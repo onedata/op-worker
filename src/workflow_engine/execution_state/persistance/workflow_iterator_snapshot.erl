@@ -70,11 +70,11 @@ save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
             ok
     end.
 
--spec get(workflow_engine:execution_id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+-spec get(workflow_engine:execution_id()) -> {ok, record()} | od_error_not_found:t().
 get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{value = Record}} -> {ok, Record};
-        ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound -> ErrorNotFound
     end.
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.

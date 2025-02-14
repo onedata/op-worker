@@ -45,7 +45,7 @@
 -define(GET_METADATA(__CALL, __DEFAULT_VALUE),
     try
         __CALL
-    catch throw:?ERROR_POSIX(?ENOATTR) ->
+    catch throw:?ERR_POSIX(?ENOATTR) ->
         __DEFAULT_VALUE
     end
 ).
@@ -75,7 +75,7 @@ get_user_metadata(SessionId, FileRef) ->
                 {error, ?ENOATTR} ->
                     Acc;
                 {error, Errno} ->
-                    throw(?ERROR_POSIX(Errno))
+                    throw(?ERR_POSIX(?err_ctx(), Errno))
             end
     end, #{}, Names)).
 
@@ -118,7 +118,7 @@ update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
                 acl:from_json(Value, cdmi)
             catch Class:Reason:Stacktrace ->
                 ?debug_exception("Acl conversion error", Class, Reason, Stacktrace),
-                throw(?ERROR_BAD_DATA(<<"acl">>))
+                throw(?ERR_BAD_DATA(?err_ctx(), <<"acl">>, undefined))
             end,
             ?lfm_check(lfm:set_acl(SessionId, FileRef, ACL));
         ({Name, Value}) ->
@@ -278,7 +278,7 @@ filter_user_metadata_map(UserMetadata) when is_map(UserMetadata) ->
             not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
     end, UserMetadata);
 filter_user_metadata_map(_) ->
-    throw(?ERROR_BAD_DATA(<<"metadata">>)).
+    throw(?ERR_BAD_DATA(?err_ctx(), <<"metadata">>, undefined)).
 
 
 %%--------------------------------------------------------------------
@@ -296,7 +296,7 @@ filter_user_metadata_keylist(UserMetadata) when is_list(UserMetadata) ->
             not str_utils:binary_starts_with(Name, ?USER_METADATA_FORBIDDEN_PREFIX)
     end, UserMetadata);
 filter_user_metadata_keylist(_) ->
-    throw(?ERROR_BAD_DATA(<<"metadata">>)).
+    throw(?ERR_BAD_DATA(?err_ctx(), <<"metadata">>, undefined)).
 
 
 %%--------------------------------------------------------------------
@@ -352,5 +352,5 @@ fill_cdmi_metadata(?ACL_XATTR_NAME, Metadata, SessionId, FileRef, _Attrs) ->
         {error, ?ENOATTR} ->
             Metadata;
         {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
+            throw(?ERR_POSIX(?err_ctx(), Errno))
     end.

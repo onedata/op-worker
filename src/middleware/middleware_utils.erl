@@ -44,11 +44,11 @@
 
 
 -spec is_file_access_error(errors:error()) -> boolean().
-is_file_access_error(?ERROR_POSIX(?EACCES)) -> true;
-is_file_access_error(?ERROR_POSIX(?EPERM)) -> true;
-is_file_access_error(?ERROR_POSIX(?ENOENT)) -> true;
-is_file_access_error(?ERROR_UNAUTHORIZED) -> true;
-is_file_access_error(?ERROR_FORBIDDEN) -> true;
+is_file_access_error(?ERR_POSIX(?EACCES)) -> true;
+is_file_access_error(?ERR_POSIX(?EPERM)) -> true;
+is_file_access_error(?ERR_POSIX(?ENOENT)) -> true;
+is_file_access_error(?ERR_UNAUTHORIZED(_)) -> true;
+is_file_access_error(?ERR_FORBIDDEN) -> true;
 is_file_access_error(?ERROR_NOT_FOUND) -> true;
 is_file_access_error({error, ?MISSING_FILE_META(_Uuid)}) -> true; % error thrown by paths_cache
 is_file_access_error(_) -> false.
@@ -78,7 +78,7 @@ resolve_file_path(SessionId, Path) ->
         {ok, [<<"/">>, SpaceName | Rest]} ->
             case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
                 false ->
-                    throw(?ERROR_POSIX(?ENOENT));
+                    throw(?ERR_POSIX(?err_ctx(), ?ENOENT));
                 {true, SpaceId} ->
                     assert_space_supported_locally(SpaceId),
                     {RootGuid, RelPathTokens} = case Rest of
@@ -90,7 +90,7 @@ resolve_file_path(SessionId, Path) ->
                     resolve_guid_by_relative_path(SessionId, RootGuid, filepath_utils:join(RelPathTokens))
             end;
         _ ->
-            throw(?ERROR_POSIX(?ENOENT))
+            throw(?ERR_POSIX(?err_ctx(), ?ENOENT))
     end.
 
 
@@ -101,7 +101,7 @@ resolve_file_path(SessionId, Path) ->
 resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) ->
     case lfm:resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) of
         {ok, Guid} -> {ok, Guid};
-        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+        {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
     end.
 
 
@@ -152,7 +152,7 @@ assert_space_supported_by(SpaceId, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId))
+            throw(?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, ProviderId))
     end.
 
 
@@ -162,7 +162,7 @@ assert_space_supported_with_storage(SpaceId, StorageId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(oneprovider:get_id(), StorageId, SpaceId))
+            throw(?ERR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(?err_ctx(), oneprovider:get_id(), StorageId, SpaceId))
     end.
 
 
@@ -174,7 +174,7 @@ decode_object_id(ObjectId, Key) ->
         {_, _, _} = file_id:unpack_share_guid(Guid),
         Guid
     catch _:_ ->
-        throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
+        throw(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), Key))
     end.
 
 
@@ -239,11 +239,11 @@ assert_file_managed_locally(FileGuid) ->
 %%            {ok, UserId} = session:get_user_id(SessionId),
 %%            case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
 %%                false ->
-%%                    throw(?ERROR_POSIX(?ENOENT));
+%%                    throw(?ERR_POSIX(?err_ctx(), ?ENOENT));
 %%                {true, SpaceId} ->
 %%                    assert_space_supported_locally(SpaceId),
 %%                    filename:join([<<"/">>, SpaceId | Rest])
 %%            end;
 %%        _ ->
-%%            throw(?ERROR_POSIX(?ENOENT))
+%%            throw(?ERR_POSIX(?err_ctx(), ?ENOENT))
 %%    end.

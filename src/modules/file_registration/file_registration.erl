@@ -145,7 +145,7 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 % this can happen if sync mechanisms decide not to synchronize file
                 ?error("Skipped registration of file ~ts located on storage ~ts in space ~ts under path ~ts.",
                     [StorageFileId2, StorageId, SpaceId, DestinationPath]),
-                ?ERROR_POSIX(?EINPROGRESS)
+                ?ERR_POSIX(?err_ctx(), ?EINPROGRESS)
         end
     catch
         throw:?ENOTSUP:Stacktrace ->
@@ -155,12 +155,12 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 [StorageFileId, StorageId, SpaceId, DestinationPath],
                 Stacktrace
             ),
-            ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
+            ?ERR_STAT_OPERATION_NOT_SUPPORTED(?err_ctx(), StorageId);
         throw:{error, _} = Error ->
             Error;
         throw:PosixError ->
             % posix errors are thrown as single atoms
-            ?ERROR_POSIX(PosixError);
+            ?ERR_POSIX(?err_ctx(), PosixError);
         Error:Reason:Stacktrace2 ->
             ?error_stacktrace(
                 "Failed registration of file ~ts located on storage ~ts in space ~ts under path ~ts.~n"
@@ -197,7 +197,7 @@ normalize_xrootd_storage_file_id(Helper, StorageFileId) ->
                     % StorageFileId is prefixed with HelperUrl, we can strip it
                     binary:part(StorageFileId, {HelperUrlSize, byte_size(StorageFileId) - HelperUrlSize});
                 _ ->
-                    throw(?ERROR_BAD_VALUE_IDENTIFIER(StorageFileId))
+                    throw(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), StorageFileId))
             end;
         false ->
             StorageFileId
@@ -225,7 +225,7 @@ ensure_all_parents_exist_and_are_dirs(PartialCtx, UserCtx, ChildrenPartialCtxs) 
                 % first directory on the path that exists in db
                 create_missing_directories(FileCtx2, ChildrenPartialCtxs, user_ctx:get_user_id(UserCtx));
             {false, _} ->
-                throw(?ERROR_POSIX(?ENOTDIR))
+                throw(?ERR_POSIX(?err_ctx(), ?ENOTDIR))
         end
     catch
         error:{badmatch, {error, not_found}} ->
@@ -249,7 +249,7 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
                 [Error, Reason],
                 Stacktrace
             ),
-            throw(?ERROR_POSIX(?ENOENT))
+            throw(?ERR_POSIX(?err_ctx(), ?ENOENT))
     end.
 
 
@@ -368,13 +368,13 @@ fill_in_missing_stat_fields(StorageFileCtx, UserDefinedStat, Spec) ->
 get_stat_from_storage_or_throw_missing_size(StorageFileCtx, Spec) ->
     case maps:get(<<"autoDetectAttributes">>, Spec, true) of
         false ->
-            throw(?ERROR_MISSING_REQUIRED_VALUE(<<"size">>));
+            throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"size">>));
         true ->
             try
                 storage_file_ctx:stat(StorageFileCtx)
             catch
                 throw:?ENOTSUP ->
-                    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"size">>));
+                    throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"size">>));
                 Error:Reason ->
                     erlang:Error(Reason)
             end

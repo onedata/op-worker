@@ -42,8 +42,8 @@ validate_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     try
         check_allowed_values_constraint(Value, AtmDataSpec)
     catch throw:{unverified_constraints, UnverifiedConstraints} ->
-        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-            Value, atm_string_type, UnverifiedConstraints
+        throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            ?err_ctx(), Value, atm_string_type, UnverifiedConstraints
         ))
     end.
 

@@ -485,7 +485,7 @@ await_zone_connection_and_run(Fun) ->
     Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(false, 0, _) ->
     ?critical("Could not establish Onezone connection. Aborting upgrade procedure."),
-    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
+    throw(?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()));
 await_zone_connection_and_run(false, Retries, Fun) ->
     ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),

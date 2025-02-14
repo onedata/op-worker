@@ -193,7 +193,7 @@ force_continue_failed_while_preparing_atm_lane_run_execution() ->
                     #atm_lane_run_execution_test_spec{
                         selector = {1, 1},
                         create_run = #atm_step_mock_spec{
-                            strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                            strategy = {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                         },
                         prepare_lane = #atm_step_mock_spec{
                             after_step_exp_state_diff = no_diff

@@ -88,7 +88,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_ev
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{gri = #gri{id = AtmTaskExecutionId, scope = private}}) ->
     case atm_task_execution:get(AtmTaskExecutionId) of

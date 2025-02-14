@@ -76,7 +76,7 @@ put(TaskId, CachedTaskDataId, #registry{waiting = Waiting, task_execution_order 
 
 
 -spec take_for_processing(registry()) ->
-    {ok, workflow_engine:task_id(), workflow_cached_task_data:id(), registry()} | ?ERROR_NOT_FOUND.
+    {ok, workflow_engine:task_id(), workflow_cached_task_data:id(), registry()} | od_error_not_found:t().
 take_for_processing(#registry{task_execution_order = []}) ->
     ?ERROR_NOT_FOUND;
 take_for_processing(#registry{waiting = Waiting, task_execution_order = [NextTaskId | Order]} = Registry) ->

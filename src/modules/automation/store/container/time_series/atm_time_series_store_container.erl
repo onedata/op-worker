@@ -102,7 +102,8 @@ create(#atm_store_container_creation_args{
     };
 
 create(_CreationArgs) ->
-    throw(?ERROR_BAD_DATA(
+    throw(?ERR_BAD_DATA(
+        ?err_ctx(),
         <<"initialContent">>,
         <<"Time series store does not accept initial content">>
     )).
@@ -155,10 +156,10 @@ browse_content(Record, #atm_store_content_browse_req{
     ) of
         {ok, SliceResult} ->
             #atm_time_series_store_content_browse_result{result = SliceResult};
-        ?ERROR_NOT_FOUND ->
-            throw(?ERROR_NOT_FOUND);
-        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
-            throw(?ERROR_TSC_MISSING_LAYOUT(MissingLayout))
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            throw(ErrorNotFound);
+        ?ERR_TSC_MISSING_LAYOUT(_MissingLayout) = ErrorTscMissingLayout ->
+            throw(ErrorTscMissingLayout)
     end.
 
 
@@ -292,7 +293,7 @@ consume_measurements(Measurements, DispatchRules, #atm_time_series_store_contain
     case datastore_time_series_collection:consume_measurements(?CTX, BackendId, ConsumeSpec) of
         ok ->
             ok;
-        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+        ?ERR_TSC_MISSING_LAYOUT(MissingLayout) ->
             MissingConfig = maps:with(maps:keys(MissingLayout), InvolvedCollectionConfig),
             ok = datastore_time_series_collection:incorporate_config(?CTX, BackendId, MissingConfig),
             ok = datastore_time_series_collection:consume_measurements(?CTX, BackendId, ConsumeSpec)

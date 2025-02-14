@@ -44,7 +44,7 @@ response(#op_req{operation = Operation, gri = GRI} = OpReq, Result) ->
                           "Error was: ~w:~tp", [
             Operation, GRI, Result, Type, Message
         ], Stacktrace),
-        error_response(?ERROR_INTERNAL_SERVER_ERROR)
+        error_response(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
     end.
 
 

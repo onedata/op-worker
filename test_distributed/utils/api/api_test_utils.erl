@@ -606,13 +606,13 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
         undefined ->
             % For authenticated users it should fail on authorization step
             % (checks if user belongs to space)
-            ?ERROR_FORBIDDEN;
+            ?ERR_FORBIDDEN;
         _ ->
             % For share request it should fail on validation step
             % (checks if space is supported by provider)
             {error_fun, fun(#api_test_ctx{node = Node}) ->
                 ProvId = opw_test_rpc:get_provider_id(Node),
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(?NOT_SUPPORTED_SPACE_ID, ProvId)
+                ?ERR_SPACE_NOT_SUPPORTED_BY(?NOT_SUPPORTED_SPACE_ID, ProvId)
             end}
     end,
 
@@ -624,8 +624,8 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
         {bad_id, NonExistentSpaceGuid, {gs, NonExistentSpaceExpError}},
 
         % Errors thrown by internal logic (all middleware checks were passed)
-        {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
+        {bad_id, NonExistentFileObjectId, {rest, ?ERR_POSIX(?ENOENT)}},
+        {bad_id, NonExistentFileGuid, {gs, ?ERR_POSIX(?ENOENT)}}
     ],
 
     add_bad_values_to_data_spec(BadFileIdErrors, DataSpec).
@@ -672,8 +672,8 @@ add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
         NonExistentSpaceGuid, ShareId, [
             % Errors in normal mode - thrown by middleware auth checks
             % (checks whether authenticated user belongs to space)
-            {bad_id, NonExistentSpaceObjectId, {rest, ?ERROR_FORBIDDEN}},
-            {bad_id, NonExistentSpaceGuid, {gs, ?ERROR_FORBIDDEN}}
+            {bad_id, NonExistentSpaceObjectId, {rest, ?ERR_FORBIDDEN}},
+            {bad_id, NonExistentSpaceGuid, {gs, ?ERR_FORBIDDEN}}
         ]
     ),
 
@@ -685,8 +685,8 @@ add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
         NonExistentFileGuid, ShareId, [
             % Errors in normal mode - thrown by internal logic
             % (all middleware checks were passed)
-            {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
-            {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
+            {bad_id, NonExistentFileObjectId, {rest, ?ERR_POSIX(?ENOENT)}},
+            {bad_id, NonExistentFileGuid, {gs, ?ERR_POSIX(?ENOENT)}}
         ]
     ),
 
@@ -748,18 +748,18 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
     BadFileIdValues = [
-        {IdKey, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
-        {IdKey, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, <<"InvalidObjectId">>, ?ERR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, DummyObjectId, ?ERR_BAD_VALUE_IDENTIFIER(IdKey)},
 
-        % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
-        {IdKey, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
-        {IdKey, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
+        % user has no privileges in non existent space and so he should receive ?ERR_FORBIDDEN
+        {IdKey, NonExistentSpaceObjectId, ?ERR_FORBIDDEN},
+        {IdKey, NonExistentSpaceShareObjectId, ?ERR_FORBIDDEN},
 
-        {IdKey, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
+        {IdKey, NonExistentFileObjectId, ?ERR_POSIX(?ENOENT)},
 
         % operation is not available in share mode - it should result in ?EPERM
-        {IdKey, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
-        {IdKey, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
+        {IdKey, ShareFileObjectId, ?ERR_POSIX(?EPERM)},
+        {IdKey, NonExistentFileShareObjectId, ?ERR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
@@ -769,8 +769,8 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     onenv_api_test_runner:data_spec().
 replace_enoent_with_error_not_found_in_error_expectations(DataSpec = #data_spec{bad_values = BadValues}) ->
     DataSpec#data_spec{bad_values = lists:map(fun
-        ({Key, Value, ?ERROR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
-        ({Key, Value, {Interface, ?ERROR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};
+        ({Key, Value, ?ERR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
+        ({Key, Value, {Interface, ?ERR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};
         (Spec) -> Spec
     end, BadValues)}.
 
@@ -803,12 +803,12 @@ get_invalid_file_id_errors(IdKey) ->
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
-        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>, provider_id_placeholder)}},
+        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERR_POSIX(?ENOENT)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>, provider_id_placeholder)}},
 
         % Errors thrown by middleware and internal logic
-        {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},
-        {bad_id, InvalidGuid, {gs, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}}
+        {bad_id, InvalidObjectId, {rest, ?ERR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},
+        {bad_id, InvalidGuid, {gs, ?ERR_BAD_VALUE_IDENTIFIER(IdKey)}}
     ].
 
 
@@ -827,7 +827,7 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
         %   to ?GUEST. Then it fails middleware auth checks (whether user belongs
         %   to space or has some space privileges)
         {bad_id, ShareFileObjectId, {rest, ?ERROR_NOT_SUPPORTED}},
-        {bad_id, ShareFileGuid, {gs, ?ERROR_UNAUTHORIZED}}
+        {bad_id, ShareFileGuid, {gs, ?ERR_UNAUTHORIZED(undefined)}}
 
         | Errors
     ].

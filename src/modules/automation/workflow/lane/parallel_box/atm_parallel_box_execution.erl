@@ -71,7 +71,8 @@ create_all(AtmLaneExecutionRunCreationArgs = #atm_lane_execution_run_creation_ar
         catch Type:Reason:Stacktrace ->
             catch delete_all(AtmParallelBoxExecutions),
 
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
+            throw(?ERR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
+                ?err_ctx(),
                 AtmParallelBoxSchema#atm_parallel_box_schema.id,
                 ?examine_exception(Type, Reason, Stacktrace)
             ))
@@ -215,7 +216,7 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
                 }
             }};
         false ->
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrentStatus, NewStatus)
+            ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), CurrentStatus, NewStatus)
     end.
 
 
@@ -300,11 +301,11 @@ initiate_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, InitiateTaskFun
         try
             initiate(AtmWorkflowExecutionCtx0, AtmParallelBoxExecution, InitiateTaskFun)
         catch
-            throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
-                throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+            throw:?ERR_ATM_WORKFLOW_EXECUTION_STOPPING = ErrorAtmWorkflowExecutionStopping ->
+                throw(ErrorAtmWorkflowExecutionStopping);
             Type:Reason:Stacktrace ->
                 Error = ?examine_exception(Type, Reason, Stacktrace),
-                throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
+                throw(?ERR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(?err_ctx(), AtmParallelBoxSchemaId, Error))
         end
     end, AtmParallelBoxExecutions),
 
@@ -340,11 +341,11 @@ initiate(
             ),
             {AtmTaskExecutionId, InitiateTaskFun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)}
         catch
-            throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
-                throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+            throw:?ERR_ATM_WORKFLOW_EXECUTION_STOPPING = ErrorAtmWorkflowExecutionStopping ->
+                throw(ErrorAtmWorkflowExecutionStopping);
             Type:Reason:Stacktrace ->
                 Error = ?examine_exception(Type, Reason, Stacktrace),
-                throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
+                throw(?ERR_ATM_TASK_EXECUTION_INITIATION_FAILED(?err_ctx(), AtmTaskSchemaId, Error))
         end
     end, maps:to_list(AtmTaskExecutionRegistry)),
 

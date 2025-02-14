@@ -72,8 +72,8 @@ get_dir_children_test(Config) ->
 
     ValidateGdPublicApiCallResultFun = fun(#api_test_ctx{client = Client}, Result) ->
         case Client of
-            ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-            _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+            ?NOBODY -> ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result);
+            _ -> ?assertEqual(?ERR_FORBIDDEN, Result)
         end
     end,
 
@@ -156,7 +156,7 @@ get_shared_dir_children_test(Config) ->
                     type = gs_with_shared_guid_and_aspect_private,
                     prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(ShareDirGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
-                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                        ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result)
                     end
                 }
             ],
@@ -237,8 +237,8 @@ get_file_children_test(Config) ->
 
     ValidateGsPublicApiCallResultFun = fun(#api_test_ctx{client = Client}, Result) ->
         case Client of
-            ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-            _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+            ?NOBODY -> ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result);
+            _ -> ?assertEqual(?ERR_FORBIDDEN, Result)
         end
     end,
 
@@ -389,7 +389,7 @@ get_shared_file_children_test(Config) ->
                     type = gs_with_shared_guid_and_aspect_private,
                     prepare_args_fun = build_get_children_attrs_prepare_gs_args_fun(ShareFileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
-                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                        ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result)
                     end
                 }
             ],
@@ -487,12 +487,12 @@ get_dir_children_on_provider_not_supporting_space_test(_Config) ->
 
     ValidateRestListedFilesOnProvidersNotSupportingSpaceFun = fun(_, {ok, RespCode, _, RespBody}) ->
         ?assertEqual(
-            {?HTTP_400_BAD_REQUEST, ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id))},
+            {?HTTP_400_BAD_REQUEST, ?REST_ERROR(?ERR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id))},
             {RespCode, RespBody}
         )
     end,
     ValidateGsListedFilesOnProvidersNotSupportingSpaceFun = fun(_, Response) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id), Response)
+        ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id), Response)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -544,11 +544,11 @@ get_children_data_spec(gs, Scope, _IsSpace) ->
             <<"attributes">> => [CorrectValuesAttributes]
         },
         bad_values = [
-            {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
-            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
-            {<<"limit">>, 10001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
-            {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+            {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+            {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 10001, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"offset">>, <<"abc">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)}
         ]
     };
 get_children_data_spec(rest, Scope, IsSpace) ->
@@ -576,12 +576,12 @@ get_children_data_spec(rest, Scope, IsSpace) ->
             ]
         },
         bad_values = [
-            {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
-            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
-            {<<"limit">>, 10001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
-            {<<"attributes">>, <<"abc">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson)},
-            {<<"attributes">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson)}
+            {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+            {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"limit">>, 10001, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 10000)},
+            {<<"attributes">>, <<"abc">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson)},
+            {<<"attributes">>, [<<"name">>, 8], ?ERR_BAD_VALUE_NOT_ALLOWED(<<"attributes">>, AllowedAttrsJson)}
         ]
     }.
 
@@ -734,7 +734,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

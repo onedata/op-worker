@@ -88,7 +88,7 @@ get_test(Config) ->
     % Make sure that other users cannot access cached data
 
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, share_logic, get, [User3Sess, ?SHARE_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
@@ -311,7 +311,7 @@ create_update_delete_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>),
+        ?ERR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>),
         rpc:call(Node, share_logic, create, [
             User1Sess,
             ?MOCK_CREATED_SHARE_ID,
@@ -335,17 +335,17 @@ create_update_delete_test(Config) ->
     % two requests should be done - one for update and one for force fetch
     ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
-        ?ERROR_BAD_VALUE_BINARY(<<"name">>),
+        ?ERR_BAD_VALUE_STRING(<<"name">>),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"name">> => 1234}])
     ),
     ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
-        ?ERROR_BAD_VALUE_BINARY(<<"description">>),
+        ?ERR_BAD_VALUE_STRING(<<"description">>),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"description">> => 87.9}])
     ),
     ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
-        ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
+        ?ERR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{}])
     ),
     ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
@@ -384,7 +384,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of the
     % oneclient interface caveat
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, share_logic, delete, [TokenCredentials, ?SHARE_1])
     ),
     % Nevertheless, following requests should be made:

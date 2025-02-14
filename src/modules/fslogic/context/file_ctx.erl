@@ -602,7 +602,7 @@ get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     case space_logic:get_name(SessionId, SpaceId) of
         {ok, SpaceName} ->
             {SpaceName, FileCtx#file_ctx{space_name = SpaceName}};
-        ?ERROR_FORBIDDEN when SessionId == ?ROOT_SESS_ID ->
+        ?ERR_FORBIDDEN when SessionId == ?ROOT_SESS_ID ->
             % Fetching space name from oz as provider is forbidden if provider
             % doesn't support space. Such requests are made e.g. when executing
             % file_meta:ensure_space_docs_exist (all user space dirs, supported or not,

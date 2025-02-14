@@ -29,16 +29,16 @@
 assert_boolean(Value, _Key) when is_boolean(Value) ->
     Value;
 assert_boolean(_Value, Key) ->
-    throw(?ERROR_BAD_VALUE_BOOLEAN(atom_to_binary(Key, utf8))).
+    throw(?ERR_BAD_VALUE_BOOLEAN(?err_ctx(), atom_to_binary(Key, utf8))).
 
 
 -spec assert_non_negative_integer(non_neg_integer(), key()) -> non_neg_integer().
 assert_non_negative_integer(Value, _Key) when is_integer(Value) andalso Value >= 0 ->
     Value;
 assert_non_negative_integer(Value, Key) when is_integer(Value) ->
-    throw(?ERROR_BAD_VALUE_TOO_LOW(atom_to_binary(Key, utf8), 0));
+    throw(?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), atom_to_binary(Key, utf8), 0));
 assert_non_negative_integer(_Value, Key) ->
-    throw(?ERROR_BAD_VALUE_INTEGER(atom_to_binary(Key, utf8))).
+    throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), atom_to_binary(Key, utf8))).
 
 
 -spec assert_not_greater_than(integer(), integer(), key()) ->
@@ -46,7 +46,7 @@ assert_non_negative_integer(_Value, Key) ->
 assert_not_greater_than(Value1, Value2, _Key) when Value1 =< Value2 ->
     {Value1, Value2};
 assert_not_greater_than(_Value1, Value2, Key) ->
-    throw(?ERROR_BAD_VALUE_TOO_HIGH(atom_to_binary(Key, utf8), Value2)).
+    throw(?ERR_BAD_VALUE_TOO_HIGH(?err_ctx(), atom_to_binary(Key, utf8), Value2)).
 
 
 %%-------------------------------------------------------------------

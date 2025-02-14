@@ -62,7 +62,7 @@ get_test(Config) ->
 
     % Make sure that users cannot access cached private data
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, provider_logic, get, [User1Sess, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
@@ -70,7 +70,7 @@ get_test(Config) ->
     % Make sure that users cannot access non-cached private data
     logic_tests_common:invalidate_cache(Config, od_provider, ?PROVIDER_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, provider_logic, get, [User1Sess, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
@@ -113,7 +113,7 @@ get_protected_data_test(Config) ->
     % is not able to verify user's right to view provider so another request
     % must be made.
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, provider_logic, get_protected_data, [User3Sess, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
@@ -129,7 +129,7 @@ get_protected_data_test(Config) ->
     % User 3 should not be able to get non-cached protected provider data
     logic_tests_common:invalidate_cache(Config, od_provider, ?PROVIDER_1),
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, provider_logic, get_protected_data, [User3Sess, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
@@ -357,7 +357,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of the
     % API caveat
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, provider_logic, get_protected_data, [TokenCredentials, ?PROVIDER_1])
     ),
     % Nevertheless, following requests should be made:

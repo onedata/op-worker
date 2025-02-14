@@ -160,7 +160,7 @@ handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads}
             ?debug("Failed to start upload by user ~tp as it is already registered by user ~tp", [
                 UserId, OtherUserId
             ]),
-            reply(?ERROR_FORBIDDEN, State);
+            reply(?ERR_FORBIDDEN(?err_ctx()), State);
         error ->
             UploadCtx = #upload_ctx{
                 user_id = UserId,

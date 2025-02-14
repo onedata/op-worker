@@ -46,13 +46,13 @@ validate_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
         check_measurement_constraints(Value, AtmDataSpec)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                Value, ?DATA_TYPE, UnverifiedConstraints
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                ?err_ctx(), Value, ?DATA_TYPE, UnverifiedConstraints
             ));
         throw:Error ->
             throw(Error);
         _:_ ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, ?DATA_TYPE))
+            throw(?ERR_ATM_DATA_TYPE_UNVERIFIED(?err_ctx(), Value, ?DATA_TYPE))
     end.
 
 
