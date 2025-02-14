@@ -151,8 +151,7 @@ renamed_models() ->
 before_init() ->
     try
         op_worker_sup:start_link(),
-        ok = helpers_nif:init(),
-        onedata_logger:configure_logger()
+        ok = helpers_nif:init()
     catch
         _:Error:Stacktrace ->
             ?error_stacktrace("Error in node_manager_plugin:before_init: ~tp", [Error], Stacktrace),
