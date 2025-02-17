@@ -520,9 +520,14 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
 
         function filterHiddenValues(object) {
             var filtered = {}
-            for (var key of Object.keys(object))
+            Object.keys(object).forEach(key => {
                 if (!key.startsWith('_'))
                     filtered[key] = object[key];
+            });
+              // TODO add upgrade procedure
+//            for (var key of Object.keys(object))
+//                if (!key.startsWith('_'))
+//                    filtered[key] = object[key];
             return filtered;
         };
 
@@ -578,9 +583,14 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
 
             if(result) {
                 if ('list' in result) {
-                    for (var keyValuePair of result['list'])
+                    result['list'].forEach(keyValuePair => {
                         if(isValidKey(keyValuePair[0]))
                             emit(keyValuePair[0], keyValuePair[1]);
+                    });
+                      // TODO add upgrade procedure
+//                    for (var keyValuePair of result['list'])
+//                        if(isValidKey(keyValuePair[0]))
+//                            emit(keyValuePair[0], keyValuePair[1]);
                 }
                 else if(isValidKey(result[0])){
                     emit(result[0], result[1]);
