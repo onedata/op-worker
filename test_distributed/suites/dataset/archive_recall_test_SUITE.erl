@@ -714,7 +714,7 @@ recall_to_recalling_dir_test_base(Method) ->
             G
     end,
     
-    ?assertEqual(?ERROR_RECALL_TARGET_CONFLICT, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
+    ?assertEqual(?ERR_RECALL_TARGET_CONFLICT, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
     
     finish_recall(Pid),
     
@@ -729,7 +729,7 @@ recall_error_test_base(Spec, FunName) ->
     SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
     Errors = [
         {?ERROR_NOT_FOUND, errors:to_json(?ERROR_NOT_FOUND)},
-        {{badmatch, {error, ?EPERM}}, errors:to_json(?ERROR_POSIX(?EPERM))}
+        {{badmatch, {error, ?EPERM}}, errors:to_json(?ERR_POSIX(?EPERM))}
     ],
     lists:foreach(fun({Error, ExpectedReason}) ->
         mock_traverse_error(FunName, Error),
@@ -910,7 +910,7 @@ check_mocked_slave_jobs_cancelled(SlaveJobsLeft, TimeoutSeconds) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [

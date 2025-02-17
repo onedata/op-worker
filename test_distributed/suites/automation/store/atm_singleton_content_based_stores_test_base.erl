@@ -64,7 +64,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     ?assertEqual(
-        ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
+        ?ERR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
         ?rpc(catch atm_store_api:create(
             AtmWorkflowExecutionAuth,
             ?DEBUG_AUDIT_LOG_SEVERITY_INT,
@@ -144,7 +144,7 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         % Assert it is not possible to perform operation on store when it is frozen
         ?rpc(atm_store_api:freeze(AtmStoreId)),
         ?assertEqual(
-            ?ERROR_ATM_STORE_FROZEN(AtmStoreSchema#atm_store_schema.id),
+            ?ERR_ATM_STORE_FROZEN(AtmStoreSchema#atm_store_schema.id),
             ?rpc(catch atm_store_api:update_content(
                 AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
             ))
@@ -179,7 +179,7 @@ browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, Se
             AtmWorkflowExecutionAuth, ?DEBUG_AUDIT_LOG_SEVERITY_INT, undefined, AtmStoreSchema
         ))),
 
-        ExpError = ?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchema#atm_store_schema.id),
+        ExpError = ?ERR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchema#atm_store_schema.id),
         ?assertThrow(ExpError, ?erpc(atm_store_api:browse_content(
             AtmWorkflowExecutionAuth, ContentBrowseOpts, AtmStoreId
         ))),

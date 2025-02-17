@@ -82,7 +82,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
     case user_logic:get(SessionId, UserId) of
@@ -105,7 +105,7 @@ fetch_entity(#op_req{auth = ?USER(_ClientId, SessionId), auth_hint = AuthHint, g
     end;
 
 fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    ?ERR_FORBIDDEN(?err_ctx()).
 
 
 %%--------------------------------------------------------------------

@@ -641,7 +641,7 @@ list_multipart_parts(SessId, UploadId, Limit, StartAfter) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks result of lfm call and if it's error throws ?ERROR_POSIX.
+%% Checks result of lfm call and if it's error throws ?ERR_POSIX.
 %% Otherwise returns it.
 %% @end
 %%--------------------------------------------------------------------
@@ -651,5 +651,5 @@ check_result(ok) -> ok;
 check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
-check_result(?ERROR_NOT_FOUND) -> throw(?ERROR_NOT_FOUND);
-check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
+check_result(?ERROR_NOT_FOUND = ErrorNotFound) -> throw(ErrorNotFound);
+check_result({error, Errno}) -> throw(?ERR_POSIX(?err_ctx(), Errno)).

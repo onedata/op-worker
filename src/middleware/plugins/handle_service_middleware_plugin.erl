@@ -80,7 +80,7 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId, scope = publi
     end;
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId}}) ->
     case handle_service_logic:get_public_data(Auth#auth.session_id, HandleServiceId) of

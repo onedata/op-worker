@@ -135,7 +135,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     id = DatasetId,

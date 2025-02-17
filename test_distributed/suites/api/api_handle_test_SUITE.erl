@@ -304,7 +304,7 @@ create_and_sync_shared_file_of_random_type() ->
 
 init_per_suite(Config) ->
     LoadModules = [opt_handles, ozt_handles, ozt_handle_services],
-    oct_background:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
         onenv_scenario = "1op-handle-proxy",
         posthook = fun(NewConfig) ->
             % make sure there are no remnants from the previous test runs

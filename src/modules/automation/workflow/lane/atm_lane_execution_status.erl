@@ -175,7 +175,7 @@ handle_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             {ok, Run#atm_lane_execution_run{status = ?PREPARING_STATUS}};
 
         (#atm_lane_execution_run{status = Status}) ->
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
+            ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), Status, ?PREPARING_STATUS)
     end,
     % preparing in advance
     Default = #atm_lane_execution_run{run_num = undefined, status = ?PREPARING_STATUS},
@@ -198,7 +198,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 {ok, Run#atm_lane_execution_run{status = ?ENQUEUED_STATUS}};
 
             (#atm_lane_execution_run{status = Status}) ->
-                ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
+                ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), Status, ?PREPARING_STATUS)
         end, AtmWorkflowExecution)
     end,
     ?extract_doc(atm_workflow_execution_status:handle_lane_run_enqueued(AtmWorkflowExecutionId, Diff)).
@@ -223,7 +223,7 @@ handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 {ok, Run#atm_lane_execution_run{status = ResumedStatus}};
 
             (#atm_lane_execution_run{status = Status}) ->
-                ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
+                ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), Status, ?RESUMING_STATUS)
         end, AtmWorkflowExecution)
     end,
     ?extract_doc(atm_workflow_execution_status:handle_lane_run_resumed(AtmWorkflowExecutionId, Diff)).
@@ -260,7 +260,7 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
                 {ok, Run#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = Reason}};
 
             (#atm_lane_execution_run{status = StoppedStatus}) ->
-                ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?STOPPING_STATUS)
+                ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), StoppedStatus, ?STOPPING_STATUS)
         end, AtmWorkflowExecution)
     end,
     atm_workflow_execution_status:handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
@@ -380,7 +380,7 @@ handle_resume(AtmWorkflowExecutionId) ->
                 }};
 
             (#atm_lane_execution_run{status = Status}) ->
-                ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
+                ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), Status, ?RESUMING_STATUS)
         end, AtmWorkflowExecution)
     end,
     atm_workflow_execution_status:handle_resume(AtmWorkflowExecutionId, Diff).
@@ -473,7 +473,7 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
             Status =:= ?ENQUEUED_STATUS
         ->
             % it is not possible to transition directly to ended/suspended phase
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?INTERRUPTED_STATUS);
+            ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), Status, ?INTERRUPTED_STATUS);
 
         (#atm_lane_execution_run{status = ?ACTIVE_STATUS} = Run) ->
             StoppedStatus = case has_any_task_failed(Run) of
@@ -494,7 +494,7 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
             {ok, Run#atm_lane_execution_run{status = StoppedStatus}};
 
         (#atm_lane_execution_run{status = StoppedStatus}) ->
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?INTERRUPTED_STATUS)
+            ?ERR_ATM_INVALID_STATUS_TRANSITION(?err_ctx(), StoppedStatus, ?INTERRUPTED_STATUS)
     end, AtmWorkflowExecution).
 
 
@@ -565,9 +565,9 @@ try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWork
         true ->
             schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution);
         false when RepeatType == rerun ->
-            ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED;
+            ?ERR_ATM_LANE_EXECUTION_RERUN_FAILED(?err_ctx());
         false when RepeatType == retry ->
-            ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED
+            ?ERR_ATM_LANE_EXECUTION_RETRY_FAILED(?err_ctx())
     end.
 
 

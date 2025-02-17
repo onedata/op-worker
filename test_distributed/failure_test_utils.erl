@@ -38,9 +38,10 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
         ok = oct_environment:start_node(Config, Node)
     end, Nodes),
 
+    cth_mock:post_init_per_suite(?MODULE, [], Config, []),
+
     lists:foreach(fun(Node) ->
         ?assertMatch({ok, _}, rpc:call(Node, provider_auth, get_provider_id, []), 180),
-        {ok, _} = rpc:call(Node, mock_manager, start, []),
         ?assertEqual(true, rpc:call(Node, gs_channel_service, is_connected, []), 60)
     end, Nodes),
 

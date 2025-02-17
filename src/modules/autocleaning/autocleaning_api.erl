@@ -54,10 +54,10 @@ force_run(SpaceId) ->
                             {error, nothing_to_clean}
                     end;
                 false ->
-                    ?ERROR_AUTO_CLEANING_DISABLED
+                    ?ERR_AUTO_CLEANING_DISABLED(?err_ctx())
             end;
         false ->
-            ?ERROR_FILE_POPULARITY_DISABLED
+            ?ERR_FILE_POPULARITY_DISABLED(?err_ctx())
     end .
 
 -spec cancel_run(od_space:id()) -> ok.
@@ -143,7 +143,7 @@ configure(SpaceId, Configuration) ->
         true ->
             autocleaning:create_or_update(SpaceId, Configuration);
         false ->
-            ?ERROR_FILE_POPULARITY_DISABLED
+            ?ERR_FILE_POPULARITY_DISABLED(?err_ctx())
     end.
 
 -spec disable(od_space:id()) -> ok | {error, term()}.

@@ -1575,7 +1575,7 @@ format_perms_per_file(TestNode, PermsPerFile) ->
 %% @private
 -spec get_exp_error(atom(), authz_test_suite_spec()) -> {error, term()}.
 get_exp_error(Errno, #authz_test_suite_spec{returned_errors = api_errors}) ->
-    ?ERROR_POSIX(Errno);
+    ?ERR_POSIX(Errno);
 get_exp_error(Errno, #authz_test_suite_spec{returned_errors = errno_errors}) ->
     {error, Errno}.
 

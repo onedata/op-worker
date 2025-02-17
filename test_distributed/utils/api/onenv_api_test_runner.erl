@@ -53,7 +53,7 @@
     % Rest scenario using file path in URL - causes fileId lookup in
     % rest_handler. If path can't be resolved (this file/space is not
     % supported by specific provider) rather then concrete error a
-    % ?ERROR_POSIX(?ENOENT) will be returned
+    % ?ERR_POSIX(?ENOENT) will be returned
     rest_with_file_path |
     % Rest scenario using a publicly accessible share guid.
     % Tests the Onezone's public shared data redirector, that should
@@ -66,7 +66,7 @@
     gs |
     % Gs scenario with gri.scope == private and gri.id == SharedGuid.
     % Such requests should be rejected at auth steps resulting in
-    % ?ERROR_UNAUTHORIZED.
+    % ?ERR_UNAUTHORIZED.
     gs_with_shared_guid_and_aspect_private |
     % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of test case due to for example invalid aspect.
@@ -264,15 +264,15 @@ get_scenario_specific_error_for_invalid_client(rest_with_file_path, ClientType, 
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    {extract_client(ClientAndError), ?ERROR_POSIX(?ENOENT)};
+    {extract_client(ClientAndError), ?ERR_POSIX(?ENOENT)};
 get_scenario_specific_error_for_invalid_client(_ScenarioType, _, {_, {error, _}} = ClientAndError) ->
     ClientAndError;
 get_scenario_specific_error_for_invalid_client(_ScenarioType, unauthorized, Client) ->
-    {Client, ?ERROR_UNAUTHORIZED};
+    {Client, ?ERR_UNAUTHORIZED(undefined)};
 get_scenario_specific_error_for_invalid_client(_ScenarioType, forbidden_not_in_space, Client) ->
-    {Client, ?ERROR_FORBIDDEN};
+    {Client, ?ERR_FORBIDDEN};
 get_scenario_specific_error_for_invalid_client(_ScenarioType, forbidden_in_space, Client) ->
-    {Client, ?ERROR_FORBIDDEN}.
+    {Client, ?ERR_FORBIDDEN}.
 
 
 %% @private
@@ -371,10 +371,10 @@ get_expected_malformed_data_error({error, _} = Error, _, _) ->
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
     ErrorFun(TestCaseCtx);
 get_expected_malformed_data_error(
-    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
+    {_ScenarioType, ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
 ) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
-    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+    ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
 get_expected_malformed_data_error({_ScenarioType, {error, _} = ScenarioSpecificError}, _, _) ->
     ScenarioSpecificError;
 get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, TestCaseCtx) ->
@@ -409,14 +409,14 @@ run_missing_required_data_test_cases(#suite_spec{
     RequiredDataSet = lists_utils:random_element(generate_required_data_sets(DataSpec)),
 
     MissingRequiredParamsDataSetsAndErrors = lists:map(fun(RequiredParam) ->
-        {maps:remove(RequiredParam, RequiredDataSet), ?ERROR_MISSING_REQUIRED_VALUE(RequiredParam)}
+        {maps:remove(RequiredParam, RequiredDataSet), ?ERR_MISSING_REQUIRED_VALUE(RequiredParam)}
     end, RequiredParams),
 
     MissingAtLeastOneParamsDataSetAndError = case AtLeastOneParams of
         [] ->
             [];
         _ ->
-            ExpectedError = ?ERROR_MISSING_AT_LEAST_ONE_VALUE(lists:sort(AtLeastOneParams)),
+            ExpectedError = ?ERR_MISSING_AT_LEAST_ONE_VALUE(lists:sort(AtLeastOneParams)),
             [{maps:without(AtLeastOneParams, RequiredDataSet), ExpectedError}]
     end,
 
@@ -990,7 +990,7 @@ should_expect_lack_of_support_error({rest_with_shared_guid, _}, _Auth, ?ONEZONE_
 should_expect_lack_of_support_error({rest_with_shared_guid, SpaceId}, _Auth, Node) ->
     case opw_test_rpc:supports_space(Node, SpaceId) of
         true -> false;
-        false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, opw_test_rpc:get_provider_id(Node))}
+        false -> {true, ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, opw_test_rpc:get_provider_id(Node))}
     end;
 should_expect_lack_of_support_error(_ScenarioType, ?NOBODY, _Node) ->
     false;
@@ -1000,7 +1000,7 @@ should_expect_lack_of_support_error(_ScenarioType, ?USER(UserId), Node) ->
     ProvId = opw_test_rpc:get_provider_id(Node),
     case lists:member(UserId, oct_background:get_provider_eff_users(ProvId)) of
         true -> false;
-        false -> {true, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)}
+        false -> {true, ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED)}
     end.
 
 

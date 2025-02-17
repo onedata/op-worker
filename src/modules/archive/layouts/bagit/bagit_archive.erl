@@ -236,7 +236,7 @@ archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
     JsonMetadata = try
         mi_file_metadata:get_custom_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false)
-    catch throw:?ERROR_POSIX(?ENODATA) ->
+    catch throw:?ERR_POSIX(?ENODATA) ->
         undefined
     end,
     bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata).

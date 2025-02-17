@@ -218,7 +218,7 @@ is_authorized(Req, State) ->
                     {stop, http_req:send_error(Error, Req), State}
             end;
         {ok, ?GUEST} ->
-            {stop, http_req:send_error(?ERROR_UNAUTHORIZED, Req), State};
+            {stop, http_req:send_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req), State};
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), Req}
     end.
@@ -293,10 +293,10 @@ authorize(Req, ?USER(UserId) = Auth) ->
                 api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI)
             catch
                 _:_ ->
-                    ?ERROR_INTERNAL_SERVER_ERROR
+                    ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
             end;
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN(?err_ctx())
     end.
 
 
@@ -345,7 +345,7 @@ parse_integer(Param, ValueBin) ->
     try
         binary_to_integer(ValueBin)
     catch _:_ ->
-        throw(?ERROR_BAD_VALUE_INTEGER(Param))
+        throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), Param))
     end.
 
 
@@ -355,7 +355,7 @@ parse_body(Body, State) ->
     ChangesSpecification = json_utils:decode(Body),
     case is_map(ChangesSpecification) of
         true -> ok;
-        false -> throw(?ERROR_BAD_VALUE_JSON(<<"changesSpecification">>))
+        false -> throw(?ERR_BAD_VALUE_JSON(?err_ctx(), <<"changesSpecification">>))
     end,
 
     Triggers = parse_triggers(ChangesSpecification),
@@ -389,9 +389,9 @@ parse_body(Body, State) ->
                 {true, true} ->
                     ok;
                 {false, _} ->
-                    throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<RecName/binary, ".fields">>));
+                    throw(?ERR_BAD_VALUE_LIST_OF_STRINGS(?err_ctx(), <<RecName/binary, ".fields">>));
                 {_, false} ->
-                    throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<RecName/binary, ".exists">>))
+                    throw(?ERR_BAD_VALUE_LIST_OF_STRINGS(?err_ctx(), <<RecName/binary, ".exists">>))
             end,
             ChangesReq = #change_req{
                 record = custom_metadata,
@@ -401,12 +401,12 @@ parse_body(Body, State) ->
             },
             [ChangesReq | Acc];
         (RecordName, _, _) ->
-            throw(?ERROR_BAD_DATA(RecordName))
+            throw(?ERR_BAD_DATA(?err_ctx(), RecordName, undefined))
     end, [], maps:remove(<<"triggers">>, ChangesSpecification)),
 
     case ChangesReqs of
         [] ->
-            throw(?ERROR_BAD_VALUE_EMPTY(<<"changesSpecification">>));
+            throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"changesSpecification">>));
         _ ->
             State#{
                 triggers => Triggers,
@@ -424,7 +424,7 @@ parse_triggers(ChangesSpecification) ->
         TriggersSpec when is_list(TriggersSpec) ->
             TriggersSpec;
         _ ->
-            throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"triggers">>))
+            throw(?ERR_BAD_VALUE_LIST_OF_STRINGS(?err_ctx(), <<"triggers">>))
     end,
 
     lists:usort(lists:map(fun
@@ -437,7 +437,7 @@ parse_triggers(ChangesSpecification) ->
         (<<"customMetadata">>) ->
             custom_metadata;
         (_) ->
-            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, ?OBSERVABLE_DOCUMENTS))
+            throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"triggers">>, ?OBSERVABLE_DOCUMENTS))
     end, RawTriggers)).
 
 
@@ -450,7 +450,7 @@ parse_always_flag(RecName, Spec) ->
         false ->
             false;
         _ ->
-            throw(?ERROR_BAD_VALUE_BOOLEAN(<<RecName/binary, ".always">>))
+            throw(?ERR_BAD_VALUE_BOOLEAN(?err_ctx(), <<RecName/binary, ".always">>))
     end.
 
 
@@ -463,7 +463,7 @@ parse_fields(<<"fileLocation">>, RawFields) when is_list(RawFields) ->
 parse_fields(<<"times">>, RawFields) when is_list(RawFields) ->
     [{FieldName, times_field_idx(FieldName)} || FieldName <- RawFields];
 parse_fields(RecName, _RawFields) ->
-    throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<RecName/binary, ".fields">>)).
+    throw(?ERR_BAD_VALUE_LIST_OF_STRINGS(?err_ctx(), <<RecName/binary, ".fields">>)).
 
 
 %% @private
@@ -476,7 +476,7 @@ file_meta_field_idx(<<"provider_id">>) -> #file_meta.provider_id;
 file_meta_field_idx(<<"shares">>) -> #file_meta.shares;
 file_meta_field_idx(<<"deleted">>) -> #file_meta.deleted;
 file_meta_field_idx(_FieldName) ->
-    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, ?FILE_META_FIELDS)).
+    throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"fileMeta.fields">>, ?FILE_META_FIELDS)).
 
 
 %% @private
@@ -487,7 +487,7 @@ file_location_field_idx(<<"size">>) -> #file_location.size;
 file_location_field_idx(<<"space_id">>) -> #file_location.space_id;
 file_location_field_idx(<<"storage_file_created">>) -> #file_location.storage_file_created;
 file_location_field_idx(_FieldName) ->
-    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileLocation.fields">>, ?FILE_LOCATION_FIELDS)).
+    throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"fileLocation.fields">>, ?FILE_LOCATION_FIELDS)).
 
 
 %% @private
@@ -496,7 +496,7 @@ times_field_idx(<<"atime">>) -> #times.atime;
 times_field_idx(<<"mtime">>) -> #times.mtime;
 times_field_idx(<<"ctime">>) -> #times.ctime;
 times_field_idx(_FieldName) ->
-    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"times.fields">>, ?TIME_FIELDS)).
+    throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"times.fields">>, ?TIME_FIELDS)).
 
 
 %%--------------------------------------------------------------------

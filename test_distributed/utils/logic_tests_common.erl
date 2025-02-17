@@ -297,7 +297,7 @@ mock_async_request(ClientRef, GsRequest = #gs_req{id = ReqId}) ->
 
 
 mock_request(#gs_req{request = #gs_req_rpc{}}) ->
-    ?ERROR_RPC_UNDEFINED;
+    ?ERR_RPC_UNDEFINED;
 mock_request(#gs_req{auth_override = AuthOverride, request = GraphReq = #gs_req_graph{}}) ->
     mock_graph_request(GraphReq, AuthOverride);
 mock_request(#gs_req{request = #gs_req_unsub{}}) ->
@@ -343,7 +343,7 @@ mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, #aut
         true ->
             {ok, #gs_resp_graph{data_format = resource, data = ?SHARE_PRIVATE_DATA_VALUE(ShareId)}};
         _ ->
-            ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>)
+            ?ERR_BAD_VALUE_ID_NOT_FOUND(<<"spaceId">>)
     end;
 
 mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
@@ -357,7 +357,7 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, #au
         true ->
             {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_PUBLIC_DATA_VALUE(?MOCK_CREATED_HANDLE_ID)}};
         _ ->
-            ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
+            ?ERR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>)
     end;
 mock_graph_create(#gri{type = od_space, id = _, aspect = harvest_metadata}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}}.
@@ -384,9 +384,9 @@ mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth
             end
     end,
     case {NameArgCheck, DescriptionArgCheck} of
-        {bad, _} -> ?ERROR_BAD_VALUE_BINARY(<<"name">>);
-        {_, bad} -> ?ERROR_BAD_VALUE_BINARY(<<"description">>);
-        {none, none} -> ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]);
+        {bad, _} -> ?ERR_BAD_VALUE_STRING(<<"name">>);
+        {_, bad} -> ?ERR_BAD_VALUE_STRING(<<"description">>);
+        {none, none} -> ?ERR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]);
         _ -> {ok, #gs_resp_graph{}}
     end;
 mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, undefined, Data) ->
@@ -395,10 +395,10 @@ mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, und
         #{<<"workerVersion">> := #{<<"gui">> := GuiHash}} = Data,
         case is_binary(GuiHash) of
             true -> {ok, #gs_resp_graph{}};
-            false -> ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>)
+            false -> ?ERR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>)
         end
     catch _:_ ->
-        ?ERROR_INTERNAL_SERVER_ERROR
+        ?ERR_INTERNAL_SERVER_ERROR(undefined)
     end.
 
 
@@ -468,7 +468,7 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, AuthOverr
                     {ok, #gs_resp_graph{data_format = resource, data = Data}}
             end;
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, AuthOverride, AuthHint) ->
@@ -491,7 +491,7 @@ mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Aut
         true ->
             {ok, #gs_resp_graph{data_format = resource, data = ?GROUP_SHARED_DATA_VALUE(GroupId)}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, AuthOverride, _) ->
@@ -514,7 +514,7 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, AuthOverride, _) ->
@@ -537,7 +537,7 @@ mock_graph_get(GRI = #gri{type = od_share, id = ShareId, aspect = instance}, Aut
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance}, AuthOverride, _) ->
@@ -559,7 +559,7 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance}, _, _) ->
@@ -582,7 +582,7 @@ mock_graph_get(GRI = #gri{type = od_harvester, id = HarvesterId, aspect = instan
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(GRI = #gri{type = od_storage, id = StorageId, aspect = instance}, AuthOverride, AuthHint) ->
@@ -602,7 +602,7 @@ mock_graph_get(GRI = #gri{type = od_storage, id = StorageId, aspect = instance},
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = shared}, AuthOverride, _) ->
@@ -621,7 +621,7 @@ mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = sh
                     ?ERROR_NOT_FOUND
             end;
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(#gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared}, AuthOverride, _) ->
@@ -638,7 +638,7 @@ mock_graph_get(#gri{type = temporary_token_secret, id = UserId, aspect = user, s
                 data = ?TEMPORARY_TOKENS_SECRET_SHARED_DATA_VALUE(UserId)}
             };
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(#gri{type = od_atm_inventory, id = AtmInventoryId, aspect = instance}, AuthOverride, _AuthHint) ->
@@ -654,7 +654,7 @@ mock_graph_get(#gri{type = od_atm_inventory, id = AtmInventoryId, aspect = insta
             Data = ?ATM_INVENTORY_PRIVATE_DATA_VALUE(AtmInventoryId),
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(#gri{type = od_atm_lambda, id = AtmLambdaId, aspect = instance}, AuthOverride, _AuthHint) ->
@@ -672,7 +672,7 @@ mock_graph_get(#gri{type = od_atm_lambda, id = AtmLambdaId, aspect = instance}, 
             Data = ?ATM_LAMBDA_PRIVATE_DATA_VALUE(AtmLambdaId),
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end;
 
 mock_graph_get(#gri{type = od_atm_workflow_schema, id = AtmWorkflowSchemaId, aspect = instance}, AuthOverride, _AuthHint) ->
@@ -688,7 +688,7 @@ mock_graph_get(#gri{type = od_atm_workflow_schema, id = AtmWorkflowSchemaId, asp
             Data = ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(AtmWorkflowSchemaId),
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN
     end.
 
 

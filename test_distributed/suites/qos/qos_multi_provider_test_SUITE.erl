@@ -651,7 +651,7 @@ create_hardlink_in_dir_with_qos(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-2nodes",
             envs = [{op_worker, op_worker, [

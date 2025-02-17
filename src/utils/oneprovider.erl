@@ -83,7 +83,7 @@ build_rest_url(PathTokens) when is_list(PathTokens) ->
 -spec get_id() -> od_provider:id() | no_return().
 get_id() ->
     case provider_auth:get_provider_id() of
-        {error, _} -> throw(?ERROR_UNREGISTERED_ONEPROVIDER);
+        {error, _} -> throw(?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx()));
         {ok, ProviderId} -> ProviderId
     end.
 
@@ -279,7 +279,7 @@ attempt_to_set_up_service_in_onezone() ->
     case cluster_logic:update_version_info(ReleaseVsn, BuildVsn, GuiHash) of
         ok ->
             ?info("Skipping GUI upload as it is already present in Onezone");
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
+        ?ERR_BAD_VALUE_ID_NOT_FOUND(<<"workerVersion.gui">>) ->
             ?info("Uploading GUI files to Onezone (~ts)...", [GuiHash]),
             ?check(cluster_logic:upload_op_worker_gui(?GUI_PACKAGE_PATH)),
             ?info("GUI uploaded succesfully"),

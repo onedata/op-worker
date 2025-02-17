@@ -201,7 +201,7 @@ verify_files_and_dirs(Worker, SessId, DirsAndFiles) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op"
     }).
 

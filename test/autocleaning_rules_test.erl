@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 -define(SETTING(Value), ?SETTING(true, Value)).
 -define(SETTING(Enabled, Value),
@@ -162,17 +163,17 @@ enable_just_one_rule_test_helper(FieldToEnable) ->
 
 setting_rule_enabled_field_to_not_boolean_should_throw_illegal_type_exception_test_helper(FieldToUpdate) ->
     BinKey = <<(atom_to_binary(FieldToUpdate, utf8))/binary, ".enabled">>,
-    ?assertException(throw, ?ERROR_BAD_VALUE_BOOLEAN(BinKey),
+    ?assertException(throw, ?ERR_BAD_VALUE_BOOLEAN(BinKey),
         autocleaning_rules:update(undefined, #{FieldToUpdate => #{enabled => not_boolean}})).
 
 setting_rule_value_to_not_integer_should_throw_illegal_type_exception_test_helper(FieldToUpdate) ->
     BinKey = <<(atom_to_binary(FieldToUpdate, utf8))/binary, ".value">>,
-    ?assertException(throw, ?ERROR_BAD_VALUE_INTEGER(BinKey),
+    ?assertException(throw, ?ERR_BAD_VALUE_INTEGER(BinKey),
         autocleaning_rules:update(undefined, #{FieldToUpdate => #{value => not_integer}})).
 
 setting_rule_value_to_negative_integer_should_throw_negative_rule_setting_exception_test_helper(FieldToUpdate) ->
     BinKey = <<(atom_to_binary(FieldToUpdate, utf8))/binary, ".value">>,
-    ?assertException(throw, ?ERROR_BAD_VALUE_TOO_LOW(BinKey, 0),
+    ?assertException(throw, ?ERR_BAD_VALUE_TOO_LOW(BinKey, 0),
         autocleaning_rules:update(undefined, #{FieldToUpdate => #{value => -1}})).
 
 

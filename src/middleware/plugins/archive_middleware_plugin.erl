@@ -122,7 +122,7 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     id = ArchiveId,
@@ -305,5 +305,5 @@ resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) ->
     case lfm:resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) of
         {ok, Guid} -> Guid;
         {error, ?ENOENT} -> undefined;
-        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+        {error, Errno} -> throw(?ERR_POSIX(?err_ctx(), Errno))
     end.
