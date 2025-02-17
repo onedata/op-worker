@@ -1218,7 +1218,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, get_local_storages, fun(SpaceId) ->
         {ok, #document{value = #od_space{storages_by_provider = StorageByProvider}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         case maps:keys(maps:get(oneprovider:get_id(), StorageByProvider, #{})) of
-            [] -> {error, space_not_supported};
+            [] -> ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
             Storage -> {ok, Storage}
         end
     end),

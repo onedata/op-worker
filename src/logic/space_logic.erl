@@ -238,7 +238,7 @@ get_shares(SessionId, SpaceId) ->
 get_local_supporting_storage(SpaceId) ->
     % called by module to be mocked in tests
     case space_logic:get_local_storages(SpaceId) of
-        {ok, []} -> {error, space_not_supported};
+        {ok, []} -> ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
         {ok, [StorageId | _]} -> {ok, StorageId};
         Other -> Other
     end.
