@@ -169,7 +169,7 @@ is_storage_accessible(FileCtx) ->
                     case space_logic:get_local_supporting_storage(SpaceId) of
                         {ok, StorageId} ->
                             not lists:member(StorageId, Storages);
-                        {error, space_not_supported} ->
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
                             %% @TODO VFS-12036 no longer needed when there is no proxy anymore
                             true % access via proxy
                     end
