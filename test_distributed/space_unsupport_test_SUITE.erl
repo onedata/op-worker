@@ -85,12 +85,12 @@ replicate_stage_test(Config) ->
     [QosEntryId] = maps:keys(EntriesMap),
     
     % check that space unsupport QoS entry cannot be deleted
-    ?assertEqual(?ERROR_FORBIDDEN, opt_qos:remove_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
+    ?assertEqual(?ERR_FORBIDDEN, opt_qos:remove_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
     
     ok = rpc:yield(Promise),
     
-    ?assertMatch(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
+    ?assertEqual(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
     
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
@@ -125,7 +125,7 @@ replicate_stage_persistence_test(Config) ->
     test_utils:mock_assert_num_calls(Worker1, qos_entry, create, 7, 0, 1),
     test_utils:mock_unload(Worker1, [qos_entry]),
     
-    ?assertMatch(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
+    ?assertEqual(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
 
 
 cleanup_traverse_stage_test(Config) ->

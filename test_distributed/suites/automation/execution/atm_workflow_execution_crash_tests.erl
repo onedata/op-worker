@@ -342,6 +342,6 @@ assert_no_action_possible_on_crashed_atm_workflow_execution(AtmMockCallCtx) ->
             RepeatType, {1, 1}, AtmMockCallCtx
         ))
     end, [
-        {retry, ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED},
-        {rerun, ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED}
+        {retry, ?ERR_ATM_LANE_EXECUTION_RETRY_FAILED},
+        {rerun, ?ERR_ATM_LANE_EXECUTION_RERUN_FAILED}
     ]).

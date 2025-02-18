@@ -42,7 +42,7 @@ get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
     end,
     case Result of
         {ok, Value} -> {ok, Value};
-        {error, not_found} -> ?ERROR_POSIX(?ENOATTR)
+        {error, not_found} -> ?ERR_POSIX(?err_ctx(), ?ENOATTR)
     end.
 
 

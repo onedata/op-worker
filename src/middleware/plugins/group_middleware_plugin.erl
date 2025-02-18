@@ -85,7 +85,7 @@ fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId,
     end;
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = GroupId, scope = private}}) ->
     case group_logic:get(Auth#auth.session_id, GroupId) of

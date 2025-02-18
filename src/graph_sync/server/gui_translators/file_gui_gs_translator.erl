@@ -83,7 +83,7 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
             <<"list">> => acl:to_json(Acl, gui)
         }
     catch throw:{error, Errno} ->
-        throw(?ERROR_POSIX(Errno))
+        throw(?ERR_POSIX(?err_ctx(), Errno))
     end;
 
 translate_resource(#gri{aspect = hardlinks, scope = private}, References) ->

@@ -91,7 +91,7 @@ save(ProviderId, RootToken) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns provider Id, or ?ERROR_UNREGISTERED_ONEPROVIDER if it is not yet
+%% Returns provider Id, or ?ERR_UNREGISTERED_ONEPROVIDER if it is not yet
 %% registered. Upon success, the ProviderId is cached in env variable to be
 %% accessible quickly.
 %% @end
@@ -101,7 +101,7 @@ get_provider_id() ->
     node_cache:acquire(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
-                ?ERROR_UNREGISTERED_ONEPROVIDER;
+                ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
             {error, _} = Error ->
                 Error;
             {ok, #document{value = #provider_auth{provider_id = Id}}} ->
@@ -129,7 +129,7 @@ clear_provider_id_cache() ->
 is_registered() ->
     case get_provider_id() of
         {ok, _ProviderId} -> true;
-        ?ERROR_UNREGISTERED_ONEPROVIDER -> false;
+        ?ERR_UNREGISTERED_ONEPROVIDER -> false;
         {error, _} = Error -> error(Error)
     end.
 
@@ -302,7 +302,7 @@ write_to_file(ProviderId, RootToken, Nodes) ->
 acquire_token(Type) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
-            ?ERROR_UNREGISTERED_ONEPROVIDER;
+            ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         {error, _} = Error ->
             Error;
         {ok, #document{value = ProviderAuth}} ->

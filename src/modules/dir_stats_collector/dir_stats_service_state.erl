@@ -120,7 +120,7 @@
 %%%===================================================================
 
 
--spec get(od_space:id()) -> {ok, record()} | errors:error().
+-spec get(od_space:id()) -> {ok, record()} | {error, term()}.
 get(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = DirStatsServiceState}} ->
@@ -193,17 +193,17 @@ get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{
 get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{
     status = initializing
 }) ->
-    ?ERROR_DIR_STATS_NOT_READY;
+    ?ERR_DIR_STATS_NOT_READY(?err_ctx());
 
 get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{}) ->
-    ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
+    ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx());
 
 get_last_initialization_timestamp_if_in_enabled_status(SpaceId) ->
     case get(SpaceId) of
         {ok, State} ->
             get_last_initialization_timestamp_if_in_enabled_status(State);
         ?ERROR_NOT_FOUND ->
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx())
     end.
 
 
@@ -252,7 +252,7 @@ handle_space_support_parameters_change(_SpaceId, _SpaceSupportParameters) ->
     ok.
 
 
--spec enable(od_space:id()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec enable(od_space:id()) -> ok | od_error_internal_server_error:t().
 enable(SpaceId) ->
     NewRecord = #dir_stats_service_state{
         status = initializing,
@@ -342,8 +342,8 @@ disable(SpaceId) ->
             ok;
         ?ERROR_NOT_FOUND ->
             ?warning("Disabling space ~tp without dir stats service state document", [SpaceId]);
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN
+        ?ERR_FORBIDDEN = ErrorForbidden ->
+            ErrorForbidden
     end.
 
 
@@ -524,12 +524,12 @@ update_timestamps(NewStatus, Timestamps) ->
     end.
 
 
--spec run_initialization_traverse(file_id:space_id(), non_neg_integer()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec run_initialization_traverse(file_id:space_id(), non_neg_integer()) -> ok | od_error_internal_server_error:t().
 run_initialization_traverse(SpaceId, Incarnation) ->
     case dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation) of
         ok ->
             ok;
-        ?ERROR_INTERNAL_SERVER_ERROR ->
+        ?ERR_INTERNAL_SERVER_ERROR(_) = ErrorInternalServerError ->
             Diff = fun
                 (State = #dir_stats_service_state{status = initializing}) ->
                     {ok, State#dir_stats_service_state{
@@ -555,7 +555,7 @@ run_initialization_traverse(SpaceId, Incarnation) ->
                     ?warning("Reporting space ~tp initialization traverse failure when "
                     "space has no dir stats service state document", [SpaceId])
             end,
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ErrorInternalServerError
     end.
 
 

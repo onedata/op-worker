@@ -64,7 +64,7 @@ store(Storage, SpaceId, PosixDefaultsMap) ->
                     Error2
             end;
         false ->
-            ?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
+            ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
     end.
 
 -spec delete(storage:id(), key()) -> ok.

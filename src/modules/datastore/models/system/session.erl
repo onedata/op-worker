@@ -50,12 +50,12 @@
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
 % Supported session modes:
 % - normal
-% - open_handle - special session mode in which user traverses open handle shares tree
+% - public_data - special session mode in which user traverses public data shares tree
 %                 (listing space dir return virtual share root dirs corresponding to
-%                 shares having open handle instead of space dirs and files) and is
+%                 shares exposed as public data instead of space dirs and files) and is
 %                 treated as guest when checking privileges.
 %                 Currently supported only in 'fuse' and 'guest' session type.
--type mode() :: normal | open_handle.
+-type mode() :: normal | public_data.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
 % gets up (either incoming_session_watcher or outgoing_connection_manager),

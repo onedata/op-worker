@@ -604,7 +604,7 @@ init_per_suite(Config) ->
     StorageType = ?RAND_ELEMENT([posix, s3]),
 
     ModulesToLoad = [?MODULE, authz_api_test_runner],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op_s3",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}

@@ -235,7 +235,7 @@ make_request(Node, RestSubpath, Method, Headers, Body) ->
                 true ->
                     Result;
                 false ->
-                    % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_, _)
+                    % Returned error may not be necessarily ?ERR_SPACE_NOT_SUPPORTED(_, _)
                     % as some errors may be thrown even before file path resolution attempt
                     % (and such errors are explicitly checked by some tests),
                     % but it should never be any successful response

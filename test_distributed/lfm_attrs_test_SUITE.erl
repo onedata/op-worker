@@ -58,7 +58,7 @@
     traverse_test/1,
     file_traverse_job_test/1,
     do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test/1,
-    listing_file_attrs_should_work_properly_in_open_handle_mode/1
+    listing_file_attrs_should_work_properly_in_public_data_mode/1
 ]).
 
 %% Pool callbacks
@@ -92,7 +92,7 @@ all() ->
         traverse_test,
         file_traverse_job_test,
         do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test,
-        listing_file_attrs_should_work_properly_in_open_handle_mode
+        listing_file_attrs_should_work_properly_in_public_data_mode
     ]).
 
 -define(CACHE, test_cache).
@@ -704,7 +704,7 @@ get_empty_json(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
+    ?assertEqual(?ERR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
 
 get_empty_rdf(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -712,7 +712,7 @@ get_empty_rdf(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
+    ?assertEqual(?ERR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
 
 has_custom_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -887,7 +887,7 @@ do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test(Config) ->
     end, lists:seq(1, 10)).
 
 
-listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
+listing_file_attrs_should_work_properly_in_public_data_mode(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     User = <<"user1">>,
@@ -900,8 +900,8 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
         initializer:create_access_token(User),
         #cv_interface{interface = oneclient}
     ),
-    OpenHandleSessId = provider_onenv_test_utils:create_session(
-        Worker, User, ClientAccessToken, open_handle
+    PublicDataSessId = provider_onenv_test_utils:create_session(
+        Worker, User, ClientAccessToken, public_data
     ),
 
     {ok, File1Guid} = lfm_proxy:create(Worker, NormalSessId, <<"/", SpaceName/binary, "/file1">>),
@@ -923,10 +923,10 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
         lfm_proxy:get_children(Worker, NormalSessId, ?FILE_REF(SpaceGuid), 0, 100)
     ),
 
-    % Assert that listing in open_handle mode should return nothing as there are no shares with open handle
+    % Assert that listing in public_data mode should return nothing as there are no shares exposed as public data
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_children(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid), 0, 100)
+        lfm_proxy:get_children(Worker, PublicDataSessId, ?FILE_REF(SpaceGuid), 0, 100)
     ),
 
     BuildShareRootDirFun = fun(ShareId) ->
@@ -959,8 +959,8 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
 
     mock_space_get_shares(Worker, [Share1Id, Share3Id, Share4Id, DirShareId, SpaceShareId]),
 
-    % Assert proper virtual share root dirs attrs (for all shares with open handle existing in space
-    % - file3 share has no handle so it shouldn't be listed) when listing space in 'open_handle' mode
+    % Assert proper virtual share root dirs attrs (for all shares exposed as public data in the space
+    % - file3 share has no handle so it shouldn't be listed) when listing space in 'public_data' mode
     {ok, _, ListingToken} = ?assertMatch(
         {ok, [
             #file_attr{
@@ -984,7 +984,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
                 shares = [], provider_id = undefined, owner_id = undefined
             }
         ], _},
-        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})
+        lfm_proxy:get_children_attrs(Worker, PublicDataSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})
     ),
     ?assert(file_listing:is_finished(ListingToken)),
 
@@ -992,7 +992,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     lists:foreach(fun({ShareRootFileGuid, ShareRootFileName, ShareRootDirGuid}) ->
         ?assertMatch(
             {ok, [{ShareRootFileGuid, ShareRootFileName}]},
-            lfm_proxy:get_children(Worker, OpenHandleSessId, ?FILE_REF(ShareRootDirGuid), 0, 100)
+            lfm_proxy:get_children(Worker, PublicDataSessId, ?FILE_REF(ShareRootDirGuid), 0, 100)
         )
     end, [
         {DirShareGuid, <<"dir">>, DirShareRootDirGuid},
@@ -1010,22 +1010,22 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
 
     ?assertMatch(
         {ok, [{DirSpaceShareGuid, _}, {File1SpaceShareGuid, _}, {File2SpaceShareGuid, _}, {File3SpaceShareGuid, _}]},
-        lfm_proxy:get_children(Worker, OpenHandleSessId, ?FILE_REF(SpaceShareGuid), 0, 100)
+        lfm_proxy:get_children(Worker, PublicDataSessId, ?FILE_REF(SpaceShareGuid), 0, 100)
     ),
 
     % Assert it is possible to operate on file4 using Share4Id (direct share of file4)
     % but is not possible via space/dir share (those are shares created on parents so
     % permissions check must assert traverse ancestors for them too - dir has 8#770 perms
-    % and in 'open_handle' mode 'other' bits are checked so permissions will be denied)
-    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, OpenHandleSessId, ?FILE_REF(File4ShareGuid), read)),
+    % and in 'public_data' mode 'other' bits are checked so permissions will be denied)
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, PublicDataSessId, ?FILE_REF(File4ShareGuid), read)),
     ?assertMatch({ok, Content}, lfm_proxy:read(Worker, Handle2, 0, 100)),
     ?assertMatch(ok, lfm_proxy:close(Worker, Handle2)),
 
     File4DirShareGuid = file_id:guid_to_share_guid(File4Guid, DirShareId),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, ?FILE_REF(File4DirShareGuid), read)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, PublicDataSessId, ?FILE_REF(File4DirShareGuid), read)),
 
     File4SpaceShareGuid = file_id:guid_to_share_guid(File4Guid, SpaceShareId),
-    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, OpenHandleSessId, ?FILE_REF(File4SpaceShareGuid), read)),
+    ?assertMatch({error, ?EACCES}, lfm_proxy:open(Worker, PublicDataSessId, ?FILE_REF(File4SpaceShareGuid), read)),
 
     ok.
 
@@ -1086,7 +1086,7 @@ init_per_testcase(Case, Config) when Case =:= effective_value_test ;
     init_per_testcase(?DEFAULT_CASE(Case), [{cache_pid, CachePid} | Config]);
 init_per_testcase(Case, Config) when
     Case == do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test;
-    Case == listing_file_attrs_should_work_properly_in_open_handle_mode
+    Case == listing_file_attrs_should_work_properly_in_public_data_mode
 ->
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);

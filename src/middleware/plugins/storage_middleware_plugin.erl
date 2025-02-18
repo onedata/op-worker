@@ -69,7 +69,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = ?USER(UserId, SessionId), auth_hint = ?THROUGH_SPACE(SpaceId), gri = #gri{
     id = StorageId,
@@ -78,14 +78,14 @@ fetch_entity(#op_req{auth = ?USER(UserId, SessionId), auth_hint = ?THROUGH_SPACE
 }}) ->
     case space_logic:has_eff_user(SessionId, SpaceId, UserId) of
         false ->
-            ?ERROR_FORBIDDEN;
+            ?ERR_FORBIDDEN(?err_ctx());
         true ->
             #document{value = Storage} = storage:fetch_shared_data(StorageId, SpaceId),
             {ok, {Storage, 1}}
     end;
 
 fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    ?ERR_FORBIDDEN(?err_ctx()).
 
 
 %%--------------------------------------------------------------------

@@ -460,10 +460,10 @@ mark_deleting(ArchiveId, Callback) ->
                     }
                 }};
             {false, undefined} ->
-                ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, ?ARCHIVE_FINISHED_STATES);
+                ?ERR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?err_ctx(), State, ?ARCHIVE_FINISHED_STATES);
             {_, Parent} ->
                 % nested archive cannot be deleted as it would destroy parent archive
-                ?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(Parent)
+                ?ERR_NESTED_ARCHIVE_DELETION_FORBIDDEN(?err_ctx(), Parent)
         end
     end).
 

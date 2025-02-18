@@ -203,9 +203,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private
 -spec down_status_to_error(status()) -> errors:error().
-down_status_to_error(unhealthy) -> ?ERROR_ATM_OPENFAAS_UNHEALTHY;
-down_status_to_error(unreachable) -> ?ERROR_ATM_OPENFAAS_UNREACHABLE;
-down_status_to_error(not_configured) -> ?ERROR_ATM_OPENFAAS_NOT_CONFIGURED.
+down_status_to_error(unhealthy) -> ?ERR_ATM_OPENFAAS_UNHEALTHY(?err_ctx());
+down_status_to_error(unreachable) -> ?ERR_ATM_OPENFAAS_UNREACHABLE(?err_ctx());
+down_status_to_error(not_configured) -> ?ERR_ATM_OPENFAAS_NOT_CONFIGURED(?err_ctx()).
 
 
 %% @private
@@ -230,7 +230,7 @@ check_openfaas_status() ->
                 end),
                 unreachable
         end
-    catch throw:?ERROR_ATM_OPENFAAS_NOT_CONFIGURED ->
+    catch throw:?ERR_ATM_OPENFAAS_NOT_CONFIGURED ->
         not_configured
     end.
 
@@ -271,9 +271,9 @@ report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
             lists:foreach(fun(SpaceId) ->
                 atm_workflow_execution_api:report_openfaas_down(SpaceId, Error)
             end, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+        ?ERR_UNREGISTERED_ONEPROVIDER ->
             schedule_openfaas_down_report_to_atm_workflow_execution_layer();
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
             schedule_openfaas_down_report_to_atm_workflow_execution_layer();
         Error = {error, _} ->
             ?error(

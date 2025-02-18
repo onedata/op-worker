@@ -75,7 +75,7 @@ get_shared_data_test(Config) ->
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
-        ?ERROR_FORBIDDEN,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, group_logic, get_shared_data, [User3Sess, ?GROUP_1, ?THROUGH_SPACE(?SPACE_2)])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, GroupGriMatcher)),
@@ -192,7 +192,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of
     % data access caveat presence
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, group_logic, get_shared_data, [TokenCredentials, ?GROUP_1, undefined])
     ),
     % Nevertheless, following requests should be made:

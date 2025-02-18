@@ -94,10 +94,10 @@ create_qos_test(Config) ->
             <<"replicasNum">> => [rand:uniform(10)]
         },
         bad_values = [
-            {<<"expression">>, <<"aaa">>, ?ERROR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)},
-            {<<"fileId">>, <<"gibberish">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-            {<<"replicasNum">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"replicasNum">>)},
-            {<<"replicasNum">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}
+            {<<"expression">>, <<"aaa">>, ?ERR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)},
+            {<<"fileId">>, <<"gibberish">>, ?ERR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+            {<<"replicasNum">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"replicasNum">>)},
+            {<<"replicasNum">>, 0, ?ERR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}
         ]
     },
 
@@ -303,7 +303,7 @@ evaluate_qos_expression_test(Config) ->
                 },
                 bad_values = [
                     {<<"expression">>, <<"invalid_qos_expression">>,
-                        ?ERROR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)}
+                        ?ERR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)}
                 ]
             }
         }
@@ -346,9 +346,9 @@ get_qos_entry_audit_log(Config) ->
                 <<"offset">> => [0]
             },
             bad_values = [
-                {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
-                {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
-                {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+                {<<"timestamp">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                {<<"timestamp">>, -8, ?ERR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                {<<"offset">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)}
             ]
         }
     },
@@ -417,7 +417,7 @@ get_qos_transfer_stats_collection_layout_test_base(Config, CollectionType) ->
                     optional = [<<"mode">>],
                     correct_values = #{<<"mode">> => [<<"layout">>]},
                     bad_values = [
-                        {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])}
+                        {<<"mode">>, mode, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])}
                     ]
                 }
             }
@@ -475,13 +475,13 @@ get_qos_transfer_stats_collection_slice_test_base(Config, CollectionType) ->
                         <<"windowLimit">> => [1, 500]
                     },
                     bad_values = [
-                        {bad_id, <<"NonExistingRequirement">>, ?ERROR_FORBIDDEN},
-                        {<<"layout">>, 8, ?ERROR_BAD_VALUE_JSON(<<"layout">>)},
-                        {<<"layout">>, #{<<"a">> => [<<"b">>, <<"c">>]}, ?ERROR_TSC_MISSING_LAYOUT(#{<<"a">> => [<<"b">>, <<"c">>]})},
-                        {<<"startTimestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)},
-                        {<<"startTimestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)},
-                        {<<"windowLimit">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"windowLimit">>)},
-                        {<<"windowLimit">>, 99999, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}
+                        {bad_id, <<"NonExistingRequirement">>, ?ERR_FORBIDDEN},
+                        {<<"layout">>, 8, ?ERR_BAD_VALUE_JSON(<<"layout">>)},
+                        {<<"layout">>, #{<<"a">> => [<<"b">>, <<"c">>]}, ?ERR_TSC_MISSING_LAYOUT(#{<<"a">> => [<<"b">>, <<"c">>]})},
+                        {<<"startTimestamp">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"startTimestamp">>)},
+                        {<<"startTimestamp">>, -8, ?ERR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)},
+                        {<<"windowLimit">>, <<"aaa">>, ?ERR_BAD_VALUE_INTEGER(<<"windowLimit">>)},
+                        {<<"windowLimit">>, 99999, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}
                     ]
                 }
             }

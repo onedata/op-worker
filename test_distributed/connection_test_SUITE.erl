@@ -656,7 +656,7 @@ init_per_testcase(Case, Config) when
         (?CORRECT_TOKEN) ->
             {ok, ?SUB(?ONEPROVIDER, ?CORRECT_PROVIDER_ID)};
         (?INCORRECT_TOKEN) ->
-            ?ERROR_BAD_TOKEN
+            ?ERR_BAD_TOKEN
     end),
 
     init_per_testcase(default, Config);

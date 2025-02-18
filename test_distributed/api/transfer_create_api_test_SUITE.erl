@@ -69,18 +69,18 @@ all() ->
 -define(PLACEHOLDER, placeholder).
 
 -define(TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES, [
-    {<<"type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"type">>)}},
-    {<<"type">>, <<"transfer">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, ?TRANSFER_TYPES)},
-    {<<"dataSourceType">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"dataSourceType">>)}},
-    {<<"dataSourceType">>, <<"data">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"dataSourceType">>, ?DATA_SOURCE_TYPES)}
+    {<<"type">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"type">>)}},
+    {<<"type">>, <<"transfer">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"type">>, ?TRANSFER_TYPES)},
+    {<<"dataSourceType">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"dataSourceType">>)}},
+    {<<"dataSourceType">>, <<"data">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"dataSourceType">>, ?DATA_SOURCE_TYPES)}
 ]).
 
 -define(PROVIDER_ID_TRANSFER_ERRORS(__KEY), [
-    {__KEY, 100, ?ERROR_BAD_VALUE_BINARY(__KEY)},
-    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_2, <<"NonExistingProvider">>)}
+    {__KEY, 100, ?ERR_BAD_VALUE_STRING(__KEY)},
+    {__KEY, <<"NonExistingProvider">>, ?ERR_SPACE_NOT_SUPPORTED_BY(?SPACE_2, <<"NonExistingProvider">>)}
 ]).
 
--define(CALLBACK_TRANSFER_ERRORS, [{<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}]).
+-define(CALLBACK_TRANSFER_ERRORS, [{<<"callback">>, 100, ?ERR_BAD_VALUE_STRING(<<"callback">>)}]).
 
 -define(HTTP_SERVER_PORT, 8080).
 -define(ENDED_TRANSFERS_PATH, "/ended_transfers").
@@ -334,20 +334,20 @@ get_data_source_dependent_data_spec_aspects(<<"view">>) ->
         <<"queryViewParams">> => [#{<<"limit">> => 100}]
     },
     BadValues = [
-        {<<"spaceId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"spaceId">>)},
-        {<<"spaceId">>, <<"NonExistingSpace">>, ?ERROR_FORBIDDEN},
+        {<<"spaceId">>, 100, ?ERR_BAD_VALUE_STRING(<<"spaceId">>)},
+        {<<"spaceId">>, <<"NonExistingSpace">>, ?ERR_FORBIDDEN},
 
-        {<<"viewName">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"viewName">>)},
+        {<<"viewName">>, 100, ?ERR_BAD_VALUE_STRING(<<"viewName">>)},
         {<<"viewName">>, <<"NonExistingView">>, {error_fun, fun(#api_test_ctx{node = Node}) ->
-            ?ERROR_VIEW_NOT_EXISTS_ON(?GET_DOMAIN_BIN(Node))
+            ?ERR_VIEW_NOT_EXISTS_ON(?GET_DOMAIN_BIN(Node))
         end}},
 
-        {<<"queryViewParams">>, #{<<"bbox">> => 123}, ?ERROR_BAD_DATA(<<"bbox">>)},
-        {<<"queryViewParams">>, #{<<"descending">> => <<"ascending">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
-        {<<"queryViewParams">>, #{<<"limit">> => <<"inf">>}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-        {<<"queryViewParams">>, #{<<"limit">> => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+        {<<"queryViewParams">>, #{<<"bbox">> => 123}, ?ERR_BAD_DATA(<<"bbox">>, undefined)},
+        {<<"queryViewParams">>, #{<<"descending">> => <<"ascending">>}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
+        {<<"queryViewParams">>, #{<<"limit">> => <<"inf">>}, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+        {<<"queryViewParams">>, #{<<"limit">> => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
         {<<"queryViewParams">>, #{<<"stale">> => <<"fresh">>},
-            ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])}
+            ?ERR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])}
     ],
     {RequiredParams, OptionalParams, CorrectValues, BadValues}.
 

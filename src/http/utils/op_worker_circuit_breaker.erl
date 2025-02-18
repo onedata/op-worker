@@ -32,7 +32,7 @@ assert_closed() ->
             ?THROTTLE_LOG(?critical(
                 "All services have been temporarily disabled, consult Onepanel logs for details"
             )),
-            throw(?ERROR_SERVICE_UNAVAILABLE);
+            throw(?ERR_SERVICE_UNAVAILABLE(?err_ctx()));
         closed ->
             ok
     end.

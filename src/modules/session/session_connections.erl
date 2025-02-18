@@ -20,7 +20,7 @@
 %% API
 -export([register/2, deregister/2, list/1]).
 -export([set_async_request_manager/2, get_async_req_manager/1]).
--export([ensure_connected/1]).
+-export([get_peer_provider_id/1, ensure_connected/1]).
 
 -type error() :: {error, Reason :: term()}.
 
@@ -88,6 +88,18 @@ get_async_req_manager(SessId) ->
     end.
 
 
+-spec get_peer_provider_id(session:id()) -> oneprovider:id().
+get_peer_provider_id(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{
+            value = #session{proxy_via = ProxyVia}}
+        } when is_binary(ProxyVia) ->
+            ProxyVia;
+        _ ->
+            session_utils:session_id_to_provider_id(SessionId)
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Ensures that outgoing session to peer provider is started.
@@ -95,14 +107,7 @@ get_async_req_manager(SessId) ->
 %%--------------------------------------------------------------------
 -spec ensure_connected(session:id()) -> {ok, session:id()} | error() | no_return().
 ensure_connected(SessId) ->
-    ProviderId = case session:get(SessId) of
-        {ok, #document{
-            value = #session{proxy_via = ProxyVia}}
-        } when is_binary(ProxyVia) ->
-            ProxyVia;
-        _ ->
-            session_utils:session_id_to_provider_id(SessId)
-    end,
+    ProviderId = get_peer_provider_id(SessId),
 
     case oneprovider:is_self(ProviderId) of
         true ->

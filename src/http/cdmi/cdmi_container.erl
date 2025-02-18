@@ -64,7 +64,7 @@ get_cdmi(Req, #cdmi_req{options = Options} = CdmiReq) ->
 -spec put_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_handler:cdmi_req()} | no_return().
 put_cdmi(_, #cdmi_req{version = undefined}) ->
-    throw(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]));
+    throw(?ERR_BAD_VERSION(?err_ctx(), [<<"1.1.1">>, <<"1.1">>]));
 put_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessId),
     file_path = Path,
@@ -236,7 +236,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
             }, [guid, name])),
             case length(List) > MaxChildren of
                 true ->
-                    throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
+                    throw(?ERR_BAD_VALUE_TOO_HIGH(?err_ctx(), <<"childrenrange">>, MaxChildren));
                 false ->
                     ok
             end,
@@ -259,13 +259,13 @@ get_directory_info(RequestedInfo, #cdmi_req{
     ChildNum :: integer(), MaxChildren :: integer()) ->
     {NewFrom :: integer(), NewTo :: integer()} | no_return().
 normalize_childrenrange(From, To, _ChildNum, _MaxChildren) when From > To ->
-    throw(?ERROR_BAD_DATA(<<"childrenrange">>));
+    throw(?ERR_BAD_DATA(?err_ctx(), <<"childrenrange">>, undefined));
 normalize_childrenrange(_From, To, ChildNum, _MaxChildren) when To >= ChildNum ->
-    throw(?ERROR_BAD_DATA(<<"childrenrange">>));
+    throw(?ERR_BAD_DATA(?err_ctx(), <<"childrenrange">>, undefined));
 normalize_childrenrange(From, To, _ChildNum, MaxChildren) ->
     case (To - From + 1) > MaxChildren of
         true ->
-            throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
+            throw(?ERR_BAD_VALUE_TOO_HIGH(?err_ctx(), <<"childrenrange">>, MaxChildren));
         false ->
             {From, To}
     end.

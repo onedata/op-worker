@@ -89,7 +89,7 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
                 [WorkflowExecutionId, TaskExecutionId, Class, Reason],
                 Stacktrace
             ),
-            {failure, ?ERROR_INTERNAL_SERVER_ERROR}
+            {failure, ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)}
         end,
         catch atm_openfaas_result_streamer_registry:clear(WorkflowExecutionId, TaskExecutionId),
         workflow_engine:report_task_data_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult)
@@ -193,7 +193,7 @@ conclude(WorkflowExecutionId, TaskExecutionId) ->
                 "but no streamers were ever registered",
                 [WorkflowExecutionId, TaskExecutionId]
             ),
-            {failure, ?ERROR_INTERNAL_SERVER_ERROR};
+            {failure, ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)};
         all_streamers_deregistered ->
             success;
         {active_result_streamers, ConnRefs} ->

@@ -29,7 +29,7 @@
     try
         __EXPR
     catch Class:Reason:Stacktrace ->
-        ?ERROR_UNAUTHORIZED(?examine_exception(Class, Reason, Stacktrace))
+        ?ERR_UNAUTHORIZED(?err_ctx(), ?examine_exception(Class, Reason, Stacktrace))
     end
 ).
 
@@ -40,7 +40,7 @@
 
 
 -spec authenticate(cowboy_req:req(), ctx()) ->
-    {ok, aai:auth()} | errors:unauthorized_error().
+    {ok, aai:auth()} | od_error:auth_error().
 authenticate(Req, #http_auth_ctx{
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
@@ -59,7 +59,7 @@ authenticate(Req, #http_auth_ctx{
 
 
 -spec authenticate_by_token(auth_manager:token_credentials()) ->
-    {ok, aai:auth()} | errors:unauthorized_error().
+    {ok, aai:auth()} | od_error:auth_error().
 authenticate_by_token(TokenCredentials) ->
     ?catch_auth_exceptions(do_authenticate_by_token(TokenCredentials)).
 
@@ -71,7 +71,7 @@ authenticate_by_token(TokenCredentials) ->
 
 %% @private
 -spec do_authenticate_by_token(auth_manager:token_credentials()) ->
-    {ok, aai:auth()} | errors:unauthorized_error() | no_return().
+    {ok, aai:auth()} | od_error:auth_error() | no_return().
 do_authenticate_by_token(TokenCredentials) ->
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity} = Auth, _TokenValidUntil} ->
@@ -81,10 +81,10 @@ do_authenticate_by_token(TokenCredentials) ->
                     {ok, Auth#auth{session_id = SessionId}};
                 {error, {invalid_identity, _}} ->
                     %% TODO VFS-5895
-                    ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_SUBJECT_INVALID)
+                    ?ERR_UNAUTHORIZED(?err_ctx(), ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx()))
             end;
         {error, _} = Error ->
-            ?ERROR_UNAUTHORIZED(Error)
+            ?ERR_UNAUTHORIZED(?err_ctx(), Error)
     end.
 
 

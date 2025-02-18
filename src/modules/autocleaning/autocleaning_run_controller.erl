@@ -201,7 +201,7 @@ start(SpaceId, Config, CurrentSize) ->
                                 "Could not start autocleaning_run_controller in space ~tp",
                                 [SpaceId]
                             ),
-                            ?ERROR_FILE_POPULARITY_DISABLED
+                            ?ERR_FILE_POPULARITY_DISABLED(?err_ctx())
                     end;
                 OtherARId ->
                     % other auto-cleaning run is in progress

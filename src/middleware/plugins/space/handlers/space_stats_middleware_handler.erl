@@ -137,6 +137,6 @@ translate_dir_stats_service_state(DirStatsServiceState) ->
         DirStatsServiceState
     ) of
         {ok, Timestamp} -> Json#{<<"since">> => Timestamp};
-        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> Json;
-        ?ERROR_DIR_STATS_NOT_READY-> Json
+        ?ERR_DIR_STATS_DISABLED_FOR_SPACE -> Json;
+        ?ERR_DIR_STATS_NOT_READY-> Json
     end.
