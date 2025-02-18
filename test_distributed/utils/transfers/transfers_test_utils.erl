@@ -310,7 +310,7 @@ assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
                         throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
                 end
         end
-    catch error:{assertMatch_failed, _} ->
+    catch error:assertMatch_failed ->
         throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
     end.
 

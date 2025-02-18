@@ -110,9 +110,11 @@ end).
         maps:fold(fun(Domain, TransferredBytes, AccIn) ->
             case is_integer(TransferredBytes) andalso TransferredBytes > 0 of
                 true ->
+                    ?assertMatch(#{Domain := _}, HistMap),
                     Hist = maps:get(Domain, HistMap),
                     AccIn and (lists:sum(Hist) =:= TransferredBytes) and (length(Hist) =:= Length);
                 false when is_function(TransferredBytes) ->
+                    ?assertMatch(#{Domain := _}, HistMap),
                     Hist = maps:get(Domain, HistMap),
                     AccIn and TransferredBytes(lists:sum(Hist));
                 false ->
