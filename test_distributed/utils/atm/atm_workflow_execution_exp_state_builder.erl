@@ -1123,7 +1123,7 @@ take_lane_run(TargetRunNum, CurrentRunNum, [Run | RestRuns], NewerRunsReversed) 
 
 %% @private
 -spec locate_lane_run(atm_lane_execution:lane_run_selector(), ctx()) ->
-    {ok, {json_utils:query(), json_utils:json_map()}} | ?ERROR_NOT_FOUND.
+    {ok, {json_utils:query(), json_utils:json_map()}} | od_error_not_found:t().
 locate_lane_run({AtmLaneSelector, AtmRunSelector}, ExpStateCtx = #exp_workflow_execution_state_ctx{
     current_run_num = CurrentRunNum,
     exp_workflow_execution_state = #{<<"lanes">> := AtmLaneExecutions}

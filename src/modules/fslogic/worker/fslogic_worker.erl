@@ -158,13 +158,22 @@ supervisor_children_spec() ->
 is_storage_accessible(undefined) ->
     true;
 is_storage_accessible(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
     case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
         [] ->
             true;
         Storages ->
-            {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-            not lists:member(StorageId, Storages)
+            case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
+                true -> true;
+                false ->
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    case space_logic:get_local_supporting_storage(SpaceId) of
+                        {ok, StorageId} ->
+                            not lists:member(StorageId, Storages);
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+                            %% @TODO VFS-12036 no longer needed when there is no proxy anymore
+                            true % access via proxy
+                    end
+            end
     end.
 
 %%%===================================================================
@@ -213,8 +222,8 @@ init(_Args) ->
     UnhealthyStorageIds = try
          storage_monitoring:perform_regular_checks([])
     catch Class:Reason ->
-        case datastore_runner:normalize_error(Reason) of
-            no_connection_to_onezone -> [];
+        case {error, datastore_runner:normalize_error(Reason)} of
+            ?ERR_NO_CONNECTION_TO_ONEZONE(_) -> [];
             _ -> erlang:apply(erlang, Class, [Reason])
         end
     end,
@@ -787,9 +796,9 @@ periodic_spaces_autocleaning_check() ->
                     _ -> ok
                 end
             end, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+        ?ERR_UNREGISTERED_ONEPROVIDER ->
             ?debug("Skipping spaces cleanup due to unregistered provider");
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
             ?debug("Skipping spaces cleanup due to no connection to Onezone");
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~tp", [Error])
@@ -810,9 +819,9 @@ rerun_transfers() ->
                         Restarted = transfer:rerun_not_ended_transfers(SpaceId),
                         ?debug("Restarted following transfers: ~tp", [Restarted])
                     end, SpaceIds);
-                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
                     schedule_rerun_transfers();
-                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     schedule_rerun_transfers();
                 Error = {error, _} ->
                     ?error("Unable to rerun transfers due to: ~tp", [Error])
@@ -835,9 +844,9 @@ restart_autocleaning_runs() ->
                     lists:foreach(fun(SpaceId) ->
                         autocleaning_api:restart_autocleaning_run(SpaceId)
                     end, SpaceIds);
-                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
                     schedule_restart_autocleaning_runs();
-                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     schedule_restart_autocleaning_runs();
                 Error = {error, _} ->
                     ?error("Unable to restart auto-cleaning runs due to: ~tp", [Error])

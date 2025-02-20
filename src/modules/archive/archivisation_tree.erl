@@ -158,7 +158,7 @@ is_in_archive(CanonicalPath) ->
     end.
 
 
--spec extract_archive_id(file_meta:path()) -> {ok, archive:id()} | {error, term()}.
+-spec extract_archive_id(file_meta:path()) -> {ok, archive:id()} | od_error_not_found:t().
 extract_archive_id(CanonicalPath) ->
     ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
     case filename:split(CanonicalPath) of

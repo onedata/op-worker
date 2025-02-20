@@ -86,7 +86,7 @@ describe_store_item(AtmWorkflowExecutionAuth, Guid, _AtmDataSpec) ->
         {ok, FileAttrs} ->
             {ok, file_attr_translator:to_json(FileAttrs, current, ?ATM_FILE_VALUE_DESCRIBE_ATTRS)};
         {error, Errno} ->
-            ?ERROR_POSIX(Errno)
+            ?ERR_POSIX(?err_ctx(), Errno)
     end.
 
 
@@ -179,11 +179,11 @@ resolve_internal(AtmWorkflowExecutionAuth, #{<<"fileId">> := ObjectId} = Value, 
         FileAttrs
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_file_type, UnverifiedConstraints));
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(?err_ctx(), Value, atm_file_type, UnverifiedConstraints));
         throw:Error ->
             throw(Error);
         _:_ ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
+            throw(?ERR_ATM_DATA_TYPE_UNVERIFIED(?err_ctx(), Value, atm_file_type))
     end.
 
 
@@ -228,7 +228,7 @@ fetch_attributes(AtmWorkflowExecutionAuth, FileGuid, AttributesToFetch) ->
         {error, Errno} ->
             case fslogic_errors:is_access_error(Errno) of
                 true -> throw({unverified_constraints, ?ATM_ACCESS_CONSTRAINT});
-                false -> throw(?ERROR_POSIX(Errno))
+                false -> throw(?ERR_POSIX(?err_ctx(), Errno))
             end
     end.
 

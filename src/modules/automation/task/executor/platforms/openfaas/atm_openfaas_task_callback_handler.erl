@@ -67,8 +67,8 @@ init(Req0, State = #{type := output}) ->
     {Body, Req1} = read_body(Req0),
     Result = case cowboy_req:header(<<"x-function-status">>, Req1) of
         <<"200">> -> decode_lambda_output(Body);
-        <<"404">> -> ?ERROR_ATM_JOB_BATCH_WITHDRAWN(trim_body(Body));
-        _ -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
+        <<"404">> -> ?ERR_ATM_JOB_BATCH_WITHDRAWN(?err_ctx(), trim_body(Body));
+        _ -> ?ERR_ATM_JOB_BATCH_CRASHED(?err_ctx(), trim_body(Body))
     end,
 
     workflow_engine:report_async_task_result(
@@ -116,7 +116,7 @@ decode_lambda_output(Body) ->
             {ok, #atm_lambda_output{results_batch = undefined}};
 
         #{<<"exception">> := Reason} ->
-            ?ERROR_ATM_JOB_BATCH_CRASHED(Reason);
+            ?ERR_ATM_JOB_BATCH_CRASHED(?err_ctx(), Reason);
 
         #{<<"resultsBatch">> := null} ->
             {ok, #atm_lambda_output{results_batch = undefined}};
@@ -125,14 +125,15 @@ decode_lambda_output(Body) ->
             {ok, #atm_lambda_output{results_batch = lists:map(fun utils:null_to_undefined/1, ResultsBatch)}};
 
         _ ->
-            ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
+            ?ERR_BAD_DATA(?err_ctx(), <<"lambdaOutput">>, str_utils:format_bin(
                 "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
                 "$LAMBDA_RESULTS_FOR_ITEM object for each item in 'argsBatch' "
                 "provided to lambda. Instead got: ~ts",
                 [json_utils:encode(trim_body(Body))]
             ))
     catch _:_ ->
-        ?ERROR_BAD_DATA(<<"lambdaOutput">>, ?ERROR_BAD_MESSAGE(trim_body(Body)))
+        ErrorCtx = ?err_ctx(),
+        ?ERR_BAD_DATA(ErrorCtx, <<"lambdaOutput">>, ?ERR_BAD_MESSAGE(ErrorCtx, trim_body(Body)))
     end.
 
 

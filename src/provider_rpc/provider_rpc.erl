@@ -65,7 +65,8 @@ call(ProviderId, FileGuid, Request) ->
                         {error, _} = CommunicatorError -> CommunicatorError
                     end;
                 error ->
-                    ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER
+                    {ok, ProviderDomain} = provider_logic:get_domain(ProviderId),
+                    ?ERR_NO_CONNECTION_TO_PEER_ONEPROVIDER(?err_ctx(), ProviderId, ProviderDomain)
             end
     end,
     case ReceivedRes of

@@ -71,9 +71,9 @@ revise() ->
                 {ok, Spaces} ->
                     CurrentlyRegisteredSpaces = list(),
                     revise(lists:sort(Spaces), lists:sort(CurrentlyRegisteredSpaces));
-                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     ?debug("auto_storage_import_worker was unable to revise its registry due to no connection to oz.");
-                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
                     ?debug("auto_storage_import_worker was unable to revise its registry due to unregistered provider.");
                 {error, _} = Error ->
                     ?error("auto_storage_import_worker was unable to revise its registry due to unexpected ~tp", [Error])
@@ -129,10 +129,10 @@ init() ->
                 create_empty(),
                 register_auto_imported_spaces(Spaces),
                 ?INITIALIZED;
-            ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                 ?debug("auto_storage_import_worker was unable to collect auto imported spaces due to no connection to oz"),
                 ?NOT_INITIALIZED;
-            ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            ?ERR_UNREGISTERED_ONEPROVIDER ->
                 ?debug("auto_storage_import_worker was unable to collect auto imported spaces due to unregistered provider"),
                 ?NOT_INITIALIZED;
             {error, _} = Error ->

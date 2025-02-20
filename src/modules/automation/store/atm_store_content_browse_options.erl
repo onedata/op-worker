@@ -82,10 +82,10 @@ sanitize(tree_forest, #{<<"type">> := <<"treeForestStoreContentBrowseOptions">>}
     atm_tree_forest_store_content_browse_options:sanitize(Data);
 
 sanitize(AtmStoreType, #{<<"type">> := _}) ->
-    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [store_type_to_type_json(AtmStoreType)]));
+    throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"type">>, [store_type_to_type_json(AtmStoreType)]));
 
 sanitize(_, _) ->
-    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"type">>)).
+    throw(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"type">>)).
 
 
 %%%===================================================================

@@ -93,7 +93,7 @@ assert_types_and_values(Configuration) ->
 assert_type_and_value(enabled, Value) when is_boolean(Value) ->
     ok;
 assert_type_and_value(enabled, _Value) ->
-    ?ERROR_BAD_VALUE_BOOLEAN(<<"enabled">>);
+    ?ERR_BAD_VALUE_BOOLEAN(?err_ctx(), <<"enabled">>);
 assert_type_and_value(last_open_hour_weight, Value) ->
     assert_non_negative_number(last_open_hour_weight, Value);
 assert_type_and_value(avg_open_count_per_day_weight, Value) ->
@@ -101,13 +101,13 @@ assert_type_and_value(avg_open_count_per_day_weight, Value) ->
 assert_type_and_value(max_avg_open_count_per_day, Value) ->
     assert_non_negative_number(max_avg_open_count_per_day, Value);
 assert_type_and_value(Other, _Value) ->
-    ?ERROR_BAD_DATA(str_utils:to_binary(Other)).
+    ?ERR_BAD_DATA(?err_ctx(), str_utils:to_binary(Other), undefined).
 
 
 -spec assert_non_negative_number(atom(), term()) -> ok | errors:error().
 assert_non_negative_number(Key, Value) when not is_number(Value) ->
-    ?ERROR_BAD_VALUE_INTEGER(atom_to_binary(Key, utf8));
+    ?ERR_BAD_VALUE_INTEGER(?err_ctx(), atom_to_binary(Key, utf8));
 assert_non_negative_number(Key, Value) when Value < 0 ->
-    ?ERROR_BAD_VALUE_TOO_LOW(atom_to_binary(Key, utf8), 0);
+    ?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), atom_to_binary(Key, utf8), 0);
 assert_non_negative_number(_Key, _Value) ->
     ok.

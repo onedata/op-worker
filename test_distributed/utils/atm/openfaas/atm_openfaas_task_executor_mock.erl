@@ -198,7 +198,7 @@ mock_initiate(Workers) ->
                     data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionUncorrelatedResultNames)
                 };
             exception ->
-                throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
+                throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
         end
     end,
     test_utils:mock_expect(Workers, ?MOCKED_MODULE, initiate, MockFun).

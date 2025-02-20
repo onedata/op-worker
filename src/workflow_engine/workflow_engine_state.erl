@@ -35,12 +35,12 @@
 %%% API
 %%%===================================================================
 
--spec init(workflow_engine:id(), non_neg_integer()) -> ok | ?ERROR_ALREADY_EXISTS.
+-spec init(workflow_engine:id(), non_neg_integer()) -> ok | od_error_already_exists:t().
 init(EngineId, SlotsLimit) ->
     Doc = #document{key = EngineId, value = #workflow_engine_state{slots_limit = SlotsLimit}},
     case datastore_model:create(?CTX, Doc) of
         {ok, _} -> ok;
-        ?ERROR_ALREADY_EXISTS -> ?ERROR_ALREADY_EXISTS
+        ?ERROR_ALREADY_EXISTS = ErrorAlreadyExist -> ErrorAlreadyExist
     end.
 
 % TODO VFS-7787 - acquire slot if it is free (optimization - one call instead of two)
@@ -67,7 +67,7 @@ remove_execution_id(EngineId, ExecutionId) ->
         ?WF_ERROR_ALREADY_REMOVED -> ?WF_ERROR_ALREADY_REMOVED
     end.
 
--spec poll_next_execution_id(workflow_engine:id()) -> {ok, workflow_engine:execution_id()} | ?ERROR_NOT_FOUND.
+-spec poll_next_execution_id(workflow_engine:id()) -> {ok, workflow_engine:execution_id()} | od_error_not_found:t().
 poll_next_execution_id(EngineId) ->
     % TODO VFS-7788 add groups/list/spaces management - we use priorities here
     % Provide execution ids using round robin algorithm due to update of executions list on each poll

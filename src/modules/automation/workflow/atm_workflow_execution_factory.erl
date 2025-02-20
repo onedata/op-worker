@@ -317,7 +317,7 @@ create_global_stores(CreationCtx = #creation_ctx{
             catch delete_stores(maps:values(AtmGlobalStoreRegistry)),
 
             Error = ?examine_exception(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Error))
+            throw(?ERR_ATM_STORE_CREATION_FAILED(?err_ctx(), AtmStoreSchemaId, Error))
         end
     end, CreationCtx, AtmStoreSchemas).
 

@@ -572,7 +572,7 @@ mock_auth_manager(Config, CheckIfUserIsSupported, NoHistory) ->
                                     Err1
                             end;
                         false ->
-                            ?ERROR_USER_NOT_SUPPORTED
+                            ?ERR_USER_NOT_SUPPORTED(?err_ctx())
                     end;
                 {error, _} = Err2 ->
                     Err2
@@ -1217,12 +1217,17 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get_local_storages, fun(SpaceId) ->
         {ok, #document{value = #od_space{storages_by_provider = StorageByProvider}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
-        {ok, maps:keys(maps:get(oneprovider:get_id(), StorageByProvider, #{}))}
+        case maps:keys(maps:get(oneprovider:get_id(), StorageByProvider, #{})) of
+            [] -> ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
+            Storage -> {ok, Storage}
+        end
     end),
     
     test_utils:mock_expect(Workers, space_logic, get_local_supporting_storage, fun(SpaceId) ->
-        {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
-        {ok, StorageId}
+        case space_logic:get_local_storages(SpaceId) of
+            {ok, [StorageId | _]} -> {ok, StorageId};
+            {error, _} = Error -> Error
+        end
     end),
 
     test_utils:mock_expect(Workers, space_logic, get_all_storage_ids, fun(SpaceId) ->
@@ -1526,7 +1531,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         (?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)) ->
             {ok, ?SUB(?ONEPROVIDER, ProviderId)};
         (_) ->
-            ?ERROR_BAD_TOKEN
+            ?ERR_BAD_TOKEN(?err_ctx())
     end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
@@ -1626,6 +1631,12 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
         {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = storage_logic:get(StorageId),
         {ok, QosParameters}
     end,
+
+    % mock existence of a dummy unhealthy storage (to check whether all works fine when one exists)
+    ok = test_utils:mock_new(Workers, storage_monitoring),
+    ok = test_utils:mock_expect(Workers, storage_monitoring, perform_regular_checks, fun(PreviousUnhealthyStorageIds) ->
+        [<<"dummy_unhealthy_storage">> | meck:passthrough([PreviousUnhealthyStorageIds -- [<<"dummy_unhealthy_storage">>]])]
+    end),
 
     ok = test_utils:mock_new(Workers, storage_logic),
 

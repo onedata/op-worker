@@ -36,7 +36,7 @@ handle(Auth, RpcFun, Data) ->
         Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error while processing gs file rpc "
                               "request - ~tp:~tp", [Type, Reason], Stacktrace),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
     end.
 
 
@@ -57,4 +57,4 @@ handle_internal(Auth, <<"moveFile">>, Data) ->
 handle_internal(Auth, <<"copyFile">>, Data) ->
     file_gs_rpc:copy(Auth, Data);
 handle_internal(_, _, _) ->
-    ?ERROR_RPC_UNDEFINED.
+    ?ERR_RPC_UNDEFINED(?err_ctx()).

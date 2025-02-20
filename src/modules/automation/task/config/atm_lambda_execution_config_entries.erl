@@ -40,7 +40,7 @@ build_entries(AtmWorkflowExecutionAuth, AtmLambdaConfigParameterSpecs, AtmLambda
             [AtmLambdaExecutionConfigEntry | Acc]
         catch Type:Reason:Stacktrace ->
             Error = ?examine_exception(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(ParameterName, Error))
+            throw(?ERR_ATM_LAMBDA_CONFIG_BAD_VALUE(?err_ctx(), ParameterName, Error))
         end
     end, [], AtmLambdaConfigParameterSpecs).
 
@@ -61,6 +61,6 @@ acquire_config(AtmRunJobBatchCtx, AtmLambdaConfigEntries) ->
             {Name, Value}
         catch Type:Reason:Stacktrace ->
             Error = ?examine_exception(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(Name, Error))
+            throw(?ERR_ATM_LAMBDA_CONFIG_BAD_VALUE(?err_ctx(), Name, Error))
         end
     end, AtmLambdaConfigEntries).

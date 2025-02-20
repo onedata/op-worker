@@ -58,9 +58,9 @@
 -spec init_session(offline_job_id(), auth_manager:credentials()) ->
     {ok, session:id()} | errors:error().
 init_session(_OfflineJobId, ?ROOT_CREDENTIALS) ->
-    ?ERROR_TOKEN_SUBJECT_INVALID;
+    ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx());
 init_session(_OfflineJobId, ?GUEST_CREDENTIALS) ->
-    ?ERROR_TOKEN_SUBJECT_INVALID;
+    ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx());
 init_session(OfflineJobId, TokenCredentials) ->
     case acquire_offline_credentials(OfflineJobId, TokenCredentials) of
         {ok, OfflineCredentials = #offline_access_credentials{user_id = UserId}} ->
@@ -111,11 +111,13 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                     case acquire_offline_credentials(OfflineJobId, to_token_credentials(OfflineCredentials)) of
                         {ok, NewOfflineCredentials} ->
                             {ok, NewOfflineCredentials};
-                        {error, _} = OzConnError when
-                            OzConnError == ?ERROR_TIMEOUT;
-                            OzConnError == ?ERROR_NO_CONNECTION_TO_ONEZONE;
-                            OzConnError == ?ERROR_TEMPORARY_FAILURE;
-                            OzConnError == ?ERROR_INTERNAL_SERVER_ERROR
+                        ?ERROR_TIMEOUT ->
+                            update_next_renewal_backoff(OfflineJobId, Now),
+                            {ok, OfflineCredentials};
+                        ?ERR(ErrorType) when
+                            ErrorType =:= ?ERR_NO_CONNECTION_TO_ONEZONE_TYPE;
+                            ErrorType =:= ?ERR_TEMPORARY_FAILURE_TYPE;
+                            ErrorType =:= ?ERR_INTERNAL_SERVER_ERROR_TYPE
                         ->
                             update_next_renewal_backoff(OfflineJobId, Now),
                             {ok, OfflineCredentials};
@@ -126,9 +128,9 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                     {ok, OfflineCredentials}
             end;
         {ok, #offline_access_credentials{valid_until = ValidUntil}} ->
-            ?ERROR_TOKEN_CAVEAT_UNVERIFIED(#cv_time{valid_until = ValidUntil});
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+            ?ERR_TOKEN_CAVEAT_UNVERIFIED(?err_ctx(), #cv_time{valid_until = ValidUntil});
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 

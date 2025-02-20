@@ -145,9 +145,9 @@ create_file_test_base(CreationType, MemRef) ->
                     <<"mode">> => [?DEFAULT_DIR_MODE, ?DEFAULT_FILE_MODE]
                 },
                 bad_values = [
-                    {<<"mode">>, <<"some_binary">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
-                    {<<"mode">>, -1, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
-                    {<<"mode">>, <<"2000">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
+                    {<<"mode">>, <<"some_binary">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
+                    {<<"mode">>, -1, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+                    {<<"mode">>, <<"2000">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
                     
                 ]
             }
@@ -321,8 +321,8 @@ get_file_instance_test(_Config) ->
             prepare_args_fun = build_get_instance_prepare_gs_args_fun(FileGuid, public),
             validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
                 case Client of
-                    ?NOBODY -> ?assertEqual(?ERROR_UNAUTHORIZED, Result);
-                    _ -> ?assertEqual(?ERROR_FORBIDDEN, Result)
+                    ?NOBODY -> ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result);
+                    _ -> ?assertEqual(?ERR_FORBIDDEN, Result)
                 end
             end
         },
@@ -388,7 +388,7 @@ get_shared_file_instance_test(_Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_get_instance_prepare_gs_args_fun(ShareRootFileGuid, private),
-            validate_result_fun = fun(_, Result) -> ?assertEqual(?ERROR_UNAUTHORIZED, Result) end
+            validate_result_fun = fun(_, Result) -> ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result) end
         },
         #scenario_spec{
             name = str_utils:format("Get instance for indirectly shared ~ts using gs public api", [FileType]),
@@ -417,7 +417,7 @@ get_file_instance_on_provider_not_supporting_space_test(_Config) ->
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
+        ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -589,7 +589,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
             end,
             prepare_args_fun = build_update_file_instance_test_prepare_gs_args_fun(FileGuid, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
+                ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
             end,
             data_spec = update_file_instance_test_data_spec()
         }
@@ -605,12 +605,12 @@ update_file_instance_test_data_spec() ->
             <<"0000">>, <<"0111">>, <<"0544">>, <<"0707">>
         ]},
         bad_values = [
-            {<<"posixPermissions">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
-            {<<"posixPermissions">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
-            {<<"posixPermissions">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
-            {<<"posixPermissions">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, true, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
             {<<"posixPermissions">>, <<"77777">>,
-                ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"posixPermissions">>, 0, 8#777)}
+                ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"posixPermissions">>, 0, 8#777)}
         ]
     }.
 
@@ -662,7 +662,7 @@ delete_file_instance_test(Config) ->
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_in_space = [{user4, ?ERR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType),
@@ -742,8 +742,8 @@ delete_file_instance_at_path_test(Config) ->
             ]
         },
         bad_values = [
-            {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
-            {<<"path">>, nonexistent_path, ?ERROR_POSIX(?ENOENT)}
+            {<<"path">>, <<"/a/b/\0null\0/">>, ?ERR_BAD_VALUE_FILE_PATH},
+            {<<"path">>, nonexistent_path, ?ERR_POSIX(?ENOENT)}
         ]
     },
 
@@ -759,7 +759,7 @@ delete_file_instance_at_path_test(Config) ->
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1],
-                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+                forbidden_in_space = [{user4, ?ERR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
             setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType),
@@ -851,7 +851,7 @@ delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
             prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, FileGuid}, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
+                ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
             end,
             verify_fun = fun(_, _) ->
                 ?assertMatch({ok, _}, file_test_utils:get_attrs(P1Node, FileGuid), ?ATTEMPTS),
@@ -996,7 +996,7 @@ ensure_guid({mem_ref, MemRef}) -> api_test_memory:get(MemRef, file_guid).
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

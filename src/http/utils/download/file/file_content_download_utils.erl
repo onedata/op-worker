@@ -126,7 +126,7 @@ download_single_regular_file(SessionId, #file_attr{
                         lfm:monitored_release(FileHandle)
                     end;
                 {error, Errno} ->
-                    http_req:send_error(?ERROR_POSIX(Errno), Req0)
+                    http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req0)
             end
     end.
 
@@ -154,7 +154,7 @@ download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnSuccessC
             file_content_streamer:close_stream(undefined, Req2),
             Req2;
         {error, Errno} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req0)
+            http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req0)
     end.
 
 
@@ -244,7 +244,7 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
 stream_whole_tarball(_BulkDownloadId, _SessionId, [], _TarballName, _FollowSymlinks, Req0) ->
     % can happen when requested download from the beginning and download 
     % code has expired but bulk download still allowed for resume
-    http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req0);
+    http_req:send_error(?ERR_BAD_VALUE_ID_NOT_FOUND(?err_ctx(), <<"code">>), Req0);
 
 stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0) ->
     Req1 = http_download_utils:set_content_disposition_header(Req0, TarballName),

@@ -70,5 +70,5 @@ handle(<<"GET">>, Req1) ->
             file_download_code:remove(DownloadCode),
             Req2;
         _ ->
-            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req1)
+            http_req:send_error(?ERR_BAD_VALUE_ID_NOT_FOUND(?err_ctx(), <<"code">>), Req1)
     end.

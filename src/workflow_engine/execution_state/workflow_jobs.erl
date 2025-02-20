@@ -112,7 +112,7 @@ init() ->
     #workflow_jobs{}.
 
 -spec prepare_next_waiting_job(jobs()) ->
-    {ok, job_identifier(), jobs()} | ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND.
+    {ok, job_identifier(), jobs()} | ?WF_ERROR_NO_WAITING_ITEMS | od_error_not_found:t().
 prepare_next_waiting_job(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing
@@ -131,7 +131,7 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
     end.
 
 -spec prepare_next_waiting_result(jobs()) ->
-    {{ok, job_identifier()} | ?ERROR_NOT_FOUND, jobs()} | ?WF_ERROR_ITERATION_FINISHED.
+    {{ok, job_identifier()} | od_error_not_found:t(), jobs()} | ?WF_ERROR_ITERATION_FINISHED.
 prepare_next_waiting_result(Jobs = #workflow_jobs{results_iterator = undefined, waiting = Waiting}) ->
     prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = gb_sets:iterator(Waiting)});
 prepare_next_waiting_result(#workflow_jobs{results_iterator = ?ITERATION_FINISHED}) ->
@@ -395,7 +395,7 @@ register_async_call(EngineId, Jobs = #workflow_jobs{
                 JobIdentifier, CachedResultId)
     end.
 
--spec check_timeouts(jobs()) -> {jobs() | ?WF_ERROR_NO_TIMEOUTS_UPDATED, [job_identifier()]} | ?ERROR_NOT_FOUND.
+-spec check_timeouts(jobs()) -> {jobs() | ?WF_ERROR_NO_TIMEOUTS_UPDATED, [job_identifier()]} | od_error_not_found:t().
 check_timeouts(Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls
 }) ->

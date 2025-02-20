@@ -90,7 +90,7 @@ translate_value(ProtocolVersion, GRI, Data) ->
         "Data: ~tp",
         [ProtocolVersion, GRI, Data]
     ),
-    throw(?ERROR_INTERNAL_SERVER_ERROR).
+    throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)).
 
 
 %%--------------------------------------------------------------------
@@ -149,4 +149,4 @@ translate_resource(ProtocolVersion, GRI, Data) ->
         "Data: ~tp",
         [ProtocolVersion, GRI, Data]
     ),
-    throw(?ERROR_INTERNAL_SERVER_ERROR).
+    throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)).

@@ -98,7 +98,7 @@ finish_atm_workflow_execution() ->
                         % is no longer possible (execution is treated as successfully ended)
                         lists:foreach(fun(StoppingReason) ->
                             ?assertEqual(
-                                ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?STOPPING_STATUS),
+                                ?ERR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?STOPPING_STATUS),
                                 atm_workflow_execution_test_utils:stop_workflow_execution(
                                     StoppingReason, AtmMockCallCtx
                                 )

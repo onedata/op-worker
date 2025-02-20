@@ -146,7 +146,7 @@ create_test_base(#{
     % Assert creating store with no initial content (in schema or in args)
     % when it is required fails
     ?assertEqual(
-        ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
+        ?ERR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
         ?rpc(catch atm_store_api:create(
             AtmWorkflowExecutionAuth,
             ?DEBUG_AUDIT_LOG_SEVERITY_INT,
@@ -185,12 +185,12 @@ create_test_base(#{
 
         % Assert creating store with non array initial content fails
         ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_array_type),
+            ?ERR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_array_type),
             ?rpc(catch CreateStoreFun(<<"NaN">>))
         ),
 
         % Assert creating store with array initial content containing some invalid items fails
-        ExpError = ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+        ExpError = ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
             [ValidInputItemDataSeed, InvalidInputItemDataSeed],
             atm_array_type,
             #{<<"$[1]">> => errors:to_json(atm_store_test_utils:infer_exp_invalid_data_error(
@@ -277,7 +277,7 @@ update_content_test_base(#{
                     ?assertEqual(InitialStoreContent, BrowseContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
                 end, [
                     {append, InvalidInputItem, ExpInvalidInputItemError},
-                    {extend, [NewInputItem1, InvalidInputItem], ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    {extend, [NewInputItem1, InvalidInputItem], ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                         [NewInputItemDataSeed1, InvalidInputItemDataSeed],
                         atm_array_type,
                         #{<<"$[1]">> => errors:to_json(ExpInvalidInputItemError)}
@@ -293,7 +293,7 @@ update_content_test_base(#{
         % Assert it is not possible to perform operation on frozen store
         ?rpc(atm_store_api:freeze(AtmStoreId)),
         ?assertEqual(
-            ?ERROR_ATM_STORE_FROZEN(get_schema_id(AtmStoreSchema)),
+            ?ERR_ATM_STORE_FROZEN(get_schema_id(AtmStoreSchema)),
             ?rpc(catch atm_store_api:update_content(
                 AtmWorkflowExecutionAuth,
                 NewInputItem1,

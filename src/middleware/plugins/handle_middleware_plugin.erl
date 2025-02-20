@@ -98,7 +98,7 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = public}}) ->
     end;
 
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = update, gri = #gri{scope = private}}) ->
     % authorization will be checked by oz in during handle update

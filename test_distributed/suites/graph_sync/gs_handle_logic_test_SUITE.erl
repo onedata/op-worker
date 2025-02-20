@@ -167,7 +167,7 @@ create_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, HandleGriMatcher)),
 
     ?assertMatch(
-        ?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>),
+        ?ERR_BAD_VALUE_ID_NOT_FOUND(<<"handleServiceId">>),
         rpc:call(Node, handle_logic, create, [
             User1Sess,
             <<"badHService">>,
@@ -201,7 +201,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of the
     % data access caveat
     ?assertMatch(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, handle_logic, get_public_data, [TokenCredentials, ?HANDLE_1])
     ),
     % Nevertheless, following requests should be made:

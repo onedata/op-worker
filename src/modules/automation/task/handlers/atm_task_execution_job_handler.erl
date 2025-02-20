@@ -195,14 +195,14 @@ parse_job_batch_result(ItemBatch, {ok, #atm_lambda_output{results_batch = Result
         (Item, Result) when is_map(Result) ->
             {Item, Result};
         (Item, Result) ->
-            {Item, ?ERROR_BAD_DATA(<<"lambdaResultsForItem">>, str_utils:format_bin(
+            {Item, ?ERR_BAD_DATA(?err_ctx(), <<"lambdaResultsForItem">>, str_utils:format_bin(
                 "Expected object with result names matching those defined in task schema. "
                 "Instead got: ~ts", [json_utils:encode(Result)]
             ))}
     end, ItemBatch, ResultsBatch)};
 
 parse_job_batch_result(_ItemBatch, {ok, #atm_lambda_output{results_batch = ResultsBatch}}) ->
-    ?ERROR_BAD_DATA(<<"lambdaOutput.resultsBatch">>, str_utils:format_bin(
+    ?ERR_BAD_DATA(?err_ctx(), <<"lambdaOutput.resultsBatch">>, str_utils:format_bin(
         "Expected array with object for each item in 'argsBatch' provided to lambda. "
         "Instead got: ~ts", [json_utils:encode(ResultsBatch)]
     )).
@@ -220,7 +220,7 @@ handle_job_batch_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     ItemBatch,
-    ?ERROR_ATM_JOB_BATCH_WITHDRAWN(Reason)
+    ?ERR_ATM_JOB_BATCH_WITHDRAWN(Reason)
 ) ->
     case atm_task_execution_status:handle_items_withdrawn(AtmTaskExecutionId, length(ItemBatch)) of
         {ok, _} ->
@@ -229,7 +229,7 @@ handle_job_batch_processing_error(
             % items withdrawal caused not by stopping execution is treated as error
             handle_job_batch_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                ?ERROR_ATM_JOB_BATCH_CRASHED(Reason)
+                ?ERR_ATM_JOB_BATCH_CRASHED(?err_ctx(), Reason)
             )
     end;
 
@@ -245,7 +245,7 @@ handle_job_batch_processing_error(
         <<"description">> => <<"Failed to process batch of items.">>,
         <<"details">> => #{
             <<"reason">> => case Error of
-                ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
+                ?ERR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
                 _ -> errors:to_json(Error)
             end
         },

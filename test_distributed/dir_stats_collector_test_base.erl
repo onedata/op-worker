@@ -893,7 +893,7 @@ multiple_status_change_test(Config) ->
         Timestamp
     end, LastChangeTime, StatusChangesWithTimestamps2),
 
-    ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+    ?assertEqual(?ERR_DIR_STATS_DISABLED_FOR_SPACE,
         rpc:call(Worker, dir_stats_service_state, get_last_initialization_timestamp_if_in_enabled_status, [SpaceId])).
 
 
@@ -1380,7 +1380,7 @@ check_space_dir_values_map_and_time_series_collection(
     Config, Selector, SpaceGuid, _ExpectedCurrentStats, _IsCollectionEmpty, disabled = _CollectingStatus
 ) ->
     [Worker | _] = ?config(get_config_nodes_selector(Selector), Config),
-    ?assertMatch(?ERROR_DIR_STATS_DISABLED_FOR_SPACE, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]));
+    ?assertMatch(?ERR_DIR_STATS_DISABLED_FOR_SPACE, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]));
 
 check_space_dir_values_map_and_time_series_collection(
     Config, Selector, SpaceGuid, ExpectedCurrentStats, IsCollectionEmpty, CollectingStatus

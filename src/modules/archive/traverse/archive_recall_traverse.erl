@@ -115,7 +115,7 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
                 {error, eexist} ->
                     ?ERROR_ALREADY_EXISTS;
                 {error, Reason} ->
-                    ?ERROR_POSIX(Reason)
+                    ?ERR_POSIX(?err_ctx(), Reason)
             end;
         Error ->
             Error
@@ -219,7 +219,7 @@ ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) ->
 can_start_recall(SpaceId, Guid) ->
     case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(Guid)) of
         {ok, {ongoing, _}} ->
-            ?ERROR_RECALL_TARGET_CONFLICT;
+            ?ERR_RECALL_TARGET_CONFLICT(?err_ctx());
         _ ->
             ok
     end.

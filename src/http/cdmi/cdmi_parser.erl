@@ -63,7 +63,7 @@ parse_content_range_header(Req, Threshold) ->
                     _ -> {Range, binary_to_integer(ExpectedSize)}
                 end
             catch _:_ ->
-                throw(?ERROR_BAD_DATA(?HDR_CONTENT_RANGE))
+                throw(?ERR_BAD_DATA(?err_ctx(), ?HDR_CONTENT_RANGE, undefined))
             end
     end.
 
@@ -161,7 +161,7 @@ validate_body(Body) ->
     ExclusiveRequiredKeysSet = sets:from_list(?KEYS_REQUIRED_TO_BE_EXCLUSIVE),
     case sets:size(sets:intersection(KeySet, ExclusiveRequiredKeysSet)) of
         N when N > 1 ->
-            throw(?ERROR_MALFORMED_DATA);
+            throw(?ERR_MALFORMED_DATA(?err_ctx()));
         _ ->
             ok
     end.

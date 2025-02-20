@@ -16,7 +16,7 @@
 -include_lib("ctool/include/onedata_file.hrl").
 
 %% NOTE: any change to this record should be reflected in:
-%%  * ctool: onedata_file.hrl and onedata_file.erl
+%%  * ctool: onedata_file.hrl, onedata_file.erl and atm_file_data_spec.erl
 %%  * onedatafilerestclient: file_attributes.py
 %%  * gui: atm lambda attributes schema selector for file type
 -record(file_attr, {

@@ -324,7 +324,7 @@ cleanup(ExecutionId) ->
     ok = datastore_model:delete(?CTX, ExecutionId).
 
 -spec prepare_next_job(workflow_engine:execution_id()) ->
-    {ok, workflow_engine:execution_spec()} | ?DEFER_EXECUTION | ?RETRY_EXECUTION | ?ERROR_NOT_FOUND | #execution_ended{} |
+    {ok, workflow_engine:execution_spec()} | ?DEFER_EXECUTION | ?RETRY_EXECUTION | od_error_not_found:t() | #execution_ended{} |
     ?PREPARE_LANE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context(),
         workflow_engine:lane_id(), workflow_engine:preparation_mode(), init_type()).
 prepare_next_job(ExecutionId) ->
@@ -356,8 +356,8 @@ prepare_next_job(ExecutionId) ->
                 remove_pending_callback(State, ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR)
             end),
             ?RETRY_EXECUTION;
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND % Race with execution deletion
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound % Race with execution deletion
     end.
 
 -spec report_execution_status_update(
@@ -620,13 +620,13 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
     {Handler, Context, TaskId}.
 
 
--spec get(workflow_engine:execution_id()) -> {ok, state()} | ?ERROR_NOT_FOUND.
+-spec get(workflow_engine:execution_id()) -> {ok, state()} | od_error_not_found:t().
 get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{value = State}} ->
             {ok, State};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 -spec save(doc()) -> ok.
@@ -790,7 +790,7 @@ get_task_ids(BoxesMap) ->
         workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
         workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
-    ) | ?ERROR_NOT_FOUND.
+    ) | od_error_not_found:t().
 prepare_next_job_for_current_lane(ExecutionId) ->
     case update(ExecutionId, fun prepare_next_waiting_job/1) of
         {ok, Doc} ->
@@ -809,7 +809,7 @@ prepare_next_job_for_current_lane(ExecutionId) ->
         workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
         workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
-    ) | ?ERROR_NOT_FOUND.
+    ) | od_error_not_found:t().
 prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Handler, Context) ->
     NextIterationStep = case CurrentIterationStep of
         undefined ->
@@ -843,9 +843,9 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         ?WF_ERROR_RACE_CONDITION ->
             maybe_delete_prefetched_iteration_step(NextIterationStep),
             prepare_next_job_for_current_lane(ExecutionId);
-        ?ERROR_NOT_FOUND -> % Race with execution deletion
+        ?ERROR_NOT_FOUND = ErrorNotFound -> % Race with execution deletion
             maybe_delete_prefetched_iteration_step(NextIterationStep),
-            ?ERROR_NOT_FOUND
+            ErrorNotFound
     end.
 
 
@@ -859,7 +859,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
         workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
-    ) | ?ERROR_NOT_FOUND.
+    ) | od_error_not_found:t().
 handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = #job_prepared_report{
         job_identifier = JobIdentifier,
@@ -1259,7 +1259,7 @@ mark_exception_appeared(State, Context, ErrorType, Reason, Stacktrace) ->
         ]
     }}}.
 
--spec check_waiting_exception_handler(state()) -> {ok, state()} | ?ERROR_NOT_FOUND.
+-spec check_waiting_exception_handler(state()) -> {ok, state()} | od_error_not_found:t().
 check_waiting_exception_handler(#workflow_execution_state{
     execution_status = #execution_cancelled{
         call_count = 0,
@@ -1779,8 +1779,8 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                     task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
                 jobs = NewJobs
             }};
-        {?ERROR_NOT_FOUND, NewJobs} ->
-            verify_ongoing_when_execution_is_cancelled(?ERROR_NOT_FOUND, NewJobs, State);
+        {?ERROR_NOT_FOUND = ErrorNotFound, NewJobs} ->
+            verify_ongoing_when_execution_is_cancelled(ErrorNotFound, NewJobs, State);
         ?WF_ERROR_ITERATION_FINISHED ->
             verify_ongoing_when_execution_is_cancelled(?WF_ERROR_ITERATION_FINISHED, Jobs, State)
     end;
@@ -1865,7 +1865,7 @@ prepare_next_waiting_job(#workflow_execution_state{
 }) ->
     ?WF_ERROR_NO_WAITING_ITEMS.
 
--spec verify_ongoing_when_execution_is_cancelled(?ERROR_NOT_FOUND | ?WF_ERROR_ITERATION_FINISHED,
+-spec verify_ongoing_when_execution_is_cancelled(od_error_not_found:t() | ?WF_ERROR_ITERATION_FINISHED,
     workflow_jobs:jobs(), state()) -> {ok, state()} | ?WF_ERROR_NO_WAITING_ITEMS.
 verify_ongoing_when_execution_is_cancelled(Error, NewJobs, State = #workflow_execution_state{
     pending_callbacks = PendingCallbacks
@@ -2055,7 +2055,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
             }}
     end.
 
--spec prepare_next_streamed_task_data(state()) -> {ok, state()} | ?ERROR_NOT_FOUND.
+-spec prepare_next_streamed_task_data(state()) -> {ok, state()} | od_error_not_found:t().
 prepare_next_streamed_task_data(State = #workflow_execution_state{tasks_data_registry = TasksDataRegistry}) ->
     case workflow_tasks_data_registry:take_for_processing(TasksDataRegistry) of
         {ok, TaskId, CachedTaskDataId, UpdatedTasksDataRegistry} ->
@@ -2064,8 +2064,8 @@ prepare_next_streamed_task_data(State = #workflow_execution_state{tasks_data_reg
                     task_id = TaskId, subject_id = CachedTaskDataId},
                 tasks_data_registry = UpdatedTasksDataRegistry
             }};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 -spec get_task_status(workflow_jobs:job_identifier(), state()) -> task_status().
@@ -2189,7 +2189,7 @@ report_job_finish(State = #workflow_execution_state{
             prepare_next_parallel_box(State2, JobIdentifier)
     end.
 
--spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
+-spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | od_error_not_found:t()) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{current_lane = #current_lane{id = undefined}}, _Error) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
 handle_no_waiting_items_error(#workflow_execution_state{pending_callbacks = Waiting}, _Error) when Waiting =/= [] ->

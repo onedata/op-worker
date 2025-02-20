@@ -69,7 +69,7 @@
     % It will be specially handled when stopping execution - items_in_processing
     % counter will be decremented but overall job is not consider as failed.
     % In any other case it will be treated as normal error.
-    ?ERROR_ATM_JOB_BATCH_WITHDRAWN(binary()) |
+    od_error_atm_job_batch_withdrawn:t() |
     errors:error().
 
 -type streamed_data() :: {chunk, json_utils:json_map()} | errors:error().
