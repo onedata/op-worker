@@ -114,10 +114,17 @@ gui_upload_circuit_breaker_test(_Config) ->
 init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [
-            {gui_upload_retry_backoff_seconds, ?LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS},
-            {db_disk_monitor_verbose_logs, true}
-        ]}]
+        envs = [
+            {op_worker, op_worker, [
+                {gui_upload_retry_backoff_seconds, ?LOW_GUI_UPLOAD_RETRY_INTERVAL_SECONDS}
+            ]},
+            {oz_panel, onepanel, [
+                {db_disk_monitor_verbose_logs, true}
+            ]},
+            {op_panel, onepanel, [
+                {db_disk_monitor_verbose_logs, true}
+            ]}
+        ]
     }).
 
 
