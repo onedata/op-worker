@@ -25,7 +25,9 @@
     save/7, update/6, update/7, get/1, get/2,
     delete/2, list/1, list/4, save_db_view/6, delete_db_view/1,
     query/3, get_json/2, exists_on_provider/3, update_reduce_function/3,
-    build_cdmi_object_id_in_js/0]).
+    build_cdmi_object_id_in_js/0
+]).
+-export([upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6/1]).
 
 %% datastore_model callbacks
 -export([
@@ -66,6 +68,45 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Due to couchbase upgrade from version 4.5 to 6.6 the javascript language
+%% construct `for ... of` no longer works. As it was used in previous map
+%% function wrapper, all views must be overwritten to replace the wrapper.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6(od_space:id()) -> ok.
+upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6(SpaceId) ->
+    ?info("Upgrading views in space (id: ~ts)...", [SpaceId]),
+
+    view_links:foreach(SpaceId, fun(ViewName) ->
+        %% TODO rm
+        ?info("Upgrading view (name: ~ts) in space (id: ~ts)...", [ViewName, SpaceId]),
+        try
+            {ok, #document{
+                key = Id,
+                value = #index{
+                    name = ViewName,
+                    space_id = SpaceId,
+                    spatial = Spatial,
+                    map_function = MapFunction,
+                    reduce_function = ReduceFunction,
+                    index_options = Options
+                }
+            }} = index:get(ViewName, SpaceId),
+
+            % Save once again to overwrite mapping function wrapper
+            ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options)
+        catch Class:Reason:Stacktrace ->
+            ?error_exception(
+                "Failed to upgrade view (name: ~ts) in space (id: ~ts)",
+                [ViewName, SpaceId],
+                Class, Reason, Stacktrace
+            )
+        end
+    end).
 
 
 %%--------------------------------------------------------------------
