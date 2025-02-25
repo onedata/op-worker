@@ -430,6 +430,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     hardlink_count = HardlinksCount,
     symlink_value = SymlinkValue,
     has_custom_metadata = HasMetadata,
+    has_json_metadata = HasJsonMetadata,
     eff_protection_flags = EffProtectionFlags,
     eff_dataset_protection_flags = EffDatasetProtectionFlags,
     eff_dataset_inheritance_path = EffDatasetInheritancePath,
@@ -492,6 +493,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
         <<"symlinkValue">> => SymlinkValue,
         <<"hasCustomMetadata">> => HasMetadata,
+        <<"hasJsonMetadata">> = HasJsonMetadata,
         <<"effProtectionFlags">> => case EffProtectionFlags of
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffProtectionFlags)

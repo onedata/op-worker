@@ -19,6 +19,8 @@
 %%  * ctool: onedata_file.hrl, onedata_file.erl and atm_file_data_spec.erl
 %%  * onedatafilerestclient: file_attributes.py
 %%  * gui: atm lambda attributes schema selector for file type
+%%  * @TODO VFS-12091 until atm versioning is introduced all new attrs have to be excluded from attr list available for atm
+%%    (atm_file_data_spec.erl and tests, search for this ticket number)
 -record(file_attr, {
     guid :: undefined | fslogic_worker:file_guid(),
     index :: undefined | file_listing:index(),
@@ -45,6 +47,7 @@
     hardlink_count :: undefined | non_neg_integer(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     has_custom_metadata :: undefined | boolean(),
+    has_json_metadata :: undefined | boolean(),
     eff_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_inheritance_path :: undefined | dataset:inheritance_path(),

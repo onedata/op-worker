@@ -281,6 +281,7 @@ resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
             (<<?ONEDATA_PREFIX_STR, _/binary>>) -> false;
             (_) -> true
         end, maps:keys(AllXattrs)),
+        has_json_metadata = maps:is_key(?JSON_METADATA_KEY, AllXattrs),
         json_metadata = maps:get(?JSON_METADATA_KEY, AllXattrs, undefined)
     }}.
 
