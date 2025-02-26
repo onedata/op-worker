@@ -238,15 +238,15 @@ new_helper(Config) ->
 
     UserCtx = #{
         <<"username">> => atom_to_binary(?config(user_name, SwiftConfig), utf8),
-        <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8)
+        <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8),
+        <<"projectName">> => atom_to_binary(?config(project_name, SwiftConfig), utf8)
     },
     {ok, Helper} = helper:new_helper(
         ?SWIFT_HELPER_NAME,
         #{
             <<"authUrl">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
-            ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v2.0/tokens">>,
+            ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v3">>,
             <<"containerName">> => ?SWIFT_CONTAINER_NAME,
-            <<"tenantName">> => atom_to_binary(?config(tenant_name, SwiftConfig), utf8),
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
         UserCtx
