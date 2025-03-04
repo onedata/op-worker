@@ -576,7 +576,7 @@ handle_exception(
 
         % if last lane run already stopped then abrupt stopping hasn't crashed
         % and only workflow needs to be marked as stopped
-        ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?STOPPING_STATUS) ->
+        ?ERR_ATM_INVALID_STATUS_TRANSITION(Status, ?STOPPING_STATUS) ->
             LastAtmLaneRunPhase = atm_lane_execution_status:status_to_phase(Status),
             case lists:member(LastAtmLaneRunPhase, [?SUSPENDED_PHASE, ?ENDED_PHASE]) of
                 true -> AbruptStoppingReason;

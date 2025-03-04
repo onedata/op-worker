@@ -49,7 +49,7 @@ get() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates the version info of this Oneprovider worker in the corresponding
-%% cluster in Onezone. May return ?ERROR_BAD_VALUE_NOT_ALLOWED if the requested
+%% cluster in Onezone. May return ?ERR_BAD_VALUE_NOT_ALLOWED if the requested
 %% GUI version is not present in Onezone (in such case, GUI must be uploaded
 %% before updating the version info).
 %% @end

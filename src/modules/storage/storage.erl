@@ -187,12 +187,12 @@ exists(StorageId) ->
 %% any space.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(id()) -> ok | ?ERROR_STORAGE_IN_USE | {error, term()}.
+-spec delete(id()) -> ok | od_error_storage_in_use:t() | {error, term()}.
 delete(StorageId) ->
     lock_on_storage_by_id(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
-                ?ERROR_STORAGE_IN_USE;
+                ?ERR_STORAGE_IN_USE(?err_ctx());
             false ->
                 % TODO VFS-5124 Remove from rtransfer
                 delete_insecure(StorageId)
@@ -466,17 +466,17 @@ validate_support_request(SerializedToken) ->
         {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
             case provider_logic:supports_space(SpaceId) of
                 true ->
-                    ?ERROR_RELATION_ALREADY_EXISTS(
-                        od_space, SpaceId, od_provider, oneprovider:get_id()
+                    ?ERR_RELATION_ALREADY_EXISTS(
+                        ?err_ctx(), od_space, SpaceId, od_provider, oneprovider:get_id()
                     );
                 false ->
                     {ok, SpaceId}
             end;
         {ok, #token{type = ReceivedType}} ->
-            ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
-                ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType));
+            ?ERR_BAD_VALUE_TOKEN(?err_ctx(), <<"token">>,
+                ?ERR_NOT_AN_INVITE_TOKEN(?err_ctx(), ?SUPPORT_SPACE, ReceivedType));
         {error, _} = Error ->
-            ?ERROR_BAD_VALUE_TOKEN(<<"token">>, Error)
+            ?ERR_BAD_VALUE_TOKEN(?err_ctx(), <<"token">>, Error)
     end.
 
 
@@ -485,7 +485,7 @@ validate_support_request(SerializedToken) ->
 update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
     CurrentOccupiedSize = space_quota:current_size(SpaceId),
     case NewSupportSize < CurrentOccupiedSize of
-        true -> ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
+        true -> ?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), <<"size">>, CurrentOccupiedSize);
         false -> storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize)
     end.
 
@@ -562,7 +562,7 @@ check_helper_against_readonly_option(#{readonly := false}, Helper) ->
     case helper:supports_storage_access_type(Helper, ?READWRITE) of
         false ->
             HelperName = helper:get_name(Helper),
-            throw(?ERROR_REQUIRES_READONLY_STORAGE(HelperName));
+            throw(?ERR_REQUIRES_READONLY_STORAGE(?err_ctx(), HelperName));
         true ->
             ok
     end.
@@ -575,7 +575,7 @@ check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
     case helper:is_import_supported(Helper) of
         false ->
             HelperName = helper:get_name(Helper),
-            throw(?ERROR_STORAGE_IMPORT_NOT_SUPPORTED(HelperName, ?OBJECT_HELPERS));
+            throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), HelperName, ?OBJECT_HELPERS));
         true ->
             ok
     end.
@@ -592,6 +592,6 @@ sanitize_readonly_option(IdOrName, #{
         utils:to_boolean(Imported)
     } of
         {false, _} -> ok;
-        {true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
+        {true, false} -> throw(?ERR_REQUIRES_IMPORTED_STORAGE(?err_ctx(), IdOrName));
         {true, true} -> ok
     end.

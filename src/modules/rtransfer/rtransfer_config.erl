@@ -442,11 +442,11 @@ get_storages(Retries) ->
                     retry;
                 [FirstBadStorage | _] ->
                     ?critical("Cannot find local configuration for storage ~ts", [FirstBadStorage]),
-                    ?ERROR_INTERNAL_SERVER_ERROR
+                    ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
             end;
-        {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->
+        {?ERR_UNREGISTERED_ONEPROVIDER, 0} ->
             {ok, []};
-        {?ERROR_NO_CONNECTION_TO_ONEZONE, 0} ->
+        {?ERR_NO_CONNECTION_TO_ONEZONE(_), 0} ->
             {ok, []}; % will be called again when connection is established
         {{error, _} = Error, 0} ->
             ?critical("Unexpected error when fetching the list of storages: ~tp", [Error]),

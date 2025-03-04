@@ -1019,7 +1019,7 @@ init_per_suite(Config) ->
         atm_workflow_execution_restart_tests
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
-    oct_background:init_per_suite(
+    opt:init_per_suite(
         [{?LOAD_MODULES, ModulesToLoad} | Config],
         #onenv_test_config{
             onenv_scenario = "1op",

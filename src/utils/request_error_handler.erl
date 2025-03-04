@@ -72,7 +72,7 @@ infer_error({error, Reason} = Error) ->
 infer_error(Error) ->
     case errors:is_posix_code(Error) of
         true ->
-            {true, ?ERROR_POSIX(Error)};
+            {true, ?ERR_POSIX(?err_ctx(), Error)};
         false ->
             false
     end.

@@ -407,7 +407,7 @@ transfer_id_to_file_uuid(TransferId) ->
 %% @private
 -spec normalize_error({error, any()}) -> errors:error().
 normalize_error({error, <<"quota exceeded">>}) ->
-    ?ERROR_QUOTA_EXCEEDED;
+    ?ERR_QUOTA_EXCEEDED(?err_ctx());
 normalize_error({error, {connection,<<"No such file or directory">>}}) ->
     ?ERROR_NOT_FOUND;
 normalize_error(Error) ->

@@ -449,7 +449,7 @@ unauthorized_access_by_object_id_test(Config) ->
         ?WORKERS(Config), filename:join("cdmi_objectid/", binary_to_list(RootId)) ++ "/",
         get, RequestHeaders, []
     ),
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_UNAUTHORIZED),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_UNAUTHORIZED(undefined)),
     ?assertMatch(ExpRestError, {Code, json_utils:decode(Response)}).
 
 

@@ -129,7 +129,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = batch}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{operation = delete, gri = #gri{scope = private, aspect = As}}) when
     As =:= instance;
@@ -332,7 +332,7 @@ delete(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{
         CreatorUserId -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
         _ -> ?SPACE_MANAGE_ATM_WORKFLOW_EXECUTIONS
     end),
-    IsAuthorized orelse throw(?ERROR_FORBIDDEN),
+    IsAuthorized orelse throw(?ERR_FORBIDDEN(?err_ctx())),
 
     mi_atm:discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId);
 

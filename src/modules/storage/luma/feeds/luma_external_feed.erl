@@ -320,7 +320,7 @@ decode_body(EncodedBody) ->
         {ok, json_utils:decode(EncodedBody)}
     catch
         _:invalid_json ->
-            ?ERROR_MALFORMED_DATA
+            ?ERR_MALFORMED_DATA(?err_ctx())
     end.
 
 %%--------------------------------------------------------------------

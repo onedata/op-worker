@@ -152,14 +152,14 @@ resolve_internal(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId} = Val
         SpaceId ->
             DatasetInfo;
         _ ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(?err_ctx(), Value, atm_dataset_type, #{
                 <<"inSpace">> => SpaceId
             }))
     catch throw:Error ->
         case middleware_utils:is_file_access_error(Error) of
             true ->
-                throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                    Value, atm_dataset_type, ?ATM_ACCESS_CONSTRAINT
+                throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    ?err_ctx(), Value, atm_dataset_type, ?ATM_ACCESS_CONSTRAINT
                 ));
             false ->
                 throw(Error)

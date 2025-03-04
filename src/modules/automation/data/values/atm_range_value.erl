@@ -63,8 +63,8 @@ validate_constraints(_AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     try
         assert_valid_step_direction(Range)
     catch throw:{unverified_constraints, UnverifiedConstraints} ->
-        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-            Value, atm_range_type, UnverifiedConstraints
+        throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            ?err_ctx(), Value, atm_range_type, UnverifiedConstraints
         ))
     end.
 

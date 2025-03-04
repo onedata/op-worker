@@ -164,7 +164,7 @@ create_get_update_delete_view(Config) ->
     UserId = <<"user1">>,
 
     AllPrivs = privileges:space_privileges(),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
 
     %% CREATE
 
@@ -300,22 +300,22 @@ creating_view_with_invalid_params_should_fail(Config) ->
         )),
         ?assertMatch([], list_views_via_rest(Config, Worker, ?SPACE_ID, 100))
     end, [
-        {#{update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
-        {#{update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
-        {#{update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
-        {#{update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
+        {#{update_min_changes => ok}, ?ERR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => -3}, ?ERR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
+        {#{update_min_changes => 15.2}, ?ERR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
 
-        {#{replica_update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
-        {#{replica_update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
-        {#{replica_update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
-        {#{replica_update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
+        {#{replica_update_min_changes => ok}, ?ERR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => -3}, ?ERR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
+        {#{replica_update_min_changes => 15.2}, ?ERR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
 
-        {#{spatial => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
-        {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
-        {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => 1}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => -3}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => ok}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
 
-        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ok">>)},
-        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ASD">>)}
+        {#{providers => [ok]}, ?ERR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ok">>)},
+        {#{providers => [<<"ASD">>]}, ?ERR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ASD">>)}
     ]).
 
 
@@ -353,22 +353,22 @@ updating_view_with_invalid_params_should_fail(Config) ->
             Config, Worker, ?SPACE_ID, ViewName)
         )
     end, [
-        {#{update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
-        {#{update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
-        {#{update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
-        {#{update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
+        {#{update_min_changes => ok}, ?ERR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => -3}, ?ERR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
+        {#{update_min_changes => 15.2}, ?ERR_BAD_VALUE_INTEGER(<<"update_min_changes">>)},
+        {#{update_min_changes => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"update_min_changes">>, 1)},
 
-        {#{replica_update_min_changes => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
-        {#{replica_update_min_changes => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
-        {#{replica_update_min_changes => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
-        {#{replica_update_min_changes => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
+        {#{replica_update_min_changes => ok}, ?ERR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => -3}, ?ERR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
+        {#{replica_update_min_changes => 15.2}, ?ERR_BAD_VALUE_INTEGER(<<"replica_update_min_changes">>)},
+        {#{replica_update_min_changes => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"replica_update_min_changes">>, 1)},
 
-        {#{spatial => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
-        {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
-        {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => 1}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => -3}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => ok}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
 
-        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ok">>)},
-        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ASD">>)}
+        {#{providers => [ok]}, ?ERR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ok">>)},
+        {#{providers => [<<"ASD">>]}, ?ERR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ASD">>)}
     ]).
 
 
@@ -436,7 +436,7 @@ create_get_delete_reduce_fun(Config) ->
     UserId = <<"user1">>,
 
     AllPrivs = privileges:space_privileges(),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
 
     % create on one provider
     ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100)),
@@ -572,7 +572,7 @@ getting_view_of_not_supported_space_should_fail(Config) ->
     }}, get_view_via_rest(Config, WorkerP2, SpaceId, ViewName), ?ATTEMPTS),
 
     ExpRestError = rest_test_utils:get_rest_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ?GET_DOMAIN_BIN(WorkerP1))
+        ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, ?GET_DOMAIN_BIN(WorkerP1))
     ),
     ?assertMatch(ExpRestError, get_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName
@@ -585,7 +585,7 @@ list_views(Config) ->
     Chunk = rand:uniform(ViewNum),
 
     AllPrivs = privileges:space_privileges(),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
 
     ?assertMatch([], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, Chunk)),
     ?assertMatch([], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, Chunk)),
@@ -622,7 +622,7 @@ query_view(Config) ->
     FilePrefix = atom_to_list(?FUNCTION_NAME),
     Guids = create_files_with_xattrs(WorkerP1, SessionId, SpaceName, FilePrefix, 5, XattrName),
     ErrorNotFound = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
     ExpGuids = lists:sort(Guids),
 
     % support view only by one provider; other should return error on query
@@ -690,39 +690,39 @@ querying_view_with_invalid_params_should_fail(Config) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ?assertMatch(ExpRestError, Query(Worker, Options))
     end, [
-        {#{bbox => ok}, ?ERROR_BAD_DATA(<<"bbox">>)},
-        {#{bbox => 1}, ?ERROR_BAD_DATA(<<"bbox">>)},
+        {#{bbox => ok}, ?ERR_BAD_DATA(<<"bbox">>, undefined)},
+        {#{bbox => 1}, ?ERR_BAD_DATA(<<"bbox">>, undefined)},
 
-        {#{descending => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
-        {#{descending => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
-        {#{descending => -15.6}, ?ERROR_BAD_VALUE_BOOLEAN(<<"descending">>)},
+        {#{descending => ok}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
+        {#{descending => 1}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
+        {#{descending => -15.6}, ?ERR_BAD_VALUE_BOOLEAN(<<"descending">>)},
 
-        {#{inclusive_end => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
-        {#{inclusive_end => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
-        {#{inclusive_end => -15.6}, ?ERROR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
+        {#{inclusive_end => ok}, ?ERR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
+        {#{inclusive_end => 1}, ?ERR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
+        {#{inclusive_end => -15.6}, ?ERR_BAD_VALUE_BOOLEAN(<<"inclusive_end">>)},
 
-        {#{keys => ok}, ?ERROR_BAD_VALUE_JSON(<<"keys">>)},
-        {#{keys => 1}, ?ERROR_BAD_VALUE_JSON(<<"keys">>)},
-        {#{keys => -15.6}, ?ERROR_BAD_VALUE_JSON(<<"keys">>)},
+        {#{keys => ok}, ?ERR_BAD_VALUE_JSON(<<"keys">>)},
+        {#{keys => 1}, ?ERR_BAD_VALUE_JSON(<<"keys">>)},
+        {#{keys => -15.6}, ?ERR_BAD_VALUE_JSON(<<"keys">>)},
 
-        {#{limit => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-        {#{limit => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
-        {#{limit => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-        {#{limit => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+        {#{limit => ok}, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+        {#{limit => -3}, ?ERR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+        {#{limit => 15.2}, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+        {#{limit => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
 
-        {#{skip => ok}, ?ERROR_BAD_VALUE_INTEGER(<<"skip">>)},
-        {#{skip => -3}, ?ERROR_BAD_VALUE_TOO_LOW(<<"skip">>, 1)},
-        {#{skip => 15.2}, ?ERROR_BAD_VALUE_INTEGER(<<"skip">>)},
-        {#{skip => 0}, ?ERROR_BAD_VALUE_TOO_LOW(<<"skip">>, 1)},
+        {#{skip => ok}, ?ERR_BAD_VALUE_INTEGER(<<"skip">>)},
+        {#{skip => -3}, ?ERR_BAD_VALUE_TOO_LOW(<<"skip">>, 1)},
+        {#{skip => 15.2}, ?ERR_BAD_VALUE_INTEGER(<<"skip">>)},
+        {#{skip => 0}, ?ERR_BAD_VALUE_TOO_LOW(<<"skip">>, 1)},
 
-        {#{stale => da}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
-        {#{stale => -3}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
-        {#{stale => 15.2}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
-        {#{stale => 0}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => da}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => -3}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => 15.2}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
+        {#{stale => 0}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])},
 
-        {#{spatial => 1}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
-        {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
-        {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)}
+        {#{spatial => 1}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => -3}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
+        {#{spatial => ok}, ?ERR_BAD_VALUE_BOOLEAN(<<"spatial">>)}
     ]).
 
 
@@ -901,7 +901,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     ExpMapFun2 = view_utils:escape_js_function(?MAP_FUNCTION2(XattrName)),
 
     ExpError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
-    ExpError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>)),
+    ExpError2 = rest_test_utils:get_rest_error(?ERR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>)),
 
     % get by simple name
     ?assertEqual({ok, #{

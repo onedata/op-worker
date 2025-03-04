@@ -57,8 +57,8 @@ gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
 
         {ok, URL}
     catch
-        throw:?ERROR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
-            ?ERROR_FORBIDDEN;
+        throw:?ERR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
+            ?ERR_FORBIDDEN(?err_ctx());
         throw:Error ->
             Error
     end.
@@ -81,7 +81,7 @@ handle(<<"GET">>, Req) ->
             handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req);
 
         {true, _} ->
-            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req);
+            http_req:send_error(?ERR_BAD_VALUE_ID_NOT_FOUND(?err_ctx(), <<"code">>), Req);
 
         false ->
             case bulk_download:find_started_for_code(FileDownloadCode) of
@@ -90,7 +90,7 @@ handle(<<"GET">>, Req) ->
                     % as it will be overwritten by an existing bulk download instance
                     handle_http_download(FileDownloadCode, SessionId, [], true, Req);
                 error ->
-                    http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
+                    http_req:send_error(?ERR_BAD_VALUE_ID_NOT_FOUND(?err_ctx(), <<"code">>), Req)
             end
     end.
 
@@ -124,7 +124,7 @@ maybe_sync_first_file_block(SessionId, [FileGuid]) ->
             },
             case lfm:sync_block(SessionId, FileRef, SyncBlock, ?DEFAULT_ON_THE_FLY_SYNC_PRIORITY) of
                 {error, ?ENOSPC} ->
-                    throw(?ERROR_QUOTA_EXCEEDED);
+                    throw(?ERR_QUOTA_EXCEEDED(?err_ctx()));
                 Res ->
                     ?lfm_check(Res)
             end;
@@ -156,7 +156,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
     end, [], FileGuids),
     case {FileAttrsList, FollowSymlinks} of
         {{error, Errno}, _} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req);
+            http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req);
         {[#file_attr{type = ?DIRECTORY_TYPE, guid = Guid, name = FileName}], _} ->
             TargetName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
                 undefined ->
@@ -184,7 +184,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
                         Req
                     );
                 {error, Errno} ->
-                    http_req:send_error(?ERROR_POSIX(Errno), Req)
+                    http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req)
             end;
         {[#file_attr{type = ?SYMLINK_TYPE} = Attr], false} ->
             file_content_download_utils:download_single_file(

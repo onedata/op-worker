@@ -152,11 +152,11 @@ first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
                                 <<"details">> := #{<<"reason">> := ErrorJson}
                             }}) ->
                                 ?assertMatch(
-                                    ?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
-                                        _, ?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
-                                            _, ?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(
-                                                _, ?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(
-                                                    ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                                    ?ERR_ATM_LANE_EXECUTION_CREATION_FAILED(
+                                        _, ?ERR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
+                                            _, ?ERR_ATM_TASK_EXECUTION_CREATION_FAILED(
+                                                _, ?ERR_ATM_LAMBDA_CONFIG_BAD_VALUE(
+                                                    ?ECHO_ARG_NAME, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                                                         EchoConfigParameterValue, atm_number_type, #{<<"integersOnly">> := true}
                                                     )
                                                 )
@@ -186,7 +186,7 @@ first_lane_run_preparation_failure_before_run_was_created() ->
                 create_run = #atm_step_mock_spec{
                     % 'create_run' step execution is mocked entirely so that
                     % no lane run execution component will be created
-                    strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                    strategy = {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     % Due to lane preparation failure 'handle_lane_execution_stopped' was called
@@ -222,7 +222,7 @@ first_lane_run_preparation_failure_after_run_was_created() ->
                     % 'create_run' step result is replaced by the one specified below but
                     % the step itself is executed normally so that lane run execution
                     % components (e.g. task executions) can be created
-                    strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                    strategy = {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     % Due to lane preparation failure 'handle_lane_execution_stopped' was called
@@ -377,10 +377,10 @@ atm_workflow_execution_cancel_before_lane_run_preparation_failed() ->
                         workflow_stopping
                     ],
                     strategy = ?RAND_ELEMENT([
-                        {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}},
+                        {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}},
                         % Even if lane run creation proceed created components should not be saved but rather
                         % immediately deleted due to cancel
-                        {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     ])
                 },
                 prepare_lane = #atm_step_mock_spec{
@@ -412,7 +412,7 @@ atm_workflow_execution_cancel_in_stopping_status_after_lane_run_preparation_fail
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 create_run = #atm_step_mock_spec{
-                    strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                    strategy = {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     % Due to lane preparation failure 'handle_lane_execution_stopped' was called
@@ -425,7 +425,7 @@ atm_workflow_execution_cancel_in_stopping_status_after_lane_run_preparation_fail
                         % (last step remaining) the current lane run did. At this point cancel
                         % is no longer possible (execution is treated as failed one)
                         ?assertThrow(
-                            ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FAILED_STATUS, ?STOPPING_STATUS),
+                            ?ERR_ATM_INVALID_STATUS_TRANSITION(?FAILED_STATUS, ?STOPPING_STATUS),
                             atm_workflow_execution_test_utils:cancel_workflow_execution(AtmMockCallCtx)
                         )
                     end,
@@ -464,7 +464,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1() ->
                     create_run = #atm_step_mock_spec{
                         % 'create_run' step execution is mocked entirely so that
                         % no lane run execution component will be created
-                        strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [
@@ -506,7 +506,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2() ->
                         after_step_exp_state_diff = no_diff
                     },
                     create_run = #atm_step_mock_spec{
-                        strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [
@@ -564,7 +564,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3() ->
                     create_run = #atm_step_mock_spec{
                         % 'create_run' step execution is mocked entirely so that
                         % no lane run execution component will be created
-                        strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [
@@ -615,7 +615,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4() ->
                     create_run = #atm_step_mock_spec{
                         % 'create_run' step execution is mocked entirely so that
                         % no lane run execution component will be created
-                        strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [
@@ -635,7 +635,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4() ->
                     create_run = #atm_step_mock_spec{
                         % 'create_run' step execution is mocked entirely so that
                         % no lane run execution component will be created
-                        strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [
@@ -857,7 +857,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4() ->
                     create_run = #atm_step_mock_spec{
                         % 'create_run' step execution is mocked entirely so that
                         % no lane run execution component will be created
-                        strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {yield, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [{lane_run, {2, 1}, stopping}],
@@ -903,7 +903,7 @@ lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished() 
                         after_step_exp_state_diff = no_diff
                     },
                     create_run = #atm_step_mock_spec{
-                        strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                        strategy = {passthrough_with_result_override, {throw, ?ERR_INTERNAL_SERVER_ERROR(undefined)}}
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = [

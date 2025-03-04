@@ -407,7 +407,7 @@ query(ViewId, Options) ->
             {error, not_found};
         {error, {Category, Description}} when is_binary(Category) andalso is_binary(Description) ->
             % this is error from Couchbase
-            ?ERROR_VIEW_QUERY_FAILED(Category, Description);
+            ?ERR_VIEW_QUERY_FAILED(?err_ctx(), Category, Description);
         Error ->
             Error
     end.

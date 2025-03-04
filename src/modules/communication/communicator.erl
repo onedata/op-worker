@@ -130,7 +130,9 @@ send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries, Ens
         {ok, _} ->
             {ok, MsgId};
         {{error, no_connections}, _} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER;
+            PeerId = session_connections:get_peer_provider_id(SessionId),
+            {ok, PeerDomain} = provider_logic:get_domain(PeerId),
+            ?ERR_NO_CONNECTION_TO_PEER_ONEPROVIDER(?err_ctx(), PeerId, PeerDomain);
         {Error, _} ->
             Error
     end;
@@ -166,7 +168,9 @@ communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
         ok ->
             await_response(MsgId);
         {error, no_connections} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER;
+            PeerId = session_connections:get_peer_provider_id(SessionId),
+            {ok, PeerDomain} = provider_logic:get_domain(PeerId),
+            ?ERR_NO_CONNECTION_TO_PEER_ONEPROVIDER(?err_ctx(), PeerId, PeerDomain);
         Error ->
             Error
     end;
@@ -244,7 +248,7 @@ send_to_provider_internal(SessionId, Msg, Retries, EnsureConnectedErrorHandlingM
 
 %% @private
 -spec await_response(clproto_message_id:id()) ->
-    {ok, message()} | ?ERROR_TIMEOUT.
+    {ok, message()} | od_error_timeout:t().
 await_response(MsgId) ->
     receive
         #server_message{

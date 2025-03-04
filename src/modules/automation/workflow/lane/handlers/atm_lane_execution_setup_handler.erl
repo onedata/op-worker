@@ -36,10 +36,10 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         {ok, AtmWorkflowExecutionDoc} ->
             prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx);
 
-        ?ERROR_ATM_INVALID_STATUS_TRANSITION(?RESUMING_STATUS, ?PREPARING_STATUS) ->
+        ?ERR_ATM_INVALID_STATUS_TRANSITION(?RESUMING_STATUS, ?PREPARING_STATUS) ->
             resume_prepared_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx);
 
-        ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+        ?ERR_ATM_WORKFLOW_EXECUTION_STOPPING ->
             handle_setup_exception(
                 execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             )
@@ -82,7 +82,7 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
         ?atm_workflow_info(Logger, ?ATM_WORKFLOW_LANE_RUN_LOG(AtmLaneRunSelector, <<"Prepared.">>)),
         {ok, LaneSpec}
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+        throw:?ERR_ATM_WORKFLOW_EXECUTION_STOPPING ->
             handle_setup_exception(
                 execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             );
@@ -191,7 +191,7 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
         ?atm_workflow_info(Logger, ?ATM_WORKFLOW_LANE_RUN_LOG(AtmLaneRunSelector, <<"Resumed.">>)),
         {ok, LaneSpec}
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+        throw:?ERR_ATM_WORKFLOW_EXECUTION_STOPPING ->
             handle_setup_exception(
                 execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             );
@@ -266,11 +266,12 @@ initiate_lane_run(
             parallel_boxes => AtmParallelBoxExecutionSpecs
         }
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+        throw:?ERR_ATM_WORKFLOW_EXECUTION_STOPPING = ErrorAtmWorkflowExecutionStopping ->
+            throw(ErrorAtmWorkflowExecutionStopping);
 
         Type:Reason:Stacktrace ->
-            throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(
+            throw(?ERR_ATM_LANE_EXECUTION_INITIATION_FAILED(
+                ?err_ctx(),
                 atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
                 ?examine_exception(Type, Reason, Stacktrace)
             ))
@@ -372,22 +373,19 @@ unfreeze_exception_store(AtmLaneRunSelector, #document{value = AtmWorkflowExecut
 %% TODO VFS-11227 call init stop from task setup try cache
 %% @private
 -spec infer_setup_exception(errors:error()) -> setup_failure | setup_interruption.
-infer_setup_exception(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(_, Error)) ->
+infer_setup_exception(?ERR_ATM_LANE_EXECUTION_INITIATION_FAILED(_, Error)) ->
     infer_setup_exception(Error);
 
-infer_setup_exception(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(_, Error)) ->
+infer_setup_exception(?ERR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(_, Error)) ->
     infer_setup_exception(Error);
 
-infer_setup_exception(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(_, Error)) ->
+infer_setup_exception(?ERR_ATM_TASK_EXECUTION_INITIATION_FAILED(_, Error)) ->
     infer_setup_exception(Error);
 
-infer_setup_exception(?ERROR_ATM_OPENFAAS_QUERY_FAILED) ->
+infer_setup_exception(?ERR_ATM_OPENFAAS_QUERY_FAILED(_)) ->
     setup_interruption;
 
-infer_setup_exception(?ERROR_ATM_OPENFAAS_QUERY_FAILED(_)) ->
-    setup_interruption;
-
-infer_setup_exception(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED) ->
+infer_setup_exception(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED) ->
     setup_interruption;
 
 infer_setup_exception(_) ->

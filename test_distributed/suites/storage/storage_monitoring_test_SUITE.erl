@@ -68,7 +68,7 @@ unmock_storage_detector(Node) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
             {storages_check_interval_sec, 1}

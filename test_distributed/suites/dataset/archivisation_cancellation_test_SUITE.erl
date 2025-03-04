@@ -620,7 +620,7 @@ continue_mocked_jobs() ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op",
             envs = [{op_worker, op_worker, [

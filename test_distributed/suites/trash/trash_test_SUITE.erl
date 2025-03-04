@@ -219,42 +219,42 @@ set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     JSON = #{<<"key">> => <<"value">>},
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json, JSON, [])).
 
 set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_cdmi:set_mimetype(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"mimetype">>)),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_cdmi:set_cdmi_completion_status(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"COMPLETED">>)),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_cdmi:set_transfer_encoding(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"base64">>)).
 
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_shares:create(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"MY SHARE">>)).
 
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_qos:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"key=value">>, 1)).
 
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_file_metadata:remove_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json)).
 
 schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P2Id)).
 
 schedule_eviction_transfer_on_trash_dir_is_allowed(_Config) ->
@@ -271,7 +271,7 @@ schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch(?ERROR_POSIX(?EPERM),
+    ?assertMatch(?ERR_POSIX(?EPERM),
         opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, P2Id)).
 
 schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
@@ -658,7 +658,7 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "2op-manual-import",
             posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1

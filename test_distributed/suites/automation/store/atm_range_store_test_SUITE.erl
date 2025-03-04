@@ -248,7 +248,7 @@ get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
             AtmStoreId
         )),
         RangeJson
-    catch throw:?ERROR_ATM_STORE_CONTENT_NOT_SET(_) ->
+    catch throw:?ERR_ATM_STORE_CONTENT_NOT_SET(_) ->
         undefined
     end.
 
@@ -284,7 +284,7 @@ iterator_get_next(AtmWorkflowExecutionEnv, Iterator) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [?MODULE | atm_singleton_content_based_stores_test_base:modules_to_load()],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

@@ -362,7 +362,7 @@ translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~tp~nResult: ~tp", [
         GRI, Result
     ]),
-    throw(?ERROR_INTERNAL_SERVER_ERROR).
+    throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)).
 
 
 %%--------------------------------------------------------------------

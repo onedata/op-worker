@@ -153,7 +153,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = cancel}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
     case transfer:get(TransferId) of
@@ -327,7 +327,7 @@ create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}
         {ok, NewTransferId} ->
             {ok, value, NewTransferId};
         {error, not_ended} ->
-            ?ERROR_TRANSFER_NOT_ENDED;
+            ?ERR_TRANSFER_NOT_ENDED(?err_ctx());
         {error, _} = Error ->
             Error
     end.
@@ -408,7 +408,7 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = cancel}}) ->
         ok ->
             ok;
         {error, already_ended} ->
-            ?ERROR_TRANSFER_ALREADY_ENDED;
+            ?ERR_TRANSFER_ALREADY_ENDED(?err_ctx());
         {error, _} = Error ->
             Error
     end.
@@ -478,7 +478,7 @@ assert_view_exists_on_provider(SpaceId, ViewName, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId))
+            throw(?ERR_VIEW_NOT_EXISTS_ON(?err_ctx(), ProviderId))
     end.
 
 

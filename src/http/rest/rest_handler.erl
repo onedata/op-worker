@@ -149,7 +149,7 @@ is_authorized(Req, State = #state{rest_req = RestReq}) ->
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};
-        ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) = Error ->
+        ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED) = Error ->
             % The user presented some authentication, but he is not supported
             % by this Oneprovider. Still, if the request concerned a shared
             % file, the user should be treated as a guest and served.
@@ -276,14 +276,14 @@ resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
     SpaceIdOrObjectId = cowboy_req:binding(Key, Req),
     try
         middleware_utils:decode_object_id(SpaceIdOrObjectId, Key)
-    catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
+    catch throw:?ERR_BAD_VALUE_IDENTIFIER(Key) ->
         {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
         case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
             true ->
                 fslogic_file_id:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
             false ->
                 ProviderId = oneprovider:get_id(),
-                throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceIdOrObjectId, ProviderId))
+                throw(?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceIdOrObjectId, ProviderId))
         end
     end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
@@ -321,9 +321,9 @@ get_data(Req, as_json_params, _Consumes) ->
             _ -> json_utils:decode(Body)
         end
     catch _:_ ->
-        throw(?ERROR_MALFORMED_DATA)
+        throw(?ERR_MALFORMED_DATA(?err_ctx()))
     end,
-    is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
+    is_map(ParsedBody) orelse throw(?ERR_MALFORMED_DATA(?err_ctx())),
     {maps:merge(ParsedBody, QueryParams), Req2};
 get_data(Req, {as_is, KeyName}, Consumes) ->
     QueryParams = http_parser:parse_query_string(Req),
@@ -340,7 +340,7 @@ get_data(Req, {as_is, KeyName}, Consumes) ->
             try
                 json_utils:decode(Body)
             catch _:_ ->
-                throw(?ERROR_BAD_VALUE_JSON(KeyName))
+                throw(?ERR_BAD_VALUE_JSON(?err_ctx(), KeyName))
             end;
         _ ->
             Body

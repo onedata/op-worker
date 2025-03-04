@@ -94,7 +94,7 @@ handle_resuming(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc = #document{
             {ok, InitiationResult};
         {error, task_already_stopped} ->
             atm_task_execution_stop_handler:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING)
+            throw(?ERR_ATM_WORKFLOW_EXECUTION_STOPPING(?err_ctx()))
     end.
 
 

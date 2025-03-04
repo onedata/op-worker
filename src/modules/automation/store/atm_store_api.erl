@@ -50,7 +50,7 @@ create(_AtmWorkflowExecutionAuth, _LogLevel, undefined, #atm_store_schema{
     requires_initial_content = true,
     default_initial_content = undefined
 }) ->
-    throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT);
+    throw(?ERR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT(?err_ctx()));
 
 create(AtmWorkflowExecutionAuth, LogLevel, InitialContent, AtmStoreSchema) ->
     StoreType = get_store_type(AtmStoreSchema),
@@ -85,17 +85,17 @@ copy(AtmStoreId, Frozen) ->
     Doc.
 
 
--spec get(atm_store:id()) -> {ok, atm_store:record()} | ?ERROR_NOT_FOUND.
+-spec get(atm_store:id()) -> {ok, atm_store:record()} | od_error_not_found:t().
 get(AtmStoreId) ->
     case atm_store:get(AtmStoreId) of
         {ok, #document{value = AtmStore}} ->
             {ok, AtmStore};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 
--spec get_ctx(atm_store:id()) -> {ok, atm_store:ctx()} | ?ERROR_NOT_FOUND.
+-spec get_ctx(atm_store:id()) -> {ok, atm_store:ctx()} | od_error_not_found:t().
 get_ctx(AtmStoreId) ->
     case get(AtmStoreId) of
         {ok, #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore} ->
@@ -106,11 +106,11 @@ get_ctx(AtmStoreId) ->
                         store = AtmStore,
                         workflow_execution = AtmWorkflowExecution
                     }};
-                ?ERROR_NOT_FOUND ->
-                    ?ERROR_NOT_FOUND
+                ?ERROR_NOT_FOUND = ErrorNotFound1 ->
+                    ErrorNotFound1
             end;
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound2 ->
+            ErrorNotFound2
     end.
 
 
@@ -169,8 +169,8 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
     case get(AtmStoreId) of
         {ok, AtmStore} ->
             browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore);
-        ?ERROR_NOT_FOUND ->
-            throw(?ERROR_NOT_FOUND)
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            throw(ErrorNotFound)
     end.
 
 
@@ -204,7 +204,7 @@ update_content(AtmWorkflowExecutionAuth, Item, Options, AtmStoreId) ->
                     end)
             end;
         {ok, #atm_store{schema_id = AtmStoreSchemaId, frozen = true}} ->
-            throw(?ERROR_ATM_STORE_FROZEN(AtmStoreSchemaId));
+            throw(?ERR_ATM_STORE_FROZEN(?err_ctx(), AtmStoreSchemaId));
         {error, _} = Error ->
             throw(Error)
     end.

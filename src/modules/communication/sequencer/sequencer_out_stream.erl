@@ -406,7 +406,7 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
     Attempt :: non_neg_integer(), time:millis()) -> ok.
 maybe_log_failure(_, {badmatch, {error, no_connections}}, _, _) ->
     ok;
-maybe_log_failure(_, {badmatch, ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER}, _, _) ->
+maybe_log_failure(_, {badmatch, ?ERR_NO_CONNECTION_TO_PEER_ONEPROVIDER(_, _)}, _, _) ->
     ok;
 maybe_log_failure(_, {badmatch, {error, not_found}}, _, _) ->
     ok;

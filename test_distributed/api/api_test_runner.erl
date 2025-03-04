@@ -139,13 +139,13 @@ get_scenario_specific_error_for_invalid_clients(rest_with_file_path, InvalidClie
 ->
     % Error thrown by rest_handler (before middleware auth checks could be performed)
     % as invalid clients who doesn't belong to space can't resolve file path to guid
-    ?ERROR_POSIX(?ENOENT);
+    ?ERR_POSIX(?ENOENT);
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, unauthorized) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(undefined);
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_not_in_space) ->
-    ?ERROR_FORBIDDEN;
+    ?ERR_FORBIDDEN;
 get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_in_space) ->
-    ?ERROR_FORBIDDEN.
+    ?ERR_FORBIDDEN.
 
 
 %% @private
@@ -225,10 +225,10 @@ get_expected_malformed_data_error({error, _} = Error, _, _) ->
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
     ErrorFun(TestCaseCtx);
 get_expected_malformed_data_error(
-    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
+    {_ScenarioType, ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
 ) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
-    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+    ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
 get_expected_malformed_data_error({_ScenarioType, {error, _} = ScenarioSpecificError}, _, _) ->
     ScenarioSpecificError;
 get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, TestCaseCtx) ->
@@ -265,13 +265,13 @@ run_missing_required_data_test_cases(Config, #suite_spec{
     RequiredDataSet = hd(RequiredDataSets),
 
     MissingRequiredParamsDataSetsAndErrors = lists:map(fun(RequiredParam) ->
-        {maps:remove(RequiredParam, RequiredDataSet), ?ERROR_MISSING_REQUIRED_VALUE(RequiredParam)}
+        {maps:remove(RequiredParam, RequiredDataSet), ?ERR_MISSING_REQUIRED_VALUE(RequiredParam)}
     end, RequiredParams),
     MissingAtLeastOneParamsDataSetAndError = case AtLeastOneParams of
         [] ->
             [];
         _ ->
-            ExpectedError = ?ERROR_MISSING_AT_LEAST_ONE_VALUE(lists:sort(AtLeastOneParams)),
+            ExpectedError = ?ERR_MISSING_AT_LEAST_ONE_VALUE(lists:sort(AtLeastOneParams)),
             [{maps:without(AtLeastOneParams, RequiredDataSet), ExpectedError}]
     end,
 
@@ -423,7 +423,7 @@ run_exp_error_testcase(
 ) ->
     ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
         true -> ScenarioError;
-        false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
+        false -> ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED)
     end,
     TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet),
 
@@ -463,7 +463,7 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClient
                         VerifyFun(expected_success, TestCaseCtx);
                     false ->
                         validate_error_result(
-                            ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
+                            ScenarioType, ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED), Result
                         ),
                         VerifyFun(expected_failure, TestCaseCtx)
                 end,

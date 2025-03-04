@@ -169,9 +169,9 @@ restart_atm_workflow_executions() ->
             lists:foreach(fun restart_atm_workflow_executions/1, SpaceIds),
 
             ?info("Automation workflow executions restart procedure finished.");
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+        ?ERR_UNREGISTERED_ONEPROVIDER ->
             schedule_atm_workflow_executions_restart();
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
             schedule_atm_workflow_executions_restart();
         Error = {error, _} ->
             ?error("Unable to restart automation workflow executions due to: ~tp", [Error])
