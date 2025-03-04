@@ -9,24 +9,7 @@ sourcesRoot: ".."
 # On bamboo all required sources will be pulled automatically.
 # NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources
 # (by default cluster_manager provided as op_worker dependency will be used).
-sources: false
-#  true
-#  onezone:
-#    node-1:
-#      - oz-panel
-##      - oz-worker
-#      - cluster-manager
-#  oneprovider-1:
-#    node-1:
-#      - op-panel
-#      - op-worker
-#      - cluster-manager
-#  oneprovider-2:
-#    node-1:
-#      - op-panel
-#      - op-worker
-#      - cluster-manager
-#        puscic takie sources i sources false i porownac logi
+sources: true
 
 users:
   - &space_owner
