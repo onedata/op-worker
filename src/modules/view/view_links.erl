@@ -27,7 +27,7 @@
 -define(LINK_PREFIX, <<"INDEXES">>).
 -define(VIEW_ID_TREE_ID_SEPARATOR, <<"@">>).
 
--define(FOLD_LIMIT, 1).
+-define(FOLD_LIMIT, op_worker:get_env(view_links_fold_limit, 1000)).
 
 
 %%%===================================================================
