@@ -27,7 +27,7 @@
     query/3, get_json/2, exists_on_provider/3, update_reduce_function/3,
     build_cdmi_object_id_in_js/0
 ]).
--export([upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6/1]).
+-export([restore_after_couchbase_upgrade_from_4_5_to_6_6/1]).
 
 %% datastore_model callbacks
 -export([
@@ -73,32 +73,22 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Due to couchbase upgrade from version 4.5 to 6.6 the javascript language
-%% construct `for ... of` no longer works. As it was used in previous map
-%% function wrapper, all views must be overwritten to replace the wrapper.
+%% construct `for ... of`, used in map function wrapper, no longer works.
+%% Couchbase will not even start after upgrade if there were any saved
+%% views. To fix this, all views are removed from db before upgrade
+%% and after it they must be restored.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6(od_space:id()) -> ok.
-upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6(SpaceId) ->
+-spec restore_after_couchbase_upgrade_from_4_5_to_6_6(od_space:id()) -> ok.
+restore_after_couchbase_upgrade_from_4_5_to_6_6(SpaceId) ->
     ?info("Upgrading views in space (id: ~ts)...", [SpaceId]),
 
     view_links:foreach(SpaceId, fun(ViewName) ->
-        %% TODO rm
-        ?info("Upgrading view (name: ~ts) in space (id: ~ts)...", [ViewName, SpaceId]),
-        try
-            {ok, #document{
-                key = Id,
-                value = #index{
-                    name = ViewName,
-                    space_id = SpaceId,
-                    spatial = Spatial,
-                    map_function = MapFunction,
-                    reduce_function = ReduceFunction,
-                    index_options = Options
-                }
-            }} = index:get(ViewName, SpaceId),
+        ?debug("Upgrading view (name: ~ts) in space (id: ~ts)...", [ViewName, SpaceId]),
 
-            % Save once again to overwrite mapping function wrapper
-            ok = index:save_db_view(Id, SpaceId, MapFunction, ReduceFunction, Spatial, Options)
+        try
+            {ok, Doc} = index:get(ViewName, SpaceId),
+            view_changes:handle(Doc)
         catch Class:Reason:Stacktrace ->
             ?error_exception(
                 "Failed to upgrade view (name: ~ts) in space (id: ~ts)",
@@ -565,10 +555,6 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
                 if (!key.startsWith('_'))
                     filtered[key] = object[key];
             });
-              // TODO add upgrade procedure
-//            for (var key of Object.keys(object))
-//                if (!key.startsWith('_'))
-//                    filtered[key] = object[key];
             return filtered;
         };
 
@@ -628,10 +614,6 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
                         if(isValidKey(keyValuePair[0]))
                             emit(keyValuePair[0], keyValuePair[1]);
                     });
-                      // TODO add upgrade procedure
-//                    for (var keyValuePair of result['list'])
-//                        if(isValidKey(keyValuePair[0]))
-//                            emit(keyValuePair[0], keyValuePair[1]);
                 }
                 else if(isValidKey(result[0])){
                     emit(result[0], result[1]);

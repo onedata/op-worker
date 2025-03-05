@@ -27,8 +27,6 @@
 -define(LINK_PREFIX, <<"INDEXES">>).
 -define(VIEW_ID_TREE_ID_SEPARATOR, <<"@">>).
 
--define(FOLD_LIMIT, op_worker:get_env(view_links_fold_limit, 1000)).
-
 
 %%%===================================================================
 %%% API
@@ -120,13 +118,14 @@ foldl(SpaceId, Callback, InitialAcc) ->
 ) ->
     term().
 foldl(SpaceId, Callback, InitialAcc, PrevViewName, Offset) ->
-    {ok, ViewNames} = list(SpaceId, PrevViewName, Offset, ?FOLD_LIMIT),
+    Limit = op_worker:get_env(view_links_fold_limit, 1000),
+    {ok, ViewNames} = list(SpaceId, PrevViewName, Offset, Limit),
 
     {LastViewName, NewAcc} = lists:foldl(fun(ViewName, {_, AccIn}) ->
         {ViewName, Callback(ViewName, AccIn)}
     end, {<<>>, InitialAcc}, ViewNames),
 
-    case length(ViewNames) < ?FOLD_LIMIT of
+    case length(ViewNames) < Limit of
         true -> NewAcc;
         false -> foldl(SpaceId, Callback, NewAcc, LastViewName, 1)
     end.

@@ -309,8 +309,7 @@ upgrade_cluster(7) ->
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
-        % Upgrade views due to changes in couchbase (cb upgrade from 4.5 to 6.6).
-        lists:foreach(fun index:upgrade_due_to_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
+        lists:foreach(fun index:restore_after_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
     end),
     {ok, 8}.
 
