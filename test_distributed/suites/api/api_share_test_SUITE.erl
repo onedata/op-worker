@@ -20,6 +20,7 @@
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/posix/errno.hrl").
 
 -export([
     groups/0, all/0,
@@ -67,12 +68,13 @@ create_share_test(_Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, file_guid, FileGuid),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            verify_fun = build_verify_shares_in_file_meta_fun(MemRef, Providers, user3, FileGuid),
+            verify_fun = build_verify_shares_in_file_meta_fun(MemRef, Providers, user3),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create share for ", FileType/binary, " using /shares rest endpoint">>,
@@ -445,19 +447,46 @@ build_update_share_prepare_gs_args_fun(ShareId) ->
 delete_share_test(_Config) ->
     Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
-
-    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 20)]),
-    #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, SpaceId, FileSpec
-    ),
-
     MemRef = api_test_memory:init(),
-    api_test_memory:set(MemRef, shares, ShareIds),
+    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 20)]),
 
-    BuildTestSpecFun = fun(VerifyFun, ShareTypeBin) ->
+
+
+    BuildTestSpecFun = fun(VerifyFun, ShareTypeBin, HasHandle) ->
+        SetupFun = fun() ->
+            #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+                user3, SpaceId, FileSpec
+            ),
+            api_test_memory:set(MemRef, shares, ShareIds),
+            api_test_memory:set(MemRef, file_guid, FileGuid),
+            case HasHandle of
+                true ->
+                    lists:foreach(fun(ShareId) ->
+                        [CreationProvider | _] = oct_background:get_space_supporting_providers(SpaceId),
+                        ozt_handles:create(
+                            CreationProvider, user3, ShareId, hd(ozt_handle_services:list_handle_services()),
+                            <<"oai_dc">>, ozt_handles:example_metadata_variant(<<"oai_dc">>, 1)
+                        )
+                    end, api_test_memory:get(MemRef, shares, []));
+                false ->
+                    ok
+            end
+        end,
+        ClientSpec = case HasHandle of
+            false ->
+                ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM);
+            true ->
+                #client_spec{
+                    correct = [user3],
+                    unauthorized = [nobody],
+                    forbidden_not_in_space = [user1, user2],
+                    forbidden_in_space = [{user4, ?ERR_POSIX(?EPERM)}]
+                }
+        end,
         #suite_spec{
             target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            client_spec = ClientSpec,
+            setup_fun = SetupFun,
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
@@ -485,17 +514,44 @@ delete_share_test(_Config) ->
         }
     end,
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
-        build_verify_shares_in_file_meta_fun(MemRef, Providers, user3, FileGuid),
-        <<"share">>
+        build_verify_shares_in_file_meta_fun(MemRef, Providers, user3),
+        <<"share">>, false
+    )])),
+
+    ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
+        build_verify_shares_in_file_meta_fun(MemRef, Providers, user3),
+        <<"share">>, true
     )])),
 
     % Assert zombie shares can be deleted
-    onenv_file_test_utils:rm_and_sync_file(user3, FileGuid),
+    onenv_file_test_utils:rm_and_sync_file(user3, api_test_memory:get(MemRef, file_guid)),
     assert_zombie_shares_exist(api_test_memory:get(MemRef, shares), user3, Providers),
 
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
-        fun(_, _) -> true end, <<"zombie share">>
+        fun(_, _) -> true end, <<"zombie share">>, false
     )])).
+
+%% @private
+setup_fun(HasHandle, SpaceId, FileSpec, MemRef) ->
+    #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, FileSpec
+    ),
+    api_test_memory:set(MemRef, shares, ShareIds),
+    api_test_memory:set(MemRef, file_guid, FileGuid),
+    ct:pal("~tp~n", [ShareIds]),
+%%    HasHandle = true,
+    case HasHandle of
+        true ->
+            lists:foreach(fun(ShareId) ->
+                HandleId = ozt_handles:create(
+                    krakow, user3, ShareId, hd(ozt_handle_services:list_handle_services()),
+                    <<"oai_dc">>, ozt_handles:example_metadata_variant(<<"oai_dc">>, 1)
+                ),
+                ct:pal("~p~n", [HandleId])
+            end, api_test_memory:get(MemRef, shares, []));
+        false ->
+            ok
+    end.
 
 
 %% @private
@@ -720,14 +776,14 @@ assert_proper_gs_share_translation(SpaceId, ShareId, ShareName, Description, Sco
 -spec build_verify_shares_in_file_meta_fun(
     api_test_memory:mem_ref(),
     [oct_background:entity_selector()],
-    oct_background:entity_selector(),
-    file_id:file_guid()
+    oct_background:entity_selector()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_shares_in_file_meta_fun(MemRef, Providers, UserSelector, FileGuid) ->
+build_verify_shares_in_file_meta_fun(MemRef, Providers, UserSelector) ->
+
     fun(_, _) ->
         ExpShares = lists:sort(api_test_memory:get(MemRef, shares, [])),
-
+        FileGuid = api_test_memory:get(MemRef, file_guid),
         lists:foreach(fun(Provider) ->
             ?assertEqual(ExpShares, get_file_shares(Provider, UserSelector, FileGuid), ?ATTEMPTS)
         end, Providers)
@@ -779,16 +835,20 @@ build_share_public_rest_url(ShareId) ->
 
 
 init_per_suite(Config) ->
-    opt:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
+    LoadModules = [dir_stats_test_utils, opt_handles, ozt_handles, ozt_handle_services],
+    opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
+            % make sure there are no remnants from the previous test runs
+            ozt_handle_services:remove_user_from_all_handle_services(user3, krakow),
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             User3Id = oct_background:get_user_id(user3),
             SpaceId = oct_background:get_space_id(space_krk_par),
             ozt_spaces:set_privileges(SpaceId, User3Id, [
                 ?SPACE_MANAGE_SHARES | privileges:space_member()
             ]),
+            ozt_handle_services:add_user_to_all_handle_services(user3),
             NewConfig
         end
     }).

@@ -26,14 +26,16 @@
 -export([
     create_handle_test/1,
     get_public_handle_data_test/1,
-    update_handle_test/1
+    update_handle_test/1,
+    delete_handle_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         create_handle_test,
         get_public_handle_data_test,
-        update_handle_test
+        update_handle_test,
+        delete_handle_test
     ]}
 ].
 
@@ -227,7 +229,7 @@ update_handle_test(_Config) ->
                 forbidden_in_space = [?SPACE_MEMBER_AND_NON_HS_MEMBER],
                 forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
             },
-            setup_fun = build_update_handle_setup_fun(
+            setup_fun = build_update_delete_handle_setup_fun(
                 MemRef, ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
             ),
             scenario_templates = [
@@ -249,9 +251,9 @@ update_handle_test(_Config) ->
 
 
 %% @private
--spec build_update_handle_setup_fun(api_test_memory:mem_ref(), od_handle:metadata()) ->
+-spec build_update_delete_handle_setup_fun(api_test_memory:mem_ref(), od_handle:metadata()) ->
     onenv_api_test_runner:setup_fun().
-build_update_handle_setup_fun(MemRef, Metadata) ->
+build_update_delete_handle_setup_fun(MemRef, Metadata) ->
     fun() ->
         HServiceId = hd(ozt_handle_services:list_handle_services()),
         #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
@@ -274,6 +276,57 @@ update_handle_prepare_gs_args_fun(MemRef) ->
                 aspect = instance, scope = private
             },
             data = Data
+        }
+    end.
+
+
+delete_handle_test(_Config) ->
+    MemRef = api_test_memory:init(),
+
+    ValidateResultFun = fun(_, ok) ->
+        HandleId = api_test_memory:get(MemRef, handle_id),
+        Node = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
+        SessId = oct_background:get_user_session_id(?SPACE_OWNER_AND_HS_MEMBER, ?PROVIDER_SELECTOR),
+        ?assertEqual(?ERROR_NOT_FOUND, ?rpc(Node, handle_logic:get_public_data(SessId, HandleId)))
+    end,
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [?PROVIDER_SELECTOR],
+            client_spec = #client_spec{
+                correct = [?SPACE_OWNER_AND_HS_MEMBER, ?NON_SPACE_MEMBER_AND_HS_ADMIN],
+                unauthorized = [nobody],
+                forbidden_in_space = [?SPACE_MEMBER_AND_NON_HS_MEMBER],
+                forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
+            },
+            setup_fun = build_update_delete_handle_setup_fun(
+                MemRef, ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+            ),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Delete handle using gs api">>,
+                    type = gs,
+                    prepare_args_fun = delete_handle_prepare_gs_args_fun(MemRef),
+                    validate_result_fun = ValidateResultFun
+                }
+            ]
+        }
+    ])).
+
+
+%% @private
+-spec delete_handle_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+    onenv_api_test_runner:gs_args().
+delete_handle_prepare_gs_args_fun(MemRef) ->
+    fun(#api_test_ctx{}) ->
+        #gs_args{
+            operation = delete,
+            gri = #gri{
+                type = op_handle,
+                id = api_test_memory:get(MemRef, handle_id),
+                aspect = instance,
+                scope = private
+            }
         }
     end.
 

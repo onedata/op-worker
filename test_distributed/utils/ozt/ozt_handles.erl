@@ -45,6 +45,7 @@
 create(ProviderSelector, UserSelector, ShareId, HServiceId, MetadataPrefix, MetadataString) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
     SessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
+
     {ok, HandleId} = ?rpc(Node, handle_logic:create(
         SessId, HServiceId, <<"Share">>, ShareId, MetadataPrefix, MetadataString
     )),
