@@ -111,8 +111,10 @@ reuse_or_renew_offline_credentials(OfflineJobId) ->
                     case acquire_offline_credentials(OfflineJobId, to_token_credentials(OfflineCredentials)) of
                         {ok, NewOfflineCredentials} ->
                             {ok, NewOfflineCredentials};
+                        ?ERROR_TIMEOUT ->
+                            update_next_renewal_backoff(OfflineJobId, Now),
+                            {ok, OfflineCredentials};
                         ?ERR(ErrorType) when
-                            ErrorType =:= ?ERROR_TIMEOUT_TYPE;
                             ErrorType =:= ?ERR_NO_CONNECTION_TO_ONEZONE_TYPE;
                             ErrorType =:= ?ERR_TEMPORARY_FAILURE_TYPE;
                             ErrorType =:= ?ERR_INTERNAL_SERVER_ERROR_TYPE
