@@ -205,9 +205,11 @@ get_child(FileCtx, Name, UserCtx) ->
     {file_ctx:cache_parent(NewFileCtx, ChildCtx), NewFileCtx}.
 
 
--spec list_children(file_ctx:ctx(), user_ctx:ctx(), file_listing:options()) ->
+-spec list_children(file_ctx:ctx(), user_ctx:ctx(),
+    #{listing_options := file_listing:options(), allow_deleted := boolean()} | file_listing:options()
+) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_children(FileCtx, UserCtx, ListOpts) ->
+list_children(FileCtx, UserCtx, #{listing_options := ListOpts} = Options) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             get_user_root_dir_children(UserCtx, FileCtx, ListOpts);
@@ -220,10 +222,13 @@ list_children(FileCtx, UserCtx, ListOpts) ->
                         true ->
                             get_space_public_data_shares(UserCtx, FileCtx, ListOpts);
                         false ->
-                            list_file_children(FileCtx, ListOpts)
+                            list_file_children(FileCtx, Options)
                     end
             end
-    end.
+    end;
+list_children(FileCtx, UserCtx, ListOpts) ->
+    list_children(FileCtx, UserCtx, #{listing_options => ListOpts, allow_deleted => false}).
+
 
 
 %%%===================================================================
@@ -469,10 +474,13 @@ get_dir_child(FileCtx, Name) ->
 
 
 %% @private
--spec list_file_children(file_ctx:ctx(), file_listing:options()) ->
+-spec list_file_children(file_ctx:ctx(), #{listing_options := file_listing:options(), allow_deleted := boolean()}) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_file_children(FileCtx, ListOpts) ->
-    {#document{} = FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+list_file_children(FileCtx, #{listing_options := ListOpts, allow_deleted := AllowDeleted}) ->
+    {#document{} = FileDoc, FileCtx2} = case AllowDeleted of
+        true -> file_ctx:get_file_doc_including_deleted(FileCtx);
+        false -> file_ctx:get_file_doc(FileCtx)
+    end,
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
 
     case file_meta:get_type(FileDoc) of

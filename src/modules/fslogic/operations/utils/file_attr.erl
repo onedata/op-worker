@@ -585,7 +585,7 @@ handle_conflicting_name(State, FileCtx, ExtendedName, ConflictingName, Conflicti
 %% @private
 -spec get_file_doc(state()) -> {file_meta:doc(), state()}.
 get_file_doc(#state{file_ctx = FileCtx} = State) ->
-    {FileDoc, FileCtx2} = case read_option(allow_deleted_files, State, false) of
+    {#document{} = FileDoc, FileCtx2} = case read_option(allow_deleted_files, State, false) of
         true ->
             file_ctx:get_and_cache_file_doc_including_deleted(FileCtx);
         false ->

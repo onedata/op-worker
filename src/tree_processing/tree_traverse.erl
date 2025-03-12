@@ -297,7 +297,7 @@ do_master_job(Job, MasterJobArgs) ->
 -spec do_master_job(master_job(), traverse:master_job_extended_args(), new_jobs_preprocessor()) ->
     {ok, traverse:master_job_map()} | {error, term(), stacktrace()}.
 do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     Job2 = Job#tree_traverse{file_ctx = FileCtx2},
     FileType = file_meta:get_effective_type(FileDoc),
     do_master_job_internal(FileType, Job2, TaskId, NewJobsPreprocessor).
@@ -482,10 +482,11 @@ list_children(#tree_traverse{
     end,
     try
         {ok, UserCtx} = acquire_user_ctx(Job, TaskId),
-        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
+        ListingOptions = BaseListingOpts#{
             limit => BatchSize,
             ignore_missing_links => ListingErrorsHandlingPolicy == ignore_known
-        })}
+        },
+        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, #{listing_options => ListingOptions, allow_deleted => true})}
     catch
         _Class:Reason:Stacktrace ->
             {error, datastore_runner:normalize_error(Reason), Stacktrace}
@@ -498,7 +499,7 @@ list_children(#tree_traverse{
 generate_children_jobs(MasterJob, TaskId, Children) ->
     {SlaveJobsReversed, MasterJobsReversed} = lists:foldl(fun(ChildCtx, {SlavesAcc, MastersAcc} = Acc) ->
         try
-            {ChildDoc, ChildCtx2} = file_ctx:get_file_doc(ChildCtx),
+            {ChildDoc, ChildCtx2} = file_ctx:get_file_doc_including_deleted(ChildCtx),
             FileType = file_meta:get_effective_type(ChildDoc),
             {Filename, ChildCtx3} = file_ctx:get_aliased_name(ChildCtx2, undefined),
             {ChildSlaves, ChildMasters} = generate_child_jobs(

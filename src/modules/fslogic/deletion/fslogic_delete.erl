@@ -20,7 +20,7 @@
 
 %% API
 -export([
-    delete_file_locally/4,
+    delete_file_locally/4, delete_file_locally_idempotent/4,
     handle_remotely_deleted_file/1,
     handle_release_of_deleted_file/2,
     handle_file_deleted_on_imported_storage/1,
@@ -71,7 +71,12 @@
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
+    % NOTE: this function should not be called more than once per file as it can result in invalid dir stats count
     report_file_deleted(FileCtx),
+    delete_file_locally_idempotent(UserCtx, FileCtx, Creator, Silent).
+
+-spec delete_file_locally_idempotent(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
+delete_file_locally_idempotent(UserCtx, FileCtx, Creator, Silent) ->
     file_qos:cleanup_reference_related_documents(FileCtx),
     % TODO VFS-7448 - test events production
     case {file_ctx:is_link_const(FileCtx), oneprovider:is_self(Creator)} of

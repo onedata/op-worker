@@ -125,7 +125,10 @@ delete_file(UserCtx, FileCtx0, Silent) ->
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) -> fslogic_worker:fuse_response().
 check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
-    case file_tree:list_children(FileCtx, UserCtx, #{offset => 0, limit => 1, tune_for_large_continuous_listing => false}) of
+    case file_tree:list_children(FileCtx, UserCtx, #{
+        listing_options => #{offset => 0, limit => 1, tune_for_large_continuous_listing => false},
+        allow_deleted => true
+    }) of
         {[], _ListExtendedInfo, FileCtx2} ->
             delete_insecure(UserCtx, FileCtx2, Silent);
         {_, _, _FileCtx2} ->
@@ -145,14 +148,24 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
 delete_insecure(UserCtx, FileCtx, Silent) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case file_meta:update(FileUuid, fun
-        (#file_meta{deleted = true}) ->
-            {error, already_deleted};
+        (#file_meta{deleted = true, provider_id = CreatorProviderId}) ->
+            {error, {already_deleted, CreatorProviderId}};
         (FileMeta = #file_meta{}) ->
             {ok, FileMeta#file_meta{deleted = true}}
     end) of
-        {ok, #document{value = #file_meta{provider_id = ProviderId}}} ->
-            fslogic_delete:delete_file_locally(UserCtx, FileCtx, ProviderId, Silent);
-        {error, already_deleted} ->
-            ok
+        {ok, #document{value = #file_meta{provider_id = CreatorProviderId}}} ->
+            fslogic_delete:delete_file_locally(UserCtx, FileCtx, CreatorProviderId, Silent);
+        {error, {already_deleted, CreatorProviderId}} ->
+            % file is already deleted, but some remnants could have remained - try to clean them up
+            fslogic_delete:delete_file_locally_idempotent(UserCtx, FileCtx, CreatorProviderId, Silent);
+        {error, not_found} ->
+            case file_meta:get_including_deleted(FileUuid) of
+                {ok, #document{value = #file_meta{provider_id = CreatorProviderId}}} ->
+                    % file is already deleted, but some remnants could have remained - try to clean them up
+                    fslogic_delete:delete_file_locally_idempotent(UserCtx, FileCtx, CreatorProviderId, Silent);
+                {error, not_found} ->
+                    %% @TODO VFS-12722 properly handle remote file creation in a deleted dir race
+                    ok
+            end
     end,
     ?FUSE_OK_RESP.
