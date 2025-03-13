@@ -450,43 +450,21 @@ delete_share_test(_Config) ->
     MemRef = api_test_memory:init(),
     {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 20)]),
 
-
-
-    BuildTestSpecFun = fun(VerifyFun, ShareTypeBin, HasHandle) ->
-        SetupFun = fun() ->
-            #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
-                user3, SpaceId, FileSpec
-            ),
-            api_test_memory:set(MemRef, shares, ShareIds),
-            api_test_memory:set(MemRef, file_guid, FileGuid),
-            case HasHandle of
-                true ->
-                    lists:foreach(fun(ShareId) ->
-                        [CreationProvider | _] = oct_background:get_space_supporting_providers(SpaceId),
-                        ozt_handles:create(
-                            CreationProvider, user3, ShareId, hd(ozt_handle_services:list_handle_services()),
-                            <<"oai_dc">>, ozt_handles:example_metadata_variant(<<"oai_dc">>, 1)
-                        )
-                    end, api_test_memory:get(MemRef, shares, []));
-                false ->
-                    ok
-            end
-        end,
+    BuildTestSpecFun = fun(VerifyFun, ShareTypeBin, HasHandle, ZombieShare) ->
         ClientSpec = case HasHandle of
             false ->
                 ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM);
             true ->
-                #client_spec{
+                ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM)#client_spec{
                     correct = [user3],
-                    unauthorized = [nobody],
-                    forbidden_not_in_space = [user1, user2],
-                    forbidden_in_space = [{user4, ?ERR_POSIX(?EPERM)}]
+                    % user2 cannot delete a share that has a handle they do not have privileges for
+                    forbidden_not_in_space = [user1, user2]
                 }
         end,
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            setup_fun = SetupFun,
+            setup_fun = setup_fun(Providers, SpaceId, FileSpec, MemRef, HasHandle, ZombieShare),
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
@@ -515,42 +493,46 @@ delete_share_test(_Config) ->
     end,
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
         build_verify_shares_in_file_meta_fun(MemRef, Providers, user3),
-        <<"share">>, false
+        <<"share">>, false, false
     )])),
 
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
         build_verify_shares_in_file_meta_fun(MemRef, Providers, user3),
-        <<"share">>, true
+        <<"share">>, true, false
     )])),
 
-    % Assert zombie shares can be deleted
-    onenv_file_test_utils:rm_and_sync_file(user3, api_test_memory:get(MemRef, file_guid)),
-    assert_zombie_shares_exist(api_test_memory:get(MemRef, shares), user3, Providers),
-
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
-        fun(_, _) -> true end, <<"zombie share">>, false
+        fun(_, _) -> true end, <<"zombie share">>, false, true
     )])).
 
+
 %% @private
-setup_fun(HasHandle, SpaceId, FileSpec, MemRef) ->
-    #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, SpaceId, FileSpec
-    ),
-    api_test_memory:set(MemRef, shares, ShareIds),
-    api_test_memory:set(MemRef, file_guid, FileGuid),
-    ct:pal("~tp~n", [ShareIds]),
-%%    HasHandle = true,
-    case HasHandle of
-        true ->
-            lists:foreach(fun(ShareId) ->
-                HandleId = ozt_handles:create(
-                    krakow, user3, ShareId, hd(ozt_handle_services:list_handle_services()),
-                    <<"oai_dc">>, ozt_handles:example_metadata_variant(<<"oai_dc">>, 1)
-                ),
-                ct:pal("~p~n", [HandleId])
-            end, api_test_memory:get(MemRef, shares, []));
-        false ->
-            ok
+-spec setup_fun(
+    [oct_background:entity_placeholder()], oct_background:entity_id(), onenv_file_test_utils:file_spec(),
+    api_test_memory:mem_ref(), boolean(), boolean()
+) -> ok.
+setup_fun(Providers, SpaceId, FileSpec, MemRef, HasHandle, ZombieShare) ->
+    fun() ->
+        #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
+            user3, SpaceId, FileSpec
+        ),
+        api_test_memory:set(MemRef, shares, ShareIds),
+        api_test_memory:set(MemRef, file_guid, FileGuid),
+        HasHandle andalso lists:foreach(fun(ShareId) ->
+            ozt_handles:create(
+                hd(oct_background:get_space_supporting_providers(SpaceId)),
+                user3,
+                ShareId,
+                hd(ozt_handle_services:list_handle_services()),
+                <<"oai_dc">>,
+                ozt_handles:example_metadata_variant(<<"oai_dc">>, 1)
+            )
+        end, api_test_memory:get(MemRef, shares, [])),
+
+        ZombieShare andalso fun() ->
+            onenv_file_test_utils:rm_and_sync_file(user3, api_test_memory:get(MemRef, file_guid)),
+            assert_zombie_shares_exist(api_test_memory:get(MemRef, shares), user3, Providers)
+        end
     end.
 
 
@@ -837,7 +819,7 @@ build_share_public_rest_url(ShareId) ->
 init_per_suite(Config) ->
     LoadModules = [dir_stats_test_utils, opt_handles, ozt_handles, ozt_handle_services],
     opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
-        onenv_scenario = "api_tests",
+        onenv_scenario = "api_tests_handle_proxy",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             % make sure there are no remnants from the previous test runs

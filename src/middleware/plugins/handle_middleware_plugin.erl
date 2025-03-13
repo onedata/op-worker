@@ -110,7 +110,7 @@ fetch_entity(#op_req{operation = update, gri = #gri{scope = private}}) ->
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, gri = #gri{scope = private}}) ->
-    % authorization will be checked by oz in during handle update
+    % authorization will be checked by oz in during handle delete
     {ok, {undefined, 1}}.
 
 

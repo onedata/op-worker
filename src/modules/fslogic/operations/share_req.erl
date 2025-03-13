@@ -16,6 +16,7 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_share/4, remove_share/3]).
@@ -57,11 +58,9 @@ remove_share(UserCtx, FileCtx, ShareId) ->
 
     data_constraints:assert_no_constraints(UserCtx),
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
-
-    {ok, #document{value = #od_share{handle= HandleId}}} = share_logic:get_public_data(SessionId, ShareId),
-    case HandleId of
+    ok = case ?check(share_logic:get_handle(SessionId, ShareId)) of
         undefined -> ok;
-        _ -> ok = handle_logic:delete(SessionId, HandleId)
+        HandleId -> ok = handle_logic:delete(SessionId, HandleId)
     end,
 
     ok = file_meta:remove_share(FileCtx, ShareId),
