@@ -82,7 +82,8 @@
             "user1": {
                 "storageCredentials": {
                     "username": "USER",
-                    "password": "USER_PASSWD"
+                    "password": "USER_PASSWD",
+                    "projectName": "PROJECT_NAME"
                 },
                 "displayUid": 2222
             }
