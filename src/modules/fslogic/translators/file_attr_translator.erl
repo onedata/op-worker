@@ -106,10 +106,6 @@ get_attr_as_json(?attr_hardlink_count, #file_attr{hardlink_count = HardlinkCount
     HardlinkCount;
 get_attr_as_json(?attr_symlink_value, #file_attr{symlink_value = SymlinkValue}) ->
     SymlinkValue;
-get_attr_as_json(?attr_has_custom_metadata, #file_attr{has_custom_metadata = HasCustomMetadata}) ->
-    HasCustomMetadata;
-get_attr_as_json(?attr_has_json_metadata, #file_attr{has_json_metadata = HasJsonMetadata}) ->
-    HasJsonMetadata;
 get_attr_as_json(?attr_eff_protection_flags, #file_attr{eff_protection_flags = EffProtectionFlags}) ->
     protection_flags_to_json(EffProtectionFlags);
 get_attr_as_json(?attr_eff_dataset_protection_flags, #file_attr{eff_dataset_protection_flags = EffDatasetProtectionFlags}) ->
@@ -122,6 +118,10 @@ get_attr_as_json(?attr_qos_status, #file_attr{qos_status = QosStatus}) ->
     utils:convert_defined(QosStatus, fun atom_to_binary/1);
 get_attr_as_json(?attr_recall_root_id, #file_attr{recall_root_id = RecallRootId}) ->
     RecallRootId;
+get_attr_as_json(?attr_has_custom_metadata, #file_attr{has_custom_metadata = HasCustomMetadata}) ->
+    HasCustomMetadata;
+get_attr_as_json(?attr_has_json_metadata, #file_attr{has_json_metadata = HasJsonMetadata}) ->
+    HasJsonMetadata;
 get_attr_as_json(?attr_json_metadata, #file_attr{json_metadata = JsonMetadata}) ->
     JsonMetadata.
 

@@ -46,8 +46,6 @@
     owner_id :: undefined | od_user:id(),
     hardlink_count :: undefined | non_neg_integer(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
-    has_custom_metadata :: undefined | boolean(),
-    has_json_metadata :: undefined | boolean(),
     eff_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_inheritance_path :: undefined | dataset:inheritance_path(),
@@ -56,6 +54,8 @@
     recall_root_id :: undefined | file_id:file_guid(),
     is_deleted :: undefined | boolean(),
     conflicting_files :: undefined | file_meta:conflicts(),
+    has_custom_metadata :: undefined | boolean(),
+    has_json_metadata :: undefined | boolean(),
     json_metadata :: undefined | json_utils:json_term(),
     xattrs :: undefined | #{onedata_file:xattr_name() => onedata_file:xattr_value()}
 }).
