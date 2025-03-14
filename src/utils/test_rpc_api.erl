@@ -23,7 +23,7 @@
     get_env/2,
     set_env/2,
 
-    create_fuse_session/3,
+    create_session/2, create_session/3,
     build_token_credentials/5,
 
     get_storages/0,
@@ -79,10 +79,17 @@ set_env(Key, Value) ->
     op_worker:set_env(Key, Value).
 
 
--spec create_fuse_session(binary(), aai:subject(),
-    auth_manager:token_credentials()) -> {ok, session:id()} | no_return().
-create_fuse_session(Nonce, Identity, TokenCredentials) ->
-    session_manager:reuse_or_create_fuse_session(Nonce, Identity, TokenCredentials).
+-spec create_session(od_user:id(), tokens:serialized()) -> {ok, session:id()}.
+create_session(UserId, AccessToken) ->
+    create_session(UserId, normal, AccessToken).
+
+
+-spec create_session(od_user:id(), session:mode(), tokens:serialized()) -> {ok, session:id()}.
+create_session(UserId, SessMode, AccessToken) ->
+    Nonce = crypto:strong_rand_bytes(10),
+    Identity = ?SUB(user, UserId),
+    TokenCredentials = build_token_credentials(AccessToken, undefined, local_ip_v4(), oneclient, allow_data_access_caveats),
+    create_fuse_session(Nonce, Identity, SessMode, TokenCredentials).
 
 
 -spec build_token_credentials(
@@ -259,15 +266,11 @@ perform_io_test(Path, AccessToken) ->
 %%% Helpers
 %%%===================================================================
 
-
 %% @private
--spec create_session(od_user:id(), tokens:serialized()) -> session:id().
-create_session(UserId, AccessToken) ->
-    Nonce = crypto:strong_rand_bytes(10),
-    Identity = ?SUB(user, UserId),
-    TokenCredentials = build_token_credentials(AccessToken, undefined, local_ip_v4(), oneclient, allow_data_access_caveats),
-    {ok, SessionId} = create_fuse_session(Nonce, Identity, TokenCredentials),
-    SessionId.
+-spec create_fuse_session(binary(), aai:subject(), session:mode(),
+    auth_manager:token_credentials()) -> {ok, session:id()} | no_return().
+create_fuse_session(Nonce, Identity, SessMode, TokenCredentials) ->
+    session_manager:reuse_or_create_fuse_session(Nonce, Identity, SessMode, TokenCredentials).
 
 
 %% @private

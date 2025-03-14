@@ -119,9 +119,13 @@
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
 get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    ShareRootFun = fun(Uuid) ->
+        % in public data mode parent guid should always be listed
+        fslogic_file_id:is_share_root_dir_uuid(Uuid) andalso not user_ctx:is_in_public_data_mode(UserCtx)
+    end,
     IsRootDir = lists:any(fun(F) -> F(FileUuid) end, [
+        ShareRootFun,
         fun fslogic_file_id:is_user_root_dir_uuid/1,
-        fun fslogic_file_id:is_share_root_dir_uuid/1,
         fun archivisation_tree:is_archives_root_dir_uuid/1,
         fun fslogic_file_id:is_trash_dir_uuid/1,
         fun fslogic_file_id:is_tmp_dir_uuid/1
