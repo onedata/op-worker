@@ -39,6 +39,13 @@
 -export([move_to_trash/2, schedule_deletion_from_trash/5]).
 
 
+%% Debug functions
+-export([
+    list/1, list/2,
+    clear_all/2, clear_all/3
+]).
+
+
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
 
@@ -102,6 +109,48 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
             ?error("Unable to start deletion of ~ts from trash in space ~ts due to ~tp.", [Guid, SpaceId, Error]),
             Error
     end.
+
+
+%%%===================================================================
+%%% Debug helpers - functions to be used in debug, should not be used in production code
+%%%===================================================================
+
+list(SpaceId) ->
+    list(SpaceId, file_listing:starting_opts(false)).
+
+list(SpaceId, ListOpts) when is_map(ListOpts) ->
+    {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
+        file_ctx:new_by_guid(fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)),
+        #{listing_options => ListOpts, allow_deleted => true}),
+    {Children, NextPaginationToken};
+list(SpaceId, PaginationToken) ->
+    ListOpts = #{pagination_token => PaginationToken},
+    list(SpaceId, ListOpts).
+
+
+% NOTE: this is best effort and is not guaranteed to work properly (mainly due to not having original parent uuid)
+clear_all(SpaceId, EmitEvents) ->
+    clear_all(SpaceId, EmitEvents, undefined).
+
+clear_all(SpaceId, EmitEvents, Token) ->
+    {List, NextToken} = case Token of
+        undefined -> list(SpaceId);
+        _ -> list(SpaceId, Token)
+    end,
+    lists:foreach(fun(FileCtx) ->
+        schedule_deletion_from_trash(FileCtx, user_ctx:new(?ROOT_SESS_ID), EmitEvents,
+            fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), extract_name(FileCtx))
+    end, List),
+    case file_listing:is_finished(NextToken) of
+        true -> ok;
+        false -> clear_all(SpaceId, EmitEvents, NextToken)
+    end.
+
+
+extract_name(FileCtx) ->
+    {ExtendedName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    str_utils:join_binary(
+        lists:droplast(binary:split(ExtendedName, <<?NAME_UUID_SEPARATOR>>, [global])), <<?NAME_UUID_SEPARATOR>>).
 
 
 %%%===================================================================
