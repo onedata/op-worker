@@ -49,6 +49,7 @@
 ]).
 
 -define(LS_SIZE, 1000).
+-define(METADATA_PREFIX, <<"oai_dc">>).
 
 -define(ATTEMPTS, 60).
 
@@ -159,10 +160,15 @@ rm_and_sync_file(UserSelector, FileSelector) ->
 get_object_attributes(Node, SessId, Guid) ->
     case file_test_utils:get_attrs(Node, SessId, Guid) of
         {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
+            Handles = maps:from_list(lists:map(fun(ShareId) ->
+                {ok, HandleId} = rpc:call(Node, share_logic, get_handle, [SessId, ShareId]),
+                {ShareId, HandleId}
+            end, Shares)),
             {ok, #object{
                 guid = Guid, name = Name,
                 type = Type, mode = Mode,
-                shares = lists:sort(Shares)
+                shares = lists:sort(Shares),
+                handles = Handles
             }};
         {error, _} = Error ->
             Error
@@ -281,12 +287,14 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         CreationProvider, UserId, FileGuid, DatasetSpec
     ),
 
+    {Shares, Handles} = create_shares(UserId, CreationProvider, UserSessId, FileGuid, ShareSpecs),
     {#object{
         guid = FileGuid,
         name = FileName,
         type = ?REGULAR_FILE_TYPE,
         mode = FileMode,
-        shares = create_shares(CreationProvider, UserSessId, FileGuid, ShareSpecs),
+        shares = Shares,
+        handles = Handles,
         dataset = DatasetObj,
         content = Content,
         children = undefined,
@@ -349,12 +357,14 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #hardlink_spec{
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, HardlinkGuid, DatasetSpec
     ),
-    
+
+    {Shares, Handles} = create_shares(UserId, CreationProvider, UserSessId, HardlinkGuid, ShareSpecs),
     {#object{
         guid = HardlinkGuid,
         name = FileName,
         type = ?REGULAR_FILE_TYPE,
-        shares = create_shares(CreationProvider, UserSessId, HardlinkGuid, ShareSpecs),
+        shares = Shares,
+        handles = Handles,
         children = undefined,
         content = undefined,
         dataset = DatasetObj,
@@ -394,13 +404,14 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, DirGuid, DatasetSpec
     ),
-    
+    {Shares, Handles} = create_shares(UserId, CreationProvider, UserSessId, DirGuid, ShareSpecs),
     {#object{
         guid = DirGuid,
         name = DirName,
         type = ?DIRECTORY_TYPE,
         mode = DirMode,
-        shares = create_shares(CreationProvider, UserSessId, DirGuid, ShareSpecs),
+        shares = Shares,
+        handles = Handles,
         dataset = DatasetObj,
         children = Children,
         metadata = MetadataObj
@@ -418,18 +429,36 @@ insert_custom_label(CustomLabel, Guid, CustomLabelsMap) ->
 
 
 %% @private
--spec create_shares(oct_background:entity_selector(), session:id(), file_id:file_guid(), [share_spec()]) ->
-    [od_share:id()] | no_return().
-create_shares(CreationProvider, SessId, FileGuid, ShareSpecs) ->
+-spec create_shares(
+    oct_background:entity_selector(), oct_background:entity_selector(), session:id(),
+    file_id:file_guid(), [share_spec()]
+) -> {[od_share:id()], #{od_share:id() => undefined | od_handle:id()}} | no_return().
+create_shares(UserId, CreationProvider, SessId, FileGuid, ShareSpecs) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
-    lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->
-        {ok, ShareId} = ?assertMatch(
-            {ok, _},
-            opt_shares:create(CreationNode, SessId, ?FILE_REF(FileGuid), Name, Description),
-            ?ATTEMPTS
-        ),
-        ShareId
-    end, ShareSpecs)).
+    Handles = maps:from_list(lists:map(
+        fun(#share_spec{name = Name, description = Description, has_handle = HasHandle}) ->
+            {ok, ShareId} = ?assertMatch(
+                {ok, _},
+                opt_shares:create(CreationNode, SessId, ?FILE_REF(FileGuid), Name, Description),
+                ?ATTEMPTS
+            ),
+            HandleId = case HasHandle of
+                true ->
+                    ozt_handles:create(
+                        CreationProvider,
+                        UserId,
+                        ShareId,
+                        hd(ozt_handle_services:list_handle_services()),
+                        ?METADATA_PREFIX,
+                        ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+                    );
+                false ->
+                    undefined
+            end,
+            {ShareId, HandleId}
+        end, ShareSpecs)),
+
+    {lists:sort(maps:keys(Handles)), Handles}.
 
 
 %% @private

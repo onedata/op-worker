@@ -52,6 +52,8 @@ all() -> [
 -define(SPACE_SELECTOR, space_krk).
 -define(METADATA_PREFIX, <<"oai_dc">>).
 
+-define(ATTEMPTS, 30).
+
 
 %%%===================================================================
 %%% Get file distribution test functions
@@ -260,7 +262,8 @@ build_update_delete_handle_setup_fun(MemRef, Metadata) ->
         HandleId = ozt_handles:create(
             ?PROVIDER_SELECTOR, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata
         ),
-        api_test_memory:set(MemRef, handle_id, HandleId)
+        api_test_memory:set(MemRef, handle_id, HandleId),
+        api_test_memory:set(MemRef, share_id, ShareId)
     end.
 
 
@@ -285,9 +288,12 @@ delete_handle_test(_Config) ->
 
     ValidateResultFun = fun(_, ok) ->
         HandleId = api_test_memory:get(MemRef, handle_id),
+        ShareId = api_test_memory:get(MemRef, share_id),
         Node = oct_background:get_random_provider_node(?PROVIDER_SELECTOR),
         SessId = oct_background:get_user_session_id(?SPACE_OWNER_AND_HS_MEMBER, ?PROVIDER_SELECTOR),
-        ?assertEqual(?ERROR_NOT_FOUND, ?rpc(Node, handle_logic:get_public_data(SessId, HandleId)))
+        ?assertEqual(?ERROR_NOT_FOUND, ?rpc(Node, handle_logic:get_public_data(SessId, HandleId))),
+        ?assertEqual({ok, undefined}, ?rpc(Node, share_logic:get_handle(SessId, ShareId)), ?ATTEMPTS),
+        ?assertNotEqual({ok, HandleId}, ?rpc(Node, share_logic:get_handle(SessId, ShareId)), ?ATTEMPTS)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([

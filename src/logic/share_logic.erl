@@ -68,10 +68,8 @@ get_public_data(SessionId, ShareId) ->
     {ok, od_handle:id() | undefined} | errors:error().
 get_handle(SessionId, ShareId) ->
     case get_public_data(SessionId, ShareId) of
-        {ok, #document{value = #od_share{handle= HandleId}}} ->
-            {ok, HandleId};
-        {error, _} = Error ->
-            Error
+        {ok, #document{value = #od_share{handle= HandleId}}} -> {ok, HandleId};
+        {error, _} = Error -> Error
     end.
 
 

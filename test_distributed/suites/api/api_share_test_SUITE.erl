@@ -20,7 +20,6 @@
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/posix/errno.hrl").
 
 -export([
     groups/0, all/0,
@@ -51,6 +50,7 @@ all() -> [
 
 
 -define(ATTEMPTS, 30).
+-define(HANDLE_CREATOR, user3).
 
 
 %%%===================================================================
@@ -448,23 +448,27 @@ delete_share_test(_Config) ->
     Providers = [krakow, paris],
     SpaceId = oct_background:get_space_id(space_krk_par),
     MemRef = api_test_memory:init(),
-    {FileType, FileSpec} = generate_random_file_spec([#share_spec{} || _ <- lists:seq(1, 20)]),
 
     BuildTestSpecFun = fun(VerifyFun, ShareTypeBin, HasHandle, ZombieShare) ->
+        {FileType, FileSpec} = generate_random_file_spec([#share_spec{has_handle = HasHandle} || _ <- lists:seq(1,20)]),
         ClientSpec = case HasHandle of
             false ->
                 ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM);
             true ->
-                ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM)#client_spec{
-                    correct = [user3],
-                    % user2 cannot delete a share that has a handle they do not have privileges for
-                    forbidden_not_in_space = [user1, user2]
+                DefaultSpec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+                DefaultSpec#client_spec{
+                    correct = [?HANDLE_CREATOR],
+                    % other users in the space cannot delete a share that has a handle they do not have privileges for
+                    forbidden_in_space = lists:flatten(
+                        DefaultSpec#client_spec.forbidden_in_space,
+                        (DefaultSpec#client_spec.correct -- [?HANDLE_CREATOR])
+                    )
                 }
         end,
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            setup_fun = setup_fun(Providers, SpaceId, FileSpec, MemRef, HasHandle, ZombieShare),
+            setup_fun = setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare),
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
@@ -509,30 +513,21 @@ delete_share_test(_Config) ->
 %% @private
 -spec setup_fun(
     [oct_background:entity_placeholder()], oct_background:entity_id(), onenv_file_test_utils:file_spec(),
-    api_test_memory:mem_ref(), boolean(), boolean()
+    api_test_memory:mem_ref(), boolean()
 ) -> ok.
-setup_fun(Providers, SpaceId, FileSpec, MemRef, HasHandle, ZombieShare) ->
+setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
     fun() ->
         #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
-            user3, SpaceId, FileSpec
+            ?HANDLE_CREATOR, SpaceId, FileSpec
         ),
         api_test_memory:set(MemRef, shares, ShareIds),
         api_test_memory:set(MemRef, file_guid, FileGuid),
-        HasHandle andalso lists:foreach(fun(ShareId) ->
-            ozt_handles:create(
-                hd(oct_background:get_space_supporting_providers(SpaceId)),
-                user3,
-                ShareId,
-                hd(ozt_handle_services:list_handle_services()),
-                <<"oai_dc">>,
-                ozt_handles:example_metadata_variant(<<"oai_dc">>, 1)
-            )
-        end, api_test_memory:get(MemRef, shares, [])),
 
-        ZombieShare andalso fun() ->
-            onenv_file_test_utils:rm_and_sync_file(user3, api_test_memory:get(MemRef, file_guid)),
-            assert_zombie_shares_exist(api_test_memory:get(MemRef, shares), user3, Providers)
-        end
+        ZombieFun = fun() ->
+            onenv_file_test_utils:rm_and_sync_file(?HANDLE_CREATOR, FileGuid),
+            assert_zombie_shares_exist(ShareIds, ?HANDLE_CREATOR, Providers)
+        end,
+        ZombieShare andalso ZombieFun()
     end.
 
 
@@ -823,14 +818,14 @@ init_per_suite(Config) ->
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             % make sure there are no remnants from the previous test runs
-            ozt_handle_services:remove_user_from_all_handle_services(user3, krakow),
+            ozt_handle_services:remove_user_from_all_handle_services(?HANDLE_CREATOR, krakow),
             dir_stats_test_utils:disable_stats_counting(NewConfig),
-            User3Id = oct_background:get_user_id(user3),
+            User3Id = oct_background:get_user_id(?HANDLE_CREATOR),
             SpaceId = oct_background:get_space_id(space_krk_par),
             ozt_spaces:set_privileges(SpaceId, User3Id, [
                 ?SPACE_MANAGE_SHARES | privileges:space_member()
             ]),
-            ozt_handle_services:add_user_to_all_handle_services(user3),
+            ozt_handle_services:add_user_to_all_handle_services(?HANDLE_CREATOR),
             NewConfig
         end
     }).
