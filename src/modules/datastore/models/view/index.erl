@@ -17,6 +17,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/file_popularity/file_popularity_view.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -81,22 +82,33 @@
 %%--------------------------------------------------------------------
 -spec restore_after_couchbase_upgrade_from_4_5_to_6_6(od_space:id()) -> ok.
 restore_after_couchbase_upgrade_from_4_5_to_6_6(SpaceId) ->
-    ?info("Upgrading views in space (id: ~ts)...", [SpaceId]),
+    SpaceName = case space_logic:get_name(?ROOT_SESS_ID, SpaceId) of
+        {ok, Name} -> Name;
+        ?ERR -> <<"unknown">>
+    end,
+    ?info("Upgrading views in space '~ts' (~ts)...", [SpaceName, SpaceId]),
 
-    view_links:foreach(SpaceId, fun(ViewName) ->
-        ?debug("Upgrading view (name: ~ts) in space (id: ~ts)...", [ViewName, SpaceId]),
+    ViewsCount = view_links:foldl(SpaceId, fun(ViewName, CountAcc) ->
+        ?info("* ~ts", [ViewName]),
 
         try
             {ok, Doc} = index:get(ViewName, SpaceId),
-            view_changes:handle(Doc)
+            view_changes:handle(Doc),
+            CountAcc + 1
         catch Class:Reason:Stacktrace ->
             ?error_exception(
-                "Failed to upgrade view (name: ~ts) in space (id: ~ts)",
-                [ViewName, SpaceId],
+                "ExceptionLog: Failed to upgrade view ~ts in space '~ts' (~ts)",
+                [ViewName, SpaceName, SpaceId],
                 Class, Reason, Stacktrace
-            )
+            ),
+            CountAcc
         end
-    end).
+    end, 0),
+
+    case ViewsCount of
+        0 -> ?info("No views present in space '~ts' (~ts)", [SpaceName, SpaceId]);
+        _ -> ?info("Successfully upgraded views in space '~ts' (~ts)", [SpaceName, SpaceId])
+    end.
 
 
 %%--------------------------------------------------------------------

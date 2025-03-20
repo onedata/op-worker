@@ -501,10 +501,16 @@ upgrade_from_21_02_9_restore_removed_views(Config) ->
         {SimpleSpatialFunction, undefined, true}
     ]),
 
-    % Assert upgrade is idempotent
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
     % After upgrade views should be restored
+    lists:foreach(fun({ViewName, IsSpatial}) ->
+        ?assertMatch({ok, _}, GetViewFun(ViewName)),
+        ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial))
+    end, Views),
+
+    % Assert upgrade is idempotent
+    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
     lists:foreach(fun({ViewName, IsSpatial}) ->
         ?assertMatch({ok, _}, GetViewFun(ViewName)),
         ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial))
@@ -577,6 +583,10 @@ init_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
     test_utils:mock_expect(Worker, provider_logic, supports_space, fun(SpaceId) ->
         SpaceId == ?SPACE1_ID
     end),
+    test_utils:mock_new(Worker, space_logic, [passthrough]),
+    test_utils:mock_expect(Worker, space_logic, get_name, fun(_, SpaceId) ->
+        {ok, SpaceId}
+    end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -600,6 +610,11 @@ end_per_testcase(Case = upgrade_from_21_02_3_missing_dirs, Config) ->
 end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [provider_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic, space_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_, Config) ->
