@@ -53,8 +53,10 @@
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
 -export([set_qos_parameters/2, update_readonly_and_imported/3]).
--export([update_helper_args/2, update_helper_admin_ctx/2,
-    update_helper/2]).
+-export([
+    update_helper_args/2, update_helper_admin_ctx/2, update_helper/2,
+    upgrade_after_swift_switch_to_v3/1
+]).
 
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
@@ -414,6 +416,51 @@ update_helper(StorageId, UpdateFun) ->
         {error, no_changes} -> ok;
         {error, _} = Error -> Error
     end.
+
+
+-spec upgrade_after_swift_switch_to_v3(data()) -> ok.
+upgrade_after_swift_switch_to_v3(StorageData) ->
+    case storage:get_helper_name(StorageData) of
+        ?SWIFT_HELPER_NAME ->
+            StorageId = storage:get_id(StorageData),
+            StorageName = storage:fetch_name_of_local_storage(StorageId),
+
+            ?info("Upgrading swift storage '~ts' (~ts)...", [StorageName, StorageId]),
+
+            ok = upgrade_swift_helper_after_swift_version_update_to_v3(StorageId),
+            % Existing luma entries will not work as they lack necessary projectName
+            ok = luma:clear_db(StorageId),
+
+            ?info("Successfully upgraded swift storage '~ts' (~ts)", [StorageName, StorageId]);
+        _ ->
+            ok
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates helper to reflect changes made in feature/VFS-12688-try-to-update-swift-to-v3
+%% (tenantName is moved from helper args to admin ctx as projectName)
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_swift_helper_after_swift_version_update_to_v3(id()) -> ok | {error, term()}.
+upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
+    storage:update_helper(StorageId, fun(Helper = #helper{
+        args = Args,
+        admin_ctx = AdminCtx
+    }) ->
+        case maps:take(<<"tenantName">>, Args) of
+            {ProjectName, NewArgs} ->
+                {ok, Helper#helper{
+                    args = NewArgs,
+                    admin_ctx = AdminCtx#{<<"projectName">> => ProjectName}
+                }};
+            error ->
+                % ensure update is idempotent
+                {ok, Helper}
+        end
+    end).
 
 
 %%%===================================================================
