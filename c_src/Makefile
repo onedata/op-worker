@@ -11,7 +11,7 @@ AWS_LIBS = -laws-cpp-sdk-s3 -laws-cpp-sdk-core -laws-c-event-stream -laws-checks
 ifndef ONEDATA_SCL
 	LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/lib \
 	-lhelpers $(shell pkg-config --libs botan-2 tbb fuse3) \
-	-lrados -lradosstriper -lSwift -lPocoUtil -lPocoXML \
+	-lrados -lradosstriper -lPocoUtil -lPocoXML -lPocoJSON \
 	-lPocoNet -lPocoFoundation -lpthread -lfolly -lproxygen $(MVFST_LIBS) -Wl,--whole-archive $(AWS_LIBS) -lfizz -lwangle -lsodium \
 	-Wl,--no-whole-archive -lz -lglog -lnss3 -lnspr4 -lboost_system -lboost_filesystem -lboost_log -lboost_thread \
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams -lboost_regex \
@@ -20,7 +20,7 @@ ifndef ONEDATA_SCL
 else
 	LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/lib \
 	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse3) \
-	-lrados -lradosstriper -lSwift -lPocoUtil -lPocoXML \
+	-lrados -lradosstriper -lPocoUtil -lPocoXML -lPocoJSON \
 	-lPocoNet -lPocoFoundation -lpthread -lfolly -lproxygen $(MVFST_LIBS) -Wl,--whole-archive $(AWS_LIBS) -lfizz -lwangle -lsodium \
 	-Wl,--no-whole-archive -lz -lglog -lnss3 -lnspr4 -lboost_system -lboost_filesystem -lboost_log -lboost_thread \
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams -lboost_regex \

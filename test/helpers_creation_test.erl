@@ -22,7 +22,7 @@
     {?CEPHRADOS_HELPER_NAME, [<<"username">>, <<"key">>]},
     {?POSIX_HELPER_NAME, []},
     {?S3_HELPER_NAME, [<<"accessKey">>, <<"secretKey">>]},
-    {?SWIFT_HELPER_NAME, [<<"username">>, <<"password">>]},
+    {?SWIFT_HELPER_NAME, [<<"username">>, <<"password">>, <<"projectName">>]},
     {?GLUSTERFS_HELPER_NAME, []},
     {?WEBDAV_HELPER_NAME, [<<"credentialsType">>, <<"credentials">>]},
     {?NULL_DEVICE_HELPER_NAME, []}
@@ -33,7 +33,7 @@
     {?CEPHRADOS_HELPER_NAME, [<<"monitorHostname">>, <<"clusterName">>, <<"poolName">>]},
     {?POSIX_HELPER_NAME, [<<"mountPoint">>]},
     {?S3_HELPER_NAME, [<<"hostname">>, <<"bucketName">>, <<"scheme">>]},
-    {?SWIFT_HELPER_NAME, [<<"authUrl">>, <<"containerName">>, <<"tenantName">>]},
+    {?SWIFT_HELPER_NAME, [<<"authUrl">>, <<"containerName">>]},
     {?GLUSTERFS_HELPER_NAME, [<<"volume">>, <<"hostname">>]},
     {?WEBDAV_HELPER_NAME, [<<"endpoint">>]},
     {?NULL_DEVICE_HELPER_NAME, []}
