@@ -65,7 +65,7 @@
 
 
 -define(LOG_TERM_SIZE_LIMIT, 1000).
--define(LOG_TO_OP_LOGS, op_worker:get_env(atm_log_to_op_logs, false)).
+-define(DUP_TO_OP_LOGS, op_worker:get_env(atm_logger_dup_to_op_logs, false)).
 
 
 %%%===================================================================
@@ -296,8 +296,8 @@ ensure_system_audit_log_object(LogMsg, Severity) when is_binary(LogMsg) ->
 handle_logs(_Logger, _UpdateOptions, _Logs, undefined) ->
     ok;
 handle_logs(Logger, UpdateOptions, Logs, AtmAuditLogStoreContainer) ->
-    case ?LOG_TO_OP_LOGS of
-        true -> dup_logs_to_op_logs(Logger, Logs);
+    case ?DUP_TO_OP_LOGS of
+        true -> dup_to_op_logs(Logger, Logs);
         false -> ok
     end,
 
@@ -315,8 +315,8 @@ handle_logs(Logger, UpdateOptions, Logs, AtmAuditLogStoreContainer) ->
 
 
 %% @private
--spec dup_logs_to_op_logs(atm_workflow_execution_auth:record(), log() | [log()]) -> ok.
-dup_logs_to_op_logs(Logger = #atm_workflow_execution_logger{
+-spec dup_to_op_logs(record(), log() | [log()]) -> ok.
+dup_to_op_logs(Logger = #atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     task_execution_id = AtmTaskExecutionId
 }, Logs) ->
