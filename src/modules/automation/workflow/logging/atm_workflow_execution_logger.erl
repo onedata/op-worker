@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
--export([build/5]).
+-export([build/6]).
 -export([should_log/2, ensure_log_term_size_not_exceeded/1]).
 -export([task_append_system_log/3, task_handle_logs/3]).
 -export([workflow_append_system_log/3, workflow_handle_logs/3]).
@@ -49,6 +49,7 @@
 -record(atm_workflow_execution_logger, {
     atm_workflow_execution_auth :: atm_workflow_execution_auth:record(),
     log_level :: audit_log:entry_severity_int(),
+    task_execution_id :: undefined | atm_task_execution:id(),
     task_audit_log_store_container :: undefined | atm_store_container:record(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
 
@@ -64,6 +65,7 @@
 
 
 -define(LOG_TERM_SIZE_LIMIT, 1000).
+-define(LOG_TO_OP_LOGS, op_worker:get_env(atm_log_to_op_logs, false)).
 
 
 %%%===================================================================
@@ -74,6 +76,7 @@
 -spec build(
     atm_workflow_execution_auth:record(),
     audit_log:entry_severity_int(),
+    undefined | atm_task_execution:id(),
     undefined | atm_store_container:record(),
     undefined | atm_store_container:record(),
     #{atm_task_execution:id() => task_selector()}
@@ -82,6 +85,7 @@
 build(
     AtmWorkflowExecutionAuth,
     LogLevel,
+    AtmTaskExecutionId,
     AtmTaskAuditLogStoreContainer,
     AtmWorkflowAuditLogStoreContainer,
     AtmTaskSelectorRegistry
@@ -89,6 +93,7 @@ build(
     #atm_workflow_execution_logger{
         atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
         log_level = LogLevel,
+        task_execution_id = AtmTaskExecutionId,
         task_audit_log_store_container = AtmTaskAuditLogStoreContainer,
         workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
         task_selector_registry = AtmTaskSelectorRegistry
@@ -132,14 +137,10 @@ task_append_system_log(Logger, LogContent, Severity) ->
     log() | [log()]
 ) ->
     ok.
-task_handle_logs(#atm_workflow_execution_logger{
-    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
+task_handle_logs(Logger = #atm_workflow_execution_logger{
     task_audit_log_store_container = AtmTaskAuditLogStoreContainer
 }, UpdateOptions, AuditLogObject) ->
-    handle_logs(
-        UpdateOptions, AuditLogObject, AtmWorkflowExecutionAuth,
-        AtmTaskAuditLogStoreContainer
-    ).
+    handle_logs(Logger, UpdateOptions, AuditLogObject, AtmTaskAuditLogStoreContainer).
 
 
 -spec workflow_append_system_log(
@@ -164,14 +165,10 @@ workflow_append_system_log(Logger, LogSchemaOrContent, Severity) ->
     log() | [log()]
 ) ->
     ok.
-workflow_handle_logs(#atm_workflow_execution_logger{
-    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
+workflow_handle_logs(Logger = #atm_workflow_execution_logger{
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
 }, UpdateOptions, AuditLogObject) ->
-    handle_logs(
-        UpdateOptions, AuditLogObject, AtmWorkflowExecutionAuth,
-        AtmWorkflowAuditLogStoreContainer
-    ).
+    handle_logs(Logger, UpdateOptions, AuditLogObject, AtmWorkflowAuditLogStoreContainer).
 
 
 %%%===================================================================
@@ -290,23 +287,55 @@ ensure_system_audit_log_object(LogMsg, Severity) when is_binary(LogMsg) ->
 
 %% @private
 -spec handle_logs(
+    record(),
     atm_audit_log_store_content_update_options:record(),
     log() | [log()],
-    atm_workflow_execution_auth:record(),
     undefined | atm_audit_log_store_container:record()
 ) ->
     ok.
-handle_logs(_UpdateOptions, _Logs, _AtmWorkflowExecutionAuth, undefined) ->
+handle_logs(_Logger, _UpdateOptions, _Logs, undefined) ->
     ok;
-handle_logs(UpdateOptions, Logs, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
+handle_logs(Logger, UpdateOptions, Logs, AtmAuditLogStoreContainer) ->
+    case ?LOG_TO_OP_LOGS of
+        true -> dup_logs_to_op_logs(Logger, Logs);
+        false -> ok
+    end,
+
     % NOTE: atm_store_api is bypassed for performance reasons. It is possible as
     % audit_log store update does not modify store document itself but only
     % referenced infinite log
     atm_audit_log_store_container:update_content(
         AtmAuditLogStoreContainer, #atm_store_content_update_req{
-            workflow_execution_auth = AtmWorkflowExecutionAuth,
+            workflow_execution_auth = Logger#atm_workflow_execution_logger.atm_workflow_execution_auth,
             argument = Logs,
             options = UpdateOptions
         }
     ),
     ok.
+
+
+%% @private
+-spec dup_logs_to_op_logs(atm_workflow_execution_auth:record(), log() | [log()]) -> ok.
+dup_logs_to_op_logs(Logger = #atm_workflow_execution_logger{
+    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
+    task_execution_id = AtmTaskExecutionId
+}, Logs) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
+
+    Msg = binary_to_list(format_description(Logger, #atm_workflow_log_schema{
+        selector = case AtmTaskExecutionId of
+            undefined -> workflow_engine;
+            _ -> {task, AtmTaskExecutionId}
+        end,
+        description = <<"atm audit log">>
+    })),
+
+    lists:foreach(fun(Log) ->
+        AppendReq = atm_audit_log_store_container:build_audit_log_append_request(Log),
+
+        Severity = audit_log:severity_to_int(AppendReq#audit_log_append_request.severity),
+        LogSource = AppendReq#audit_log_append_request.source,
+        LogContent = AppendReq#audit_log_append_request.content,
+
+        ?log(Severity, ?autoformat_with_msg(Msg, [AtmWorkflowExecutionId, LogSource, LogContent]), [])
+    end, utils:ensure_list(Logs)).
