@@ -116,7 +116,7 @@ schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUu
 %%%===================================================================
 
 list(SpaceId) ->
-    list(SpaceId, file_listing:starting_opts(false)).
+    list(SpaceId, file_listing:starting_opts_with_tune_for_cont_listing(false)).
 
 list(SpaceId, ListOpts) when is_map(ListOpts) ->
     {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),

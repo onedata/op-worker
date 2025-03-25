@@ -553,8 +553,9 @@ partially_deleted_files_should_be_cleaned_up(_Config) ->
 
     remove_file_meta(P1Node, First#file_attr.guid), % remove file meta of a file at the edge of listing batch
     remove_file_meta(P1Node, Second#file_attr.guid), % remove file meta of a file in the middle of a listing batch
-%%    remove_file_meta(P1Node, ChildDirGuid1), % remove file meta of a non-empty dir - currently not working as
-%%  removing dir's file meta removes its link tree and therefore its children cannot be listed anymore
+    %% @TODO VFS-12755 currently not working as removing dir's file meta removes its link tree and therefore its children
+    %%  cannot be listed anymore
+%%    remove_file_meta(P1Node, ChildDirGuid1), % remove file meta of a non-empty dir -
 
     schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID, DirName),
 

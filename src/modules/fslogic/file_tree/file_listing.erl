@@ -36,7 +36,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_meta_forest.hrl").
 
--export([list/2, starting_opts/1]).
+-export([list/2, starting_opts_with_tune_for_cont_listing/1]).
 -export([build_index/1, build_index/2]).
 -export([encode_pagination_token/1, decode_pagination_token/1]). 
 -export([encode_index/1, decode_index/1]).
@@ -105,8 +105,8 @@ list(FileUuid, ListOpts) ->
     end.
 
 
--spec starting_opts(boolean()) -> options().
-starting_opts(TuneForLargeContinuousListing) ->
+-spec starting_opts_with_tune_for_cont_listing(boolean()) -> options().
+starting_opts_with_tune_for_cont_listing(TuneForLargeContinuousListing) ->
     #{tune_for_large_continuous_listing => TuneForLargeContinuousListing}.
 
 

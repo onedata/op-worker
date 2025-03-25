@@ -491,7 +491,7 @@ list_file_children(FileCtx, #{listing_options := ListOpts, allow_deleted := Allo
             {ok, ChildrenLinks, ListingToken} = 
                 file_listing:list(FileUuid, ListOpts),
             Children = lists:map(fun({Name, Uuid}) ->
-                file_ctx:new_by_uuid(Uuid, SpaceId, ShareId, Name)
+                file_ctx:cache_parent(FileCtx2, file_ctx:new_by_uuid(Uuid, SpaceId, ShareId, Name))
             end, ChildrenLinks),
 
             {Children, ListingToken, FileCtx2};
