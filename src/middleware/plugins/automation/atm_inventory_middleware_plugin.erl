@@ -75,7 +75,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmInventoryId, scope = private}}) ->
     case atm_inventory_logic:get(Auth#auth.session_id, AtmInventoryId) of

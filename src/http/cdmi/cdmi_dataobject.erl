@@ -148,7 +148,7 @@ put_binary(Req, #cdmi_req{
                 {{From, To}, _ExpectedSize} when Length =:= undefined; Length =:= To - From + 1 ->
                     {Guid, false, From};
                 _ ->
-                    throw(?ERROR_BAD_DATA(?HDR_CONTENT_RANGE))
+                    throw(?ERR_BAD_DATA(?err_ctx(), ?HDR_CONTENT_RANGE, undefined))
             end
     end,
 
@@ -244,7 +244,7 @@ put_cdmi(Req, #cdmi_req{
                 undefined ->
                     {true, Req0, CdmiReq};
                 _MalformedRange ->
-                    throw(?ERROR_BAD_DATA(<<"range">>))
+                    throw(?ERR_BAD_DATA(?err_ctx(), <<"range">>, undefined))
             end
     end.
 

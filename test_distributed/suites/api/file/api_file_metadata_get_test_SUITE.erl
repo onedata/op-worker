@@ -116,7 +116,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
             api_test_utils:set_and_sync_metadata(Providers, FileGuid, MetadataType, ?RDF_METADATA_1),
             fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
         do_not_set_rdf ->
-            fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
+            fun(_TestCtx) -> ?ERR_POSIX(?ENODATA) end
     end,
 
     {ShareId, ClientSpec} = case TestMode of
@@ -156,7 +156,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"rdf">>,
@@ -230,17 +230,17 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
                     ]
                 },
                 bad_values = [
-                    {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                    {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                    {<<"inherited">>, -100, ?ERR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                    {<<"inherited">>, <<"dummy">>, ?ERR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
                     {<<"filter_type">>, <<"dummy">>,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+                        ?ERR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
 
                     % Below differences between error returned by rest and gs are results of sending
                     % parameters via qs in REST, so they lost their original type and are cast to binary
                     {<<"filter_type">>, 100, {rest,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                    {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-                    {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
+                        ?ERR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                    {<<"filter_type">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"filter_type">>)}},
+                    {<<"filter">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"filter">>)}}
                 ]
             }
         )
@@ -338,7 +338,7 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
                 {undefined, _} ->
                     [];
                 {<<"keypath">>, undefined} ->
-                    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+                    throw(?ERR_MISSING_REQUIRED_VALUE(<<"filter">>));
                 {<<"keypath">>, _} ->
                     binary:split(Filter, <<".">>, [global])
             end,
@@ -351,7 +351,7 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
                             % shouldn't be able to get inherited metadata due to
                             % insufficient perms on DirLayer2 (exception would be
                             % space owner)
-                            throw(?ERROR_POSIX(?EACCES));
+                            throw(?ERR_POSIX(?EACCES));
                         undefined ->
                             json_utils:merge([
                                 ?JSON_METADATA_1,
@@ -375,7 +375,7 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
                             % shouldn't be able to get inherited metadata due to
                             % insufficient perms on DirLayer2 (exception would be
                             % space owner)
-                            throw(?ERROR_POSIX(?EACCES));
+                            throw(?ERR_POSIX(?EACCES));
                         undefined ->
                             json_utils:merge([
                                 ?JSON_METADATA_1,
@@ -387,14 +387,14 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
                             ?JSON_METADATA_4
                     end;
                 {do_not_set_direct_json, false} ->
-                    throw(?ERROR_POSIX(?ENODATA))
+                    throw(?ERR_POSIX(?ENODATA))
             end,
 
             case json_utils:query(ExpJsonMetadata, FilterList) of
                 {ok, _} = Result ->
                     Result;
                 error ->
-                    ?ERROR_POSIX(?ENODATA)
+                    ?ERR_POSIX(?ENODATA)
             end
         catch throw:Error ->
             Error
@@ -413,7 +413,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"json">>,
@@ -492,11 +492,11 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
                 <<"show_internal">> => [true, false]
             },
             bad_values = [
-                {<<"attribute">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"attribute">>)},
-                {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                {<<"show_internal">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
-                {<<"show_internal">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
+                {<<"attribute">>, <<>>, ?ERR_BAD_VALUE_EMPTY(<<"attribute">>)},
+                {<<"inherited">>, -100, ?ERR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                {<<"inherited">>, <<"dummy">>, ?ERR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                {<<"show_internal">>, -100, ?ERR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
+                {<<"show_internal">>, <<"dummy">>, ?ERR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
             ]
         }
     ),
@@ -618,7 +618,7 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
                                 false ->
                                     % It is not possible for user to get internal
                                     % key other than allowed ones
-                                    throw(?ERROR_POSIX(?EPERM))
+                                    throw(?ERR_POSIX(?EPERM))
                             end;
                         false ->
                             [Attribute]
@@ -653,7 +653,7 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
                             end, [?JSON_METADATA_KEY, ?XATTR_1_KEY, NotSetXattrKey]),
 
                             case IsUser4GettingForbiddenXattr of
-                                true -> throw(?ERROR_POSIX(?EACCES));
+                                true -> throw(?ERR_POSIX(?EACCES));
                                 false -> AllDirectMetadata
                             end;
                         undefined ->
@@ -685,12 +685,12 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
                                     % Cdmi attrs cannot be inherited, so trying to get them when
                                     % they are not directly set result in ?ENODATA no matter the
                                     % value of 'inherited' flag (exception would be space owner).
-                                    throw(?ERROR_POSIX(?ENODATA));
+                                    throw(?ERR_POSIX(?ENODATA));
                                 false ->
                                     % User belonging to the same space as owner of files
                                     % shouldn't be able to get any inherited metadata due to
                                     % insufficient perms on Dir1 (exception would be space owner).
-                                    throw(?ERROR_POSIX(?EACCES))
+                                    throw(?ERR_POSIX(?EACCES))
                             end;
                         undefined ->
                             % User should fetch all metadata set on ancestor dirs
@@ -708,7 +708,7 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
                 [] ->
                     {ok, maps:with(XattrsToGet, AvailableXattrsMap)};
                 _ ->
-                    ?ERROR_POSIX(?ENODATA)
+                    ?ERR_POSIX(?ENODATA)
             end
         catch throw:Error ->
             Error
@@ -727,7 +727,7 @@ get_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, ?FILE_REF(FileGuid), ?XATTR_1)),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"xattrs">>,
@@ -754,7 +754,7 @@ build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace, Spa
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) when TestNode == ProvNotSuppSpace ->
             ProvId = opw_test_rpc:get_provider_id(TestNode),
-            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId)),
+            ExpError = ?REST_ERROR(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
         (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case GetExpResultFun(TestCtx) of
@@ -777,7 +777,7 @@ build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace, Space
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProvNotSuppSpace ->
             ProvId = opw_test_rpc:get_provider_id(TestNode),
-            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId), Result);
+            ?assertEqual(?ERR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId), Result);
         (TestCtx, Result) ->
             case GetExpResultFun(TestCtx) of
                 {ok, ExpMetadata} ->
@@ -852,8 +852,8 @@ get_metadata_test_base(
             ),
             validate_result_fun = fun(#api_test_ctx{client = Client}, Result) ->
                 ExpError = case Client of
-                    ?NOBODY -> ?ERROR_UNAUTHORIZED;
-                    _ -> ?ERROR_FORBIDDEN
+                    ?NOBODY -> ?ERR_UNAUTHORIZED(undefined);
+                    _ -> ?ERR_FORBIDDEN
                 end,
                 ?assertEqual(ExpError, Result)
             end
@@ -901,7 +901,7 @@ get_metadata_test_base(
                         MetadataType, ShareFileGuid, private
                     ),
                     validate_result_fun = fun(_, Result) ->
-                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                        ?assertEqual(?ERR_UNAUTHORIZED(undefined), Result)
                     end
                 }
             ],
@@ -950,7 +950,7 @@ build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

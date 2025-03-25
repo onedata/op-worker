@@ -94,11 +94,11 @@ many_files_creation_tree_test_base(Config) ->
             SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
             PhaseAns = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
             case rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]) of
-                ?ERROR_DIR_STATS_NOT_READY ->
+                ?ERR_DIR_STATS_NOT_READY ->
                     ct:print("Initializing stats collections"),
                     timer:sleep(5000),
                     PhaseAns;
-                ?ERROR_DIR_STATS_DISABLED_FOR_SPACE ->
+                ?ERR_DIR_STATS_DISABLED_FOR_SPACE ->
                     ct:print("Initializing stats collections"),
                     timer:sleep(5000),
                     PhaseAns;

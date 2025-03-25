@@ -220,9 +220,9 @@ end).
 %%%===================================================================
 
 -define(SWIFT_ADMIN_CREDENTIALS,
-     luma_test_utils:new_swift_user_ctx(<<"ADMIN">>, <<"ADMIN_PASSWD">>)).
+     luma_test_utils:new_swift_user_ctx(<<"ADMIN">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>)).
 -define(SWIFT_USER_CREDENTIALS,
-     luma_test_utils:new_swift_user_ctx(<<"USER">>, <<"USER_PASSWD">>)).
+     luma_test_utils:new_swift_user_ctx(<<"USER">>, <<"USER_PASSWD">>, <<"PROJECT_NAME">>)).
 
 -define(SWIFT_STORAGE_ID_AUTO_FEED_LUMA, <<"swiftStorageIdAutoFeedLuma">>).
 -define(SWIFT_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"swiftStorageIdExternalFeedLuma">>).
@@ -231,7 +231,6 @@ end).
 -define(SWIFT_HELPER, ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
     #{<<"authUrl">> => <<"authUrl">>,
         <<"containerName">> => <<"containerName">>,
-        <<"tenantName">> => <<"tenantName">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
     ?SWIFT_ADMIN_CREDENTIALS

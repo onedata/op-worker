@@ -100,7 +100,7 @@ update(LumaConfig = #luma_config{
         {true, true} ->
             case maps:get(url, Diff, undefined) of
                 undefined ->
-                    ?ERROR_MISSING_REQUIRED_VALUE(url);
+                    ?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), url);
                 NewUrl when is_binary(NewUrl) ->
                     {ok, #luma_config{
                         feed = NewFeed,

@@ -17,6 +17,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include("modules/datastore/qos.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 valid_qos_expression_test() ->
@@ -197,7 +198,7 @@ check_valid_expression(Expression, ExpectedRpn) ->
     
 
 check_invalid_expression(Expression) ->
-    ?assertThrow(?ERROR_INVALID_QOS_EXPRESSION(_), qos_expression:parse(Expression)).
+    ?assertThrow(?ERR_INVALID_QOS_EXPRESSION(_), qos_expression:parse(Expression)).
 
 
 check_filter_storages(Expression, ExpectedStorages, StoragesMap) ->

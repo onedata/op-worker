@@ -229,10 +229,10 @@ ensure_stalled_scans_are_fixed() ->
                         case provider_logic:get_spaces() of
                             {ok, SpaceIds} ->
                                 fix_stalled_scans(SpaceIds);
-                            ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                            ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                                 ?debug("auto_storage_import_worker was unable to fix stalled scans due to no connection to oz."),
                                 throw(?STALLED_SCANS_NOT_FIXED_ERROR);
-                            ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                            ?ERR_UNREGISTERED_ONEPROVIDER ->
                                 ?debug("auto_storage_import_worker was unable to fix stalled scans due to unregistered provider."),
                                 throw(?STALLED_SCANS_NOT_FIXED_ERROR);
                             {error, _} = Error ->

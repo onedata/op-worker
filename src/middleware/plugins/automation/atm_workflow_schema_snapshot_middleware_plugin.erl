@@ -71,7 +71,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(#op_req{gri = #gri{id = AtmWorkflowSchemaSnapshotId, scope = private}}) ->
     case atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId) of

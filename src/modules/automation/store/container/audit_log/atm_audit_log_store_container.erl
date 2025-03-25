@@ -259,7 +259,7 @@ sanitize_append_requests(
     Requests;
 
 sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogLevel, _LogContentDataSpec, Item) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Item, atm_array_type)).
+    throw(?ERR_ATM_DATA_TYPE_UNVERIFIED(?err_ctx(), Item, atm_array_type)).
 
 
 %% @private

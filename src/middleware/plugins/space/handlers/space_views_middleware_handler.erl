@@ -241,7 +241,7 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName
 
     case index:update_reduce_function(SpaceId, ViewName, ReduceFunction) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
+            ?ERR_BAD_VALUE_AMBIGUOUS_ID(?err_ctx(), <<"view_name">>);
         Result ->
             Result
     end.
@@ -282,7 +282,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
 get(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}, _) ->
     case index:get_json(SpaceId, ViewName) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
+            ?ERR_BAD_VALUE_AMBIGUOUS_ID(?err_ctx(), <<"view_name">>);
         Result ->
             Result
     end;
@@ -293,7 +293,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {query_view, ViewName}}} = Req, _)
         {ok, #{<<"rows">> := Rows}} ->
             {ok, Rows};
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
+            ?ERR_BAD_VALUE_AMBIGUOUS_ID(?err_ctx(), <<"view_name">>);
         {error, _} = Error ->
             Error
     end.
@@ -317,7 +317,7 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}
         maps:get(<<"providers[]">>, Data, undefined)
     ) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
+            ?ERR_BAD_VALUE_AMBIGUOUS_ID(?err_ctx(), <<"view_name">>);
         Result ->
             Result
     end.
@@ -332,7 +332,7 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     case index:delete(SpaceId, ViewName) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
+            ?ERR_BAD_VALUE_AMBIGUOUS_ID(?err_ctx(), <<"view_name">>);
         Result ->
             Result
     end;
@@ -340,7 +340,7 @@ delete(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName}}}) ->
     case index:update_reduce_function(SpaceId, ViewName, undefined) of
         {error, ?EINVAL} ->
-            ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
+            ?ERR_BAD_VALUE_AMBIGUOUS_ID(?err_ctx(), <<"view_name">>);
         Result ->
             Result
     end.

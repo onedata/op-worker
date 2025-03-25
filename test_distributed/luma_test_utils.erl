@@ -24,7 +24,7 @@
     clear_luma_db/2]).
 
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
-    new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
+    new_s3_user_ctx/2, new_swift_user_ctx/3, new_glusterfs_user_ctx/2,
     new_webdav_user_ctx/2, new_nulldevice_user_ctx/2]).
 
 -type user_ctx() :: helper:user_ctx().
@@ -180,11 +180,12 @@ new_s3_user_ctx(AccessKey, SecretKey) ->
 %% Constructs Swift storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_swift_user_ctx(binary(), binary()) -> user_ctx().
-new_swift_user_ctx(Username, Password) ->
+-spec new_swift_user_ctx(binary(), binary(), binary()) -> user_ctx().
+new_swift_user_ctx(Username, Password, ProjectName) ->
     #{
         <<"username">> => Username,
-        <<"password">> => Password
+        <<"password">> => Password,
+        <<"projectName">> => ProjectName
     }.
 
 %%--------------------------------------------------------------------

@@ -172,13 +172,13 @@ schedule(
 
 
 -spec get(atm_workflow_execution:id()) ->
-    {ok, atm_workflow_execution:record()} | ?ERROR_NOT_FOUND.
+    {ok, atm_workflow_execution:record()} | od_error_not_found:t().
 get(AtmWorkflowExecutionId) ->
     case atm_workflow_execution:get(AtmWorkflowExecutionId) of
         {ok, #document{value = AtmWorkflowExecution}} ->
             {ok, AtmWorkflowExecution};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 

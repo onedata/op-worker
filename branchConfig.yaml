@@ -3,8 +3,8 @@ default: develop
 
 images:
   # Specification of branches from which docker images will be pulled.
-  onezone: current_branch
-  oneprovider: current_branch
+  onezone: 22.02.0
+  oneprovider: 22.02.0
 
 sources:
   # Specification of branches from which sources for components will be pulled.

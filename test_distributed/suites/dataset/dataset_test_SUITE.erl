@@ -333,7 +333,7 @@ remove_attached_dataset(_Config) ->
     % traverse permission to file is required to remove attached dataset
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, ?FILE_REF(ParentGuid), 8#444),
     % user2 should not be able to remove the dataset
-    ?assertMatch(?ERROR_POSIX(?EACCES), opt_datasets:remove(P1Node, User2SessIdP1, DatasetId)),
+    ?assertMatch(?ERR_POSIX(?EACCES), opt_datasets:remove(P1Node, User2SessIdP1, DatasetId)),
 
     % revert permissions
     ok = lfm_proxy:set_perms(P1Node, UserSessIdP1, ?FILE_REF(ParentGuid), ?DEFAULT_DIR_PERMS),
@@ -1145,7 +1145,7 @@ remove_hardlink_with_protection_flags(_Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op"}).
+    opt:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op"}).
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().

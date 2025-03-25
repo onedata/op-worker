@@ -126,7 +126,7 @@ handle(#op_req{} = OpReq, VersionedEntity) ->
         % to client instead
         Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~tp - ~tp:~tp", [?MODULE, Type, Reason], Stacktrace),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
     end.
 
 
@@ -244,7 +244,7 @@ sanitize_request(#req_ctx{handler = Handler, req = #op_req{
                 _ when is_map(RawData) ->
                     RawData#{id => Id, aspect => Aspect};
                 _ ->
-                    throw(?ERROR_MALFORMED_DATA)
+                    throw(?ERR_MALFORMED_DATA(?err_ctx()))
             end,
             SanitizedData = middleware_sanitizer:sanitize_data(
                 RawDataWithIdAndAspect, DataSpec
@@ -317,11 +317,11 @@ ensure_authorized(#req_ctx{
             case Auth of
                 ?GUEST ->
                     % The client was not authenticated -> unauthorized
-                    throw(?ERROR_UNAUTHORIZED);
+                    throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
                 _ ->
                     % The client was authenticated but cannot access the
                     % aspect -> forbidden
-                    throw(?ERROR_FORBIDDEN)
+                    throw(?ERR_FORBIDDEN(?err_ctx()))
             end
     end.
 

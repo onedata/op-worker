@@ -171,7 +171,7 @@ get_effective_file_qos_insecure(FileCtx) ->
         undefined ->
             {ok, {#{}, #{}}};
         {error, _} ->
-            ?ERROR_TEMPORARY_FAILURE
+            ?ERR_TEMPORARY_FAILURE(?err_ctx())
     end.
 
 
@@ -188,7 +188,7 @@ get_qos_entry_insecure(QosEntryId) ->
         {ok, #document{value = QosEntry}} ->
             {ok, QosEntry};
         {error, _} ->
-            ?ERROR_TEMPORARY_FAILURE
+            ?ERR_TEMPORARY_FAILURE(?err_ctx())
     end.
 
 
@@ -211,7 +211,7 @@ remove_qos_entry_insecure(UserCtx, QosEntryId) ->
             ok = qos_logic:handle_entry_delete(QosDoc),
             ok = qos_entry:delete(QosEntryId);
         false ->
-            ?ERROR_FORBIDDEN
+            ?ERR_FORBIDDEN(?err_ctx())
     end.
 
 
@@ -242,7 +242,7 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             Result;
         _ ->
-            ?ERROR_TEMPORARY_FAILURE
+            ?ERR_TEMPORARY_FAILURE(?err_ctx())
     end.
 
 
@@ -263,5 +263,5 @@ add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
             ok = file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
             Result;
         _ ->
-            ?ERROR_TEMPORARY_FAILURE
+            ?ERR_TEMPORARY_FAILURE(?err_ctx())
     end.

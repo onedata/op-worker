@@ -80,7 +80,7 @@ import_file_with_content_test(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [?MODULE, sd_test_utils, storage_import_oct_test_base],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},

@@ -164,7 +164,7 @@ autocleaning_run_should_not_start_when_file_popularity_is_disabled(Config) ->
 
 forcefully_started_autocleaning_should_return_error_when_file_popularity_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(?ERROR_FILE_POPULARITY_DISABLED, force_start(W, ?SPACE_ID)).
+    ?assertEqual(?ERR_FILE_POPULARITY_DISABLED, force_start(W, ?SPACE_ID)).
 
 autocleaning_run_should_not_start_when_autocleaning_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -181,7 +181,7 @@ autocleaning_run_should_not_start_when_autocleaning_is_disabled(Config) ->
 forcefully_started_autocleaning_should_return_error_when_autocleaning_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_file_popularity(W, ?SPACE_ID),
-    ?assertEqual(?ERROR_AUTO_CLEANING_DISABLED, force_start(W, ?SPACE_ID)).
+    ?assertEqual(?ERR_AUTO_CLEANING_DISABLED, force_start(W, ?SPACE_ID)).
 
 autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),

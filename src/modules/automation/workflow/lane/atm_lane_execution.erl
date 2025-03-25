@@ -206,7 +206,7 @@ update_run({AtmLaneSelector, RunSelector}, Diff, Default, AtmWorkflowExecution =
     end.
 
 
--spec get(selector(), atm_workflow_execution:record()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+-spec get(selector(), atm_workflow_execution:record()) -> {ok, record()} | od_error_not_found:t().
 get(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
     case maps:find(resolve_selector(AtmLaneSelector, AtmWorkflowExecution), AtmLaneExecutions) of
         {ok, _} = Result -> Result;
@@ -215,7 +215,7 @@ get(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmL
 
 
 -spec update(selector(), diff(), atm_workflow_execution:record()) ->
-    {ok, atm_workflow_execution:record()} | errors:error().
+    {ok, atm_workflow_execution:record()} | errors:error() | {error, term()}.
 update(AtmLaneSelector, Diff, AtmWorkflowExecution = #atm_workflow_execution{
     lanes = AtmLaneExecutions
 }) ->
@@ -416,7 +416,7 @@ replace(AtmLaneIndex, AtmLaneExecution, AtmWorkflowExecution = #atm_workflow_exe
 
 %% @private
 -spec locate_run(run_selector(), record(), atm_workflow_execution:record()) ->
-    {ok, RunIndex :: pos_integer(), run()} | ?ERROR_NOT_FOUND.
+    {ok, RunIndex :: pos_integer(), run()} | od_error_not_found:t().
 locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution = #atm_workflow_execution{
     current_run_num = CurrentRunNum
 }) ->

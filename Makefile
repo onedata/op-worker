@@ -50,7 +50,8 @@ inject-gui:
 	$(LIB_DIR)/gui/pull-gui.sh gui-image.conf
 
 submodules-in-deps: get-deps
-	make -C _build/default/lib/helpers submodules
+	$(MAKE) -C $(LIB_DIR)/helpers submodules
+	$(MAKE) -C $(LIB_DIR)/ctool submodules
 
 ## Generates a production release
 generate: submodules-in-deps template inject-gui
@@ -89,7 +90,7 @@ submodules:
 
 rel: generate
 
-test_rel: generate cm_rel 
+test_rel: generate cm_rel
 
 cm_rel:
 	make -C $(LIB_DIR)/cluster_manager/ submodules
@@ -165,7 +166,7 @@ package/$(PKG_ID).tar.gz:
 	rm -rf package/$(PKG_ID)
 	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
 	git submodule foreach --recursive "git archive --prefix=$(PKG_ID)/\$$path/ \$$sha1 | (cd \$$toplevel/package && tar -xf -)"
-	${MAKE} -C package/$(PKG_ID) get-deps submodules-in-deps inject-gui
+	$(MAKE) -C package/$(PKG_ID) get-deps submodules-in-deps inject-gui
 	for dep in package/$(PKG_ID) package/$(PKG_ID)/$(LIB_DIR)/*; do \
 	     echo "Processing dependency: `basename $${dep}`"; \
 	     vsn=`git --git-dir=$${dep}/.git describe --tags 2>/dev/null`; \

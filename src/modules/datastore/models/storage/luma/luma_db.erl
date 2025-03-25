@@ -319,17 +319,17 @@ validate_constraints_end_execute(Storage, [Constraint | Rest], Fun) ->
 validate_constraint(Storage, ?POSIX_STORAGE) ->
     case storage:is_posix_compatible(Storage) of
         true -> ok;
-        false -> ?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
+        false -> ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
     end;
 validate_constraint(Storage, ?IMPORTED_STORAGE) ->
     case storage:is_imported(Storage) of
         true -> ok;
-        false -> ?ERROR_REQUIRES_IMPORTED_STORAGE(storage:get_id(Storage))
+        false -> ?ERR_REQUIRES_IMPORTED_STORAGE(?err_ctx(), storage:get_id(Storage))
     end;
 validate_constraint(Storage, ?NON_IMPORTED_STORAGE) ->
     case storage:is_imported(Storage) of
         false -> ok;
-        true -> ?ERROR_REQUIRES_NON_IMPORTED_STORAGE(storage:get_id(Storage))
+        true -> ?ERR_REQUIRES_NON_IMPORTED_STORAGE(?err_ctx(), storage:get_id(Storage))
     end.
 
 -spec new_doc(doc_id(), storage(), table(), db_record(), luma:feed()) -> doc().

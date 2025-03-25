@@ -267,12 +267,12 @@ start_aux_streams_according_to_summary(State = #hs_state{
             % we can ignore this error
             AccIn;
 
-        (?ERROR_FORBIDDEN, _ErrorDest, AccIn) ->
+        (?ERR_FORBIDDEN, _ErrorDest, AccIn) ->
             % Harvesters in _ErrorDest were deleted from space
             % we can ignore this error
             AccIn;
 
-        (?ERROR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName), ErrorDest, {DestIn, AuxDestIn}) ->
+        (?ERR_EXTERNAL_SERVICE_OPERATION_FAILED(ServiceName), ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
                 ?warning(
                     "An error occured for harvester ~tp due to a failed external service (~ts) operation. "
@@ -285,7 +285,7 @@ start_aux_streams_according_to_summary(State = #hs_state{
             end, ErrorDest),
             {DestIn, harvesting_destination:merge(AuxDestIn, ErrorDest)};
 
-        (?ERROR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
+        (?ERR_TEMPORARY_FAILURE, ErrorDest, {DestIn, AuxDestIn}) ->
             harvesting_destination:foreach(fun(HarvesterId, Indices) ->
                 ?warning("Harvester ~tp is temporarily unavailable. "
                 "Starting aux_harvesting_streams", [HarvesterId]),
@@ -572,7 +572,7 @@ remove_harvester(HarvesterId, State) ->
         {ok, _} ->
             % harvester doesn't have space handled by this stream
             false;
-        ?ERROR_FORBIDDEN ->
+        ?ERR_FORBIDDEN ->
             % harvester doesn't have spaces supported by this provider
             false;
         ?ERROR_NOT_FOUND ->

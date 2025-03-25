@@ -91,7 +91,7 @@ token_auth_test(Config) ->
     DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceId/binary>>]},
     TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
     ExpRestError1 = rest_test_utils:get_rest_error(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
     ),
     ?assertMatch(ExpRestError1, get_changes(
         [{{access_token, ?USER_1}, TokenWithDataCaveat} | Config],
@@ -102,7 +102,7 @@ token_auth_test(Config) ->
     InvalidApiCaveat = #cv_api{whitelist = [{all, all, ?GRI_PATTERN(op_metrics, <<"ASD">>, <<"changes">>)}]},
     TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
     ExpRestError2 = rest_test_utils:get_rest_error(
-        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat))
+        ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat))
     ),
     ?assertMatch(ExpRestError2, get_changes(
         [{{access_token, ?USER_1}, TokenWithInvalidApiCaveat} | Config],
@@ -126,17 +126,17 @@ invalid_request_should_fail(Config) ->
         ExpRestError = rest_test_utils:get_rest_error(ExpError),
         ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json))
     end, [
-        {<<"ASD">>, ?ERROR_BAD_VALUE_JSON(<<"changesSpecification">>)},
-        {#{}, ?ERROR_BAD_VALUE_EMPTY(<<"changesSpecification">>)},
-        {#{<<"triggers">> => <<"ASD">>}, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"triggers">>)},
-        {#{<<"triggers">> => [<<"ASD">>]}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, [<<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>])},
-        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_BAD_DATA(<<"fielMeta">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"fileMeta.fields">>)},
-        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
+        {<<"ASD">>, ?ERR_BAD_VALUE_JSON(<<"changesSpecification">>)},
+        {#{}, ?ERR_BAD_VALUE_EMPTY(<<"changesSpecification">>)},
+        {#{<<"triggers">> => <<"ASD">>}, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"triggers">>)},
+        {#{<<"triggers">> => [<<"ASD">>]}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, [<<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>])},
+        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERR_BAD_DATA(<<"fielMeta">>, undefined)},
+        {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"fileMeta.fields">>)},
+        {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
             <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
             <<"provider_id">>, <<"shares">>, <<"deleted">>
         ])},
-        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"fileMeta.always">>)}
+        {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERR_BAD_VALUE_BOOLEAN(<<"fileMeta.always">>)}
     ]).
 
 
@@ -147,7 +147,7 @@ unauthorized_request_should_fail(Config) ->
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
     }},
 
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
     ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json)).
 
 

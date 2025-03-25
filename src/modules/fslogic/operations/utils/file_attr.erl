@@ -280,7 +280,9 @@ resolve_metadata_attrs(#state{file_ctx = FileCtx} = State) ->
             (?RDF_METADATA_KEY) -> true;
             (<<?ONEDATA_PREFIX_STR, _/binary>>) -> false;
             (_) -> true
-        end, maps:keys(AllXattrs))
+        end, maps:keys(AllXattrs)),
+        has_json_metadata = maps:is_key(?JSON_METADATA_KEY, AllXattrs),
+        json_metadata = maps:get(?JSON_METADATA_KEY, AllXattrs, undefined)
     }}.
 
 
@@ -471,8 +473,8 @@ resolve_location_attrs_for_dir(#state{file_ctx = FileCtx, user_ctx = UserCtx} = 
             StatsResult = case dir_size_stats:get_stats(Guid, StatsToGet) of
                 {ok, StatsMap} -> StatsMap;
                 ?ERROR_NOT_FOUND -> #{};
-                ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> error;
-                ?ERROR_DIR_STATS_NOT_READY -> error
+                ?ERR_DIR_STATS_DISABLED_FOR_SPACE -> error;
+                ?ERR_DIR_STATS_NOT_READY -> error
             end,
             case StatsResult of
                 error ->

@@ -75,7 +75,7 @@ registering_upload_for_directory_should_fail_test(_Config) ->
         user1, space_krk, #dir_spec{}
     ),
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"guid">>, <<"not a regular file">>),
+        ?ERR_BAD_DATA(<<"guid">>, <<"not a regular file">>),
         initialize_gui_upload(krakow, user1, DirGuid)
     ).
 
@@ -85,7 +85,7 @@ registering_upload_for_non_empty_file_should_fail_test(_Config) ->
         user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
     ),
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"guid">>, <<"file is not empty">>),
+        ?ERR_BAD_DATA(<<"guid">>, <<"file is not empty">>),
         initialize_gui_upload(krakow, user1, FileGuid)
     ).
 
@@ -95,7 +95,7 @@ registering_upload_for_not_owned_file_should_fail_test(_Config) ->
         user1, space_krk, #file_spec{}
     ),
     ?assertMatch(
-        ?ERROR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
+        ?ERR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
         initialize_gui_upload(krakow, user2, FileGuid)
     ).
 
@@ -224,7 +224,7 @@ upload_with_forward_time_warps_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op-2nodes",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}

@@ -153,7 +153,7 @@ get_stats(Guid, StatNames) ->
 
 
 -spec browse_historical_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> 
-    {ok, ts_browse_result:record()} | dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
+    {ok, ts_browse_result:record()} | dir_stats_collector:collecting_status_error() | od_error_internal_server_error:t().
 browse_historical_stats_collection(Guid, BrowseRequest) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
@@ -169,7 +169,7 @@ browse_historical_stats_collection(Guid, BrowseRequest) ->
                     Error
             end;
         false ->
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+            ?ERR_DIR_STATS_DISABLED_FOR_SPACE(?err_ctx())
     end.
 
 
@@ -501,7 +501,7 @@ save(Guid, Collection, Incarnation) ->
             % {error, already_exists} is impossible - match create answer to ok
             ok = datastore_time_series_collection:create(?CTX, Uuid, Config),
             save(Guid, Collection, Incarnation);
-        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+        ?ERR_TSC_MISSING_LAYOUT(MissingLayout) ->
             MissingConfig = maps:with(maps:keys(MissingLayout), internal_stats_config(Guid)),
             ok = datastore_time_series_collection:incorporate_config(?CTX, Uuid, MissingConfig),
             ok = datastore_time_series_collection:consume_measurements(?CTX, Uuid, ConsumeSpec)
@@ -674,7 +674,7 @@ stat_names(Guid) ->
         {ok, StorageId} ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERROR_COUNT, ?DIR_ERROR_COUNT,
                 ?VIRTUAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
                 false -> throw({error, space_unsupported})
@@ -793,8 +793,8 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
 
         % throw to repeat init by collector
         repeat ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone ->
+            case {error, datastore_runner:normalize_error(Reason)} of
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     ok;
                 _ ->
                     ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
@@ -805,10 +805,10 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
             throw(dir_size_stats_init_error);
 
         repeat_connection_errors ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone ->
+            case {error, datastore_runner:normalize_error(Reason)} of
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) = ErrorNoConnectionToOnezone ->
                     % Collector handles problems with zone connection
-                    throw(no_connection_to_onezone);
+                    throw(ErrorNoConnectionToOnezone);
                 _ ->
                     ?error_stacktrace("Error initializing size stats for ~tp: ~tp:~tp",
                         [Guid, Error, Reason], Stacktrace)
