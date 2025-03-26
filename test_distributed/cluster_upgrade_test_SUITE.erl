@@ -35,7 +35,8 @@
     upgrade_from_20_02_1_storage_sync_monitoring/1,
     upgrade_from_21_02_2_tmp_dir/1,
     upgrade_from_21_02_3_missing_dirs/1,
-    upgrade_from_21_02_5_links_reconciliation_traverses/1
+    upgrade_from_21_02_5_links_reconciliation_traverses/1,
+    upgrade_from_21_02_9_restore_removed_views/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -52,7 +53,8 @@ all() -> ?ALL([
     upgrade_from_20_02_1_storage_sync_monitoring,
     upgrade_from_21_02_2_tmp_dir,
     upgrade_from_21_02_3_missing_dirs,
-    upgrade_from_21_02_5_links_reconciliation_traverses
+    upgrade_from_21_02_5_links_reconciliation_traverses,
+    upgrade_from_21_02_9_restore_removed_views
 ]).
 
 %%%===================================================================
@@ -430,6 +432,91 @@ upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
         rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID]), 10).
 
 
+upgrade_from_21_02_9_restore_removed_views(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Provider1Id = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
+
+    % Overwrite views fold limit to ensure they are iterated one by one
+    rpc:call(Worker, op_worker, set_env, [view_links_fold_limit, 1]),
+
+    SimpleMapFunction = <<"
+        function(id, type, meta, ctx) {
+            return [id, id];
+        }
+    ">>,
+    SimpleReduceFunction = <<"
+        function(key, values, rereduce) {
+           if (rereduce) {
+               var result = 0;
+               for (var i = 0; i < values.length; i++) {
+                   result += values[i];
+               }
+               return result;
+           } else {
+               return values.length;
+           }
+        }
+    ">>,
+    SimpleSpatialFunction = <<"
+        function (id, type, meta, ctx) {
+            if(type == 'custom_metadata' && meta['loc']) {
+                return [meta['loc'], id];
+            }
+            return null;
+        }
+    ">>,
+    GetViewFun = fun(ViewName) -> rpc:call(Worker, index, get, [ViewName, ?SPACE1_ID]) end,
+    QueryView = fun(ViewName, IsSpatial) ->
+        Options = case IsSpatial of
+            true -> [{spatial, true}];
+            false -> []
+        end,
+        rpc:call(Worker, index, query, [?SPACE1_ID, ViewName, Options])
+    end,
+
+    Views = lists:map(fun({MapFunction, ReduceFunction, IsSpatial}) ->
+        ViewName = ?RAND_STR(),
+
+        ?assertEqual(ok, rpc:call(Worker, index, save, [
+            ?SPACE1_ID, ViewName, MapFunction, ReduceFunction, [], IsSpatial, [Provider1Id]
+        ])),
+
+        {ok, #document{key = ViewId}} = ?assertMatch({ok, _}, GetViewFun(ViewName)),
+        ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial)),
+
+        % Simulate views removal (they are removed by scripts before upgrade)
+        ?assertEqual(ok, rpc:call(Worker, index, delete_db_view, [ViewId])),
+        % Assert only view is deleted - index doc remains
+        ?assertMatch({ok, _}, GetViewFun(ViewName)),
+        ?assertMatch({error, not_found}, QueryView(ViewName, IsSpatial)),
+
+        {ViewName, IsSpatial}
+
+    end, [
+        {SimpleMapFunction, undefined, false},
+        {SimpleMapFunction, undefined, false},
+        {SimpleMapFunction, SimpleReduceFunction, false},
+        {SimpleMapFunction, SimpleReduceFunction, false},
+        {SimpleSpatialFunction, undefined, true},
+        {SimpleSpatialFunction, undefined, true}
+    ]),
+
+    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+
+    % After upgrade views should be restored
+    lists:foreach(fun({ViewName, IsSpatial}) ->
+        ?assertMatch({ok, _}, GetViewFun(ViewName)),
+        ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial))
+    end, Views),
+
+    % Assert upgrade is idempotent
+    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+    lists:foreach(fun({ViewName, IsSpatial}) ->
+        ?assertMatch({ok, _}, GetViewFun(ViewName)),
+        ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial))
+    end, Views).
+
+
 %%%===================================================================
 %%% Setup/teardown functions
 %%%===================================================================
@@ -486,6 +573,23 @@ init_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Co
     
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
+    end),
+    test_utils:mock_expect(Worker, provider_logic, supports_space, fun(SpaceId) ->
+        SpaceId == ?SPACE1_ID
+    end),
+    test_utils:mock_new(Worker, space_logic, [passthrough]),
+    test_utils:mock_expect(Worker, space_logic, get_name, fun(_, SpaceId) ->
+        {ok, SpaceId}
+    end),
+
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
@@ -506,6 +610,11 @@ end_per_testcase(Case = upgrade_from_21_02_3_missing_dirs, Config) ->
 end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [provider_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic, space_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_, Config) ->

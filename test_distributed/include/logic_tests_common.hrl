@@ -245,7 +245,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"3f737525fe2e905b2b5b532d0264175b">>,
+    checksum = <<"6b4ca19f0ff1884867ee1150bbc04e13">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{

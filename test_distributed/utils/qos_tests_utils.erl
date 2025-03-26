@@ -789,7 +789,7 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts, _Sleep) 
         ?assertMatch(Expected, ActualVal),
         ok
     catch
-        error:{assertMatch_failed, _} = Error ->
+        error:assertMatch_failed = Error ->
             ct:pal(ErrMsg),
             error(Error)
     end;
