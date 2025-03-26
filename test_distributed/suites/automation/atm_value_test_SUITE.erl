@@ -172,22 +172,22 @@ atm_array_value_validation_test(_Config) ->
         ],
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)} end,
+                {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)} end,
                 [5.5, <<"NaN">>, #{<<"key">> => 5}]
             ),
 
             lists:map(fun({Value, ConstraintUnverified}) ->
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_array_type, ConstraintUnverified
                 )}
             end, [
                 {[[1, 2, 3], <<"NaN">>], #{<<"$[1]">> => errors:to_json(
-                    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_array_type)
+                    ?ERR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_array_type)
                 )}},
                 {[[1, 2, 3, <<"NaN">>], [4, 5]], #{<<"$[0]">> => errors:to_json(
-                    ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([1, 2, 3, <<"NaN">>], atm_array_type, #{
+                    ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([1, 2, 3, <<"NaN">>], atm_array_type, #{
                         <<"$[3]">> => errors:to_json(
-                            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_number_type)
+                            ?ERR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_number_type)
                         )
                     })
                 )}}
@@ -267,7 +267,7 @@ atm_boolean_value_validation_test(_Config) ->
         data_spec = #atm_boolean_data_spec{},
         valid_values = [false, true],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
-            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_boolean_type)} end,
+            {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_boolean_type)} end,
             [5, <<"true">>, [5], #{<<"key">> => 5}]
         )
     }).
@@ -321,13 +321,13 @@ atm_dataset_value_validation_test(_Config) ->
         ]),
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type)} end,
+                {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type)} end,
                 [5.5, <<"NaN">>, [5], #{<<"datasetId">> => 5}]
             ),
 
             lists:map(fun({DatasetId, UnverifiedConstraint}) ->
                 Value = #{<<"datasetId">> => DatasetId},
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_dataset_type, UnverifiedConstraint
                 )}
             end, [
@@ -475,13 +475,13 @@ atm_file_value_validation_test(_Config) ->
         end, FilesWithAllowedType),
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
+                {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
                 [5.5, <<"NaN">>, [5], #{<<"fileId">> => 5}]
             ),
 
             lists:map(fun({Guid, UnverifiedConstraint}) ->
                 Value = BuildBareFileObjectFun(Guid),
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_file_type, UnverifiedConstraint
                 )}
             end, [
@@ -498,7 +498,7 @@ atm_file_value_validation_test(_Config) ->
 
             lists:map(fun(Guid) ->
                 Value = BuildBareFileObjectFun(Guid),
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_file_type, #{<<"fileType">> => AllowedFileTypeBin}
                 )}
             end, FilesWithNotAllowedType)
@@ -573,12 +573,12 @@ atm_file_value_describe_test(_Config) ->
                 #{<<"fileId">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
                     <<"removed_file_id">>, SpaceKrkId
                 )))},
-                ?ERROR_POSIX(?ENOENT)
+                ?ERR_POSIX(?ENOENT)
             },
             {
                 error,
                 #{<<"fileId">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
-                ?ERROR_POSIX(?EACCES)
+                ?ERR_POSIX(?EACCES)
             },
 
             lists:map(fun(Guid) ->
@@ -620,13 +620,13 @@ atm_group_value_validation_test(_Config) ->
         ]),
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_group_type)} end,
+                {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_group_type)} end,
                 [5.5, <<"NaN">>, [5], #{<<"datasetId">> => 5}]
             ),
 
             lists:map(fun({GroupId, UnverifiedConstraint}) ->
                 Value = #{<<"groupId">> => GroupId},
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_group_type, UnverifiedConstraint
                 )}
             end, [
@@ -708,7 +708,7 @@ atm_number_value_validation_test(_Config) ->
         },
         valid_values = [-10, 0, 5.5, 10],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
-            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_number_type)} end,
+            {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_number_type)} end,
             [<<"5.5">>, [5], #{<<"key">> => 5}]
         )
     }),
@@ -720,7 +720,7 @@ atm_number_value_validation_test(_Config) ->
         },
         valid_values = [-10, 0, 10],
         invalid_values_with_exp_errors = [
-            {5.5, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            {5.5, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 5.5, atm_number_type, #{<<"integersOnly">> => true}
             )}
         ]
@@ -734,7 +734,7 @@ atm_number_value_validation_test(_Config) ->
         },
         valid_values = AllowedValues,
         invalid_values_with_exp_errors = lists:map(fun(Num) ->
-            {Num, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            {Num, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 Num, atm_number_type, #{<<"allowedValues">> => AllowedValues}
             )}
         end, [-10, 0.1, 5.5, 7])
@@ -772,7 +772,7 @@ atm_object_value_validation_test(_Config) ->
             #{5 => 6}
         ],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
-            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)} end,
+            {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)} end,
             [5.5, <<"NaN">>, [5]]
         )
     }).
@@ -816,7 +816,7 @@ atm_range_value_validation_test(_Config) ->
         ],
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(
-                fun(Value) -> {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_range_type)} end,
+                fun(Value) -> {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_range_type)} end,
                 [
                     5,
                     <<"NaN">>,
@@ -829,7 +829,7 @@ atm_range_value_validation_test(_Config) ->
             ),
 
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_range_type, <<"invalid step direction">>
                 )}
             end, [
@@ -907,7 +907,7 @@ atm_string_value_validation_test(_Config) ->
         data_spec = #atm_string_data_spec{allowed_values = undefined},
         valid_values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
-            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)} end,
+            {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)} end,
             [5, [5], #{<<"key">> => 5}]
         )
     }),
@@ -917,7 +917,7 @@ atm_string_value_validation_test(_Config) ->
         data_spec = #atm_string_data_spec{allowed_values = AllowedValues},
         valid_values = AllowedValues,
         invalid_values_with_exp_errors = lists:map(fun(Num) ->
-            {Num, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            {Num, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 Num, atm_string_type, #{<<"allowedValues">> => AllowedValues}
             )}
         end, [<<"-10">>, <<"">>, <<"asd">>])
@@ -960,7 +960,7 @@ atm_time_series_measurement_value_validation_test(_Config) ->
         ],
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_time_series_measurement_type)} end,
+                {Value, ?ERR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_time_series_measurement_type)} end,
                 [
                     <<"NaN">>,
                     5,
@@ -974,7 +974,7 @@ atm_time_series_measurement_value_validation_test(_Config) ->
             ),
 
             lists:map(fun(Value) ->
-                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                {Value, ?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                     Value, atm_time_series_measurement_type, #{
                         <<"specs">> => jsonable_record:list_to_json(
                             MeasurementSpecs, atm_time_series_measurement_spec
@@ -1176,7 +1176,7 @@ resolve_group_attrs(SessionId, GroupId, SpaceId, Attributes) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [?MODULE, atm_store_test_utils],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

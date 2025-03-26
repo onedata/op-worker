@@ -83,7 +83,7 @@ consume_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
             dispatch_result(AtmWorkflowExecutionCtx, Result, DispatchSpec)
         catch Type:Reason:Stacktrace ->
             Error = ?examine_exception(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Error))
+            throw(?ERR_ATM_TASK_RESULT_DISPATCH_FAILED(?err_ctx(), AtmStoreSchemaId, Error))
         end
     end, DispatchSpecs).
 

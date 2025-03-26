@@ -43,7 +43,7 @@ handle_connected_to_oz() ->
         on_connect_to_oz(),
         ?info("Finished executing on-connect-to-oz procedures")
     catch
-        _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
+        _:{_, ?ERR_NO_CONNECTION_TO_ONEZONE(_)} ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
             error;
         Class:Reason:Stacktrace ->
@@ -123,7 +123,6 @@ handle_entity_deleted(GRI) ->
 on_connect_to_oz() ->
     ok = restart_hooks:maybe_execute_hooks(),
     ok = gs_client_worker:enable_cache(),
-    ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
     ok = main_harvesting_stream:revise_all_spaces(),
     % TODO: VFS-5744 potential race condition:

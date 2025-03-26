@@ -91,7 +91,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = indices_by_trace_ids}}) -
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?NOBODY}) ->
-    ?ERROR_UNAUTHORIZED;
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
 
 fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
     case atm_store_api:get_ctx(AtmStoreId) of
@@ -99,8 +99,8 @@ fetch_entity(OpReq = #op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
             assert_operation_supported(OpReq, AtmStore),
             {ok, {AtmStoreCtx, 1}};
 
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound
     end.
 
 

@@ -165,7 +165,7 @@ all() -> ?ALL(?TEST_CASES).
             FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
-                ?ERROR_POSIX(?ENODATA),
+                ?ERR_POSIX(?ENODATA),
                 opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
                 __Attempts
             );
@@ -186,7 +186,7 @@ all() -> ?ALL(?TEST_CASES).
             FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
-                ?ERROR_POSIX(?ENODATA),
+                ?ERR_POSIX(?ENODATA),
                 opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
                 __Attempts
             );

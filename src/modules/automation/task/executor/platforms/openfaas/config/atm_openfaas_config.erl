@@ -126,7 +126,7 @@ get_oneclient_default_options(_Record) ->
 -spec get_env(atom()) -> term() | no_return().
 get_env(Key) ->
     case get_env(Key, undefined) of
-        undefined -> throw(?ERROR_ATM_OPENFAAS_NOT_CONFIGURED);
+        undefined -> throw(?ERR_ATM_OPENFAAS_NOT_CONFIGURED(?err_ctx()));
         Value -> Value
     end.
 

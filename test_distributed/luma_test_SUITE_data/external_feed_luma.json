@@ -286,7 +286,8 @@
             "user1": {
                 "storageCredentials": {
                     "username": "USER",
-                    "password": "USER_PASSWD"
+                    "password": "USER_PASSWD",
+                    "projectName": "PROJECT_NAME"
                 },
                 "displayUid": 1111
             },
@@ -318,7 +319,8 @@
             "user8": {
                 "storageCredentials": {
                     "username": "user",
-                    "password": "password"
+                    "password": "password",
+                    "projectName": "project"
                 },
                 "displayUid": [
                     1,
@@ -329,14 +331,16 @@
             "user9": {
                 "storageCredentials": {
                     "username": "user",
-                    "password": "password"
+                    "password": "password",
+                    "projectName": "project"
                 },
                 "displayUid": "string"
             },
             "user10": {
                 "storageCredentials": {
                     "username": "user",
-                    "password": "password"
+                    "password": "password",
+                    "projectName": "project"
                 },
                 "displayUid": {
                     "key": "value"

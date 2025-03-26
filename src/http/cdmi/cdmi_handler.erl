@@ -119,7 +119,7 @@ init(Req, ReqTypeResolutionMethod) ->
             ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ], Stacktrace),
-            {ok, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
+            {ok, http_req:send_error(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined), Req), undefined}
     end.
 
 
@@ -151,7 +151,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     try {get_supported_version(ReqVer), parse_qs(cowboy_req:qs(Req)), Type} of
         {undefined, _, {capabilities, _}} ->
             {stop, http_req:send_error(
-                ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), Req
+                ?ERR_BAD_VERSION(?err_ctx(), [<<"1.1.1">>, <<"1.1">>]), Req
             ), CdmiReq};
         {Version, Options, _} ->
             {false, Req, CdmiReq#cdmi_req{
@@ -165,7 +165,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
             ?error_stacktrace("Unexpected error in ~tp:~tp - ~tp:~tp", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ], Stacktrace),
-            {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
+            {stop, http_req:send_error(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined), Req), CdmiReq}
     end.
 
 
@@ -188,7 +188,7 @@ is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
         {ok, ?GUEST} ->
-            {stop, http_req:send_error(?ERROR_UNAUTHORIZED, Req), CdmiReq};
+            {stop, http_req:send_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req), CdmiReq};
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), CdmiReq}
     end;
@@ -226,7 +226,7 @@ resource_exists(Req, #cdmi_req{
                 {false, Req, CdmiReq}
         end
     catch
-        throw:?ERROR_POSIX(?ENOENT) ->
+        throw:?ERR_POSIX(?ENOENT) ->
             {false, Req, CdmiReq};
         throw:Error ->
             {stop, http_req:send_error(Error, Req), CdmiReq};
@@ -317,7 +317,7 @@ content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
 -spec error_no_version(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_no_version(Req, CdmiReq) ->
-    {stop, http_req:send_error(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>), Req), CdmiReq}.
+    {stop, http_req:send_error(?ERR_MISSING_REQUIRED_VALUE(?err_ctx(), <<"version">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -329,7 +329,7 @@ error_no_version(Req, CdmiReq) ->
 -spec error_wrong_path(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_wrong_path(Req, CdmiReq) ->
-    {stop, http_req:send_error(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>), Req), CdmiReq}.
+    {stop, http_req:send_error(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), <<"path">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -452,7 +452,7 @@ resolve_resource_by_id(Req) ->
         {ok, Id} ->
             Id;
         _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"file_id">>))
+            throw(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), <<"file_id">>))
     end,
 
     {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
@@ -462,7 +462,7 @@ resolve_resource_by_id(Req) ->
                     {ok, FilePath} = ?lfm_check(lfm:get_file_path(SessionId, Guid)),
                     {Auth0, FilePath};
                 {ok, ?GUEST} ->
-                    throw(?ERROR_UNAUTHORIZED);
+                    throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
                 {error, _} = Error ->
                     throw(Error)
             end;
@@ -525,7 +525,7 @@ resolve_resource_by_path(Path) ->
 get_supported_version(undefined) ->
     undefined;
 get_supported_version([]) ->
-    throw(?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]));
+    throw(?ERR_BAD_VERSION(?err_ctx(), [<<"1.1.1">>, <<"1.1">>]));
 get_supported_version([<<"1.1.1">> | _Rest]) ->
     <<"1.1.1">>;
 get_supported_version([<<"1.1">> | _Rest]) ->
@@ -567,7 +567,7 @@ parse_qs(QueryString) ->
                     end
             end
         catch _:_ ->
-            throw(?ERROR_BAD_DATA(<<"query string">>))
+            throw(?ERR_BAD_DATA(?err_ctx(), <<"query string">>, undefined))
         end
     end, binary:split(QueryString, <<";">>, [global])).
 

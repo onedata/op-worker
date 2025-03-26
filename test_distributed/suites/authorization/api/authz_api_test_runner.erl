@@ -105,7 +105,7 @@ run_suite(TestSuiteSpec) ->
     run_file_protection_test_group(TestSuiteCtx),
     run_data_access_caveats_test_group(TestSuiteCtx),
     run_share_test_group(TestSuiteCtx),
-    run_open_handle_mode_test_group(TestSuiteCtx),
+    run_public_data_mode_test_group(TestSuiteCtx),
     run_posix_permission_test_group(TestSuiteCtx),
     run_acl_permission_test_group(TestSuiteCtx),
     run_special_dirs_test_group(TestSuiteCtx).
@@ -766,21 +766,21 @@ run_share_test_case({acl, AceType}, TestCaseCtx) ->
 
 
 %%%===================================================================
-%%% OPEN_HANDLE MODE TESTS
+%%% PUBLIC_DATA MODE TESTS
 %%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tests open data session mode. For that it will setup environment,
+%% Tests public data session mode. For that it will setup environment,
 %% add full acl permissions and assert that even with full other/anonymous
 %% perms set only operations also available in share mode can be performed.
 %% @end
 %%--------------------------------------------------------------------
--spec run_open_handle_mode_test_group(authz_test_suite_ctx()) ->
+-spec run_public_data_mode_test_group(authz_test_suite_ctx()) ->
     ok | no_return().
-run_open_handle_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
+run_public_data_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         files_owner_selector = FilesOwnerSelector,
         space_owner_selector = SpaceOwnerSelector,
@@ -789,9 +789,9 @@ run_open_handle_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
 }) ->
     lists:foreach(fun({ExecutionerSelector, TestCaseSuffix, PermsType}) ->
 
-        TestCaseName = build_test_case_name(["open_handle_mode", TestCaseSuffix]),
-        TestCaseCtx = init_open_handle_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
-        run_open_handle_mode_test_case(PermsType, TestCaseCtx)
+        TestCaseName = build_test_case_name(["public_data_mode", TestCaseSuffix]),
+        TestCaseCtx = init_public_data_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
+        run_public_data_mode_test_case(PermsType, TestCaseCtx)
 
     end, [
         {FilesOwnerSelector, "files_owner_posix", posix},
@@ -804,13 +804,13 @@ run_open_handle_mode_test_group(TestSuiteCtx = #authz_test_suite_ctx{
 
 
 %% @private
--spec init_open_handle_mode_test_case(
+-spec init_public_data_mode_test_case(
     binary(),
     session:id() | oct_background:entity_selector(),
     authz_test_suite_ctx()
 ) ->
     authz_test_case_ctx().
-init_open_handle_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx) ->
+init_public_data_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx) ->
     TestNode = TestSuiteCtx#authz_test_suite_ctx.test_node,
     TestCaseCtx = init_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx),
 
@@ -818,17 +818,17 @@ init_open_handle_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
     ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
     TestCaseCtx#authz_test_case_ctx{
         executioner_session_id = provider_onenv_test_utils:create_session(
-            TestNode, ExecutionerUserId, ExecutionerToken, open_handle
+            TestNode, ExecutionerUserId, ExecutionerToken, public_data
         )
     }.
 
 
 %% @private
--spec run_open_handle_mode_test_case(posix | acl, authz_test_case_ctx()) ->
+-spec run_public_data_mode_test_case(posix | acl, authz_test_case_ctx()) ->
     ok | no_return().
-run_open_handle_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
+run_public_data_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
-        suite_spec = TestSuiteSpec = #authz_test_suite_spec{available_in_open_handle_mode = false},
+        suite_spec = TestSuiteSpec = #authz_test_suite_spec{available_in_public_data_mode = false},
         test_node = TestNode
     },
     required_perms_per_file = RequiredPermsPerFile
@@ -841,11 +841,11 @@ run_open_handle_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
 
 % Operation is available in share/public mode but access is still controlled
 % (even for space owner) by posix mode (other bits) or acl
-run_open_handle_mode_test_case(posix, TestCaseCtx) ->
+run_public_data_mode_test_case(posix, TestCaseCtx) ->
     PosixTestCaseCtx = build_posix_test_case_ctx(TestCaseCtx),
     run_posix_mode_test_case(other, PosixTestCaseCtx);
 
-run_open_handle_mode_test_case(acl, TestCaseCtx) ->
+run_public_data_mode_test_case(acl, TestCaseCtx) ->
     AclTestCaseCtx = build_acl_test_case_ctx(TestCaseCtx),
     AceType = ?RAND_ELEMENT([allow, deny]),
     run_acl_permission_test_case(AceType, ?anonymous, ?no_flags_mask, AclTestCaseCtx).
@@ -1638,7 +1638,7 @@ format_perms_per_file(TestNode, PermsPerFile) ->
 %% @private
 -spec get_exp_error(atom(), authz_test_suite_spec()) -> {error, term()}.
 get_exp_error(Errno, #authz_test_suite_spec{returned_errors = api_errors}) ->
-    ?ERROR_POSIX(Errno);
+    ?ERR_POSIX(Errno);
 get_exp_error(Errno, #authz_test_suite_spec{returned_errors = errno_errors}) ->
     {error, Errno}.
 

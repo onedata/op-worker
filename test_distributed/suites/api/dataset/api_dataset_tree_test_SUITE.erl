@@ -214,18 +214,18 @@ get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
                     <<"token">> => [<<"null">>, null | [http_utils:base64url_encode(Index) || Index <- [FirstIndex, RandomIndex, LastIndex]]]
                 },
                 bad_values = [
-                    {bad_id, <<"NonExistentSpace">>, ?ERROR_FORBIDDEN},
-                    {<<"state">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"state">>)}},
-                    {<<"state">>, <<"active">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(
+                    {bad_id, <<"NonExistentSpace">>, ?ERR_FORBIDDEN},
+                    {<<"state">>, 10, {gs, ?ERR_BAD_VALUE_STRING(<<"state">>)}},
+                    {<<"state">>, <<"active">>, ?ERR_BAD_VALUE_NOT_ALLOWED(
                         <<"state">>, [<<"attached">>, <<"detached">>]
                     )},
-                    {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-                    {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                    {<<"index">>, 1, {gs, ?ERROR_BAD_VALUE_BINARY(<<"index">>)}},
-                    {<<"token">>, 1, {gs, ?ERROR_BAD_VALUE_BINARY(<<"token">>)}}
+                    {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+                    {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"limit">>, 1001, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"offset">>, <<"abc">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
+                    {<<"index">>, 1, {gs, ?ERR_BAD_VALUE_STRING(<<"index">>)}},
+                    {<<"token">>, 1, {gs, ?ERR_BAD_VALUE_STRING(<<"token">>)}}
                 ]
             }
         }
@@ -361,13 +361,13 @@ get_child_datasets_test_base(DatasetId, ChildDatasets) ->
                 },
                 bad_values = [
                     {bad_id, <<"NonExistentDataset">>, ?ERROR_NOT_FOUND},
-                    {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-                    {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
-                    {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                    {<<"index">>, 1, {gs, ?ERROR_BAD_VALUE_BINARY(<<"index">>)}},
-                    {<<"token">>, 1, {gs, ?ERROR_BAD_VALUE_BINARY(<<"token">>)}}
+                    {<<"limit">>, true, ?ERR_BAD_VALUE_INTEGER(<<"limit">>)},
+                    {<<"limit">>, -100, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"limit">>, 0, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"limit">>, 1001, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+                    {<<"offset">>, <<"abc">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
+                    {<<"index">>, 1, {gs, ?ERR_BAD_VALUE_STRING(<<"index">>)}},
+                    {<<"token">>, 1, {gs, ?ERR_BAD_VALUE_STRING(<<"token">>)}}
                 ]
             }
         }
@@ -646,7 +646,7 @@ build_get_file_dataset_summary_prepare_gs_args_fun(FileGuid) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
+    opt:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->

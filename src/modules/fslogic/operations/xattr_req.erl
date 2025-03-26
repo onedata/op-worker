@@ -84,7 +84,7 @@ get_xattr_internal(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
     case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
         {ok, Mimetype} ->
             ?FUSE_OK_RESP(?XATTR(?MIMETYPE_KEY, Mimetype));
-        ?ERROR_POSIX(Errno) ->
+        ?ERR_POSIX(Errno) ->
             #fuse_response{status = #status{code = Errno}}
     end;
 
@@ -92,7 +92,7 @@ get_xattr_internal(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
     case cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx) of
         {ok, Encoding} ->
             ?FUSE_OK_RESP(?XATTR(?TRANSFER_ENCODING_KEY, Encoding));
-        ?ERROR_POSIX(Errno) ->
+        ?ERR_POSIX(Errno) ->
             #fuse_response{status = #status{code = Errno}}
     end;
 
@@ -100,7 +100,7 @@ get_xattr_internal(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
     case cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx) of
         {ok, Completion} ->
             ?FUSE_OK_RESP(?XATTR(?CDMI_COMPLETION_STATUS_KEY, Completion));
-        ?ERROR_POSIX(Errno) ->
+        ?ERR_POSIX(Errno) ->
             #fuse_response{status = #status{code = Errno}}
     end;
 
@@ -111,7 +111,7 @@ get_xattr_internal(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, json, [], Inherited) of
         {ok, JsonTerm} ->
             ?FUSE_OK_RESP(?XATTR(?JSON_METADATA_KEY, JsonTerm));
-        ?ERROR_POSIX(Errno) ->
+        ?ERR_POSIX(Errno) ->
             #fuse_response{status = #status{code = Errno}}
     end;
 
@@ -119,7 +119,7 @@ get_xattr_internal(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, rdf, [], Inherited) of
         {ok, Rdf} ->
             ?FUSE_OK_RESP(?XATTR(?RDF_METADATA_KEY, Rdf));
-        ?ERROR_POSIX(Errno) ->
+        ?ERR_POSIX(Errno) ->
             #fuse_response{status = #status{code = Errno}}
     end;
 
@@ -232,7 +232,7 @@ provider_response_to_fuse_response(#provider_response{status = Status}) ->
     fslogic_worker:fuse_response().
 operation_result_to_fuse_response(ok) ->
     #fuse_response{status = #status{code = ?OK}};
-operation_result_to_fuse_response(?ERROR_POSIX(Errno)) ->
+operation_result_to_fuse_response(?ERR_POSIX(Errno)) ->
     #fuse_response{status = #status{code = Errno}}.
 
 

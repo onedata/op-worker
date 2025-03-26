@@ -290,7 +290,7 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
 }) ->
     case maps:get(AtmStoreSchemaId, AtmStoreRegistry, undefined) of
         undefined ->
-            throw(?ERROR_ATM_STORE_NOT_FOUND(AtmStoreSchemaId));
+            throw(?ERR_ATM_STORE_NOT_FOUND(?err_ctx(), AtmStoreSchemaId));
         AtmStoreId ->
             AtmStoreId
     end.

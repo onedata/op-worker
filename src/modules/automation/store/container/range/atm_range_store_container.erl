@@ -122,7 +122,7 @@ browse_content(
         options = #atm_range_store_content_browse_options{}
     }
 ) ->
-    throw(?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchemaId));
+    throw(?ERR_ATM_STORE_CONTENT_NOT_SET(?err_ctx(), AtmStoreSchemaId));
 
 browse_content(
     #atm_range_store_container{range = Range},

@@ -174,5 +174,5 @@ get_callback_module(atm_time_series_measurement_type) -> atm_time_series_measure
 assert_is_instance_of_data_type(AtmDataType, Value) ->
     case atm_data_type:is_instance(AtmDataType, Value) of
         true -> ok;
-        false -> throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))
+        false -> throw(?ERR_ATM_DATA_TYPE_UNVERIFIED(?err_ctx(), Value, AtmDataType))
     end.

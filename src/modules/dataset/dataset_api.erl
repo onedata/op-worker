@@ -98,7 +98,7 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
             {?DETACHED_DATASET, ?ATTACHED_DATASET, _, _} ->
                 reattach(DatasetId, FlagsToSet, FlagsToUnset);
             {?DETACHED_DATASET, undefined, _, _} ->
-                throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
+                throw(?ERR_BAD_DATA(?err_ctx(), state, <<"Detached dataset cannot be modified.">>));
             {?ATTACHED_DATASET, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask} ->
                 {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                 {ok, Uuid} = dataset:get_root_file_uuid(DatasetDoc),

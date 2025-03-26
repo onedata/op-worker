@@ -37,10 +37,10 @@ test_create_share(SpaceId) ->
         files = [#ct_authz_dir_spec{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
-        blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EAGAIN)},
+        blocked_by_data_access_caveats = {true, ?ERR_POSIX(?EAGAIN)},
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, DirKey) ->
                 opt_shares:create(Node, SessionId, DirKey, <<"create_share">>);
@@ -56,7 +56,7 @@ test_create_share(SpaceId) ->
             user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
-        special_dirs_error = ?ERROR_FORBIDDEN
+        special_dirs_error = ?ERR_FORBIDDEN
     }).
 
 
@@ -76,10 +76,10 @@ test_remove_share(SpaceId) ->
         requires_traverse_ancestors = false,
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
-        blocked_by_data_access_caveats = {true, ?ERROR_POSIX(?EACCES)},
+        blocked_by_data_access_caveats = {true, ?ERR_POSIX(?EACCES)},
         available_in_readonly_mode = false,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),

@@ -23,7 +23,7 @@
 -record(client_spec, {
     correct = [] :: [aai:auth() | onenv_api_test_runner:client_placeholder()],
     % list of clients unauthorized to perform operation. By default it is assumed
-    % that ?ERROR_UNAUTHORIZED is returned when executing operation on their behalf
+    % that ?ERR_UNAUTHORIZED is returned when executing operation on their behalf
     % but it is possible to specify concrete error if necessary (edge cases).
     unauthorized = [] :: [
         aai:auth() |
@@ -31,7 +31,7 @@
         {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
     ],
     % list of clients (members of space in context of which operation is performed)
-    % forbidden to perform operation. By default it is assumed that ?ERROR_FORBIDDEN
+    % forbidden to perform operation. By default it is assumed that ?ERR_FORBIDDEN
     % is returned when executing operation on their behalf but it is possible to
     % specify concrete error if necessary (edge cases).
     forbidden_in_space = [] :: [
@@ -40,7 +40,7 @@
         {aai:auth() | onenv_api_test_runner:client_placeholder(), errors:error()}
     ],
     % list of clients (not in space in context of which operation is performed)
-    % forbidden to perform operation. By default it is assumed that ?ERROR_FORBIDDEN
+    % forbidden to perform operation. By default it is assumed that ?ERR_FORBIDDEN
     % is returned when executing operation on their behalf but it is possible to
     % specify concrete error if necessary (edge cases).
     forbidden_not_in_space = [] :: [
@@ -194,7 +194,7 @@ end)()).
 }).
 % Special case -> any user can make requests for publicly accessibly resources,
 % but if request is being made using credentials by user not supported on specific provider
-% ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) should be returned
+% ?ERR_UNAUTHORIZED(?ERR_USER_NOT_SUPPORTED) should be returned
 -define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS(__CONFIG), #client_spec{
     correct = [?NOBODY, ?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],

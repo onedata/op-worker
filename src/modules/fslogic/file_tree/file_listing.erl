@@ -116,7 +116,7 @@ build_index(Name, TreeId) when is_binary(Name) andalso (is_binary(TreeId) orelse
     #list_index{file_name = Name, tree_id = TreeId};
 build_index(_, _) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_BINARY())
+    %% throw(?ERR_BAD_VALUE_BINARY())
     throw(?EINVAL).
 
 
@@ -241,7 +241,7 @@ convert_to_datastore_options(Opts) ->
             undefined;
         error ->
             %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_MISSING_REQUIRED_VALUE(tune_for_large_continuous_listing)),
+            %% throw(?ERR_MISSING_REQUIRED_VALUE(tune_for_large_continuous_listing)),
             throw(?EINVAL)
     end,
     maps_utils:remove_undefined(BaseOpts#{
@@ -267,10 +267,10 @@ sanitize_limit(Limit) when is_integer(Limit) andalso Limit >= 0 ->
     Limit;
 %% TODO VFS-7208 uncomment after introducing API errors to fslogic
 %%sanitize_limit(Limit) when is_integer(Limit) ->
-%%     throw(?ERROR_BAD_VALUE_TOO_LOW(Limit, 0));
+%%     throw(?ERR_BAD_VALUE_TOO_LOW(Limit, 0));
 sanitize_limit(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_INTEGER(size))
+    %% throw(?ERR_BAD_VALUE_INTEGER(size))
     throw(?EINVAL).
 
 
@@ -282,7 +282,7 @@ sanitize_inclusive(Inclusive) when is_boolean(Inclusive) ->
     Inclusive;
 sanitize_inclusive(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_BOOLEAN(inclusive))
+    %% throw(?ERR_BAD_VALUE_BOOLEAN(inclusive))
     throw(?EINVAL).
 
 
@@ -293,12 +293,12 @@ sanitize_offset(undefined, _PrevLinkName, _Whitelist) ->
     undefined;
 sanitize_offset(Offset, _PrevLinkName, _Whitelist) when not is_integer(Offset) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_INTEGER(Offset))
+    %% throw(?ERR_BAD_VALUE_INTEGER(Offset))
     throw(?EINVAL);
 sanitize_offset(Offset, undefined = _PrevLinkName, _Whitelist) ->
     % if prev_link_name is undefined, offset cannot be negative
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_TOO_LOW(Offset, 0));
+    %% throw(?ERR_BAD_VALUE_TOO_LOW(Offset, 0));
     Offset < 0 andalso throw(?EINVAL),
     Offset;
 sanitize_offset(Offset, _, undefined = _Whitelist) ->
@@ -307,7 +307,7 @@ sanitize_offset(Offset, _, undefined = _Whitelist) ->
 sanitize_offset(Offset, _, _Whitelist) ->
     % if whitelist is provided, offset cannot be negative
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_TOO_LOW(Offset, 0));
+    %% throw(?ERR_BAD_VALUE_TOO_LOW(Offset, 0));
     Offset < 0 andalso throw(?EINVAL),
     Offset.
 
@@ -320,7 +320,7 @@ sanitize_ignore_missing_links_opt(undefined) ->
     undefined;
 sanitize_ignore_missing_links_opt(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_BOOLEAN(ignore_missing_links))
+    %% throw(?ERR_BAD_VALUE_BOOLEAN(ignore_missing_links))
     throw(?EINVAL).
 
 
@@ -335,7 +335,7 @@ index_to_datastore_list_opts(#list_index{file_name = Name, tree_id = TreeId}) ->
     };
 index_to_datastore_list_opts(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_INDEX())
+    %% throw(?ERR_BAD_VALUE_INDEX())
     throw(?EINVAL).
 
 

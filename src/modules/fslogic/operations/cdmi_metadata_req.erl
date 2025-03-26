@@ -164,7 +164,7 @@ set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
 get_transfer_encoding_insecure(_UserCtx, FileCtx) ->
     case get_cdmi_metadata(FileCtx, ?TRANSFER_ENCODING_KEY) of
         {ok, Val} -> {ok, Val};
-        {error, not_found} -> ?ERROR_POSIX(?ENOATTR)
+        {error, not_found} -> ?ERR_POSIX(?err_ctx(), ?ENOATTR)
     end.
 
 
@@ -188,7 +188,7 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
             times_api:touch(FileCtx, [?attr_ctime]),
             ok;
         {error, not_found} ->
-            ?ERROR_POSIX(?ENOATTR)
+            ?ERR_POSIX(?err_ctx(), ?ENOATTR)
     end.
 
 
@@ -204,7 +204,7 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
 get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
     case get_cdmi_metadata(FileCtx, ?CDMI_COMPLETION_STATUS_KEY) of
         {ok, Val} -> {ok, Val};
-        {error, not_found} -> ?ERROR_POSIX(?ENOATTR)
+        {error, not_found} -> ?ERR_POSIX(?err_ctx(), ?ENOATTR)
     end.
 
 
@@ -226,7 +226,7 @@ get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
 set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create, Replace) ->
     case set_cdmi_metadata(FileCtx, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus, Create, Replace) of
         {ok, _} -> ok;
-        {error, not_found} -> ?ERROR_POSIX(?ENOENT)
+        {error, not_found} -> ?ERR_POSIX(?err_ctx(), ?ENOENT)
     end.
 
 
@@ -241,7 +241,7 @@ set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create,
 get_mimetype_insecure(_UserCtx, FileCtx) ->
     case get_cdmi_metadata(FileCtx, ?MIMETYPE_KEY) of
         {ok, Val} -> {ok, Val};
-        {error, not_found} -> ?ERROR_POSIX(?ENOATTR)
+        {error, not_found} -> ?ERR_POSIX(?err_ctx(), ?ENOATTR)
     end.
 
 
@@ -265,7 +265,7 @@ set_mimetype_insecure(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
             times_api:touch(FileCtx, [?attr_ctime]),
             ok;
         {error, not_found} ->
-            ?ERROR_POSIX(?ENOATTR)
+            ?ERR_POSIX(?err_ctx(), ?ENOATTR)
     end.
 
 

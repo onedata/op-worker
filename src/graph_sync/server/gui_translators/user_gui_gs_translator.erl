@@ -87,7 +87,7 @@ translate_resource(#gri{aspect = eff_handle_services, scope = private}, HService
                 type = op_handle_service,
                 id = HandleServiceId,
                 aspect = instance,
-                scope = private
+                scope = public
             })
         end, HServices)
     };

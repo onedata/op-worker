@@ -42,12 +42,11 @@
 -export([get_support_size/1]).
 -export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
--export([set_domain/1, set_delegated_subdomain/1]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
--export([update_subdomain_delegation_ips/0]).
+-export([update_domain_config/1]).
+-export([update_txt_records/1]).
 -export([get_nodes/1, get_nodes/2]).
 -export([get_rtransfer_port/1]).
--export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_get_offline_access_idps/0]).
 -export([get_service_configuration/1, get_peer_version/1]).
 -export([provider_connection_ssl_opts/1]).
@@ -95,7 +94,7 @@ get(ProviderId) ->
     {ok, od_provider:doc()} | errors:error().
 get(SessionId, ?SELF) ->
     case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_ONEPROVIDER;
+        undefined -> ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         ProviderId -> get(SessionId, ProviderId)
     end;
 get(SessionId, ProviderId) ->
@@ -114,7 +113,7 @@ get(SessionId, ProviderId) ->
     {ok, od_provider:doc()} | errors:error().
 get_protected_data(SessionId, ?SELF) ->
     case oneprovider:get_id_or_undefined() of
-        undefined -> ?ERROR_UNREGISTERED_ONEPROVIDER;
+        undefined -> ?ERR_UNREGISTERED_ONEPROVIDER(?err_ctx());
         ProviderId -> get_protected_data(SessionId, ProviderId)
     end;
 get_protected_data(SessionId, ProviderId) ->
@@ -334,7 +333,7 @@ supports_space(SessionId, ProviderId, SpaceId) ->
     end.
 
 
--spec get_support_size(od_space:id()) -> {ok, integer()} | errors:error().
+-spec get_support_size(od_space:id()) -> {ok, integer()} | {error, term()}.
 get_support_size(SpaceId) ->
     case get(?ROOT_SESS_ID, ?SELF) of
         {ok, #document{value = #od_provider{eff_spaces = #{SpaceId := SupportSize}}}} ->
@@ -480,44 +479,6 @@ is_subdomain_delegated() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets onezone subdomain pointing to this provider.
-%% @end
-%%--------------------------------------------------------------------
--spec set_delegated_subdomain(binary()) -> ok | errors:error().
-set_delegated_subdomain(Subdomain) ->
-    IPs = node_manager:get_cluster_ips(),
-    case set_subdomain_delegation(Subdomain, IPs) of
-        ok ->
-            provider_logic:force_fetch(),
-            ok;
-        Error ->
-            Error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% If subdomain delegation is on, updates ips of this provider in dns state.
-%% @end
-%%--------------------------------------------------------------------
--spec update_subdomain_delegation_ips() -> ok | error.
-update_subdomain_delegation_ips() ->
-    try
-        case is_subdomain_delegated() of
-            {true, Subdomain} ->
-                IPs = node_manager:get_cluster_ips(),
-                ok = set_subdomain_delegation(Subdomain, IPs);
-            false ->
-                ok
-        end
-    catch Type:Message ->
-        ?error("Error updating provider IPs: ~tp:~tp", [Type, Message]),
-        error
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Retrieves IPs of this provider as known to Onezone DNS.
 %% Returns the atom 'false' if subdomain delegation is not enabled for this
 %% provider.
@@ -545,79 +506,8 @@ get_subdomain_delegation_ips() ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets provider domain that is NOT a subdomain of onezone domain.
-%% @end
-%%--------------------------------------------------------------------
--spec set_domain(binary()) -> ok | errors:error().
-set_domain(Domain) ->
-    Data = #{
-        <<"subdomainDelegation">> => false,
-        <<"domain">> => Domain},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = domain_config}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        provider_logic:force_fetch()
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets TXT type dns record in onezone DNS.
-%% @end
-%%--------------------------------------------------------------------
--spec set_txt_record(Name :: binary(), Content :: binary(),
-    TTL :: non_neg_integer() | undefined) -> ok | no_return().
-set_txt_record(Name, Content, TTL) ->
-    Data = #{<<"content">> => Content},
-    Data2 = case TTL of
-        Number when is_integer(Number) -> Data#{<<"ttl">> => TTL};
-        _ -> Data
-    end,
-    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create, data = Data2,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = {dns_txt_record, Name}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes TXT type dns record in onezone DNS.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_txt_record(Name :: binary()) -> ok | no_return().
-remove_txt_record(Name) ->
-    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = delete,
-        gri = #gri{type = od_provider, id = ?SELF,
-            aspect = {dns_txt_record, Name}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Turns on subdomain delegation for this provider
-%% and sets its subdomain and ips.
-%% @end
-%%--------------------------------------------------------------------
--spec set_subdomain_delegation(binary(), [inet:ip4_address() | binary()]) ->
-    ok | errors:error().
-set_subdomain_delegation(Subdomain, IPs) ->
-    IPBinaries = lists:map(fun
-        (IP) when is_binary(IP) -> IP;
-        (IP) when is_tuple(IP) -> list_to_binary(inet:ntoa(IP))
-    end, IPs),
-
-    Data = #{
-        <<"subdomainDelegation">> => true,
-        <<"subdomain">> => Subdomain,
-        <<"ipList">> => IPBinaries},
+-spec update_domain_config(json_utils:json_map()) -> ok | errors:error().
+update_domain_config(Data) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update, data = Data,
         gri = #gri{type = od_provider, id = ?SELF, aspect = domain_config}
@@ -625,6 +515,19 @@ set_subdomain_delegation(Subdomain, IPs) ->
     ?ON_SUCCESS(Result, fun(_) ->
         provider_logic:force_fetch()
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates TXT type dns records in onezone DNS.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_txt_records(map()) -> ok | no_return().
+update_txt_records(Data) ->
+    ok = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update, data = Data,
+        gri = #gri{type = od_provider, id = ?SELF, aspect = dns_txt_records}
+    }).
 
 
 %%--------------------------------------------------------------------
@@ -883,7 +786,7 @@ verify_provider_identity(ProviderId, IdentityToken) ->
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             ok;
         {ok, _} ->
-            ?ERROR_TOKEN_SUBJECT_INVALID;
+            ?ERR_TOKEN_SUBJECT_INVALID(?err_ctx());
         {error, _} = Error ->
             Error
     end.

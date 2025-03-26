@@ -57,7 +57,7 @@ verify_handshake_auth({token, AccessToken}, PeerIp, _) ->
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {ok, ?GUEST} ->
-            ?ERROR_UNAUTHORIZED;
+            ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
         {error, _} = Error ->
             Error
     end.
@@ -108,7 +108,7 @@ client_disconnected(_, _) ->
 -spec verify_auth_override(aai:auth(), gs_protocol:auth_override()) ->
     {ok, aai:auth()} | errors:error().
 verify_auth_override(_, _) ->
-    ?ERROR_UNAUTHORIZED.
+    ?ERR_UNAUTHORIZED(?err_ctx(), undefined).
 
 
 %%--------------------------------------------------------------------

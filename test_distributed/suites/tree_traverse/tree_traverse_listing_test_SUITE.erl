@@ -362,7 +362,7 @@ check_traverse_retries_until_listing_success(TraverseModule, PoolName) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, dir_stats_test_utils]} | Config],
+    opt:init_per_suite([{?LOAD_MODULES, [?MODULE, dir_stats_test_utils]} | Config],
         #onenv_test_config{
             onenv_scenario = "1op",
             envs = [{op_worker, op_worker, [

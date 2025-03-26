@@ -733,7 +733,7 @@ mv_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op",
         posthook = fun(NewConfig) ->
             % clean space

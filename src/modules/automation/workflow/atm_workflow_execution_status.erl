@@ -116,7 +116,7 @@
 % Function taking as argument entire atm_workflow_execution record, modifying lane run
 % and returning updated atm_workflow_execution record (or record)
 -type lane_run_diff() :: fun((atm_workflow_execution:record()) ->
-    {ok, atm_workflow_execution:record()} | errors:error()
+    {ok, atm_workflow_execution:record()} | {error, already_stopping} | errors:error()
 ).
 
 
@@ -174,7 +174,7 @@ handle_lane_run_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRun
             AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPING(?err_ctx());
 
         (#atm_workflow_execution{status = Status}) when
             Status =:= ?FINISHED_STATUS;
@@ -184,7 +184,7 @@ handle_lane_run_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRun
             Status =:= ?INTERRUPTED_STATUS;
             Status =:= ?PAUSED_STATUS
         ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPED(?err_ctx())
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -211,7 +211,7 @@ handle_lane_run_created(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPING(?err_ctx());
 
         (#atm_workflow_execution{status = Status}) when
             Status =:= ?FINISHED_STATUS;
@@ -221,7 +221,7 @@ handle_lane_run_created(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             Status =:= ?INTERRUPTED_STATUS;
             Status =:= ?PAUSED_STATUS
         ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPED(?err_ctx())
     end).
 
 
@@ -240,7 +240,7 @@ handle_lane_run_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPING(?err_ctx());
 
         (#atm_workflow_execution{status = Status}) when
             Status =:= ?FINISHED_STATUS;
@@ -250,7 +250,7 @@ handle_lane_run_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             Status =:= ?INTERRUPTED_STATUS;
             Status =:= ?PAUSED_STATUS
         ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPED(?err_ctx())
     end).
 
 
@@ -269,7 +269,7 @@ handle_lane_run_resumed(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             end;
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPING(?err_ctx());
 
         (#atm_workflow_execution{status = Status}) when
             Status =:= ?FINISHED_STATUS;
@@ -279,7 +279,7 @@ handle_lane_run_resumed(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             Status =:= ?INTERRUPTED_STATUS;
             Status =:= ?PAUSED_STATUS
         ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
+            ?ERR_ATM_WORKFLOW_EXECUTION_STOPPED(?err_ctx())
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -296,7 +296,7 @@ handle_lane_run_resumed(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
-    {ok, atm_workflow_execution:doc()} | errors:error().
+    {ok, atm_workflow_execution:doc()} | {error, already_stopping} | errors:error().
 handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status}) when
@@ -326,7 +326,7 @@ handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunD
             Status =:= ?CANCELLED_STATUS;
             Status =:= ?CRASHED_STATUS
         ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+            ?ERR_ATM_WORKFLOW_EXECUTION_ENDED(?err_ctx())
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -368,8 +368,8 @@ handle_lane_run_stopped(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
 handle_lane_run_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
-            ?SUSPENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED;
-            ?ENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED;
+            ?SUSPENDED_PHASE -> ?ERR_ATM_WORKFLOW_EXECUTION_STOPPED(?err_ctx());
+            ?ENDED_PHASE -> ?ERR_ATM_WORKFLOW_EXECUTION_STOPPED(?err_ctx());
             _ -> AtmLaneRunDiff(Record)
         end
     end,
@@ -377,7 +377,7 @@ handle_lane_run_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, _} ->
             ok;
-        ?ERROR_ATM_INVALID_STATUS_TRANSITION(_, _) ->
+        ?ERR_ATM_INVALID_STATUS_TRANSITION(_, _) ->
             % Race with other process which must have already updated task status
             ok;
         {error, _} = Error ->
@@ -427,7 +427,7 @@ handle_discard(AtmWorkflowExecutionId) ->
         case infer_phase(Record) of
             ?SUSPENDED_PHASE -> {ok, Record#atm_workflow_execution{discarded = true}};
             ?ENDED_PHASE -> {ok, Record#atm_workflow_execution{discarded = true}};
-            _ -> ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED
+            _ -> ?ERR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED(?err_ctx())
         end
     end,
 
@@ -464,7 +464,7 @@ handle_manual_lane_run_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
                         Error
                 end;
             _ ->
-                ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED
+                ?ERR_ATM_WORKFLOW_EXECUTION_NOT_ENDED(?err_ctx())
         end
     end,
 
@@ -492,7 +492,7 @@ handle_resume(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             });
 
         (_) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE
+            ?ERR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE(?err_ctx())
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -533,7 +533,7 @@ handle_forced_continue(AtmWorkflowExecutionId) ->
             );
 
         (_) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE
+            ?ERR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE(?err_ctx())
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} = Result ->

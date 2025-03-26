@@ -2,6 +2,30 @@
 
 ## CHANGELOG
 
+### 21.02.8
+
+-   **VFS-12482** Web GUI: Improved UX of file and share IDs
+    presentation in file details panel.
+-   **VFS-12477** Greatly optimized the listing of Shares in GUI; both
+    the Space's and global view of Shares are now based on an
+    infinite-scroll mechanism.
+-   **VFS-12469** Web GUI: Improved UX of managing share name and Open
+    Data title; disabled some operations when user has insufficient
+    privileges for space shares.
+-   **VFS-12418** Improved error handling for S3 storages.
+-   **VFS-12370** Web GUI: Changed default views which are opened using
+    tabs, remembering last used resource (eg. space), improved look of
+    main views loading indicators and added "recently used" space icons.
+-   **VFS-12277** Web GUI: Changed "basic metadata" naming to "xattrs
+    metadata" (extended attributes) to better differentiate with other
+    custom metadata types (JSON, RDF).
+-   **VFS-12268** Enabled support for read-only and interface caveat
+    tokens in OneS3.
+-   **VFS-10787** Added a circuit breaker mechanism that disables
+    Oneprovider services when the database is close to running out of
+    disk space.
+-   **VFS-10341** Web GUI: Upgraded EmberJS to v3.16.
+
 ### 21.02.7
 
 -   **VFS-12295** Web GUI: Fixed issues with opening share views without

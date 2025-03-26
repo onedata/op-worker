@@ -217,7 +217,7 @@ remove_storage_test_file(Helper, StorageUserCtx, FileId, Size, Delay) ->
 %% @private
 %% @doc
 %% Verifies storage test file by reading its content and checking it with the
-%% one sent by the client. Retires 'Attempts' times if file is not found or
+%% one sent by the client. Retries 'Attempts' times if file is not found or
 %% its content doesn't match expected one.
 %% @end
 %%--------------------------------------------------------------------

@@ -339,7 +339,7 @@ move_copy_conflict_test(Config) ->
         ),
         {Code, json_utils:decode(Response)}
     end,
-    ExpRestError = rest_test_utils:get_rest_error(?ERROR_MALFORMED_DATA),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_MALFORMED_DATA),
     ?assertMatch(ExpRestError, GetResponseErrorFun(), ?ATTEMPTS),
     ?assertEqual(FileData, cdmi_test_utils:get_file_content(FilePath, Config), ?ATTEMPTS).
 

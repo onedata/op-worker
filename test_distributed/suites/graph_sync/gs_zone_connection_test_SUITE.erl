@@ -209,7 +209,7 @@ is_connected_to_oz(Worker) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op-2nodes"
     }).
 

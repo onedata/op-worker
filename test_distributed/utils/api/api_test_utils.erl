@@ -207,7 +207,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     ),
 
     HasDirectQos = randomly_add_qos(Nodes, FileGuid, <<"key=value2">>, 2),
-    HasMetadata = randomly_set_metadata(Nodes, FileGuid),
+    {HasMetadata, JsonMetadata} = randomly_set_metadata(Nodes, FileGuid),
     HasAcl = randomly_set_acl(Nodes, FileGuid),
 
     FinalFileAttr = FileAttr#file_attr{
@@ -229,7 +229,9 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> ?IMPOSSIBLE_QOS_STATUS;
             false -> undefined
         end,
-        has_custom_metadata = HasMetadata
+        has_custom_metadata = HasMetadata,
+        has_json_metadata = JsonMetadata =/= undefined,
+        json_metadata = JsonMetadata
     },
 
     {FileType, FilePath, FileGuid, FinalFileAttr}.
@@ -342,9 +344,10 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
     end.
 
 
--spec randomly_set_metadata([node()], file_id:file_guid()) -> Set :: boolean().
+-spec randomly_set_metadata([node()], file_id:file_guid()) ->
+    {HasCustomMetadata :: boolean(), JsonMetadata :: json_utils:json_term()}.
 randomly_set_metadata(Nodes, FileGuid) ->
-    case rand:uniform(2) of
+    case rand:uniform(3) of
         1 ->
             FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
@@ -358,9 +361,24 @@ randomly_set_metadata(Nodes, FileGuid) ->
                     ?ATTEMPTS
                 )
             end, Nodes),
-            true;
+            {true, undefined};
         2 ->
-            false
+            JsonMetadata = lists_utils:random_element([null, ?JSON_METADATA_1, ?JSON_METADATA_2]), % NOTE: `null` is a valid json metadata
+            FileKey = ?FILE_REF(FileGuid),
+            RandNode = lists_utils:random_element(Nodes),
+            ?assertMatch(ok, opt_file_metadata:set_custom_metadata(
+                RandNode, ?ROOT_SESS_ID, FileKey, json, JsonMetadata, []
+            ), ?ATTEMPTS),
+            lists:foreach(fun(Node) ->
+                ?assertMatch(
+                    {ok, _},
+                    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, FileKey, json, [], false),
+                    ?ATTEMPTS
+                )
+            end, Nodes),
+            {true, JsonMetadata};
+        3 ->
+            {false, undefined}
     end.
 
 
@@ -430,12 +448,14 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     hardlink_count = HardlinksCount,
     symlink_value = SymlinkValue,
     has_custom_metadata = HasMetadata,
+    has_json_metadata = HasJsonMetadata,
     eff_protection_flags = EffProtectionFlags,
     eff_dataset_protection_flags = EffDatasetProtectionFlags,
     eff_dataset_inheritance_path = EffDatasetInheritancePath,
     eff_qos_inheritance_path = EffQosInheritancePath,
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
+    json_metadata = JsonMetadata,
     xattrs = Xattrs
 }) ->
     % NOTE: this assumes that there were no remote file readings between creation and attrs check
@@ -491,6 +511,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
         <<"symlinkValue">> => SymlinkValue,
         <<"hasCustomMetadata">> => HasMetadata,
+        <<"hasJsonMetadata">> => HasJsonMetadata,
         <<"effProtectionFlags">> => case EffProtectionFlags of
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffProtectionFlags)
@@ -502,7 +523,8 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"effDatasetInheritancePath">> => translate_membership(EffDatasetInheritancePath),
         <<"effQosInheritancePath">> => translate_membership(EffQosInheritancePath),
         <<"aggregateQosStatus">> => translate_qos_status(QosStatus),
-        <<"archiveRecallRootFileId">> => RecallRootId
+        <<"archiveRecallRootFileId">> => RecallRootId,
+        <<"jsonMetadata">> => utils:undefined_to_null(JsonMetadata)
     },
     FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
@@ -606,13 +628,13 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
         undefined ->
             % For authenticated users it should fail on authorization step
             % (checks if user belongs to space)
-            ?ERROR_FORBIDDEN;
+            ?ERR_FORBIDDEN;
         _ ->
             % For share request it should fail on validation step
             % (checks if space is supported by provider)
             {error_fun, fun(#api_test_ctx{node = Node}) ->
                 ProvId = opw_test_rpc:get_provider_id(Node),
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(?NOT_SUPPORTED_SPACE_ID, ProvId)
+                ?ERR_SPACE_NOT_SUPPORTED_BY(?NOT_SUPPORTED_SPACE_ID, ProvId)
             end}
     end,
 
@@ -624,8 +646,8 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
         {bad_id, NonExistentSpaceDirGuid, {gs, NonExistentSpaceExpError}},
 
         % Errors thrown by internal logic (all middleware checks were passed)
-        {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
+        {bad_id, NonExistentFileObjectId, {rest, ?ERR_POSIX(?ENOENT)}},
+        {bad_id, NonExistentFileGuid, {gs, ?ERR_POSIX(?ENOENT)}}
     ],
 
     add_bad_values_to_data_spec(BadFileIdErrors, DataSpec).
@@ -647,7 +669,7 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
 %%--------------------------------------------------------------------
 -spec add_file_id_errors_for_operations_not_available_in_share_mode(
     file_id:file_guid(),
-    od_share:id(),
+    undefined | od_share:id(),
     undefined | onenv_api_test_runner:data_spec()
 ) ->
     onenv_api_test_runner:data_spec().
@@ -658,7 +680,7 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 -spec add_file_id_errors_for_operations_not_available_in_share_mode(
     IdKey :: binary(),
     file_id:file_guid(),
-    od_share:id(),
+    undefined | od_share:id(),
     undefined | onenv_api_test_runner:data_spec()
 ) ->
     onenv_api_test_runner:data_spec().
@@ -672,8 +694,8 @@ add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
         NonExistentSpaceDirGuid, ShareId, [
             % Errors in normal mode - thrown by middleware auth checks
             % (checks whether authenticated user belongs to space)
-            {bad_id, NonExistentSpaceObjectId, {rest, ?ERROR_FORBIDDEN}},
-            {bad_id, NonExistentSpaceDirGuid, {gs, ?ERROR_FORBIDDEN}}
+            {bad_id, NonExistentSpaceObjectId, {rest, ?ERR_FORBIDDEN}},
+            {bad_id, NonExistentSpaceDirGuid, {gs, ?ERR_FORBIDDEN}}
         ]
     ),
 
@@ -685,8 +707,8 @@ add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
         NonExistentFileGuid, ShareId, [
             % Errors in normal mode - thrown by internal logic
             % (all middleware checks were passed)
-            {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
-            {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
+            {bad_id, NonExistentFileObjectId, {rest, ?ERR_POSIX(?ENOENT)}},
+            {bad_id, NonExistentFileGuid, {gs, ?ERR_POSIX(?ENOENT)}}
         ]
     ),
 
@@ -748,18 +770,18 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
     BadFileIdValues = [
-        {IdKey, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
-        {IdKey, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, <<"InvalidObjectId">>, ?ERR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, DummyObjectId, ?ERR_BAD_VALUE_IDENTIFIER(IdKey)},
 
-        % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
-        {IdKey, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
-        {IdKey, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
+        % user has no privileges in non existent space and so he should receive ?ERR_FORBIDDEN
+        {IdKey, NonExistentSpaceObjectId, ?ERR_FORBIDDEN},
+        {IdKey, NonExistentSpaceShareObjectId, ?ERR_FORBIDDEN},
 
-        {IdKey, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
+        {IdKey, NonExistentFileObjectId, ?ERR_POSIX(?ENOENT)},
 
         % operation is not available in share mode - it should result in ?EPERM
-        {IdKey, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
-        {IdKey, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
+        {IdKey, ShareFileObjectId, ?ERR_POSIX(?EPERM)},
+        {IdKey, NonExistentFileShareObjectId, ?ERR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
@@ -769,8 +791,8 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     onenv_api_test_runner:data_spec().
 replace_enoent_with_error_not_found_in_error_expectations(DataSpec = #data_spec{bad_values = BadValues}) ->
     DataSpec#data_spec{bad_values = lists:map(fun
-        ({Key, Value, ?ERROR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
-        ({Key, Value, {Interface, ?ERROR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};
+        ({Key, Value, ?ERR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
+        ({Key, Value, {Interface, ?ERR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};
         (Spec) -> Spec
     end, BadValues)}.
 
@@ -803,16 +825,18 @@ get_invalid_file_id_errors(IdKey) ->
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
-        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>, provider_id_placeholder)}},
+        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERR_POSIX(?ENOENT)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>, provider_id_placeholder)}},
 
         % Errors thrown by middleware and internal logic
-        {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},
-        {bad_id, InvalidGuid, {gs, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}}
+        {bad_id, InvalidObjectId, {rest, ?ERR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},
+        {bad_id, InvalidGuid, {gs, ?ERR_BAD_VALUE_IDENTIFIER(IdKey)}}
     ].
 
 
 %% @private
+add_share_file_id_errors_for_operations_not_available_in_share_mode(_FileGuid, undefined, Errors) ->
+    Errors;
 add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, Errors) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
@@ -825,7 +849,7 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
         %   to ?GUEST. Then it fails middleware auth checks (whether user belongs
         %   to space or has some space privileges)
         {bad_id, ShareFileObjectId, {rest, ?ERROR_NOT_SUPPORTED}},
-        {bad_id, ShareFileGuid, {gs, ?ERROR_UNAUTHORIZED}}
+        {bad_id, ShareFileGuid, {gs, ?ERR_UNAUTHORIZED(undefined)}}
 
         | Errors
     ].

@@ -58,7 +58,7 @@ test_get_custom_metadata(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 opt_file_metadata:get_custom_metadata(Node, SessionId, FileKey, json, [], false);
@@ -74,7 +74,7 @@ test_get_custom_metadata(SpaceId) ->
             user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir
         ],
-        special_dirs_error = ?ERROR_FORBIDDEN
+        special_dirs_error = ?ERR_FORBIDDEN
     }).
 
 
@@ -90,7 +90,7 @@ test_set_custom_metadata(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 opt_file_metadata:set_custom_metadata(Node, SessionId, FileKey, json, <<"VAL">>, []);
@@ -106,7 +106,7 @@ test_set_custom_metadata(SpaceId) ->
             user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir
         ],
-        special_dirs_error = ?ERROR_FORBIDDEN
+        special_dirs_error = ?ERR_FORBIDDEN
     }).
 
 
@@ -128,7 +128,7 @@ test_remove_custom_metadata(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -158,7 +158,7 @@ test_get_xattr(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>);
@@ -191,7 +191,7 @@ test_list_xattr(SpaceId) ->
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false);
@@ -222,7 +222,7 @@ test_set_xattr(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>});
@@ -258,7 +258,7 @@ test_remove_xattr(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -282,7 +282,7 @@ test_get_file_distribution(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey);
@@ -298,7 +298,7 @@ test_get_file_distribution(SpaceId) ->
             user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
-        special_dirs_error = ?ERROR_FORBIDDEN
+        special_dirs_error = ?ERR_FORBIDDEN
     }).
 
 
@@ -320,7 +320,7 @@ test_get_historical_dir_size_stats(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 ProviderId = opw_test_rpc:get_provider_id(Node),
@@ -338,7 +338,7 @@ test_get_historical_dir_size_stats(SpaceId) ->
         forbidden_special_dirs = [
             user_root_dir, opened_deleted_files_dir, share_container
         ],
-        special_dirs_error = ?ERROR_FORBIDDEN
+        special_dirs_error = ?ERR_FORBIDDEN
     }).
 
 
@@ -354,7 +354,7 @@ test_get_file_storage_locations(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 opt_file_metadata:get_storage_locations(Node, SessionId, FileKey);
@@ -370,5 +370,5 @@ test_get_file_storage_locations(SpaceId) ->
             user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
             space_archives_root_dir, dataset_archives_root_dir, archive_dir
         ],
-        special_dirs_error = ?ERROR_FORBIDDEN
+        special_dirs_error = ?ERR_FORBIDDEN
     }).

@@ -181,7 +181,7 @@ get_children(Node, DirGuid) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
             {file_links_reconciliation_traverse_max_retry_sleep, timer:seconds(8)}

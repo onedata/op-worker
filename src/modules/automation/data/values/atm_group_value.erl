@@ -47,7 +47,7 @@ validate_constraints(AtmWorkflowExecutionAuth, #{<<"groupId">> := GroupId} = Val
         true ->
             ok;
         false ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_group_type, ?ATM_ACCESS_CONSTRAINT))
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(?err_ctx(), Value, atm_group_type, ?ATM_ACCESS_CONSTRAINT))
     end.
 
 
@@ -104,5 +104,5 @@ transform_to_data_spec_conformant(
         {ok, FullItem} ->
             maps:with(lists:map(fun atm_group_data_spec:attribute_name_to_json/1, Attributes), FullItem);
         {error, _} ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_group_type, ?ATM_ACCESS_CONSTRAINT))
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(?err_ctx(), Value, atm_group_type, ?ATM_ACCESS_CONSTRAINT))
     end.

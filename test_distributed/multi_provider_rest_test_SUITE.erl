@@ -425,7 +425,7 @@ get_space(Config) ->
     {_, _, _, Body2} = ?assertMatch({ok, 401, _, _}, rest_test_utils:request(
         WorkerP1, <<"spaces/space2">>, get, AuthHeaders, [])),
     #{<<"error">> := ErrorJson} = ?assertMatch(#{<<"error">> := _}, json_utils:decode(Body2)),
-    ?assertMatch(?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(_)), errors:from_json(ErrorJson)).
+    ?assertMatch(?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(_)), errors:from_json(ErrorJson)).
 
 
 list_transfers(Config) ->
@@ -501,7 +501,7 @@ list_transfers(Config) ->
     ?assertMatch(AllTransfers, lists:sort(Ended(P2)), ?ATTEMPTS),
 
     AllPrivs = privileges:space_privileges(),
-    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERR_FORBIDDEN),
 
     % listing transfers without SPACE_VIEW_TRANSFERS privilege should fail
     initializer:testmaster_mock_space_user_privileges(Workers, <<"space4">>, <<"user1">>, AllPrivs -- [?SPACE_VIEW_TRANSFERS]),

@@ -57,7 +57,7 @@ execute_unsafe_job(Module, JobFunctionName, Options, Job, ErrorHandler) ->
         erlang:apply(Module, JobFunctionName, [Job | Options])
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            ErrorHandler(Job, ?ERROR_POSIX(Reason), Stacktrace);
+            ErrorHandler(Job, ?ERR_POSIX(?err_ctx(), Reason), Stacktrace);
         _Class:Reason:Stacktrace ->
             ErrorHandler(Job, Reason, Stacktrace)
     end.

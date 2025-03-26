@@ -46,7 +46,7 @@ test_mkdir(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, ?FILE_REF(ParentDirGuid)) ->
                 case lfm_proxy:mkdir(Node, SessionId, ParentDirGuid, <<"dir2">>, 8#777) of
@@ -82,7 +82,7 @@ test_get_children_attrs(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -107,7 +107,7 @@ test_get_child_attr(SpaceId) ->
         }],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
@@ -143,7 +143,7 @@ test_mv_dir(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
@@ -177,7 +177,7 @@ test_rm_dir(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, DirKey) ->
                 lfm_proxy:unlink(Node, SessionId, DirKey);

@@ -47,7 +47,8 @@
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
 % Oldest upgradable generation is the lowest one that can be directly upgraded to newest.
-% Human readable version is included to for logging purposes.
+% Human readable version is included to for logging purposes. It's the last version
+% where this cluster generation was the current one.
 -define(CLUSTER_GENERATIONS, [
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
@@ -481,7 +482,7 @@ await_zone_connection_and_run(Fun) ->
     Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(false, 0, _) ->
     ?critical("Could not establish Onezone connection. Aborting upgrade procedure."),
-    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
+    throw(?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()));
 await_zone_connection_and_run(false, Retries, Fun) ->
     ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),

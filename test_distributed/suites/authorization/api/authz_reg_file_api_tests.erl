@@ -47,7 +47,7 @@ test_create_file(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, ?FILE_REF(ParentDirGuid)) ->
                 case lfm_proxy:create(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777) of
@@ -83,7 +83,7 @@ test_open_for_read(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -107,7 +107,7 @@ test_open_for_write(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -131,7 +131,7 @@ test_open_for_rdwr(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -155,7 +155,7 @@ test_create_and_open(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun
             F(guid, Node, SessionId, ?FILE_REF(ParentDirGuid)) ->
                 lfm_proxy:create_and_open(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777);
@@ -186,7 +186,7 @@ test_truncate(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -222,7 +222,7 @@ test_mv_file(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
@@ -256,7 +256,7 @@ test_rm_file(SpaceId) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_for_share_guid = false,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),

@@ -44,7 +44,7 @@ validate_constraints(AtmWorkflowExecutionAuth, Array, #atm_array_data_spec{item_
         try
             atm_value:validate_constraints(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
         catch throw:ItemError ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Array, atm_array_type, #{
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(?err_ctx(), Array, atm_array_type, #{
                 str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)
             }))
         end
@@ -94,7 +94,7 @@ transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, ItemsArray, #atm_arr
         try
             atm_value:transform_to_data_spec_conformant(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
         catch throw:ItemError ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(ItemsArray, atm_array_type, #{
+            throw(?ERR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(?err_ctx(), ItemsArray, atm_array_type, #{
                 str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)
             }))
         end

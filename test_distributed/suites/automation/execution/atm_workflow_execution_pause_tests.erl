@@ -282,7 +282,7 @@ pause_interrupted_atm_workflow_execution() ->
         incarnations = [InterruptedIncarnation#atm_workflow_execution_incarnation_test_spec{
             after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                 ?assertThrow(
-                    ?ERROR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
+                    ?ERR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
                     atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
                 ),
                 atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_not_ended_workflow_execution(
@@ -386,7 +386,7 @@ assert_paused_workflow_execution_impossible_actions_set(AtmMockCallCtx = #atm_mo
     workflow_execution_exp_state = ExpState0
 }) ->
     ?assertThrow(
-        ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
+        ?ERR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
         atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
     ),
     atm_workflow_execution_test_utils:assert_impossible_actions_are_declined_for_not_ended_workflow_execution(

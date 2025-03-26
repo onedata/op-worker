@@ -38,7 +38,7 @@ test_get_parent(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun
             F(guid, Node, SessionId, FileKey) ->
                 lfm_proxy:get_parent(Node, SessionId, FileKey);
@@ -64,7 +64,7 @@ test_get_file_path(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = false, % TODO VFS-6057
-        available_in_open_handle_mode = false, % TODO VFS-6057
+        available_in_public_data_mode = false, % TODO VFS-6057
         operation = fun
             F(guid, Node, SessionId, ?FILE_REF(FileGuid)) ->
                 lfm_proxy:get_file_path(Node, SessionId, FileGuid);
@@ -90,7 +90,7 @@ test_resolve_guid(SpaceId) ->
         files = [#ct_authz_file_spec{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
-        available_in_open_handle_mode = false,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             lfm_proxy:resolve_guid(Node, SessionId, FilePath)
@@ -131,7 +131,7 @@ test_stat(SpaceId) ->
         acl_requires_space_privs = RequiredSpacePrivs,
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_open_handle_mode = true,
+        available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -179,7 +179,6 @@ get_attr_required_perms(?attr_shares) -> [];
 get_attr_required_perms(?attr_owner_id) -> [];
 get_attr_required_perms(?attr_hardlink_count) -> [];
 get_attr_required_perms(?attr_symlink_value) -> [];
-get_attr_required_perms(?attr_has_custom_metadata) -> [];
 get_attr_required_perms(?attr_eff_protection_flags) -> [];
 get_attr_required_perms(?attr_eff_dataset_protection_flags) -> [];
 get_attr_required_perms(?attr_eff_dataset_inheritance_path) -> [];
@@ -188,4 +187,7 @@ get_attr_required_perms(?attr_qos_status) -> [];
 get_attr_required_perms(?attr_recall_root_id) -> [];
 get_attr_required_perms(?attr_is_deleted) -> [];
 get_attr_required_perms(?attr_conflicting_files) -> [];
+get_attr_required_perms(?attr_has_custom_metadata) -> [];
+get_attr_required_perms(?attr_has_json_metadata) -> [];
+get_attr_required_perms(?attr_json_metadata) -> [];
 get_attr_required_perms(?attr_xattrs(_XattrNames)) -> [?read_metadata].

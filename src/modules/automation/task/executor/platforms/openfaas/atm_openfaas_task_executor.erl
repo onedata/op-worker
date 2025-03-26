@@ -132,7 +132,7 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
     remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor),
     case await_function_removal(InitiationCtx, ?AWAIT_RETRIES) of
         true -> ok;
-        false -> throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
+        false -> throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED(?err_ctx()))
     end,
 
     register_function(InitiationCtx),
@@ -315,9 +315,9 @@ is_function_registered(#initiation_ctx{
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             false;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
         _ ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), undefined))
     end.
 
 
@@ -334,16 +334,16 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
         {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
             log_function_registered(InitiationCtx);
         {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             % Possible race with other task registering function
             % (Openfaas returns 500 if function already exists)
             case is_function_registered(InitiationCtx) of
                 true -> ok;
-                false -> throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason))
+                false -> throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason))
             end;
         _ ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), undefined))
     end.
 
 
@@ -663,7 +663,7 @@ await_function_readiness(InitiationCtx) ->
 %% @private
 -spec await_function_readiness(initiation_ctx(), non_neg_integer()) -> ok | no_return().
 await_function_readiness(_InitiationCtx, 0) ->
-    throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED);
+    throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED(?err_ctx()));
 
 await_function_readiness(#initiation_ctx{
     openfaas_config = OpenfaasConfig,
@@ -760,9 +760,9 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
             ok;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
         _ ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), undefined))
     end.
 
 
@@ -802,10 +802,10 @@ remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
         {ok, ?HTTP_404_NOT_FOUND, _, _} ->
             ok;
         {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
-            Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
+            Error = ?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason),
             log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-            Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
+            Error = ?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason),
             log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error)
     end.
 
@@ -864,7 +864,7 @@ assert_atm_workflow_execution_is_not_stopping(#initiation_ctx{
     ),
     case atm_workflow_execution:get(AtmWorkflowExecutionId) of
         {ok, #document{value = #atm_workflow_execution{status = ?STOPPING_STATUS}}} ->
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+            throw(?ERR_ATM_WORKFLOW_EXECUTION_STOPPING(?err_ctx()));
         _ ->
             ok
     end.

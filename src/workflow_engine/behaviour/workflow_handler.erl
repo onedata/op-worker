@@ -44,7 +44,7 @@
 
 -type handler() :: module().
 -type async_processing_basic_result() :: term().
--type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
+-type async_processing_result() :: async_processing_basic_result() | od_error_malformed_data:t() | od_error_timeout:t().
 -type handler_execution_result() :: ok | error. % NOTE - run_task_for_item can return {error, _} what is
                                                 % translated to error by workflow_engine.
 -type prepare_lane_result() :: {ok, workflow_engine:lane_spec()} | error.

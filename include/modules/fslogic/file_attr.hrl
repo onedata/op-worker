@@ -16,9 +16,11 @@
 -include_lib("ctool/include/onedata_file.hrl").
 
 %% NOTE: any change to this record should be reflected in:
-%%  * ctool: onedata_file.hrl and onedata_file.erl
+%%  * ctool: onedata_file.hrl, onedata_file.erl and atm_file_data_spec.erl
 %%  * onedatafilerestclient: file_attributes.py
 %%  * gui: atm lambda attributes schema selector for file type
+%%  * @TODO VFS-12091 until atm versioning is introduced all new attrs have to be excluded from attr list available for atm
+%%    (atm_file_data_spec.erl and tests, search for this ticket number)
 -record(file_attr, {
     guid :: undefined | fslogic_worker:file_guid(),
     index :: undefined | file_listing:index(),
@@ -44,7 +46,6 @@
     owner_id :: undefined | od_user:id(),
     hardlink_count :: undefined | non_neg_integer(),
     symlink_value :: undefined | file_meta_symlinks:symlink(),
-    has_custom_metadata :: undefined | boolean(),
     eff_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_protection_flags :: undefined | data_access_control:bitmask(),
     eff_dataset_inheritance_path :: undefined | dataset:inheritance_path(),
@@ -53,6 +54,9 @@
     recall_root_id :: undefined | file_id:file_guid(),
     is_deleted :: undefined | boolean(),
     conflicting_files :: undefined | file_meta:conflicts(),
+    has_custom_metadata :: undefined | boolean(),
+    has_json_metadata :: undefined | boolean(),
+    json_metadata :: undefined | json_utils:json_term(),
     xattrs :: undefined | #{onedata_file:xattr_name() => onedata_file:xattr_value()}
 }).
 

@@ -119,7 +119,7 @@
     get_child_attr,
     get_file_children_attrs
 ]).
--define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+-define(AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE, [
     % Necessary operations for direct-io to work (contains private information
     % like storage id, etc.)
     get_file_location,
@@ -129,8 +129,6 @@
 ]).
 
 -define(UNHEALTHY_STORAGES_KEY, unhealthy_storages).
-
--define(THROTTLE_STORAGE_MONITORING_LOG(Log), utils:throttle(2 * 3600, fun() -> Log end)). % 2 hours
 
 %%%===================================================================
 %%% API
@@ -163,13 +161,22 @@ supervisor_children_spec() ->
 is_storage_accessible(undefined) ->
     true;
 is_storage_accessible(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
     case worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY) of
         [] ->
             true;
         Storages ->
-            {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-            not lists:member(StorageId, Storages)
+            case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
+                true -> true;
+                false ->
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    case space_logic:get_local_supporting_storage(SpaceId) of
+                        {ok, StorageId} ->
+                            not lists:member(StorageId, Storages);
+                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+                            %% @TODO VFS-12036 no longer needed when there is no proxy anymore
+                            true % access via proxy
+                    end
+            end
     end.
 
 %%%===================================================================
@@ -215,15 +222,15 @@ init(_Args) ->
     ]),
 
     %% @TODO VFS-12272 - properly handle imported storages during storage monitoring
-    UnhealthyStoragesIds = try perform_all_storages_checks() of
-        {ok, Unhealthy, _} -> Unhealthy
-        catch Class:Reason ->
-            case datastore_runner:normalize_error(Reason) of
-                no_connection_to_onezone -> [];
-                _ -> erlang:apply(erlang, Class, [Reason])
-            end
+    UnhealthyStorageIds = try
+         storage_monitoring:perform_regular_checks([])
+    catch Class:Reason ->
+        case {error, datastore_runner:normalize_error(Reason)} of
+            ?ERR_NO_CONNECTION_TO_ONEZONE(_) -> [];
+            _ -> erlang:apply(erlang, Class, [Reason])
+        end
     end,
-    {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStoragesIds}}.
+    {ok, #{?UNHEALTHY_STORAGES_KEY => UnhealthyStorageIds}}.
 
 
 %%--------------------------------------------------------------------
@@ -387,15 +394,15 @@ infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
         _ -> file_partial_ctx:get_share_id_const(FilePartialCtx)
     end,
 
-    case {user_ctx:is_in_open_handle_mode(UserCtx), ShareId} of
+    case {user_ctx:is_in_public_data_mode(UserCtx), ShareId} of
         {false, undefined} ->
             UserCtx;
-        {IsInOpenHandleMode, _} ->
-            case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
+        {IsInPublicDataMode, _} ->
+            case is_operation_available_in_share_mode(Request, IsInPublicDataMode) of
                 true -> ok;
                 false -> throw(?EPERM)
             end,
-            case IsInOpenHandleMode of
+            case IsInPublicDataMode of
                 true ->
                     UserCtx;
                 false ->
@@ -409,7 +416,7 @@ infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
 
 
 %% @private
--spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+-spec is_operation_available_in_share_mode(request(), IsInPublicDataMode :: boolean()) ->
     boolean().
 is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
     file_request = #open_file{flag = Flag}
@@ -424,7 +431,7 @@ is_operation_available_in_share_mode(#provider_request{
 }, _) ->
     Flag == read;
 is_operation_available_in_share_mode(Request, true) ->
-    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
 is_operation_available_in_share_mode(Request, false) ->
     lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 
@@ -797,9 +804,9 @@ periodic_spaces_autocleaning_check() ->
                     _ -> ok
                 end
             end, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+        ?ERR_UNREGISTERED_ONEPROVIDER ->
             ?debug("Skipping spaces cleanup due to unregistered provider");
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
             ?debug("Skipping spaces cleanup due to no connection to Onezone");
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~tp", [Error])
@@ -820,9 +827,9 @@ rerun_transfers() ->
                         Restarted = transfer:rerun_not_ended_transfers(SpaceId),
                         ?debug("Restarted following transfers: ~tp", [Restarted])
                     end, SpaceIds);
-                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
                     schedule_rerun_transfers();
-                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     schedule_rerun_transfers();
                 Error = {error, _} ->
                     ?error("Unable to rerun transfers due to: ~tp", [Error])
@@ -845,9 +852,9 @@ restart_autocleaning_runs() ->
                     lists:foreach(fun(SpaceId) ->
                         autocleaning_api:restart_autocleaning_run(SpaceId)
                     end, SpaceIds);
-                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                ?ERR_UNREGISTERED_ONEPROVIDER ->
                     schedule_restart_autocleaning_runs();
-                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
                     schedule_restart_autocleaning_runs();
                 Error = {error, _} ->
                     ?error("Unable to restart auto-cleaning runs due to: ~tp", [Error])
@@ -863,93 +870,13 @@ restart_autocleaning_runs() ->
 %% @private
 -spec handle_periodic_storages_check() -> ok.
 handle_periodic_storages_check() ->
-    {ok, UnhealthyStoragesIds, AllStoragesIds} = perform_all_storages_checks(),
     PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
-    case UnhealthyStoragesIds of
+    case storage_monitoring:perform_regular_checks(PreviousUnhealthyStorages) of
         PreviousUnhealthyStorages ->
-            ?THROTTLE_STORAGE_MONITORING_LOG(
-                log_storages_health_report(UnhealthyStoragesIds, AllStoragesIds -- UnhealthyStoragesIds)
-            );
-        _ ->
-            PreviousUnhealthyStorages -- UnhealthyStoragesIds =/= [] andalso
-                ?notice("Following storage backends are no longer unhealthy:~n~ts",
-                    [format_storages_log(PreviousUnhealthyStorages -- UnhealthyStoragesIds)]),
-            UnhealthyStoragesIds -- PreviousUnhealthyStorages =/= [] andalso
-                ?warning("Following storage backends became unhealthy - all request concerning the suppported spaces "
-                "will be rejected:~n~ts", [format_storages_log(UnhealthyStoragesIds -- PreviousUnhealthyStorages)]),
+            ok;
+        UnhealthyStoragesIds ->
             worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStoragesIds)
     end.
-
-
-%% @private
--spec perform_all_storages_checks() -> {ok, [storage:id()], [storage:id()]}.
-perform_all_storages_checks() ->
-    {ok, StoragesData} = storage:get_all(),
-    UnhealthyStoragesIds = lists:filtermap(fun(StorageData) ->
-        case is_storage_healthy(StorageData) of
-            true -> false;
-            false -> {true, storage:get_id(StorageData)}
-        end
-    end, StoragesData),
-    {ok, UnhealthyStoragesIds, lists:map(fun storage:get_id/1, StoragesData)}.
-
-
-%% @private
--spec is_storage_healthy(storage:data()) -> boolean().
-is_storage_healthy(StorageData) ->
-    Helper = storage:get_helper(StorageData),
-    LumaFeed = storage:get_luma_feed(StorageData),
-    IgnoreReadWriteTest = storage:is_local_storage_readonly(StorageData) orelse
-        (storage:is_imported(StorageData) andalso storage:supports_any_space(StorageData)),
-    ok == storage_detector:run_diagnostics(this_node, Helper, LumaFeed,
-        #{read_write_test => not IgnoreReadWriteTest}).
-
-
-%% @private
--spec format_storages_log([storage:id()]) -> string().
-format_storages_log(StorageIds) ->
-    string:join([format_storage_log(S) || S <- StorageIds], "\n").
-
-
-%% @private
--spec format_storage_log(storage:id()) -> string().
-format_storage_log(StorageId) ->
-    try
-        Name = storage:fetch_name_of_local_storage(StorageId),
-        Type = storage:get_helper_name(StorageId),
-        str_utils:format(" - StorageId: ~ts~n   Name: ~ts~n   Type: ~ts", [StorageId, Name, Type])
-    catch _:_ ->
-        str_utils:format(" - StorageId: ~ts", [StorageId])
-    end.
-
-
-%% @private
--spec log_storages_health_report([storage:id()], [storage:id()]) -> ok.
-log_storages_health_report([], []) ->
-    ok;
-log_storages_health_report(Unhealthy, []) ->
-    ?warning("Storage health report: ~ts", [format_unhealthy_storages_report(Unhealthy)]);
-log_storages_health_report([], Healthy) ->
-    ?info("Storage health report: ~ts", [format_healthy_storages_report(Healthy)]);
-log_storages_health_report(Unhealthy, Healthy) ->
-    ?warning("Storage health report:~n - ~ts~n - ~ts", [
-        format_healthy_storages_report(Healthy), format_unhealthy_storages_report(Unhealthy)]).
-
-
-%% @private
--spec format_healthy_storages_report([storage:id()]) -> string().
-format_healthy_storages_report([StorageId]) ->
-    str_utils:format("the storage backend ~ts is healthy", [StorageId]);
-format_healthy_storages_report(HealthyStorages) ->
-    str_utils:format("~tp storage backends are healthy", [length(HealthyStorages)]).
-
-
-%% @private
--spec format_unhealthy_storages_report([storage:id()]) -> string().
-format_unhealthy_storages_report([StorageId]) ->
-    str_utils:format("the storage backend ~ts remains unhealthy", [StorageId]);
-format_unhealthy_storages_report(HealthyStorages) ->
-    str_utils:format("~tp storage backends remain unhealthy", [length(HealthyStorages)]).
 
 
 %% @private

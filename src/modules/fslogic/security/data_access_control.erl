@@ -112,11 +112,11 @@ is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
     file_ctx:ctx() | no_return().
 assert_access_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
     IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
-    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
+    IsInPublicDataMode = user_ctx:is_in_public_data_mode(UserCtx),
     
-    case IsSpaceDir orelse IsInOpenHandleMode of
+    case IsSpaceDir orelse IsInPublicDataMode of
         true ->
-            % In case of space dir or 'open_handle' session mode space owner
+            % In case of space dir or 'public_data' session mode space owner
             % is treated as any other user
             assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements);
         false ->
@@ -139,10 +139,10 @@ assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
                 false -> throw(?EACCES)
             end
     end,
-    % Special case - user in 'open_handle' mode should be treated as ?GUEST
+    % Special case - user in 'public_data' mode should be treated as ?GUEST
     % when checking permissions
-    UserCtx2 = case user_ctx:is_in_open_handle_mode(UserCtx) of
-        true -> user_ctx:set_session_mode(user_ctx:new(?GUEST_SESS_ID), open_handle);
+    UserCtx2 = case user_ctx:is_in_public_data_mode(UserCtx) of
+        true -> user_ctx:set_session_mode(user_ctx:new(?GUEST_SESS_ID), public_data);
         false -> UserCtx
     end,
     lists:foldl(fun(AccessRequirement, FileCtx1) ->
@@ -362,9 +362,9 @@ check_operations(UserCtx, FileCtx0, RequiredOps) ->
 get_operations_blocked_by_lack_of_space_privs(UserCtx, FileCtx, undefined) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
+    IsInPublicDataMode = user_ctx:is_in_public_data_mode(UserCtx),
 
-    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) orelse IsInOpenHandleMode of
+    case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) orelse IsInPublicDataMode of
         true ->
             ?SPACE_BLOCKED_WRITE_OPERATIONS;
         false ->

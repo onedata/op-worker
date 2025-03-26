@@ -174,11 +174,11 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         middleware_utils:assert_file_managed_locally(FileGuid),
         case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), Operation) of
             false ->
-                ?ERROR_FORBIDDEN;
+                ?ERR_FORBIDDEN;
             true ->
                 case fslogic_worker:is_storage_accessible(FileCtx) of
                     true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
-                    false -> ?ERROR_SERVICE_UNAVAILABLE
+                    false -> ?ERR_SERVICE_UNAVAILABLE(?err_ctx())
                 end
         end
 
@@ -211,15 +211,15 @@ cleanup() ->
 infer_user_ctx(SessionId, FileCtx, Operation) ->
     UserCtx = user_ctx:new(SessionId),
 
-    assert_user_not_in_open_handle_mode(UserCtx),
+    assert_user_not_in_public_data_mode(UserCtx),
     ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation).
 
 
 %% @private
--spec assert_user_not_in_open_handle_mode(user_ctx:ctx()) -> ok | no_return().
-assert_user_not_in_open_handle_mode(UserCtx) ->
-    case user_ctx:is_in_open_handle_mode(UserCtx) of
-        true -> throw(?ERROR_POSIX(?EPERM));
+-spec assert_user_not_in_public_data_mode(user_ctx:ctx()) -> ok | no_return().
+assert_user_not_in_public_data_mode(UserCtx) ->
+    case user_ctx:is_in_public_data_mode(UserCtx) of
+        true -> throw(?ERR_POSIX(?err_ctx(), ?EPERM));
         false -> ok
     end.
 
@@ -234,7 +234,7 @@ ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
         _ShareId ->
             case is_operation_available_in_share_mode(Operation) of
                 true -> ensure_guest_ctx(UserCtx);
-                false -> throw(?ERROR_POSIX(?EPERM))
+                false -> throw(?ERR_POSIX(?err_ctx(), ?EPERM))
             end
     end.
 
@@ -269,6 +269,6 @@ assert_has_access_to_space(UserCtx, FileCtx) ->
         true ->
             ok;
         false ->
-            file_ctx:is_in_user_space_const(FileCtx, UserCtx) orelse throw(?ERROR_POSIX(?EACCES)),
+            file_ctx:is_in_user_space_const(FileCtx, UserCtx) orelse throw(?ERR_POSIX(?err_ctx(), ?EACCES)),
             ok
     end.
