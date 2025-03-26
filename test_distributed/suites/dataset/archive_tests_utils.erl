@@ -471,14 +471,14 @@ get_archive_info_without_config(Node, SessionId, ArchiveId) ->
 assert_incremental_archive_links(Node, SessionId, BaseArchiveId, Guid, ModifiedFiles) ->
     {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessionId, #file_ref{guid = Guid}), 60),
     case FileAttr of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, name = FileName}} ->
+        #file_attr{type = ?REGULAR_FILE_TYPE, name = FileName} ->
             case lists:member(FileName, ModifiedFiles) of
                 true -> ?assertNotEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid));
                 false -> ?assertEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid))
             end;
-        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+        #file_attr{type = ?SYMLINK_TYPE} ->
             ok;
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+        #file_attr{type = ?DIRECTORY_TYPE} ->
             {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(Guid), 0, ?LISTED_CHILDREN_LIMIT),
             lists:foreach(fun({ChildGuid, _}) ->
                 assert_incremental_archive_links(Node, SessionId, BaseArchiveId, ChildGuid, ModifiedFiles)

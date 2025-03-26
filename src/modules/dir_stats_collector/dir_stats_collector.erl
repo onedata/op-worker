@@ -348,7 +348,7 @@ report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
 %% @TODO VFS-12228 - Analyze usages of is_uuid_counted in context of special dirs
 -spec is_uuid_counted(file_meta:uuid()) -> boolean().
 is_uuid_counted(Uuid) ->
-    not special_dirs:is_included_in_dir_stats(Uuid).
+    special_dirs:is_included_in_dir_stats(Uuid).
 
 
 %%%===================================================================

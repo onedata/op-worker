@@ -431,20 +431,20 @@ is_operation_available_in_share_mode(#provider_request{
 }, _) ->
     Flag == read;
 is_operation_available_in_share_mode(Request, true) ->
-    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
+    lists:member(get_operation_name(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
 is_operation_available_in_share_mode(Request, false) ->
-    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+    lists:member(get_operation_name(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 
 
 %% @private
--spec get_operation(request()) -> atom().
-get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
+-spec get_operation_name(request()) -> atom().
+get_operation_name(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
-get_operation(#fuse_request{fuse_request = Req}) ->
+get_operation_name(#fuse_request{fuse_request = Req}) ->
     element(1, Req);
-get_operation(#provider_request{provider_request = Req}) ->
+get_operation_name(#provider_request{provider_request = Req}) ->
     element(1, Req);
-get_operation(#proxyio_request{proxyio_request = Req}) ->
+get_operation_name(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
 
 
