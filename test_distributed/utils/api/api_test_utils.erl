@@ -207,7 +207,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     ),
 
     HasDirectQos = randomly_add_qos(Nodes, FileGuid, <<"key=value2">>, 2),
-    HasMetadata = randomly_set_metadata(Nodes, FileGuid),
+    {HasMetadata, JsonMetadata} = randomly_set_metadata(Nodes, FileGuid),
     HasAcl = randomly_set_acl(Nodes, FileGuid),
 
     FinalFileAttr = FileAttr#file_attr{
@@ -229,7 +229,9 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> ?IMPOSSIBLE_QOS_STATUS;
             false -> undefined
         end,
-        has_custom_metadata = HasMetadata
+        has_custom_metadata = HasMetadata,
+        has_json_metadata = JsonMetadata =/= undefined,
+        json_metadata = JsonMetadata
     },
 
     {FileType, FilePath, FileGuid, FinalFileAttr}.
@@ -342,9 +344,10 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
     end.
 
 
--spec randomly_set_metadata([node()], file_id:file_guid()) -> Set :: boolean().
+-spec randomly_set_metadata([node()], file_id:file_guid()) ->
+    {HasCustomMetadata :: boolean(), JsonMetadata :: json_utils:json_term()}.
 randomly_set_metadata(Nodes, FileGuid) ->
-    case rand:uniform(2) of
+    case rand:uniform(3) of
         1 ->
             FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
@@ -358,9 +361,24 @@ randomly_set_metadata(Nodes, FileGuid) ->
                     ?ATTEMPTS
                 )
             end, Nodes),
-            true;
+            {true, undefined};
         2 ->
-            false
+            JsonMetadata = lists_utils:random_element([null, ?JSON_METADATA_1, ?JSON_METADATA_2]), % NOTE: `null` is a valid json metadata
+            FileKey = ?FILE_REF(FileGuid),
+            RandNode = lists_utils:random_element(Nodes),
+            ?assertMatch(ok, opt_file_metadata:set_custom_metadata(
+                RandNode, ?ROOT_SESS_ID, FileKey, json, JsonMetadata, []
+            ), ?ATTEMPTS),
+            lists:foreach(fun(Node) ->
+                ?assertMatch(
+                    {ok, _},
+                    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, FileKey, json, [], false),
+                    ?ATTEMPTS
+                )
+            end, Nodes),
+            {true, JsonMetadata};
+        3 ->
+            {false, undefined}
     end.
 
 
@@ -430,12 +448,14 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
     hardlink_count = HardlinksCount,
     symlink_value = SymlinkValue,
     has_custom_metadata = HasMetadata,
+    has_json_metadata = HasJsonMetadata,
     eff_protection_flags = EffProtectionFlags,
     eff_dataset_protection_flags = EffDatasetProtectionFlags,
     eff_dataset_inheritance_path = EffDatasetInheritancePath,
     eff_qos_inheritance_path = EffQosInheritancePath,
     qos_status = QosStatus,
     recall_root_id = RecallRootId,
+    json_metadata = JsonMetadata,
     xattrs = Xattrs
 }) ->
     % NOTE: this assumes that there were no remote file readings between creation and attrs check
@@ -491,6 +511,7 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"hardlinkCount">> => utils:undefined_to_null(HardlinksCount),
         <<"symlinkValue">> => SymlinkValue,
         <<"hasCustomMetadata">> => HasMetadata,
+        <<"hasJsonMetadata">> => HasJsonMetadata,
         <<"effProtectionFlags">> => case EffProtectionFlags of
             undefined -> undefined;
             _ -> file_meta:protection_flags_to_json(EffProtectionFlags)
@@ -502,7 +523,8 @@ file_attr_to_json(undefined, ApiType, CheckingProviderId, #file_attr{
         <<"effDatasetInheritancePath">> => translate_membership(EffDatasetInheritancePath),
         <<"effQosInheritancePath">> => translate_membership(EffQosInheritancePath),
         <<"aggregateQosStatus">> => translate_qos_status(QosStatus),
-        <<"archiveRecallRootFileId">> => RecallRootId
+        <<"archiveRecallRootFileId">> => RecallRootId,
+        <<"jsonMetadata">> => utils:undefined_to_null(JsonMetadata)
     },
     FinalJson = maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
