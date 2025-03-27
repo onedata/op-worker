@@ -307,10 +307,7 @@ upgrade_cluster(6) ->
 upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
-    await_zone_connection_and_run(fun() ->
-        {ok, StorageList} = storage:get_all(),
-        lists:foreach(fun storage:upgrade_after_swift_switch_to_v3/1, StorageList)
-    end),
+    await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
     {ok, 8}.
 
 

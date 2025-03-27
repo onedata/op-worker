@@ -93,7 +93,7 @@ gen_status_message(Error = {error, Reason}) ->
                     {true, Errno} ->
                         Errno;
                     false ->
-                        % TODO log?
+                        ?error(?autoformat_with_msg("Non-fslogic error has been returned via clproto", [Error])),
                         ?EINVAL
                 end,
                 description = json_utils:encode(errors:to_json(Error))

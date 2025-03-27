@@ -435,7 +435,7 @@ upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
 upgrade_from_21_02_9_upgrade_swift_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    ProjectName = <<"some_project">>,
+    TenantName = <<"some_project">>,
     BaseHelperArgs = #{
         <<"authUrl">> => <<"some_url">>,
         <<"containerName">> => <<"some_container">>
@@ -446,7 +446,7 @@ upgrade_from_21_02_9_upgrade_swift_storage(Config) ->
     },
     Helper = #helper{
         name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs#{<<"tenantName">> => ProjectName},
+        args = BaseHelperArgs#{<<"tenantName">> => TenantName},
         admin_ctx = BaseHelperAdminCtx
     },
     StorageName = ?RAND_STR(),
@@ -462,7 +462,7 @@ upgrade_from_21_02_9_upgrade_swift_storage(Config) ->
     ExpNewHelper = #helper{
         name = ?SWIFT_HELPER_NAME,
         args = BaseHelperArgs,
-        admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => ProjectName}
+        admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => TenantName}
     },
     ?assertMatch(
         {ok, #document{value = #storage_config{helper = ExpNewHelper}}},

@@ -55,7 +55,7 @@
 -export([set_qos_parameters/2, update_readonly_and_imported/3]).
 -export([
     update_helper_args/2, update_helper_admin_ctx/2, update_helper/2,
-    upgrade_after_swift_switch_to_v3/1
+    upgrade_after_swift_version_update_to_v3/0, upgrade_after_swift_version_update_to_v3/1
 ]).
 
 %%% Support related functions
@@ -418,8 +418,14 @@ update_helper(StorageId, UpdateFun) ->
     end.
 
 
--spec upgrade_after_swift_switch_to_v3(data()) -> ok.
-upgrade_after_swift_switch_to_v3(StorageData) ->
+-spec upgrade_after_swift_version_update_to_v3() -> ok.
+upgrade_after_swift_version_update_to_v3() ->
+    {ok, StorageList} = storage:get_all(),
+    lists:foreach(fun storage:upgrade_after_swift_version_update_to_v3/1, StorageList).
+
+
+-spec upgrade_after_swift_version_update_to_v3(data()) -> ok.
+upgrade_after_swift_version_update_to_v3(StorageData) ->
     case storage:get_helper_name(StorageData) of
         ?SWIFT_HELPER_NAME ->
             StorageId = storage:get_id(StorageData),

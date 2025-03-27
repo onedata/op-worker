@@ -65,7 +65,7 @@
 
 
 -define(LOG_TERM_SIZE_LIMIT, 1000).
--define(DUP_TO_OP_LOGS, op_worker:get_env(atm_logger_dup_to_op_logs, false)).
+-define(DUMP_TO_OP_LOGS, op_worker:get_env(atm_logger_dump_to_op_logs, false)).
 
 
 %%%===================================================================
@@ -296,10 +296,7 @@ ensure_system_audit_log_object(LogMsg, Severity) when is_binary(LogMsg) ->
 handle_logs(_Logger, _UpdateOptions, _Logs, undefined) ->
     ok;
 handle_logs(Logger, UpdateOptions, Logs, AtmAuditLogStoreContainer) ->
-    case ?DUP_TO_OP_LOGS of
-        true -> dup_to_op_logs(Logger, Logs);
-        false -> ok
-    end,
+    ?DUMP_TO_OP_LOGS andalso dump_to_op_logs(Logger, Logs),
 
     % NOTE: atm_store_api is bypassed for performance reasons. It is possible as
     % audit_log store update does not modify store document itself but only
@@ -315,8 +312,8 @@ handle_logs(Logger, UpdateOptions, Logs, AtmAuditLogStoreContainer) ->
 
 
 %% @private
--spec dup_to_op_logs(record(), log() | [log()]) -> ok.
-dup_to_op_logs(Logger = #atm_workflow_execution_logger{
+-spec dump_to_op_logs(record(), log() | [log()]) -> ok.
+dump_to_op_logs(Logger = #atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     task_execution_id = AtmTaskExecutionId
 }, Logs) ->
