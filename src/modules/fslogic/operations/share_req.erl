@@ -58,10 +58,9 @@ remove_share(UserCtx, FileCtx, ShareId) ->
 
     data_constraints:assert_no_constraints(UserCtx),
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
-    case share_logic:get_handle(SessionId, ShareId) of
-        {ok, undefined} -> ok;
-        {ok, HandleId} -> ?check(handle_logic:delete(SessionId, HandleId));
-        {error, _} = Error -> Error
+    case ?check(share_logic:get_handle(SessionId, ShareId)) of
+        undefined -> ok;
+        HandleId -> ?check(handle_logic:delete(SessionId, HandleId))
     end,
 
     ok = file_meta:remove_share(FileCtx, ShareId),

@@ -12,9 +12,13 @@
 -module(opt_shares).
 -author("Bartosz Walkowicz").
 
+-include_lib("ctool/include/test/assertions.hrl").
+
 %% API
 -export([
     create/4, create/5,
+    get/3,
+    get_handle/3,
     remove/3
 ]).
 
@@ -55,6 +59,20 @@ create(NodeSelector, SessionId, FileKey, Name) ->
     {ok, od_share:id()} | errors:error().
 create(NodeSelector, SessionId, FileKey, Name, Description) ->
     ?CALL(NodeSelector, [SessionId, FileKey, Name, Description]).
+
+
+-spec get(oct_background:node_selector(), session:id(), od_share:id()) ->
+    {ok, od_share:doc()} | errors:error().
+get(NodeSelector, SessionId, ShareId) ->
+    test_rpc:call(op_worker, NodeSelector, share_logic, get, [SessionId, ShareId]).
+
+
+-spec get_handle(oct_background:node_selector(), session:id(), od_share:id()) ->
+    {ok, od_handle:id() | undefined} | errors:error().
+get_handle(NodeSelector, SessionId, ShareId) ->
+    {ok, HandleId} = ?assertMatch({ok, _}, test_rpc:call(
+        op_worker, NodeSelector, share_logic, get_handle, [SessionId, ShareId])),
+    HandleId.
 
 
 -spec remove(oct_background:node_selector(), session:id(), od_share:id()) ->

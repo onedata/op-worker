@@ -20,10 +20,13 @@
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
+
 
 -export([get/2, get_public_data/2, get_handle/2]).
 -export([force_fetch/1]).
 -export([create/7, update/3, delete/2]).
+
 
 %%%===================================================================
 %%% API
@@ -59,16 +62,11 @@ get_public_data(SessionId, ShareId) ->
     }).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves handle id from share public data by given SpaceId.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_handle(gs_client_worker:client(), od_share:id()) ->
     {ok, od_handle:id() | undefined} | errors:error().
 get_handle(SessionId, ShareId) ->
     case get_public_data(SessionId, ShareId) of
-        {ok, #document{value = #od_share{handle= HandleId}}} -> {ok, HandleId};
+        {ok, #document{value = #od_share{handle = HandleId}}} -> {ok, HandleId};
         {error, _} = Error -> Error
     end.
 

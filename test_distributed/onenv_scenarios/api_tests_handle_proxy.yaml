@@ -40,6 +40,9 @@ users:
     name: user4
     password: password
 
+  - name: non_space_member
+    password: password
+
 
 spaces:
   - name: space_krk  # space used mainly for testing ?ERR_SPACE_NOT_SUPPORTED_BY

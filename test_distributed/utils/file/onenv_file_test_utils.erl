@@ -49,7 +49,6 @@
 ]).
 
 -define(LS_SIZE, 1000).
--define(METADATA_PREFIX, <<"oai_dc">>).
 
 -define(ATTEMPTS, 60).
 
@@ -160,10 +159,9 @@ rm_and_sync_file(UserSelector, FileSelector) ->
 get_object_attributes(Node, SessId, Guid) ->
     case file_test_utils:get_attrs(Node, SessId, Guid) of
         {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
-            Handles = maps:from_list(lists:map(fun(ShareId) ->
-                {ok, HandleId} = rpc:call(Node, share_logic, get_handle, [SessId, ShareId]),
-                {ShareId, HandleId}
-            end, Shares)),
+            Handles = maps_utils:generate_from_list(fun(ShareId) ->
+                opt_shares:get_handle(Node, SessId, ShareId)
+            end, Shares),
             {ok, #object{
                 guid = Guid, name = Name,
                 type = Type, mode = Mode,
@@ -435,7 +433,7 @@ insert_custom_label(CustomLabel, Guid, CustomLabelsMap) ->
 ) -> {[od_share:id()], #{od_share:id() => undefined | od_handle:id()}} | no_return().
 create_shares(UserId, CreationProvider, SessId, FileGuid, ShareSpecs) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
-    Handles = maps:from_list(lists:map(
+    Handles = maps_utils:generate_from_list(
         fun(#share_spec{name = Name, description = Description, has_handle = HasHandle}) ->
             {ok, ShareId} = ?assertMatch(
                 {ok, _},
@@ -444,19 +442,14 @@ create_shares(UserId, CreationProvider, SessId, FileGuid, ShareSpecs) ->
             ),
             HandleId = case HasHandle of
                 true ->
-                    ozt_handles:create(
-                        CreationProvider,
-                        UserId,
-                        ShareId,
-                        hd(ozt_handle_services:list_handle_services()),
-                        ?METADATA_PREFIX,
-                        ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+                    opt_handles:create(
+                        CreationProvider, UserId, ShareId, hd(ozt_handle_services:list_handle_services())
                     );
                 false ->
                     undefined
             end,
             {ShareId, HandleId}
-        end, ShareSpecs)),
+        end, ShareSpecs),
 
     {lists:sort(maps:keys(Handles)), Handles}.
 

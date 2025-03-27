@@ -506,7 +506,7 @@ delete_share_test(_Config) ->
     )])),
 
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
-        fun(_, _) -> true end, <<"zombie share">>, false, true
+        fun(_, _) -> true end, <<"unknown share id">>, false, true
     )])).
 
 
@@ -523,11 +523,10 @@ setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
         api_test_memory:set(MemRef, shares, ShareIds),
         api_test_memory:set(MemRef, file_guid, FileGuid),
 
-        ZombieFun = fun() ->
+        ZombieShare andalso begin
             onenv_file_test_utils:rm_and_sync_file(?HANDLE_CREATOR, FileGuid),
             assert_zombie_shares_exist(ShareIds, ?HANDLE_CREATOR, Providers)
-        end,
-        ZombieShare andalso ZombieFun()
+        end
     end.
 
 
@@ -609,7 +608,9 @@ validate_delete_share_result(MemRef, UserId, Providers) ->
     ShareId = api_test_memory:get(MemRef, share_to_remove),
 
     lists:foreach(fun(Provider) ->
-        ?assertEqual(?ERROR_NOT_FOUND, get_share_doc(Provider, UserId, ShareId), ?ATTEMPTS)
+        Node = oct_background:get_random_provider_node(Provider),
+        UserSessId = oct_background:get_user_session_id(UserId, Provider),
+        ?assertEqual(?ERROR_NOT_FOUND, opt_shares:get(Node, UserSessId, ShareId), ?ATTEMPTS)
     end, Providers),
 
     api_test_memory:set(MemRef, shares, lists:delete(ShareId, api_test_memory:get(MemRef, shares))).
@@ -632,7 +633,7 @@ assert_zombie_shares_exist(ShareIds, UserSelector, Providers) ->
 
         {ok, #document{value = #od_share{root_file = ShareFileGuid}}} = ?assertMatch(
             {ok, _},
-            get_share_doc(Provider, UserId, ShareId)
+            opt_shares:get(ProviderNode, UserSessId, ShareId)
         ),
 
         FileGuid = file_id:share_guid_to_guid(ShareFileGuid),
@@ -676,6 +677,8 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     lists:foreach(fun(Provider) ->
+        Node = oct_background:get_random_provider_node(Provider),
+        UserSessId = oct_background:get_user_session_id(UserId, Provider),
         ?assertMatch(
             {ok, #document{key = ShareId, value = #od_share{
                 name = ShareName,
@@ -687,21 +690,10 @@ verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, 
                 file_type = ExpFileType,
                 handle = undefined
             }}},
-            get_share_doc(Provider, UserId, ShareId),
+            opt_shares:get(Node, UserSessId, ShareId),
             ?ATTEMPTS
         )
     end, Providers).
-
-
-%% @private
--spec get_share_doc(oct_background:entity_selector(), od_user:id(), od_share:id()) ->
-    od_share:doc().
-get_share_doc(ProviderSelector, UserId, ShareId) ->
-    Node = get_random_op_node(ProviderSelector),
-    ProviderId = oct_background:get_provider_id(ProviderSelector),
-    UserSessId = oct_background:get_user_session_id(UserId, ProviderId),
-
-    rpc:call(Node, share_logic, get, [UserSessId, ShareId]).
 
 
 %% @private
@@ -812,13 +804,13 @@ build_share_public_rest_url(ShareId) ->
 
 
 init_per_suite(Config) ->
-    LoadModules = [dir_stats_test_utils, opt_handles, ozt_handles, ozt_handle_services],
+    LoadModules = [dir_stats_test_utils, opt_handles, ozt_handle_services],
     opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
         onenv_scenario = "api_tests_handle_proxy",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             % make sure there are no remnants from the previous test runs
-            ozt_handle_services:remove_user_from_all_handle_services(?HANDLE_CREATOR, krakow),
+            ozt_handle_services:remove_user_from_all_handle_services(?HANDLE_CREATOR),
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             User3Id = oct_background:get_user_id(?HANDLE_CREATOR),
             SpaceId = oct_background:get_space_id(space_krk_par),
