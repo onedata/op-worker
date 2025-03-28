@@ -64,14 +64,14 @@ create(NodeSelector, SessionId, FileKey, Name, Description) ->
 -spec get(oct_background:node_selector(), session:id(), od_share:id()) ->
     {ok, od_share:doc()} | errors:error().
 get(NodeSelector, SessionId, ShareId) ->
-    test_rpc:call(op_worker, NodeSelector, share_logic, get, [SessionId, ShareId]).
+    opw_test_rpc:call(NodeSelector, share_logic, get, [SessionId, ShareId]).
 
 
 -spec get_handle(oct_background:node_selector(), session:id(), od_share:id()) ->
-    {ok, od_handle:id() | undefined} | errors:error().
+    od_handle:id() | undefined.
 get_handle(NodeSelector, SessionId, ShareId) ->
-    {ok, HandleId} = ?assertMatch({ok, _}, test_rpc:call(
-        op_worker, NodeSelector, share_logic, get_handle, [SessionId, ShareId])),
+    {ok, HandleId} = ?assertMatch({ok, _}, opw_test_rpc:call(
+        NodeSelector, share_logic, get_handle, [SessionId, ShareId])),
     HandleId.
 
 

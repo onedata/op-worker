@@ -159,14 +159,17 @@ rm_and_sync_file(UserSelector, FileSelector) ->
 get_object_attributes(Node, SessId, Guid) ->
     case file_test_utils:get_attrs(Node, SessId, Guid) of
         {ok, #file_attr{guid = Guid, name = Name, type = Type, mode = Mode, shares = Shares}} ->
-            Handles = maps_utils:generate_from_list(fun(ShareId) ->
-                opt_shares:get_handle(Node, SessId, ShareId)
-            end, Shares),
+            HandlePerShare = maps:from_list(lists:filtermap(fun(ShareId) ->
+                case opt_shares:get_handle(Node, SessId, ShareId) of
+                    undefined -> false;
+                    HandleId -> {true, {ShareId, HandleId}}
+                end
+            end, Shares)),
             {ok, #object{
                 guid = Guid, name = Name,
                 type = Type, mode = Mode,
                 shares = lists:sort(Shares),
-                handles = Handles
+                handles = HandlePerShare
             }};
         {error, _} = Error ->
             Error
@@ -246,11 +249,11 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProvid
     SupportingProviders = oct_background:get_space_supporting_providers(SpaceId),
     CreationProvider = oct_background:get_provider_id(CreationProviderSelector),
     SyncProviders = SupportingProviders -- [CreationProvider],
-    
+
     {FileTree, FinalCustomLabelsMaps} = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc, Mode, CustomLabelsMap),
     await_sync(CreationProvider, SyncProviders, UserId, FileTree),
     await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileTree),
-    
+
     {FileTree, FinalCustomLabelsMaps}.
 
 
@@ -343,7 +346,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #hardlink_spec{
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
-    
+
     FinalTarget = case Target of
         {custom_label, TargetCustomLabel} ->
             maps:get(TargetCustomLabel, CustomLabelsMap);
@@ -351,7 +354,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #hardlink_spec{
             Target
     end,
     {ok, #file_attr{guid = HardlinkGuid}} = create_hardlink(CreationNode, UserSessId, ParentGuid, FileName, FinalTarget),
-    
+
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, HardlinkGuid, DatasetSpec
     ),
@@ -398,7 +401,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
             {lists:reverse(ResList), LabelsMap}
     end,
     MetadataObj = create_metadata(CreationNode, UserSessId, DirGuid, MetadataSpec),
-    
+
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, DirGuid, DatasetSpec
     ),
@@ -416,9 +419,8 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     }, insert_custom_label(CustomLabel, DirGuid, UpdatedCustomLabelsMap)}.
 
 
-
 %% @private
--spec insert_custom_label(custom_label(), file_id:file_guid(), custom_labels_map()) -> 
+-spec insert_custom_label(custom_label(), file_id:file_guid(), custom_labels_map()) ->
     custom_labels_map().
 insert_custom_label(undefined, _, CustomLabelsMap) ->
     CustomLabelsMap;
@@ -430,28 +432,28 @@ insert_custom_label(CustomLabel, Guid, CustomLabelsMap) ->
 -spec create_shares(
     oct_background:entity_selector(), oct_background:entity_selector(), session:id(),
     file_id:file_guid(), [share_spec()]
-) -> {[od_share:id()], #{od_share:id() => undefined | od_handle:id()}} | no_return().
+) -> {[od_share:id()], #{od_share:id() => od_handle:id()}} | no_return().
 create_shares(UserId, CreationProvider, SessId, FileGuid, ShareSpecs) ->
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
-    Handles = maps_utils:generate_from_list(
-        fun(#share_spec{name = Name, description = Description, has_handle = HasHandle}) ->
-            {ok, ShareId} = ?assertMatch(
-                {ok, _},
-                opt_shares:create(CreationNode, SessId, ?FILE_REF(FileGuid), Name, Description),
-                ?ATTEMPTS
-            ),
-            HandleId = case HasHandle of
-                true ->
-                    opt_handles:create(
-                        CreationProvider, UserId, ShareId, hd(ozt_handle_services:list_handle_services())
-                    );
-                false ->
-                    undefined
-            end,
-            {ShareId, HandleId}
-        end, ShareSpecs),
+    {Shares, HandlePerShare} = lists:foldl(fun(#share_spec{
+        name = Name, description = Description, has_handle = HasHandle
+    }, {SharesAcc, HandlePerShareAcc}) ->
+        {ok, ShareId} = ?assertMatch(
+            {ok, _},
+            opt_shares:create(?OCT_RAND_OP_NODE(CreationProvider), SessId, ?FILE_REF(FileGuid), Name, Description),
+            ?ATTEMPTS
+        ),
+        case HasHandle of
+            true ->
+                HandleId = opt_handles:create(
+                    CreationProvider, UserId, ShareId, ?RAND_ELEMENT(ozt_handle_services:list_handle_services())
+                ),
+                {[ShareId | SharesAcc], HandlePerShareAcc#{ShareId => HandleId}};
+            false ->
+                {[ShareId | SharesAcc], HandlePerShareAcc}
+        end
+    end, {[], #{}}, ShareSpecs),
 
-    {lists:sort(maps:keys(Handles)), Handles}.
+    {lists:sort(Shares), HandlePerShare}.
 
 
 %% @private
@@ -720,7 +722,7 @@ create_metadata(Node, SessId, FileGuid, #metadata_spec{
     Json /= undefined andalso create_json_metadata(Node, SessId, FileGuid, Json),
     Rdf /= undefined andalso create_rdf_metadata(Node, SessId, FileGuid, Rdf),
     Xattrs /= undefined andalso create_xattrs(Node, SessId, FileGuid, Xattrs),
-    
+
     #metadata_object{
         json = Json,
         rdf = Rdf,
@@ -751,7 +753,7 @@ create_xattrs(Node, SessionId, FileGuid, Xattrs) ->
     ok.
 
 
-    %% @private
+%% @private
 -spec mv_file(od_user:id(), file_id:file_guid(), file_meta:path(), oct_background:entity_selector()) ->
     ok.
 mv_file(UserId, FileGuid, DstPath, MvProvider) ->

@@ -47,7 +47,7 @@
     {ok, od_handle:doc()} | errors:error().
 get(NodeSelector, UserSelector, HandleId) ->
     SessId = oct_background:get_user_session_id(UserSelector, NodeSelector),
-    test_rpc:call(op_worker, NodeSelector, handle_logic, get_public_data, [SessId, HandleId]).
+    opw_test_rpc:call(NodeSelector, handle_logic, get_public_data, [SessId, HandleId]).
 
 
 -spec get_metadata(oct_background:node_selector(), oct_background:entity_selector(), od_handle:id()) ->

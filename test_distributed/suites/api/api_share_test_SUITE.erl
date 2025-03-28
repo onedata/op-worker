@@ -468,7 +468,7 @@ delete_share_test(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            setup_fun = setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare),
+            setup_fun = build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare),
             verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
@@ -502,20 +502,21 @@ delete_share_test(_Config) ->
 
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
         build_verify_shares_in_file_meta_fun(MemRef, Providers, user3),
-        <<"share">>, true, false
+        <<"share with handle">>, true, false
     )])),
 
     ?assert(onenv_api_test_runner:run_tests([BuildTestSpecFun(
-        fun(_, _) -> true end, <<"unknown share id">>, false, true
+        fun(_, _) -> true end,
+        <<"zombie share">>, false, true
     )])).
 
 
 %% @private
--spec setup_fun(
+-spec build_delete_share_setup_fun(
     [oct_background:entity_placeholder()], oct_background:entity_id(), onenv_file_test_utils:file_spec(),
     api_test_memory:mem_ref(), boolean()
 ) -> ok.
-setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
+build_delete_share_setup_fun(Providers, SpaceId, FileSpec, MemRef, ZombieShare) ->
     fun() ->
         #object{guid = FileGuid, shares = ShareIds} = onenv_file_test_utils:create_and_sync_file_tree(
             ?HANDLE_CREATOR, SpaceId, FileSpec
