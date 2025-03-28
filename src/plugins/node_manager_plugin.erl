@@ -57,7 +57,8 @@
     {5, ?LINE_21_02(<<"3">>)},
     {6, ?LINE_21_02(<<"5">>)},
     {7, ?LINE_21_02(<<"9">>)},
-    {8, op_worker:get_release_version()}
+    {8, ?LINE_21_02(<<"10">>)},
+    {9, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -311,7 +312,12 @@ upgrade_cluster(7) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun index:restore_after_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
     end),
-    {ok, 8}.
+    {ok, 8};
+upgrade_cluster(8) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
+    {ok, 9}.
 
 
 %%--------------------------------------------------------------------
