@@ -230,7 +230,7 @@ expected_custom_helper_args(?S3_HELPER_NAME) -> [
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>},
     {optional, <<"blockSize">>}];
 expected_custom_helper_args(?SWIFT_HELPER_NAME) -> [
-    <<"authUrl">>, <<"containerName">>, <<"tenantName">>,
+    <<"authUrl">>, <<"containerName">>,
     {optional, <<"blockSize">>}];
 expected_custom_helper_args(?GLUSTERFS_HELPER_NAME) -> [
     <<"volume">>, <<"hostname">>,
@@ -290,7 +290,9 @@ expected_user_ctx_params(?POSIX_HELPER_NAME) ->
 expected_user_ctx_params(?S3_HELPER_NAME) ->
     [<<"accessKey">>, <<"secretKey">>];
 expected_user_ctx_params(?SWIFT_HELPER_NAME) ->
-    [<<"username">>, <<"password">>];
+    [<<"username">>, <<"password">>, <<"projectName">>,
+        {optional, <<"userDomainName">>}, {optional, <<"projectDomainName">>}
+    ];
 expected_user_ctx_params(?GLUSTERFS_HELPER_NAME) ->
     [<<"uid">>, {optional, <<"gid">>}];
 expected_user_ctx_params(?NFS_HELPER_NAME) ->
