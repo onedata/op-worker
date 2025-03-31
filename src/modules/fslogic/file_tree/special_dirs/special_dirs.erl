@@ -76,7 +76,7 @@ is_special(Uuid) ->
     end.
 
 
--spec is_special(module(), uuid | guid, file_meta:uuid() | file_meta:guid()) -> boolean().
+-spec is_special(module(), uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().
 is_special(Module, IdType, Id) ->
     Module:is_special(IdType, Id).
 
@@ -85,7 +85,7 @@ is_special(Module, IdType, Id) ->
 is_operation_allowed(Uuid, Operation) ->
     case apply_if_special(Uuid, allowed_operations, not_special) of
         not_special -> true;
-        AllowedOperations -> lists:member(Operation, AllowedOperations)
+        AllowedOperations -> lists:member(element(1, Operation), [element(1, O) || O <- AllowedOperations])
     end.
 
 

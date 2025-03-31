@@ -14,6 +14,8 @@
 
 -behaviour(special_dir_behaviour).
 
+-dialyzer({nowarn_function, allowed_operations/0}).
+
 -include("middleware/middleware.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
 -include("proto/oneclient/fuse_messages.hrl").

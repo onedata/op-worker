@@ -194,7 +194,7 @@
     ),
 
     forbidden_special_dirs = [] :: [module()],
-    special_dirs_error :: {error, ?EPERM} | ?ERROR_FORBIDDEN
+    special_dirs_error :: errors:error()
 }).
 
 -endif.

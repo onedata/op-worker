@@ -35,6 +35,8 @@
 
 -behaviour(special_dir_behaviour).
 
+-dialyzer({nowarn_function, allowed_operations/0}).
+
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").

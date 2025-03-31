@@ -165,7 +165,7 @@ is_storage_accessible(FileCtx) ->
         [] ->
             true;
         Storages ->
-            case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
+            case file_ctx:is_filesystem_root_dir_const(FileCtx)  of
                 true -> true;
                 false ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -880,8 +880,16 @@ handle_periodic_storages_check() ->
 
 
 %% @private
--spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, operation()) -> boolean().
-is_operation_allowed_by_special_dir_logic(undefined, _Operation) ->
+-spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, request() | operation()) -> boolean().
+is_operation_allowed_by_special_dir_logic(undefined, _Request) ->
     true;
+is_operation_allowed_by_special_dir_logic(FileCtx, #fuse_request{fuse_request = FuseRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, FuseRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #file_request{file_request = FileRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, FileRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #provider_request{provider_request = ProviderRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, ProviderRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #proxyio_request{proxyio_request = ProxyIORequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, ProxyIORequest);
 is_operation_allowed_by_special_dir_logic(FileCtx, Operation) ->
     special_dirs:is_operation_allowed(file_ctx:get_logical_uuid_const(FileCtx), Operation).

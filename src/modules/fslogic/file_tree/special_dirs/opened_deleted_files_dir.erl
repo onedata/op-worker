@@ -16,6 +16,8 @@
 
 -behaviour(special_dir_behaviour).
 
+-dialyzer({nowarn_function, allowed_operations/0}).
+
 -include("proto/oneclient/fuse_messages.hrl").
 
 % API

@@ -157,7 +157,7 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ping | healthcheck | monitor_streams) ->
+-spec handle(ping | healthcheck | {middleware_request, session:id(), file_id:file_guid(), operation()}) ->
     pong | ok | {ok, term()} | errors:error().
 handle(ping) ->
     pong;
@@ -174,7 +174,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         middleware_utils:assert_file_managed_locally(FileGuid),
         case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), Operation) of
             false ->
-                ?ERR_FORBIDDEN;
+                ?ERR_FORBIDDEN(?err_ctx());
             true ->
                 case fslogic_worker:is_storage_accessible(FileCtx) of
                     true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
