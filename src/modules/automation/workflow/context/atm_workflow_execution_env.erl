@@ -356,6 +356,7 @@ build_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_executi
     atm_workflow_execution_logger:build(
         AtmWorkflowExecutionAuth,
         LogLevel,
+        AtmTaskExecutionId,
         maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined),
         AtmWorkflowAuditLogStoreContainer,
         AtmTaskSelectorRegistry
