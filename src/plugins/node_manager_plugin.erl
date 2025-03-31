@@ -308,15 +308,15 @@ upgrade_cluster(6) ->
 upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
-    await_zone_connection_and_run(fun() ->
-        {ok, SpaceIds} = provider_logic:get_spaces(),
-        lists:foreach(fun index:restore_after_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
-    end),
+    await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
     {ok, 8};
 upgrade_cluster(8) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
-    await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
+    await_zone_connection_and_run(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun index:restore_after_couchbase_upgrade_from_4_5_to_6_6/1, SpaceIds)
+    end),
     {ok, 9}.
 
 

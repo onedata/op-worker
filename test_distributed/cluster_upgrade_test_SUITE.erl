@@ -36,8 +36,8 @@
     upgrade_from_21_02_2_tmp_dir/1,
     upgrade_from_21_02_3_missing_dirs/1,
     upgrade_from_21_02_5_links_reconciliation_traverses/1,
-    upgrade_from_21_02_9_restore_removed_views/1,
-    upgrade_from_21_02_10_upgrade_swift_storage/1
+    upgrade_from_21_02_9_upgrade_swift_storage/1,
+    upgrade_from_21_02_10_restore_removed_views/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -55,8 +55,8 @@ all() -> ?ALL([
     upgrade_from_21_02_2_tmp_dir,
     upgrade_from_21_02_3_missing_dirs,
     upgrade_from_21_02_5_links_reconciliation_traverses,
-    upgrade_from_21_02_9_restore_removed_views,
-    upgrade_from_21_02_10_upgrade_swift_storage
+    upgrade_from_21_02_9_upgrade_swift_storage,
+    upgrade_from_21_02_10_restore_removed_views
 ]).
 
 %%%===================================================================
@@ -434,7 +434,54 @@ upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
         rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID]), 10).
 
 
-upgrade_from_21_02_9_restore_removed_views(Config) ->
+upgrade_from_21_02_9_upgrade_swift_storage(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    TenantName = <<"some_project">>,
+    BaseHelperArgs = #{
+        <<"authUrl">> => <<"some_url">>,
+        <<"containerName">> => <<"some_container">>
+    },
+    BaseHelperAdminCtx = #{
+        <<"username">> => <<"user">>,
+        <<"password">> => <<"password">>
+    },
+    Helper = #helper{
+        name = ?SWIFT_HELPER_NAME,
+        args = BaseHelperArgs#{<<"tenantName">> => TenantName},
+        admin_ctx = BaseHelperAdminCtx
+    },
+    StorageName = ?RAND_STR(),
+    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]),
+
+    ?assertMatch(
+        {ok, #document{value = #storage_config{helper = Helper}}},
+        rpc:call(Worker, storage_config, get, [StorageId])
+    ),
+
+    ?assertEqual(true, rpc:call(Worker, gs_channel_service, is_connected, [])),
+    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+
+    ExpNewHelper = #helper{
+        name = ?SWIFT_HELPER_NAME,
+        args = BaseHelperArgs,
+        admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => TenantName}
+    },
+    ?assertMatch(
+        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
+        rpc:call(Worker, storage_config, get, [StorageId])
+    ),
+
+    % Assert upgrade is idempotent
+    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+
+    ?assertMatch(
+        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
+        rpc:call(Worker, storage_config, get, [StorageId])
+    ).
+
+
+upgrade_from_21_02_10_restore_removed_views(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Provider1Id = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
 
@@ -503,7 +550,7 @@ upgrade_from_21_02_9_restore_removed_views(Config) ->
         {SimpleSpatialFunction, undefined, true}
     ]),
 
-    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+    ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
 
     % After upgrade views should be restored
     lists:foreach(fun({ViewName, IsSpatial}) ->
@@ -512,57 +559,11 @@ upgrade_from_21_02_9_restore_removed_views(Config) ->
     end, Views),
 
     % Assert upgrade is idempotent
-    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+    ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
     lists:foreach(fun({ViewName, IsSpatial}) ->
         ?assertMatch({ok, _}, GetViewFun(ViewName)),
         ?assertMatch({ok, _}, QueryView(ViewName, IsSpatial))
     end, Views).
-
-
-upgrade_from_21_02_10_upgrade_swift_storage(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    TenantName = <<"some_project">>,
-    BaseHelperArgs = #{
-        <<"authUrl">> => <<"some_url">>,
-        <<"containerName">> => <<"some_container">>
-    },
-    BaseHelperAdminCtx = #{
-        <<"username">> => <<"user">>,
-        <<"password">> => <<"password">>
-    },
-    Helper = #helper{
-        name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs#{<<"tenantName">> => TenantName},
-        admin_ctx = BaseHelperAdminCtx
-    },
-    StorageName = ?RAND_STR(),
-    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]),
-
-    ?assertMatch(
-        {ok, #document{value = #storage_config{helper = Helper}}},
-        rpc:call(Worker, storage_config, get, [StorageId])
-    ),
-
-    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
-
-    ExpNewHelper = #helper{
-        name = ?SWIFT_HELPER_NAME,
-        args = BaseHelperArgs,
-        admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => TenantName}
-    },
-    ?assertMatch(
-        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
-        rpc:call(Worker, storage_config, get, [StorageId])
-    ),
-
-    % Assert upgrade is idempotent
-    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
-
-    ?assertMatch(
-        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
-        rpc:call(Worker, storage_config, get, [StorageId])
-    ).
 
 
 %%%===================================================================
@@ -621,7 +622,17 @@ init_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Co
     
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
+init_per_testcase(Case = upgrade_from_21_02_9_upgrade_swift_storage, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Worker, storage_logic, [passthrough]),
+    test_utils:mock_expect(Worker, storage_logic, get_name_of_local_storage, fun(StorageId) ->
+        {ok, StorageId}
+    end),
+
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(Case = upgrade_from_21_02_10_restore_removed_views, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, provider_logic, [passthrough]),
@@ -634,16 +645,6 @@ init_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
     test_utils:mock_new(Worker, space_logic, [passthrough]),
     test_utils:mock_expect(Worker, space_logic, get_name, fun(_, SpaceId) ->
         {ok, SpaceId}
-    end),
-
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = upgrade_from_21_02_10_upgrade_swift_storage, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, get_name_of_local_storage, fun(StorageId) ->
-        {ok, StorageId}
     end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -670,7 +671,7 @@ end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Con
     test_utils:mock_unload(Worker, [provider_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case = upgrade_from_21_02_9_restore_removed_views, Config) ->
+end_per_testcase(Case = upgrade_from_21_02_10_restore_removed_views, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [provider_logic, space_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
