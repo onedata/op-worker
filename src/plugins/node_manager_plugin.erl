@@ -318,7 +318,8 @@ upgrade_cluster(7) ->
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
-%% This callback is executed on all cluster nodes.
+%% NOTE: this callback is run on all cluster nodes and is awaited
+%% for before cluster setup proceeds.
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
@@ -330,6 +331,7 @@ before_listeners_start() ->
     atm_workflow_execution_api:init_engine(),
     gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:after_listeners_stop/0}.
@@ -337,7 +339,8 @@ before_listeners_start() ->
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
-%% This callback is executed on all cluster nodes.
+%% NOTE: this callback is run on a cluster node that is being turned off
+%% independently of other cluster nodes (no synchronization is performed).
 %% @end
 %%--------------------------------------------------------------------
 after_listeners_stop() ->
