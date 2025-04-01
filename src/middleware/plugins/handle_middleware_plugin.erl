@@ -47,6 +47,8 @@ resolve_handler(get, instance, public) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
 
+resolve_handler(delete, instance, private) -> ?MODULE;
+
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -77,7 +79,10 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"metadataString">> => {binary, any}
     }
-}.
+};
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
+    undefined.
 
 
 %%--------------------------------------------------------------------
@@ -102,6 +107,10 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
 
 fetch_entity(#op_req{operation = update, gri = #gri{scope = private}}) ->
     % authorization will be checked by oz in during handle update
+    {ok, {undefined, 1}};
+
+fetch_entity(#op_req{operation = delete, gri = #gri{scope = private}}) ->
+    % authorization will be checked by oz in during handle delete
     {ok, {undefined, 1}}.
 
 
@@ -127,6 +136,10 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
 
 authorize(#op_req{operation = update, gri = #gri{aspect = instance}}, _) ->
     % authorization will be checked by oz in during handle update
+    true;
+
+authorize(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
+    % authorization will be checked by oz in during handle update
     true.
 
 
@@ -142,6 +155,8 @@ validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % validation was checked by oz in `fetch_entity`
     ok;
 validate(#op_req{operation = update, gri = #gri{aspect = instance}}, _) ->
+    ok;
+validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
     ok.
 
 
@@ -195,8 +210,8 @@ update(#op_req{auth = #auth{session_id = SessionId}, data = Data, gri = #gri{id 
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+delete(#op_req{auth = #auth{session_id = SessionId}, gri = #gri{id = HandleId, aspect = instance}}) ->
+    handle_logic:delete(SessionId, HandleId).
 
 
 %% @private

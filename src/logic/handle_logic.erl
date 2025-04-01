@@ -24,7 +24,7 @@
 
 -export([get_public_data/2]).
 -export([force_fetch/2]).
--export([create/6, update/3]).
+-export([create/6, update/3, delete/2]).
 
 %%%===================================================================
 %%% API
@@ -97,4 +97,15 @@ update(SessionId, HandleId, NewMetadata) ->
     }),
     ?ON_SUCCESS(Res, fun(_) ->
         force_fetch(SessionId, HandleId)
+    end).
+
+
+-spec delete(gs_client_worker:client(), od_handle:id()) -> ok | errors:error().
+delete(SessionId, HandleId) ->
+    Res = gs_client_worker:request(SessionId, #gs_req_graph{
+        operation = delete,
+        gri = #gri{type = od_handle, id = HandleId, aspect = instance, scope = private}
+    }),
+    ?ON_SUCCESS(Res, fun(_) ->
+        gs_client_worker:invalidate_cache(od_handle, HandleId)
     end).
