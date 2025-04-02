@@ -38,7 +38,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([create/5, create/7, get/1, delete/1]).
+-export([create_impossible_qos/5, create/7, get/1, delete/1]).
 
 %% higher-level functions operating on qos_entry document
 -export([get_space_id/1, get_file_guid/1]).
@@ -111,22 +111,22 @@
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
--spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
+-spec create_impossible_qos(od_space:id(), file_meta:uuid(), qos_expression:expression(),
     replicas_num(), type()) -> {ok, id()} | {error, term()}.
-create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
-    create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
+create_impossible_qos(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
+    create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, impossible,
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
-    replicas_num(), type(), boolean(), qos_traverse_req:traverse_reqs()) ->
+    replicas_num(), type(), possible | impossible, qos_traverse_req:traverse_reqs()) ->
     {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, TraverseReqs) ->
     QosEntryId = datastore_key:new_adjacent_to(SpaceId),
     PossibilityCheck = case Possible of
-        true ->
+        possible ->
             {possible, oneprovider:get_id()};
-        false ->
+        impossible ->
             ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,

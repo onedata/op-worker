@@ -73,8 +73,8 @@ emit(#event{} = Evt, MgrRef) ->
     case event_type:get_context(Evt) of
         {file, Guid} ->
             case special_dirs:is_included_in_events(file_id:guid_to_uuid(Guid)) of
-                true -> ok;
-                false -> send_to_event_managers(Evt, get_event_managers(MgrRef))
+                true -> send_to_event_managers(Evt, get_event_managers(MgrRef));
+                false -> ok
             end;
         _ ->
             send_to_event_managers(Evt, get_event_managers(MgrRef))

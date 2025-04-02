@@ -27,6 +27,21 @@
 
 -define(LINK_UUID_PREFIX, "link_").
 
+
+-define(ALL_SPECIAL_DIRS, [
+    global_root_dir,
+    user_root_dir,
+        space_dir,
+            share_container,
+            space_archives_dir,
+                dataset_archives_dir,
+                    archive_dir,
+            tmp_dir,
+                opened_deleted_files_dir,
+            trash_dir
+]).
+
+
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 %% Tmp file prefix

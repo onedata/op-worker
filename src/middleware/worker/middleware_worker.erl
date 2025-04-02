@@ -167,15 +167,15 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
-        FileCtx = file_ctx:new_by_guid(FileGuid),
-        UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
-
-        assert_has_access_to_space(UserCtx, FileCtx),
-        middleware_utils:assert_file_managed_locally(FileGuid),
         case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), Operation) of
             false ->
                 ?ERR_FORBIDDEN(?err_ctx());
             true ->
+                FileCtx = file_ctx:new_by_guid(FileGuid),
+                UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
+
+                assert_has_access_to_space(UserCtx, FileCtx),
+                middleware_utils:assert_file_managed_locally(FileGuid),
                 case fslogic_worker:is_storage_accessible(FileCtx) of
                     true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
                     false -> ?ERR_SERVICE_UNAVAILABLE(?err_ctx())

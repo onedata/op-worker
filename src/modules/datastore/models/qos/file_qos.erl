@@ -419,8 +419,11 @@ get_effective(FileUuid, Options) when is_binary(FileUuid) ->
         {ok, FileDoc} -> get_effective(FileDoc, Options);
         ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(FileUuid)}
     end;
-get_effective(#document{} = FileDoc, Options) ->
-    get_effective(FileDoc, undefined, Options).
+get_effective(#document{key = FileUuid} = FileDoc, Options) ->
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
+        true -> undefined; % effective cache is not set up for filesystem roots
+        false -> get_effective(FileDoc, undefined, Options)
+    end.
 
 
 %% @private

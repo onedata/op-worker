@@ -15,6 +15,7 @@
 -include("authz_api_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -39,21 +40,14 @@ test_get_parent(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = true,
         available_in_public_data_mode = true,
-        operation = fun
-            F(guid, Node, SessionId, FileKey) ->
-                lfm_proxy:get_parent(Node, SessionId, FileKey);
-            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
-            end,
+        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:get_parent(Node, SessionId, FileKey)
+        end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        forbidden_special_dirs = [
-            trash, tmp_dir, opened_deleted_files_dir, share_container,
-            space_archives_root_dir, dataset_archives_root_dir, archive_dir
-        ],
-        special_dirs_error = {error, ?EPERM}
+        allowed_special_dirs = [space_dir, user_root_dir]
     }).
 
 
@@ -65,21 +59,15 @@ test_get_file_path(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false, % TODO VFS-6057
         available_in_public_data_mode = false, % TODO VFS-6057
-        operation = fun
-            F(guid, Node, SessionId, ?FILE_REF(FileGuid)) ->
-                lfm_proxy:get_file_path(Node, SessionId, FileGuid);
-            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
-            end,
+        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            ?FILE_REF(FileGuid) = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath,
+                <<"/file1">>, ExtraData),
+            lfm_proxy:get_file_path(Node, SessionId, FileGuid)
+        end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        forbidden_special_dirs = [
-            trash, tmp_dir, opened_deleted_files_dir, share_container,
-            space_archives_root_dir, dataset_archives_root_dir
-        ],
-        special_dirs_error = {error, ?EPERM}
+        allowed_special_dirs = [space_dir, user_root_dir, archive_dir]
     }).
 
 
@@ -97,7 +85,8 @@ test_resolve_guid(SpaceId) ->
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        allowed_special_dirs = undefined
     }).
 
 
@@ -133,13 +122,13 @@ test_stat(SpaceId) ->
         available_for_share_guid = true,
         available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:stat(Node, SessionId, FileKey, Attributes)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        allowed_special_dirs = ?ALL_SPECIAL_DIRS -- [global_root_dir]
     }).
 
 

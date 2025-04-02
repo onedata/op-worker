@@ -21,6 +21,7 @@
 -module(special_dirs).
 -author("Michal Stanisz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([set_up_for_new_space/1, report_new_user/1]).
@@ -28,19 +29,6 @@
     is_affected_by_protection_flags/1, is_included_in_harvesting/1, is_included_in_dir_stats/1,
     is_included_in_events/1, is_logically_detached/1]).
 -export([get_file_meta_if_special/1, get_times_if_special/2]).
-
--define(ALL_SPECIAL_DIRS, [
-    global_root_dir,
-    user_root_dir,
-        space_dir,
-            share_container,
-            space_archives_dir,
-                dataset_archives_dir,
-                    archive_dir,
-            tmp_dir,
-                opened_deleted_files_dir,
-            trash_dir
-]).
 
 
 %%%===================================================================

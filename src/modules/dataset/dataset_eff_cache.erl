@@ -177,9 +177,11 @@ get(FileDoc) ->
 
 
 -spec get(file_meta:doc(), boolean()) -> {ok, entry()} | error().
-get(FileDoc, true = _CheckInvalidateOnDatasetsGetFlag) ->
+get(FileDoc = #document{key = FileUuid}, true = _CheckInvalidateOnDatasetsGetFlag) ->
     {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
-    case effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET) of
+    case special_dirs:is_affected_by_protection_flags(FileUuid) andalso
+        effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET)
+    of
         {ok, true} -> invalidate(SpaceId, false);
         _ -> ok
     end,

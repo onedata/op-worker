@@ -20,6 +20,7 @@
 
 -behaviour(special_dir_behaviour).
 
+% ignore this function as it uses record definitions without setting fields values
 -dialyzer({nowarn_function, allowed_operations/0}).
 
 -include("proto/oneclient/fuse_messages.hrl").
@@ -136,6 +137,7 @@ get_file_meta(Uuid) ->
             mode = ?DEFAULT_SHARE_CONTAINER_PERMS,
             owner = ?ROOT_USER_ID,
             provider_id = oneprovider:get_id(),
+            shares = [ShareId],
             deleted = Deleted,
             parent_uuid = ParentUuid
         },

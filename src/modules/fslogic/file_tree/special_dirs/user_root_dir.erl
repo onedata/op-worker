@@ -35,6 +35,7 @@
 
 -behaviour(special_dir_behaviour).
 
+% ignore this function as it uses record definitions without setting fields values
 -dialyzer({nowarn_function, allowed_operations/0}).
 
 -include("modules/datastore/datastore_models.hrl").
@@ -107,7 +108,11 @@
     #get_file_attr{},
     #get_file_children{},
     #get_child_attr{},
-    #get_file_children_attrs{}
+    #get_file_children_attrs{},
+
+    % cdmi needs below operations to work properly
+    #get_xattr{},
+    #list_xattr{}
 ]).
 
 -type apply_fun() :: fun((session:id(), file_id:file_guid(), od_space:id(), #{od_space:name() => [od_space:id()]}) -> ok).

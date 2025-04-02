@@ -174,29 +174,15 @@ get_effective_file_qos_insecure(FileCtx) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets details about QoS entry.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_qos_entry_insecure(qos_entry:id()) ->
     {ok, qos_entry:record()} | errors:error().
 get_qos_entry_insecure(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
-        {ok, #document{value = QosEntry}} ->
-            {ok, QosEntry};
-        {error, _} ->
-            ?ERR_TEMPORARY_FAILURE(?err_ctx())
+        {ok, #document{value = QosEntry}} -> {ok, QosEntry};
+        {error, _} = Error -> Error
     end.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Removes qos_entry ID from file_qos documents then removes qos_entry document.
-%% @end
-%%--------------------------------------------------------------------
 -spec remove_qos_entry_insecure(user_ctx:ctx(), qos_entry:id()) ->
     ok | errors:error().
 remove_qos_entry_insecure(UserCtx, QosEntryId) ->
@@ -218,14 +204,7 @@ remove_qos_entry_insecure(UserCtx, QosEntryId) ->
 %%% Internal functions
 %%%===================================================================
 
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new qos_entry document with appropriate traverse requests.
-%% @end
-%%--------------------------------------------------------------------
--spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(),
     qos_entry:type(), [storage:id()]) -> {ok, qos_entry:id()} | errors:error().
 add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
@@ -233,34 +212,21 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 
     AllTraverseReqs = qos_traverse_req:build_traverse_reqs(InodeUuid, Storages),
 
-    case qos_entry:create(
-        SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType, true, AllTraverseReqs
-    ) of
-        {ok, QosEntryId} = Result ->
-            file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
-            qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
-            Result;
-        _ ->
-            ?ERR_TEMPORARY_FAILURE(?err_ctx())
-    end.
+    {ok, QosEntryId} = Result = qos_entry:create(
+        SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType, possible, AllTraverseReqs
+    ),
+    file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
+    qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
+    Result.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates new qos_entry document and adds it to impossible list.
-%% @end
-%%--------------------------------------------------------------------
--spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
+-spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(),
     qos_entry:type()) -> {ok, qos_entry:id()} | errors:error().
 add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_entry:create(SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType) of
-        {ok, QosEntryId} = Result ->
-            ok = file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
-            Result;
-        _ ->
-            ?ERR_TEMPORARY_FAILURE(?err_ctx())
-    end.
+    {ok, QosEntryId} = Result = qos_entry:create_impossible_qos(SpaceId, InodeUuid, QosExpression,
+        ReplicasNum, EntryType),
+    ok = file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
+    Result.

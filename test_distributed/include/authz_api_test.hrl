@@ -193,8 +193,8 @@
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
     ),
 
-    forbidden_special_dirs = [] :: [module()],
-    special_dirs_error :: errors:error()
+    allowed_special_dirs = [] :: undefined | [module()],
+    special_dirs_ok_value = ok :: ok | errors:error()
 }).
 
 -endif.

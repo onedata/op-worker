@@ -41,22 +41,15 @@ test_create_share(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun
-            F(guid, Node, SessionId, DirKey) ->
-                opt_shares:create(Node, SessionId, DirKey, <<"create_share">>);
-            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-                DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-                F(guid, Node, SessionId, maps:get(DirPath, ExtraData))
-            end,
+        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            DirKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/dir1">>, ExtraData),
+            opt_shares:create(Node, SessionId, DirKey, <<"create_share">>)
+        end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end,
-        forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
-            space_archives_root_dir, dataset_archives_root_dir, archive_dir
-        ],
-        special_dirs_error = ?ERR_FORBIDDEN
+        allowed_special_dirs = [space_dir]
     }).
 
 
@@ -88,7 +81,8 @@ test_remove_share(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
+        end,
+        allowed_special_dirs = undefined
     }).
 
 

@@ -14,6 +14,7 @@
 
 -behaviour(special_dir_behaviour).
 
+% ignore this function as it uses record definitions without setting fields values
 -dialyzer({nowarn_function, allowed_operations/0}).
 
 -include("middleware/middleware.hrl").

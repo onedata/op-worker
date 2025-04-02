@@ -17,14 +17,17 @@
 -author("Bartosz Walkowicz").
 
 -include("authz_api_test.hrl").
+-include("modules/dataset/archive.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([run_suite/1]).
+-export([extract_test_file_key/3]).
 
 -type file_tree_spec() :: #ct_authz_dir_spec{} | #ct_authz_file_spec{}.
 
@@ -35,7 +38,7 @@
 
 -type posix_user_type() :: owner | group | other.
 
--type extra_data() :: #{file_meta:path() => term()}.
+-type extra_data() :: #{file_meta:path() | special_dir => term() | lfm:file_key()}.
 
 -type authz_test_suite_spec() :: #authz_test_suite_spec{}.
 
@@ -89,6 +92,7 @@
 -type authz_acl_test_case_ctx() :: #authz_acl_test_case_ctx{}.
 
 -define(ATTEMPTS, 10).
+-define(SPECIAL_DIRS_MEM_REF, special_dirs_mem_ref).
 
 
 %%%===================================================================
@@ -110,6 +114,13 @@ run_suite(TestSuiteSpec) ->
     run_acl_permission_test_group(TestSuiteCtx),
     run_special_dirs_test_group(TestSuiteCtx).
 
+
+-spec extract_test_file_key(file_meta:path(), file_meta:path(), extra_data()) -> lfm:file_key().
+extract_test_file_key(_TestCaseRootDirPath, _RelPath, #{special_dir := SpecialDirFileKey}) when SpecialDirFileKey =/= undefined->
+    SpecialDirFileKey;
+extract_test_file_key(TestCaseRootDirPath, RelPath, ExtraData) ->
+    Path = <<TestCaseRootDirPath/binary, RelPath/binary>>,
+    maps:get(Path, ExtraData).
 
 %%%===================================================================
 %%% SPACE OWNER TESTS
@@ -883,8 +894,7 @@ run_posix_permission_test_group(TestSuiteCtx = #authz_test_suite_ctx{
             RequiredPerms = format_posix_perms_per_file(PosixTestCaseCtx),
 
             ?ct_pal_exception(
-                ?notice(?autoformat_with_msg("POSIX test case failure ",
-                [TestCaseRootDirPath, RequiredPerms])),
+                ?autoformat_with_msg("POSIX test case failure ", [TestCaseRootDirPath, RequiredPerms]),
                 Class, Reason, Stacktrace
             ),
             error(posix_perms_test_failed)
@@ -1219,46 +1229,112 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
 
 %% @private
 -spec run_special_dirs_test_group(authz_test_suite_ctx()) -> ok | no_return().
+run_special_dirs_test_group(#authz_test_suite_ctx{
+    suite_spec = #authz_test_suite_spec{allowed_special_dirs = undefined}
+}) ->
+    ok;
 run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         space_owner_selector = SpaceOwnerSelector,
-        forbidden_special_dirs = ForbiddenSpecialDirs,
-        special_dirs_error = ExpectedError
+        allowed_special_dirs = AllowedSpecialDirs,
+        special_dirs_ok_value = ExpectedOkValue,
+        returned_errors = ReturnedErrors
     } = SuiteSpec
 }) ->
     lists:foreach(fun(SpecialDir) ->
         TestCaseName = build_test_case_name(["special dir", SpecialDir]),
         TestCaseCtx = init_test_case(TestCaseName, SpaceOwnerSelector, TestSuiteCtx),
 
+        FinalTestCaseCtx = case SpecialDir of
+            share_container ->
+                TestNode = TestSuiteCtx#authz_test_suite_ctx.test_node,
+                ExecutionerUserId = oct_background:get_user_id(SpaceOwnerSelector),
+                ExecutionerToken = provider_onenv_test_utils:create_oz_temp_access_token(ExecutionerUserId),
+                TestCaseCtx#authz_test_case_ctx{
+                    executioner_session_id = provider_onenv_test_utils:create_session(
+                        TestNode, ExecutionerUserId, ExecutionerToken, public_data
+                    )
+                };
+            _ ->
+                TestCaseCtx
+        end,
+
+        assert_operation(#{}, ExpectedOkValue, FinalTestCaseCtx#authz_test_case_ctx{
+            special_dir_file_key = build_special_dir_file_key(SpecialDir, SuiteSpec)
+        })
+
+    end, AllowedSpecialDirs),
+
+    lists:foreach(fun(SpecialDir) ->
+        TestCaseName = build_test_case_name(["special dir", SpecialDir]),
+        TestCaseCtx = init_test_case(TestCaseName, SpaceOwnerSelector, TestSuiteCtx),
+
+        % NOTE: requests to global root dir via fslogic worker are automatically rejected with not_found
+        ExpectedError = case {SpecialDir, ReturnedErrors} of
+            {global_root_dir, errno_errors} ->
+                {error, ?ENOENT};
+            _ ->
+                case ReturnedErrors of
+                    api_errors -> ?ERR_FORBIDDEN;
+                    errno_errors -> {error, ?EPERM}
+                end
+        end,
+
         assert_operation(#{}, ExpectedError, TestCaseCtx#authz_test_case_ctx{
             special_dir_file_key = build_special_dir_file_key(SpecialDir, SuiteSpec)
         })
 
-    end, ForbiddenSpecialDirs).
+    end, ?ALL_SPECIAL_DIRS -- AllowedSpecialDirs).
 
 
 %% @private
 -spec build_special_dir_file_key(module(), authz_test_suite_spec()) -> lfm:file_key().
-% NOTE: global_root_dir cannot be tested as all requests to it are automatically rejected with not_found
+build_special_dir_file_key(global_root_dir, #authz_test_suite_spec{}) ->
+    ?FILE_REF(global_root_dir:guid());
 build_special_dir_file_key(user_root_dir, #authz_test_suite_spec{space_owner_selector = SpaceOwnerSelector}) ->
     ?FILE_REF(user_root_dir:guid(oct_background:get_user_id(SpaceOwnerSelector)));
 build_special_dir_file_key(space_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
     ?FILE_REF(space_dir:guid(SpaceId));
-build_special_dir_file_key(trash, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(trash_dir:guid(SpaceId));
+build_special_dir_file_key(share_container, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ShareId = api_test_memory:get(?SPECIAL_DIRS_MEM_REF, share_id),
+    ?FILE_REF(file_id:pack_share_guid(share_container:uuid(ShareId), SpaceId, ShareId));
+build_special_dir_file_key(space_archives_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(space_archives_dir:guid(SpaceId));
+build_special_dir_file_key(dataset_archives_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    DatasetId = api_test_memory:get(?SPECIAL_DIRS_MEM_REF, dataset_id),
+    ?FILE_REF(file_id:pack_guid(dataset_archives_dir:uuid(DatasetId), SpaceId));
+build_special_dir_file_key(archive_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ArchiveId = api_test_memory:get(?SPECIAL_DIRS_MEM_REF, archive_id),
+    ?FILE_REF(file_id:pack_guid(archive_dir:uuid(ArchiveId), SpaceId));
 build_special_dir_file_key(tmp_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
     ?FILE_REF(tmp_dir:guid(SpaceId));
 build_special_dir_file_key(opened_deleted_files_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
     ?FILE_REF(opened_deleted_files_dir:guid(SpaceId));
-build_special_dir_file_key(share_container, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(file_id:pack_guid(share_container:uuid(<<"dummy_id">>), SpaceId));
-build_special_dir_file_key(space_archives_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(space_archives_dir:guid(SpaceId));
-build_special_dir_file_key(dataset_archives_root_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(file_id:pack_guid(dataset_archives_dir:uuid(<<"dummy_id">>), SpaceId));
-build_special_dir_file_key(archive_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
-    ?FILE_REF(file_id:pack_guid(archive_dir:uuid(<<"dummy_id">>), SpaceId)).
+build_special_dir_file_key(trash_dir, #authz_test_suite_spec{space_id = SpaceId}) ->
+    ?FILE_REF(trash_dir:guid(SpaceId)).
 
+
+%% @private
+-spec setup_special_dirs(oct_background:entity_selector(), oct_background:entity_selector(), od_space:id()) -> ok.
+setup_special_dirs(ProviderSelector, SpaceOwnerSelector, SpaceId) ->
+    SessId = oct_background:get_user_session_id(SpaceOwnerSelector, ProviderSelector),
+    {ok, ShareId} = opt_shares:create(ProviderSelector, SessId, ?FILE_REF(space_dir:guid(SpaceId)), <<"share_name">>),
+    {ok, DatasetId} = opt_datasets:establish(ProviderSelector, SessId, ?FILE_REF(space_dir:guid(SpaceId))),
+
+    % deliberately fail archive creation so protection flags are not set
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    test_utils:mock_new(Nodes, archive_traverses_common),
+    test_utils:mock_expect(Nodes, archive_traverses_common, do_master_job, fun(_, _, _, _) -> {error, mocked, undefined} end),
+    {ok, ArchiveId} = opt_archives:archive_dataset(ProviderSelector, SessId, DatasetId, #archive_config{},
+        <<"archive_description">>),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_FAILED}},
+        opt_archives:get_info(ProviderSelector, SessId, ArchiveId), ?ATTEMPTS),
+    test_utils:mock_unload(Nodes, archive_traverses_common),
+
+    api_test_memory:set(?SPECIAL_DIRS_MEM_REF, share_id, ShareId),
+    api_test_memory:set(?SPECIAL_DIRS_MEM_REF, dataset_id, DatasetId),
+    api_test_memory:set(?SPECIAL_DIRS_MEM_REF, archive_id, ArchiveId),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -1272,7 +1348,8 @@ init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
     provider_selector = ProviderSelector,
     space_id = SpaceId,
     space_owner_selector = SpaceOwnerSelector,
-    files_owner_selector = FilesOwnerSelector
+    files_owner_selector = FilesOwnerSelector,
+    allowed_special_dirs = AllowedSpecialDirs
 }) ->
     TestNode = oct_background:get_random_provider_node(ProviderSelector),
     FileOwnerSessionId = oct_background:get_user_session_id(FilesOwnerSelector, ProviderSelector),
@@ -1280,6 +1357,11 @@ init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
     {ok, SpaceName} = ?rpc(TestNode, space_logic:get_name(?ROOT_SESS_ID, SpaceId)),
     TestSuiteRootDirPath = filepath_utils:join([<<"/">>, SpaceName, TestSuiteName]),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(TestNode, FileOwnerSessionId, TestSuiteRootDirPath, 8#777)),
+
+    case AllowedSpecialDirs of
+        undefined -> ok;
+        _ -> setup_special_dirs(ProviderSelector, SpaceOwnerSelector, SpaceId)
+    end,
 
     #authz_test_suite_ctx{
         suite_spec = TestSuiteSpec,
@@ -1490,28 +1572,21 @@ exec_operation(#authz_test_case_ctx{
     test_case_root_dir_path = TestCaseRootDirPath,
     executioner_session_id = ExecutionerSessionId,
     extra_data = ExtraData,
-    special_dir_file_key = undefined
-}) ->
-    check_operation_result(Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath, ExtraData));
-exec_operation(#authz_test_case_ctx{
-    suite_ctx = #authz_test_suite_ctx{
-        suite_spec = #authz_test_suite_spec{operation = Operation},
-        test_node = TestNode
-    },
-    executioner_session_id = ExecutionerSessionId,
     special_dir_file_key = SpecialDirFileKey
 }) ->
-    check_operation_result(Operation(guid, TestNode, ExecutionerSessionId, SpecialDirFileKey)).
+    check_operation_result(Operation(TestNode, ExecutionerSessionId, TestCaseRootDirPath,
+        ExtraData#{special_dir => SpecialDirFileKey})).
 
 
 %% @private
--spec check_operation_result(ok | {ok, any()} | {ok, any(), any()} | {ok, any(), any(), any()} | {error, term()}) ->
+-spec check_operation_result(ok | tuple() | {error, term()}) ->
     ok | {error, term()}.
 check_operation_result(ok) -> ok;
-check_operation_result({ok, _}) -> ok;
-check_operation_result({ok, _, _}) -> ok;
-check_operation_result({ok, _, _, _}) -> ok;
-check_operation_result({error, _} = Error) -> Error.
+check_operation_result(Result) when is_tuple(Result) ->
+    case element(1, Result) of
+        ok -> ok;
+        _ -> Result
+    end.
 
 
 %% @private

@@ -39,21 +39,14 @@ test_get_acl(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun
-            F(guid, Node, SessionId, FileKey) ->
-                lfm_proxy:get_acl(Node, SessionId, FileKey);
-            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
-            end,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:get_acl(Node, SessionId, FileKey)
+        end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
-            space_archives_root_dir, dataset_archives_root_dir, archive_dir
-        ],
-        special_dirs_error = {error, ?EPERM}
+        allowed_special_dirs = [space_dir]
     }).
 
 
@@ -70,27 +63,21 @@ test_set_acl(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun
-            F(guid, Node, SessionId, FileKey) ->
-                lfm_proxy:set_acl(Node, SessionId, FileKey, [
-                    ?ALLOW_ACE(
-                        ?group,
-                        ?no_flags_mask,
-                        authz_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
-                    )
-                ]);
-            F(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-                FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-                F(guid, Node, SessionId, maps:get(FilePath, ExtraData))
-            end,
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
+            lfm_proxy:set_acl(Node, SessionId, FileKey, [
+                ?ALLOW_ACE(
+                    ?group,
+                    ?no_flags_mask,
+                    authz_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
+                )
+            ])
+        end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        forbidden_special_dirs = [
-            user_root_dir, trash, tmp_dir, opened_deleted_files_dir, share_container,
-            space_archives_root_dir, dataset_archives_root_dir, archive_dir
-        ],
-        special_dirs_error = {error, ?EPERM}
+        allowed_special_dirs = [space_dir],
+        special_dirs_ok_value = {error, ?EACCES} % space dir does not have required perms set
     }).
 
 
@@ -108,11 +95,12 @@ test_remove_acl(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:remove_acl(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        allowed_special_dirs = [space_dir],
+        special_dirs_ok_value = {error, ?EACCES} % space dir does not have required perms set
     }).

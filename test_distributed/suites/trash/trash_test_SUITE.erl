@@ -47,7 +47,7 @@
     add_qos_entry_for_trash_dir_is_forbidden/1,
     remove_metadata_on_trash_dir_is_forbidden/1,
     schedule_replication_transfer_on_trash_dir_is_forbidden/1,
-    schedule_eviction_transfer_on_trash_dir_is_allowed/1,
+    schedule_eviction_transfer_on_trash_dir_is_forbidden/1,
     schedule_migration_transfer_on_trash_dir_is_forbidden/1,
     schedule_replication_transfer_on_space_does_not_replicate_trash/1,
     schedule_eviction_transfer_on_space_evicts_trash/1,
@@ -84,7 +84,7 @@ all() -> ?ALL([
     add_qos_entry_for_trash_dir_is_forbidden,
     remove_metadata_on_trash_dir_is_forbidden,
     schedule_replication_transfer_on_trash_dir_is_forbidden,
-    schedule_eviction_transfer_on_trash_dir_is_allowed,
+    schedule_eviction_transfer_on_trash_dir_is_forbidden,
     schedule_migration_transfer_on_trash_dir_is_forbidden,
     schedule_replication_transfer_on_space_does_not_replicate_trash,
     schedule_eviction_transfer_on_space_evicts_trash,
@@ -257,14 +257,12 @@ schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     ?assertMatch(?ERR_FORBIDDEN,
         opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P2Id)).
 
-schedule_eviction_transfer_on_trash_dir_is_allowed(_Config) ->
+schedule_eviction_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
-    {ok, TransferId} = ?assertMatch({ok, _},
-        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, undefined)),
-    ?assertMatch({ok, #document{value = #transfer{eviction_status = completed}}},
-        rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
+    ?assertMatch(?ERR_FORBIDDEN,
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, undefined)).
 
 schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
