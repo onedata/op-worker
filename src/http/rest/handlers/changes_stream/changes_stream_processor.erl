@@ -6,7 +6,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Processor for changes stream events.
+%%%
+%%% This module is responsible for processing changes stream events.
+%%% It handles:
+%%% - Processing changed documents
+%%% - Gathering changes from related documents
+%%% - Formatting response data
+%%%
+%%% For detailed documentation about changes stream functionality,
+%%% see changes_stream.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(changes_stream_processor).
@@ -14,10 +23,6 @@
 
 -include("http/changes_stream.hrl").
 -include("middleware/middleware.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([process_doc/3]).
@@ -48,11 +53,6 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% TODO WRITEME?
-%% @end
-%%--------------------------------------------------------------------
 -spec process_doc(user_ctx:ctx(), datastore:doc(), changes_monitoring_spec()) ->
     ok | {ok, json_utils:json_map()}.
 process_doc(UserCtx, ChangedDoc, ChangesMonitoringSpec) ->
@@ -111,8 +111,8 @@ get_file_object_id(FileCtx) ->
     try
         {ok, ObjectId} = file_id:guid_to_objectid(file_ctx:get_logical_guid_const(FileCtx)),
         ObjectId
-    catch _:Error1 ->
-        ?debug("Cannot fetch cdmi id for changes, error: ~tp", [Error1]),
+    catch _:Reason ->
+        ?debug("Cannot fetch cdmi id for changes, error: ~tp", [Reason]),
         <<>>
     end.
 
@@ -123,8 +123,8 @@ get_file_path(FileCtx) ->
     try
         {Path, _} = file_ctx:get_canonical_path(FileCtx),
         Path
-    catch _:Error2 ->
-        ?debug("Cannot fetch Path for changes, error: ~tp", [Error2]),
+    catch _:Reason ->
+        ?debug("Cannot fetch Path for changes, error: ~tp", [Reason]),
         <<>>
     end.
 

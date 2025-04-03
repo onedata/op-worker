@@ -6,7 +6,13 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Parser for changes stream requests.
+%%%
+%%% This module is responsible for parsing HTTP requests for changes stream.
+%%% It builds #changes_monitoring_spec record based on request parameters and body.
+%%%
+%%% For detailed documentation about changes stream functionality,
+%%% see changes_stream.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(changes_stream_parser).
@@ -70,7 +76,7 @@ read_arguments(Req) ->
 -spec parse_timeout(json_utils:json_map()) -> infinity | integer() | no_return().
 parse_timeout(Arguments) ->
     case maps:get(<<"timeout">>, Arguments, ?DEFAULT_TIMEOUT) of
-        <<"infinity">> ->
+        ?DEFAULT_TIMEOUT ->
             infinity;
         NumberBin ->
             parse_integer(<<"timeout">>, NumberBin)
@@ -83,7 +89,7 @@ parse_timeout(Arguments) ->
 parse_start_at_seq(SpaceId, Arguments) ->
     Key = <<"startAtSeq">>,
     case maps:get(Key, Arguments, maps:get(<<"last_seq">>, Arguments, ?DEFAULT_LAST_SEQ)) of
-        <<"now">> ->
+        ?DEFAULT_LAST_SEQ ->
             dbsync_state:get_seq(SpaceId, oneprovider:get_id());
         NumberBin ->
             parse_integer(Key, NumberBin)

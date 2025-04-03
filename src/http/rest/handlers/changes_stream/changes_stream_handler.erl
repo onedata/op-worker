@@ -1,104 +1,22 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2016-2019 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2025 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Handler for streaming changes happening to `file_meta`, `file_location`,
-%%% `times` or `custom_metadata` in scope of given space.
+%%% HTTP handler for changes stream.
 %%%
-%%% Possible fields to observe are shown below.
+%%% This module is responsible for handling:
+%%% - HTTP request/response
+%%% - Authorization
+%%% - Stream lifecycle
+%%% - Event delivery
 %%%
-%%% fileMeta:
-%%%     - name
-%%%     - type
-%%%     - mode
-%%%     - owner
-%%%     - group_owner
-%%%     - provider_id
-%%%     - shares
-%%%     - deleted
-%%%
-%%% fileLocation:
-%%%     - provider_id
-%%%     - storage_id
-%%%     - size
-%%%     - space_id
-%%%     - storage_file_created
-%%%
-%%% times:
-%%%     - atime
-%%%     - mtime
-%%%     - ctime
-%%%
-%%% customMetadata:
-%%%     - onedata_json
-%%%     - onedata_rdf
-%%%     - onedata_keyvalue
-%%%     ...
-%%%
-%%% In case of `file_meta`, `file_location` and `times` fields corresponds
-%%% one to one to those held in records. As for `custom_metadata` elements
-%%% from `value` map field in record can be requested. One additional metakey
-%%% named `onedata_keyvalue` can be used to observe all elements beside
-%%% `onedata_json` and `onedata_rdf`.
-%%%
-%%% To open stream user must specify records to observe and either
-%%% fields to return (`fields`), fields for which check existence
-%%% (`exists` - only possible for `customMetadata`),
-%%% whether information about this record should be send always or
-%%% on this record changes only (`always` boolean flag with default value
-%%% being 'false' - not sending information on other docs changes).
-%%% Optionally `triggers`, that is list of documents whose changes
-%%% triggers sending events, can also be specified.
-%%%
-%%% <record>:
-%%%     [fields: <fields>]
-%%%     [exists: <fields>]
-%%%     [always: boolean()]
-%%%
-%%% Response will include beside requested information also additional metadata
-%%% like fileId, filePath, seq and mutators, rev, deleted, changed for each doc.
-%%%
-%%% EXAMPLE REQUEST:
-%%%
-%%% triggers:
-%%%     - fileMeta,
-%%%     - times
-%%% fileMeta:
-%%%     fields: [owner]
-%%% customMetadata:
-%%%     fields: [onedata_rdf]
-%%%     exists: [onedata_json]
-%%%     always: true
-%%%
-%%% EXAMPLE RESPONSE:
-%%%
-%%% fileId: 00000000002C66ED677569642361626562383736303665323765313
-%%% filePath: space1/my/file
-%%% seq: 100
-%%% fileMeta:
-%%%     rev: 2-c500a5eb026d9474429903d47841f9c5
-%%%     mutators: ["p1.1542789098.test"]
-%%%     changed: true
-%%%     deleted: false
-%%%     fields:
-%%%         owner: john
-%%% customMetadata:
-%%%     rev: 1-09f941b4e8452ef6a244c5181d894814
-%%%     mutators: ["p1.1542789098.test"]
-%%%     changed: false
-%%%     deleted: false
-%%%     exists:
-%%%         onedata_rdf: true
-%%%     fields:
-%%%         onedata_json:
-%%%             name1: value1
-%%%             name2: value2
-%%%
+%%% For detailed documentation about changes stream functionality,
+%%% see changes_stream.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(changes_stream_handler).
@@ -107,9 +25,6 @@
 
 -include("http/changes_stream.hrl").
 -include("middleware/middleware.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 %% API
