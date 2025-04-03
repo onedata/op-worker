@@ -88,7 +88,6 @@ get_file_ctx(ChangedDoc = #document{value = #times{}}, ChangesMonitoringSpec) ->
         ChangesMonitoringSpec#changes_monitoring_spec.space_id
     );
 get_file_ctx(ChangedDoc = #document{value = #file_meta{}}, ChangesMonitoringSpec) ->
-    %% TODO? doc from changes could be old and as such it is debatable if it should be used in ctx (e.g. for perm checks)
     file_ctx:new_by_doc(
         ChangedDoc,
         ChangesMonitoringSpec#changes_monitoring_spec.space_id
@@ -247,7 +246,6 @@ get_record_changes(#document{
 
     Fields = lists:foldl(fun
         ({<<"name">>, _FieldIndex}, Acc) ->
-            %% TODO update file_ctx?
             {FileName, _NewFileCtx} = file_ctx:get_aliased_name(FileCtx, UserCtx),
             Acc#{<<"name">> => FileName};
         ({FieldName, FieldIndex}, Acc) ->

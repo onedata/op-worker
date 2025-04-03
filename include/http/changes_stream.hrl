@@ -181,12 +181,8 @@
 
     timeout :: infinity | integer(),
     start_after_seq :: null | integer(),
-    %% TODO implement
-%%    finish_at_seq :: null | integer(),
 
     triggers :: changes_stream_processor:triggers(),
-    %% TODO implement
-%%    observed_directories :: [file_id:file_guid()],
     doc_monitoring_specs :: [changes_stream_processor:doc_monitoring_spec()]
 }).
 

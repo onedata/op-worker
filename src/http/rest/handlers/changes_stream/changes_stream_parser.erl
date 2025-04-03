@@ -143,7 +143,7 @@ parse_doc_monitoring_specs(Arguments) ->
     end, [], ?OBSERVABLE_DOCUMENTS),
 
     case DocMonitoringSpecs of
-        [] -> throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"changesSpecification">>));
+        [] -> throw(?ERR_MISSING_AT_LEAST_ONE_VALUE(?err_ctx(), ?OBSERVABLE_DOCUMENTS));
         _ -> DocMonitoringSpecs
     end.
 
@@ -167,12 +167,12 @@ parse_doc_monitoring_spec(DocName = <<"fileLocation">>, RawSpec) ->
 
 parse_doc_monitoring_spec(DocName = <<"times">>, RawSpec) ->
     #doc_monitoring_spec{
-        doc_type = file_location,
+        doc_type = times,
         always_include_in_other_docs_changes = parse_always_flag(DocName, RawSpec),
         observed_fields_for_values = parse_fields(DocName, maps:get(<<"fields">>, RawSpec, []))
     };
 
-parse_doc_monitoring_spec(DocName = <<"times">>, RawSpec) ->
+parse_doc_monitoring_spec(DocName = <<"customMetadata">>, RawSpec) ->
     Fields = maps:get(<<"fields">>, RawSpec, []),
     Exists = maps:get(<<"exists">>, RawSpec, []),
     case {is_list(Fields), is_list(Exists)} of

@@ -187,7 +187,11 @@ authorize(Req, ?USER(UserId) = Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_stream(State :: map()) -> map().
-init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = State) ->
+init_stream(State = #{changes_monitoring_spec := #changes_monitoring_spec{
+    start_after_seq = Since,
+    space_id = SpaceId,
+    triggers = Triggers
+}}) ->
     ?info("[ changes ]: Starting stream ~tp", [Since]),
     Ref = make_ref(),
     Pid = self(),
@@ -215,10 +219,11 @@ init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = St
 -spec stream_loop(cowboy_req:req(), map()) -> ok.
 stream_loop(Req, State = #{
     changes_stream := Stream,
-    timeout := Timeout,
     ref := Ref,
     auth := SessionId,
-    changes_monitoring_spec := ChangesMonitoringSpec
+    changes_monitoring_spec := ChangesMonitoringSpec = #changes_monitoring_spec{
+        timeout = Timeout
+    }
 }) ->
     receive
         {Ref, stream_ended} ->
