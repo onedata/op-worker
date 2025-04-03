@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% It is a virtual directory (there are no associated documents in the db).
-%%% It is used in 'open_handle' mode. In that  mode listing space directory
+%%% It is used only in 'public_data' mode. In that  mode listing space directory
 %%% returns list of share root dirs instead of regular files/dirs in the space so
 %%% that only shared content can be viewed (from this point down the tree the context
 %%% is changed to shared one). In the future it will be used as mount root when

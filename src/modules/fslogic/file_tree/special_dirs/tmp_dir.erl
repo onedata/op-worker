@@ -78,8 +78,10 @@ ensure_exists(SpaceId) ->
         uuid(SpaceId), ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE,
         ?SPACE_OWNER_ID(SpaceId), space_dir:uuid(SpaceId), SpaceId, true
     ),
-    special_dir_docs:create(SpaceId, TmpDirDoc, add_link),
-    ok.
+    case special_dir_docs:create(SpaceId, TmpDirDoc, add_link) of
+        created -> ?info("Created tmp directory for space '~ts'.", [SpaceId]);
+        exists -> ok
+    end.
 
 
 -spec ensure_tmp_dir_link_exists(od_space:id()) -> ok.

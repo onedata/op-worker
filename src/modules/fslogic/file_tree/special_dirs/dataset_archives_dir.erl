@@ -66,8 +66,10 @@ ensure_exists(DatasetId, SpaceId) ->
         ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
     space_archives_dir:ensure_exists(SpaceId),
-    special_dir_docs:create(SpaceId, FMDoc, add_link),
-    ok.
+    case special_dir_docs:create(SpaceId, FMDoc, add_link) of
+        created -> ?info("Created dataset archives directory for dataset '~ts'.", [DatasetId]);
+        exists -> ok
+    end.
 
 
 -spec ensure_parent_link_exists(dataset:id(), od_space:id()) -> ok.

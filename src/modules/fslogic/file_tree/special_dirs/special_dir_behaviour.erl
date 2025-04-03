@@ -34,6 +34,8 @@
 
 -callback is_included_in_events() -> boolean().
 
+% logically detached means that for all user-related purposes it acts as an independent(detached) subtree,
+% however it has a parent in metadata (for technical reasons).
 -callback is_logically_detached() -> boolean().
 
 -callback exists(file_meta:uuid()) -> boolean().

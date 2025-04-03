@@ -20,6 +20,7 @@
 -dialyzer({nowarn_function, allowed_operations/0}).
 
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % API
 -export([uuid/1, guid/1, ensure_exists/1]).
@@ -70,6 +71,7 @@ ensure_exists(SpaceId) ->
     ),
     case special_dir_docs:create(SpaceId, Doc, add_link) of
         created ->
+            ?info("Created directory for opened deleted files in space '~ts'.", [SpaceId]),
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, tmp_dir:guid(SpaceId));
         exists ->
             ok

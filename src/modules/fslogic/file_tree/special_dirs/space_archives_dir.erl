@@ -68,8 +68,10 @@ ensure_exists(SpaceId) ->
     FMDoc = file_meta:new_dir_doc(uuid(SpaceId), ?SPACE_ARCHIVES_DIR_NAME, ?SPACE_ARCHIVES_DIR_PERMS,
         ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
-    special_dir_docs:create(SpaceId, FMDoc, add_link),
-    ok.
+    case special_dir_docs:create(SpaceId, FMDoc, add_link) of
+        created -> ?info("Created space archives directory for space '~ts'.", [SpaceId]);
+        exists -> ok
+    end.
 
 
 -spec is_special(uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().

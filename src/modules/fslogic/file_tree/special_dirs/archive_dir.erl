@@ -86,8 +86,10 @@ ensure_exists(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
         ArchiveCreatorId, ParentUuid, SpaceId
     ),
     dataset_archives_dir:ensure_exists(DatasetId, SpaceId),
-    special_dir_docs:create(SpaceId, FMDoc, add_link),
-    ok.
+    case special_dir_docs:create(SpaceId, FMDoc, add_link) of
+        created -> ?info("Created archive directory for archive '~ts'.", [ArchiveId]);
+        exists -> ok
+    end.
 
 
 %%%===================================================================
