@@ -691,8 +691,18 @@ mock_share_logic(Config) ->
     test_utils:mock_expect(Workers, share_logic, get, fun(_Auth, ShareId) ->
         od_share:get_from_cache(ShareId)
     end),
+    test_utils:mock_expect(Workers, share_logic, get_public_data, fun(_Auth, ShareId) ->
+        od_share:get_from_cache(ShareId)
+    end),
+    test_utils:mock_expect(Workers, share_logic, get_handle, fun(_Auth, ShareId) ->
+        {ok, #document{value = #od_share{handle = HandleId}}} = od_share:get_from_cache(ShareId),
+        {ok, HandleId}
+    end),
     test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
         ok = od_share:invalidate_cache(ShareId)
+    end),
+    test_utils:mock_expect(Workers, handle_logic, delete, fun(_Auth, HandleId) ->
+        ok = od_handle:invalidate_cache(HandleId)
     end),
     test_utils:mock_expect(Workers, share_logic, update, fun(Auth, ShareId, Data) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
