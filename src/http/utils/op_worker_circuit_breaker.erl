@@ -19,7 +19,7 @@
 -define(THROTTLE_LOG(Log), utils:throttle({?MODULE, ?FUNCTION_NAME}, timer:minutes(5), fun() -> Log end)).
 
 %% API
--export([assert_closed/0]).
+-export([assert_closed/0, toggle/1]).
 
 %%%===================================================================
 %%% API
@@ -34,5 +34,25 @@ assert_closed() ->
             )),
             throw(?ERR_SERVICE_UNAVAILABLE(?err_ctx()));
         closed ->
+            ok
+    end.
+
+
+-spec toggle(open | closed) -> ok.
+toggle(NewState) ->
+    PrevState = op_worker:get_env(service_circuit_breaker_state, closed),
+    op_worker:set_env(service_circuit_breaker_state, NewState),
+    case {PrevState, NewState} of
+        {open, closed} ->
+            ?notice(
+                "The circuit breaker has been set to 'closed', all services resume operation - "
+                "consult Onepanel logs for details"
+            );
+        {closed, open} ->
+            ?emergency(
+                "The circuit breaker has been set to 'open', ALL SERVICES HAVE BEEN DISABLED - "
+                "consult Onepanel logs for details"
+            );
+        {Same, Same} ->
             ok
     end.

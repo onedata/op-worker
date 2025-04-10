@@ -26,14 +26,16 @@
 -export([
     create_handle_test/1,
     get_public_handle_data_test/1,
-    update_handle_test/1
+    update_handle_test/1,
+    delete_handle_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         create_handle_test,
         get_public_handle_data_test,
-        update_handle_test
+        update_handle_test,
+        delete_handle_test
     ]}
 ].
 
@@ -41,14 +43,16 @@ all() -> [
     {group, all_tests}
 ].
 
--define(SPACE_OWNER_AND_HS_MEMBER, space_owner).
--define(NON_SPACE_MEMBER_AND_HS_ADMIN, handle_service_admin).
--define(SPACE_MEMBER_AND_NON_HS_MEMBER, space_member).
+-define(SPACE_OWNER_AND_HS_MEMBER, user2).
+-define(NON_SPACE_MEMBER_AND_HS_ADMIN, user1).
+-define(SPACE_MEMBER_AND_NON_HS_MEMBER, user4).
 -define(NON_SPACE_MEMBER_AND_NON_HS_MEMBER, non_space_member).
 
--define(PROVIDER_SELECTOR, krakow).
--define(SPACE_SELECTOR, space_krk).
+-define(PROVIDERS, [krakow, paris]).
+-define(SPACE_SELECTOR, space_krk_par).
 -define(METADATA_PREFIX, <<"oai_dc">>).
+
+-define(ATTEMPTS, 30).
 
 
 %%%===================================================================
@@ -59,7 +63,7 @@ all() -> [
 create_handle_test(_Config) ->
     HServiceId = hd(ozt_handle_services:list_handle_services()),
     MemRef = api_test_memory:init(),
-    Metadata = ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1),
+    Metadata = opt_handles:example_metadata_variant(?METADATA_PREFIX, 1),
 
     ValidateResultFun = fun(_, {ok, #{
         <<"handleService">> := HServiceInDb,
@@ -70,7 +74,7 @@ create_handle_test(_Config) ->
         ExpectedHService = gri:serialize(#gri{
             type = op_handle_service, id = HServiceId, aspect = instance, scope = public
         }),
-        ExpectedMetadata = ozt_handles:expected_metadata_after_publication(Metadata, Url),
+        ExpectedMetadata = opt_handles:expected_metadata_after_publication(Metadata, Url),
 
         ?assertMatch(
             {ExpectedHService, ?METADATA_PREFIX, ExpectedMetadata},
@@ -79,7 +83,7 @@ create_handle_test(_Config) ->
     end,
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = [?PROVIDER_SELECTOR],
+            target_nodes = ?PROVIDERS,
             client_spec = #client_spec{
                 correct = [?SPACE_OWNER_AND_HS_MEMBER],
                 unauthorized = [nobody],
@@ -147,16 +151,15 @@ build_create_handle_teardown_fun(MemRef) ->
 
 
 get_public_handle_data_test(_Config) ->
+    Provider = ?RAND_ELEMENT(?PROVIDERS),
     HServiceId = hd(ozt_handle_services:list_handle_services()),
     #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
-    Metadata = ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1),
-    HandleId = ozt_handles:create(
-        ?PROVIDER_SELECTOR, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata
-    ),
-    PublicHandle = opt_handles:get_public_handle_url(?PROVIDER_SELECTOR, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
+    Metadata = opt_handles:example_metadata_variant(?METADATA_PREFIX, 1),
+    HandleId = opt_handles:create(Provider, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata),
+    PublicHandleUrl = opt_handles:get_public_handle_url(Provider, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
 
     ValidateResultFun = fun(_, {ok, Result}) ->
-        ExpectedHandleData =  #{
+        ExpectedHandleData = #{
             <<"gri">> => gri:serialize(#gri{
                 type = op_handle, id = HandleId, aspect = instance, scope = public
             }),
@@ -164,16 +167,16 @@ get_public_handle_data_test(_Config) ->
                 type = op_handle_service, id = HServiceId, aspect = instance, scope = public
             }),
             <<"metadataPrefix">> => ?METADATA_PREFIX,
-            <<"metadataString">> => ozt_handles:expected_metadata_after_publication(Metadata, PublicHandle),
+            <<"metadataString">> => opt_handles:expected_metadata_after_publication(Metadata, PublicHandleUrl),
             <<"revision">> => 1,
-            <<"url">> => PublicHandle
+            <<"url">> => PublicHandleUrl
         },
 
         ?assertEqual(ExpectedHandleData, Result)
     end,
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = [?PROVIDER_SELECTOR],
+            target_nodes = ?PROVIDERS,
             client_spec = #client_spec{
                 correct = [
                     ?SPACE_OWNER_AND_HS_MEMBER, ?NON_SPACE_MEMBER_AND_HS_ADMIN,
@@ -206,29 +209,34 @@ get_handle_prepare_gs_args_fun(HandleId) ->
 
 update_handle_test(_Config) ->
     MemRef = api_test_memory:init(),
-    MetadataAfterUpdate = ozt_handles:example_metadata_variant(?METADATA_PREFIX, 2),
+    MetadataAfterUpdate = opt_handles:example_metadata_variant(?METADATA_PREFIX, 2),
 
     ValidateResultFun = fun(_, ok) ->
         HandleId = api_test_memory:get(MemRef, handle_id),
-        PublicHandle = opt_handles:get_public_handle_url(?PROVIDER_SELECTOR, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
-        #document{value = #od_handle{
-            metadata = MetadataInDbAfterUpdate
-        }} = opt_handles:get(?PROVIDER_SELECTOR, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
-        ExpectedMetadata = ozt_handles:expected_metadata_after_publication(MetadataAfterUpdate, PublicHandle),
-        ?assertEqual(ExpectedMetadata, MetadataInDbAfterUpdate)
+        PublicHandleUrl = opt_handles:get_public_handle_url(
+            ?RAND_ELEMENT(?PROVIDERS), ?SPACE_OWNER_AND_HS_MEMBER, HandleId
+        ),
+        ExpectedMetadata = opt_handles:expected_metadata_after_publication(MetadataAfterUpdate, PublicHandleUrl),
+        lists:foreach(fun(Provider) ->
+            ?assertEqual(
+                ExpectedMetadata,
+                opt_handles:get_metadata(Provider, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
+                ?ATTEMPTS
+            )
+        end, ?PROVIDERS)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = [?PROVIDER_SELECTOR],
+            target_nodes = ?PROVIDERS,
             client_spec = #client_spec{
                 correct = [?SPACE_OWNER_AND_HS_MEMBER, ?NON_SPACE_MEMBER_AND_HS_ADMIN],
                 unauthorized = [nobody],
                 forbidden_in_space = [?SPACE_MEMBER_AND_NON_HS_MEMBER],
                 forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
             },
-            setup_fun = build_update_handle_setup_fun(
-                MemRef, ozt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+            setup_fun = build_update_delete_handle_setup_fun(
+                MemRef, opt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
             ),
             scenario_templates = [
                 #scenario_template{
@@ -249,16 +257,17 @@ update_handle_test(_Config) ->
 
 
 %% @private
--spec build_update_handle_setup_fun(api_test_memory:mem_ref(), od_handle:metadata()) ->
+-spec build_update_delete_handle_setup_fun(api_test_memory:mem_ref(), od_handle:metadata()) ->
     onenv_api_test_runner:setup_fun().
-build_update_handle_setup_fun(MemRef, Metadata) ->
+build_update_delete_handle_setup_fun(MemRef, Metadata) ->
     fun() ->
         HServiceId = hd(ozt_handle_services:list_handle_services()),
         #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
-        HandleId = ozt_handles:create(
-            ?PROVIDER_SELECTOR, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata
+        HandleId = opt_handles:create(
+            ?RAND_ELEMENT(?PROVIDERS), ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata
         ),
-        api_test_memory:set(MemRef, handle_id, HandleId)
+        api_test_memory:set(MemRef, handle_id, HandleId),
+        api_test_memory:set(MemRef, share_id, ShareId)
     end.
 
 
@@ -278,6 +287,60 @@ update_handle_prepare_gs_args_fun(MemRef) ->
     end.
 
 
+delete_handle_test(_Config) ->
+    MemRef = api_test_memory:init(),
+
+    ValidateResultFun = fun(_, ok) ->
+        HandleId = api_test_memory:get(MemRef, handle_id),
+        ShareId = api_test_memory:get(MemRef, share_id),
+        lists:foreach(fun(Provider) ->
+            SessId = oct_background:get_user_session_id(?SPACE_OWNER_AND_HS_MEMBER, Provider),
+            ?assertEqual(?ERROR_NOT_FOUND, ?rpc(Provider, handle_logic:get_public_data(SessId, HandleId)), ?ATTEMPTS),
+            ?assertEqual({ok, undefined}, ?rpc(Provider, share_logic:get_handle(SessId, ShareId)), ?ATTEMPTS)
+        end, ?PROVIDERS)
+    end,
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?PROVIDERS,
+            client_spec = #client_spec{
+                correct = [?SPACE_OWNER_AND_HS_MEMBER, ?NON_SPACE_MEMBER_AND_HS_ADMIN],
+                unauthorized = [nobody],
+                forbidden_in_space = [?SPACE_MEMBER_AND_NON_HS_MEMBER],
+                forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
+            },
+            setup_fun = build_update_delete_handle_setup_fun(
+                MemRef, opt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+            ),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Delete handle using gs api">>,
+                    type = gs,
+                    prepare_args_fun = delete_handle_prepare_gs_args_fun(MemRef),
+                    validate_result_fun = ValidateResultFun
+                }
+            ]
+        }
+    ])).
+
+
+%% @private
+-spec delete_handle_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+    onenv_api_test_runner:gs_args().
+delete_handle_prepare_gs_args_fun(MemRef) ->
+    fun(#api_test_ctx{}) ->
+        #gs_args{
+            operation = delete,
+            gri = #gri{
+                type = op_handle,
+                id = api_test_memory:get(MemRef, handle_id),
+                aspect = instance,
+                scope = private
+            }
+        }
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -290,7 +353,7 @@ create_and_sync_shared_file_of_random_type() ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FileSpec = case FileType of
         <<"file">> -> #file_spec{shares = ShareSpecs};
-        <<"dir">> ->  #dir_spec{shares = ShareSpecs}
+        <<"dir">> -> #dir_spec{shares = ShareSpecs}
     end,
     onenv_file_test_utils:create_and_sync_file_tree(
         ?SPACE_OWNER_AND_HS_MEMBER, ?SPACE_SELECTOR, FileSpec
@@ -303,17 +366,13 @@ create_and_sync_shared_file_of_random_type() ->
 
 
 init_per_suite(Config) ->
-    LoadModules = [opt_handles, ozt_handles, ozt_handle_services],
+    LoadModules = [opt_handles, ozt_handle_services],
     opt:init_per_suite([{?LOAD_MODULES, LoadModules} | Config], #onenv_test_config{
-        onenv_scenario = "1op-handle-proxy",
+        onenv_scenario = "api_tests_handle_proxy",
         posthook = fun(NewConfig) ->
             % make sure there are no remnants from the previous test runs
-            ozt_handle_services:remove_user_from_all_handle_services(
-                ?SPACE_OWNER_AND_HS_MEMBER, ?PROVIDER_SELECTOR
-            ),
-            ozt_handle_services:remove_user_from_all_handle_services(
-                ?NON_SPACE_MEMBER_AND_HS_ADMIN, ?PROVIDER_SELECTOR
-            ),
+            ozt_handle_services:remove_user_from_all_handle_services(?SPACE_OWNER_AND_HS_MEMBER),
+            ozt_handle_services:remove_user_from_all_handle_services(?NON_SPACE_MEMBER_AND_HS_ADMIN),
 
             ozt_handle_services:add_user_to_all_handle_services(?SPACE_OWNER_AND_HS_MEMBER),
             ozt_handle_services:add_user_to_all_handle_services(

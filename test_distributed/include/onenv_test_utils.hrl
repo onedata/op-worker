@@ -91,7 +91,8 @@ end)).
 
 -record(share_spec, {
     name = <<"share">> :: binary(),
-    description = <<>> :: binary()
+    description = <<>> :: binary(),
+    has_handle = false :: boolean()
 }).
 
 
@@ -122,7 +123,8 @@ end)).
     name :: binary(),
     type :: onedata_file:type(),
     mode :: file_meta:mode(),
-    shares :: [od_share:id()],
+    shares = [] :: [od_share:id()],
+    handles = #{} :: #{od_share:id() => od_handle:id()},
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_object(),
     content = undefined :: undefined | binary(),  % set only for files
     children = undefined :: undefined | [onenv_file_test_utils:object()],  % set only for dirs
