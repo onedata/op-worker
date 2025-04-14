@@ -189,6 +189,8 @@ get(FileDoc = #document{key = FileUuid}, true = _CheckInvalidateOnDatasetsGetFla
     get(FileDoc, false);
 get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFlag) ->
     case special_dirs:is_affected_by_protection_flags(FileUuid) of
+        false ->
+            {ok, #entry{}};
         true ->
             {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
             CacheName = ?CACHE_NAME(SpaceId),
@@ -211,9 +213,7 @@ get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFl
                     {ok, Entry};
                 {error, ?MISSING_FILE_META(_)} ->
                     ?ERROR_NOT_FOUND
-            end;
-        false ->
-            {ok, #entry{}}
+            end
     end.
 
 %%%===================================================================

@@ -79,7 +79,7 @@ ensure_exists(SpaceId) ->
         ?SPACE_OWNER_ID(SpaceId), space_dir:uuid(SpaceId), SpaceId, true
     ),
     case special_dir_docs:create(SpaceId, TmpDirDoc, add_link) of
-        created -> ?info("Created tmp directory for space '~ts'.", [SpaceId]);
+        created -> ?info("Created tmp directory for space '~ts'", [SpaceId]);
         exists -> ok
     end.
 

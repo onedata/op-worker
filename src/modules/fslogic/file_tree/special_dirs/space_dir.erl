@@ -82,7 +82,7 @@ guid(SpaceId) ->
 -spec ensure_exists(binary()) -> ok.
 ensure_exists(SpaceId) ->
     case special_dir_docs:create(SpaceId, ?FILE_META_DOC(SpaceId), add_link) of
-        created -> ?info("Created space directory for space '~ts'.", [SpaceId]);
+        created -> ?info("Created space directory for space '~ts'", [SpaceId]);
         exists -> ok
     end.
 

@@ -171,12 +171,9 @@
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
     %               following tuple ?FILE_REF(FileGuid), which is required by framework.
-    % In case of guid mode (used for special dirs tests) it takes FileKey to tested file, instead of Path and ExtraData.
-    operation ::
-        fun((node(), session:id(), file_meta:path(), map()) ->
-            ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}) |
-        fun((guid, node(), session:id(), lfm:file_key()) ->
-            ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}),
+    operation :: fun((node(), session:id(), file_meta:path(), map()) ->
+        ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()} | {error, term()}
+    ),
 
     % Tells whether failed operation returns:
     % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl
@@ -193,7 +190,7 @@
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
     ),
 
-    allowed_special_dirs = [] :: undefined | [module()],
+    allowed_special_dirs = [] :: undefined | [module()], % undefined when testcase is not applicable for special dirs
     special_dirs_ok_value = ok :: ok | errors:error()
 }).
 

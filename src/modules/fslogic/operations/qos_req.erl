@@ -226,7 +226,7 @@ add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    {ok, QosEntryId} = Result = qos_entry:create_impossible_qos(SpaceId, InodeUuid, QosExpression,
+    {ok, QosEntryId} = Result = qos_entry:create_impossible(SpaceId, InodeUuid, QosExpression,
         ReplicasNum, EntryType),
     ok = file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
     Result.

@@ -92,7 +92,7 @@ ensure_exists(SpaceId) ->
     %  * remember to filter trash from list result in storage_import_deletion or replica_controller, tree_traverse, etc
     %  * maybe there should be option passed to file_meta_forest:list that would exclude trash from the result
     case special_dir_docs:create(SpaceId, prepare_doc(SpaceId), no_link) of
-        created -> ?info("Created trash directory for space '~ts'.", [SpaceId]);
+        created -> ?info("Created trash directory for space '~ts'", [SpaceId]);
         exists -> ok
     end.
 

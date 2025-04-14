@@ -69,7 +69,7 @@ ensure_exists(SpaceId) ->
         ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId
     ),
     case special_dir_docs:create(SpaceId, FMDoc, add_link) of
-        created -> ?info("Created space archives directory for space '~ts'.", [SpaceId]);
+        created -> ?info("Created space archives directory for space '~ts'", [SpaceId]);
         exists -> ok
     end.
 

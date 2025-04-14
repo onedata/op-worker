@@ -71,7 +71,7 @@ ensure_exists(SpaceId) ->
     ),
     case special_dir_docs:create(SpaceId, Doc, add_link) of
         created ->
-            ?info("Created directory for opened deleted files in space '~ts'.", [SpaceId]),
+            ?info("Created directory for opened deleted files in space '~ts'", [SpaceId]),
             dir_size_stats:report_file_created(?DIRECTORY_TYPE, tmp_dir:guid(SpaceId));
         exists ->
             ok

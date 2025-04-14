@@ -12,8 +12,10 @@
 %%%
 %%% When links are created for a parent of a special dir they must be created on
 %%% all providers, because there can be race on creation as uuid is known - this
-%%% can result in broken children listing.
-%%5
+%%% can result in broken children listing - this means that provider encountering
+%%% a special dir and ensuring its existence should also ensure existence of such
+%%% link.
+%%%
 %%% @TODO VFS-12229 - implement allowed_operations for special dirs subtree
 %%% @TODO VFS-12233 - properly handle special dirs deletion
 %%% @end

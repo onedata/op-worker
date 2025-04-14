@@ -451,9 +451,12 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
         false ->
             case file_ctx:is_imported_storage(FileCtx) of
                 {true, FileCtx2} ->
-                    {ParentCtx, FileCtx3} = file_tree:get_parent(FileCtx2, UserCtx),
-                    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
-                    deletion_marker:add(ParentUuid, FileCtx3);
+                    case file_tree:get_parent_guid_if_not_logically_detached(FileCtx2, UserCtx) of
+                        {undefined, FileCtx3} ->
+                            FileCtx3;
+                        {ParentGuid, FileCtx3} ->
+                            deletion_marker:add(file_id:guid_to_uuid(ParentGuid), FileCtx3)
+                    end;
                 {false, FileCtx2} ->
                     FileCtx2
             end

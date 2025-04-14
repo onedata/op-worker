@@ -1582,11 +1582,8 @@ exec_operation(#authz_test_case_ctx{
 -spec check_operation_result(ok | tuple() | {error, term()}) ->
     ok | {error, term()}.
 check_operation_result(ok) -> ok;
-check_operation_result(Result) when is_tuple(Result) ->
-    case element(1, Result) of
-        ok -> ok;
-        _ -> Result
-    end.
+check_operation_result(Result) when is_tuple(Result) andalso element(1, Result) == ok -> ok;
+check_operation_result(Result) -> Result.
 
 
 %% @private

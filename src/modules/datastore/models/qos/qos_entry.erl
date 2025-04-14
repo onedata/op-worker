@@ -38,7 +38,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([create_impossible_qos/5, create/7, get/1, delete/1]).
+-export([create_impossible/5, create/7, get/1, delete/1]).
 
 %% higher-level functions operating on qos_entry document
 -export([get_space_id/1, get_file_guid/1]).
@@ -111,9 +111,9 @@
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
--spec create_impossible_qos(od_space:id(), file_meta:uuid(), qos_expression:expression(),
+-spec create_impossible(od_space:id(), file_meta:uuid(), qos_expression:expression(),
     replicas_num(), type()) -> {ok, id()} | {error, term()}.
-create_impossible_qos(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
+create_impossible(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
     create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, impossible,
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 

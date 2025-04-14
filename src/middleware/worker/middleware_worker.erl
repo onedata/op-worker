@@ -181,7 +181,6 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
                     false -> ?ERR_SERVICE_UNAVAILABLE(?err_ctx())
                 end
         end
-
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;
