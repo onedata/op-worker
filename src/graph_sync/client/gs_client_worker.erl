@@ -106,7 +106,7 @@ start() ->
 
 -spec is_connected() -> boolean().
 is_connected() ->
-    is_pid(get_connection_pid()).
+    is_pid(get_connection_pid()) andalso not safe_mode:should_enforce_for_pid(self()).
 
 
 -spec get_connection_pid() -> undefined | pid().

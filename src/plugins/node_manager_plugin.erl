@@ -56,7 +56,7 @@
     {4, ?LINE_21_02(<<"2">>)},
     {5, ?LINE_21_02(<<"3">>)},
     {6, ?LINE_21_02(<<"5">>)},
-    {7, ?LINE_21_02(<<"9">>)},
+    {7, ?LINE_21_02(<<"8">>)},
     {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
@@ -289,9 +289,16 @@ upgrade_cluster(5) ->
         lists:foreach(fun(SpaceId) ->
             % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
             ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
-            file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
+            file_meta:ensure_opened_deleted_files_dir_exists(SpaceId, ignore_dir_stats)
         end, SpaceIds),
-        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+        lists:foreach(fun(SpaceId) ->
+            % run in fun so it does not block when waiting for a traverse pool to start (see traverse_utils)
+            spawn(fun() ->
+                utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+                ?notice("Onezone connection established - reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+                dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+            end)
+        end, SpaceIds)
     end),
     {ok, 6};
 upgrade_cluster(6) ->
