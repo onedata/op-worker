@@ -27,6 +27,9 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% API
+-export([build_audit_log_append_request/1]).
+
 %% atm_store_container callbacks
 -export([
     create/1,
@@ -69,6 +72,45 @@
 
 %% defaults are used; @see audit_log.erl
 -define(LOG_OPTS, #{}).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec build_audit_log_append_request(json_utils:json_term() | audit_log:append_request()) ->
+    audit_log:append_request().
+build_audit_log_append_request(#audit_log_append_request{} = AppendRequest) ->
+    AppendRequest;
+
+build_audit_log_append_request(#{<<"content">> := LogContent, <<"severity">> := Severity}) ->
+    #audit_log_append_request{
+        severity = audit_log:normalize_severity(Severity),
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
+        content = LogContent
+    };
+
+build_audit_log_append_request(#{<<"content">> := LogContent}) ->
+    #audit_log_append_request{
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
+        content = LogContent
+    };
+
+build_audit_log_append_request(#{<<"severity">> := Severity} = Object) ->
+    #audit_log_append_request{
+        severity = audit_log:normalize_severity(Severity),
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
+        content = maps:without([<<"severity">>], Object)
+    };
+
+build_audit_log_append_request(LogContent) ->
+    #audit_log_append_request{
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
+        content = LogContent
+    }.
 
 
 %%%===================================================================
@@ -294,41 +336,6 @@ prepare_append_request(Item, LogLevel) ->
         true -> {true, AppendRequest};
         false -> false
     end.
-
-
-%% @private
--spec build_audit_log_append_request(json_utils:json_term() | audit_log:append_request()) ->
-    audit_log:append_request().
-build_audit_log_append_request(#audit_log_append_request{} = AppendRequest) ->
-    AppendRequest;
-
-build_audit_log_append_request(#{<<"content">> := LogContent, <<"severity">> := Severity}) ->
-    #audit_log_append_request{
-        severity = audit_log:normalize_severity(Severity),
-        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
-        content = LogContent
-    };
-
-build_audit_log_append_request(#{<<"content">> := LogContent}) ->
-    #audit_log_append_request{
-        severity = ?INFO_AUDIT_LOG_SEVERITY,
-        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
-        content = LogContent
-    };
-
-build_audit_log_append_request(#{<<"severity">> := Severity} = Object) ->
-    #audit_log_append_request{
-        severity = audit_log:normalize_severity(Severity),
-        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
-        content = maps:without([<<"severity">>], Object)
-    };
-
-build_audit_log_append_request(LogContent) ->
-    #audit_log_append_request{
-        severity = ?INFO_AUDIT_LOG_SEVERITY,
-        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
-        content = LogContent
-    }.
 
 
 %% @private

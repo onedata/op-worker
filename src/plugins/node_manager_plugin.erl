@@ -56,7 +56,8 @@
     {4, ?LINE_21_02(<<"2">>)},
     {5, ?LINE_21_02(<<"3">>)},
     {6, ?LINE_21_02(<<"5">>)},
-    {7, op_worker:get_release_version()}
+    {7, ?LINE_21_02(<<"9">>)},
+    {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -302,7 +303,12 @@ upgrade_cluster(6) ->
         % could have been accidentally cancelled.
         lists:foreach(fun file_links_reconciliation_traverse:mark_traverse_needed_for_space/1, SpaceIds)
     end),
-    {ok, 7}.
+    {ok, 7};
+upgrade_cluster(7) ->
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    safe_mode:whitelist_pid(self()),
+    await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
+    {ok, 8}.
 
 
 %%--------------------------------------------------------------------
