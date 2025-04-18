@@ -120,8 +120,7 @@ list(SpaceId) ->
 
 list(SpaceId, ListOpts) when is_map(ListOpts) ->
     {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
-        file_ctx:new_by_guid(fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)),
-        #{listing_options => ListOpts, allow_deleted => true}),
+        file_ctx:new_by_guid(fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)), ListOpts),
     {Children, NextPaginationToken};
 list(SpaceId, PaginationToken) ->
     ListOpts = #{pagination_token => PaginationToken},

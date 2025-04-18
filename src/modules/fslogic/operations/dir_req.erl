@@ -135,16 +135,12 @@ list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
 
 
 % NOTE: this function may return less elements than provided limit even when listing is not finished.
--spec list_children_ctxs(user_ctx:ctx(), file_ctx:ctx(),
-    file_listing:options() | #{listing_options := file_listing:options(), allow_deleted := boolean()}
-) ->
+-spec list_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_children_ctxs(UserCtx, FileCtx, #{listing_options := ListOpts} = Options) ->
+list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
     {Whitelist, FileCtx2} = check_listing_permissions(
         UserCtx, FileCtx, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)),
-    list_children_ctxs_insecure(UserCtx, FileCtx2, Options#{listing_options => ListOpts#{whitelist => Whitelist}});
-list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
-    list_children_ctxs(UserCtx, FileCtx, #{listing_options => ListOpts, allow_deleted => false}).
+    list_children_ctxs_insecure(UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}).
 
 
 -spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [onedata_file:attr_name()]) ->
@@ -220,13 +216,11 @@ check_listing_permissions(UserCtx, FileCtx0, DirOperationsRequirements) ->
 
 
 %% @private
--spec list_children_ctxs_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    #{listing_options := file_listing:options(), allow_deleted := boolean()}
-) ->
+-spec list_children_ctxs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_children_ctxs_insecure(UserCtx, FileCtx, Options) ->
+list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts) ->
     {ChildrenCtxs, PaginationToken, FileCtx3} = file_tree:list_children(
-        FileCtx, UserCtx, Options),
+        FileCtx, UserCtx, ListOpts),
     FinalChildrenCtxs = ensure_extended_name_in_edge_files(UserCtx, ChildrenCtxs),
     {FinalChildrenCtxs, PaginationToken, FileCtx3}.
 
@@ -262,8 +256,7 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
 -spec list_children_attrs_internal(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [onedata_file:attr_name()],
     [file_attr:record()]) -> {[file_attr:record()], file_listing:pagination_token(), file_ctx:ctx()}.
 list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
-    {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx,
-        #{listing_options => ListOpts, allow_deleted => false}),
+    {Children, NextToken, FileCtx2} = list_children_ctxs_insecure(UserCtx, FileCtx, ListOpts),
     
     MapperFun = fun(ChildCtx) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =

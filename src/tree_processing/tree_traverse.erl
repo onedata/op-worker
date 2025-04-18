@@ -486,7 +486,7 @@ list_children(#tree_traverse{
             limit => BatchSize,
             ignore_missing_links => ListingErrorsHandlingPolicy == ignore_known
         },
-        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, #{listing_options => ListingOptions, allow_deleted => true})}
+        {ok, dir_req:list_children_ctxs(UserCtx, FileCtx, ListingOptions)}
     catch
         _Class:Reason:Stacktrace ->
             {error, datastore_runner:normalize_error(Reason), Stacktrace}

@@ -125,10 +125,8 @@ delete_file(UserCtx, FileCtx0, Silent) ->
 %%--------------------------------------------------------------------
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) -> fslogic_worker:fuse_response().
 check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
-    case file_tree:list_children(FileCtx, UserCtx, #{
-        listing_options => #{offset => 0, limit => 1, tune_for_large_continuous_listing => false},
-        allow_deleted => true
-    }) of
+    ListOpts = #{offset => 0, limit => 1, tune_for_large_continuous_listing => false},
+    case file_tree:list_children(FileCtx, UserCtx, ListOpts, allow_deleted_file_meta) of
         {[], _ListExtendedInfo, FileCtx2} ->
             delete_insecure(UserCtx, FileCtx2, Silent);
         {_, _, _FileCtx2} ->
