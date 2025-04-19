@@ -19,7 +19,7 @@
 
 
 %% @TODO VFS-12091 include all attrs after atm versioning is introduced
--define(ATM_FILE_ATTRIBUTES, ?API_FILE_ATTRS -- [?attr_creation_time]).
+-define(ATM_FILE_ATTRIBUTES, ?API_FILE_ATTRS -- [?attr_creation_time, ?attr_json_metadata, ?attr_has_json_metadata]).
 
 -define(ECHO_DOCKER_IMAGE_ID, <<"test/echo">>).
 
