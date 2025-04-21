@@ -59,7 +59,8 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
             (_ProviderId, #provider_dir_distribution_get_result{
                 virtual_size = VirtualSize,
                 logical_size = LogicalSize,
-                physical_size_per_storage = PhysicalDirSizePerStorage
+                physical_size_per_storage = PhysicalDirSizePerStorage,
+                locations_per_storage = LocationsPerStorage
             }) ->
                 #{
                     <<"success">> => true,
@@ -68,7 +69,8 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                     <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
                         <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
                     }
-                    end, PhysicalDirSizePerStorage)
+                    end, PhysicalDirSizePerStorage),
+                    <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
                 }
         end, DistributionPerProvider)
     };

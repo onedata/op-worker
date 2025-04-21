@@ -37,12 +37,16 @@
 
 -record(provider_reg_storage_locations_get_request, {}).
 
--record(provider_historical_dir_size_stats_browse_request, {
-    request :: ts_browse_request:record()
-}).
-
 -record(provider_current_dir_size_stats_browse_request, {
     stat_names = [] :: [dir_stats_collection:stat_name()]
+}).
+
+-record(provider_dir_distribution_get_request, {
+    stats_request :: #provider_current_dir_size_stats_browse_request{}
+}).
+
+-record(provider_historical_dir_size_stats_browse_request, {
+    request :: ts_browse_request:record()
 }).
 
 -record(provider_qos_status_get_request, {

@@ -107,12 +107,12 @@ gather_dir_distribution(FileCtx) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     
     SizeStatsPerProvider = provider_rpc:gather(
-        FileGuid, build_dir_size_stat_provider_requests(FileCtx)),
+        FileGuid, build_dir_distribution_provider_requests(FileCtx)),
 
     DistributionPerProvider = maps:map(fun(_ProviderId, Result) ->
         case Result of
-            {ok, ProviderStats} ->
-                build_provider_dir_distribution(ProviderStats);
+            {ok, ProviderDistributionResult} ->
+                build_provider_dir_distribution(ProviderDistributionResult);
             {error, _} = Error ->
                 Error
         end
@@ -122,25 +122,30 @@ gather_dir_distribution(FileCtx) ->
 
 
 %% @private
--spec build_dir_size_stat_provider_requests(file_ctx:ctx()) -> 
-    #{oneprovider:id() => #provider_current_dir_size_stats_browse_request{}}.
-build_dir_size_stat_provider_requests(FileCtx) ->
+-spec build_dir_distribution_provider_requests(file_ctx:ctx()) ->
+    #{oneprovider:id() => #provider_dir_distribution_get_request{}}.
+build_dir_distribution_provider_requests(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
 
     maps:map(fun(_ProviderId, SupportingStorages) ->
-        #provider_current_dir_size_stats_browse_request{
-            stat_names = maps:fold(fun(StorageId, _, Acc) ->
-                 [?PHYSICAL_SIZE(StorageId) | Acc]
-            end, [?VIRTUAL_SIZE, ?LOGICAL_SIZE], SupportingStorages)
+        #provider_dir_distribution_get_request{
+            stats_request = #provider_current_dir_size_stats_browse_request{
+                stat_names = maps:fold(fun(StorageId, _, Acc) ->
+                    [?PHYSICAL_SIZE(StorageId) | Acc]
+                end, [?VIRTUAL_SIZE, ?LOGICAL_SIZE], SupportingStorages)
+            }
         }
     end, StoragesByProvider).
 
 
 %% @private
--spec build_provider_dir_distribution(#provider_current_dir_size_stats_browse_result{}) ->
+-spec build_provider_dir_distribution(#provider_dir_distribution_get_result2{}) ->
     provider_dir_distribution().
-build_provider_dir_distribution(#provider_current_dir_size_stats_browse_result{stats = ProviderDirStats}) ->
+build_provider_dir_distribution(#provider_dir_distribution_get_result2{
+    current_dir_size_stats = #provider_current_dir_size_stats_browse_result{stats = ProviderDirStats},
+    locations_per_storage = LocationsPerStorage
+}) ->
     #provider_dir_distribution_get_result{
         virtual_size = maps:get(?VIRTUAL_SIZE, ProviderDirStats),
         logical_size = maps:get(?LOGICAL_SIZE, ProviderDirStats),
@@ -149,7 +154,8 @@ build_provider_dir_distribution(#provider_current_dir_size_stats_browse_result{s
                 Acc#{StorageId => Value};
             (_, _, Acc) ->
                 Acc
-        end, #{}, ProviderDirStats)
+        end, #{}, ProviderDirStats),
+        locations_per_storage = LocationsPerStorage
     }.
 
 

@@ -16,8 +16,15 @@
 -record(provider_dir_distribution_get_result, {
     logical_size :: file_meta:size(),
     virtual_size :: file_meta:size(),
-    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()}
+    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()},
+    locations_per_storage = #{} :: data_distribution:locations_per_storage()
 }).
+
+-record(provider_dir_distribution_get_result2, {
+    current_dir_size_stats :: provider_dir_distribution:current_dir_size_stats_result(),
+    locations_per_storage = #{} :: data_distribution:locations_per_storage()
+}).
+
 
 -record(dir_distribution_gather_result, {
     distribution_per_provider = #{} :: #{

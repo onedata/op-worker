@@ -55,6 +55,12 @@ from_protobuf(#'TimeSeriesSliceGetRequest'{
         window_limit = WindowLimit,
         stop_timestamp = StopTimestamp
     };
+from_protobuf(#'ProviderDirDistributionGetRequest'{
+    stats_request = StatsRequest
+}) ->
+    #provider_dir_distribution_get_request{
+        stats_request = from_protobuf(StatsRequest)
+    };
 from_protobuf(#'ProviderCurrentDirSizeStatsBrowseRequest'{
     stat_names = StatNames
 }) ->
@@ -86,6 +92,14 @@ from_protobuf(#'ProviderRpcResponse'{
         status = error,
         result = errors:from_json(json_utils:decode(ErrorAsJson))
 };
+from_protobuf(#'ProviderDirDistributionGetResult'{
+    dir_size_stats = DirSizeStats,
+    storage_location = StorageLocations
+}) ->
+    #provider_dir_distribution_get_result2{
+        current_dir_size_stats = from_protobuf(DirSizeStats),
+        locations_per_storage = locations_per_storage_from_proto(StorageLocations)
+    };
 from_protobuf(#'ProviderCurrentDirSizeStatsBrowseResult'{
     stats_as_json = StatsAsJson
 }) ->
@@ -127,10 +141,7 @@ from_protobuf(#'ProviderRegStorageLocationsResult'{
     locations = Locations
 }) ->
     #provider_reg_storage_locations_result{
-        locations_per_storage = maps_utils:generate_from_list(
-            fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
-                {StorageId, Location}
-            end, Locations)
+        locations_per_storage = locations_per_storage_from_proto(Locations)
     };
 from_protobuf(#'ProviderQosStatusGetResult'{
     status = Status
@@ -155,14 +166,20 @@ to_protobuf(#provider_rpc_call{
 to_protobuf(#provider_current_dir_size_stats_browse_request{
     stat_names = StatNames
 }) ->
-    {provider_current_dir_size_stats_browse_request, #'ProviderCurrentDirSizeStatsBrowseRequest'{
+    #'ProviderCurrentDirSizeStatsBrowseRequest'{
         stat_names = StatNames
-    }};
+    };
 to_protobuf(#provider_historical_dir_size_stats_browse_request{
     request = Request
 }) ->
     {provider_historical_dir_size_stats_browse_request, #'ProviderHistoricalDirSizeStatsBrowseRequest'{
         request = to_protobuf(Request)
+    }};
+to_protobuf(#provider_dir_distribution_get_request{
+    stats_request = StatsRequest
+}) ->
+    {provider_dir_distribution_get_request, #'ProviderDirDistributionGetRequest'{
+        stats_request = to_protobuf(StatsRequest)
     }};
 to_protobuf(#time_series_layout_get_request{}) ->
     {time_series_layout_get_request, #'TimeSeriesLayoutGetRequest'{}};
@@ -205,12 +222,20 @@ to_protobuf(#provider_rpc_response{
         status = error,
         result = {error_json, json_utils:encode(errors:to_json(Error))}
     }};
+to_protobuf(#provider_dir_distribution_get_result2{
+    current_dir_size_stats = DirSizeStats,
+    locations_per_storage = LocationsPerStorage
+}) ->
+    {provider_dir_distribution_get_result, #'ProviderDirDistributionGetResult'{
+        dir_size_stats = to_protobuf(DirSizeStats),
+        storage_location = locations_per_storage_to_proto(LocationsPerStorage)
+    }};
 to_protobuf(#provider_current_dir_size_stats_browse_result{
     stats = Stats
 }) ->
-    {provider_current_dir_size_stats_browse_result, #'ProviderCurrentDirSizeStatsBrowseResult'{
+    #'ProviderCurrentDirSizeStatsBrowseResult'{
         stats_as_json = json_utils:encode(Stats)
-    }};
+    };
 to_protobuf(#time_series_layout_get_result{
     layout = Layout
 }) ->
@@ -240,9 +265,7 @@ to_protobuf(#provider_reg_storage_locations_result{
     locations_per_storage = LocationsPerStorageMap
 }) ->
     {provider_reg_storage_locations_result, #'ProviderRegStorageLocationsResult'{
-        locations = maps:fold(fun(StorageId, Location, Acc) ->
-            [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
-        end, [], LocationsPerStorageMap)
+        locations = locations_per_storage_to_proto(LocationsPerStorageMap)
     }};
 to_protobuf(#provider_qos_status_get_result{
     status = Status
@@ -254,3 +277,25 @@ to_protobuf(#provider_qos_status_get_result{
 
 %% OTHER
 to_protobuf(undefined) -> undefined.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec locations_per_storage_from_proto(#'StorageLocation'{}) -> data_distribution:locations_per_storage().
+locations_per_storage_from_proto(Locations) ->
+    maps_utils:generate_from_list(
+        fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
+            {StorageId, Location}
+        end, Locations).
+
+
+%% @private
+-spec locations_per_storage_to_proto(data_distribution:locations_per_storage()) -> #'StorageLocation'{}.
+locations_per_storage_to_proto(LocationsPerStorageMap) ->
+    maps:fold(fun(StorageId, Location, Acc) ->
+        [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
+    end, [], LocationsPerStorageMap).
+

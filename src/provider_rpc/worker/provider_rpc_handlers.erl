@@ -32,11 +32,8 @@ execute(FileCtx, #provider_reg_distribution_get_request{}) ->
 execute(FileCtx, #provider_reg_storage_locations_get_request{}) ->
     provider_reg_distribution:get_storage_locations(FileCtx);
 
-execute(FileCtx, #provider_current_dir_size_stats_browse_request{stat_names = StatNames}) ->
-    case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), StatNames) of
-        {ok, Stats} -> {ok, #provider_current_dir_size_stats_browse_result{stats = Stats}};
-        {error, _} = Error -> Error
-    end;
+execute(FileCtx, #provider_dir_distribution_get_request{stats_request = StatsRequest}) ->
+    provider_dir_distribution:get(FileCtx, StatsRequest);
 
 execute(FileCtx, #provider_historical_dir_size_stats_browse_request{request = Request}) ->
     dir_size_stats:browse_historical_stats_collection(file_ctx:get_logical_guid_const(FileCtx), Request);
