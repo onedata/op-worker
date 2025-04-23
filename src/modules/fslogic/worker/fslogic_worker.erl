@@ -505,6 +505,20 @@ handle_request_locally(UserCtx, #proxyio_request{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Handle request remotely
+%% @end
+%%--------------------------------------------------------------------
+%% TODO VFS-12678 Remove provider proxy
+%-spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
+%handle_request_remotely(_UserCtx, _Req, []) ->
+%    #fuse_response{status = #status{code = ?ENOTSUP}};
+%handle_request_remotely(UserCtx, Req, Providers) ->
+%    ProviderId = fslogic_remote:get_provider_to_route(Providers),
+%    fslogic_remote:route(UserCtx, ProviderId, Req).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Processes a FUSE request and returns a response.
 %% @end
 %%--------------------------------------------------------------------
