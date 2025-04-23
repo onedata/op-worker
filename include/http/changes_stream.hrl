@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Common definitions for changes stream - a mechanism for observing
-%%% changes happening to files in a space.
+%%% changes happening to files in a space since it was created.
 %%%
 %%% Possible documents and their fields to observe:
 %%%
@@ -53,7 +53,8 @@
 %%% 1. Space ID to observe changes in
 %%% 2. Timeout for the stream (optional, default: infinity)
 %%% 3. Start after sequence number (optional, default: now)
-%%% 4. Triggers - list of document types whose changes should trigger sending events (optional, default: all)
+%%% 4. Triggers - list of document types whose changes should trigger sending events
+%%%    (optional, if not supplied all observable docs will be monitored)
 %%% 5. Document monitoring specifications - for each document type:
 %%%    - fields to return (`fields`)
 %%%    - fields for which to check existence (`exists` - only for customMetadata)
@@ -143,10 +144,6 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 
--define(DEFAULT_TIMEOUT, <<"infinity">>).
--define(DEFAULT_LAST_SEQ, <<"now">>).
--define(DEFAULT_ALWAYS, false).
-
 -define(OBSERVABLE_DOCUMENTS, [
     <<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>
 ]).
@@ -172,6 +169,7 @@
 -record(doc_monitoring_spec, {
     doc_type :: changes_stream_processor:observable_doc_type(),
     always_include_in_other_docs_changes = false :: boolean(),
+    % Xattr names for custom_metadata or file_name:field_record_index pairs for other docs
     observed_fields_for_values = [] :: [binary() | {binary(), integer()}],
     observed_fields_for_existence = [] :: [binary()]
 }).

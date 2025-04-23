@@ -46,20 +46,12 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc Cowboy callback function.
-%% Initialize the state for this request.
-%% @end
-%%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), term()) ->
     {cowboy_rest, cowboy_req:req(), map()}.
 init(Req, _Opts) ->
     {cowboy_rest, Req, #{}}.
 
 
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:terminate/3
-%%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), cowboy_req:req(), map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     couchbase_changes:cancel_stream(Stream),
@@ -70,18 +62,12 @@ terminate(_, _, #{}) ->
     ok.
 
 
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:allowed_methods/2
-%%--------------------------------------------------------------------
 -spec allowed_methods(cowboy_req:req(), map() | {error, term()}) ->
     {[binary()], cowboy_req:req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"POST">>], Req, State}.
 
 
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:is_authorized/2
-%%--------------------------------------------------------------------
 -spec is_authorized(cowboy_req:req(), map()) ->
     {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
@@ -104,9 +90,6 @@ is_authorized(Req, State) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc @equiv pre_handler:content_types_provided/2
-%%--------------------------------------------------------------------
 -spec content_types_accepted(cowboy_req:req(), map()) ->
     {[{binary(), atom()}], cowboy_req:req(), map()}.
 content_types_accepted(Req, State) ->
@@ -145,15 +128,9 @@ stream_space_changes(Req, State) ->
             cowboy_req:stream_body(<<"">>, fin, Req3),
 
             {stop, Req3, State3}
-    catch
-        throw:Error ->
-            {stop, http_req:send_error(Error, Req), State};
-        Type:Message:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~tp:process_request - ~tp:~tp", [
-                ?MODULE, Type, Message
-            ], Stacktrace),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {stop, NewReq, State}
+    catch Class:Reason:Stacktrace ->
+        Error = ?examine_exception(Class, Reason, Stacktrace),
+        {stop, http_req:send_error(Error, Req), State}
     end.
 
 
@@ -169,23 +146,13 @@ authorize(Req, ?USER(UserId) = Auth) ->
 
     case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
         true ->
-            try
-                GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
-                api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI)
-            catch
-                _:_ ->
-                    ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
-            end;
+            GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
+            ?catch_exceptions(api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI));
         false ->
             ?ERR_FORBIDDEN(?err_ctx())
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Init changes stream.
-%% @end
-%%--------------------------------------------------------------------
 -spec init_stream(State :: map()) -> map().
 init_stream(State = #{changes_monitoring_spec := #changes_monitoring_spec{
     start_after_seq = Since,
@@ -197,12 +164,14 @@ init_stream(State = #{changes_monitoring_spec := #changes_monitoring_spec{
     Pid = self(),
 
     % TODO VFS-5570
-    % TODO VFS-6389 - maybe restart stream in case of node failure
+    % TODO VFS-6389 - maybe, instead of aborting http connection on Node failure
+    % (stream process will die and in turn kill this one - terminate),
+    % try to restart couchbase_changes stream on different node
     Node = datastore_key:any_responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
         <<"onedata">>,
         SpaceId,
-        fun(Feed) -> notify(Pid, Ref, Triggers, Feed) end,
+        fun(Feed) -> notify_http_conn_proc(Pid, Ref, Triggers, Feed) end,
         [{since, Since}],
         [Pid]
     ]),
@@ -210,12 +179,7 @@ init_stream(State = #{changes_monitoring_spec := #changes_monitoring_spec{
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Listens for events and pushes them to the socket
-%% @end
-%%--------------------------------------------------------------------
 -spec stream_loop(cowboy_req:req(), map()) -> ok.
 stream_loop(Req, State = #{
     changes_stream := Stream,
@@ -256,16 +220,11 @@ stream_loop(Req, State = #{
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Forwards changes feed to a streaming process.
-%% @end
-%%--------------------------------------------------------------------
--spec notify(pid(), reference(), changes_stream_processor:triggers(),
+-spec notify_http_conn_proc(pid(), reference(), changes_stream_processor:triggers(),
     {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
-notify(Pid, Ref, Triggers, {ok, {change, #document{} = Doc}}) ->
+notify_http_conn_proc(Pid, Ref, Triggers, {ok, {change, #document{} = Doc}}) ->
     case is_observed_doc(Doc, Triggers) of
         true ->
             call_changes_stream_handler(Pid, Ref, [Doc]);
@@ -273,7 +232,7 @@ notify(Pid, Ref, Triggers, {ok, {change, #document{} = Doc}}) ->
             ok
     end,
     ok;
-notify(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
+notify_http_conn_proc(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
     case lists:filtermap(fun({change, Doc}) ->
         case is_observed_doc(Doc, Triggers) of
             true -> {true, Doc};
@@ -286,14 +245,14 @@ notify(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
             call_changes_stream_handler(Pid, Ref, RelevantDocs)
     end,
     ok;
-notify(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
+notify_http_conn_proc(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, _Triggers, {error, _Seq, shutdown = Reason}) ->
+notify_http_conn_proc(Pid, Ref, _Triggers, {error, _Seq, shutdown = Reason}) ->
     ?debug("Changes stream terminated due to: ~tp", [Reason]),
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
+notify_http_conn_proc(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
     ?error("Changes stream terminated abnormally due to: ~tp", [Reason]),
     Pid ! {Ref, stream_ended},
     ok.
@@ -307,13 +266,7 @@ is_observed_doc(_Doc, _Triggers) ->
     false.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Send synchronous message to changes_stream_handler and await confirmation
-%% that msg was received.
-%% @end
-%%--------------------------------------------------------------------
 call_changes_stream_handler(Pid, Ref, Msg) ->
     Pid ! {Ref, Msg},
     receive

@@ -24,6 +24,10 @@
 %% API
 -export([parse_request/1]).
 
+-define(DEFAULT_TIMEOUT, <<"infinity">>).
+-define(DEFAULT_LAST_SEQ, <<"now">>).
+-define(DEFAULT_ALWAYS, false).
+
 
 %%%===================================================================
 %%% API
