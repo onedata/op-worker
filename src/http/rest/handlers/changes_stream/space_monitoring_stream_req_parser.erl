@@ -6,19 +6,19 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Parser for changes stream requests.
+%%% Parser for space monitoring stream requests.
 %%%
-%%% This module is responsible for parsing HTTP requests for changes stream.
-%%% It builds #changes_monitoring_spec record based on request parameters and body.
+%%% This module is responsible for parsing HTTP requests for space monitoring stream.
+%%% It builds #space_monitoring_spec record based on request parameters and body.
 %%%
-%%% For detailed documentation about changes stream functionality,
-%%% see changes_stream.hrl.
+%%% For detailed documentation about space monitoring stream functionality,
+%%% see space_monitoring_stream.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
--module(changes_stream_parser).
+-module(space_monitoring_stream_req_parser).
 -author("Bartosz Walkowicz").
 
--include("http/changes_stream.hrl").
+-include("http/space_monitoring_stream.hrl").
 -include("middleware/middleware.hrl").
 
 %% API
@@ -35,12 +35,12 @@
 
 
 -spec parse_request(cowboy_req:req()) ->
-    {cowboy_req:req(), changes_stream_processor:changes_monitoring_spec()}.
+    {cowboy_req:req(), space_monitoring_stream_processor:space_monitoring_spec()}.
 parse_request(Req) ->
     SpaceId = cowboy_req:binding(sid, Req),
     {Arguments, Req2} = read_arguments(Req),
 
-    ChangesMonitoringSpec = #changes_monitoring_spec{
+    SpaceMonitoringSpec = #space_monitoring_spec{
         space_id = SpaceId,
 
         timeout = parse_timeout(Arguments),
@@ -50,7 +50,7 @@ parse_request(Req) ->
         doc_monitoring_specs = parse_doc_monitoring_specs(Arguments)
     },
 
-    {Req2, ChangesMonitoringSpec}.
+    {Req2, SpaceMonitoringSpec}.
 
 
 %%%===================================================================
@@ -111,7 +111,7 @@ parse_integer(Param, ValueBin) ->
 
 
 %% @private
--spec parse_triggers(json_utils:json_map()) -> changes_stream_processor:triggers() | no_return().
+-spec parse_triggers(json_utils:json_map()) -> space_monitoring_stream_processor:triggers() | no_return().
 parse_triggers(Arguments) ->
     RawTriggers = case maps:get(<<"triggers">>, Arguments, undefined) of
         undefined ->
@@ -133,7 +133,7 @@ parse_triggers(Arguments) ->
 
 %% @private
 -spec parse_doc_monitoring_specs(json_utils:json_map()) ->
-    [changes_stream_processor:doc_monitoring_spec()] | no_return().
+    [space_monitoring_stream_processor:doc_monitoring_spec()] | no_return().
 parse_doc_monitoring_specs(Arguments) ->
     DocMonitoringSpecs = lists:foldl(fun(DocName, SpecsAcc) ->
         case maps:get(DocName, Arguments, undefined) of
@@ -154,7 +154,7 @@ parse_doc_monitoring_specs(Arguments) ->
 
 %% @private
 -spec parse_doc_monitoring_spec(binary(), json_utils:json_map()) ->
-    changes_stream_processor:doc_monitoring_spec().
+    space_monitoring_stream_processor:doc_monitoring_spec().
 parse_doc_monitoring_spec(DocName = <<"fileMeta">>, RawSpec) ->
     #doc_monitoring_spec{
         doc_type = file_meta,

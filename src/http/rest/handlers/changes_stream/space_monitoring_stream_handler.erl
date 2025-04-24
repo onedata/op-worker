@@ -7,7 +7,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% HTTP handler for changes stream.
+%%% HTTP handler for space monitoring stream.
 %%%
 %%% This module is responsible for handling:
 %%% - HTTP request/response
@@ -15,15 +15,15 @@
 %%% - Stream lifecycle
 %%% - Event delivery
 %%%
-%%% For detailed documentation about changes stream functionality,
-%%% see changes_stream.hrl.
+%%% For detailed documentation about space monitoring stream functionality,
+%%% see space_monitoring_stream.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
--module(changes_stream_handler).
+-module(space_monitoring_stream_handler).
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("http/changes_stream.hrl").
+-include("http/space_monitoring_stream.hrl").
 -include("middleware/middleware.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
@@ -117,9 +117,9 @@ content_types_accepted(Req, State) ->
 -spec stream_space_changes(cowboy_req:req(), map()) ->
     {term(), cowboy_req:req(), map()}.
 stream_space_changes(Req, State) ->
-    try changes_stream_parser:parse_request(Req) of
-        {Req2, ChangesMonitoringSpec} ->
-            State2 = State#{changes_monitoring_spec => ChangesMonitoringSpec},
+    try space_monitoring_stream_req_parser:parse_request(Req) of
+        {Req2, SpaceMonitoringSpec} ->
+            State2 = State#{space_monitoring_spec => SpaceMonitoringSpec},
             State3 = ?MODULE:init_stream(State2),
             Req3 = cowboy_req:stream_reply(
                 ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"application/json">>}, Req2
@@ -154,12 +154,12 @@ authorize(Req, ?USER(UserId) = Auth) ->
 
 
 -spec init_stream(State :: map()) -> map().
-init_stream(State = #{changes_monitoring_spec := #changes_monitoring_spec{
+init_stream(State = #{space_monitoring_spec := #space_monitoring_spec{
     start_after_seq = Since,
     space_id = SpaceId,
     triggers = Triggers
 }}) ->
-    ?info("[ changes ]: Starting stream ~tp", [Since]),
+    ?info("[ space monitoring ]: Starting stream ~tp", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
@@ -185,7 +185,7 @@ stream_loop(Req, State = #{
     changes_stream := Stream,
     ref := Ref,
     auth := SessionId,
-    changes_monitoring_spec := ChangesMonitoringSpec = #changes_monitoring_spec{
+    space_monitoring_spec := SpaceMonitoringSpec = #space_monitoring_spec{
         timeout = Timeout
     }
 }) ->
@@ -197,7 +197,7 @@ stream_loop(Req, State = #{
             UserCtx = user_ctx:new(SessionId),
             lists:foreach(fun(ChangedDoc) ->
                 try
-                    case changes_stream_processor:process_doc(UserCtx, ChangedDoc, ChangesMonitoringSpec) of
+                    case space_monitoring_stream_processor:process_doc(UserCtx, ChangedDoc, SpaceMonitoringSpec) of
                         ok ->
                             ok;
                         {ok, Changes} ->
@@ -221,13 +221,13 @@ stream_loop(Req, State = #{
 
 
 %% @private
--spec notify_http_conn_proc(pid(), reference(), changes_stream_processor:triggers(),
+-spec notify_http_conn_proc(pid(), reference(), space_monitoring_stream_processor:triggers(),
     {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
 notify_http_conn_proc(Pid, Ref, Triggers, {ok, {change, #document{} = Doc}}) ->
     case is_observed_doc(Doc, Triggers) of
         true ->
-            call_changes_stream_handler(Pid, Ref, [Doc]);
+            call_space_monitoring_stream_handler(Pid, Ref, [Doc]);
         false ->
             ok
     end,
@@ -242,7 +242,7 @@ notify_http_conn_proc(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
         [] ->
             ok;
         RelevantDocs ->
-            call_changes_stream_handler(Pid, Ref, RelevantDocs)
+            call_space_monitoring_stream_handler(Pid, Ref, RelevantDocs)
     end,
     ok;
 notify_http_conn_proc(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
@@ -259,7 +259,7 @@ notify_http_conn_proc(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
 
 
 %% @private
--spec is_observed_doc(datastore:doc(), changes_stream_processor:triggers()) -> boolean().
+-spec is_observed_doc(datastore:doc(), space_monitoring_stream_processor:triggers()) -> boolean().
 is_observed_doc(#document{value = Record}, Triggers) when is_tuple(Record) ->
     lists:member(element(1, Record), Triggers);
 is_observed_doc(_Doc, _Triggers) ->
@@ -267,7 +267,7 @@ is_observed_doc(_Doc, _Triggers) ->
 
 
 %% @private
-call_changes_stream_handler(Pid, Ref, Msg) ->
+call_space_monitoring_stream_handler(Pid, Ref, Msg) ->
     Pid ! {Ref, Msg},
     receive
         {Ref, ok} ->

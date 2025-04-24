@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Processor for changes stream events.
+%%% Processor for space monitoring stream events.
 %%%
 %%% This module is responsible for processing changes stream events.
 %%% It handles:
@@ -14,14 +14,14 @@
 %%% - Gathering changes from related documents
 %%% - Formatting response data
 %%%
-%%% For detailed documentation about changes stream functionality,
-%%% see changes_stream.hrl.
+%%% For detailed documentation about space monitoring stream functionality,
+%%% see space_monitoring_stream.hrl.
 %%% @end
 %%%--------------------------------------------------------------------
--module(changes_stream_processor).
+-module(space_monitoring_stream_processor).
 -author("Bartosz Walkowicz").
 
--include("http/changes_stream.hrl").
+-include("http/space_monitoring_stream.hrl").
 -include("middleware/middleware.hrl").
 
 %% API
@@ -31,18 +31,18 @@
 -type triggers() :: [observable_doc_type()].
 
 -type doc_monitoring_spec() :: #doc_monitoring_spec{}.
--type changes_monitoring_spec() :: #changes_monitoring_spec{}.
+-type space_monitoring_spec() :: #space_monitoring_spec{}.
 
 -export_type([
     observable_doc_type/0, triggers/0,
-    doc_monitoring_spec/0, changes_monitoring_spec/0
+    doc_monitoring_spec/0, space_monitoring_spec/0
 ]).
 
 -record(processing_ctx, {
     changed_doc :: datastore:doc(),
     user_ctx :: user_ctx:ctx(),
     file_ctx :: file_ctx:ctx(),
-    changes_monitoring_spec :: changes_monitoring_spec(),
+    space_monitoring_spec :: space_monitoring_spec(),
     gathered_changes = #{} :: json_utils:json_map()
 }).
 -type processing_ctx() :: #processing_ctx{}.
@@ -53,14 +53,14 @@
 %%%===================================================================
 
 
--spec process_doc(user_ctx:ctx(), datastore:doc(), changes_monitoring_spec()) ->
+-spec process_doc(user_ctx:ctx(), datastore:doc(), space_monitoring_spec()) ->
     ok | {ok, json_utils:json_map()}.
-process_doc(UserCtx, ChangedDoc, ChangesMonitoringSpec) ->
+process_doc(UserCtx, ChangedDoc, SpaceMonitoringSpec) ->
     ProcessingCtx = #processing_ctx{
         changed_doc = ChangedDoc,
         user_ctx = UserCtx,
-        file_ctx = get_file_ctx(ChangedDoc, ChangesMonitoringSpec),
-        changes_monitoring_spec = ChangesMonitoringSpec
+        file_ctx = get_file_ctx(ChangedDoc, SpaceMonitoringSpec),
+        space_monitoring_spec = SpaceMonitoringSpec
     },
     case get_all_docs_changes(ProcessingCtx) of
         #processing_ctx{gathered_changes = Changes} when map_size(Changes) == 0 ->
@@ -81,26 +81,26 @@ process_doc(UserCtx, ChangedDoc, ChangesMonitoringSpec) ->
 
 
 %% @private
--spec get_file_ctx(datastore:doc(), changes_monitoring_spec()) -> file_ctx:ctx().
-get_file_ctx(ChangedDoc = #document{value = #times{}}, ChangesMonitoringSpec) ->
+-spec get_file_ctx(datastore:doc(), space_monitoring_spec()) -> file_ctx:ctx().
+get_file_ctx(ChangedDoc = #document{value = #times{}}, SpaceMonitoringSpec) ->
     file_ctx:new_by_uuid(
         ChangedDoc#document.key,
-        ChangesMonitoringSpec#changes_monitoring_spec.space_id
+        SpaceMonitoringSpec#space_monitoring_spec.space_id
     );
-get_file_ctx(ChangedDoc = #document{value = #file_meta{}}, ChangesMonitoringSpec) ->
+get_file_ctx(ChangedDoc = #document{value = #file_meta{}}, SpaceMonitoringSpec) ->
     file_ctx:new_by_doc(
         ChangedDoc,
-        ChangesMonitoringSpec#changes_monitoring_spec.space_id
+        SpaceMonitoringSpec#space_monitoring_spec.space_id
     );
-get_file_ctx(ChangedDoc = #document{value = #custom_metadata{}}, ChangesMonitoringSpec) ->
+get_file_ctx(ChangedDoc = #document{value = #custom_metadata{}}, SpaceMonitoringSpec) ->
     file_ctx:new_by_uuid(
         ChangedDoc#document.key,
-        ChangesMonitoringSpec#changes_monitoring_spec.space_id
+        SpaceMonitoringSpec#space_monitoring_spec.space_id
     );
-get_file_ctx(#document{value = #file_location{uuid = FileUUid}}, ChangesMonitoringSpec) ->
+get_file_ctx(#document{value = #file_location{uuid = FileUUid}}, SpaceMonitoringSpec) ->
     file_ctx:new_by_uuid(
         FileUUid,
-        ChangesMonitoringSpec#changes_monitoring_spec.space_id
+        SpaceMonitoringSpec#space_monitoring_spec.space_id
     ).
 
 
@@ -111,7 +111,7 @@ get_file_object_id(FileCtx) ->
         {ok, ObjectId} = file_id:guid_to_objectid(file_ctx:get_logical_guid_const(FileCtx)),
         ObjectId
     catch _:Reason ->
-        ?debug("Cannot fetch cdmi id for changes, error: ~tp", [Reason]),
+        ?debug("Cannot fetch cdmi id for space monitoring, error: ~tp", [Reason]),
         <<>>
     end.
 
@@ -123,7 +123,7 @@ get_file_path(FileCtx) ->
         {Path, _} = file_ctx:get_canonical_path(FileCtx),
         Path
     catch _:Reason ->
-        ?debug("Cannot fetch Path for changes, error: ~tp", [Reason]),
+        ?debug("Cannot fetch Path for space monitoring, error: ~tp", [Reason]),
         <<>>
     end.
 
@@ -137,7 +137,7 @@ get_file_path(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_all_docs_changes(processing_ctx()) -> processing_ctx().
 get_all_docs_changes(InitialProcessingCtx = #processing_ctx{
-    changes_monitoring_spec = #changes_monitoring_spec{doc_monitoring_specs = DocMonitoringSpecs}
+    space_monitoring_spec = #space_monitoring_spec{doc_monitoring_specs = DocMonitoringSpecs}
 }) ->
     lists:foldl(fun(DocMonitoringSpec, ProcessingCtxAcc) ->
         case is_changed_doc_also_observed_doc(DocMonitoringSpec, ProcessingCtxAcc) of
@@ -157,7 +157,7 @@ get_all_docs_changes(InitialProcessingCtx = #processing_ctx{
 
 
 %% @private
--spec is_changed_doc_also_observed_doc(changes_stream_processor:doc_monitoring_spec(), processing_ctx()) ->
+-spec is_changed_doc_also_observed_doc(space_monitoring_stream_processor:doc_monitoring_spec(), processing_ctx()) ->
     boolean().
 is_changed_doc_also_observed_doc(DocMonitoringSpec, ProcessingCtx) ->
     ObservedDocType = DocMonitoringSpec#doc_monitoring_spec.doc_type,
@@ -167,7 +167,7 @@ is_changed_doc_also_observed_doc(DocMonitoringSpec, ProcessingCtx) ->
 
 
 %% @private
--spec get_observed_doc(changes_stream_processor:doc_monitoring_spec(), processing_ctx()) ->
+-spec get_observed_doc(space_monitoring_stream_processor:doc_monitoring_spec(), processing_ctx()) ->
     {datastore:doc(), processing_ctx()}.
 get_observed_doc(#doc_monitoring_spec{doc_type = times}, ProcessingCtx) ->
     {ok, Doc} = times:get(get_file_uuid(ProcessingCtx)),
@@ -196,7 +196,7 @@ get_file_uuid(#processing_ctx{file_ctx = FileCtx}) ->
 -spec get_record_changes(
     datastore:doc(),
     boolean(),
-    changes_stream_processor:doc_monitoring_spec(),
+    space_monitoring_stream_processor:doc_monitoring_spec(),
     processing_ctx()
 ) ->
     processing_ctx().
@@ -281,7 +281,7 @@ get_record_changes(#document{
 
 %% @private
 -spec update_gathered_changes(
-    changes_stream_processor:doc_monitoring_spec(),
+    space_monitoring_stream_processor:doc_monitoring_spec(),
     processing_ctx(),
     json_utils:json_map()
 ) ->

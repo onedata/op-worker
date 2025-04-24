@@ -664,8 +664,8 @@ init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     ct:timetrap(timer:minutes(3)),
     Workers = ?config(op_worker_nodes, Config),
     Pid = self(),
-    ok = test_utils:mock_new(Workers, changes_stream_handler),
-    ok = test_utils:mock_expect(Workers, changes_stream_handler, init_stream,
+    ok = test_utils:mock_new(Workers, space_monitoring_stream_handler),
+    ok = test_utils:mock_expect(Workers, space_monitoring_stream_handler, init_stream,
         fun(State) ->
             State1 = meck:passthrough([State]),
             StreamPid = maps:get(changes_stream, State1, undefined),
@@ -698,7 +698,7 @@ end_per_testcase(token_auth_test, Config) ->
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, changes_stream_handler),
+    test_utils:mock_unload(Workers, space_monitoring_stream_handler),
     end_per_testcase(all, Config);
 
 end_per_testcase(unauthorized_request_should_fail, Config) ->

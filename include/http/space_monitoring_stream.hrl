@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common definitions for changes stream - a mechanism for observing
+%%% Common definitions for space monitoring stream - a mechanism for observing
 %%% changes happening to files in a space since it was created.
 %%%
 %%% Possible documents and their fields to observe:
@@ -47,9 +47,9 @@
 %%%    to observe all elements beside onedata_json and onedata_rdf
 %%% 
 %%% 
-%%% ## Changes monitoring specification and events
+%%% ## Space monitoring specification and events
 %%% 
-%%% To open a changes stream, user must specify:
+%%% To open a space monitoring stream, user must specify:
 %%% 1. Space ID to observe changes in
 %%% 2. Timeout for the stream (optional, default: infinity)
 %%% 3. Start after sequence number (optional, default: now)
@@ -149,7 +149,7 @@
 ]).
 
 %%% NOTE: Adding new fields here is not sufficient for them to work.
-%%% To enable new fields, changes_stream_parser must also be modified to handle them.
+%%% To enable new fields, space_monitoring_stream_req_parser must also be modified to handle them.
 %%% Do not forget to update the documentation at the top of this file!
 -define(OBSERVABLE_FILE_META_FIELDS, [
     <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
@@ -167,21 +167,21 @@
 
 
 -record(doc_monitoring_spec, {
-    doc_type :: changes_stream_processor:observable_doc_type(),
+    doc_type :: space_monitoring_stream_processor:observable_doc_type(),
     always_include_in_other_docs_changes = false :: boolean(),
     % Xattr names for custom_metadata or file_name:field_record_index pairs for other docs
     observed_fields_for_values = [] :: [binary() | {binary(), integer()}],
     observed_fields_for_existence = [] :: [binary()]
 }).
 
--record(changes_monitoring_spec, {
+-record(space_monitoring_spec, {
     space_id :: od_space:id(),
 
     timeout :: infinity | integer(),
     start_after_seq :: null | integer(),
 
-    triggers :: changes_stream_processor:triggers(),
-    doc_monitoring_specs :: [changes_stream_processor:doc_monitoring_spec()]
+    triggers :: space_monitoring_stream_processor:triggers(),
+    doc_monitoring_specs :: [space_monitoring_stream_processor:doc_monitoring_spec()]
 }).
 
 
