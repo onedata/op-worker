@@ -170,7 +170,7 @@ is_storage_accessible(FileCtx) ->
                         {ok, StorageId} ->
                             not lists:member(StorageId, Storages);
                         ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
-                            %% @TODO VFS-12036 no longer needed when there is no proxy anymore
+                            %% @TODO VFS-12762 no longer needed when there is no proxy anymore
                             true % access via proxy
                     end
             end
@@ -365,17 +365,11 @@ handle_request_and_process_response(SessId, Request) ->
         FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
 
         EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
-        Providers = fslogic_request:get_target_providers(EffLocalUserCtx, FilePartialCtx, Request),
 
-        case lists:member(oneprovider:get_id(), Providers) of
-            true ->
-                OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
-                handle_request_and_process_response_locally(
-                    OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
-                );
-            false ->
-                handle_request_remotely(OriginalUserCtx, Request, Providers)
-        end
+        OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
+        handle_request_and_process_response_locally(
+            OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
+        )
     catch
         Type2:Error2:Stacktrace ->
             fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
@@ -514,12 +508,13 @@ handle_request_locally(UserCtx, #proxyio_request{
 %% Handle request remotely
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
-handle_request_remotely(_UserCtx, _Req, []) ->
-    #fuse_response{status = #status{code = ?ENOTSUP}};
-handle_request_remotely(UserCtx, Req, Providers) ->
-    ProviderId = fslogic_remote:get_provider_to_route(Providers),
-    fslogic_remote:route(UserCtx, ProviderId, Req).
+%% TODO VFS-12678 Remove provider proxy
+%-spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
+%handle_request_remotely(_UserCtx, _Req, []) ->
+%    #fuse_response{status = #status{code = ?ENOTSUP}};
+%handle_request_remotely(UserCtx, Req, Providers) ->
+%    ProviderId = fslogic_remote:get_provider_to_route(Providers),
+%    fslogic_remote:route(UserCtx, ProviderId, Req).
 
 %%--------------------------------------------------------------------
 %% @private
