@@ -170,6 +170,7 @@ is_storage_accessible(FileCtx) ->
                         {ok, StorageId} ->
                             not lists:member(StorageId, Storages);
                         ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+                            % TODO
                             %% @TODO VFS-12762 no longer needed when there is no proxy anymore
                             true % access via proxy
                     end
@@ -459,6 +460,7 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
     try
+        % TODO is it necessary?
         case is_storage_accessible(FileCtx1) of
             true ->
                 handle_request_locally(EffUserCtx, Request, FileCtx1);
@@ -501,20 +503,6 @@ handle_request_locally(UserCtx, #proxyio_request{
 }, FileCtx) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
     handle_proxyio_request(UserCtx, Req, FileCtx, HandleId).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle request remotely
-%% @end
-%%--------------------------------------------------------------------
-%% TODO VFS-12678 Remove provider proxy
-%-spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
-%handle_request_remotely(_UserCtx, _Req, []) ->
-%    #fuse_response{status = #status{code = ?ENOTSUP}};
-%handle_request_remotely(UserCtx, Req, Providers) ->
-%    ProviderId = fslogic_remote:get_provider_to_route(Providers),
-%    fslogic_remote:route(UserCtx, ProviderId, Req).
 
 %%--------------------------------------------------------------------
 %% @private
