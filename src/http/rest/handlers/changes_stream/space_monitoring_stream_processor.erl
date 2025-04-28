@@ -68,7 +68,7 @@ process_doc(UserCtx, ChangedDoc, SpaceMonitoringSpec) ->
         #processing_ctx{file_ctx = FileCtx, gathered_changes = Changes} ->
             CommonInfo = #{
                 <<"fileId">> => get_file_object_id(FileCtx),
-                <<"filePath">> => get_file_path(FileCtx),
+                <<"filePath">> => get_file_path(UserCtx, FileCtx),
                 <<"seq">> => ChangedDoc#document.seq
             },
             {ok, maps:merge(CommonInfo, Changes)}
@@ -117,10 +117,10 @@ get_file_object_id(FileCtx) ->
 
 
 %% @private
--spec get_file_path(file_ctx:ctx()) -> file_meta:path().
-get_file_path(FileCtx) ->
+-spec get_file_path(user_ctx:ctx(), file_ctx:ctx()) -> file_meta:path().
+get_file_path(UserCtx, FileCtx) ->
     try
-        {Path, _} = file_ctx:get_canonical_path(FileCtx),
+        {Path, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
         Path
     catch _:Reason ->
         ?debug("Cannot fetch Path for space monitoring, error: ~tp", [Reason]),
