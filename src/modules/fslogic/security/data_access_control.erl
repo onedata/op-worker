@@ -60,6 +60,7 @@ assert_granted(UserCtx, FileCtx, AccessRequirements) ->
                 false ->
                     assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements);
                 true ->
+                    % TODO
                     %% @TODO VFS-8589 - properly handle getting space dir metadata on proxy providers
                     FileCtx
             end;

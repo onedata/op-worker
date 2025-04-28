@@ -71,24 +71,24 @@ send(SessionId, Msg, ExcludedCons, LogErrors) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO VFS-6364 refactor proxy session - session restart should be on this level
+%% TODO VFS-12678 refactor proxy session - session restart should be on this level
 %% Tries to send given message via any of specified connections.
 %% @end
 %%--------------------------------------------------------------------
--spec send_via_any(communicator:message(), EffSessId :: session:id(), [pid()]) ->
+-spec send_via_any(communicator:message(), EffSessionId :: session:id(), [pid()]) ->
     ok | {error, term()}.
-send_via_any(_Msg, EffSessId, []) ->
-    session_manager:restart_session_if_dead(EffSessId),
+send_via_any(_Msg, EffSessionId, []) ->
+    session_manager:restart_session_if_dead(EffSessionId),
     {error, no_connections};
-send_via_any(Msg, EffSessId, [Conn]) ->
+send_via_any(Msg, EffSessionId, [Conn]) ->
     case connection:send_msg(Conn, Msg) of
         {error, no_connection} = Error ->
-            session_manager:restart_session_if_dead(EffSessId),
+            session_manager:restart_session_if_dead(EffSessionId),
             Error;
         Result ->
             Result
     end;
-send_via_any(Msg, EffSessId, [Conn | Cons]) ->
+send_via_any(Msg, EffSessionId, [Conn | Cons]) ->
     case connection:send_msg(Conn, Msg) of
         ok ->
             ok;
@@ -97,10 +97,10 @@ send_via_any(Msg, EffSessId, [Conn | Cons]) ->
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         {error, no_connection} ->
-            session_manager:restart_session_if_dead(EffSessId),
-            send_via_any(Msg, EffSessId, Cons);
+            session_manager:restart_session_if_dead(EffSessionId),
+            send_via_any(Msg, EffSessionId, Cons);
         _Error ->
-            send_via_any(Msg, EffSessId, Cons)
+            send_via_any(Msg, EffSessionId, Cons)
     end.
 
 
@@ -114,9 +114,9 @@ send_via_any(Msg, EffSessId, [Conn | Cons]) ->
     ExcludedCons :: [pid()]) -> ok | {error, term()}.
 send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
     case session_connections:list(SessionId) of
-        {ok, EffSessId, AllCons} ->
+        {ok, AllCons} ->
             Cons = lists_utils:shuffle(AllCons -- ExcludedCons),
-            send_via_any(Msg, EffSessId, Cons);
+            send_via_any(Msg, SessionId, Cons);
         Error ->
             Error
     end.

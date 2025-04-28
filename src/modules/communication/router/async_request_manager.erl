@@ -325,10 +325,10 @@ handle_info(heartbeat, #state{
     withheld_heartbeats = WH
 } = State) ->
     NewState = case session_connections:list(SessionId) of
-        {ok, EffSessId, Cons} ->
+        {ok, Cons} ->
             State#state{
-                pending_requests = check_workers_status(PR, EffSessId, Cons, true),
-                withheld_heartbeats = check_workers_status(WH, EffSessId, Cons, false),
+                pending_requests = check_workers_status(PR, SessionId, Cons, true),
+                withheld_heartbeats = check_workers_status(WH, SessionId, Cons, false),
                 heartbeat_timer = undefined
             };
         Error ->

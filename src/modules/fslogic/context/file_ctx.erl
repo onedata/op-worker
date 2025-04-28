@@ -722,6 +722,7 @@ get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
 get_storage_id(FileCtx) ->
     case get_storage(FileCtx) of
         {undefined, FileCtx2} ->
+            % TODO
             % can happen for user root dir or space dir accessed via provider proxy
             {undefined, FileCtx2};
         {Storage, FileCtx2} ->
