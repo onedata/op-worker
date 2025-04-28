@@ -17,40 +17,13 @@
 -include("proto/oneclient/server_messages.hrl").
 
 %% API
--export([
-    fill_effective_session_info/2,
-    msg_to_string/1
-]).
+-export([msg_to_string/1]).
 
 -type message() :: #client_message{} | #server_message{}.
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets effective session field in message to specified session id if
-%% this session is proxied by some other session.
-%% @end
-%%--------------------------------------------------------------------
-% TODO VFS-5412
--spec fill_effective_session_info(message(), session:id()) -> message().
-fill_effective_session_info(Msg, SessionId) ->
-    case session:get(SessionId) of
-        {ok, #document{value = #session{proxy_via = PV}}} when is_binary(PV) ->
-            case Msg of
-                #server_message{effective_session_id = undefined} ->
-                    Msg#server_message{effective_session_id = SessionId};
-                #client_message{effective_session_id = undefined} ->
-                    Msg#client_message{effective_session_id = SessionId};
-                _ ->
-                    Msg
-            end;
-        _ ->
-            Msg
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -79,7 +52,7 @@ stringify_only_relevant_info(#server_message{
     message_id = MsgId,
     message_stream = MsgStream,
     message_body = MsgBody,
-    effective_session_id = EffSessionId
+    session_id = EffSessionId
 }) ->
     str_utils:format_bin(
         "ServerMessage{id = ~w, eff_sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
@@ -88,11 +61,10 @@ stringify_only_relevant_info(#server_message{
 stringify_only_relevant_info(#client_message{
     message_id = MsgId,
     session_id = SessionId,
-    effective_session_id = EffSessionId,
     message_stream = MsgStream,
     message_body = MsgBody
 }) ->
     str_utils:format_bin(
-        "ClientMessage{id = ~w, sess_id = ~ts, eff_sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
-        [MsgId, SessionId, EffSessionId, MsgStream, element(1, MsgBody)]
+        "ClientMessage{id = ~w, sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
+        [MsgId, SessionId, MsgStream, element(1, MsgBody)]
     ).

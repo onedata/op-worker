@@ -26,7 +26,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([effective_session_id/1]).
+-export([get_session_id/1]).
 -export([build_rib/1, route_message/2]).
 
 %% Routing Information Base (RIB in short) is a structure containing necessary
@@ -52,19 +52,9 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns session's ID that shall be used for given message.
-%% @end
-%%--------------------------------------------------------------------
--spec effective_session_id(client_message()) -> session:id().
-effective_session_id(#client_message{
-    session_id = SessionId,
-    effective_session_id = undefined
-}) ->
-    SessionId;
-effective_session_id(#client_message{effective_session_id = EffSessionId}) ->
-    EffSessionId.
+-spec get_session_id(client_message()) -> session:id().
+get_session_id(#client_message{session_id = SessionId}) ->
+    SessionId.
 
 
 %%--------------------------------------------------------------------
@@ -166,17 +156,17 @@ route_direct_message(#server_message{message_id = #message_id{
 route_and_ignore_answer(#client_message{
     message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
 } = Msg) ->
-    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    Req = {fuse_request, get_session_id(Msg), FuseRequest},
     worker_proxy:cast(fslogic_ref_by_context_guid(ContextGuid), Req);
 route_and_ignore_answer(#client_message{
     message_body = #fuse_request{} = FuseRequest
 } = Msg) ->
-    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    Req = {fuse_request, get_session_id(Msg), FuseRequest},
     ok = worker_proxy:cast(fslogic_worker, Req);
 route_and_ignore_answer(ClientMsg = #client_message{
     message_body = #dbsync_message{message_body = Msg}
 }) ->
-    Req = {dbsync_message, effective_session_id(ClientMsg), Msg},
+    Req = {dbsync_message, get_session_id(ClientMsg), Msg},
     ok = worker_proxy:cast(dbsync_worker, Req);
 % Message that updates the auth_manager:token_credentials() in given session
 % (originates from #'Macaroon' client message).
@@ -187,12 +177,12 @@ route_and_ignore_answer(#client_message{
     }
 } = Msg) ->
     incoming_session_watcher:update_credentials(
-        effective_session_id(Msg),
+        get_session_id(Msg),
         AccessToken, ConsumerToken
     ),
     ok;
 route_and_ignore_answer(#client_message{message_body = #close_session{}} = Msg) ->
-    incoming_session_watcher:report_session_close(effective_session_id(Msg)),
+    incoming_session_watcher:report_session_close(get_session_id(Msg)),
     ok;
 route_and_ignore_answer(ClientMsg) ->
     event_router:route_message(ClientMsg).
@@ -270,7 +260,7 @@ answer_or_delegate(Msg = #client_message{
 }, _) ->
     % TODO VFS-5331
     ok = worker_proxy:cast(fslogic_worker,
-        {fuse_request, effective_session_id(Msg), FuseRequest}
+        {fuse_request, get_session_id(Msg), FuseRequest}
     );
 
 answer_or_delegate(Msg = #client_message{
@@ -278,7 +268,7 @@ answer_or_delegate(Msg = #client_message{
     message_body = #get_configuration{}
 }, RIB) ->
     delegate_request(proc, fun() ->
-        storage_req:get_configuration(effective_session_id(Msg))
+        storage_req:get_configuration(get_session_id(Msg))
     end, MsgId, RIB);
 
 answer_or_delegate(#client_message{
@@ -293,21 +283,21 @@ answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
 }, RIB) ->
-    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    Req = {fuse_request, get_session_id(Msg), FuseRequest},
     delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = FuseRequest = #fuse_request{}
 }, RIB) ->
-    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    Req = {fuse_request, get_session_id(Msg), FuseRequest},
     delegate_request(fslogic_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = ProviderRequest = #provider_request{context_guid = ContextGuid}
 }, RIB) ->
-    Req = {provider_request, effective_session_id(Msg), ProviderRequest},
+    Req = {provider_request, get_session_id(Msg), ProviderRequest},
     delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
@@ -317,14 +307,14 @@ answer_or_delegate(Msg = #client_message{
     }
 }, RIB) ->
     Node = read_write_req:get_proxyio_node(file_id:guid_to_uuid(FileGuid)),
-    Req = {proxyio_request, effective_session_id(Msg), ProxyIORequest},
+    Req = {proxyio_request, get_session_id(Msg), ProxyIORequest},
     delegate_request({fslogic_worker, Node}, Req, Id, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = #dbsync_request{} = DBSyncRequest
 }, RIB) ->
-    Req = {dbsync_request, effective_session_id(Msg), DBSyncRequest},
+    Req = {dbsync_request, get_session_id(Msg), DBSyncRequest},
     delegate_request(dbsync_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg, _) ->

@@ -45,12 +45,12 @@
 %%                        waiting to be forwarded
 -record(state, {
     session_id :: session:id(),
-    proxy_session_id :: undefined | session:id(),
     sequencer_manager :: pid(),
     stream_id :: stream_id(),
     sequence_number = 0 :: sequence_number(),
     sequence_number_ack = -1 :: -1 | sequence_number(),
     messages = #{} :: #{sequence_number() => #client_message{}},
+    % TODO what is this?
     is_proxy :: boolean(),
     session_type :: session:type()
 }).
@@ -103,8 +103,9 @@ init([SeqMan, StmId, SessId]) ->
     ?debug("Initializing sequencer in stream for session ~tp", [SessId]),
     process_flag(trap_exit, true),
     register_stream(SeqMan, StmId),
-    {ok, #document{value = #session{type = SessionType, proxy_via = ProxyVia}}} = session:get(SessId),
-    IsProxy = SessionType =:= provider_incoming orelse SessionType =:= provider_outgoing orelse ProxyVia =/= undefined,
+    % TODO what is this proxy?
+    {ok, #document{value = #session{type = SessionType}}} = session:get(SessId),
+    IsProxy = SessionType =:= provider_incoming orelse SessionType =:= provider_outgoing,
     self() ! reset_stream,
     {ok, receiving, #state{
         sequencer_manager = SeqMan,
