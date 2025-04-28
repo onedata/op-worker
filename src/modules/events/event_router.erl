@@ -32,7 +32,7 @@
 %%--------------------------------------------------------------------
 -spec route_message(#client_message{}) -> ok.
 route_message(Msg) ->
-    route_message(Msg, router:effective_session_id(Msg)).
+    route_message(Msg, router:get_session_id(Msg)).
 
 %%%===================================================================
 %%% Internal functions

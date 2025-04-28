@@ -29,19 +29,18 @@
 -export([start_link/2, handle/2, handle_session_termination/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
+-export([
+    init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+    code_change/3
+]).
 
--type ctx() :: event_type:ctx() | subscription_type:ctx().
--type data_type() :: streams | subscriptions | guid_to_provider | sub_to_guid.
--type provider() :: oneprovider:id() | self.
+-type data_type() :: streams | subscriptions.
 
 %% event manager state:
 %% session_id        - ID of a session associated with this event manager
 %% event_manager_sup - pid of an event manager supervisor
 %% event_stream_sup  - pid of an event stream supervisor
 %% event_streams     - mapping from a subscription ID to an event stream pid
-%% providers         - cache that maps file to provider that shall handle the event
 -record(state, {
     session_id :: undefined | session:id(),
     manager_sup :: undefined | pid(),
@@ -51,8 +50,7 @@
 -define(STATE_ID, session).
 -define(INITIALIZATION_STATUS_KEY, initialization_status).
 -define(INITIALIZATION_STATUS_FINISHED_VALUE, initialization_finished).
--define(LOCAL_CALL_TIMEOUT, timer:minutes(1)).
--define(REMOTE_CALL_TIMEOUT, timer:minutes(10)).
+-define(CALL_TIMEOUT, timer:minutes(1)).
 
 %%%===================================================================
 %%% API
@@ -63,10 +61,10 @@
 %% Starts the event manager.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(MgrSup :: pid(), SessId :: session:id()) ->
+-spec start_link(MgrSup :: pid(), SessionId :: session:id()) ->
     {ok, Mgr :: pid()} | ignore | {error, Reason :: term()}.
-start_link(MgrSup, SessId) ->
-    gen_server2:start_link(?MODULE, [MgrSup, SessId], []).
+start_link(MgrSup, SessionId) ->
+    gen_server2:start_link(?MODULE, [MgrSup, SessionId], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -87,29 +85,7 @@ handle(_Manager, Request, -1) ->
     ok;
 handle(Manager, Request, RetryCounter) ->
     try
-        case get_provider(Request, Manager) of
-            self ->
-                handle_locally(Request, Manager);
-            ignore ->
-                ?debug("Ignore request: ~tp", [Request]), % Manager is closing
-                ok;
-            ProviderId ->
-                Self = oneprovider:get_id_or_undefined(),
-                case ProviderId of
-                    Self -> % For requests with proxy filed set
-                        handle_locally(Request, Manager);
-                    _ ->
-                        case Request of
-                            #subscription{} ->
-                                call_manager(Manager, {remote_subscription, ProviderId, Request}),
-                                {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
-                                handle_remotely(Request, ProviderId, SessId);
-                            _->
-                                {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
-                                handle_remotely(Request, ProviderId, SessId)
-                        end
-                end
-        end
+        handle_insecure(Request, Manager)
     catch
         exit:{noproc, _} ->
             ?debug("No proc to handle request ~tp, retry", [Request]),
@@ -154,15 +130,15 @@ handle_session_termination(Manager) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([MgrSup, SessId]) ->
-    ?debug("Initializing event manager for session ~tp", [SessId]),
+init([MgrSup, SessionId]) ->
+    ?debug("Initializing event manager for session ~tp", [SessionId]),
     process_flag(trap_exit, true),
-    init_memory(SessId),
+    init_memory(),
     Self = self(),
-    {ok, #document{key = SessId}} = session:update(SessId, fun(Session = #session{}) ->
+    {ok, #document{key = SessionId}} = session:update(SessionId, fun(Session = #session{}) ->
         {ok, Session#session{event_manager = Self}}
     end),
-    {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
+    {ok, #state{manager_sup = MgrSup, session_id = SessionId}, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -250,10 +226,10 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(Reason, #state{session_id = SessId} = State) ->
+terminate(Reason, #state{session_id = SessionId} = State) ->
     ?log_terminate(Reason, State),
     delete_memory(),
-    session:update(SessId, fun(Session = #session{}) ->
+    session:update(SessionId, fun(Session = #session{}) ->
         {ok, Session#session{event_manager = undefined}}
     end).
 
@@ -275,74 +251,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns ID of a provider responsible for request handling in given context.
-%% Handles cases of events that should be handled even if file is not supported
-%% locally
-%% @end
-%%--------------------------------------------------------------------
--spec get_provider(Request :: term(), Manager :: pid()) ->
-    provider() | ignore | no_return().
-get_provider(#flush_events{provider_id = ProviderId}, _Manager) ->
-    ProviderId;
-get_provider(#event{type = Type}, Manager)
-    when is_record(Type, file_attr_changed_event)
-    orelse is_record(Type, file_location_changed_event)
-    orelse is_record(Type, file_perm_changed_event)
-    orelse is_record(Type, file_removed_event)
-    orelse is_record(Type, file_renamed_event)
-    orelse is_record(Type, quota_exceeded_event) ->
-    case ets_state:get(session, Manager, proxy_via) of
-        {ok, ProxyVia} -> ProxyVia;
-        _ -> ignore
-    end;
-get_provider(Request, Manager) ->
-    case get_context(Request) of
-        undefined ->
-            self;
-        {file, FileGuid} -> % TODO VFS-7448 - test production of events for hardlinks
-            case get_from_memory(Manager, guid_to_provider, FileGuid) of
-                {ok, {ID, _SubCount}} ->
-                    ID;
-                _ ->
-                    case ets_state:get(session, Manager, session_id) of
-                        {ok, SessId} -> get_provider(Request, SessId, FileGuid);
-                        _ -> ignore
-                    end
-            end
-    end.
-
--spec get_provider(Request :: term(), session:id(), file_id:file_guid()) ->
-    provider() | no_return().
-get_provider(_, SessId, FileGuid) ->
-    case fslogic_file_id:is_root_dir_guid(FileGuid) of
-        true ->
-            self;
-        false ->
-            SpaceId = file_id:guid_to_space_id(FileGuid),
-            case provider_logic:supports_space(SpaceId) of
-                true ->
-                    self;
-                false ->
-                    case space_logic:get_provider_ids(SessId, SpaceId) of
-                        {ok, []} -> throw(unsupported_space);
-                        {ok, [RemoteProviderId | _]} -> RemoteProviderId
-                    end
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Handles request locally (in caller process) or delegates it to manager
 %% if manager has not finished initialization.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_locally(Request :: term(), Manager :: pid()) -> ok.
-handle_locally(#event{} = Evt, Manager) ->
+-spec handle_insecure(Request :: term(), Manager :: pid()) -> ok.
+handle_insecure(#event{} = Evt, Manager) ->
     handle_event(Evt, Manager, true);
-handle_locally(#flush_events{} = FlushRequest, Manager) ->
+handle_insecure(#flush_events{} = FlushRequest, Manager) ->
     handle_flush(FlushRequest, Manager, true);
-handle_locally(Request, Manager) ->
+handle_insecure(Request, Manager) ->
     call_manager(Manager, Request).
 
 %%--------------------------------------------------------------------
@@ -446,12 +364,7 @@ handle_in_process(Request, #state{streams_sup = StmsSup} = State, RetryCounter) 
 %%--------------------------------------------------------------------
 -spec handle_in_process(Request :: term(), State :: #state{}) -> ok.
 handle_in_process(#subscription{} = Sub, #state{} = State) ->
-    add_subscription(Sub, State),
-    cache_provider(Sub, self);
-
-handle_in_process({remote_subscription, ProviderId, Sub}, #state{} = State) ->
-    add_subscription(Sub, State),
-    cache_provider(Sub, ProviderId);
+    add_subscription(Sub, State);
 
 handle_in_process(#subscription_cancellation{} = Request, #state{} = State) ->
     cancel_subscription(Request, State, request);
@@ -472,14 +385,14 @@ handle_in_process(Request, _State) ->
 add_subscription(#subscription{id = Id} = Sub, #state{} = State) ->
     #state{
         streams_sup = StmsSup,
-        session_id = SessId
+        session_id = SessionId
     } = State,
     StmKey = subscription_type:get_stream_key(Sub),
     case get_from_memory(streams, StmKey) of
         {ok, Stm} ->
             ok = event_stream:send(Stm, {add_subscription, Sub});
         error ->
-            {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
+            {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessionId),
             add_to_memory(streams, StmKey, Stm)
     end,
     add_to_memory(subscriptions, Id, StmKey).
@@ -487,7 +400,7 @@ add_subscription(#subscription{id = Id} = Sub, #state{} = State) ->
 
 %% @private
 -spec cancel_subscription(#subscription_cancellation{}, #state{}, CancellationReason :: request | termination) -> ok.
-cancel_subscription(#subscription_cancellation{id = SubId} = Request, #state{session_id = SessId}, CancellationReason) ->
+cancel_subscription(#subscription_cancellation{id = SubId}, _State, CancellationReason) ->
     case get_from_memory(subscriptions, SubId) of
         {ok, StmKey} ->
             case get_from_memory(streams, StmKey) of
@@ -497,28 +410,7 @@ cancel_subscription(#subscription_cancellation{id = SubId} = Request, #state{ses
                         % Ignore stream errors on termination
                         termination -> event_stream:send(Stm, {remove_subscription, SubId})
                     end,
-                    remove_from_memory(subscriptions, SubId),
-                    {FileGuid, ProviderId} = get_and_clean_subscription_cache(SubId),
-
-                    Self = oneprovider:get_id_or_undefined(),
-                    case is_binary(ProviderId) andalso ProviderId =/= Self of
-                        true ->
-                            case CancellationReason of
-                                request ->
-                                    % Cancel subscription also on remote provider
-                                    % Spawn as sending request could block manager for long time
-                                    spawn(fun() ->
-                                        stream_to_provider(Request, ProviderId, SessId, FileGuid, undefined)
-                                    end);
-                                termination ->
-                                    % Sync request sending to block session termination
-                                    % (messages cannot be send after session termination)
-                                    stream_to_provider(Request, ProviderId, SessId, FileGuid, undefined)
-                            end,
-                            ok;
-                        false ->
-                            ok
-                    end;
+                    remove_from_memory(subscriptions, SubId);
                 _ ->
                     ok
             end;
@@ -530,155 +422,6 @@ cancel_subscription(#subscription_cancellation{id = SubId} = Request, #state{ses
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Forwards request to the remote provider.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_remotely(Request :: term(), ProviderId :: oneprovider:id(),
-    session:id()) -> ok.
-handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
-    #flush_events{context = Context, notify = Notify} = Request,
-    {ok, SessDoc} = session:get(SessId),
-    Credentials = session:get_credentials(SessDoc),
-    {ok, SessMode} = session:get_mode(SessDoc),
-    StreamId = sequencer:binary_to_stream_id(Context),
-    ClientMsg = #client_message{
-        message_stream = #message_stream{stream_id = StreamId},
-        message_body = Request,
-        effective_session_id = SessId,
-        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
-        effective_session_mode = SessMode
-    },
-    Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
-    RequestTranslator = spawn(fun() ->
-        receive
-            % VFS-5206 - handle heartbeats
-            #server_message{message_body = #status{}} = Msg ->
-                Notify(Msg)
-        after ?REMOTE_CALL_TIMEOUT ->
-            Notify(#server_message{message_body = #status{code = ?EAGAIN}})
-        end
-    end),
-    communicator:stream_to_provider(Ref, ClientMsg, StreamId, RequestTranslator),
-    ok;
-
-handle_remotely(#event{} = Evt, ProviderId, SessId) ->
-    handle_remotely(#events{events = [Evt]}, ProviderId, SessId);
-
-handle_remotely(#subscription{} = Sub, ProviderId, SessId) ->
-    stream_to_provider(Sub, ProviderId, SessId, self()),
-
-    receive
-        % VFS-5206 - handle heartbeats
-        #server_message{message_body = #status{code = ?OK}} ->
-            ok;
-        #server_message{message_body = #status{} = Status} ->
-            ?error("Remote subscription ~tp (provider ~tp, seesion ~tp) failed with status: ~tp",
-                [Sub, ProviderId, SessId, Status])
-    after
-        ?REMOTE_CALL_TIMEOUT ->
-            ?error("Remote subscription ~tp (provider ~tp, seesion ~tp) failed timeout", [Sub, ProviderId, SessId])
-    end;
-
-handle_remotely(Request, ProviderId, SessId) ->
-    stream_to_provider(Request, ProviderId, SessId, undefined).
-
-
-%% @private
--spec stream_to_provider(Request :: term(), ProviderId :: oneprovider:id(), session:id(), undefined | pid()) -> ok.
-stream_to_provider(Request, ProviderId, SessId, RecipientPid) ->
-    {file, FileGuid} = get_context(Request),
-    stream_to_provider(Request, ProviderId, SessId, FileGuid, RecipientPid).
-
-
-%% @private
--spec stream_to_provider(Request :: term(), ProviderId :: oneprovider:id(), session:id(),
-    file_id:file_guid(), undefined | pid()) -> ok.
-stream_to_provider(Request, ProviderId, SessId, FileGuid, RecipientPid) ->
-    StreamId = sequencer:binary_to_stream_id(FileGuid),
-    {ok, SessDoc} = session:get(SessId),
-    Credentials = session:get_credentials(SessDoc),
-    {ok, SessMode} = session:get_mode(SessDoc),
-    communicator:stream_to_provider(
-        session_utils:get_provider_session_id(outgoing, ProviderId),
-        #client_message{
-            message_body = Request,
-            effective_session_id = SessId,
-            effective_client_tokens = auth_manager:get_client_tokens(Credentials),
-            effective_session_mode = SessMode
-        },
-        StreamId, RecipientPid
-    ),
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Caches information about provider that handles request connected with guid.
-%% @end
-%%--------------------------------------------------------------------
--spec cache_provider(#subscription{}, ProviderId :: provider()) -> ok.
-cache_provider(#subscription{id = Id} = Sub, Provider) ->
-    case get_context(Sub) of
-        undefined ->
-            ok;
-        {file, FileGuid} ->
-            cache_guid_to_provider(FileGuid, Provider),
-            add_to_memory(sub_to_guid, Id, FileGuid)
-    end.
-
-%% @private
--spec cache_guid_to_provider(file_id:file_guid(), provider()) -> ok.
-cache_guid_to_provider(FileGuid, Provider) ->
-    case get_from_memory(guid_to_provider, FileGuid) of
-        {ok, {Provider, SubCount}} ->
-            add_to_memory(guid_to_provider, FileGuid, {Provider, SubCount + 1});
-        error ->
-            add_to_memory(guid_to_provider, FileGuid, {Provider, 1})
-    end.
-
-%% @private
--spec get_and_clean_subscription_cache(subscription:id()) ->
-    {file_id:file_guid() | undefined, oneprovider:id() | undefined}.
-get_and_clean_subscription_cache(SubId) ->
-    case get_from_memory(sub_to_guid, SubId) of
-        {ok, FileGuid} ->
-            remove_from_memory(sub_to_guid, SubId),
-            case get_from_memory(guid_to_provider, FileGuid) of
-                {ok, {Provider, 1}} ->
-                    remove_from_memory(guid_to_provider, FileGuid),
-                    {FileGuid, Provider};
-                {ok, {Provider, SubCount}} ->
-                    add_to_memory(guid_to_provider, FileGuid, {Provider, SubCount - 1}),
-                    {FileGuid, Provider};
-                _ ->
-                    {FileGuid, undefined}
-            end;
-        _ ->
-            {undefined, undefined}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns request context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_context(Request :: term()) -> Ctx :: ctx().
-get_context(#event{} = Evt) ->
-    event_type:get_context(Evt);
-
-get_context(#events{events = [Evt]}) ->
-    get_context(Evt);
-
-get_context(#subscription{} = Sub) ->
-    subscription_type:get_context(Sub);
-
-get_context(_) ->
-    undefined.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Starts event streams for durable subscriptions.
 %% @end
 %%--------------------------------------------------------------------
@@ -686,12 +429,12 @@ get_context(_) ->
 start_event_streams(#state{streams_sup = undefined, manager_sup = MgrSup} = State) ->
     {ok, StmsSup} = event_manager_sup:get_event_stream_sup(MgrSup),
     start_event_streams(State#state{streams_sup = StmsSup});
-start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) ->
+start_event_streams(#state{streams_sup = StmsSup, session_id = SessionId} = State) ->
     {ok, Docs} = subscription:list_durable_subscriptions(),
 
     lists:foreach(fun(#document{value = #subscription{id = Id} = Sub}) ->
         StmKey = subscription_type:get_stream_key(Sub),
-        {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
+        {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessionId),
         add_to_memory(subscriptions, Id, StmKey),
         add_to_memory(streams, StmKey, Stm)
     end, Docs),
@@ -795,15 +538,10 @@ get_collection_keys_from_memory(DataType) ->
 %% Initializes state.
 %% @end
 %%--------------------------------------------------------------------
--spec init_memory(session:id()) -> ok.
-init_memory(SessionID) ->
+-spec init_memory() -> ok.
+init_memory() ->
     ets_state:init_collection(?STATE_ID, streams),
-    ets_state:init_collection(?STATE_ID, subscriptions),
-    ets_state:init_collection(?STATE_ID, guid_to_provider),
-    ets_state:init_collection(?STATE_ID, sub_to_guid),
-    ets_state:save(?STATE_ID, self(), session_id, SessionID),
-    {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionID),
-    ets_state:save(?STATE_ID, self(), proxy_via, utils:ensure_defined(ProxyVia, self)).
+    ets_state:init_collection(?STATE_ID, subscriptions).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -815,13 +553,9 @@ init_memory(SessionID) ->
 delete_memory() ->
     ets_state:delete(?STATE_ID, self(), ?INITIALIZATION_STATUS_KEY),
     ets_state:delete_collection(?STATE_ID, streams),
-    ets_state:delete_collection(?STATE_ID, subscriptions),
-    ets_state:delete_collection(?STATE_ID, guid_to_provider),
-    ets_state:delete_collection(?STATE_ID, sub_to_guid),
-    ets_state:delete(?STATE_ID, self(), session_id),
-    ets_state:delete(?STATE_ID, self(), proxy_via).
+    ets_state:delete_collection(?STATE_ID, subscriptions).
 
 %% @private
 -spec call_manager(pid(), term()) -> term().
 call_manager(Manager, Request) ->
-    gen_server2:call(Manager, Request, ?LOCAL_CALL_TIMEOUT).
+    gen_server2:call(Manager, Request, ?CALL_TIMEOUT).
