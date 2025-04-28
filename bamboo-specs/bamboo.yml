@@ -174,7 +174,6 @@ stages:
         - multi_provider_db_sync
         - multi_provider_file_ops
         - multi_provider_hardlinks
-        - multi_provider_proxy
         - multi_provider_rest
         - multi_provider_view_rest
         - multipart_upload
@@ -1358,14 +1357,6 @@ multi_provider_hardlinks:
       name: ct_logs_multi_provider_hardlinks.tar.gz
   requirements: *os-agent
 
-multi_provider_proxy:
-  <<: *ct-job
-  key: MULPPROX
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_multi_provider_proxy.tar.gz
-  requirements: *os-agent
-
 multi_provider_rest:
   <<: *ct-job
   key: MULREST
@@ -2008,7 +1999,6 @@ Coverage report:
     - artifact: ct_logs_multi_provider_db_sync.tar.gz
     - artifact: ct_logs_multi_provider_file_ops.tar.gz
     - artifact: ct_logs_multi_provider_hardlinks.tar.gz
-    - artifact: ct_logs_multi_provider_proxy.tar.gz
     - artifact: ct_logs_multi_provider_rest.tar.gz
     - artifact: ct_logs_multi_provider_view_rest.tar.gz
     - artifact: ct_logs_multipart_upload.tar.gz
