@@ -30,8 +30,6 @@
 -export([
     subscribe_on_dir_test/1,
     sync_subscribe_on_dir_test/1,
-    proxy_subscribe_on_dir_test/1,
-    sync_proxy_subscribe_on_dir_test/1,
     subscribe_on_user_root_test/1,
     subscribe_on_user_root_filter_test/1,
     subscribe_on_new_space_test/1,
@@ -51,8 +49,6 @@ all() ->
     ?ALL([
         subscribe_on_dir_test,
         sync_subscribe_on_dir_test,
-        proxy_subscribe_on_dir_test,
-        sync_proxy_subscribe_on_dir_test,
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
@@ -84,14 +80,6 @@ subscribe_on_dir_test(Config) ->
 sync_subscribe_on_dir_test(Config) ->
     [_, Worker] = ?config(op_worker_nodes, Config),
     subscribe_on_dir_test_base(Config, <<"/space_name1">>, sync, Worker).
-
-proxy_subscribe_on_dir_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
-    subscribe_on_dir_test_base(Config, <<"/space_name4">>, async, Worker).
-
-sync_proxy_subscribe_on_dir_test(Config) ->
-    [Worker, _] = ?config(op_worker_nodes, Config),
-    subscribe_on_dir_test_base(Config, <<"/space_name4">>, sync, Worker).
 
 subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWorker) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
@@ -694,6 +682,7 @@ rename_auth_filtering_test(Config) ->
     ok.
 
 
+%% TODO assert error on creating subscription on not supporting provider??
 proxy_connection_error_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     SessionId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),

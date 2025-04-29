@@ -8,6 +8,7 @@
 %%% @doc
 %%% Module handling serialization to and deserialization from protobuf format
 %%% of client/server messages.
+%%% TODO check guid/space id of file and rejest not supported space request???
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_serializer).

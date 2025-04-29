@@ -250,12 +250,7 @@ multi_space_test(Config) ->
     Attempts = 120,
 
     SpaceConfigs = lists:foldl(fun({_, SN}, Acc) ->
-        {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider} = case SN of
-            <<"space1">> ->
-                {3,0,0,1};
-            _ ->
-                {0,3,1,1}
-        end,
+        {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider} = {3,0,0,1},
         EC = multi_provider_file_ops_test_base:extend_config(Config, User,
             {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
         [{SN, EC} | Acc]

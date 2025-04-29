@@ -51,8 +51,7 @@
     synchronize_stress_test_base/2,
     cancel_synchronizations_for_session_with_mocked_rtransfer_test_base/1,
     cancel_synchronizations_for_session_test_base/1,
-    transfer_files_to_source_provider/1,
-    proxy_session_token_update_test_base/3
+    transfer_files_to_source_provider/1
 ]).
 -export([init_env/1, teardown_env/1, mock_sync_and_rtransfer_errors/1, unmock_sync_and_rtransfer_errors/1]).
 
@@ -1748,52 +1747,6 @@ transfer_files_to_source_provider(Config0) ->
            "Average time per file[ms]: ~tp~n"
            "GUI time [s]: ~tp",
         [TransfersTimeSec, TransfersTimeSec * 1000 / FilesNum, TimeSecGui]).
-
-
-proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts) ->
-    proxy_session_token_update_test_base(Config, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts);
-proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
-    User = <<"user1">>,
-    SpaceName = <<"space4">>,       % supported on P1 but not on P2
-
-    Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
-    [P1 | _] = ?config(workers1, Config),
-    [P2 | _] = ?config(workers_not1, Config),
-    GetSessIdFun = ?config(session, Config),
-
-    SessionId = GetSessIdFun(P2),   % proxy session on P1 should have the same SessionId as session on P2
-
-    OriginalAccessToken = ?config({access_token, User}, Config),
-    OriginalClientTokens = #client_tokens{access_token = OriginalAccessToken, consumer_token = undefined},
-
-    NewAccessToken = tokens:confine(OriginalAccessToken, #cv_data_readonly{}),
-    ?assertNotEqual(OriginalAccessToken, NewAccessToken),
-
-    NewClientTokens = #client_tokens{access_token = NewAccessToken, consumer_token = undefined},
-
-    % After making request resulting in proxy request session with the same SessionId should
-    % exist on P1 (proxy one) and P2
-    DirPath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P2, SessionId, DirPath)),
-
-    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
-    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
-
-    % Assert that when updating credentials on P2 proxy session on P1 is not automatically updated
-    ?assertEqual(ok, rpc:call(P2, incoming_session_watcher, update_credentials, [
-        SessionId, NewAccessToken, undefined
-    ]), Attempts),
-
-    ?assertEqual({ok, OriginalClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
-    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
-
-    % But any future proxy request will update those credentials (credentials are send with every
-    % proxy request)
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, ?FILE_REF(DirGuid)), Attempts),
-    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
-    ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
-
-    ok.
 
 
 %%%===================================================================
