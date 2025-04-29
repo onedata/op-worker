@@ -715,7 +715,7 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
     transfers_test_mechanism:run_test(
         Config2, #transfer_test_spec{
             setup = #setup{
-                setup_node = WorkerP1,
+                setup_node = WorkerP2,
                 assertion_nodes = [WorkerP2],
                 files_structure = [{0, 1}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
@@ -726,8 +726,8 @@ replicate_to_not_supporting_provider(Config, Type, FileKeyType) ->
             scenario = #scenario{
                 type = Type,
                 file_key_type = FileKeyType,
-                schedule_node = WorkerP1,
-                replicating_nodes = [WorkerP2],
+                schedule_node = WorkerP2,
+                replicating_nodes = [WorkerP1],
                 function = fun transfers_test_mechanism:error_on_replicating_files/2
             },
             expected = #expected{
