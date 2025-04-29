@@ -60,7 +60,7 @@ assert_granted(UserCtx, FileCtx, AccessRequirements) ->
                 false ->
                     assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements);
                 true ->
-                    % TODO
+                    % TODO should requests for not supported space be rejected?
                     %% @TODO VFS-8589 - properly handle getting space dir metadata on proxy providers
                     FileCtx
             end;

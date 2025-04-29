@@ -163,17 +163,12 @@ is_storage_accessible(FileCtx) ->
             true;
         Storages ->
             case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
-                true -> true;
+                true ->
+                    true;
                 false ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx),
-                    case space_logic:get_local_supporting_storage(SpaceId) of
-                        {ok, StorageId} ->
-                            not lists:member(StorageId, Storages);
-                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
-                            % TODO
-                            %% @TODO VFS-12762 no longer needed when there is no proxy anymore
-                            true % access via proxy
-                    end
+                    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+                    not lists:member(StorageId, Storages)
             end
     end.
 
@@ -362,18 +357,18 @@ init_report() ->
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
     try
+        % TODO assert space supported/target provider is self?
         OriginalUserCtx = user_ctx:new(SessId),
         FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
 
         EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
 
         OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
-        handle_request_and_process_response_locally(
+        handle_request_and_process_response_insecure(
             OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
         )
-    catch
-        Type2:Error2:Stacktrace ->
-            fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
+    catch Type:Error:Stacktrace ->
+        fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
     end.
 
 
@@ -440,17 +435,12 @@ get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle request locally and do postprocessing of the response
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_and_process_response_locally(
+-spec handle_request_and_process_response_insecure(
     od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
 ) ->
     response().
-handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
     FileCtx1 = case FilePartialCtx of
         undefined ->
             undefined;
@@ -459,28 +449,16 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
             FileCtx0
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
-    try
-        % TODO is it necessary?
-        case is_storage_accessible(FileCtx1) of
-            true ->
-                handle_request_locally(EffUserCtx, Request, FileCtx1);
-            false ->
-                #fuse_response{status = #status{code = ?EAGAIN}}
-        end
-    catch
-        Type:Error:Stacktrace ->
-            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+
+    case is_storage_accessible(FileCtx1) of
+        true -> handle_request(EffUserCtx, Request, FileCtx1);
+        false -> #fuse_response{status = #status{code = ?EAGAIN}}
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle request locally, as it operates on locally supported entity.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
+-spec handle_request(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
+handle_request(UserCtx, #fuse_request{fuse_request = #file_request{
     file_request = Req
 }}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
@@ -489,15 +467,15 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     Ans = handle_file_request(UserCtx, Req, FileCtx),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
+handle_request(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
     multipart_request = Req
 }}, _FileCtx) ->
     handle_multipart_upload_request(UserCtx, Req);
-handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
+handle_request(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
+handle_request(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
     handle_provider_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #proxyio_request{
+handle_request(UserCtx, #proxyio_request{
     parameters = Parameters,
     proxyio_request = Req
 }, FileCtx) ->

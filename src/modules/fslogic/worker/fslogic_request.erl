@@ -56,6 +56,7 @@ get_file_partial_ctx(_UserCtx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
+% TODO rm not used?
 %%--------------------------------------------------------------------
 %% @doc
 %% Get providers capable of handling given request.
