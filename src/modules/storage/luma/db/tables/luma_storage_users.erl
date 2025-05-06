@@ -141,7 +141,7 @@ get_and_describe(Storage, UserId) ->
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire(Storage, UserId) ->
     Result = case storage:get_luma_feed(Storage) of
         ?AUTO_FEED -> acquire_default_mapping(Storage, UserId);
@@ -149,11 +149,11 @@ acquire(Storage, UserId) ->
         ?LOCAL_FEED -> {error, not_found}
     end,
     case Result of
-        {ok, Record, Feed} ->
+        {error, _} = Error ->
+            Error;
+        {_, Record, Feed} ->
             maybe_add_reverse_mapping(Storage, Record, UserId, Feed),
-            Result;
-        Error ->
-            Error
+            Result
     end.
 
 
@@ -162,7 +162,7 @@ acquire(Storage, UserId) ->
 acquire_mapping_from_external_feed(Storage, UserId) ->
     case luma_external_feed:map_onedata_user_to_credentials(UserId, Storage) of
         {ok, StorageUserMap} ->
-            {ok, luma_storage_user:new(UserId, StorageUserMap, Storage), ?EXTERNAL_FEED};
+            {cache, luma_storage_user:new(UserId, StorageUserMap, Storage), ?EXTERNAL_FEED};
         {error, luma_external_feed_error} ->
             {error, not_found};
         OtherError ->
@@ -173,7 +173,7 @@ acquire_mapping_from_external_feed(Storage, UserId) ->
     {ok, record(), luma:feed()}.
 acquire_default_mapping(Storage, UserId) ->
     {ok, StorageUser} = luma_auto_feed:acquire_user_storage_credentials(Storage, UserId),
-    {ok, StorageUser, ?AUTO_FEED}.
+    {nocache, StorageUser, ?AUTO_FEED}.
 
 
 -spec store_internal(storage(), luma_onedata_user:user_map(), luma_storage_user:user_map(), luma:feed()) ->

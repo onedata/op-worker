@@ -167,7 +167,7 @@ encode_key(AclUser, ?ACL) ->
 
 
 -spec acquire(storage(), internal_key(), key_type()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire(Storage, Key, Mode) ->
     case storage:get_luma_feed(Storage) of
         ?EXTERNAL_FEED ->
@@ -178,7 +178,7 @@ acquire(Storage, Key, Mode) ->
 
 
 -spec acquire_from_external_feed(storage(), internal_key(), key_type()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire_from_external_feed(Storage, Uid, ?UID) ->
     acquire_uid_mapping(Storage, Uid);
 acquire_from_external_feed(Storage, AclUser, ?ACL) ->
@@ -186,24 +186,24 @@ acquire_from_external_feed(Storage, AclUser, ?ACL) ->
 
 
 -spec acquire_uid_mapping(storage:data(), luma:uid()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire_uid_mapping(Storage, Uid) ->
     case luma_external_feed:map_uid_to_onedata_user(Uid, Storage) of
         {ok, OnedataUserMap} ->
             OnedataUser = luma_onedata_user:new(OnedataUserMap),
             UserId = luma_onedata_user:get_user_id(OnedataUser),
             add_reverse_mapping(Storage, UserId, Uid, ?EXTERNAL_FEED),
-            {ok, OnedataUser, ?EXTERNAL_FEED};
+            {cache, OnedataUser, ?EXTERNAL_FEED};
         Error ->
             Error
     end.
 
 -spec acquire_acl_mapping(storage:data(), luma:acl_who()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire_acl_mapping(Storage, AclUser) ->
     case luma_external_feed:map_acl_user_to_onedata_user(AclUser, Storage) of
         {ok, OnedataUserMap} ->
-            {ok, luma_onedata_user:new(OnedataUserMap), ?EXTERNAL_FEED};
+            {cache, luma_onedata_user:new(OnedataUserMap), ?EXTERNAL_FEED};
         Error ->
             Error
     end.
