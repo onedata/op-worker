@@ -123,7 +123,7 @@ is_storage_imported(StorageId) ->
     {true, od_space:id()} | false.
 get_user_space_by_name(SpaceName, AccessToken) ->
     UserId = get_user_id_from_token(AccessToken),
-    SessionId = create_session(UserId, AccessToken),
+    {ok, SessionId} = create_session(UserId, AccessToken),
     user_logic:get_space_by_name(SessionId, UserId, SpaceName).
 
 
@@ -236,7 +236,7 @@ list_ongoing_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
 -spec perform_io_test(file_meta:path(), tokens:serialized()) -> ok | error.
 perform_io_test(Path, AccessToken) ->
     UserId = get_user_id_from_token(AccessToken),
-    SessionId = create_session(UserId, AccessToken),
+    {ok, SessionId} = create_session(UserId, AccessToken),
     BytesSize = 5000,
     SampleFileContent = str_utils:rand_hex(BytesSize),
 
