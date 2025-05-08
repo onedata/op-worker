@@ -309,8 +309,15 @@ upgrade_cluster(7) ->
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         storage:upgrade_after_swift_version_update_to_v3(),
+
+        % clear cached auto luma entries in db
         {ok, StorageIds} = provider_logic:get_storages(),
-        lists:foreach(fun(StorageId) -> luma:clear_db(StorageId) end, StorageIds)
+        lists:foreach(fun(StorageId) ->
+            case storage_config:get_luma_feed(StorageId) of
+                ?AUTO_FEED -> luma:clear_db(StorageId);
+                _ -> ok
+            end
+        end, StorageIds)
     end),
     {ok, 8}.
 
