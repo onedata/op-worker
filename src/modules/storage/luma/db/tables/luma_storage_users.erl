@@ -158,7 +158,7 @@ acquire(Storage, UserId) ->
 
 
 -spec acquire_mapping_from_external_feed(storage:data(), key()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire_mapping_from_external_feed(Storage, UserId) ->
     case luma_external_feed:map_onedata_user_to_credentials(UserId, Storage) of
         {ok, StorageUserMap} ->
@@ -170,7 +170,7 @@ acquire_mapping_from_external_feed(Storage, UserId) ->
     end.
 
 -spec acquire_default_mapping(storage:data(), key()) ->
-    {ok, record(), luma:feed()}.
+    {luma_db:cache_policy(), record(), luma:feed()}.
 acquire_default_mapping(Storage, UserId) ->
     {ok, StorageUser} = luma_auto_feed:acquire_user_storage_credentials(Storage, UserId),
     {nocache, StorageUser, ?AUTO_FEED}.

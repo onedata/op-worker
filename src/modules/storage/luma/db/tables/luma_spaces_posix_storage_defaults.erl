@@ -99,13 +99,13 @@ acquire(Storage, SpaceId) ->
     end.
 
 -spec acquire_from_auto_feed(storage(), od_space:id()) ->
-    {ok, record(), luma:feed()}.
+    {luma_db:cache_policy(), record(), luma:feed()}.
 acquire_from_auto_feed(Storage, SpaceId) ->
     {ok, PosixDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
     {nocache, PosixDefaults, ?AUTO_FEED}.
 
 -spec acquire_from_external_feed(storage(), od_space:id()) ->
-    {ok, record(), luma:feed()}.
+    {luma_db:cache_policy(), record(), luma:feed()}.
 acquire_from_external_feed(Storage, SpaceId) ->
     PosixDefaultsMap0 = fetch_default_posix_credentials(Storage, SpaceId),
     RealFeed = case map_size(PosixDefaultsMap0) =:= 0 of
