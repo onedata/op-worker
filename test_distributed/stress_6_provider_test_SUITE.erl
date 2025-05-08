@@ -47,6 +47,7 @@ stress_test_base(Config) ->
 
 %%%===================================================================
 
+% TODO
 db_sync_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [

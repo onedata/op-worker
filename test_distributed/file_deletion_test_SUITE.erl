@@ -318,7 +318,7 @@ file_handle_should_work_after_deletion(Config) ->
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
 remove_file_on_ceph_using_client(Config0) ->
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0}, 0),
     [Worker | _] = ?config(workers1, Config),
     SessionId = ?config(session, Config),
     SpaceName = <<"space2">>,
