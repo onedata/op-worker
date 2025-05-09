@@ -124,7 +124,6 @@ child_specs(SessId, provider_incoming) ->
     ];
 child_specs(SessId, provider_outgoing) ->
     [
-        sequencer_manager_sup_spec(SessId),
         event_manager_sup_spec(SessId),
         outgoing_connection_manager_spec(SessId)
     ];
