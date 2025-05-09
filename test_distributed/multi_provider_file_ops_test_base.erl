@@ -1966,12 +1966,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     storage_driver:fsync(SDHandle3, false),
     ok.
 
-% TODO rm proxy?
 extend_config(Config, User, {SyncNodes, NodesOfProvider}, Attempts) ->
-    extend_config(Config, User, {SyncNodes, 0, 0, NodesOfProvider}, Attempts);
-
-extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->
-    ProxyNodesWritten = ProxyNodesWritten0 * NodesOfProvider,
     Workers = ?config(op_worker_nodes, Config),
     {Worker1, Workers1, WorkersNot1, Workers2} = lists:foldl(fun(W, {Acc1, Acc2, Acc3, Acc4}) ->
         {NAcc2, NAcc3} = case string:str(atom_to_list(W), "p1") of
@@ -1999,7 +1994,7 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
         {session, SessId}, {first_space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
-        {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
+        {nodes_number, {SyncNodes, 0, 0, 0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
     Workers = ?config(op_worker_nodes, Config),
