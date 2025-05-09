@@ -8,7 +8,7 @@
 %%% @doc
 %%% Module handling serialization to and deserialization from protobuf format
 %%% of client/server messages.
-%%% TODO check guid/space id of file and rejest not supported space request???
+%%% TODO VFS-12820 check guid/space id of file and reject not supported space request
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_serializer).
@@ -44,7 +44,6 @@ load_msg_defs() ->
 -spec deserialize_client_message(binary(), undefined | session:id()) ->
     {ok, #client_message{}} | no_return().
 deserialize_client_message(Message, SessionId) ->
-    % TODO rm proxy for protobuf
     #'ClientMessage'{
         message_id = MsgId,
         message_stream = MsgStm,
@@ -75,9 +74,7 @@ deserialize_server_message(Message, SessionId) ->
     #'ServerMessage'{
         message_id = MsgId,
         message_stream = MsgStm,
-        message_body = {_, MsgBody},
-        % TODO ?
-        proxy_session_id = EffSessionId
+        message_body = {_, MsgBody}
     } = enif_protobuf:decode(Message, 'ServerMessage'),
 
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
@@ -85,9 +82,7 @@ deserialize_server_message(Message, SessionId) ->
         message_id = DecodedId,
         message_stream = clproto_translator:from_protobuf(MsgStm),
         message_body = clproto_translator:from_protobuf(MsgBody),
-        session_id = utils:ensure_defined(
-            EffSessionId, undefined, SessionId
-        )
+        session_id = SessionId
     }}.
 
 
@@ -96,18 +91,14 @@ deserialize_server_message(Message, SessionId) ->
 serialize_server_message(#server_message{
     message_id = MsgId,
     message_stream = MsgStm,
-    message_body = MsgBody,
-    % TODO? what is this session_if? why is it needed?
-    session_id = EffSessionId
+    message_body = MsgBody
 }, VerifyMsg) ->
 
     {ok, EncodedId} = clproto_message_id:encode(MsgId),
     ServerMessage = #'ServerMessage'{
         message_id = EncodedId,
         message_stream = clproto_translator:to_protobuf(MsgStm),
-        message_body = clproto_translator:to_protobuf(MsgBody),
-        % TODO
-        proxy_session_id = EffSessionId
+        message_body = clproto_translator:to_protobuf(MsgBody)
     },
     serialize_message(ServerMessage, VerifyMsg).
 

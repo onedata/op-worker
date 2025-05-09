@@ -52,11 +52,11 @@ stringify_only_relevant_info(#server_message{
     message_id = MsgId,
     message_stream = MsgStream,
     message_body = MsgBody,
-    session_id = EffSessionId
+    session_id = SessionId
 }) ->
     str_utils:format_bin(
-        "ServerMessage{id = ~w, eff_sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
-        [MsgId, EffSessionId, MsgStream, element(1, MsgBody)]
+        "ServerMessage{id = ~w, sess_id = ~ts, stream = ~w, body = ~ts#{...}}",
+        [MsgId, SessionId, MsgStream, element(1, MsgBody)]
     );
 stringify_only_relevant_info(#client_message{
     message_id = MsgId,
