@@ -132,7 +132,6 @@ stages:
         - events
         - events_performance
         - events_reliability
-        - events_reliability_2op
         - file_deletion
         - file_lifecycle
         - file_links_reconciliation_traverse
@@ -1054,13 +1053,6 @@ events_reliability:
     - <<: *ct_logs
       name: ct_logs_events_reliability.tar.gz
 
-events_reliability_2op:
-  <<: *ct-job
-  key: EVREL2OP
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_events_reliability_2op.tar.gz
-
 file_deletion:
   <<: *ct-job
   key: FILEDEL
@@ -1957,7 +1949,6 @@ Coverage report:
     - artifact: ct_logs_events.tar.gz
     - artifact: ct_logs_events_performance.tar.gz
     - artifact: ct_logs_events_reliability.tar.gz
-    - artifact: ct_logs_events_reliability_2op.tar.gz
     - artifact: ct_logs_file_deletion.tar.gz
     - artifact: ct_logs_file_lifecycle.tar.gz
     - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
