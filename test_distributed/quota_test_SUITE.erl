@@ -355,7 +355,7 @@ rename_should_unlock_space(Config) ->
     ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(18))),
     ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(7))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
-    % TODO what about rename between supported and not space?
+    % TODO VFS-12134 what about rename between supported and not space?
 %%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
     ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(7))),
     ?assertMatch({ok, _}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
@@ -366,7 +366,7 @@ rename_should_unlock_space(Config) ->
 
     ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, [Dir1], File1), 0, crypto:strong_rand_bytes(27))),
     ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(3))),
-    % TODO what about rename between supported and not space?
+    % TODO VFS-12134 what about rename between supported and not space?
 %%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, Dir1), f(<<"space0">>, Dir1))),
     ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(27))),
     ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(37))),
@@ -413,7 +413,7 @@ rename_with_no_quota_left_should_fail(Config) ->
 
     ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(16))),
     ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(12))),
-    % TODO what about rename between supported and not space?
+    % TODO VFS-12134 what about rename between supported and not space?
 %%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
 %%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, File1), f(<<"space0">>, File1))),
     ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, [File3, File3], File2), 0, crypto:strong_rand_bytes(8))),

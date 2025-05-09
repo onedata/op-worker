@@ -722,7 +722,6 @@ get_times(FileCtx = #file_ctx{times = TimesMap}, RequestedTimes) ->
 get_storage_id(FileCtx) ->
     case get_storage(FileCtx) of
         {undefined, FileCtx2} ->
-            % TODO - not only proxy? I mean i can ask about any space on any provider? When listing at least but any storage operation should not be made soo maybe we do not need it?
             % can happen for user root dir or space dir accessed via provider proxy
             {undefined, FileCtx2};
         {Storage, FileCtx2} ->

@@ -101,7 +101,7 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
-    % TODO?
+    % TODO @MS any comment?
     % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
     % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
     IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso

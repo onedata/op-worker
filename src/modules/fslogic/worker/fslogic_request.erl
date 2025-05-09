@@ -56,7 +56,7 @@ get_file_partial_ctx(_UserCtx, Req) ->
     ?log_bad_request(Req),
     erlang:error({invalid_request, Req}).
 
-% TODO rm not used?
+% TODO VFS-12820 rm if not used to check that target provider is self
 %%--------------------------------------------------------------------
 %% @doc
 %% Get providers capable of handling given request.

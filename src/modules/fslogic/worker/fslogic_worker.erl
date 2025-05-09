@@ -357,7 +357,7 @@ init_report() ->
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
     try
-        % TODO assert space supported/target provider is self?
+        % TODO VFS-12820 assert space supported/target provider is self
         OriginalUserCtx = user_ctx:new(SessId),
         FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
 
