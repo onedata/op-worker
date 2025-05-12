@@ -129,7 +129,6 @@ end).
 -define(POSIX_IMPORTED_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"posixImportedStorageIdExternalFeedLuma">>).
 -define(POSIX_IMPORTED_STORAGE_ID_LOCAL_FEED_LUMA, <<"posixImportedStorageIdLocalFeedLuma">>).
 
--define(POSIX_HELPER, ?POSIX_HELPER(?POSIX_ADMIN_CREDENTIALS)).
 -define(POSIX_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
         ?POSIX_HELPER_NAME,
         #{
@@ -140,7 +139,7 @@ end).
 ))).
 
 -define(POSIX_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"POSIX">>, ?POSIX_HELPER, LumaMode)).
+    ?STORAGE_RECORD(Id, <<"POSIX">>, ?POSIX_HELPER(?POSIX_ADMIN_CREDENTIALS), LumaMode)).
 -define(POSIX_STORAGE_DOC_AUTO_FEED_LUMA, ?POSIX_STORAGE_DOC(?POSIX_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
 -define(POSIX_STORAGE_DOC_EXTERNAL_FEED_LUMA, ?POSIX_STORAGE_DOC(?POSIX_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
 -define(POSIX_STORAGE_DOC_LOCAL_FEED_LUMA, ?POSIX_STORAGE_DOC(?POSIX_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
@@ -163,7 +162,6 @@ end).
 -define(CEPH_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephStorageIdExternalFeedLuma">>).
 -define(CEPH_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephStorageIdLocalFeedLuma">>).
 
--define(CEPH_HELPER, ?CEPH_HELPER(?CEPH_ADMIN_CREDENTIALS)).
 -define(CEPH_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?CEPH_HELPER_NAME,
     #{
         <<"monitorHostname">> => <<"monitorHostname">>,
@@ -175,7 +173,7 @@ end).
 ))).
 
 -define(CEPH_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"CEPH">>, ?CEPH_HELPER, LumaMode)
+    ?STORAGE_RECORD(Id, <<"CEPH">>, ?CEPH_HELPER(?CEPH_ADMIN_CREDENTIALS), LumaMode)
 ).
 -define(CEPH_STORAGE_DOC_AUTO_FEED_LUMA,
     ?CEPH_STORAGE_DOC(?CEPH_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
@@ -197,7 +195,6 @@ end).
 -define(S3_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"s3StorageIdExternalFeedLuma">>).
 -define(S3_STORAGE_ID_LOCAL_FEED_LUMA, <<"s3StorageIdLocalFeedLuma">>).
 
--define(S3_HELPER, ?S3_HELPER(?S3_ADMIN_CREDENTIALS)).
 -define(S3_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
     #{
         <<"scheme">> => <<"https">>,
@@ -209,7 +206,7 @@ end).
 ))).
 
 -define(S3_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"S3">>, ?S3_HELPER, LumaMode)
+    ?STORAGE_RECORD(Id, <<"S3">>, ?S3_HELPER(?S3_ADMIN_CREDENTIALS), LumaMode)
 ).
 -define(S3_STORAGE_DOC_AUTO_FEED_LUMA,
     ?S3_STORAGE_DOC(?S3_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
@@ -231,7 +228,6 @@ end).
 -define(SWIFT_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"swiftStorageIdExternalFeedLuma">>).
 -define(SWIFT_STORAGE_ID_LOCAL_FEED_LUMA, <<"swiftStorageIdLocalFeedLuma">>).
 
--define(SWIFT_HELPER, ?SWIFT_HELPER(?SWIFT_ADMIN_CREDENTIALS)).
 -define(SWIFT_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
     #{<<"authUrl">> => <<"authUrl">>,
         <<"containerName">> => <<"containerName">>,
@@ -241,7 +237,7 @@ end).
 ))).
 
 -define(SWIFT_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"SWIFT">>, ?SWIFT_HELPER, LumaMode)
+    ?STORAGE_RECORD(Id, <<"SWIFT">>, ?SWIFT_HELPER(?SWIFT_ADMIN_CREDENTIALS), LumaMode)
 ).
 -define(SWIFT_STORAGE_DOC_AUTO_FEED_LUMA,
     ?SWIFT_STORAGE_DOC(?SWIFT_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
@@ -263,7 +259,6 @@ end).
 -define(CEPHRADOS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephradosStorageIdExternalFeedLuma">>).
 -define(CEPHRADOS_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephradosStorageIdLocalFeedLuma">>).
 
--define(CEPHRADOS_HELPER, ?CEPHRADOS_HELPER(?CEPHRADOS_ADMIN_CREDENTIALS)).
 -define(CEPHRADOS_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(?CEPHRADOS_HELPER_NAME,
     #{
         <<"monitorHostname">> => <<"monitorHostname">>,
@@ -275,7 +270,7 @@ end).
 ))).
 
 -define(CEPHRADOS_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"CEPHRADOS">>, ?CEPHRADOS_HELPER, LumaMode)
+    ?STORAGE_RECORD(Id, <<"CEPHRADOS">>, ?CEPHRADOS_HELPER(?CEPHRADOS_ADMIN_CREDENTIALS), LumaMode)
 ).
 -define(CEPHRADOS_STORAGE_DOC_AUTO_FEED_LUMA,
     ?CEPHRADOS_STORAGE_DOC(?CEPHRADOS_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
@@ -304,7 +299,6 @@ end).
 -define(IMPORTED_GLUSTERFS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"glusterfsImportedStorageIdExternalFeedLuma">>).
 -define(IMPORTED_GLUSTERFS_STORAGE_ID_LOCAL_FEED_LUMA, <<"glusterfsImportedStorageIdLocalFeedLuma">>).
 
--define(GLUSTERFS_HELPER, ?GLUSTERFS_HELPER(?GLUSTERFS_ADMIN_CREDENTIALS)).
 -define(GLUSTERFS_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
     ?GLUSTERFS_HELPER_NAME,
     #{
@@ -316,7 +310,7 @@ end).
 ))).
 
 -define(GLUSTERFS_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"GLUSTERFS">>, ?GLUSTERFS_HELPER, LumaMode)
+    ?STORAGE_RECORD(Id, <<"GLUSTERFS">>, ?GLUSTERFS_HELPER(?GLUSTERFS_ADMIN_CREDENTIALS), LumaMode)
 ).
 
 -define(GLUSTERFS_STORAGE_DOC_AUTO_FEED_LUMA,
@@ -351,7 +345,6 @@ end).
 -define(IMPORTED_NULLDEVICE_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"nulldeviceImportedStorageIdExternalFeedLuma">>).
 -define(IMPORTED_NULLDEVICE_STORAGE_ID_LOCAL_FEED_LUMA, <<"nulldeviceImportedStorageIdLocalFeedLuma">>).
 
--define(NULLDEVICE_HELPER, ?NULLDEVICE_HELPER(?NULLDEVICE_ADMIN_CREDENTIALS)).
 -define(NULLDEVICE_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
     ?NULL_DEVICE_HELPER_NAME, #{
         <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
@@ -360,7 +353,7 @@ end).
 ))).
 
 -define(NULLDEVICE_STORAGE_DOC(Id, LumaMode),
-    ?STORAGE_RECORD(Id, <<"NULLDEVICE">>, ?NULLDEVICE_HELPER, LumaMode)
+    ?STORAGE_RECORD(Id, <<"NULLDEVICE">>, ?NULLDEVICE_HELPER(?NULLDEVICE_ADMIN_CREDENTIALS), LumaMode)
 ).
 
 -define(NULLDEVICE_STORAGE_DOC_AUTO_FEED_LUMA,

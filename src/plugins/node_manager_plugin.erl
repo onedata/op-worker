@@ -313,6 +313,7 @@ upgrade_cluster(7) ->
         % clear cached auto luma entries in db
         {ok, StorageIds} = provider_logic:get_storages(),
         lists:foreach(fun(StorageId) ->
+            ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
             case storage_config:get_luma_feed(StorageId) of
                 ?AUTO_FEED -> luma:clear_db(StorageId);
                 _ -> ok

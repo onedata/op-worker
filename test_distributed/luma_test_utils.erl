@@ -133,13 +133,6 @@ change_admin_creds(
         value = StorageConfig#storage_config{helper = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
-) ->
-    ChangedAdminCreds = luma_test_utils:new_cephrados_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
-    {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
-    };
-change_admin_creds(
     #document{value = #storage_config{helper = #helper{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_glusterfs_user_ctx(1, 0),
