@@ -41,7 +41,7 @@
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
     ensure_space_doc_exist/1, ensure_tmp_dir_exists/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exists/1,
-    ensure_opened_deleted_files_dir_exists/2, new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2,
+    new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2,
     get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
@@ -786,11 +786,6 @@ ensure_tmp_dir_link_exists(SpaceId) ->
 
 -spec ensure_opened_deleted_files_dir_exists(od_space:id()) -> ok.
 ensure_opened_deleted_files_dir_exists(SpaceId) ->
-    ensure_opened_deleted_files_dir_exists(SpaceId, update_dir_stats).
-
-
--spec ensure_opened_deleted_files_dir_exists(od_space:id(), update_dir_stats | ignore_dir_stats) -> ok.
-ensure_opened_deleted_files_dir_exists(SpaceId, StatsPolicy) ->
     TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
     Doc = new_special_dir_doc(
         ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DEFAULT_DIR_MODE,
@@ -798,7 +793,7 @@ ensure_opened_deleted_files_dir_exists(SpaceId, StatsPolicy) ->
     ),
     case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
         {ok, CreatedDoc} ->
-            StatsPolicy == update_dir_stats andalso dir_size_stats:report_file_created(
+            dir_size_stats:report_file_created(
                 ?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
             ok = ?ok_if_exists(
                 times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))

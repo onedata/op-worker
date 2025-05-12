@@ -287,15 +287,16 @@ upgrade_cluster(5) ->
                 archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end)
         end, SpaceIds),
         lists:foreach(fun(SpaceId) ->
-            % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
-            ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
-            file_meta:ensure_opened_deleted_files_dir_exists(SpaceId, ignore_dir_stats)
+            async_run_with_oz_connection_after_upgrade(fun() ->
+                % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
+                ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
+                file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
+            end)
         end, SpaceIds),
         lists:foreach(fun(SpaceId) ->
-            % run in fun so it does not block when waiting for a traverse pool to start (see traverse_utils)
-            spawn(fun() ->
-                utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
-                ?notice("Onezone connection established - reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+            async_run_with_oz_connection_after_upgrade(fun() ->
+                ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
                 dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
             end)
         end, SpaceIds)
@@ -316,6 +317,7 @@ upgrade_cluster(7) ->
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
     {ok, 8}.
+
 
 
 %%--------------------------------------------------------------------
@@ -505,3 +507,15 @@ await_zone_connection_and_run(false, Retries, Fun) ->
     await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
+
+
+%% @private
+-spec async_run_with_oz_connection_after_upgrade(Fun :: fun(() -> ok)) -> ok.
+async_run_with_oz_connection_after_upgrade(Fun) ->
+    spawn(fun() ->
+        utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+        ?catch_exceptions(Fun())
+    end),
+    ok.
+
