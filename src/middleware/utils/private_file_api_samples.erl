@@ -163,6 +163,9 @@ update_file_content_endpoint(FileId) ->
         method = 'PUT',
         path = str_utils:format_bin("/data/~ts/content", [FileId]),
         data = <<"$NEW_CONTENT">>,
+        headers = #{
+            <<"content-type">> => <<"application/octet-stream">>
+        },
         placeholders = #{
             <<"$NEW_CONTENT">> => <<"Binary content that will be written to the file.">>
         },
