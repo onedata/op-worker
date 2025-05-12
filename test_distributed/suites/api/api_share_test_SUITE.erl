@@ -32,7 +32,8 @@
     create_share_test/1,
     get_share_test/1,
     update_share_test/1,
-    delete_share_test/1
+    delete_share_test/1,
+    share_root_accessed_via_public_data_mode_should_have_parent_set/1
 ]).
 
 groups() -> [
@@ -40,7 +41,8 @@ groups() -> [
         create_share_test,
         get_share_test,
         update_share_test,
-        delete_share_test
+        delete_share_test,
+        share_root_accessed_via_public_data_mode_should_have_parent_set
     ]}
 ].
 
@@ -640,6 +642,25 @@ assert_zombie_shares_exist(ShareIds, UserSelector, Providers) ->
         FileGuid = file_id:share_guid_to_guid(ShareFileGuid),
         ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(ProviderNode, UserSessId, ?FILE_REF(FileGuid)))
     end, ShareIds).
+
+
+share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    #object{shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, #file_spec{shares = [#share_spec{}]}
+    ),
+
+    UserId = oct_background:get_user_id(user3),
+    AccessToken = oct_background:get_user_access_token(user3),
+    PublicDataSessId = opw_test_rpc:create_session(krakow, UserId, public_data, AccessToken),
+    ShareRootGuid = file_id:share_guid_to_guid(fslogic_file_id:shareid_to_share_root_dir_guid(ShareId, SpaceId)),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+
+    ?assertMatch({ok, #file_attr{parent_guid = undefined}}, opw_test_rpc:call(
+        krakow, lfm, stat, [?ROOT_SESS_ID, ?FILE_REF(ShareRootGuid), [?attr_parent_guid]])),
+    ?assertMatch({ok, #file_attr{parent_guid = SpaceDirGuid}}, opw_test_rpc:call(
+        krakow, lfm, stat, [PublicDataSessId, ?FILE_REF(ShareRootGuid), [?attr_parent_guid]])).
+
 
 
 %%%===================================================================
