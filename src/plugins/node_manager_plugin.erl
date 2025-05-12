@@ -43,6 +43,8 @@
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
 
+-define(GS_WORKER_POOL_SIZE, op_worker:get_env(graph_sync_worker_pool_size, 20)).
+
 % List of all known cluster generations.
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
@@ -60,7 +62,6 @@
     {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
-
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -323,6 +324,7 @@ upgrade_cluster(7) ->
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
+    gs_worker_pool:init(?GS_WORKER_POOL_SIZE),
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
