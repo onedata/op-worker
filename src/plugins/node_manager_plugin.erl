@@ -286,20 +286,13 @@ upgrade_cluster(5) ->
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
                 archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end)
         end, SpaceIds),
-        lists:foreach(fun(SpaceId) ->
-            async_run_with_oz_connection_after_upgrade(fun() ->
+        async_run_with_oz_connection_after_upgrade(fun() ->
+            lists:foreach(fun(SpaceId) ->
                 % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
                 ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
                 file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
-            end)
-        end, SpaceIds),
-        lists:foreach(fun(SpaceId) ->
-            % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
-            async_run_with_oz_connection_after_upgrade(fun() ->
-                ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
-                dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
-            end)
-        end, SpaceIds)
+            end, SpaceIds)
+        end)
     end),
     {ok, 6};
 upgrade_cluster(6) ->
@@ -316,6 +309,14 @@ upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
     {ok, 8}.
 
 

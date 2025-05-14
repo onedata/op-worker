@@ -541,6 +541,10 @@ init_per_testcase(Case = upgrade_from_21_02_9_upgrade_swift_storage, Config) ->
     test_utils:mock_expect(Worker, storage_logic, get_name_of_local_storage, fun(StorageId) ->
         {ok, StorageId}
     end),
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
+    end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
