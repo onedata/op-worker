@@ -82,7 +82,7 @@ test_remove_share(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 

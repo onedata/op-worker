@@ -22,6 +22,7 @@
 
 -callback allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
 
+% global_root_dir and user_root_dirs
 -callback is_filesystem_root_dir() -> boolean().
 
 -callback can_be_shared() -> boolean().

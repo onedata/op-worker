@@ -75,7 +75,7 @@ test_get_qos_entry(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -104,7 +104,7 @@ test_remove_qos_entry(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -161,5 +161,5 @@ test_check_qos_status(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).

@@ -190,7 +190,7 @@
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
     ),
 
-    allowed_special_dirs = [] :: undefined | [module()], % undefined when testcase is not applicable for special dirs
+    allowed_special_dirs = [] :: not_applicable | [module()], % undefined when testcase is not applicable for special dirs
     special_dirs_ok_value = ok :: ok | errors:error()
 }).
 

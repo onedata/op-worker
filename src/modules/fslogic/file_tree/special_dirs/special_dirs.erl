@@ -27,7 +27,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([set_up_for_new_space/1, report_new_user/1]).
--export([exists/1, is_special/1, is_special/3, is_filesystem_root_dir/1, is_operation_allowed/2,
+-export([exists/1, is_special/1, is_special/3, is_filesystem_root_dir/1, accepts_operation/2,
     is_affected_by_protection_flags/1, is_included_in_harvesting/1, is_included_in_dir_stats/1,
     is_included_in_events/1, is_logically_detached/1]).
 -export([get_file_meta_if_special/1, get_times_if_special/2]).
@@ -60,7 +60,7 @@ exists(Uuid) ->
 
 -spec is_special(file_meta:uuid()) -> boolean().
 is_special(Uuid) ->
-    case extract_special_module(Uuid) of
+    case lookup_special_directory(Uuid) of
         {true, _} -> true;
         undefined -> false
     end.
@@ -71,8 +71,8 @@ is_special(Module, IdType, Id) ->
     Module:is_special(IdType, Id).
 
 
--spec is_operation_allowed(file_meta:uuid(), middleware_worker:operation() | fslogic_worker:operation()) -> boolean().
-is_operation_allowed(Uuid, Operation) ->
+-spec accepts_operation(file_meta:uuid(), middleware_worker:operation() | fslogic_worker:operation()) -> boolean().
+accepts_operation(Uuid, Operation) ->
     case apply_if_special(Uuid, allowed_operations, not_special) of
         not_special -> true;
         AllowedOperations -> lists:member(element(1, Operation), [element(1, O) || O <- AllowedOperations])
@@ -113,7 +113,7 @@ is_logically_detached(Uuid) ->
 -spec get_times_if_special(file_id:file_guid(), [times_api:times_type()]) -> {true, times:record()} | not_special.
 get_times_if_special(Guid, RequestedTimes) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    case extract_special_module(Uuid) of
+    case lookup_special_directory(Uuid) of
         {true, Module} ->
             case erlang:function_exported(Module, get_times, 2) of
                 true ->
@@ -128,7 +128,7 @@ get_times_if_special(Guid, RequestedTimes) ->
 
 -spec get_file_meta_if_special(file_meta:uuid()) -> {true, {ok, file_meta:doc() | {error, term()}}} | not_special.
 get_file_meta_if_special(Uuid) ->
-    case extract_special_module(Uuid) of
+    case lookup_special_directory(Uuid) of
         {true, Module} ->
             case erlang:function_exported(Module, get_file_meta, 1) of
                 true ->
@@ -155,7 +155,7 @@ apply_if_special(Uuid, FunctionName, NotSpecialValue) ->
 %% @private
 -spec apply_if_special(file_meta:uuid(), atom(), NotSpecialValue, [any()]) -> term() | NotSpecialValue.
 apply_if_special(Uuid, FunctionName, NotSpecialValue, Args) ->
-    case extract_special_module(Uuid) of
+    case lookup_special_directory(Uuid) of
         {true, DirType} ->
             erlang:apply(DirType, FunctionName, Args);
         undefined ->
@@ -164,8 +164,8 @@ apply_if_special(Uuid, FunctionName, NotSpecialValue, Args) ->
 
 
 %% @private
--spec extract_special_module(file_meta:uuid()) -> {true, module()} | undefined.
-extract_special_module(Uuid) ->
+-spec lookup_special_directory(file_meta:uuid()) -> {true, module()} | undefined.
+lookup_special_directory(Uuid) ->
     case lists:filter(fun(DirType) -> DirType:is_special(uuid, Uuid) end, ?ALL_SPECIAL_DIRS) of
         [] -> undefined;
         [DirType] -> {true, DirType}

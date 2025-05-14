@@ -59,7 +59,8 @@
 -define(DELETED_OPENED_FILES_DIR_STRING, binary_to_list(?DELETED_OPENED_FILES_DIR)).
 
 % Global root - parent of all spaces
-% note: spaces are also linked to virtual root directories of each user belonging to space
+% note: spaces are also linked to virtual root directories of each user belonging to space;
+% global_root_dir and user_root_dirs are a filesystem_root_dir as per special_dirs nomenclature (see special_dirs)
 -define(GLOBAL_ROOT_DIR_UUID, <<"">>).
 -define(GLOBAL_ROOT_DIR_NAME, <<"">>).
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).

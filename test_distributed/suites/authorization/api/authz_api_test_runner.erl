@@ -1230,7 +1230,7 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
 %% @private
 -spec run_special_dirs_test_group(authz_test_suite_ctx()) -> ok | no_return().
 run_special_dirs_test_group(#authz_test_suite_ctx{
-    suite_spec = #authz_test_suite_spec{allowed_special_dirs = undefined}
+    suite_spec = #authz_test_suite_spec{allowed_special_dirs = not_applicable}
 }) ->
     ok;
 run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{

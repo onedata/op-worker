@@ -85,7 +85,7 @@ test_open_for_read(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -109,7 +109,7 @@ test_open_for_write(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -133,7 +133,7 @@ test_open_for_rdwr(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -182,7 +182,7 @@ test_truncate(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -220,7 +220,7 @@ test_mv_file(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/file21">>}
         end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).
 
 
@@ -250,5 +250,5 @@ test_rm_file(SpaceId) ->
             lfm_proxy:unlink(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(_) -> {inapplicable_due_to, file_removal} end,
-        allowed_special_dirs = undefined
+        allowed_special_dirs = not_applicable
     }).

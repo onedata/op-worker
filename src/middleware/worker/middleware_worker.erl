@@ -167,7 +167,7 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
-        case special_dirs:is_operation_allowed(file_id:guid_to_uuid(FileGuid), Operation) of
+        case special_dirs:accepts_operation(file_id:guid_to_uuid(FileGuid), Operation) of
             false ->
                 ?ERR_FORBIDDEN(?err_ctx());
             true ->

@@ -118,10 +118,10 @@
 -spec get_parent_guid_if_not_logically_detached(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
 get_parent_guid_if_not_logically_detached(FileCtx, UserCtx) ->
-    IsShareContainerInPublicDataMode = fun(Uuid) ->
-        % in public data mode parent guid should always be listed
-        share_container:is_special(uuid, Uuid) andalso user_ctx:is_in_public_data_mode(UserCtx)
-    end,
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+    % in public data mode parent guid should always be listed
+    IsShareContainerInPublicDataMode = share_container:is_special(uuid, Uuid)
+        andalso user_ctx:is_in_public_data_mode(UserCtx),
     case IsShareContainerInPublicDataMode orelse
         special_dirs:is_logically_detached(file_ctx:get_logical_uuid_const(FileCtx))
     of
