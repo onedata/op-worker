@@ -77,6 +77,8 @@ all() ->
 % users for which mappings defined in luma.json are incorrect
 -define(ERR_USERS, [<<"user", (integer_to_binary(I))/binary>> || I <- lists:seq(2, 10)]).
 
+%% @TODO VFS-12827 - implement tests for all helper types
+
 %%%===================================================================
 %%% Test functions - mapping user to storage credentials
 %%%===================================================================
