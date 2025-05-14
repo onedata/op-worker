@@ -345,8 +345,8 @@ get_shared_file_instance_test(_Config) ->
     SpaceOwnerSessId = oct_background:get_user_session_id(user2, krakow),
 
     {FileType, _FilePath, FileGuid, #file_attr{
-            guid = FileGuid,
-            shares = OriginalShares
+        guid = FileGuid,
+        shares = OriginalShares
     } = OriginalFileAttrs} = api_test_utils:create_file_in_space_krk_par_with_additional_metadata(
         <<"/", ?SPACE_KRK_PAR/binary>>, false, ?RANDOM_FILE_NAME()
     ),

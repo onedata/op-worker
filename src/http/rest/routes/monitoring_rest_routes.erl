@@ -31,7 +31,7 @@
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
     %% Subscribe to file events
-    {<<"/changes/metadata/:sid">>, changes_stream_handler, #rest_req{
+    {<<"/changes/metadata/:sid">>, space_monitoring_stream_handler, #rest_req{
         method = 'POST',
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
