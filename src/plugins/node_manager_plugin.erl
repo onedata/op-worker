@@ -43,6 +43,8 @@
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
 
+-define(GS_WORKER_POOL_SIZE, op_worker:get_env(graph_sync_worker_pool_size, 20)).
+
 % List of all known cluster generations.
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
@@ -60,7 +62,6 @@
     {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
-
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -318,10 +319,12 @@ upgrade_cluster(7) ->
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
-%% This callback is executed on all cluster nodes.
+%% NOTE: this callback is run on all cluster nodes and is awaited
+%% for before cluster setup proceeds.
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
+    gs_worker_pool:init(?GS_WORKER_POOL_SIZE),
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
@@ -330,6 +333,7 @@ before_listeners_start() ->
     atm_workflow_execution_api:init_engine(),
     gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:after_listeners_stop/0}.
@@ -337,7 +341,8 @@ before_listeners_start() ->
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
-%% This callback is executed on all cluster nodes.
+%% NOTE: this callback is run on a cluster node that is being turned off
+%% independently of other cluster nodes (no synchronization is performed).
 %% @end
 %%--------------------------------------------------------------------
 after_listeners_stop() ->
