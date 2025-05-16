@@ -157,7 +157,7 @@ test_check_read_perms(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(Node, SessionId, FileKey, read)
+            opt_file_perms:check_perms(Node, SessionId, FileKey, read)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -181,7 +181,7 @@ test_check_write_perms(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(Node, SessionId, FileKey, write)
+            opt_file_perms:check_perms(Node, SessionId, FileKey, write)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -205,7 +205,7 @@ test_check_rdwr_perms(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(Node, SessionId, FileKey, rdwr)
+            opt_file_perms:check_perms(Node, SessionId, FileKey, rdwr)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}

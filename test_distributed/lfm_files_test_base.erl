@@ -1770,8 +1770,8 @@ lfm_acl(Config) ->
         ?read_all_object_mask bor ?write_all_object_mask},
         #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, name = GroupName1, aceflags = ?identifier_group_mask, acemask = ?write_all_object_mask}
     ],
-    ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, ?FILE_REF(FileGUID), Acl)),
-    ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, ?FILE_REF(FileGUID))).
+    ?assertEqual(ok, opt_file_perms:set_acl(W, SessId1, ?FILE_REF(FileGUID), Acl)),
+    ?assertEqual({ok, Acl}, opt_file_perms:get_acl(W, SessId1, ?FILE_REF(FileGUID))).
 
 lfm_rmdir(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -2022,15 +2022,15 @@ share_get_parent(Config) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % Getting parent of dir should return space guid
-    ?assertMatch({ok, SpaceGuid}, lfm_proxy:get_parent(W, SessId, ?FILE_REF(DirGuid))),
+    ?assertMatch({ok, SpaceGuid}, opt_file_tree:get_parent(W, SessId, ?FILE_REF(DirGuid))),
     % Getting parent of dir when accessing it in share mode should return undefined
     % as dir is share root
-    ?assertMatch({ok, undefined}, lfm_proxy:get_parent(W, SessId, ?FILE_REF(ShareDirGuid))),
+    ?assertMatch({ok, undefined}, opt_file_tree:get_parent(W, SessId, ?FILE_REF(ShareDirGuid))),
 
     % Getting file parent in normal mode should return dir guid
-    ?assertMatch({ok, DirGuid}, lfm_proxy:get_parent(W, SessId, ?FILE_REF(FileGuid))),
+    ?assertMatch({ok, DirGuid}, opt_file_tree:get_parent(W, SessId, ?FILE_REF(FileGuid))),
     % Getting file parent in share mode should return share dir guid
-        ?assertMatch({ok, ShareDirGuid}, lfm_proxy:get_parent(W, SessId, ?FILE_REF(ShareFileGuid))).
+        ?assertMatch({ok, ShareDirGuid}, opt_file_tree:get_parent(W, SessId, ?FILE_REF(ShareFileGuid))).
 
 share_list(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

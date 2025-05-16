@@ -16,7 +16,10 @@
 
 %% API
 -export([
-    get_acl/2, set_acl/3, remove_acl/2,
+    get_acl/2,
+    set_acl/3,
+    remove_acl/2,
+
     check_perms/3
 ]).
 

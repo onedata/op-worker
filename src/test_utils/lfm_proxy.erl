@@ -24,10 +24,8 @@
 -export([
     stat/3, stat/4, resolve_symlink/3, get_fs_stats/3,
     get_file_references/3,
-    resolve_guid/3, get_file_path/3,
-    get_parent/3,
+    resolve_guid/3,
     ensure_dir/5,
-    check_perms/4,
     set_perms/4,
     update_times/6,
     unlink/3, rm_recursive/3,
@@ -58,8 +56,6 @@
     set_xattr/4, set_xattr/6,
     remove_xattr/4,
     list_xattr/5,
-
-    get_acl/3, set_acl/4, remove_acl/3,
 
     has_custom_metadata/3,
 
@@ -185,28 +181,10 @@ resolve_guid(Worker, SessId, Path) ->
         end)).
 
 
--spec get_file_path(node(), session:id(), file_id:file_guid()) ->
-    {ok, binary()} | lfm:error_reply().
-get_file_path(Worker, SessId, Guid) ->
-    ?EXEC(Worker, mi_file_tree:get_path(SessId, Guid)).
-
-
--spec get_parent(node(), session:id(), lfm:file_key()) ->
-    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
-get_parent(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, mi_file_tree:get_parent(SessId, FileKey)).
-
-
 -spec ensure_dir(node(), session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 ensure_dir(Worker, SessId, RelativeRootGuid, FilePath, Mode) ->
     ?EXEC(Worker, lfm:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
-
-
--spec check_perms(node(), session:id(), lfm:file_key(), helpers:open_flag()) ->
-    ok | {error, term()}.
-check_perms(Worker, SessId, FileKey, OpenFlag) ->
-    ?EXEC(Worker, mi_file_perms:check_perms(SessId, FileKey, OpenFlag)).
 
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
@@ -636,29 +614,6 @@ remove_xattr(Worker, SessId, FileKey, XattrKey) ->
     {ok, [onedata_file:xattr_name()]} | lfm:error_reply().
 list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_file_ref(Worker, FileKey), Inherited, ShowInternal)).
-
-
-%%%===================================================================
-%%% ACL related operations
-%%%===================================================================
-
-
--spec get_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
-    {ok, acl:acl()} | lfm:error_reply().
-get_acl(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, mi_file_perms:get_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
-
-
--spec set_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), acl:acl()) ->
-    ok | lfm:error_reply().
-set_acl(Worker, SessId, FileKey, EntityList) ->
-    ?EXEC(Worker, mi_file_perms:set_acl(SessId, uuid_to_file_ref(Worker, FileKey), EntityList)).
-
-
--spec remove_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
-    ok | lfm:error_reply().
-remove_acl(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, mi_file_perms:remove_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 %%%===================================================================

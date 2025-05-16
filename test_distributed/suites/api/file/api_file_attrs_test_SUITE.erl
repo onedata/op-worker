@@ -1673,7 +1673,7 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
     ),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     
-    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
+    {ok, FilePath} = opt_file_tree:get_path(P1Node, UserSessIdP1, FileGuid),
     [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
     FileStoragePath = case StorageType of
         posix -> 

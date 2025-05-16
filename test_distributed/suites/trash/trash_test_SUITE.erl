@@ -206,14 +206,14 @@ remove_xattr_on_trash_dir_is_forbidden(_Config) ->
 set_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), [])).
+    ?assertMatch(?ERR_POSIX(?EPERM),
+        opt_file_perms:set_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), [])).
 
 remove_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))).
+    ?assertMatch(?ERR_POSIX(?EPERM),
+        opt_file_perms:remove_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))).
 
 set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -481,7 +481,7 @@ move_to_trash_should_fail_if_required_acl_perm_is_missing(_Config) ->
         DirName = ?RAND_DIR_NAME,
         {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
         Perms = ?ALL_DIR_PERMS -- utils:ensure_list(RequiredPerm),
-        ok = lfm_proxy:set_acl(P1Node, UserSessIdP1, ?FILE_REF(DirGuid), [perms_to_allow_ace(Perms)]),
+        ok = opt_file_perms:set_acl(P1Node, UserSessIdP1, ?FILE_REF(DirGuid), [perms_to_allow_ace(Perms)]),
         ?assertMatch({error, ?EACCES}, lfm_proxy:rm_recursive(P1Node, UserSessIdP1, ?FILE_REF(DirGuid)))
     end, RequiredPerms).
 

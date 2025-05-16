@@ -42,7 +42,7 @@ test_get_parent(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_parent(Node, SessionId, FileKey)
+            opt_file_tree:get_parent(Node, SessionId, FileKey)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
@@ -61,7 +61,7 @@ test_get_file_path(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_file_path(Node, SessionId, FileGuid)
+            opt_file_tree:get_path(Node, SessionId, FileGuid)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}

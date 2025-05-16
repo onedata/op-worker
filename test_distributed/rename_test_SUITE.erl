@@ -509,7 +509,7 @@ attributes_retaining_test(Config) ->
 
     lists:foreach(
         fun({Guid, Ace}) ->
-            ?assertEqual(ok, lfm_proxy:set_acl(W1, SessId1, ?FILE_REF(Guid), [Ace])),
+            ?assertEqual(ok, opt_file_perms:set_acl(W1, SessId1, ?FILE_REF(Guid), [Ace])),
             ?assertEqual(ok, opt_cdmi:set_mimetype(W1, SessId1, ?FILE_REF(Guid), Mimetype)),
             ?assertEqual(ok, opt_cdmi:set_transfer_encoding(W1, SessId1, ?FILE_REF(Guid), TransferEncoding)),
             ?assertEqual(ok, opt_cdmi:set_cdmi_completion_status(W1, SessId1, ?FILE_REF(Guid), CompletionStatus)),
@@ -538,7 +538,7 @@ attributes_retaining_test(Config) ->
         fun({Path, Ace, Worker}) ->
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
             {ok, Guid} = lfm_proxy:resolve_guid(Worker, SessId, Path),
-            ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(Worker, SessId, ?FILE_REF(Guid))),
+            ?assertEqual({ok, [Ace]}, opt_file_perms:get_acl(Worker, SessId, ?FILE_REF(Guid))),
             ?assertEqual({ok, Mimetype}, opt_cdmi:get_mimetype(Worker, SessId, ?FILE_REF(Guid))),
             ?assertEqual({ok, TransferEncoding}, opt_cdmi:get_transfer_encoding(Worker, SessId, ?FILE_REF(Guid))),
             lists:foreach(

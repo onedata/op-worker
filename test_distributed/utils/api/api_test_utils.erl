@@ -388,11 +388,11 @@ randomly_set_acl(Nodes, FileGuid) ->
         1 ->
             FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
-            ?assertMatch(ok, lfm_proxy:set_acl(
+            ?assertMatch(ok, opt_file_perms:set_acl(
                 RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
-                ?assertMatch({ok, [_]}, lfm_proxy:get_acl(Node, ?ROOT_SESS_ID, FileKey), ?ATTEMPTS)
+                ?assertMatch({ok, [_]}, opt_file_perms:get_acl(Node, ?ROOT_SESS_ID, FileKey), ?ATTEMPTS)
             end, Nodes),
             true;
         2 ->
