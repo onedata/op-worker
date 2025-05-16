@@ -75,7 +75,7 @@ get_and_describe(Storage, SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
--spec acquire(storage:data(), key()) -> {ok, record(), luma:feed()}.
+-spec acquire(storage:data(), key()) -> {luma_db:cache_policy(), record(), luma:feed()}.
 acquire(Storage, SpaceId) ->
     LumaFeed = storage:get_luma_feed(Storage),
     % Feed returned from acquire_ functions can be different from the feed set in #luma_config because
@@ -87,13 +87,13 @@ acquire(Storage, SpaceId) ->
     end.
 
 -spec acquire_from_auto_feed(storage(), od_space:id()) ->
-    {ok, record(), luma:feed()}.
+    {luma_db:cache_policy(), record(), luma:feed()}.
 acquire_from_auto_feed(Storage, SpaceId) ->
     {ok, DisplayDefaults} = luma_auto_feed:acquire_default_display_credentials(Storage, SpaceId),
-    {ok, DisplayDefaults, ?AUTO_FEED}.
+    {nocache, DisplayDefaults, ?AUTO_FEED}.
 
 -spec acquire_from_external_feed(storage(), od_space:id()) ->
-    {ok, record(), luma:feed()}.
+    {luma_db:cache_policy(), record(), luma:feed()}.
 acquire_from_external_feed(Storage, SpaceId) ->
     DisplayDefaultsMap0 = fetch_display_credentials(Storage, SpaceId),
     RealFeed = case map_size(DisplayDefaultsMap0) =:= 0 of
@@ -101,7 +101,7 @@ acquire_from_external_feed(Storage, SpaceId) ->
         false -> ?EXTERNAL_FEED
     end,
     DisplayDefaultsMap1 = ensure_all_fields_are_defined(DisplayDefaultsMap0, Storage, SpaceId),
-    {ok, luma_posix_credentials:new(DisplayDefaultsMap1), RealFeed}.
+    {cache, luma_posix_credentials:new(DisplayDefaultsMap1), RealFeed}.
 
 
 -spec fetch_display_credentials(storage:data(), key()) ->

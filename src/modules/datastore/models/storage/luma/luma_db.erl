@@ -75,7 +75,8 @@
                      luma_onedata_users:record() |
                      luma_onedata_groups:record().
 
--type db_acquire_fun() :: fun(() -> {ok, db_record(), luma:feed()} | {error, term()}).
+-type cache_policy() :: cache | nocache.
+-type db_acquire_fun() :: fun(() -> {cache_policy(), db_record(), luma:feed()} | {error, term()}).
 -type db_diff() :: luma_storage_user:user_map() |
                    luma_posix_credentials:credentials_map()  |
                    luma_onedata_user:user_map() |
@@ -84,7 +85,7 @@
 -type db_pred() :: fun((db_record()) -> boolean()).
 % @formatter:on
 
--export_type([db_key/0, db_record/0, table/0, db_acquire_fun/0, db_diff/0]).
+-export_type([db_key/0, db_record/0, table/0, cache_policy/0, db_acquire_fun/0, db_diff/0]).
 
 -type storage() :: storage:id() | storage:data().
 -type overwrite_opt() :: ?FORCE_OVERWRITE | ?NO_OVERWRITE.
@@ -132,7 +133,7 @@ get_or_acquire(Storage, Key, Table, AcquireFun, Constraints) ->
             {ok, Record} ->
                 {ok, Record};
             {error, not_found} ->
-                acquire_and_store(AcquireFun, Storage, Key, Table)
+                acquire_and_maybe_store(AcquireFun, Storage, Key, Table)
         end
     end).
 
@@ -286,13 +287,15 @@ id(Storage, Table, Key) ->
     StorageId = storage:get_id(Storage),
     datastore_key:new_from_digest([StorageId, atom_to_binary(Table, utf8), Key]).
 
--spec acquire_and_store(db_acquire_fun() ,storage(), db_key(), table()) ->
+-spec acquire_and_maybe_store(db_acquire_fun() ,storage(), db_key(), table()) ->
     {ok, db_record()} | {error, term()}.
-acquire_and_store(AcquireFun, Storage, Key, TableModule) ->
+acquire_and_maybe_store(AcquireFun, Storage, Key, TableModule) ->
     % ensure Storage is a document
     case AcquireFun() of
-        {ok, Record, Feed} ->
+        {cache, Record, Feed} ->
             store(Storage, Key, TableModule, Record, Feed),
+            {ok, Record};
+        {nocache, Record, _Feed} ->
             {ok, Record};
         Error ->
             Error
