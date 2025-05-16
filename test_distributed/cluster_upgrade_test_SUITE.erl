@@ -608,6 +608,9 @@ init_per_testcase(Case = upgrade_from_21_02_8_upgrade_swift_storage, Config) ->
         {ok, StorageConfigDocs} = storage_config:list_all(),
         {ok, [StorageId || #document{key = StorageId} <- StorageConfigDocs]}
     end),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
+    end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -624,6 +627,9 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
             [<<"storage_id_auto_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
                 [<<"storage_id_local_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
         }
+    end),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
     end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
