@@ -317,4 +317,16 @@
 }).
 
 
+%%%===================================================================
+%%% File tree related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(file_parent_get_request, {
+}).
+
+-record(file_path_get_request, {
+}).
+
+
 -endif.

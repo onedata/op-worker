@@ -188,13 +188,13 @@ resolve_guid(Worker, SessId, Path) ->
 -spec get_file_path(node(), session:id(), file_id:file_guid()) ->
     {ok, binary()} | lfm:error_reply().
 get_file_path(Worker, SessId, Guid) ->
-    ?EXEC(Worker, lfm:get_file_path(SessId, Guid)).
+    ?EXEC(Worker, mi_file_tree:get_path(SessId, Guid)).
 
 
 -spec get_parent(node(), session:id(), lfm:file_key()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 get_parent(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_parent(SessId, FileKey)).
+    ?EXEC(Worker, mi_file_tree:get_parent(SessId, FileKey)).
 
 
 -spec ensure_dir(node(), session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->

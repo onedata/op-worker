@@ -467,8 +467,6 @@ handle_request(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
     handle_multipart_upload_request(UserCtx, Req);
 handle_request(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
-handle_request(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
-    handle_provider_request(UserCtx, Req, FileCtx);
 handle_request(UserCtx, #proxyio_request{
     parameters = Parameters,
     proxyio_request = Req
@@ -636,19 +634,6 @@ handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, attribu
     attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, Attributes);
 handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
     dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes provider request and returns a response.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
-    provider_response().
-handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
-    guid_req:get_parent(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
-    guid_req:get_file_path(UserCtx, FileCtx).
 
 
 %%--------------------------------------------------------------------

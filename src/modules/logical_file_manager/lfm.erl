@@ -34,10 +34,8 @@
     stat/2, stat/3,
     get_file_references/2,
 
-    get_file_path/2,
     get_file_guid/2,
     resolve_guid_by_relative_path/3,
-    get_parent/2,
     ensure_dir/4,
 
     is_dir/2,
@@ -174,12 +172,6 @@ get_file_references(SessId, FileKey) ->
     ?run(lfm_attrs:get_references(SessId, FileKey)).
 
 
--spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
-    {ok, file_meta:path()} | error_reply().
-get_file_path(SessId, FileGuid) ->
-    ?run(lfm_files:get_file_path(SessId, FileGuid)).
-
-
 -spec get_file_guid(session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()}.
 get_file_guid(SessId, FilePath) ->
@@ -191,11 +183,6 @@ get_file_guid(SessId, FilePath) ->
 resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath) ->
     ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath)).
 
-
--spec get_parent(session:id(), file_key()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-get_parent(SessId, FileKey) ->
-    ?run(lfm_files:get_parent(SessId, FileKey)).
 
 -spec ensure_dir(session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().

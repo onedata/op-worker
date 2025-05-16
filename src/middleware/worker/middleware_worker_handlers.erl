@@ -228,6 +228,15 @@ execute(UserCtx, FileCtx, #perms_check_request{flag = Flag}) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag);
 
 
+%% File tree
+
+execute(UserCtx, FileCtx, #file_path_get_request{}) ->
+    guid_req:get_file_path(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #file_parent_get_request{}) ->
+    guid_req:get_parent(UserCtx, FileCtx);
+
+
 %% QoS
 
 execute(UserCtx, FileCtx, #qos_entry_add_request{

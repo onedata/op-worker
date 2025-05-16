@@ -386,13 +386,13 @@ test_rm_file(Config) ->
 
 
 test_get_parent(tested_operations) ->
-    [fun lfm:get_parent/2];
+    [fun mi_file_tree:get_parent/2];
 test_get_parent(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
 test_get_file_path(tested_operations) ->
-    [fun lfm:get_file_path/2];
+    [fun mi_file_tree:get_path/2];
 test_get_file_path(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 

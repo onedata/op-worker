@@ -82,6 +82,10 @@
     #acl_remove_request{} |
     #perms_check_request{}.
 
+-type file_tree_operation() ::
+    #file_path_get_request{} |
+    #file_parent_get_request{}.
+
 -type qos_operation() ::
     #qos_entry_add_request{} |
     #qos_entry_get_request{} |
@@ -104,6 +108,7 @@
     dataset_operation() |
     file_metadata_operations() |
     file_perms_operation() |
+    file_tree_operation() |
     qos_operation() |
     share_operation() |
     transfer_operation().
@@ -113,6 +118,7 @@
     cdmi_operation/0, dataset_operation/0,
     file_metadata_operations/0,
     file_perms_operation/0,
+    file_tree_operation/0,
     qos_operation/0, transfer_operation/0,
     operation/0
 ]).
