@@ -642,7 +642,7 @@ data_access_caveats_cache_test(_Config) ->
     % performed but since ancestor checks were not performed it is not known whether
     % ancestor operations can be performed
     ?assertMatch(
-        {error, ?EACCES},
+        ?ERR_POSIX(?EACCES),
         opt_file_perms:get_acl(Node, SessionId, ?FILE_REF(DirGuid))
     ),
     ?assertEqual(

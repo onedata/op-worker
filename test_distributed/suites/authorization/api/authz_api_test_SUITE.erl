@@ -281,15 +281,26 @@ all() -> [
 
 
 test_all_operations_are_checked(_Config) ->
+    AllMiddlewareInterfaceModules = lists:flatmap(fun(Path) ->
+        case filelib:wildcard(Path ++ "/*.beam") of
+            [] ->
+                [];
+            Files ->
+                lists:filtermap(fun(File) ->
+                    case filename:basename(File, ".beam") of
+                        MiModule = "mi_" ++ _ -> {true, list_to_atom(MiModule)};
+                        _ -> false
+                    end
+                end, Files)
+        end
+    end, code:get_path()),
+
     AllAvailableOperations = lists:usort(lists:flatmap(fun(Module) ->
         lists:filtermap(fun
             ({module_info, _}) -> false;
             ({FunName, Arity}) -> {true, {Module, FunName, Arity}}
         end, Module:module_info(exports))
-    end, [
-        lfm,
-        mi_archives, mi_atm, mi_cdmi, mi_datasets, mi_file_metadata, mi_qos, mi_shares, mi_transfers
-    ])),
+    end, [lfm | AllMiddlewareInterfaceModules])),
 
     FunsToMFA = fun(Funs) -> lists:map(fun erlang:fun_info_mfa/1, Funs) end,
 

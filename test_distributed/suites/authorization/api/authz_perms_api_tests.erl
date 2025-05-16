@@ -153,12 +153,13 @@ test_check_read_perms(SpaceId) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_for_share_guid = true,
-        available_in_public_data_mode = true,
+        available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             opt_file_perms:check_perms(Node, SessionId, FileKey, read)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -183,6 +184,7 @@ test_check_write_perms(SpaceId) ->
             FileKey = maps:get(FilePath, ExtraData),
             opt_file_perms:check_perms(Node, SessionId, FileKey, write)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -207,6 +209,7 @@ test_check_rdwr_perms(SpaceId) ->
             FileKey = maps:get(FilePath, ExtraData),
             opt_file_perms:check_perms(Node, SessionId, FileKey, rdwr)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end

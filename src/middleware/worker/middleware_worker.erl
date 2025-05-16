@@ -125,7 +125,10 @@
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
     % Checking perms for operations other than 'read' should result in immediate ?EACCES
-    check_perms,
+    perms_check_request,
+    file_parent_get_request,
+    % TODO VFS-6057 resolve share path up to share not user root dir
+    %%    file_path_get_request,
 
     custom_metadata_get_request
 ]).

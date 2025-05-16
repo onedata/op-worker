@@ -88,9 +88,6 @@
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
-    get_parent,
-    % TODO VFS-6057 resolve share path up to share not user root dir
-    %%    get_file_path,
     resolve_symlink,
 
     list_xattr,
