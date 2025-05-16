@@ -416,19 +416,19 @@ test_set_perms(Config) ->
 
 
 test_check_read_perms(tested_operations) ->
-    [fun lfm:check_perms/3];
+    [fun mi_file_perms:check_perms/3];
 test_check_read_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
 test_check_write_perms(tested_operations) ->
-    [fun lfm:check_perms/3];
+    [fun mi_file_perms:check_perms/3];
 test_check_write_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
 test_check_rdwr_perms(tested_operations) ->
-    [fun lfm:check_perms/3];
+    [fun mi_file_perms:check_perms/3];
 test_check_rdwr_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
@@ -452,19 +452,19 @@ test_share_perms_are_checked_only_up_to_share_root(Config) ->
 
 
 test_get_acl(tested_operations) ->
-    [fun lfm:get_acl/2];
+    [fun mi_file_perms:get_acl/2];
 test_get_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
 test_set_acl(tested_operations) ->
-    [fun lfm:set_acl/3];
+    [fun mi_file_perms:set_acl/3];
 test_set_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
 test_remove_acl(tested_operations) ->
-    [fun lfm:remove_acl/2];
+    [fun mi_file_perms:remove_acl/2];
 test_remove_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 

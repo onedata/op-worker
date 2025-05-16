@@ -80,11 +80,7 @@
 ]).
 %% Permissions related operations
 -export([
-    set_perms/3,
-    check_perms/3,
-    set_acl/3,
-    get_acl/2,
-    remove_acl/2
+    set_perms/3
 ]).
 %% Custom metadata related operations
 -export([
@@ -532,30 +528,6 @@ get_children_count(SessId, FileKey) ->
     ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     ?run(lfm_perms:set_perms(SessId, FileKey, NewPerms)).
-
-
--spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    ok | error_reply().
-check_perms(SessId, FileKey, PermType) ->
-    ?run(lfm_perms:check_perms(SessId, FileKey, PermType)).
-
-
--spec set_acl(session:id(), file_key(), acl:acl()) ->
-    ok | error_reply().
-set_acl(SessId, FileKey, EntityList) ->
-    ?run(lfm_perms:set_acl(SessId, FileKey, EntityList)).
-
-
--spec get_acl(session:id(), file_key()) ->
-    {ok, acl:acl()} | error_reply().
-get_acl(SessId, FileKey) ->
-    ?run(lfm_perms:get_acl(SessId, FileKey)).
-
-
--spec remove_acl(session:id(), FileKey :: file_key()) ->
-    ok | error_reply().
-remove_acl(SessId, FileKey) ->
-    ?run(lfm_perms:remove_acl(SessId, FileKey)).
 
 
 %%%===================================================================

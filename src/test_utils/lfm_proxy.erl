@@ -206,7 +206,7 @@ ensure_dir(Worker, SessId, RelativeRootGuid, FilePath, Mode) ->
 -spec check_perms(node(), session:id(), lfm:file_key(), helpers:open_flag()) ->
     ok | {error, term()}.
 check_perms(Worker, SessId, FileKey, OpenFlag) ->
-    ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
+    ?EXEC(Worker, mi_file_perms:check_perms(SessId, FileKey, OpenFlag)).
 
 
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
@@ -646,19 +646,19 @@ list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
 -spec get_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     {ok, acl:acl()} | lfm:error_reply().
 get_acl(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
+    ?EXEC(Worker, mi_file_perms:get_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec set_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), acl:acl()) ->
     ok | lfm:error_reply().
 set_acl(Worker, SessId, FileKey, EntityList) ->
-    ?EXEC(Worker, lfm:set_acl(SessId, uuid_to_file_ref(Worker, FileKey), EntityList)).
+    ?EXEC(Worker, mi_file_perms:set_acl(SessId, uuid_to_file_ref(Worker, FileKey), EntityList)).
 
 
 -spec remove_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 remove_acl(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:remove_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
+    ?EXEC(Worker, mi_file_perms:remove_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 %%%===================================================================

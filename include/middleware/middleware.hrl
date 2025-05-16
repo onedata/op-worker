@@ -296,4 +296,25 @@
 
 -record(file_storage_locations_get_request, {}).
 
+
+%%%===================================================================
+%%% File permissions related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(acl_get_request, {
+}).
+
+-record(acl_set_request, {
+    value :: acl:acl()
+}).
+
+-record(acl_remove_request, {
+}).
+
+-record(perms_check_request, {
+    flag :: fslogic_worker:open_flag()
+}).
+
+
 -endif.

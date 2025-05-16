@@ -76,6 +76,12 @@
     #historical_dir_size_stats_get_request{} |
     #file_storage_locations_get_request{}.
 
+-type file_perms_operation() ::
+    #acl_get_request{} |
+    #acl_set_request{} |
+    #acl_remove_request{} |
+    #perms_check_request{}.
+
 -type qos_operation() ::
     #qos_entry_add_request{} |
     #qos_entry_get_request{} |
@@ -97,6 +103,7 @@
     cdmi_operation() |
     dataset_operation() |
     file_metadata_operations() |
+    file_perms_operation() |
     qos_operation() |
     share_operation() |
     transfer_operation().
@@ -104,12 +111,16 @@
 -export_type([
     archive_operation/0, atm_operation/0,
     cdmi_operation/0, dataset_operation/0,
-    file_metadata_operations/0, 
+    file_metadata_operations/0,
+    file_perms_operation/0,
     qos_operation/0, transfer_operation/0,
     operation/0
 ]).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
+    check_perms,
+
     custom_metadata_get_request
 ]).
 
@@ -236,6 +247,8 @@ ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
 
 %% @private
 -spec is_operation_available_in_share_mode(operation()) -> boolean().
+is_operation_available_in_share_mode(#perms_check_request{flag = Flag}) ->
+    Flag == read;
 is_operation_available_in_share_mode(Operation) ->
     lists:member(get_operation_name(Operation), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 

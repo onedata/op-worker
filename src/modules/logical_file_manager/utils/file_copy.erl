@@ -277,8 +277,8 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
             ok = lfm:set_xattr(SessId, ?FILE_REF(TargetGuid), Xattr)
     end, Xattrs),
 
-    {ok, Acl} = lfm:get_acl(SessId, ?FILE_REF(SourceGuid)),
-    lfm:set_acl(SessId, ?FILE_REF(TargetGuid), Acl),
+    {ok, Acl} = mi_file_perms:get_acl(SessId, ?FILE_REF(SourceGuid)),
+    mi_file_perms:set_acl(SessId, ?FILE_REF(TargetGuid), Acl),
     lfm:set_perms(SessId, ?FILE_REF(TargetGuid), Mode).
 
 

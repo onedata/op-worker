@@ -119,11 +119,11 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance
             ?lfm_check(lfm:set_perms(Auth#auth.session_id, ?FILE_REF(Guid), PosixPerms))
     end;
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) ->
-    ?lfm_check(lfm:set_acl(
+    mi_file_perms:set_acl(
         Auth#auth.session_id,
         ?FILE_REF(Guid),
         maps:get(<<"list">>, Data)
-    )).
+    ).
 
 
 %% @doc {@link middleware_handler} callback delete/1.

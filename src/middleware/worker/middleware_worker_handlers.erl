@@ -215,6 +215,19 @@ execute(UserCtx, FileCtx, #file_storage_locations_get_request{}) ->
     data_distribution:gather_storage_locations(UserCtx, FileCtx);
 
 
+%% File permissions
+
+execute(UserCtx, FileCtx, #acl_get_request{}) ->
+    acl_req:get_acl(UserCtx, FileCtx);
+execute(UserCtx, FileCtx, #acl_set_request{value = Acl}) ->
+    acl_req:set_acl(UserCtx, FileCtx, Acl);
+execute(UserCtx, FileCtx, #acl_remove_request{}) ->
+    acl_req:remove_acl(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #perms_check_request{flag = Flag}) ->
+    permission_req:check_perms(UserCtx, FileCtx, Flag);
+
+
 %% QoS
 
 execute(UserCtx, FileCtx, #qos_entry_add_request{

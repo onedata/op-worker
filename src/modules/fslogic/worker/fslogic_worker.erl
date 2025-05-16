@@ -91,8 +91,6 @@
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
-    % Checking perms for operations other than 'read' should result in immediate ?EACCES
-    check_perms,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
     %%    get_file_path,
@@ -413,10 +411,6 @@ is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
     file_request = #open_file_with_extended_info{flag = Flag}
 }}, _) ->
     Flag == read;
-is_operation_available_in_share_mode(#provider_request{
-    provider_request = #check_perms{flag = Flag}
-}, _) ->
-    Flag == read;
 is_operation_available_in_share_mode(Request, true) ->
     lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
 is_operation_available_in_share_mode(Request, false) ->
@@ -654,15 +648,7 @@ handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
-    guid_req:get_file_path(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_acl{}, FileCtx) ->
-    acl_req:get_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
-    acl_req:set_acl(UserCtx, FileCtx, Acl);
-handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
-    acl_req:remove_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag).
+    guid_req:get_file_path(UserCtx, FileCtx).
 
 
 %%--------------------------------------------------------------------

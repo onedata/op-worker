@@ -30,11 +30,10 @@
 %% Checks given permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
-    fslogic_worker:provider_response().
+-spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) -> ok.
 check_perms(UserCtx, FileCtx, OpenFlag) ->
     fslogic_authz:ensure_authorized(UserCtx, FileCtx, required_perms(OpenFlag)),
-    #provider_response{status = #status{code = ?OK}}.
+    ok.
 
 
 %%%===================================================================
