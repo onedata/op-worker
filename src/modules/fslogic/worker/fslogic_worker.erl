@@ -882,6 +882,8 @@ handle_periodic_storages_check() ->
 %% @private
 -spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, request() | operation()) -> boolean().
 is_operation_allowed_by_special_dir_logic(undefined, _Request) ->
+    % FileCtx is undefined for storage related operations (get_helper_params, create_storage_test_file, verify_storage_test_file)
+    % as well as upload_multipart_part operation.
     true;
 is_operation_allowed_by_special_dir_logic(FileCtx, #fuse_request{fuse_request = FuseRequest}) ->
     is_operation_allowed_by_special_dir_logic(FileCtx, FuseRequest);
