@@ -22,7 +22,7 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    allowed_operations/0,
+    supported_operations/0,
     is_filesystem_root_dir/0,
     can_be_shared/0,
     is_affected_by_protection_flags/0,
@@ -58,8 +58,8 @@ is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
-allowed_operations() -> [].
+-spec supported_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+supported_operations() -> [].
 
 
 -spec is_filesystem_root_dir() -> boolean().

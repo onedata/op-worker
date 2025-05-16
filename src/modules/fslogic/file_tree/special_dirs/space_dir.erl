@@ -18,7 +18,7 @@
 -behaviour(special_dir_behaviour).
 
 % ignore this function as it uses record definitions without setting fields values
--dialyzer({nowarn_function, allowed_operations/0}).
+-dialyzer({nowarn_function, supported_operations/0}).
 
 -include("middleware/middleware.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -31,7 +31,7 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    allowed_operations/0,
+    supported_operations/0,
     is_filesystem_root_dir/0,
     can_be_shared/0,
     is_affected_by_protection_flags/0,
@@ -57,7 +57,7 @@
     scope = SpaceId
 }).
 
--define(DISALLOWED_OPERATIONS, [
+-define(DISSUPPORTED_OPERATIONS, [
     #move_to_trash{},
     #delete_file{},
     #change_mode{},
@@ -101,9 +101,9 @@ is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
-allowed_operations() ->
-    (?MIDDLEWARE_ALL_OPERATIONS ++ ?FSLOGIC_ALL_OPERATIONS) -- ?DISALLOWED_OPERATIONS.
+-spec supported_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+supported_operations() ->
+    (?MIDDLEWARE_ALL_OPERATIONS ++ ?FSLOGIC_ALL_OPERATIONS) -- ?DISSUPPORTED_OPERATIONS.
 
 
 -spec is_filesystem_root_dir() -> boolean().

@@ -20,7 +20,7 @@
 
 -callback is_special(uuid | guid, file_meta:uuid() | file_id:file_guid()) -> boolean().
 
--callback allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+-callback supported_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
 
 % global_root_dir and user_root_dirs
 -callback is_filesystem_root_dir() -> boolean().

@@ -1275,8 +1275,8 @@ run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
                 {error, ?ENOENT};
             _ ->
                 case ReturnedErrors of
-                    api_errors -> ?ERR_FORBIDDEN;
-                    errno_errors -> {error, ?EPERM}
+                    api_errors -> ?ERROR_NOT_SUPPORTED;
+                    errno_errors -> {error, ?ENOTSUP}
                 end
         end,
 

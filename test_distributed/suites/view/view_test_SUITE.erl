@@ -150,7 +150,7 @@ query_view_using_file_meta(_Config) ->
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
     
     ArchivesRootDirName = ?SPACE_ARCHIVES_DIR_NAME,
-    {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(space_archives_dir:guid(SpaceId)),
+    {ok, SpaceArchivesObjectId} = file_id:guid_to_objectid(space_archives_dir:guid(SpaceId)),
 
     ViewName = ?view_name,
     SimpleMapFunction = <<"
@@ -206,7 +206,7 @@ query_view_using_file_meta(_Config) ->
         },
         #{
             <<"id">> := _,
-            <<"key">> := ArchivesRootDirObjectId,
+            <<"key">> := SpaceArchivesObjectId,
             <<"value">> := #{
                 <<"name">> := ArchivesRootDirName,
                 <<"type">> := <<"DIR">>,
@@ -240,9 +240,14 @@ query_view_using_times(_Config) ->
     SpaceDirGuid = space_dir:guid(SpaceId),
     {ok, SpaceObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
+    TrashGuid = trash_dir:guid(SpaceId),
+    {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
+    
     TmpDirGuid = tmp_dir:guid(SpaceId),
     {ok, TmpObjectId} = file_id:guid_to_objectid(TmpDirGuid),
 
+    {ok, SpaceArchivesObjectId} = file_id:guid_to_objectid(space_archives_dir:guid(SpaceId)),
+    
     OpenedDeletedGuid = file_id:pack_guid(?OPENED_DELETED_FILES_DIR_UUID(SpaceId), SpaceId),
     {ok, OpenedDeletedObjectId} = file_id:guid_to_objectid(OpenedDeletedGuid),
 
@@ -258,6 +263,16 @@ query_view_using_times(_Config) ->
     ?assertQuery([
         #{
             <<"id">> := _,
+            <<"key">> := TrashObjectId,
+            <<"value">> := #{
+                <<"atime">> := _,
+                <<"mtime">> := _,
+                <<"ctime">> := _
+
+            }
+        },
+        #{
+            <<"id">> := _,
             <<"key">> := TmpObjectId,
             <<"value">> := #{
                 <<"atime">> := _,
@@ -269,6 +284,16 @@ query_view_using_times(_Config) ->
         #{
             <<"id">> := _,
             <<"key">> := SpaceObjectId,
+            <<"value">> := #{
+                <<"atime">> := _,
+                <<"mtime">> := _,
+                <<"ctime">> := _
+
+            }
+        },
+        #{
+            <<"id">> := _,
+            <<"key">> := SpaceArchivesObjectId,
             <<"value">> := #{
                 <<"atime">> := _,
                 <<"mtime">> := _,

@@ -15,7 +15,7 @@
 -behaviour(special_dir_behaviour).
 
 % ignore this function as it uses record definitions without setting fields values
--dialyzer({nowarn_function, allowed_operations/0}).
+-dialyzer({nowarn_function, supported_operations/0}).
 
 -include("middleware/middleware.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
@@ -26,7 +26,7 @@
 % special_dir_behaviour
 -export([
     is_special/2,
-    allowed_operations/0,
+    supported_operations/0,
     is_filesystem_root_dir/0,
     can_be_shared/0,
     is_affected_by_protection_flags/0,
@@ -37,7 +37,7 @@
     exists/1
 ]).
 
--define(ALLOWED_OPERATIONS, [
+-define(SUPPORTED_OPERATIONS, [
     #resolve_guid{},
     #resolve_guid_by_relative_path{},
 
@@ -80,8 +80,8 @@ is_special(guid, Guid) -> is_special(uuid, file_id:guid_to_uuid(Guid));
 is_special(_, _) -> false.
 
 
--spec allowed_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
-allowed_operations() -> ?ALLOWED_OPERATIONS.
+-spec supported_operations() -> [middleware_worker:operation() | fslogic_worker:operation()].
+supported_operations() -> ?SUPPORTED_OPERATIONS.
 
 
 -spec is_filesystem_root_dir() -> boolean().

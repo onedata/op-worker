@@ -470,7 +470,7 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     try
         case is_operation_allowed_by_special_dir_logic(FileCtx1, Request) of
             false ->
-                throw(?EPERM);
+                throw(?ENOTSUP);
             true ->
                 case is_storage_accessible(FileCtx1) of
                     true ->
@@ -894,4 +894,4 @@ is_operation_allowed_by_special_dir_logic(FileCtx, #provider_request{provider_re
 is_operation_allowed_by_special_dir_logic(FileCtx, #proxyio_request{proxyio_request = ProxyIORequest}) ->
     is_operation_allowed_by_special_dir_logic(FileCtx, ProxyIORequest);
 is_operation_allowed_by_special_dir_logic(FileCtx, Operation) ->
-    special_dirs:accepts_operation(file_ctx:get_logical_uuid_const(FileCtx), Operation).
+    special_dirs:is_operation_supported(file_ctx:get_logical_uuid_const(FileCtx), Operation).

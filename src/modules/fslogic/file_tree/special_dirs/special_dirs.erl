@@ -16,7 +16,7 @@
 %%% a special dir and ensuring its existence should also ensure existence of such
 %%% link.
 %%%
-%%% @TODO VFS-12229 - implement allowed_operations for special dirs subtree
+%%% @TODO VFS-12229 - implement supported_operations for special dirs subtree
 %%% @TODO VFS-12233 - properly handle special dirs deletion
 %%% @end
 %%%-------------------------------------------------------------------
@@ -27,7 +27,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 -export([set_up_for_new_space/1, report_new_user/1]).
--export([exists/1, is_special/1, is_special/3, is_filesystem_root_dir/1, accepts_operation/2,
+-export([exists/1, is_special/1, is_special/3, is_filesystem_root_dir/1, is_operation_supported/2,
     is_affected_by_protection_flags/1, is_included_in_harvesting/1, is_included_in_dir_stats/1,
     is_included_in_events/1, is_logically_detached/1]).
 -export([get_file_meta_if_special/1, get_times_if_special/2]).
@@ -71,9 +71,9 @@ is_special(Module, IdType, Id) ->
     Module:is_special(IdType, Id).
 
 
--spec accepts_operation(file_meta:uuid(), middleware_worker:operation() | fslogic_worker:operation()) -> boolean().
-accepts_operation(Uuid, Operation) ->
-    case apply_if_special(Uuid, allowed_operations, not_special) of
+-spec is_operation_supported(file_meta:uuid(), middleware_worker:operation() | fslogic_worker:operation()) -> boolean().
+is_operation_supported(Uuid, Operation) ->
+    case apply_if_special(Uuid, supported_operations, not_special) of
         not_special -> true;
         AllowedOperations -> lists:member(element(1, Operation), [element(1, O) || O <- AllowedOperations])
     end.
