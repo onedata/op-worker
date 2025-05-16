@@ -77,6 +77,8 @@ all() ->
 % users for which mappings defined in luma.json are incorrect
 -define(ERR_USERS, [<<"user", (integer_to_binary(I))/binary>> || I <- lists:seq(2, 10)]).
 
+%% @TODO VFS-12827 - implement tests for all helper types
+
 %%%===================================================================
 %%% Test functions - mapping user to storage credentials
 %%%===================================================================
@@ -210,14 +212,23 @@ map_space_owner_to_storage_creds_posix_incompatible_base(Config, StorageLumaConf
     Storage = maps:get(storage_record, StorageLumaConfig),
     AdminCreds = maps:get(admin_credentials, StorageLumaConfig),
     ?assertEqual({ok, AdminCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)),
+    % changing admin creds should change mapping
+    {ChangedAdminCreds, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
+    ?assertEqual({ok, ChangedAdminCreds},
+        luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, ChangedStorage)).
 
 map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     UserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, UserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
+        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)),
+    % changing admin creds should NOT change mapping
+    {_ChangedAdminCreds, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
+    ?assertMatch({ok, UserCreds},
+        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, ChangedStorage)).
+
 
 map_user_to_storage_creds_on_storage_with_auto_feed_luma_not_posix_incompatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
