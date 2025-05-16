@@ -16,7 +16,6 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
@@ -32,14 +31,12 @@
 %%%===================================================================
 
 -type fuse_request() :: #fuse_request{}.
--type provider_request() :: #provider_request{}.
 -type proxyio_request() :: #proxyio_request{}.
--type request() :: fuse_request() | provider_request() | proxyio_request().
+-type request() :: fuse_request() | proxyio_request().
 
 -type fuse_response() :: #fuse_response{}.
--type provider_response() :: #provider_response{}.
 -type proxyio_response() :: #proxyio_response{}.
--type response() :: fuse_response() | provider_response() | proxyio_response().
+-type response() :: fuse_response() | proxyio_response().
 
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type open_flag() :: helpers:open_flag().
@@ -48,7 +45,7 @@
 
 -export_type([
     request/0, response/0, file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0
+    file_guid/0, fuse_response/0, proxyio_response/0, fuse_response_type/0
 ]).
 
 % requests
@@ -234,7 +231,6 @@ init(_Args) ->
     ping |
     healthcheck |
     {fuse_request, session:id(), fuse_request()} |
-    {provider_request, session:id(), provider_request()} |
     {proxyio_request, session:id(), proxyio_request()},
     Result :: cluster_status:status() | ok | {ok, response()} |
     {error, Reason :: term()} | pong.
@@ -269,11 +265,6 @@ handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
     ?debug("fuse_response: ~tp", [Response]),
-    {ok, Response};
-handle({provider_request, SessId, ProviderRequest}) ->
-    ?debug("provider_request(~tp): ~tp", [SessId, ProviderRequest]),
-    Response = handle_request_and_process_response(SessId, ProviderRequest),
-    ?debug("provider_response: ~tp", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request(~tp): ~tp", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
@@ -422,8 +413,6 @@ is_operation_available_in_share_mode(Request, false) ->
 get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
-    element(1, Req);
-get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).

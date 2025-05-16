@@ -294,13 +294,6 @@ answer_or_delegate(Msg = #client_message{
     delegate_request(fslogic_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
-    message_id = MsgId,
-    message_body = ProviderRequest = #provider_request{context_guid = ContextGuid}
-}, RIB) ->
-    Req = {provider_request, get_session_id(Msg), ProviderRequest},
-    delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
-
-answer_or_delegate(Msg = #client_message{
     message_id = Id,
     message_body = ProxyIORequest = #proxyio_request{
         parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}
