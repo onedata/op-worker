@@ -524,18 +524,18 @@ call_async_request_manager(AsyncReqManager, Msg) ->
 %%--------------------------------------------------------------------
 -spec check_workers_status(Workers, session:id(), [pid()], boolean()) -> Workers when
     Workers :: #{req_id() => pid() | {pid(), not_alive}}.
-check_workers_status(Workers, EffSessId, Cons, SendHeartbeats) ->
+check_workers_status(Workers, SessionId, Cons, SendHeartbeats) ->
     maps:fold(
         fun
             ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
                 ?error("Async Request Manager: process ~tp handling request ~tp died",
                     [Pid, ReqId]
                 ),
-                connection_api:send_via_any(?ERROR_MSG(MsgId), EffSessId, Cons),
+                connection_api:send_via_any(?ERROR_MSG(MsgId), SessionId, Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
                 SendHeartbeats andalso connection_api:send_via_any(
-                    ?HEARTBEAT_MSG(MsgId), EffSessId, Cons
+                    ?HEARTBEAT_MSG(MsgId), SessionId, Cons
                 ),
                 case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
                     true ->

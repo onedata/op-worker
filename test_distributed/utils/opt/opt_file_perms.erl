@@ -22,7 +22,7 @@
 
 -define(CALL(NodeSelector, Args), ?CALL(NodeSelector, ?FUNCTION_NAME, Args)).
 -define(CALL(NodeSelector, FunctionName, Args),
-    try opw_test_rpc:insecure_call(NodeSelector, mi_file_tree, FunctionName, Args, timer:minutes(3)) of
+    try opw_test_rpc:insecure_call(NodeSelector, mi_file_perms, FunctionName, Args, timer:minutes(3)) of
         ok -> ok;
         __RESULT -> {ok, __RESULT}
     catch throw:__ERROR ->
