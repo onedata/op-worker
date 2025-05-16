@@ -252,11 +252,6 @@ to_protobuf(#provider_rpc_call{} = Msg) -> clproto_provider_rpc_translator:to_pr
 to_protobuf(#provider_rpc_response{} = Msg) -> clproto_provider_rpc_translator:to_protobuf(Msg);
 
 
-%% PROVIDER
-to_protobuf(#provider_request{} = Msg) -> clproto_provider_req_translator:to_protobuf(Msg);
-to_protobuf(#provider_response{} = Msg) -> clproto_provider_req_translator:to_protobuf(Msg);
-
-
 %% DBSYNC
 to_protobuf(#dbsync_request{} = Msg) -> clproto_dbsync_translator:to_protobuf(Msg);
 to_protobuf(#dbsync_message{} = Msg) -> clproto_dbsync_translator:to_protobuf(Msg);
