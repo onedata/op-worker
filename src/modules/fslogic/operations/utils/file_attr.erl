@@ -61,18 +61,18 @@
 -define(XATTRS_STAGE, xattrs).
 
 -define(STAGES, [
-    {?FILE_META_ATTRS, fun resolve_file_meta_attrs/1},
-    {?LINK_TREE_FILE_ATTRS, fun resolve_name_attrs/1},
-    {?PATH_FILE_ATTRS, fun resolve_path/1},
-    {?LUMA_FILE_ATTRS, fun resolve_luma_attrs/1},
-    {?TIMES_FILE_ATTRS, fun resolve_times_attrs/1},
-    {?LOCATION_FILE_ATTRS, fun resolve_location_attrs/1},
-    {?METADATA_FILE_ATTRS, fun resolve_metadata_attrs/1},
-    {?DATASET_FILE_ATTRS, fun resolve_dataset_attrs/1},
-    {?QOS_EFF_VALUE_FILE_ATTRS, fun resolve_qos_eff_value_attrs/1},
-    {?QOS_STATUS_FILE_ATTRS, fun resolve_qos_status_attrs/1},
-    {?ARCHIVE_RECALL_FILE_ATTRS, fun resolve_archive_recall_attrs/1},
-    {?XATTRS_STAGE, fun resolve_xattrs/1}
+    {?FILE_META_ATTRS, direct, fun resolve_file_meta_attrs/1},
+    {?LINK_TREE_FILE_ATTRS, direct, fun resolve_name_attrs/1},
+    {?PATH_FILE_ATTRS, effective, fun resolve_path/1},
+    {?LUMA_FILE_ATTRS, direct, fun resolve_luma_attrs/1},
+    {?TIMES_FILE_ATTRS, direct, fun resolve_times_attrs/1},
+    {?LOCATION_FILE_ATTRS, direct, fun resolve_location_attrs/1},
+    {?METADATA_FILE_ATTRS, direct, fun resolve_metadata_attrs/1},
+    {?DATASET_FILE_ATTRS, effective, fun resolve_dataset_attrs/1},
+    {?QOS_EFF_VALUE_FILE_ATTRS, effective, fun resolve_qos_eff_value_attrs/1},
+    {?QOS_STATUS_FILE_ATTRS, effective, fun resolve_qos_status_attrs/1},
+    {?ARCHIVE_RECALL_FILE_ATTRS, effective, fun resolve_archive_recall_attrs/1},
+    {?XATTRS_STAGE, direct, fun resolve_xattrs/1}
 ]).
 
 
@@ -101,14 +101,17 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
-    {FinalState, FinalFileAttrRecord} = lists:foldl(
-        fun({AttrsSubset, StageFun}, {AccState, AccFileAttrRecord}) ->
+    % For spaces not supported locally (accessed by e.g. listing user root dir) effective value cache is not initialized.
+    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
+    IsUnsupportedSpace = file_ctx:is_space_dir_const(FileCtx) andalso
+        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
+    {FinalState, FinalFileAttrRecord} = lists:foldl(fun
+        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsUnsupportedSpace ->
+            {AccState, AccFileAttrRecord};
+        ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
             {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
             {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
-        end,
-        {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}},
-        ?STAGES
-    ),
+    end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 
