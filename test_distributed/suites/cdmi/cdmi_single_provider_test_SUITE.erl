@@ -187,7 +187,7 @@ all() -> [
             p2_selector = krakow,
             space_selector = space_krk})
     catch __TYPE:__REASON:__STACKTRACE ->
-        ?error_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
+        ?ct_pal_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
         error(test_failed)
     end
 ).

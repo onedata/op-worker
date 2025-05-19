@@ -153,6 +153,7 @@ renamed_models() ->
 before_init() ->
     try
         op_worker_sup:start_link(),
+        start_logger_handlers(),
         ok = helpers_nif:init()
     catch
         _:Error:Stacktrace ->
@@ -536,3 +537,21 @@ async_run_with_oz_connection_after_upgrade(Fun) ->
     end),
     ok.
 
+
+%% @private
+-spec start_logger_handlers() -> ok.
+start_logger_handlers() ->
+    LogDir = ctool:get_env(log_dir),
+    Config = ctool:get_env(logger_base_config),
+
+    ok = logger:add_handler(file_access_audit_log, logger_std_h, #{
+        level => debug,
+        config => Config#{file => LogDir ++ op_worker:get_env(file_access_audit_log_file_name)},
+        filter_default => stop,
+        filters => [
+            {opw_file_access_domain, {fun logger_filters:domain/2, {log, equal, [onedata, opw, file_access]}}}
+        ],
+        formatter => {onedata_logger_formatter, #{
+            template =>  op_worker:get_env(file_access_audit_log_formatter_template)
+        }}
+    }).

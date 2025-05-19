@@ -449,7 +449,7 @@ all() -> [
     try
         __TEST_BASE_MODULE:?FUNCTION_NAME()
     catch __TYPE:__REASON:__STACKTRACE ->
-        ?error_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
+        ?ct_pal_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
         error(test_failed)
     end
 ).
@@ -457,7 +457,7 @@ all() -> [
     try
         __TEST_BASE_MODULE:?FUNCTION_NAME(__CONFIG)
     catch __TYPE:__REASON:__STACKTRACE ->
-        ?error_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
+        ?ct_pal_exception("Test failed due to", __TYPE, __REASON, __STACKTRACE),
         error(test_failed)
     end
 ).

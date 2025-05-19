@@ -358,7 +358,7 @@ check_for_compatibility_registry_updates(Resolver, OzConfiguration) ->
                     );
                 false ->
                     ?debug(
-                        "Local compatibility registry (v. ~ts) is not older than Onezone's (v. ~ts)",
+                        "Local compatibility registry (v. ~B) is not older than Onezone's (v. ~B)",
                         [LocalRevision, RemoteRevision]
                     )
             end;
