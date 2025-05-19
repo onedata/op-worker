@@ -106,7 +106,8 @@
     storage_import_get_info/1,
     storage_import_get_manual_example/1,
     restart_rtransfer_link/0,
-    update_txt_records/1
+    update_txt_records/1,
+    circuit_breaker_toggle/1
 ]).
 
 
@@ -668,3 +669,8 @@ restart_rtransfer_link() ->
 -spec update_txt_records(map()) -> ok | no_return().
 update_txt_records(Data) ->
     provider_logic:update_txt_records(Data).
+
+
+-spec circuit_breaker_toggle(open | closed) -> ok.
+circuit_breaker_toggle(State) ->
+    op_worker_circuit_breaker:toggle(State).

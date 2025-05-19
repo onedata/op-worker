@@ -16,7 +16,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 
 -export([run_test_for_all_storage_configs/5, clear_luma_db_for_all_storages/1,
-    mock_stat_on_space_mount_dir/1, setup_local_feed_luma/3, mock_storage_is_imported/1]).
+    mock_stat_on_space_mount_dir/1, setup_local_feed_luma/3, mock_storage_is_imported/1, change_admin_creds/1]).
 
 % LUMA API
 -export([map_to_storage_creds/4, map_to_storage_creds/5, map_to_display_creds/4,
@@ -24,7 +24,7 @@
     clear_luma_db/2]).
 
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
-    new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
+    new_s3_user_ctx/2, new_swift_user_ctx/3, new_glusterfs_user_ctx/2,
     new_webdav_user_ctx/2, new_nulldevice_user_ctx/2]).
 
 -type user_ctx() :: helper:user_ctx().
@@ -97,6 +97,62 @@ setup_local_feed_luma(Worker, Config, LocalFeedConfigFile) ->
         {ok, maps:get(StorageId, StorageDocs)}
     end),
     initializer:setup_luma_local_feed(Worker, Config, LocalFeedConfigFile).
+
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?POSIX_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_posix_user_ctx(?UID1, ?ROOT_GID),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?POSIX_HELPER(ChangedAdminCreds)}}
+    };
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?CEPH_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_ceph_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?CEPH_HELPER(ChangedAdminCreds)}}
+    };
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?S3_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_s3_user_ctx(<<"ADMIN_ACCESS_KEY1">>, <<"ADMIN_SECRET_KEY">>),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?S3_HELPER(ChangedAdminCreds)}}
+    };
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?SWIFT_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_swift_user_ctx(<<"ADMIN1">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?SWIFT_HELPER(ChangedAdminCreds)}}};
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_cephrados_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
+    };
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_glusterfs_user_ctx(1, 0),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?GLUSTERFS_HELPER(ChangedAdminCreds)}}
+    };
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?NULL_DEVICE_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = luma_test_utils:new_nulldevice_user_ctx(1, 0),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?NULLDEVICE_HELPER(ChangedAdminCreds)}}
+    };
+change_admin_creds(
+    #document{value = #storage_config{helper = #helper{name = ?WEBDAV_HELPER_NAME}} = StorageConfig} = StorageDoc
+) ->
+    ChangedAdminCreds = ?WEBDAV_BASIC_CREDENTIALS(<<"admin1:password">>),
+    {ChangedAdminCreds, StorageDoc#document{
+        value = StorageConfig#storage_config{helper = ?WEBDAV_HELPER(ChangedAdminCreds)}}
+    }.
 
 %%%===================================================================
 %%% LUMA API functions
@@ -180,11 +236,12 @@ new_s3_user_ctx(AccessKey, SecretKey) ->
 %% Constructs Swift storage helper user context record.
 %% @end
 %%--------------------------------------------------------------------
--spec new_swift_user_ctx(binary(), binary()) -> user_ctx().
-new_swift_user_ctx(Username, Password) ->
+-spec new_swift_user_ctx(binary(), binary(), binary()) -> user_ctx().
+new_swift_user_ctx(Username, Password, ProjectName) ->
     #{
         <<"username">> => Username,
-        <<"password">> => Password
+        <<"password">> => Password,
+        <<"projectName">> => ProjectName
     }.
 
 %%--------------------------------------------------------------------

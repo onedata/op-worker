@@ -83,12 +83,24 @@ handle_error(Request, Type, Error, Stacktrace) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_status_message(Error :: term()) -> #status{}.
-gen_status_message(?ERR_UNAUTHORIZED(_)) ->
-    #status{code = ?EACCES, description = describe_error(?EACCES)};
-gen_status_message(?ERR_FORBIDDEN) ->
-    #status{code = ?EACCES, description = describe_error(?EACCES)};
-gen_status_message({error, Reason}) ->
-    gen_status_message(Reason);
+gen_status_message(#fuse_response{status = Status}) ->
+    Status;
+gen_status_message(Error = {error, Reason}) ->
+    case errors:is_known_error(Error) of
+        true ->
+            #status{
+                code = case errors:to_errno(Error) of
+                    {true, Errno} ->
+                        Errno;
+                    false ->
+                        ?error(?autoformat_with_msg("Non-fslogic error has been returned via clproto", [Error])),
+                        ?EINVAL
+                end,
+                description = json_utils:encode(errors:to_json(Error))
+            };
+        false ->
+            gen_status_message(Reason)
+    end;
 gen_status_message({badmatch, Error}) ->
     gen_status_message(Error);
 gen_status_message({badrpc, Error}) ->
@@ -98,8 +110,6 @@ gen_status_message({'EXIT', {{Error, _}, _}}) ->
     gen_status_message(Error);
 gen_status_message({case_clause, Error}) ->
     gen_status_message(Error);
-gen_status_message(#fuse_response{status = Status}) ->
-    Status;
 gen_status_message({invalid_guid, _}) ->
     #status{code = ?ENOENT, description = describe_error(?ENOENT)};
 gen_status_message(not_found) ->
@@ -119,8 +129,7 @@ gen_status_message(Error) when is_atom(Error) ->
         true -> #status{code = Error};
         false -> #status{code = ?EAGAIN, description = describe_error(Error)}
     end;
-gen_status_message({ErrorCode, ErrorDescription}) when
-    is_atom(ErrorCode) and is_binary(ErrorDescription) ->
+gen_status_message({ErrorCode, ErrorDescription}) when is_atom(ErrorCode) and is_binary(ErrorDescription) ->
     case errors:is_posix_code(ErrorCode) of
         true -> #status{code = ErrorCode, description = ErrorDescription};
         false -> #status{code = ?EAGAIN, description = ErrorDescription}

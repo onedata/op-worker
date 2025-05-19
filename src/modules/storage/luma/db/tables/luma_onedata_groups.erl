@@ -85,7 +85,7 @@ get_and_describe(Storage, AclGroup) ->
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire(Storage, AclGroup) ->
     case storage:get_luma_feed(Storage) of
         ?EXTERNAL_FEED ->
@@ -95,11 +95,11 @@ acquire(Storage, AclGroup) ->
     end.
 
 -spec acquire_from_external_feed(storage:data(), key()) ->
-    {ok, record(), luma:feed()} | {error, term()}.
+    {luma_db:cache_policy(), record(), luma:feed()} | {error, term()}.
 acquire_from_external_feed(Storage, AclGroup) ->
     case luma_external_feed:map_acl_group_to_onedata_group(AclGroup, Storage) of
         {ok, OnedataGroupMap} ->
-            {ok, luma_onedata_group:new(OnedataGroupMap), ?EXTERNAL_FEED};
+            {cache, luma_onedata_group:new(OnedataGroupMap), ?EXTERNAL_FEED};
         Error ->
             Error
     end.

@@ -114,7 +114,8 @@
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModule) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModule);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModule) ->
-    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, #{callback_modules => [CallbackModule]}).
+    traverse_utils:init_pool_with_zone_connection(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
+        #{callback_modules => [CallbackModule]}).
 
 -spec stop(pool() | atom()) -> any().
 stop(Pool) when is_atom(Pool) ->
@@ -156,7 +157,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         info = TraverseInfo
     },
     ChildrenMasterJobPrehook(StorageTraverse),
-    traverse:run(Pool, DefinedTaskId, StorageTraverse).
+    traverse_utils:run(Pool, DefinedTaskId, StorageTraverse).
 
 %%-------------------------------------------------------------------
 %% @doc

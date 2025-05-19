@@ -19,7 +19,8 @@
 %%%
 %%%
 %%% There are 3 types of feed for LUMA DB that can be configured for a specific storage:
-%%%  * AUTO_FEED - LUMA DB will be automatically filled.
+%%%  * AUTO_FEED - LUMA mappings are automatically resolved and only computationally heavy
+%%%                and unchangeable are cached in DB.
 %%%  * LOCAL_FEED - custom mappings in LUMA DB can be set using REST API.
 %%%                 It must be configured before supporting space with the storage.
 %%%  * EXTERNAL_FEED - external HTTP server that implements required API (described on onedata.org).
