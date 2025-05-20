@@ -33,10 +33,10 @@
 %%%===================================================================
 
 
--spec get_path(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
+-spec get_path(oct_background:node_selector(), session:id(), lfm:file_key()) ->
     {ok, file_meta:path()} | errors:error().
-get_path(NodeSelector, SessionId, FileGuid) ->
-    ?CALL(NodeSelector, [SessionId, FileGuid]).
+get_path(NodeSelector, SessionId, FileKey) ->
+    ?CALL(NodeSelector, [SessionId, FileKey]).
 
 
 -spec get_parent(oct_background:node_selector(), session:id(), lfm:file_key()) ->

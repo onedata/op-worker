@@ -8,7 +8,6 @@
 %%% @doc
 %%% Module handling serialization to and deserialization from protobuf format
 %%% of client/server messages.
-%%% TODO VFS-12820 check guid/space id of file and reject not supported space request
 %%% @end
 %%%-------------------------------------------------------------------
 -module(clproto_serializer).

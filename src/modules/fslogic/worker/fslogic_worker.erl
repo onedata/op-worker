@@ -343,7 +343,6 @@ init_report() ->
 -spec handle_request_and_process_response(session:id(), request()) -> response().
 handle_request_and_process_response(SessId, Request) ->
     try
-        % TODO VFS-12820 assert space supported/target provider is self
         OriginalUserCtx = user_ctx:new(SessId),
         FilePartialCtx = fslogic_request:get_file_partial_ctx(OriginalUserCtx, Request),
 
@@ -426,6 +425,7 @@ handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request
             undefined;
         _ ->
             {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            assert_request_can_be_handled_locally(FileCtx0, Request),
             FileCtx0
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
@@ -434,6 +434,25 @@ handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request
         true -> handle_request(EffUserCtx, Request, FileCtx1);
         false -> #fuse_response{status = #status{code = ?EAGAIN}}
     end.
+
+
+%% @private
+-spec assert_request_can_be_handled_locally(file_ctx:ctx(), request()) -> ok | no_return().
+assert_request_can_be_handled_locally(FileCtx, Request) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    case fslogic_file_id:is_space_dir_guid(FileGuid) andalso can_handle_remote_space_operation(Request) of
+        true -> ok;
+        false -> middleware_utils:assert_file_managed_locally(FileGuid)
+    end.
+
+
+%% @private
+-spec can_handle_remote_space_operation(request()) -> boolean().
+can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid{}}) -> true;
+can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid_by_relative_path{}}) -> true;
+can_handle_remote_space_operation(#fuse_request{fuse_request = #ensure_dir{}}) -> true;
+can_handle_remote_space_operation(#fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) -> true;
+can_handle_remote_space_operation(_) -> false.
 
 
 %% @private

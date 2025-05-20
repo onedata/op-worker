@@ -294,7 +294,7 @@ detach_and_reattach_dataset(_Config) ->
     % detach dataset
     detach(P1Node, UserSessIdP1, DatasetId),
 
-    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
     ?assertDatasetInheritancePath(P1Node, UserSessIdP1, Guid, ?none_inheritance_path, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
@@ -361,7 +361,7 @@ remove_detached_dataset(_Config) ->
     ProtectionFlags = ?RAND_PROTECTION_FLAGS(),
     {ok, ParentGuid} = lfm_proxy:mkdir(P1Node, User2SessIdP1, SpaceGuid, ParentDirName, ?DEFAULT_DIR_PERMS),
     {ok, Guid} = lfm_proxy:mkdir(P1Node, User2SessIdP1, ParentGuid, DirName, ?DEFAULT_DIR_PERMS),
-    {ok, Path} = opt_file_tree:get_path(P1Node, User2SessIdP1, Guid),
+    {ok, Path} = opt_file_tree:get_path(P1Node, User2SessIdP1, ?FILE_REF(Guid)),
     {ok, DatasetId} = ?assertMatch({ok, _},
         opt_datasets:establish(P1Node, User2SessIdP1, ?FILE_REF(Guid), ProtectionFlags), ?ATTEMPTS),
     ?assertAttachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
@@ -396,7 +396,7 @@ remove_file_should_detach_dataset(_Config) ->
     DirName = ?DIR_NAME(),
     ProtectionFlags = ?no_flags_mask,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
-    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
@@ -574,7 +574,7 @@ reattach_if_root_file_is_deleted_should_fail(_Config) ->
     DirName = ?DIR_NAME(),
     ProtectionFlags = ?no_flags_mask,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
-    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
@@ -688,7 +688,7 @@ remove_detached_dataset_if_root_file_has_already_been_deleted(_Config) ->
     DirName = ?DIR_NAME(),
     ProtectionFlags = ?no_flags_mask,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
-    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
@@ -799,7 +799,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
 
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetId}) ->
-        {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+        {ok, Path} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
         ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, ExpParentDatasetId, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
         ?assertDatasetInheritancePath(P1Node, UserSessIdP1, Guid, ?none_inheritance_path, ?no_flags_mask),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
@@ -857,7 +857,7 @@ rename_file_should_not_rename_detached_dataset(_Config) ->
 
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
-    {ok, SourcePatch} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, SourcePatch} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
     ?assertDatasetInheritancePath(P1Node, UserSessIdP1, Guid, ?direct_inheritance_path, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
@@ -906,7 +906,7 @@ move_file_should_not_move_detached_dataset(_Config) ->
 
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
-    {ok, SourcePatch} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, SourcePatch} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
     ?assertDatasetInheritancePath(P1Node, UserSessIdP1, Guid, ?direct_inheritance_path, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
@@ -932,7 +932,7 @@ reattach_to_moved_root_file(_Config) ->
 
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
-    {ok, SourcePatch} = opt_file_tree:get_path(P1Node, UserSessIdP1, Guid),
+    {ok, SourcePatch} = opt_file_tree:get_path(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
     ?assertDatasetInheritancePath(P1Node, UserSessIdP1, Guid, ?direct_inheritance_path, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
@@ -1177,7 +1177,7 @@ assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, Expect
     ExpectedProtectionFlags, ExpectedEffProtectionFlags
 ) ->
     {ok, #file_attr{type = ExpectedRootFileType}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ExpectedRootFileGuid)),
-    {ok, ExpectedRootFilePath} = opt_file_tree:get_path(Node, SessionId, ExpectedRootFileGuid),
+    {ok, ExpectedRootFilePath} = opt_file_tree:get_path(Node, SessionId, ?FILE_REF(ExpectedRootFileGuid)),
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
         ExpectedRootFileType, false, ?ATTACHED_DATASET, ExpectedProtectionFlags, ExpectedEffProtectionFlags).
 

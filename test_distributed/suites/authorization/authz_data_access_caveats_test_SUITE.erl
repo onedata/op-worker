@@ -525,7 +525,7 @@ allowed_ancestors_operations_test(_Config) ->
             ),
             ?assertMatch(
                 {ok, DirPath},
-                opt_file_tree:get_path(Node, SessionIdWithCaveats, DirGuid)
+                opt_file_tree:get_path(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
             ),
 
             % Get child attr should also succeed but only for children that are
