@@ -17,7 +17,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([check_perms/3]).
+-export([check_file_access/3]).
 
 
 %%%===================================================================
@@ -30,11 +30,10 @@
 %% Checks given permission on file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_perms(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) ->
-    fslogic_worker:provider_response().
-check_perms(UserCtx, FileCtx, OpenFlag) ->
+-spec check_file_access(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:open_flag()) -> ok.
+check_file_access(UserCtx, FileCtx, OpenFlag) ->
     fslogic_authz:ensure_authorized(UserCtx, FileCtx, required_perms(OpenFlag)),
-    #provider_response{status = #status{code = ?OK}}.
+    ok.
 
 
 %%%===================================================================

@@ -71,24 +71,23 @@ send(SessionId, Msg, ExcludedCons, LogErrors) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO VFS-5895 refactor proxy session - session restart should be on this level
 %% Tries to send given message via any of specified connections.
 %% @end
 %%--------------------------------------------------------------------
--spec send_via_any(communicator:message(), EffSessionId :: session:id(), [pid()]) ->
+-spec send_via_any(communicator:message(), session:id(), [pid()]) ->
     ok | {error, term()}.
-send_via_any(_Msg, EffSessionId, []) ->
-    session_manager:restart_session_if_dead(EffSessionId),
+send_via_any(_Msg, SessionId, []) ->
+    session_manager:restart_session_if_dead(SessionId),
     {error, no_connections};
-send_via_any(Msg, EffSessionId, [Conn]) ->
+send_via_any(Msg, SessionId, [Conn]) ->
     case connection:send_msg(Conn, Msg) of
         {error, no_connection} = Error ->
-            session_manager:restart_session_if_dead(EffSessionId),
+            session_manager:restart_session_if_dead(SessionId),
             Error;
         Result ->
             Result
     end;
-send_via_any(Msg, EffSessionId, [Conn | Cons]) ->
+send_via_any(Msg, SessionId, [Conn | Cons]) ->
     case connection:send_msg(Conn, Msg) of
         ok ->
             ok;
@@ -97,10 +96,10 @@ send_via_any(Msg, EffSessionId, [Conn | Cons]) ->
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
         {error, no_connection} ->
-            session_manager:restart_session_if_dead(EffSessionId),
-            send_via_any(Msg, EffSessionId, Cons);
+            session_manager:restart_session_if_dead(SessionId),
+            send_via_any(Msg, SessionId, Cons);
         _Error ->
-            send_via_any(Msg, EffSessionId, Cons)
+            send_via_any(Msg, SessionId, Cons)
     end.
 
 

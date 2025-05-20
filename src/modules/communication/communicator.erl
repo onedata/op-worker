@@ -23,8 +23,7 @@
     send_to_oneclient/2, send_to_oneclient/3,
 
     send_to_provider/2, send_to_provider/3, send_to_provider/4, send_to_provider/5,
-    communicate_with_provider/2, communicate_with_provider/3,
-    stream_to_provider/4
+    communicate_with_provider/2, communicate_with_provider/3
 ]).
 
 % Pid of process that should receive response to send message.
@@ -174,29 +173,6 @@ communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
 communicate_with_provider(SessionId, Msg, Retries) ->
     ClientMsg = #client_message{message_body = Msg},
     communicate_with_provider(SessionId, ClientMsg, Retries).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sends stream message to peer provider.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_to_provider(session:id(), generic_message(),
-    sequencer:stream_id(), recipient_pid()) ->
-    ok | {ok | clproto_message_id:id()} | error().
-stream_to_provider(SessionId, #client_message{} = Msg0, StmId, RecipientPid) ->
-    {MsgId, Msg} = maybe_set_msg_id(Msg0, RecipientPid),
-    case {sequencer:send_message(Msg, StmId, SessionId), RecipientPid} of
-        {ok, undefined} ->
-            ok;
-        {ok, _} ->
-            {ok, MsgId};
-        {Error, _} ->
-            Error
-    end;
-stream_to_provider(SessionId, Msg, StreamId, RecipientPid) ->
-    ClientMsg = #client_message{message_body = Msg},
-    stream_to_provider(SessionId, ClientMsg, StreamId, RecipientPid).
 
 
 %%%===================================================================

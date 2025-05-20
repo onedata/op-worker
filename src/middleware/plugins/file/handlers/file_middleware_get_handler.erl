@@ -461,7 +461,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_met
     {ok, value, mi_file_metadata:get_custom_metadata(Auth#auth.session_id, FileRef, rdf, [], false)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
-    ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
+    {ok, mi_file_perms:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     {ok, mi_file_metadata:gather_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};

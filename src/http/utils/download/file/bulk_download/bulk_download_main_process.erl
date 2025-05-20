@@ -153,7 +153,7 @@ handle_multiple_files(
 ) ->
     % Retrieve file path using root session as download can be performed in shared scope.
     % This value is used only for internal calculations and is never returned.
-    {ok, RootDirPath} = lfm:get_file_path(?ROOT_SESS_ID, strip_share_guid(Guid)),
+    RootDirPath = mi_file_tree:get_path(?ROOT_SESS_ID, ?FILE_REF(strip_share_guid(Guid))),
     UpdatedState = State#state{root_dir_path = RootDirPath},
     % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState2} = new_tar_file_entry(UpdatedState, FileAttrs, Name),

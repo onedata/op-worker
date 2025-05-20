@@ -1594,7 +1594,7 @@ qos_on_symlink_test_base() ->
     SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
     
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, ?SESS_ID(Provider1), FileGuid),
+    {ok, FilePath} = opt_file_tree:get_path(P1Node, ?SESS_ID(Provider1), FileGuid),
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(SpaceGuid), generator:gen_name(), FilePath),
     await_files_sync_between_nodes(oct_background:get_all_providers_nodes(), [FileGuid, LinkGuid]),
     
@@ -1613,7 +1613,7 @@ effective_qos_with_symlink_test_base() ->
     {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, ?SESS_ID(Provider1), FileGuid),
+    {ok, FilePath} = opt_file_tree:get_path(P1Node, ?SESS_ID(Provider1), FileGuid),
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir2Guid), generator:gen_name(), FilePath),
     await_files_sync_between_nodes(oct_background:get_all_providers_nodes(), [FileGuid, LinkGuid]),
     

@@ -48,8 +48,6 @@ get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #get_fs_stats{file_i
     file_partial_ctx:new_by_guid(FileGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{}) ->
     undefined;
-get_file_partial_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->
-    file_partial_ctx:new_by_guid(FileGuid);
 get_file_partial_ctx(_UserCtx, #proxyio_request{parameters = #{?PROXYIO_PARAMETER_FILE_GUID := FileGuid}}) ->
     file_partial_ctx:new_by_guid(FileGuid);
 get_file_partial_ctx(_UserCtx, Req) ->

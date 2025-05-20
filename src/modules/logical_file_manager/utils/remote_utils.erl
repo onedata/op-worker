@@ -23,30 +23,19 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends given Request to fslogic_worker, recives answer and applies
-%% 'fuse_response' or 'provider_response' value to given function.
+%% 'fuse_response' value to given function.
 %% Returns the function's return value on success or error code returned
 %% in fslogic's response.
 %% @end
 %%--------------------------------------------------------------------
 -spec call_fslogic(SessId :: session:id(),
-    RequestType :: file_request | provider_request | proxyio_request,
+    RequestType :: file_request | proxyio_request,
     ContextEntry :: fslogic_worker:file_guid() | undefined, Request :: term(),
     OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
 call_fslogic(SessId, file_request, ContextGuid, Request, OKHandle) ->
     call_fslogic(SessId, fuse_request,
-        #file_request{context_guid = ContextGuid, file_request = Request}, OKHandle);
-call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
-    Uuid = file_id:guid_to_uuid(ContextGuid),
-    case worker_proxy:call({id, fslogic_worker, Uuid}, {provider_request, SessId,
-        #provider_request{context_guid = ContextGuid, provider_request = Request}}) of
-        {ok, #provider_response{status = #status{code = ?OK}, provider_response = Response}} ->
-            OKHandle(Response);
-        {ok, #provider_response{status = #status{code = Code}}} ->
-            {error, Code};
-        {ok, #status{code = Code}} ->
-            {error, Code}
-    end.
+        #file_request{context_guid = ContextGuid, file_request = Request}, OKHandle).
 
 -spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request | proxyio_request | multipart_upload_request,
     Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->

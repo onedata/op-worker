@@ -101,18 +101,18 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
-    % TODO @MS any comment?
-    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
+    % TODO VFS-12851 restrict attrs available for special dirs sub trees
+    % For spaces not supported locally (accessed by e.g. listing user root dir) effective value cache is not initialized.
     % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
-    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
+    IsNotLocallySupportedSpace = file_ctx:is_space_dir_const(FileCtx) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
-        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsRemoteOnlySpace ->
+        ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsNotLocallySupportedSpace ->
             {AccState, AccFileAttrRecord};
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
             {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
             {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
-        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
+    end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 

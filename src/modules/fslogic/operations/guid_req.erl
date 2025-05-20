@@ -96,12 +96,13 @@ ensure_dir(UserCtx, RootFileCtx, Path, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    {ok, file_id:file_guid()} | no_return().
 get_parent(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
-    get_parent_insecure(UserCtx, FileCtx1).
+    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx1, UserCtx),
+    {ok, ParentGuid}.
 
 
 %%--------------------------------------------------------------------
@@ -109,12 +110,13 @@ get_parent(UserCtx, FileCtx0) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_path(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    {ok, file_meta:path()} | no_return().
 get_file_path(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
-    get_file_path_insecure(UserCtx, FileCtx1).
+    {Path, _FileCtx2} = file_ctx:get_logical_path(FileCtx1, UserCtx),
+    {ok, Path}.
 
 
 %%%===================================================================
@@ -135,36 +137,4 @@ resolve_guid_insecure(_UserCtx, FileCtx) ->
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #guid{guid = Guid}
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets parent of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-get_parent_insecure(UserCtx, FileCtx) ->
-    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #dir{guid = ParentGuid}
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Translates given file's Guid to absolute path.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_path_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-get_file_path_insecure(UserCtx, FileCtx) ->
-    {Path, _FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #file_path{value = Path}
     }.

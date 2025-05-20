@@ -158,13 +158,13 @@ unmock_opening_file_without_perms(Config) ->
 set_acl(Path, Acl, Config) ->
     WorkerP1 = oct_background:get_random_provider_node(Config#cdmi_test_config.p1_selector),
     SessionId = oct_background:get_user_session_id(user2, Config#cdmi_test_config.p1_selector),
-    lfm_proxy:set_acl(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Acl).
+    opt_file_perms:set_acl(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Acl).
 
 
 get_acl(Path, Config) ->
     WorkerP2 = oct_background:get_random_provider_node(Config#cdmi_test_config.p2_selector),
     SessionId = oct_background:get_user_session_id(user2, Config#cdmi_test_config.p2_selector),
-    lfm_proxy:get_acl(WorkerP2, SessionId, {path, absolute_binary_path(Path)}).
+    opt_file_perms:get_acl(WorkerP2, SessionId, {path, absolute_binary_path(Path)}).
 
 
 get_xattrs(Path, Config) ->
