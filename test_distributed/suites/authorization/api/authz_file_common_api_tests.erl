@@ -61,8 +61,8 @@ test_get_file_path(SpaceId) ->
         available_in_public_data_mode = false, % TODO VFS-6057
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
-            opt_file_tree:get_path(Node, SessionId, FileGuid)
+            FileRef = maps:get(FilePath, ExtraData),
+            opt_file_tree:get_path(Node, SessionId, FileRef)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->

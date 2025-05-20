@@ -71,7 +71,6 @@ send(SessionId, Msg, ExcludedCons, LogErrors) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO VFS-5895 refactor proxy session - session restart should be on this level
 %% Tries to send given message via any of specified connections.
 %% @end
 %%--------------------------------------------------------------------

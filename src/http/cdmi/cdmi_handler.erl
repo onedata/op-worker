@@ -459,7 +459,7 @@ resolve_resource_by_id(Req) ->
         undefined ->
             case http_auth:authenticate(Req, ?AUTH_CTX) of
                 {ok, ?USER(_UserId, SessionId) = Auth0} ->
-                    FilePath = mi_file_tree:get_path(SessionId, Guid),
+                    FilePath = mi_file_tree:get_path(SessionId, ?FILE_REF(Guid)),
                     {Auth0, FilePath};
                 {ok, ?GUEST} ->
                     throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));

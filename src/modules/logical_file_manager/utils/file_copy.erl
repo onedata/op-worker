@@ -72,8 +72,8 @@ copy(_SessId, SourceGuid, SourceGuid, _TargetName, _Options) ->
     % attempt to copy file to itself
     {error, ?EINVAL};
 copy(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
-    SourcePath = mi_file_tree:get_path(SessId, SourceGuid),
-    TargetParentPath = mi_file_tree:get_path(SessId, TargetParentGuid),
+    SourcePath = mi_file_tree:get_path(SessId, ?FILE_REF(SourceGuid)),
+    TargetParentPath = mi_file_tree:get_path(SessId, ?FILE_REF(TargetParentGuid)),
     Recursive = maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT),
     case filepath_utils:is_equal_or_descendant(TargetParentPath, SourcePath) of
         {true, _} when Recursive ->

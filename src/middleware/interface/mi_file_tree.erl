@@ -6,13 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Interface for managing file tree traversal (requests are delegated to middleware_worker).
+%%% Interface for file tree navigation (requests are delegated to middleware_worker).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mi_file_tree).
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 
 %% API
 -export([
@@ -26,9 +27,11 @@
 %%%===================================================================
 
 
--spec get_path(session:id(), file_id:file_guid()) ->
+-spec get_path(session:id(), file_id:file_key()) ->
     file_meta:path().
-get_path(SessionId, FileGuid) ->
+get_path(_SessionId, {path, Path}) ->
+    Path;
+get_path(SessionId, ?FILE_REF(FileGuid)) ->
     middleware_worker:check_exec(SessionId, FileGuid, #file_path_get_request{}).
 
 
