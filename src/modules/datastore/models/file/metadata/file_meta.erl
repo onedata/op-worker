@@ -41,8 +41,8 @@
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
     ensure_space_doc_exist/1, ensure_tmp_dir_exists/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exists/1,
-    new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
+    new_doc/7, new_doc/8, new_special_dir_doc/6, new_share_root_dir_doc/2,
+    get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, is_deleted/1]).
 -export([get_ctx_with_remote_set/2]).
@@ -793,7 +793,8 @@ ensure_opened_deleted_files_dir_exists(SpaceId) ->
     ),
     case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
         {ok, CreatedDoc} ->
-            dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
+            dir_size_stats:report_file_created(
+                ?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
             ok = ?ok_if_exists(
                 times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
             );

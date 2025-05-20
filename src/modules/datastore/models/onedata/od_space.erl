@@ -57,6 +57,7 @@ update_cache(Id, Diff, Default) ->
             {ok, #document{value = V}} -> V;
             {error, not_found} -> #od_space{}
         end,
+        % TODO VFS-12743 what if an error is returned here? will the record be cached? will it be logged?
         case datastore_model:update(?CTX, Id, Diff, Default) of
             {ok, #document{value = #od_space{eff_users = UsersMap} = NewVal}} = Res ->
                 handle_name_change(Id, PrevVal, NewVal, maps:keys(UsersMap)),
