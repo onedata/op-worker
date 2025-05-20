@@ -284,12 +284,13 @@ upgrade_cluster(5) ->
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
                 dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end)
         end, SpaceIds),
-        lists:foreach(fun(SpaceId) ->
-            % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
-            ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
-            opened_deleted_files_dir:ensure_exists(SpaceId)
-        end, SpaceIds),
-        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+        async_run_with_oz_connection_after_upgrade(fun() ->
+            lists:foreach(fun(SpaceId) ->
+                % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
+                ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
+                opened_deleted_files_dir:ensure_exists(SpaceId)
+            end, SpaceIds)
+        end)
     end),
     {ok, 6};
 upgrade_cluster(6) ->
@@ -317,6 +318,14 @@ upgrade_cluster(7) ->
                 _ -> ok
             end
         end, StorageIds)
+    end),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
     end),
     {ok, 8}.
 
@@ -512,3 +521,15 @@ await_zone_connection_and_run(false, Retries, Fun) ->
     await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
+
+
+%% @private
+-spec async_run_with_oz_connection_after_upgrade(Fun :: fun(() -> ok)) -> ok.
+async_run_with_oz_connection_after_upgrade(Fun) ->
+    spawn(fun() ->
+        utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+        ?catch_exceptions(Fun())
+    end),
+    ok.
+
