@@ -27,7 +27,7 @@
 %%%===================================================================
 
 
--spec get_path(session:id(), file_id:file_key()) ->
+-spec get_path(session:id(), lfm:file_key()) ->
     file_meta:path().
 get_path(_SessionId, {path, Path}) ->
     Path;

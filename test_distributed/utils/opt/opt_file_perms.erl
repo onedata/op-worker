@@ -17,7 +17,7 @@
     set_acl/4,
     remove_acl/3,
 
-    check_perms/4
+    check_file_access/4
 ]).
 
 -define(CALL(NodeSelector, Args), ?CALL(NodeSelector, ?FUNCTION_NAME, Args)).
@@ -54,7 +54,7 @@ remove_acl(NodeSelector, SessionId, FileKey) ->
     ?CALL(NodeSelector, [SessionId, FileKey]).
 
 
--spec check_perms(oct_background:node_selector(), session:id(), lfm:file_key(), fslogic_worker:open_flag()) ->
+-spec check_file_access(oct_background:node_selector(), session:id(), lfm:file_key(), fslogic_worker:open_flag()) ->
     ok | no_return().
-check_perms(NodeSelector, SessionId, FileKey, Flag) ->
+check_file_access(NodeSelector, SessionId, FileKey, Flag) ->
     ?CALL(NodeSelector, [SessionId, FileKey, Flag]).

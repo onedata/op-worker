@@ -20,7 +20,7 @@
     set_acl/3,
     remove_acl/2,
 
-    check_perms/3
+    check_file_access/3
 ]).
 
 
@@ -49,9 +49,9 @@ remove_acl(SessionId, FileKey) ->
     middleware_worker:check_exec(SessionId, FileGuid, #acl_remove_request{}).
 
 
--spec check_perms(session:id(), lfm:file_key(), fslogic_worker:open_flag()) -> ok | no_return().
-check_perms(SessionId, FileKey, Flag) ->
+-spec check_file_access(session:id(), lfm:file_key(), fslogic_worker:open_flag()) -> ok | no_return().
+check_file_access(SessionId, FileKey, Flag) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
-    middleware_worker:check_exec(SessionId, FileGuid, #perms_check_request{
+    middleware_worker:check_exec(SessionId, FileGuid, #check_file_access_request{
         flag = Flag
     }).

@@ -50,9 +50,9 @@
     test_stat/1,
 
     test_set_perms/1,
-    test_check_read_perms/1,
-    test_check_write_perms/1,
-    test_check_rdwr_perms/1,
+    test_check_file_read_access/1,
+    test_check_file_write_access/1,
+    test_check_file_rdwr_access/1,
 
     test_create_share/1,
     test_remove_share/1,
@@ -116,9 +116,9 @@ groups() -> [
 
     {authz_perms_api_tests, [], [
         test_set_perms,
-        test_check_read_perms,
-        test_check_write_perms,
-        test_check_rdwr_perms
+        test_check_file_read_access,
+        test_check_file_write_access,
+        test_check_file_rdwr_access
     ]},
 
     {authz_share_api_tests, [], [
@@ -426,21 +426,21 @@ test_set_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-test_check_read_perms(tested_operations) ->
-    [fun mi_file_perms:check_perms/3];
-test_check_read_perms(Config) ->
+test_check_file_read_access(tested_operations) ->
+    [fun mi_file_perms:check_file_access/3];
+test_check_file_read_access(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-test_check_write_perms(tested_operations) ->
-    [fun mi_file_perms:check_perms/3];
-test_check_write_perms(Config) ->
+test_check_file_write_access(tested_operations) ->
+    [fun mi_file_perms:check_file_access/3];
+test_check_file_write_access(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-test_check_rdwr_perms(tested_operations) ->
-    [fun mi_file_perms:check_perms/3];
-test_check_rdwr_perms(Config) ->
+test_check_file_rdwr_access(tested_operations) ->
+    [fun mi_file_perms:check_file_access/3];
+test_check_file_rdwr_access(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 

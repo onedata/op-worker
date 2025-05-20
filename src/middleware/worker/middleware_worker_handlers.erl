@@ -224,8 +224,8 @@ execute(UserCtx, FileCtx, #acl_set_request{value = Acl}) ->
 execute(UserCtx, FileCtx, #acl_remove_request{}) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 
-execute(UserCtx, FileCtx, #perms_check_request{flag = Flag}) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag);
+execute(UserCtx, FileCtx, #check_file_access_request{flag = Flag}) ->
+    permission_req:check_file_access(UserCtx, FileCtx, Flag);
 
 
 %% File tree

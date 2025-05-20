@@ -80,7 +80,7 @@
     #acl_get_request{} |
     #acl_set_request{} |
     #acl_remove_request{} |
-    #perms_check_request{}.
+    #check_file_access_request{}.
 
 -type file_tree_operation() ::
     #file_path_get_request{} |
@@ -124,8 +124,8 @@
 ]).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
-    % Checking perms for operations other than 'read' should result in immediate ?EACCES
-    perms_check_request,
+    % Checking perms for operations other than 'read' should result in immediate ?EPERM
+    check_file_access_request,
     file_parent_get_request,
     % TODO VFS-6057 resolve share path up to share not user root dir
     %%    file_path_get_request,
@@ -256,7 +256,7 @@ ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
 
 %% @private
 -spec is_operation_available_in_share_mode(operation()) -> boolean().
-is_operation_available_in_share_mode(#perms_check_request{flag = Flag}) ->
+is_operation_available_in_share_mode(#check_file_access_request{flag = Flag}) ->
     Flag == read;
 is_operation_available_in_share_mode(Operation) ->
     lists:member(get_operation_name(Operation), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).

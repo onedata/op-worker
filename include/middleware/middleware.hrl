@@ -312,7 +312,7 @@
 -record(acl_remove_request, {
 }).
 
--record(perms_check_request, {
+-record(check_file_access_request, {
     flag :: fslogic_worker:open_flag()
 }).
 
