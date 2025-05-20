@@ -54,8 +54,8 @@ test_get_transfer_encoding(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir],
-        special_dirs_ok_value = ?ERR_POSIX(?ENODATA)
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -80,7 +80,7 @@ test_set_transfer_encoding(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -107,8 +107,8 @@ test_get_cdmi_completion_status(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir],
-        special_dirs_ok_value = ?ERR_POSIX(?ENODATA)
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -133,7 +133,7 @@ test_set_cdmi_completion_status(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -160,8 +160,8 @@ test_get_mimetype(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir],
-        special_dirs_ok_value = ?ERR_POSIX(?ENODATA)
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -186,5 +186,5 @@ test_set_mimetype(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).

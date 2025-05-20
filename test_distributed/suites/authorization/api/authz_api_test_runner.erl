@@ -1230,14 +1230,14 @@ run_acl_permission_test_case(deny, AceWho, AceFlags, #authz_acl_test_case_ctx{
 %% @private
 -spec run_special_dirs_test_group(authz_test_suite_ctx()) -> ok | no_return().
 run_special_dirs_test_group(#authz_test_suite_ctx{
-    suite_spec = #authz_test_suite_spec{allowed_special_dirs = not_applicable}
+    suite_spec = #authz_test_suite_spec{special_dirs_supporting_the_operation = not_applicable}
 }) ->
     ok;
 run_special_dirs_test_group(TestSuiteCtx = #authz_test_suite_ctx{
     suite_spec = #authz_test_suite_spec{
         space_owner_selector = SpaceOwnerSelector,
-        allowed_special_dirs = AllowedSpecialDirs,
-        special_dirs_ok_value = ExpectedOkValue,
+        special_dirs_supporting_the_operation = AllowedSpecialDirs,
+        expected_result_for_supporting_special_dirs = ExpectedOkValue,
         returned_errors = ReturnedErrors
     } = SuiteSpec
 }) ->
@@ -1349,7 +1349,7 @@ init_test_suite(TestSuiteSpec = #authz_test_suite_spec{
     space_id = SpaceId,
     space_owner_selector = SpaceOwnerSelector,
     files_owner_selector = FilesOwnerSelector,
-    allowed_special_dirs = AllowedSpecialDirs
+    special_dirs_supporting_the_operation = AllowedSpecialDirs
 }) ->
     TestNode = oct_background:get_random_provider_node(ProviderSelector),
     FileOwnerSessionId = oct_background:get_user_session_id(FilesOwnerSelector, ProviderSelector),

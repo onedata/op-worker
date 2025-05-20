@@ -122,12 +122,14 @@ get_parent_guid_if_not_logically_detached(FileCtx, UserCtx) ->
     % in public data mode parent guid should always be listed
     IsShareContainerInPublicDataMode = share_container:is_special(uuid, Uuid)
         andalso user_ctx:is_in_public_data_mode(UserCtx),
-    case IsShareContainerInPublicDataMode orelse
-        not special_dirs:is_logically_detached(file_ctx:get_logical_uuid_const(FileCtx))
+
+    case
+        special_dirs:is_logically_detached(file_ctx:get_logical_uuid_const(FileCtx)) and
+            not IsShareContainerInPublicDataMode
     of
-        false ->
-            {undefined, FileCtx};
         true ->
+            {undefined, FileCtx};
+        false ->
             % get_parent/2 returns the same file_ctx when file is shared and accessed in share ctx.
             {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
             case file_ctx:equals(ParentCtx, FileCtx2) of

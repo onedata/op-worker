@@ -67,8 +67,8 @@ test_get_custom_metadata(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir, archive_dir],
-        special_dirs_ok_value = ?ERR_POSIX(?ENODATA)
+        special_dirs_supporting_the_operation = [space_dir, archive_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -93,7 +93,7 @@ test_set_custom_metadata(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -124,7 +124,7 @@ test_remove_custom_metadata(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -153,8 +153,8 @@ test_get_xattr(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir, user_root_dir],
-        special_dirs_ok_value = {error, ?ENODATA}
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir],
+        expected_result_for_supporting_special_dirs = {error, ?ENODATA}
     }).
 
 
@@ -180,7 +180,7 @@ test_list_xattr(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir, user_root_dir]
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir]
     }).
 
 
@@ -204,7 +204,7 @@ test_set_xattr(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -233,7 +233,7 @@ test_remove_xattr(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -258,7 +258,7 @@ test_get_file_distribution(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -292,7 +292,7 @@ test_get_historical_dir_size_stats(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end,
-        allowed_special_dirs = [space_dir, space_archives_dir, dataset_archives_dir, archive_dir, tmp_dir, trash_dir]
+        special_dirs_supporting_the_operation = [space_dir, space_archives_dir, dataset_archives_dir, archive_dir, tmp_dir, trash_dir]
     }).
 
 
@@ -317,6 +317,6 @@ test_get_file_storage_locations(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir],
-        special_dirs_ok_value = ?ERROR_NOT_SUPPORTED % this operation is supported only for regular files
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERROR_NOT_SUPPORTED % this operation is supported only for regular files
     }).

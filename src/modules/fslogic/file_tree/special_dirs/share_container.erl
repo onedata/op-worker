@@ -67,7 +67,7 @@ uuid(ShareId) ->
     <<?SHARE_CONTAINER_UUID_PREFIX, ShareId/binary>>.
 
 
--spec guid(od_space:id(), od_share:id()) -> file_id:guid().
+-spec guid(od_space:id(), od_share:id()) -> file_id:file_guid().
 guid(SpaceId, ShareId) ->
     file_id:pack_share_guid(uuid(ShareId), SpaceId, ShareId).
 

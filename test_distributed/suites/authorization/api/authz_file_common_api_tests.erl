@@ -47,7 +47,7 @@ test_get_parent(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir, user_root_dir]
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir]
     }).
 
 
@@ -67,7 +67,7 @@ test_get_file_path(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir, user_root_dir, archive_dir]
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir, archive_dir]
     }).
 
 
@@ -86,7 +86,7 @@ test_resolve_guid(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = not_applicable
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -128,7 +128,7 @@ test_stat(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = ?ALL_SPECIAL_DIRS -- [global_root_dir]
+        special_dirs_supporting_the_operation = ?ALL_SPECIAL_DIRS -- [global_root_dir]
     }).
 
 

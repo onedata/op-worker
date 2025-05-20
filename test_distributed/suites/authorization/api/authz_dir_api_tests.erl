@@ -60,7 +60,7 @@ test_mkdir(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/dir2">>}
         end,
-        allowed_special_dirs = [space_dir, archive_dir, tmp_dir]
+        special_dirs_supporting_the_operation = [space_dir, archive_dir, tmp_dir]
     }).
 
 
@@ -86,7 +86,7 @@ test_get_children_attrs(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end,
-        allowed_special_dirs = ?ALL_SPECIAL_DIRS -- [global_root_dir]
+        special_dirs_supporting_the_operation = ?ALL_SPECIAL_DIRS -- [global_root_dir]
     }).
 
 
@@ -110,8 +110,8 @@ test_get_child_attr(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
         end,
-        allowed_special_dirs = ?ALL_SPECIAL_DIRS -- [global_root_dir],
-        special_dirs_ok_value = {error, ?ENOENT} % this file does not exist in special dirs
+        special_dirs_supporting_the_operation = ?ALL_SPECIAL_DIRS -- [global_root_dir],
+        expected_result_for_supporting_special_dirs = {error, ?ENOENT} % this file does not exist in special dirs
     }).
 
 
@@ -149,7 +149,7 @@ test_mv_dir(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/dir21">>}
         end,
-        allowed_special_dirs = []
+        special_dirs_supporting_the_operation = []
     }).
 
 
@@ -179,5 +179,5 @@ test_rm_dir(SpaceId) ->
                 <<"/dir1/dir2">>, ExtraData))
         end,
         final_ownership_check = fun(_) -> {inapplicable_due_to, dir_removal} end,
-        allowed_special_dirs = []
+        special_dirs_supporting_the_operation = []
     }).

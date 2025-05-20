@@ -161,7 +161,7 @@ test_check_read_perms(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -185,7 +185,7 @@ test_check_write_perms(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -209,5 +209,5 @@ test_check_rdwr_perms(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        allowed_special_dirs = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir]
     }).

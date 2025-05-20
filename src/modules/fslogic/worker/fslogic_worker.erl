@@ -400,7 +400,7 @@ infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
         {IsInPublicDataMode, _} ->
             case is_operation_available_in_share_mode(Request, IsInPublicDataMode) of
                 true -> ok;
-                false -> throw(?EPERM)
+                false -> throw(?ENOTSUP)
             end,
             case IsInPublicDataMode of
                 true ->
