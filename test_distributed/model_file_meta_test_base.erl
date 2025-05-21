@@ -58,32 +58,32 @@ basic_operations_test_core(Config, LastLevel) ->
     SpaceId = <<"Space 1">>,
     Space1Uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     {{ok, #document{key = Space1Uuid}}, CreateLevel1} = ?assertMatch(
-        {{ok, _}, _},
+        {{ok, #document{value = #file_meta{is_imported = false}}}, _},
         ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
             value = #file_meta{name = SpaceId, is_scope = true}, scope = SpaceId}])
     ),
     {{ok, #document{key = Dir1Uuid}}, CreateLevel2} = ?assertMatch(
-        {{ok, _}, _},
+        {{ok, #document{value = #file_meta{is_imported = false}}}, _},
         ?call_with_time(Worker1, create, [{uuid, Space1Uuid}, #document{value = #file_meta{name = <<"dir1">>}}])
     ),
     {ok, #document{key = Dir1File1Uuid}} = ?assertMatch(
-        {ok, _},
+        {ok, #document{value = #file_meta{is_imported = false}}},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir1Uuid}, #document{value = #file_meta{name = <<"file1">>}}])
     ),
     {ok, #document{key = Dir2Uuid}} = ?assertMatch(
-        {ok, _},
+        {ok, #document{value = #file_meta{is_imported = false}}},
         rpc:call(Worker1, file_meta, create, [{uuid, Space1Uuid}, #document{value = #file_meta{name = <<"dir2">>}}])
     ),
     {ok, #document{key = Dir2File1Uuid}} = ?assertMatch(
-        {ok, _},
+        {ok, #document{value = #file_meta{is_imported = false}}},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file1">>}}])
     ),
     {ok, #document{key = Dir2File2Uuid}} = ?assertMatch(
-        {ok, _},
+        {ok, #document{value = #file_meta{is_imported = false}}},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file2">>}}])
     ),
     {ok, #document{key = Dir2File3Uuid}} = ?assertMatch(
-        {ok, _},
+        {ok, #document{value = #file_meta{is_imported = false}}},
         rpc:call(Worker1, file_meta, create, [{uuid, Dir2Uuid}, #document{value = #file_meta{name = <<"file3">>}}])
     ),
 

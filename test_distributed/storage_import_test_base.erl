@@ -309,8 +309,14 @@ create_empty_file_import_test(Config) ->
     assertInitialScanFinished(W1, ?SPACE_ID),
 
     %% Check if file was imported on W1
-    ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    ?assertMatch(
+        {ok, #document{value = #file_meta{is_imported = true}}},
+        rpc:call(W1, file_meta, get, [FileUuid]),
+        ?ATTEMPTS
+    ),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, <<"">>},
@@ -363,8 +369,14 @@ create_file_import_test(Config) ->
     assertInitialScanFinished(W1, ?SPACE_ID),
 
     %% Check if file was imported on W1
-    ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    ?assertMatch(
+        {ok, #document{value = #file_meta{is_imported = true}}},
+        rpc:call(W1, file_meta, get, [FileUuid]),
+        ?ATTEMPTS
+    ),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
@@ -6384,8 +6396,14 @@ verify_dir(N, Pid, W1, SessId, Attempts) ->
     Pid ! {finished, DirPath}.
 
 verify_file(FilePath, Pid, W1, SessId, Attempts) ->
-    ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, FilePath}), Attempts),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    ?assertMatch(
+        {ok, #document{value = #file_meta{is_imported = true}}},
+        rpc:call(W1, file_meta, get, [FileUuid]),
+        ?ATTEMPTS
+    ),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, FilePath}, read), Attempts),
     ?assertMatch({ok, ?TEST_DATA},
@@ -6396,8 +6414,14 @@ verify_file(FilePath, Pid, W1, SessId, Attempts) ->
 verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
     NBin = integer_to_binary(N),
     FileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(NBin, NBin),
-    ?assertMatch({ok, #file_attr{}},
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, FileInDirPath}), Attempts),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    ?assertMatch(
+        {ok, #document{value = #file_meta{is_imported = true}}},
+        rpc:call(W1, file_meta, get, [FileUuid]),
+        ?ATTEMPTS
+    ),
     {ok, Handle1} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, FileInDirPath}, read), Attempts),
     ?assertMatch({ok, ?TEST_DATA},
