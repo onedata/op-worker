@@ -52,9 +52,9 @@
     lfm_truncate_and_write/1,
     lfm_acl/1,
     lfm_rmdir/1,
-    lfm_rmdir_fails_with_eperm_on_space_directory/1,
+    lfm_rmdir_fails_on_space_directory/1,
     rm_recursive/1,
-    rm_recursive_fails_with_eperm_on_space_directory/1,
+    rm_recursive_fails_on_space_directory/1,
     file_gap/1,
     ls/1, ls_base/1,
     ls_with_stats/1, ls_with_stats_base/1,
@@ -1781,11 +1781,11 @@ lfm_rmdir(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath)),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, DirPath})).
 
-lfm_rmdir_fails_with_eperm_on_space_directory(Config) ->
+lfm_rmdir_fails_on_space_directory(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    ?assertMatch({error, ?EPERM}, lfm_proxy:unlink(W, SessId1, {path, <<"/space_name1">>})).
+    ?assertMatch({error, ?ENOTSUP}, lfm_proxy:unlink(W, SessId1, {path, <<"/space_name1">>})).
 
 
 rm_recursive(Config) ->
@@ -1838,11 +1838,11 @@ rm_recursive(Config) ->
     % TODO VFS-7348 uncomment below tests after scheduling deletion as user not by root
     % ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId, ?FILE_REF(FileJGuid)), Attempts).
 
-rm_recursive_fails_with_eperm_on_space_directory(Config) ->
+rm_recursive_fails_on_space_directory(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    ?assertMatch({error, ?EPERM}, lfm_proxy:rm_recursive(W, SessId1, {path, <<"/space_name1">>})).
+    ?assertMatch({error, ?ENOTSUP}, lfm_proxy:rm_recursive(W, SessId1, {path, <<"/space_name1">>})).
 
 file_gap(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1878,7 +1878,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch(?ERR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERR_POSIX(?ENOTSUP), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()

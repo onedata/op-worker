@@ -763,7 +763,7 @@ run_share_test_case(PermsType0, TestCaseCtx = #authz_test_case_ctx{
     FullPermsPerFile = set_full_perms(PermsType1, TestNode, maps:keys(RequiredPermsPerFile)),
 
     % Even with all perms set operation should fail
-    ExpError = get_exp_error(?EPERM, TestSuiteSpec),
+    ExpError = get_exp_error(?ENOTSUP, TestSuiteSpec),
     assert_operation(FullPermsPerFile, ExpError, TestCaseCtx);
 
 run_share_test_case(posix, TestCaseCtx) ->

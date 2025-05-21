@@ -315,7 +315,7 @@ lfm_rmdir_test(Config) ->
 
 
 lfm_rmdir_fails_with_eperm_on_space_directory_test(Config) ->
-    lfm_files_test_base:lfm_rmdir_fails_with_eperm_on_space_directory(Config).
+    lfm_files_test_base:lfm_rmdir_fails_on_space_directory(Config).
 
 
 rm_recursive_test(Config) ->
@@ -323,7 +323,7 @@ rm_recursive_test(Config) ->
 
 
 rm_recursive_fails_with_eperm_on_space_directory_test(Config) ->
-    lfm_files_test_base:rm_recursive_fails_with_eperm_on_space_directory(Config).
+    lfm_files_test_base:rm_recursive_fails_on_space_directory(Config).
 
 
 file_gap_test(Config) ->

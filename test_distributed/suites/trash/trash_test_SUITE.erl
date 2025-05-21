@@ -149,32 +149,32 @@ create_dir_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     % TODO VFS-7064 change this error to EEXIST after adding link from space to trash directory
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, ?TRASH_DIR_NAME, ?DEFAULT_DIR_PERMS)).
 
 create_file_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     % TODO VFS-7064 change this error to EEXIST after adding link from space to trash directory
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:create(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, ?TRASH_DIR_NAME, ?DEFAULT_FILE_PERMS)).
 
 
 remove_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:rm_recursive(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))).
 
 rename_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     TargetPath = filename:join([?DIRECTORY_SEPARATOR, ?SPACE_NAME, <<"other_trash_name">>]),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), TargetPath)).
 
 rename_other_dir_to_trash_dir_is_forbidden(_Config) ->
@@ -182,25 +182,25 @@ rename_other_dir_to_trash_dir_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     DirName = ?RAND_DIR_NAME,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(DirGuid), filename:join([?SPACE_NAME, ?TRASH_DIR_NAME]))).
 
 chmod_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:set_perms(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), 8#777)).
 
 set_xattr_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:set_xattr(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), #{<<"key">> => <<"value">>})).
 
 remove_xattr_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:remove_xattr(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"key">>)).
 
 set_acl_on_trash_dir_is_forbidden(_Config) ->

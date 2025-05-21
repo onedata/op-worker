@@ -495,7 +495,7 @@ allowed_ancestors_operations_test(_Config) ->
             end,
 
             ExpectedError = case DirGuid of
-                UserRootDirGuid -> ?EPERM;
+                UserRootDirGuid -> ?ENOTSUP;
                 _ -> ?EACCES
             end,
             % Most operations should be forbidden to perform on dirs/ancestors
