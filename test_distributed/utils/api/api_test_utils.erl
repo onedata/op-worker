@@ -779,9 +779,9 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
 
         {IdKey, NonExistentFileObjectId, ?ERR_POSIX(?ENOENT)},
 
-        % operation is not available in share mode - it should result in ?EPERM
-        {IdKey, ShareFileObjectId, ?ERR_POSIX(?EPERM)},
-        {IdKey, NonExistentFileShareObjectId, ?ERR_POSIX(?EPERM)}
+        % operation is not available in share mode - it should result in ?ENOTSUP
+        {IdKey, ShareFileObjectId, ?ERR_POSIX(?ENOTSUP)},
+        {IdKey, NonExistentFileShareObjectId, ?ERR_POSIX(?ENOTSUP)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
