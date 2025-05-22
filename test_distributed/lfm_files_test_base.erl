@@ -1878,7 +1878,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch(?ERR_POSIX(?ENOTSUP), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1886,7 +1886,7 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        ?ERR_FORBIDDEN,
+        ?ERROR_NOT_SUPPORTED,
         opt_shares:create(W, SessId, ?FILE_REF(user_root_dir:guid(UserId)), <<"share_name">>)
     ),
     % But space dir can

@@ -149,14 +149,14 @@ create_dir_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     % TODO VFS-7064 change this error to EEXIST after adding link from space to trash directory
-    ?assertMatch({error, ?ENOTSUP},
+    ?assertMatch({error, ?EPERM},
         lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, ?TRASH_DIR_NAME, ?DEFAULT_DIR_PERMS)).
 
 create_file_with_trash_dir_name_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     % TODO VFS-7064 change this error to EEXIST after adding link from space to trash directory
-    ?assertMatch({error, ?ENOTSUP},
+    ?assertMatch({error, ?EPERM},
         lfm_proxy:create(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, ?TRASH_DIR_NAME, ?DEFAULT_FILE_PERMS)).
 
 
@@ -182,7 +182,7 @@ rename_other_dir_to_trash_dir_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     DirName = ?RAND_DIR_NAME,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_DIR_GUID, DirName, ?DEFAULT_DIR_PERMS),
-    ?assertMatch({error, ?ENOTSUP},
+    ?assertMatch({error, ?EPERM},
         lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(DirGuid), filename:join([?SPACE_NAME, ?TRASH_DIR_NAME]))).
 
 chmod_on_trash_dir_is_forbidden(_Config) ->
@@ -206,62 +206,62 @@ remove_xattr_on_trash_dir_is_forbidden(_Config) ->
 set_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:set_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), [])).
 
 remove_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
+    ?assertMatch({error, ?ENOTSUP},
         lfm_proxy:remove_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))).
 
 set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     JSON = #{<<"key">> => <<"value">>},
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json, JSON, [])).
 
 set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_cdmi:set_mimetype(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"mimetype">>)),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_cdmi:set_cdmi_completion_status(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"COMPLETED">>)),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_cdmi:set_transfer_encoding(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"base64">>)).
 
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_shares:create(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"MY SHARE">>)).
 
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_qos:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"key=value">>, 1)).
 
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_file_metadata:remove_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json)).
 
 schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P2Id)).
 
 schedule_eviction_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, undefined)).
 
 schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
@@ -269,7 +269,7 @@ schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch(?ERR_FORBIDDEN,
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, P2Id)).
 
 schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->

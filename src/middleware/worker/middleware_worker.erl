@@ -218,7 +218,7 @@ infer_user_ctx(SessionId, FileCtx, Operation) ->
 -spec assert_user_not_in_public_data_mode(user_ctx:ctx()) -> ok | no_return().
 assert_user_not_in_public_data_mode(UserCtx) ->
     case user_ctx:is_in_public_data_mode(UserCtx) of
-        true -> throw(?ERR_POSIX(?err_ctx(), ?EPERM));
+        true -> throw(?ERR_POSIX(?err_ctx(), ?ENOTSUP));
         false -> ok
     end.
 
@@ -233,7 +233,7 @@ ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
         _ShareId ->
             case is_operation_available_in_share_mode(Operation) of
                 true -> ensure_guest_ctx(UserCtx);
-                false -> throw(?ERR_POSIX(?err_ctx(), ?EPERM))
+                false -> throw(?ERR_POSIX(?err_ctx(), ?ENOTSUP))
             end
     end.
 
