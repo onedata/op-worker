@@ -20,8 +20,7 @@
 -export([report_file_access_operation/3]).
 -export([mask_data_in_message/1]).
 
--type logged_record() :: fslogic_worker:request() | fuse_request_type() | file_request_type()
-| provider_request_type() | proxyio_request_type().
+-type logged_record() :: fslogic_worker:request() | fuse_request_type() | file_request_type() | proxyio_request_type().
 
 -define(MAX_BINARY_DATA_SIZE, 32).
 
@@ -114,8 +113,6 @@ append_to_audit_log(Request, UserId, Uuid, ShareId, FilePath) ->
 format_request(#file_request{file_request = SubRecord} = Record) ->
     format_inner_record(Record, SubRecord);
 format_request(#fuse_request{fuse_request = SubRecord} = Record) ->
-    format_inner_record(Record, SubRecord);
-format_request(#provider_request{provider_request = SubRecord} = Record) ->
     format_inner_record(Record, SubRecord);
 format_request(#proxyio_request{proxyio_request = SubRecord} = Record) ->
     format_inner_record(Record, SubRecord);

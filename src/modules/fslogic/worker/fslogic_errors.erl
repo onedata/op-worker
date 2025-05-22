@@ -160,13 +160,11 @@ code_to_loglevel(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec error_response(fslogic_worker:request(), #status{}) ->
-    #fuse_response{} | #provider_response{} | #proxyio_response{}.
+    #fuse_response{} | #proxyio_response{}.
 error_response(#fuse_request{}, Status) ->
     #fuse_response{status = Status};
 error_response(#file_request{}, Status) ->
     #fuse_response{status = Status};
-error_response(#provider_request{}, Status) ->
-    #provider_response{status = Status};
 error_response(#proxyio_request{}, Status) ->
     #proxyio_response{status = Status}.
 

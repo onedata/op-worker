@@ -541,7 +541,7 @@ remove_xattrs(TestNode, Nodes, FileGuid, Xattrs) ->
     lists:foreach(fun({Key, _}) ->
         case Key of
             ?ACL_KEY ->
-                ?assertMatch(ok, lfm_proxy:remove_acl(TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)));
+                ?assertMatch(ok, opt_file_perms:remove_acl(TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)));
             <<?CDMI_PREFIX_STR, _/binary>> ->
                 % Because cdmi attributes don't have api to remove them removal must be carried by
                 % calling custom_metadata directly

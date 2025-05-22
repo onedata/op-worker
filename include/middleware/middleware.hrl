@@ -296,4 +296,37 @@
 
 -record(file_storage_locations_get_request, {}).
 
+
+%%%===================================================================
+%%% File permissions related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(acl_get_request, {
+}).
+
+-record(acl_set_request, {
+    value :: acl:acl()
+}).
+
+-record(acl_remove_request, {
+}).
+
+-record(check_file_access_request, {
+    flag :: fslogic_worker:open_flag()
+}).
+
+
+%%%===================================================================
+%%% File tree related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(file_parent_get_request, {
+}).
+
+-record(file_path_get_request, {
+}).
+
+
 -endif.

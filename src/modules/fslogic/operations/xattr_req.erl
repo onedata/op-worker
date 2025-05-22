@@ -74,10 +74,8 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 get_xattr_internal(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
     case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
         {acl, FileCtx2} ->
-            case acl_req:get_acl(UserCtx, FileCtx2) of
-                ?PROVIDER_OK_RESP(#acl{value = Acl}) ->
-                    ?FUSE_OK_RESP(?XATTR(?ACL_KEY, acl:to_json(Acl, cdmi)))
-            end;
+            {ok, Acl} = acl_req:get_acl(UserCtx, FileCtx2),
+            ?FUSE_OK_RESP(?XATTR(?ACL_KEY, acl:to_json(Acl, cdmi)));
         {posix, _} ->
             #fuse_response{status = #status{code = ?ENOATTR}}
     end;
@@ -149,7 +147,7 @@ get_xattr_internal(UserCtx, FileCtx, XattrName, Inherited) ->
 ) ->
     fslogic_worker:fuse_response().
 set_xattr_internal(UserCtx, FileCtx, ?XATTR(?ACL_KEY, Acl), _Create, _Replace) ->
-    provider_response_to_fuse_response(acl_req:set_acl(
+    operation_result_to_fuse_response(acl_req:set_acl(
         UserCtx, FileCtx, acl:from_json(Acl, cdmi)
     ));
 
@@ -197,7 +195,7 @@ set_xattr_internal(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Rep
 -spec remove_xattr_internal(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name()) ->
     fslogic_worker:fuse_response().
 remove_xattr_internal(UserCtx, FileCtx, ?ACL_KEY) ->
-    provider_response_to_fuse_response(acl_req:remove_acl(UserCtx, FileCtx));
+    operation_result_to_fuse_response(acl_req:remove_acl(UserCtx, FileCtx));
 
 remove_xattr_internal(_UserCtx, _FileCtx, <<?CDMI_PREFIX_STR, _/binary>>) ->
     throw(?EPERM);
@@ -220,13 +218,6 @@ remove_xattr_internal(UserCtx, FileCtx0, XattrName) ->
     ok = xattr:remove(UserCtx, FileCtx1, XattrName),
     times_api:touch(FileCtx1, [?attr_ctime]),
     #fuse_response{status = #status{code = ?OK}}.
-
-
-%% @private
--spec provider_response_to_fuse_response(fslogic_worker:provider_response()) ->
-    fslogic_worker:fuse_response().
-provider_response_to_fuse_response(#provider_response{status = Status}) ->
-    #fuse_response{status = Status}.
 
 
 %% @private

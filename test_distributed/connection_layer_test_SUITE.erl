@@ -308,7 +308,7 @@ communicate_test(Config) ->
 
     % await until connection is added to session or timeout
     ?assertMatch(
-        {ok, _, [_]},
+        {ok, [_]},
         rpc:call(Worker1, session_connections, list, [SessionId]),
         ?ATTEMPTS
     ),

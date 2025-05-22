@@ -42,8 +42,9 @@ test_get_acl(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_acl(Node, SessionId, FileKey)
+            opt_file_perms:get_acl(Node, SessionId, FileKey)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -66,7 +67,7 @@ test_set_acl(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_acl(Node, SessionId, FileKey, [
+            opt_file_perms:set_acl(Node, SessionId, FileKey, [
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
@@ -74,6 +75,7 @@ test_set_acl(SpaceId) ->
                 )
             ])
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -96,8 +98,9 @@ test_remove_acl(SpaceId) ->
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:remove_acl(Node, SessionId, FileKey)
+            opt_file_perms:remove_acl(Node, SessionId, FileKey)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end

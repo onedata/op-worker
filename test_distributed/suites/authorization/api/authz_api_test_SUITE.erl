@@ -50,9 +50,9 @@
     test_stat/1,
 
     test_set_perms/1,
-    test_check_read_perms/1,
-    test_check_write_perms/1,
-    test_check_rdwr_perms/1,
+    test_check_file_read_access/1,
+    test_check_file_write_access/1,
+    test_check_file_rdwr_access/1,
 
     test_create_share/1,
     test_remove_share/1,
@@ -116,9 +116,9 @@ groups() -> [
 
     {authz_perms_api_tests, [], [
         test_set_perms,
-        test_check_read_perms,
-        test_check_write_perms,
-        test_check_rdwr_perms
+        test_check_file_read_access,
+        test_check_file_write_access,
+        test_check_file_rdwr_access
     ]},
 
     {authz_share_api_tests, [], [
@@ -281,15 +281,26 @@ all() -> [
 
 
 test_all_operations_are_checked(_Config) ->
+    AllMiddlewareInterfaceModules = lists:flatmap(fun(Path) ->
+        case filelib:wildcard(Path ++ "/*.beam") of
+            [] ->
+                [];
+            Files ->
+                lists:filtermap(fun(File) ->
+                    case filename:basename(File, ".beam") of
+                        MiModule = "mi_" ++ _ -> {true, list_to_atom(MiModule)};
+                        _ -> false
+                    end
+                end, Files)
+        end
+    end, code:get_path()),
+
     AllAvailableOperations = lists:usort(lists:flatmap(fun(Module) ->
         lists:filtermap(fun
             ({module_info, _}) -> false;
             ({FunName, Arity}) -> {true, {Module, FunName, Arity}}
         end, Module:module_info(exports))
-    end, [
-        lfm,
-        mi_archives, mi_atm, mi_cdmi, mi_datasets, mi_file_metadata, mi_qos, mi_shares, mi_transfers
-    ])),
+    end, [lfm | AllMiddlewareInterfaceModules])),
 
     FunsToMFA = fun(Funs) -> lists:map(fun erlang:fun_info_mfa/1, Funs) end,
 
@@ -386,13 +397,13 @@ test_rm_file(Config) ->
 
 
 test_get_parent(tested_operations) ->
-    [fun lfm:get_parent/2];
+    [fun mi_file_tree:get_parent/2];
 test_get_parent(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
 
 test_get_file_path(tested_operations) ->
-    [fun lfm:get_file_path/2];
+    [fun mi_file_tree:get_path/2];
 test_get_file_path(Config) ->
     ?RUN_AUTHZ_FILE_COMMON_API_TEST(Config).
 
@@ -415,21 +426,21 @@ test_set_perms(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-test_check_read_perms(tested_operations) ->
-    [fun lfm:check_perms/3];
-test_check_read_perms(Config) ->
+test_check_file_read_access(tested_operations) ->
+    [fun mi_file_perms:check_file_access/3];
+test_check_file_read_access(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-test_check_write_perms(tested_operations) ->
-    [fun lfm:check_perms/3];
-test_check_write_perms(Config) ->
+test_check_file_write_access(tested_operations) ->
+    [fun mi_file_perms:check_file_access/3];
+test_check_file_write_access(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
-test_check_rdwr_perms(tested_operations) ->
-    [fun lfm:check_perms/3];
-test_check_rdwr_perms(Config) ->
+test_check_file_rdwr_access(tested_operations) ->
+    [fun mi_file_perms:check_file_access/3];
+test_check_file_rdwr_access(Config) ->
     ?RUN_AUTHZ_PERMS_API_TEST(Config).
 
 
@@ -452,19 +463,19 @@ test_share_perms_are_checked_only_up_to_share_root(Config) ->
 
 
 test_get_acl(tested_operations) ->
-    [fun lfm:get_acl/2];
+    [fun mi_file_perms:get_acl/2];
 test_get_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
 test_set_acl(tested_operations) ->
-    [fun lfm:set_acl/3];
+    [fun mi_file_perms:set_acl/3];
 test_set_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 
 
 test_remove_acl(tested_operations) ->
-    [fun lfm:remove_acl/2];
+    [fun mi_file_perms:remove_acl/2];
 test_remove_acl(Config) ->
     ?RUN_AUTHZ_ACL_API_TEST(Config).
 

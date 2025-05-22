@@ -16,7 +16,6 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("proto/oneprovider/provider_messages.hrl").
 -include("modules/events/definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
@@ -32,14 +31,12 @@
 %%%===================================================================
 
 -type fuse_request() :: #fuse_request{}.
--type provider_request() :: #provider_request{}.
 -type proxyio_request() :: #proxyio_request{}.
--type request() :: fuse_request() | provider_request() | proxyio_request().
+-type request() :: fuse_request() | proxyio_request().
 
 -type fuse_response() :: #fuse_response{}.
--type provider_response() :: #provider_response{}.
 -type proxyio_response() :: #proxyio_response{}.
--type response() :: fuse_response() | provider_response() | proxyio_response().
+-type response() :: fuse_response() | proxyio_response().
 
 -type file() :: file_meta:entry(). %% Type alias for better code organization
 -type open_flag() :: helpers:open_flag().
@@ -48,7 +45,7 @@
 
 -export_type([
     request/0, response/0, file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0
+    file_guid/0, fuse_response/0, proxyio_response/0, fuse_response_type/0
 ]).
 
 % requests
@@ -91,11 +88,6 @@
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
-    % Checking perms for operations other than 'read' should result in immediate ?EACCES
-    check_perms,
-    get_parent,
-    % TODO VFS-6057 resolve share path up to share not user root dir
-    %%    get_file_path,
     resolve_symlink,
 
     list_xattr,
@@ -163,16 +155,12 @@ is_storage_accessible(FileCtx) ->
             true;
         Storages ->
             case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
-                true -> true;
+                true ->
+                    true;
                 false ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx),
-                    case space_logic:get_local_supporting_storage(SpaceId) of
-                        {ok, StorageId} ->
-                            not lists:member(StorageId, Storages);
-                        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
-                            %% @TODO VFS-12762 no longer needed when there is no proxy anymore
-                            true % access via proxy
-                    end
+                    {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
+                    not lists:member(StorageId, Storages)
             end
     end.
 
@@ -240,7 +228,6 @@ init(_Args) ->
     ping |
     healthcheck |
     {fuse_request, session:id(), fuse_request()} |
-    {provider_request, session:id(), provider_request()} |
     {proxyio_request, session:id(), proxyio_request()},
     Result :: cluster_status:status() | ok | {ok, response()} |
     {error, Reason :: term()} | pong.
@@ -275,11 +262,6 @@ handle({fuse_request, SessId, FuseRequest}) ->
     ?debug("fuse_request(~tp): ~tp", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
     ?debug("fuse_response: ~tp", [Response]),
-    {ok, Response};
-handle({provider_request, SessId, ProviderRequest}) ->
-    ?debug("provider_request(~tp): ~tp", [SessId, ProviderRequest]),
-    Response = handle_request_and_process_response(SessId, ProviderRequest),
-    ?debug("provider_response: ~tp", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
     ?debug("proxyio_request(~tp): ~tp", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
@@ -367,12 +349,11 @@ handle_request_and_process_response(SessId, Request) ->
         EffLocalUserCtx = infer_eff_user_ctx(OriginalUserCtx, Request, FilePartialCtx),
 
         OriginalUserId = user_ctx:get_user_id(OriginalUserCtx),
-        handle_request_and_process_response_locally(
+        handle_request_and_process_response_insecure(
             OriginalUserId, EffLocalUserCtx, Request, FilePartialCtx
         )
-    catch
-        Type2:Error2:Stacktrace ->
-            fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
+    catch Type:Error:Stacktrace ->
+        fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
     end.
 
 
@@ -417,10 +398,6 @@ is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
     file_request = #open_file_with_extended_info{flag = Flag}
 }}, _) ->
     Flag == read;
-is_operation_available_in_share_mode(#provider_request{
-    provider_request = #check_perms{flag = Flag}
-}, _) ->
-    Flag == read;
 is_operation_available_in_share_mode(Request, true) ->
     lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
 is_operation_available_in_share_mode(Request, false) ->
@@ -433,52 +410,54 @@ get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) -
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
     element(1, Req);
-get_operation(#provider_request{provider_request = Req}) ->
-    element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle request locally and do postprocessing of the response
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_and_process_response_locally(
+-spec handle_request_and_process_response_insecure(
     od_user:id(), user_ctx:ctx(), request(), file_partial_ctx:ctx() | undefined
 ) ->
     response().
-handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
+handle_request_and_process_response_insecure(OriginalUserId, EffUserCtx, Request, FilePartialCtx) ->
     FileCtx1 = case FilePartialCtx of
         undefined ->
             undefined;
         _ ->
             {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            assert_request_can_be_handled_locally(FileCtx0, Request),
             FileCtx0
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
-    try
-        case is_storage_accessible(FileCtx1) of
-            true ->
-                handle_request_locally(EffUserCtx, Request, FileCtx1);
-            false ->
-                #fuse_response{status = #status{code = ?EAGAIN}}
-        end
-    catch
-        Type:Error:Stacktrace ->
-            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
+
+    case is_storage_accessible(FileCtx1) of
+        true -> handle_request(EffUserCtx, Request, FileCtx1);
+        false -> #fuse_response{status = #status{code = ?EAGAIN}}
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handle request locally, as it operates on locally supported entity.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
+-spec assert_request_can_be_handled_locally(file_ctx:ctx(), request()) -> ok | no_return().
+assert_request_can_be_handled_locally(FileCtx, Request) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    case fslogic_file_id:is_space_dir_guid(FileGuid) andalso can_handle_remote_space_operation(Request) of
+        true -> ok;
+        false -> middleware_utils:assert_file_managed_locally(FileGuid)
+    end.
+
+
+%% @private
+-spec can_handle_remote_space_operation(request()) -> boolean().
+can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid{}}) -> true;
+can_handle_remote_space_operation(#fuse_request{fuse_request = #resolve_guid_by_relative_path{}}) -> true;
+can_handle_remote_space_operation(#fuse_request{fuse_request = #ensure_dir{}}) -> true;
+can_handle_remote_space_operation(#fuse_request{fuse_request = #file_request{file_request = #get_file_attr{}}}) -> true;
+can_handle_remote_space_operation(_) -> false.
+
+
+%% @private
+-spec handle_request(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
+handle_request(UserCtx, #fuse_request{fuse_request = #file_request{
     file_request = Req
 }}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
@@ -487,34 +466,18 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     Ans = handle_file_request(UserCtx, Req, FileCtx),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
-handle_request_locally(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
+handle_request(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
     multipart_request = Req
 }}, _FileCtx) ->
     handle_multipart_upload_request(UserCtx, Req);
-handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
+handle_request(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
-    handle_provider_request(UserCtx, Req, FileCtx);
-handle_request_locally(UserCtx, #proxyio_request{
+handle_request(UserCtx, #proxyio_request{
     parameters = Parameters,
     proxyio_request = Req
 }, FileCtx) ->
     HandleId = maps:get(?PROXYIO_PARAMETER_HANDLE_ID, Parameters, undefined),
     handle_proxyio_request(UserCtx, Req, FileCtx, HandleId).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle request remotely
-%% @end
-%%--------------------------------------------------------------------
-%% TODO VFS-12678 Remove provider proxy
-%-spec handle_request_remotely(user_ctx:ctx(), request(), [od_provider:id()]) -> response().
-%handle_request_remotely(_UserCtx, _Req, []) ->
-%    #fuse_response{status = #status{code = ?ENOTSUP}};
-%handle_request_remotely(UserCtx, Req, Providers) ->
-%    ProviderId = fslogic_remote:get_provider_to_route(Providers),
-%    fslogic_remote:route(UserCtx, ProviderId, Req).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -676,27 +639,6 @@ handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, attribu
     attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, Attributes);
 handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
     dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Processes provider request and returns a response.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
-    provider_response().
-handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
-    guid_req:get_parent(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
-    guid_req:get_file_path(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_acl{}, FileCtx) ->
-    acl_req:get_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
-    acl_req:set_acl(UserCtx, FileCtx, Acl);
-handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
-    acl_req:remove_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag).
 
 
 %%--------------------------------------------------------------------

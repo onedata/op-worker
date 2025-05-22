@@ -58,7 +58,7 @@ all() ->
 % - deletion of second link
 basic_test(Config0) ->
     Attempts = 60,
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 2}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -156,7 +156,7 @@ basic_test(Config0) ->
 % - writing link 2 via provider 2 (note that file 2 has never been accessed via provider 2)
 first_access_performed_via_link_test(Config0) ->
     Attempts = 60,
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 2}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -196,7 +196,7 @@ first_access_performed_via_link_test(Config0) ->
 
 create_link_to_link_test(Config0) ->
     Attempts = 60,
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, Attempts),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 2}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
     Worker1 = ?config(worker1, Config),
@@ -281,7 +281,7 @@ end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
 init_per_testcase(hardlink_reference_file_meta_race_test = Case, Config0) ->
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 0, 0, 2}, 60),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user1">>, {4, 2}, 60),
     mock_file_meta_dbsync_to_intercept_regular_files(?config(workers2, Config)),
     test_utils:mock_new(?config(workers2, Config), dbsync_file_meta_handler, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);

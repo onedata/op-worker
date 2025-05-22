@@ -34,10 +34,8 @@
     stat/2, stat/3,
     get_file_references/2,
 
-    get_file_path/2,
     get_file_guid/2,
     resolve_guid_by_relative_path/3,
-    get_parent/2,
     ensure_dir/4,
 
     is_dir/2,
@@ -80,11 +78,7 @@
 ]).
 %% Permissions related operations
 -export([
-    set_perms/3,
-    check_perms/3,
-    set_acl/3,
-    get_acl/2,
-    remove_acl/2
+    set_perms/3
 ]).
 %% Custom metadata related operations
 -export([
@@ -178,12 +172,6 @@ get_file_references(SessId, FileKey) ->
     ?run(lfm_attrs:get_references(SessId, FileKey)).
 
 
--spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
-    {ok, file_meta:path()} | error_reply().
-get_file_path(SessId, FileGuid) ->
-    ?run(lfm_files:get_file_path(SessId, FileGuid)).
-
-
 -spec get_file_guid(session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()}.
 get_file_guid(SessId, FilePath) ->
@@ -195,11 +183,6 @@ get_file_guid(SessId, FilePath) ->
 resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath) ->
     ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath)).
 
-
--spec get_parent(session:id(), file_key()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-get_parent(SessId, FileKey) ->
-    ?run(lfm_files:get_parent(SessId, FileKey)).
 
 -spec ensure_dir(session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
@@ -532,30 +515,6 @@ get_children_count(SessId, FileKey) ->
     ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
     ?run(lfm_perms:set_perms(SessId, FileKey, NewPerms)).
-
-
--spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    ok | error_reply().
-check_perms(SessId, FileKey, PermType) ->
-    ?run(lfm_perms:check_perms(SessId, FileKey, PermType)).
-
-
--spec set_acl(session:id(), file_key(), acl:acl()) ->
-    ok | error_reply().
-set_acl(SessId, FileKey, EntityList) ->
-    ?run(lfm_perms:set_acl(SessId, FileKey, EntityList)).
-
-
--spec get_acl(session:id(), file_key()) ->
-    {ok, acl:acl()} | error_reply().
-get_acl(SessId, FileKey) ->
-    ?run(lfm_perms:get_acl(SessId, FileKey)).
-
-
--spec remove_acl(session:id(), FileKey :: file_key()) ->
-    ok | error_reply().
-remove_acl(SessId, FileKey) ->
-    ?run(lfm_perms:remove_acl(SessId, FileKey)).
 
 
 %%%===================================================================

@@ -31,20 +31,20 @@
 
 
 -spec register(session:id(), Conn :: pid()) -> ok | error().
-register(SessId, Conn) ->
+register(SessionId, Conn) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
         {ok, Sess#session{connections = [Conn | Cons]}}
     end,
-    ?extract_ok(session:update_doc_and_time(SessId, Diff)).
+    ?extract_ok(session:update_doc_and_time(SessionId, Diff)).
 
 
 -spec deregister(session:id(), Conn :: pid()) -> ok | error().
-deregister(SessId, Conn) ->
+deregister(SessionId, Conn) ->
     Diff = fun(#session{connections = Cons} = Sess) ->
         NewCons = lists:filter(fun(C) -> C =/= Conn end, Cons),
         {ok, Sess#session{connections = NewCons}}
     end,
-    ?extract_ok(session:update_doc_and_time(SessId, Diff)).
+    ?extract_ok(session:update_doc_and_time(SessionId, Diff)).
 
 
 %%--------------------------------------------------------------------
@@ -52,13 +52,13 @@ deregister(SessId, Conn) ->
 %% Returns list of effective connections for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec list(session:id()) -> {ok, session:id(), [Conn :: pid()]} | error().
-list(SessId) ->
-    case get_proxy_session(SessId) of
-        {ok, _, #session{status = initializing}} ->
+-spec list(session:id()) -> {ok, [Conn :: pid()]} | error().
+list(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{status = initializing}}} ->
             {error, uninitialized_session};
-        {ok, EffSessId, #session{connections = Cons}} ->
-            {ok, EffSessId, Cons};
+        {ok, #document{value = #session{connections = Cons}}} ->
+            {ok, Cons};
         Error ->
             Error
     end.
@@ -77,11 +77,11 @@ set_async_request_manager(SessionId, AsyncReqManager) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_async_req_manager(session:id()) -> {ok, pid()} | error().
-get_async_req_manager(SessId) ->
-    case get_proxy_session(SessId) of
-        {ok, _, #session{async_request_manager = undefined}} ->
+get_async_req_manager(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{async_request_manager = undefined}}} ->
             {error, no_async_req_manager};
-        {ok, _, #session{async_request_manager = AsyncReqManager}} ->
+        {ok, #document{value = #session{async_request_manager = AsyncReqManager}}} ->
             {ok, AsyncReqManager};
         Error ->
             Error
@@ -90,14 +90,7 @@ get_async_req_manager(SessId) ->
 
 -spec get_peer_provider_id(session:id()) -> oneprovider:id().
 get_peer_provider_id(SessionId) ->
-    case session:get(SessionId) of
-        {ok, #document{
-            value = #session{proxy_via = ProxyVia}}
-        } when is_binary(ProxyVia) ->
-            ProxyVia;
-        _ ->
-            session_utils:session_id_to_provider_id(SessionId)
-    end.
+    session_utils:session_id_to_provider_id(SessionId).
 
 
 %%--------------------------------------------------------------------
@@ -106,8 +99,8 @@ get_peer_provider_id(SessionId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_connected(session:id()) -> {ok, session:id()} | error() | no_return().
-ensure_connected(SessId) ->
-    ProviderId = get_peer_provider_id(SessId),
+ensure_connected(SessionId) ->
+    ProviderId = get_peer_provider_id(SessionId),
 
     case oneprovider:is_self(ProviderId) of
         true ->
@@ -119,30 +112,5 @@ ensure_connected(SessId) ->
     end,
 
     session_manager:reuse_or_create_outgoing_provider_session(
-        SessId, ?SUB(?ONEPROVIDER, ProviderId)
+        SessionId, ?SUB(?ONEPROVIDER, ProviderId)
     ).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% TODO VFS-6364 refactor proxy
-%% Returns effective session, that is session, which is not proxied.
-%% @end
-%%--------------------------------------------------------------------
--spec get_proxy_session(session:id()) -> {ok, session:id(), #session{}} | error().
-get_proxy_session(SessId) ->
-    case session:get(SessId) of
-        {ok, #document{value = #session{proxy_via = ProxyVia}}} when is_binary(ProxyVia) ->
-            ProxyViaSession = session_utils:get_provider_session_id(outgoing, ProxyVia),
-            get_proxy_session(ProxyViaSession);
-        {ok, #document{value = Sess}} ->
-            {ok, SessId, Sess};
-        Error ->
-            Error
-    end.

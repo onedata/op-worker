@@ -779,36 +779,10 @@ handle_message(#state{type = outgoing} = State, Data) ->
 -spec handle_client_message(state(), binary()) -> {ok, state()} | error().
 handle_client_message(State, ?CLIENT_KEEPALIVE_MSG) ->
     {ok, State};
-handle_client_message(#state{
-    peer_id = PeerId,
-    peer_ip = PeerIp,
-    session_id = SessId
-} = State, Data) ->
+handle_client_message(#state{session_id = SessId} = State, Data) ->
     try
         {ok, Msg} = clproto_serializer:deserialize_client_message(Data, SessId),
-        case connection_utils:maybe_create_proxied_session(PeerId, PeerIp, Msg) of
-            ok ->
-                route_message(State, Msg);
-            Error ->
-                MsgStr = clproto_utils:msg_to_string(Msg),
-                ?THROTTLE_ERROR(
-                    SessId,
-                    ?autoformat_with_msg("Failed to create proxied session while handling message",
-                        [Error, MsgStr]
-                    )),
-                % Respond with eacces error if request has msg_id
-                % (msg_id means that peer awaits answer)
-                case Msg#client_message.message_id of
-                    undefined ->
-                        {ok, State};
-                    _ ->
-                        AccessErrorMsg = #server_message{
-                            message_id = Msg#client_message.message_id,
-                            message_body = #status{code = ?EACCES}
-                        },
-                        send_response(State, AccessErrorMsg)
-                end
-        end
+        route_message(State, Msg)
     catch
         throw:{translation_failed, Reason, undefined} ->
             ?THROTTLE_ERROR(SessId, ?autoformat_with_msg(

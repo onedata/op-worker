@@ -307,7 +307,6 @@
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
-    proxy_via :: undefined | oneprovider:id(),
     % Key-value in-session memory
     memory = #{} :: map(),
     direct_io = #{} :: #{od_space:id() => boolean()}

@@ -96,7 +96,7 @@ all() ->
 -define(ATTEMPTS, 60).
 
 -record(env, {
-    p1, p2, user1, user2, file1, file2, file3, dir1
+    p1, p2, user1_p1, user1_p2, user2_p1, user2_p2, file1, file2, file3, dir1
 }).
 
 %% Spaces support:
@@ -132,283 +132,293 @@ all() ->
 
 write_with_no_quota_left_should_fail(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = User2P1,
+        user1_p2 = User1P2, user2_p2 = User2P2,
         file1 = File1, file2 = File2
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space2">>, File2)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User2P1, f(<<"space1">>, File2)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File1)),
+    {ok, _} = create_file(P2, User2P2, f(<<"space2">>, File2)),
 
     % Writes be allowed until there is no quota left
-    ?assertMatch({ok, 29}, write_to_file(P1, User1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(29))),
-    ?assertMatch({ok, 131}, write_to_file(P1, User1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(131))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(38))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(3131))),
+    ?assertMatch({ok, 29}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(29))),
+    ?assertMatch({ok, 131}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(131))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(38))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(3131))),
 
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(31))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(38))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(3131))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(31))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(38))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(3131))),
 
     % Until some space is freed not event writes to already allocated blocks will be permitted
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(1))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(1))),
 
-    ?assertMatch({ok, 29}, write_to_file(P1, User1, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(29))),
-    ?assertMatch({ok, 1131}, write_to_file(P1, User1, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(1131))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(58))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(3131))),
+    ?assertMatch({ok, 29}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(29))),
+    ?assertMatch({ok, 1131}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(1131))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(58))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(3131))),
 
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(51))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(58))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(3131))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(51))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(58))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(3131))),
 
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(1))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(1))),
 
     ok.
 
 truncate_bigger_then_quota_should_not_fail(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = User2P1,
+        user1_p2 = User1P2, user2_p2 = User2P2,
         file1 = File1, file2 = File2
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space2">>, File2)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User2P1, f(<<"space1">>, File2)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File1)),
+    {ok, _} = create_file(P2, User2P2, f(<<"space2">>, File2)),
 
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 31)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 38)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 3131)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 31)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 38)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 3131)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 51)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 58)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 3131)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File2), 51)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File2), 58)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File2), 3131)),
+    ?assertMatch(ok, truncate(P1, User1P1, f(<<"space1">>, File1), 31)),
+    ?assertMatch(ok, truncate(P1, User1P1, f(<<"space1">>, File1), 38)),
+    ?assertMatch(ok, truncate(P1, User1P1, f(<<"space1">>, File1), 3131)),
+    ?assertMatch(ok, truncate(P1, User2P1, f(<<"space1">>, File2), 31)),
+    ?assertMatch(ok, truncate(P1, User2P1, f(<<"space1">>, File2), 38)),
+    ?assertMatch(ok, truncate(P1, User2P1, f(<<"space1">>, File2), 3131)),
+    ?assertMatch(ok, truncate(P2, User1P2, f(<<"space2">>, File1), 51)),
+    ?assertMatch(ok, truncate(P2, User1P2, f(<<"space2">>, File1), 58)),
+    ?assertMatch(ok, truncate(P2, User1P2, f(<<"space2">>, File1), 3131)),
+    ?assertMatch(ok, truncate(P2, User2P2, f(<<"space2">>, File2), 51)),
+    ?assertMatch(ok, truncate(P2, User2P2, f(<<"space2">>, File2), 58)),
+    ?assertMatch(ok, truncate(P2, User2P2, f(<<"space2">>, File2), 3131)),
 
     ok.
 
 truncate_smaller_then_quota_should_not_fail(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = User2P1,
+        user1_p2 = User1P2, user2_p2 = User2P2,
         file1 = File1, file2 = File2
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space2">>, File2)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User2P1, f(<<"space1">>, File2)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File1)),
+    {ok, _} = create_file(P2, User2P2, f(<<"space2">>, File2)),
 
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 30)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 19)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space1">>, File1), 5)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 10)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 15)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space1">>, File2), 25)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 50)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 35)),
-    ?assertMatch(ok, truncate(P1, User1, f(<<"space2">>, File1), 5)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File1), 10)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File1), 35)),
-    ?assertMatch(ok, truncate(P1, User2, f(<<"space2">>, File1), 45)),
+    ?assertMatch(ok, truncate(P1, User1P1, f(<<"space1">>, File1), 30)),
+    ?assertMatch(ok, truncate(P1, User1P1, f(<<"space1">>, File1), 19)),
+    ?assertMatch(ok, truncate(P1, User1P1, f(<<"space1">>, File1), 5)),
+    ?assertMatch(ok, truncate(P1, User2P1, f(<<"space1">>, File2), 10)),
+    ?assertMatch(ok, truncate(P1, User2P1, f(<<"space1">>, File2), 15)),
+    ?assertMatch(ok, truncate(P1, User2P1, f(<<"space1">>, File2), 25)),
+    ?assertMatch(ok, truncate(P2, User1P2, f(<<"space2">>, File1), 50)),
+    ?assertMatch(ok, truncate(P2, User1P2, f(<<"space2">>, File1), 35)),
+    ?assertMatch(ok, truncate(P2, User1P2, f(<<"space2">>, File1), 5)),
+    ?assertMatch(ok, truncate(P2, User2P2, f(<<"space2">>, File1), 10)),
+    ?assertMatch(ok, truncate(P2, User2P2, f(<<"space2">>, File1), 35)),
+    ?assertMatch(ok, truncate(P2, User2P2, f(<<"space2">>, File1), 45)),
 
     ok.
 
 incremental_write_with_no_quota_left_should_fail(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = User2P1,
+        user1_p2 = User1P2, user2_p2 = User2P2,
         file1 = File1, file2 = File2
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User2, f(<<"space2">>, File2)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User2P1, f(<<"space1">>, File2)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File1)),
+    {ok, _} = create_file(P2, User2P2, f(<<"space2">>, File2)),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0,  crypto:strong_rand_bytes(5))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 2,  crypto:strong_rand_bytes(20))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 19, crypto:strong_rand_bytes(12))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 29, crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(9))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(134))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 0,  crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 2,  crypto:strong_rand_bytes(20))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 19, crypto:strong_rand_bytes(12))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space1">>, File1), 29, crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(9))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(134))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File1), 0,  crypto:strong_rand_bytes(5))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File1), 2,  crypto:strong_rand_bytes(20))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File1), 19, crypto:strong_rand_bytes(12))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 29, crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(9))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(134))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 0,  crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 2,  crypto:strong_rand_bytes(20))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 19, crypto:strong_rand_bytes(12))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1P1, f(<<"space1">>, File1), 29, crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(9))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File2), 0,  crypto:strong_rand_bytes(134))),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0,  crypto:strong_rand_bytes(17))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 12, crypto:strong_rand_bytes(31))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 19, crypto:strong_rand_bytes(32))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 49, crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(9))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(134))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 0,  crypto:strong_rand_bytes(17))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 12, crypto:strong_rand_bytes(31))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 19, crypto:strong_rand_bytes(32))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User1, f(<<"space2">>, File1), 49, crypto:strong_rand_bytes(5))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(9))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(134))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 0,  crypto:strong_rand_bytes(17))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 12, crypto:strong_rand_bytes(31))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 19, crypto:strong_rand_bytes(32))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 49, crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(9))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(134))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 0,  crypto:strong_rand_bytes(17))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 12, crypto:strong_rand_bytes(31))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 19, crypto:strong_rand_bytes(32))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User1P2, f(<<"space2">>, File1), 49, crypto:strong_rand_bytes(5))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(9))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File2), 0,  crypto:strong_rand_bytes(134))),
 
     ok.
 
 unlink_should_unlock_space(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = User2P1,
+        user1_p2 = User1P2, user2_p2 = User2P2,
         file1 = File1, file2 = File2, file3 = File3
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User2, f(<<"space1">>, File3)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File2)),
-    {ok, _} = create_file(P1, User2, f(<<"space2">>, File3)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File2)),
+    {ok, _} = create_file(P1, User2P1, f(<<"space1">>, File3)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File1)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File2)),
+    {ok, _} = create_file(P2, User2P2, f(<<"space2">>, File3)),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space1">>, File2))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(21))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space1">>, File1))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space1">>, File2))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(21))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space1">>, File1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2P1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(26))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(22))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(3))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space2">>, File2))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(31))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(3))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space2">>, File1))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(26))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(22))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(3))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
+    ?assertMatch(ok, unlink(P2, User1P2,                      f(<<"space2">>, File2))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(31))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(3))),
+    ?assertMatch(ok, unlink(P2, User1P2,                      f(<<"space2">>, File1))),
+    ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
 
     ok.
 
 rename_should_unlock_space(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = User2P1,
+        user1_p2 = User1P2, user2_p2 = User2P2,
         file1 = File1, file2 = File2, file3 = File3,
         dir1 = Dir1
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File1)),
-    {ok, _} = mkdir(P1, User1,       f(<<"space1">>, Dir1)),
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, [Dir1], File1)),
-    {ok, _} = create_file(P1, User1, f(<<"space1">>, File2)),
-    {ok, _} = create_file(P1, User2, f(<<"space1">>, File3)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File1)),
-    {ok, _} = mkdir(P1, User1,       f(<<"space2">>, Dir1)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, [Dir1], File1)),
-    {ok, _} = create_file(P1, User1, f(<<"space2">>, File2)),
-    {ok, _} = create_file(P1, User2, f(<<"space2">>, File3)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File1)),
+    {ok, _} = mkdir(P1, User1P1,       f(<<"space1">>, Dir1)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, [Dir1], File1)),
+    {ok, _} = create_file(P1, User1P1, f(<<"space1">>, File2)),
+    {ok, _} = create_file(P1, User2P1, f(<<"space1">>, File3)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File1)),
+    {ok, _} = mkdir(P2, User1P2,       f(<<"space2">>, Dir1)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, [Dir1], File1)),
+    {ok, _} = create_file(P2, User1P2, f(<<"space2">>, File2)),
+    {ok, _} = create_file(P2, User2P2, f(<<"space2">>, File3)),
 
     %% ### Space1 ###
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({ok, 3}, write_to_file(P1, User1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File2), f(<<"space0">>, File2))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File1), f(<<"space0">>, File1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
+    ?assertMatch({ok, 3}, write_to_file(P1, User1P1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
+    ?assertMatch({ok, _}, rename(P1, User1P1,                 f(<<"space1">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(3))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2P1,          f(<<"space1">>, File3), 0, crypto:strong_rand_bytes(18))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, rename(P1, User1P1,                 f(<<"space1">>, File1), f(<<"space0">>, File1))),
 
     %% Cleanup only
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File1))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, File1))),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, [Dir1], File1), 0, crypto:strong_rand_bytes(17))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space1">>, File3), 3, crypto:strong_rand_bytes(11))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, Dir1), f(<<"space0">>, Dir1))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 3, crypto:strong_rand_bytes(11))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space1">>, File3), 3, crypto:strong_rand_bytes(17))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2P1,          f(<<"space1">>, [Dir1], File1), 0, crypto:strong_rand_bytes(17))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2P1, f(<<"space1">>, File3), 3, crypto:strong_rand_bytes(11))),
+    ?assertMatch({ok, _}, rename(P1, User1P1,                 f(<<"space1">>, Dir1), f(<<"space0">>, Dir1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2P1,          f(<<"space1">>, File3), 3, crypto:strong_rand_bytes(11))),
+    ?assertMatch({ok, _}, write_to_file(P1, User2P1,          f(<<"space1">>, File3), 3, crypto:strong_rand_bytes(17))),
 
     %% Cleanup only
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, [Dir1], File1))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, Dir1))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, [Dir1], File1))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, Dir1))),
 
 
     %% ### Space2 ###
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(26))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(18))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(7))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(7))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(26))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(18))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(7))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
+    % TODO VFS-12134 what about rename between supported and not space?
+%%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(7))),
+    ?assertMatch({ok, _}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 0, crypto:strong_rand_bytes(28))),
 
     %% Cleanup only
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space2">>, File1))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, File2))),
+    ?assertMatch(ok, unlink(P2, User1P2,                      f(<<"space2">>, File1))),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, [Dir1], File1), 0, crypto:strong_rand_bytes(27))),
-    ?assertMatch({error, ?ENOSPC}, write_to_file(P1, User2, f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(3))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, Dir1), f(<<"space0">>, Dir1))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(27))),
-    ?assertMatch({ok, _}, write_to_file(P1, User2,          f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(37))),
+    ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, [Dir1], File1), 0, crypto:strong_rand_bytes(27))),
+    ?assertMatch({error, ?ENOSPC}, write_to_file(P2, User2P2, f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(3))),
+    % TODO VFS-12134 what about rename between supported and not space?
+%%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, Dir1), f(<<"space0">>, Dir1))),
+    ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(27))),
+    ?assertMatch({ok, _}, write_to_file(P2, User2P2,          f(<<"space2">>, File3), 7, crypto:strong_rand_bytes(37))),
 
     ok.
 
 
 rename_with_no_quota_left_should_fail(Config) ->
     #env{
-        p1 = P1, p2 = _P2,
-        user1 = User1, user2 = _User2,
+        p1 = P1, p2 = P2,
+        user1_p1 = User1P1, user2_p1 = _User2P1,
+        user1_p2 = User1P2, user2_p2 = _User2P2,
         file1 = File1, file2 = File2, file3 = File3
     } = gen_test_env(Config),
 
-    {ok, _} = create_file(P1, User1,    f(<<"space1">>, File1)),
-    {ok, _} = create_file(P1, User1,    f(<<"space1">>, File2)),
-    {ok, _} = mkdir(P1, User1,          f(<<"space1">>, File3)),
-    {ok, _} = mkdir(P1, User1,          f(<<"space1">>, [File3], File3)),
-    {ok, _} = create_file(P1, User1,    f(<<"space1">>, [File3], File2)),
-    {ok, _} = create_file(P1, User1,    f(<<"space1">>, [File3, File3], File2)),
+    {ok, _} = create_file(P1, User1P1,    f(<<"space1">>, File1)),
+    {ok, _} = create_file(P1, User1P1,    f(<<"space1">>, File2)),
+    {ok, _} = mkdir(P1, User1P1,          f(<<"space1">>, File3)),
+    {ok, _} = mkdir(P1, User1P1,          f(<<"space1">>, [File3], File3)),
+    {ok, _} = create_file(P1, User1P1,    f(<<"space1">>, [File3], File2)),
+    {ok, _} = create_file(P1, User1P1,    f(<<"space1">>, [File3, File3], File2)),
 
-    {ok, _} = create_file(P1, User1,    f(<<"space2">>, File1)),
-    {ok, _} = create_file(P1, User1,    f(<<"space2">>, File2)),
-    {ok, _} = mkdir(P1, User1,          f(<<"space2">>, File3)),
-    {ok, _} = mkdir(P1, User1,          f(<<"space2">>, [File3], File3)),
-    {ok, _} = create_file(P1, User1,    f(<<"space2">>, [File3], File2)),
-    {ok, _} = create_file(P1, User1,    f(<<"space2">>, [File3, File3], File2)),
+    {ok, _} = create_file(P2, User1P2,    f(<<"space2">>, File1)),
+    {ok, _} = create_file(P2, User1P2,    f(<<"space2">>, File2)),
+    {ok, _} = mkdir(P2, User1P2,          f(<<"space2">>, File3)),
+    {ok, _} = mkdir(P2, User1P2,          f(<<"space2">>, [File3], File3)),
+    {ok, _} = create_file(P2, User1P2,    f(<<"space2">>, [File3], File2)),
+    {ok, _} = create_file(P2, User1P2,    f(<<"space2">>, [File3, File3], File2)),
 
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File2), f(<<"space0">>, File2))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space1">>, File1), f(<<"space0">>, File1))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3, File3], File2), 0, crypto:strong_rand_bytes(8))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space1">>, [File3], File2), 0, crypto:strong_rand_bytes(2))),
-    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, File3), f(<<"space0">>, File3))),
-    ?assertMatch(ok, rm_recursive(P1, User1,                f(<<"space0">>, File3))),
-    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space1">>, [File3], File3), f(<<"space0">>, File3))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File1), 0, crypto:strong_rand_bytes(16))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, File2), 0, crypto:strong_rand_bytes(12))),
+    ?assertMatch({ok, _}, rename(P1, User1P1,                 f(<<"space1">>, File2), f(<<"space0">>, File2))),
+    ?assertMatch({ok, _}, rename(P1, User1P1,                 f(<<"space1">>, File1), f(<<"space0">>, File1))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, [File3, File3], File2), 0, crypto:strong_rand_bytes(8))),
+    ?assertMatch({ok, _}, write_to_file(P1, User1P1,          f(<<"space1">>, [File3], File2), 0, crypto:strong_rand_bytes(2))),
+    ?assertMatch({error, ?ENOSPC}, rename(P1, User1P1,        f(<<"space1">>, File3), f(<<"space0">>, File3))),
+    ?assertMatch(ok, rm_recursive(P1, User1P1,                f(<<"space0">>, File3))),
+    ?assertMatch({error, ?ENOSPC}, rename(P1, User1P1,        f(<<"space1">>, [File3], File3), f(<<"space0">>, File3))),
 
     %% Cleanup only
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, File2))),
-    ?assertMatch(ok, unlink(P1, User1,                      f(<<"space0">>, [File3], File2))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, File2))),
+    ?assertMatch(ok, unlink(P1, User1P1,                      f(<<"space0">>, [File3], File2))),
 
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(16))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(12))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
-    ?assertMatch({ok, _}, rename(P1, User1,                 f(<<"space2">>, File1), f(<<"space0">>, File1))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3, File3], File2), 0, crypto:strong_rand_bytes(8))),
-    ?assertMatch({ok, _}, write_to_file(P1, User1,          f(<<"space2">>, [File3], File2), 0, crypto:strong_rand_bytes(2))),
-    ?assertMatch({error, ?ENOSPC}, rename(P1, User1,        f(<<"space2">>, File3), f(<<"space0">>, File3))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File1), 0, crypto:strong_rand_bytes(16))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, File2), 0, crypto:strong_rand_bytes(12))),
+    % TODO VFS-12134 what about rename between supported and not space?
+%%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, File2), f(<<"space0">>, File2))),
+%%    ?assertMatch({ok, _}, rename(P2, User1P2,                 f(<<"space2">>, File1), f(<<"space0">>, File1))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, [File3, File3], File2), 0, crypto:strong_rand_bytes(8))),
+    ?assertMatch({ok, _}, write_to_file(P2, User1P2,          f(<<"space2">>, [File3], File2), 0, crypto:strong_rand_bytes(2))),
+%%    ?assertMatch({error, ?ENOSPC}, rename(P2, User1P2,        f(<<"space2">>, File3), f(<<"space0">>, File3))),
 
     ok.
 
@@ -605,7 +615,7 @@ quota_updated_on_gui_upload(Config) ->
 failed_gui_upload_test(Config) ->
     #env{
         p1 = P1,
-        user1 = User1,
+        user1_p1 = User1,
         file1 = File1, file2 = File2
     } = gen_test_env(Config),
     SessId = fun(Worker) -> ?config({session_id, {User1, ?GET_DOMAIN(Worker)}}, Config) end,
@@ -815,8 +825,10 @@ gen_test_env(Config) ->
     #env{
         p1 = P1,
         p2 = P2,
-        user1 = User1,
-        user2 = User2,
+        user1_p1 = User1,
+        user1_p2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P2)}}, Config),
+        user2_p1 = User2,
+        user2_p2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(P2)}}, Config),
         file1 = generator:gen_name(),
         file2 = generator:gen_name(),
         file3 = generator:gen_name(),

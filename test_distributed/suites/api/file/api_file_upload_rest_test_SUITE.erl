@@ -424,7 +424,7 @@ build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
 
         {Body, Data3} = utils:ensure_defined(maps:take(body, Data2), error, {<<>>, Data2}),
         RestPath = str_utils:join_as_binaries([<<"data">>, ParentId, <<"path">>, RelativePath], <<"/">>),
-        {ok, RelRootPath} = lfm_proxy:get_file_path(TestNode, ?ROOT_SESS_ID, RelRootDirGuid),
+        {ok, RelRootPath} = opt_file_tree:get_path(TestNode, ?ROOT_SESS_ID, ?FILE_REF(RelRootDirGuid)),
         CanonicalFilePath = filename:join([RelRootPath, RelativePath]),
         api_test_memory:set(MemRef, file_path, CanonicalFilePath),
         #rest_args{
@@ -448,8 +448,8 @@ build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
                 true ->
                     FileGuid = api_test_memory:get(MemRef, file_guid),
                     ExpPath = api_test_memory:get(MemRef, file_path),
-                    {ok, FilePath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(
-                        TestNode, ?ROOT_SESS_ID, FileGuid), ?ATTEMPTS),
+                    {ok, FilePath} = ?assertMatch({ok, _}, opt_file_tree:get_path(
+                        TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)), ?ATTEMPTS),
 
                     ?assertEqual(ExpPath, FilePath, ?ATTEMPTS),
 

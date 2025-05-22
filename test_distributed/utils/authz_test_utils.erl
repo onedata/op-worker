@@ -133,7 +133,7 @@ set_modes(Node, ModePerFile) ->
     ok.
 set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
     maps:fold(fun(Guid, Perms, _) ->
-        ?assertEqual(ok, lfm_proxy:set_acl(
+        ?assertEqual(ok, opt_file_perms:set_acl(
             Node, ?ROOT_SESS_ID, ?FILE_REF(Guid),
             [?ALLOW_ACE(AceWho, AceFlags, perms_to_bitmask(Perms))])
         )
@@ -142,7 +142,7 @@ set_acls(Node, AllowedPermsPerFile, DeniedPermsPerFile, AceWho, AceFlags) ->
     maps:fold(fun(Guid, Perms, _) ->
         AllPerms = all_perms(Node, Guid),
 
-        ?assertEqual(ok, lfm_proxy:set_acl(
+        ?assertEqual(ok, opt_file_perms:set_acl(
             Node, ?ROOT_SESS_ID, ?FILE_REF(Guid),
             [
                 ?DENY_ACE(AceWho, AceFlags, perms_to_bitmask(Perms)),

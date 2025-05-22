@@ -43,7 +43,7 @@ all() -> ?ALL([
 rtransfer_stats_updates_test(Config) ->
     ct:timetrap({hours, 4}),
     multi_provider_file_ops_test_base:rtransfer_test_base2(
-        Config, <<"user1">>, {2,0,0,2}, 60, 14400, 1048576000000
+        Config, <<"user1">>, {2, 2}, 60, 14400, 1048576000000
     ).
 
 

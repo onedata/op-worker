@@ -30,26 +30,19 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @equiv get_acl_insecure/2 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response() | no_return().
+-spec get_acl(user_ctx:ctx(), file_ctx:ctx()) -> {ok, acl:acl()} | no_return().
 get_acl(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_acl_mask)]
     ),
-    get_acl_insecure(UserCtx, FileCtx1).
+
+    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_based_on_referenced_guid(FileCtx1)),
+    % ACLs are kept in database without names, as they might change. Resolve the names here.
+    {ok, acl:add_names(Acl)}.
 
 
-%%--------------------------------------------------------------------
-%% @equiv set_acl_insecure/3 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
-    fslogic_worker:provider_response().
+-spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) -> ok | errors:error().
 set_acl(UserCtx, FileCtx0, Acl) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -59,12 +52,7 @@ set_acl(UserCtx, FileCtx0, Acl) ->
     set_acl_insecure(UserCtx, FileCtx1, Acl).
 
 
-%%--------------------------------------------------------------------
-%% @equiv remove_acl_insecure/2 with permission checks
-%% @end
-%%--------------------------------------------------------------------
--spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+-spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) -> ok | errors:error().
 remove_acl(UserCtx, FileCtx0) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -79,34 +67,9 @@ remove_acl(UserCtx, FileCtx0) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Gets access control list of file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-get_acl_insecure(_UserCtx, FileCtx) ->
-    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_based_on_referenced_guid(FileCtx)),
-    % ACLs are kept in database without names, as they might change.
-    % Resolve the names here.
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #acl{
-            value = acl:add_names(Acl)
-        }
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Modifies access control list of specified file.
-%% @end
-%%--------------------------------------------------------------------
 -spec set_acl_insecure(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
-    fslogic_worker:provider_response().
+    ok | errors:error().
 set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
 
@@ -124,20 +87,15 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
             ok = permissions_cache:invalidate(),
             times_api:touch(FileCtx2, [?attr_ctime]),
             fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
-            #provider_response{status = #status{code = ?OK}};
+            ok;
         {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOENT}}
+            ?ERR_POSIX(?err_ctx(), ?ENOENT)
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Clears access control list of specified file.
-%% @end
-%%--------------------------------------------------------------------
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    ok | errors:error().
 remove_acl_insecure(_UserCtx, FileCtx) ->
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_meta:update_acl(FileUuid, []) of
@@ -145,7 +103,7 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
             ok = permissions_cache:invalidate(),
             times_api:touch(FileCtx, [?attr_ctime]),
             fslogic_event_emitter:emit_file_perm_changed(FileCtx),
-            #provider_response{status = #status{code = ?OK}};
+            ok;
         {error, not_found} ->
-            #provider_response{status = #status{code = ?ENOENT}}
+            ?ERR_POSIX(?err_ctx(), ?ENOENT)
     end.

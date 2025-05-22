@@ -154,10 +154,10 @@ assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts)
                 false -> false;
                 nested_archive_only ->
                     {ok, G} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
-                    {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, G),
+                    {ok, Path} = opt_file_tree:get_path(Node, SessionId, ?FILE_REF(G)),
                     case archivisation_tree:extract_archive_id(Path) of
                         {ok, ArchiveId} ->
-                            {ok, ParentGuid} = lfm_proxy:get_parent(Node, SessionId, #file_ref{guid = G}),
+                            {ok, ParentGuid} = opt_file_tree:get_parent(Node, SessionId, #file_ref{guid = G}),
                             case opw_test_rpc:call(Node, archive, get_data_dir_guid, [ArchiveId]) of
                                 {ok, ParentGuid} -> true;
                                 _ -> false
@@ -273,7 +273,7 @@ assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT, FollowSymlinks, Attempts) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
-    {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
+    {ok, ArchiveRootDirPath} = opt_file_tree:get_path(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid)),
     ArchiveDataDirPath = filename:join([ArchiveRootDirPath, <<"data">>]),
     {ok, #file_attr{guid = ArchiveDataDirGuid}} = lfm_proxy:stat(Node, SessionId, {path, ArchiveDataDirPath}),
     {ok, [{TargetGuid, _} | _]} = 
@@ -486,7 +486,7 @@ assert_incremental_archive_links(Node, SessionId, BaseArchiveId, Guid, ModifiedF
 
 
 extract_base_archive_id(Node, SessionId, Guid) ->
-    {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, fslogic_file_id:ensure_referenced_guid(Guid)),
+    {ok, Path} = opt_file_tree:get_path(Node, SessionId, ?FILE_REF(fslogic_file_id:ensure_referenced_guid(Guid))),
     archivisation_tree:extract_archive_id(Path).
 
 

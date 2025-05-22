@@ -132,7 +132,7 @@ mv_and_sync_file(UserSelector, FileSelector, DstPath) ->
     lists:foreach(fun(Provider) ->
         Node = ?OCT_RAND_OP_NODE(Provider),
         UserSessId = oct_background:get_user_session_id(UserId, Provider),
-        ?assertEqual({ok, DstPath}, lfm_proxy:get_file_path(Node, UserSessId, FileGuid), ?ATTEMPTS)
+        ?assertEqual({ok, DstPath}, opt_file_tree:get_path(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS)
     end, RestProviders).
 
 
@@ -180,7 +180,7 @@ get_object_attributes(Node, SessId, Guid) ->
     binary().
 prepare_symlink_value(Node, SessId, FileGuid) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, CanonicalPath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
+    {ok, CanonicalPath} = opt_file_tree:get_path(Node, SessId, ?FILE_REF(FileGuid)),
     SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
     [_Sep, _SpaceId | Rest] = filename:split(CanonicalPath),
     filename:join([SpaceIdPrefix | Rest]).
@@ -698,7 +698,7 @@ create_symlink(Node, SessId, ParentGuid, FileName, SymlinkValue) ->
 -spec create_hardlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_id:file_guid()) ->
     {ok, #file_attr{}} | no_return().
 create_hardlink(Node, SessId, ParentGuid, FileName, TargetGuid) ->
-    {ok, ParentPath} = lfm_proxy:get_file_path(Node, SessId, ParentGuid),
+    {ok, ParentPath} = opt_file_tree:get_path(Node, SessId, ?FILE_REF(ParentGuid)),
     ?assertMatch({ok, _}, lfm_proxy:make_link(Node, SessId, filename:join(ParentPath, FileName), TargetGuid)).
 
 

@@ -80,10 +80,10 @@ all() ->
     ]).
 
 db_sync_basic_opts_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4, 2}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 300, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4, 2}, 300, false).
 
 db_sync_create_after_del_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -100,7 +100,7 @@ db_sync_create_after_del_test(Config) ->
         ]}
     ]).
 db_sync_create_after_del_test_base(Config) ->
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4, 2}, 60).
 
 db_sync_create_after_deletion_links_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -118,25 +118,25 @@ db_sync_create_after_deletion_links_test(Config) ->
     ]).
 db_sync_create_after_deletion_links_test_base(Config) ->
     % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
-    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4, 2}, 60).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
 db_sync_many_ops_test_base(Config) ->
     DirsNum = ?config(dirs_num, Config),
     FilesNum = ?config(files_num, Config),
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 180, DirsNum, FilesNum).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4, 2}, 180, DirsNum, FilesNum).
 
 db_sync_distributed_modification_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+    multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user1">>, {4, 2}, 60).
 
 
 db_sync_with_delays_test(Config) ->
-    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4,0,0,2}, 300, 50, 50).
+    multi_provider_file_ops_test_base:many_ops_test_base(Config, <<"user1">>, {4, 2}, 300, 50, 50).
 
 sparse_files_should_be_created(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0,
-        <<"user1">>, {4, 0, 0, 2}, 30),
+        <<"user1">>, {4, 2}, 30),
     Worker1 = ?config(worker1, Config),
     [Worker2 | _] = ?config(workers2, Config),
 

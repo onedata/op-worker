@@ -21,7 +21,6 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 %% API
--export([maybe_create_proxied_session/3]).
 -export([
     protocol_upgrade_request/1,
     process_protocol_upgrade_request/1,
@@ -32,36 +31,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates proxy session if requested by peer.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_create_proxied_session(od_provider:id(), inet:ip4_address(),
-    #client_message{}) -> ok | {error, term()}.
-maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
-    effective_session_id = EffSessionId,
-    effective_session_mode = EffSessMode,
-    effective_client_tokens = #client_tokens{
-        access_token = AccessToken,
-        consumer_token = ConsumerToken
-    }
-}) when EffSessionId =/= undefined ->
-    TokenCredentials = auth_manager:build_token_credentials(
-        AccessToken, ConsumerToken,
-        ProviderIp, oneclient, allow_data_access_caveats
-    ),
-    Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, TokenCredentials, fuse, EffSessMode
-    ),
-    case Res of
-        {ok, _} -> ok;
-        Error -> Error
-    end;
-maybe_create_proxied_session(_, _, _) ->
-    ok.
 
 
 %%--------------------------------------------------------------------
