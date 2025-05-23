@@ -430,15 +430,11 @@ add_default_properties(FunctionDefinition, #initiation_ctx{openfaas_config = Ope
         {<<"annotations">>, openfaas_function_annotations}
     ]),
 
-    case atm_openfaas_config:should_disable_tls_verification(OpenfaasConfig) of
-        true ->
-            EnvVars = maps:get(<<"envVars">>, DefaultProperties, #{}),
-            DefaultProperties#{<<"envVars">> => EnvVars#{
-                <<"VERIFY_SSL_CERTIFICATES">> => <<"false">>
-            }};
-        false ->
-            DefaultProperties
-    end.
+    EnvVars = maps:get(<<"envVars">>, DefaultProperties, #{}),
+    DefaultProperties#{<<"envVars">> => EnvVars#{
+        <<"DEBUG_MODE">> => atm_openfaas_config:in_debug_mod(OpenfaasConfig),
+        <<"VERIFY_SSL_CERTIFICATES">> => not atm_openfaas_config:should_disable_tls_verification(OpenfaasConfig)
+    }}.
 
 
 %% @private
