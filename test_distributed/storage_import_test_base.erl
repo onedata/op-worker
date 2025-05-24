@@ -313,7 +313,7 @@ create_empty_file_import_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     ?assertMatch(
-        {ok, #document{value = #file_meta{is_imported = true}}},
+        {ok, #document{value = #file_meta{imported = true}}},
         rpc:call(W1, file_meta, get, [FileUuid]),
         ?ATTEMPTS
     ),
@@ -373,7 +373,7 @@ create_file_import_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     ?assertMatch(
-        {ok, #document{value = #file_meta{is_imported = true}}},
+        {ok, #document{value = #file_meta{imported = true}}},
         rpc:call(W1, file_meta, get, [FileUuid]),
         ?ATTEMPTS
     ),
@@ -6400,7 +6400,7 @@ verify_file(FilePath, Pid, W1, SessId, Attempts) ->
         lfm_proxy:stat(W1, SessId, {path, FilePath}), Attempts),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     ?assertMatch(
-        {ok, #document{value = #file_meta{is_imported = true}}},
+        {ok, #document{value = #file_meta{imported = true}}},
         rpc:call(W1, file_meta, get, [FileUuid]),
         ?ATTEMPTS
     ),
@@ -6418,7 +6418,7 @@ verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
         lfm_proxy:stat(W1, SessId, {path, FileInDirPath}), Attempts),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     ?assertMatch(
-        {ok, #document{value = #file_meta{is_imported = true}}},
+        {ok, #document{value = #file_meta{imported = true}}},
         rpc:call(W1, file_meta, get, [FileUuid]),
         ?ATTEMPTS
     ),

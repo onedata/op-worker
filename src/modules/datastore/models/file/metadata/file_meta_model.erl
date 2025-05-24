@@ -299,8 +299,8 @@ get_record_struct(13) ->
         {references, #{string => [string]}},
         {symlink_value, string},
         {dataset_status, atom},
-        % field is_imported has been added in this version
-        {is_imported, atom}
+        % field imported has been added in this version
+        {imported, atom}
     ]}.
 
 
@@ -401,8 +401,8 @@ upgrade_record(12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 }) ->
     {13, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue, DatasetState,
-        % field is_imported has been added in this version
-        undefined
+        % field imported has been added in this version
+        unknown
     }}.
 
 
