@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 
+-include("http/space_file_events_stream.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -23,12 +24,18 @@
 %%% API
 %%%===================================================================
 
--spec build_attributes_param_spec(middleware:scope(), onedata_file:attr_generation() | deprecated_recursive, binary()) ->
+-spec build_attributes_param_spec(
+    middleware:scope(),
+    onedata_file:attr_generation() | deprecated_recursive | current_events,
+    binary()
+) ->
     middleware_sanitizer:param_spec().
 build_attributes_param_spec(public, current = AttrGeneration, Key) ->
     {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?PUBLIC_API_FILE_ATTRS)};
 build_attributes_param_spec(private, current = AttrGeneration, Key) ->
     {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?API_FILE_ATTRS)};
+build_attributes_param_spec(private, current_events, Key) ->
+    {any, build_parse_requested_attrs_fun(Key, current, ?OBSERVABLE_FILE_ATTRS)};
 build_attributes_param_spec(public, deprecated = AttrGeneration, Key) ->
     {any, build_parse_requested_attrs_fun(Key, AttrGeneration, ?DEPRECATED_PUBLIC_FILE_ATTRS)};
 build_attributes_param_spec(private, deprecated = AttrGeneration, Key) ->

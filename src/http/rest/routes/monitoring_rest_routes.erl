@@ -41,5 +41,17 @@ routes() -> [
             aspect = changes, 
             scope = private
         }
+    }},
+    %% Subscribe to space file events
+    {<<"/spaces/:sid/events/files">>, space_file_events_stream_handler, #rest_req{
+        method = 'POST',
+        consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_metrics,
+            id = ?BINDING(sid),
+            aspect = file_events,
+            scope = private
+        }
     }}
 ].
