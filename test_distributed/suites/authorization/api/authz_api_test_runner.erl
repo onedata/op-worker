@@ -840,8 +840,7 @@ init_public_data_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
 run_public_data_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
         suite_spec = TestSuiteSpec = #authz_test_suite_spec{
-            available_in_public_data_mode = false,
-            returned_errors = ReturnedErrors
+            available_in_public_data_mode = false
         },
         test_node = TestNode
     },
