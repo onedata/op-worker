@@ -840,7 +840,8 @@ init_public_data_mode_test_case(TestCaseName, ExecutionerSelector, TestSuiteCtx)
 run_public_data_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
     suite_ctx = #authz_test_suite_ctx{
         suite_spec = TestSuiteSpec = #authz_test_suite_spec{
-            available_in_public_data_mode = false
+            available_in_public_data_mode = false,
+            returned_errors = ReturnedErrors
         },
         test_node = TestNode
     },
@@ -849,7 +850,11 @@ run_public_data_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
     % If operation is not available in share/public mode then operation
     % should be rejected even if all permissions are granted
     FullPermsPerFile = set_full_perms(PermsType, TestNode, maps:keys(RequiredPermsPerFile)),
-    ExpError = get_exp_error(?ENOTSUP, TestSuiteSpec),
+    ExpErrno = case ReturnedErrors of
+        api_errors -> ?EPERM;
+        errno_errors -> ?ENOTSUP
+    end,
+    ExpError = get_exp_error(ExpErrno, TestSuiteSpec),
     assert_operation(FullPermsPerFile, ExpError, TestCaseCtx);
 
 % Operation is available in share/public mode but access is still controlled

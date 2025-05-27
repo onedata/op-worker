@@ -218,7 +218,7 @@ infer_user_ctx(SessionId, FileCtx, Operation) ->
 -spec assert_user_not_in_public_data_mode(user_ctx:ctx()) -> ok | no_return().
 assert_user_not_in_public_data_mode(UserCtx) ->
     case user_ctx:is_in_public_data_mode(UserCtx) of
-        true -> throw(?ERR_POSIX(?err_ctx(), ?ENOTSUP));
+        true -> throw(?ERR_POSIX(?err_ctx(), ?EPERM));
         false -> ok
     end.
 
