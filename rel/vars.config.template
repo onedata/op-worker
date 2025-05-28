@@ -27,4 +27,5 @@
 {runner_user,        "root"}.
 {runner_wait_process, "op_worker_sup"}.
 
-{build_version, ""}.
+{service_build_version, ""}.
+{service_release_version, ""}.

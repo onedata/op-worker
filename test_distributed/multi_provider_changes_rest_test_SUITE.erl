@@ -122,15 +122,20 @@ invalid_request_should_fail(Config) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
+    ObservableDocs = [
+        <<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>
+    ],
+
     lists:foreach(fun({Json, ExpError}) ->
         ExpRestError = rest_test_utils:get_rest_error(ExpError),
         ?assertMatch(ExpRestError, get_changes(Config, WorkerP1, SpaceId, Json))
     end, [
-        {<<"ASD">>, ?ERR_BAD_VALUE_JSON(<<"changesSpecification">>)},
-        {#{}, ?ERR_BAD_VALUE_EMPTY(<<"changesSpecification">>)},
+        {<<"ASD">>, ?ERR_MALFORMED_DATA},
+        {#{}, ?ERR_MISSING_AT_LEAST_ONE_VALUE(ObservableDocs)},
         {#{<<"triggers">> => <<"ASD">>}, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"triggers">>)},
-        {#{<<"triggers">> => [<<"ASD">>]}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, [<<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>])},
-        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERR_BAD_DATA(<<"fielMeta">>, undefined)},
+        {#{<<"triggers">> => [<<"ASD">>]}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, ObservableDocs)},
+        {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERR_MISSING_AT_LEAST_ONE_VALUE(ObservableDocs)},
+        {#{<<"fileMeta">> => <<"owner">>}, ?ERR_BAD_VALUE_JSON(<<"fileMeta">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"fileMeta.fields">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
             <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
@@ -659,8 +664,8 @@ init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     ct:timetrap(timer:minutes(3)),
     Workers = ?config(op_worker_nodes, Config),
     Pid = self(),
-    ok = test_utils:mock_new(Workers, changes_stream_handler),
-    ok = test_utils:mock_expect(Workers, changes_stream_handler, init_stream,
+    ok = test_utils:mock_new(Workers, space_monitoring_stream_handler),
+    ok = test_utils:mock_expect(Workers, space_monitoring_stream_handler, init_stream,
         fun(State) ->
             State1 = meck:passthrough([State]),
             StreamPid = maps:get(changes_stream, State1, undefined),
@@ -693,7 +698,7 @@ end_per_testcase(token_auth_test, Config) ->
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, changes_stream_handler),
+    test_utils:mock_unload(Workers, space_monitoring_stream_handler),
     end_per_testcase(all, Config);
 
 end_per_testcase(unauthorized_request_should_fail, Config) ->
@@ -718,14 +723,17 @@ domain(Node) ->
 
 
 get_changes_for_file(Config, Worker, SpaceId, Json, FileKey) ->
-    {ok, Changes} = get_changes(Config, Worker, SpaceId, Json),
-
-    lists:filter(fun(#{<<"fileId">> := FileId, <<"filePath">> := FilePath}) ->
-        case FileKey of
-            {path, Path} -> Path == FilePath;
-            {object_id, ObjectId} -> ObjectId == FileId
-        end
-    end, Changes).
+    case get_changes(Config, Worker, SpaceId, Json) of
+        {ok, Changes} ->
+            lists:filter(fun(#{<<"fileId">> := FileId, <<"filePath">> := FilePath}) ->
+                case FileKey of
+                    {path, Path} -> Path == FilePath;
+                    {object_id, ObjectId} -> ObjectId == FileId
+                end
+            end, Changes);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 get_changes(Config, Worker, SpaceId, Json) ->
@@ -765,5 +773,7 @@ get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
             [_EmptyMap | RealChanges] = lists:reverse(Changes),
             {ok, RealChanges};
         {ok, Code, _, Body} ->
-            {Code, json_utils:decode(Body)}
+            {Code, json_utils:decode(Body)};
+        {error, _} = Error ->
+            Error
     end.

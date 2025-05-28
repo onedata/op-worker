@@ -19,6 +19,7 @@
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include("luma_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -36,13 +37,27 @@
     upgrade_from_21_02_2_tmp_dir/1,
     upgrade_from_21_02_3_missing_dirs/1,
     upgrade_from_21_02_5_links_reconciliation_traverses/1,
-    upgrade_from_21_02_9_upgrade_swift_storage/1
+    upgrade_from_21_02_8_upgrade_swift_storage/1,
+    upgrade_from_21_02_8_luma/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
 
 -define(DUMMY_SPACE_ID1, <<"dummy">>).
 -define(DUMMY_SPACE_ID2, <<"bigger_dummy">>).
+
+-define(HELPERS_21_02_8, [
+    ?POSIX_HELPER(?POSIX_ADMIN_CREDENTIALS),
+    ?CEPH_HELPER(?CEPH_ADMIN_CREDENTIALS),
+    ?S3_HELPER(?S3_ADMIN_CREDENTIALS),
+    % swift storages are upgraded differently (see upgrade_from_21_02_8_upgrade_swift_storage)
+%%    ?SWIFT_HELPER(?SWIFT_ADMIN_CREDENTIALS),
+    ?CEPHRADOS_HELPER(?CEPHRADOS_ADMIN_CREDENTIALS),
+    ?GLUSTERFS_HELPER(?GLUSTERFS_ADMIN_CREDENTIALS),
+    ?NULLDEVICE_HELPER(?NULLDEVICE_ADMIN_CREDENTIALS),
+    ?WEBDAV_HELPER(?WEBDAV_BASIC_ADMIN_CREDENTIALS)
+]).
+
 
 %%%===================================================================
 %%% API functions
@@ -54,7 +69,8 @@ all() -> ?ALL([
     upgrade_from_21_02_2_tmp_dir,
     upgrade_from_21_02_3_missing_dirs,
     upgrade_from_21_02_5_links_reconciliation_traverses,
-    upgrade_from_21_02_9_upgrade_swift_storage
+    upgrade_from_21_02_8_upgrade_swift_storage,
+    upgrade_from_21_02_8_luma
 ]).
 
 %%%===================================================================
@@ -432,7 +448,7 @@ upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
         rpc:call(Worker, traverse_task, get, [qos_traverse:pool_name(), ?SPACE1_ID]), 10).
 
 
-upgrade_from_21_02_9_upgrade_swift_storage(Config) ->
+upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     TenantName = <<"some_project">>,
@@ -478,6 +494,52 @@ upgrade_from_21_02_9_upgrade_swift_storage(Config) ->
     ).
 
 
+upgrade_from_21_02_8_luma(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    UserId = <<"user_id">>,
+
+    StoragesAutoLuma = lists:map(fun(Helper) -> setup_luma(Worker, Helper, UserId, ?AUTO_FEED) end, ?HELPERS_21_02_8),
+    StoragesLocalLuma = lists:map(fun(Helper) -> setup_luma(Worker, Helper, UserId, ?LOCAL_FEED) end, ?HELPERS_21_02_8),
+
+    lists:foreach(fun({LumaStorageUser, Storage}) ->
+        ?assertEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [Storage, UserId])),
+        % luma returns cached entry
+        {_, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
+        ?assertEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [ChangedStorage, UserId]))
+    end, StoragesAutoLuma ++ StoragesLocalLuma),
+
+    ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
+
+    % for auto luma cache should be cleared
+    lists:foreach(fun({LumaStorageUser, Storage}) ->
+        {_, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
+        ?assertNotEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [ChangedStorage, UserId]))
+    end, StoragesAutoLuma),
+
+    % for local luma cache should NOT be cleared
+    lists:foreach(fun({LumaStorageUser, Storage}) ->
+        {_, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
+        ?assertEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [ChangedStorage, UserId]))
+    end, StoragesLocalLuma).
+
+%%%===================================================================
+%%% Helper functions
+%%%===================================================================
+
+setup_luma(Worker, Helper, UserId, Feed) ->
+    HelperName = helper:get_name(Helper),
+    StorageDoc = #document{
+        key = <<"storage_id_", (atom_to_binary(Feed))/binary, "_", HelperName/binary>>,
+        value = #storage_config{helper = Helper, luma_config = luma_config:new(Feed)}
+    },
+    rpc:call(Worker, storage_config, create, [StorageDoc#document.key, StorageDoc#document.value]),
+
+    LumaStorageUser = rpc:call(Worker, luma_storage_user, new,
+        [UserId, #{<<"storageCredentials">> => helper:get_admin_ctx(Helper)}, StorageDoc]),
+    ok = rpc:call(Worker, luma_db, store, [StorageDoc, UserId, luma_storage_users, LumaStorageUser, Feed]),
+    {LumaStorageUser, StorageDoc}.
+
+
 %%%===================================================================
 %%% Setup/teardown functions
 %%%===================================================================
@@ -487,7 +549,7 @@ init_per_suite(Config) ->
         NewConfig1 = initializer:setup_storage(NewConfig),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, luma_test_utils]} | Config].
 
 
 init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->
@@ -534,12 +596,40 @@ init_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Co
     
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case = upgrade_from_21_02_9_upgrade_swift_storage, Config) ->
+init_per_testcase(Case = upgrade_from_21_02_8_upgrade_swift_storage, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
     test_utils:mock_expect(Worker, storage_logic, get_name_of_local_storage, fun(StorageId) ->
         {ok, StorageId}
+    end),
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_storages, fun() ->
+        {ok, StorageConfigDocs} = storage_config:list_all(),
+        {ok, [StorageId || #document{key = StorageId} <- StorageConfigDocs]}
+    end),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
+    end),
+
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Worker, storage_logic, [passthrough]),
+    test_utils:mock_expect(Worker, storage_logic, get_name_of_local_storage, fun(StorageId) ->
+        {ok, StorageId}
+    end),
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_storages, fun() ->
+        {ok,
+            [<<"storage_id_auto_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
+                [<<"storage_id_local_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
+        }
+    end),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
     end),
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
