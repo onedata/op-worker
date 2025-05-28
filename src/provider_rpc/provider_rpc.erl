@@ -76,6 +76,8 @@ call(ProviderId, FileGuid, Request) ->
             Error;
         {ok, #status{code = ?EBADMSG}} ->
             ?ERROR_NOT_SUPPORTED;
+        {ok, #status{code = ?EINVAL}} ->
+            ?ERROR_NOT_SUPPORTED;
         {error, _} = Error ->
             Error
     end.

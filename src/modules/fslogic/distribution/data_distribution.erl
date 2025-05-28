@@ -105,14 +105,27 @@ gather_storage_locations(UserCtx, FileCtx0) ->
 -spec gather_dir_distribution(file_ctx:ctx()) -> dir_distribution().
 gather_dir_distribution(FileCtx) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    
-    SizeStatsPerProvider = provider_rpc:gather(
-        FileGuid, build_dir_distribution_provider_requests(FileCtx)),
 
-    DistributionPerProvider = maps:map(fun(_ProviderId, Result) ->
+    RequestsPerProvider = build_dir_distribution_provider_requests(FileCtx),
+    SizeStatsPerProvider = provider_rpc:gather(FileGuid, RequestsPerProvider),
+
+    DistributionPerProvider = maps:map(fun(ProviderId, Result) ->
         case Result of
             {ok, ProviderDistributionResult} ->
                 build_provider_dir_distribution(ProviderDistributionResult);
+            ?ERROR_NOT_SUPPORTED ->
+                % peer provider is in older version, maybe it understands older request
+                % @TODO VFS-12867 remove in next major release after 22.02.*
+                case provider_rpc:call(ProviderId, FileGuid,
+                    (maps:get(ProviderId, RequestsPerProvider))#provider_dir_distribution_get_request.stats_request)
+                of
+                    {ok, CurrentDirStats} ->
+                        build_provider_dir_distribution(#provider_dir_distribution_get_result{
+                            current_dir_size_stats = CurrentDirStats
+                        });
+                    {error, _} = E ->
+                        E
+                end;
             {error, _} = Error ->
                 Error
         end

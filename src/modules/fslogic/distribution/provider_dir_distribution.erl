@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2025 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -20,9 +20,9 @@
 %% API
 -export([get/2]).
 
--type current_dir_size_stats_request() :: #provider_current_dir_size_stats_browse_request{}.
 -type current_dir_size_stats_result() :: #provider_current_dir_size_stats_browse_result{}.
 -type provider_dir_distribution_get_result() :: #provider_dir_distribution_get_result{}.
+-type provider_dir_distribution_get_request() :: #provider_dir_distribution_get_request{}.
 
 -export_type([current_dir_size_stats_result/0, provider_dir_distribution_get_result/0]).
 
@@ -30,8 +30,10 @@
 %%% API
 %%%===================================================================
 
--spec get(file_ctx:ctx(), current_dir_size_stats_request()) -> {ok, data_distribution:provider_reg_distribution()}.
-get(FileCtx, #provider_current_dir_size_stats_browse_request{stat_names = StatNames}) ->
+-spec get(file_ctx:ctx(), provider_dir_distribution_get_request()) -> {ok, data_distribution:provider_reg_distribution()}.
+get(FileCtx, #provider_dir_distribution_get_request{
+    stats_request = #provider_current_dir_size_stats_browse_request{stat_names = StatNames}
+}) ->
     StorageLocation = case file_ctx:get_dir_location_doc_const(FileCtx) of
         undefined -> undefined;
         DirLocationDoc -> dir_location:get_storage_file_id(DirLocationDoc)

@@ -34,6 +34,7 @@
 -type request() ::
     #provider_reg_distribution_get_request{} |
     #provider_dir_distribution_get_request{} |
+    #provider_current_dir_size_stats_browse_request{} | % @TODO VFS-12867 deprecated, remove in next major release after 22.02.*
     #provider_historical_dir_size_stats_browse_request{} |
     #provider_reg_storage_locations_get_request{} |
     #provider_qos_status_get_request{}.
@@ -41,6 +42,7 @@
 -type result() ::
     #provider_reg_distribution_get_result{} |
     #provider_dir_distribution_get_result{} |
+    #provider_current_dir_size_stats_browse_result{} | % @TODO VFS-12867 deprecated, remove in next major release after 22.02.*
     #time_series_layout_get_result{} | #time_series_slice_get_result{} |
     #provider_reg_storage_locations_result{} |
     #provider_qos_status_get_result{}.

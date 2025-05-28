@@ -98,7 +98,7 @@ from_protobuf(#'ProviderDirDistributionGetResult'{
 }) ->
     #provider_dir_distribution_get_result{
         current_dir_size_stats = from_protobuf(DirSizeStats),
-        locations_per_storage = locations_per_storage_from_proto(StorageLocations)
+        locations_per_storage = locations_per_storage_from_protobuf(StorageLocations)
     };
 from_protobuf(#'ProviderCurrentDirSizeStatsBrowseResult'{
     stats_as_json = StatsAsJson
@@ -141,7 +141,7 @@ from_protobuf(#'ProviderRegStorageLocationsResult'{
     locations = Locations
 }) ->
     #provider_reg_storage_locations_result{
-        locations_per_storage = locations_per_storage_from_proto(Locations)
+        locations_per_storage = locations_per_storage_from_protobuf(Locations)
     };
 from_protobuf(#'ProviderQosStatusGetResult'{
     status = Status
@@ -166,9 +166,9 @@ to_protobuf(#provider_rpc_call{
 to_protobuf(#provider_current_dir_size_stats_browse_request{
     stat_names = StatNames
 }) ->
-    #'ProviderCurrentDirSizeStatsBrowseRequest'{
+    {provider_current_dir_size_stats_browse_request, #'ProviderCurrentDirSizeStatsBrowseRequest'{
         stat_names = StatNames
-    };
+    }};
 to_protobuf(#provider_historical_dir_size_stats_browse_request{
     request = Request
 }) ->
@@ -178,8 +178,10 @@ to_protobuf(#provider_historical_dir_size_stats_browse_request{
 to_protobuf(#provider_dir_distribution_get_request{
     stats_request = StatsRequest
 }) ->
+    % @TODO VFS-12867 tuple format kept for compatibility reasons; remove in next major release after 22.02.*
+    {provider_current_dir_size_stats_browse_request, TranslatedStatsRequest} = to_protobuf(StatsRequest),
     {provider_dir_distribution_get_request, #'ProviderDirDistributionGetRequest'{
-        stats_request = to_protobuf(StatsRequest)
+        stats_request = TranslatedStatsRequest
     }};
 to_protobuf(#time_series_layout_get_request{}) ->
     {time_series_layout_get_request, #'TimeSeriesLayoutGetRequest'{}};
@@ -226,16 +228,18 @@ to_protobuf(#provider_dir_distribution_get_result{
     current_dir_size_stats = DirSizeStats,
     locations_per_storage = LocationsPerStorage
 }) ->
+    % @TODO VFS-12867 tuple format kept for compatibility reasons; remove in next major release after 22.02.*
+    {provider_current_dir_size_stats_browse_result, TranslatedDirSizeStats} = to_protobuf(DirSizeStats),
     {provider_dir_distribution_get_result, #'ProviderDirDistributionGetResult'{
-        dir_size_stats = to_protobuf(DirSizeStats),
-        storage_location = locations_per_storage_to_proto(LocationsPerStorage)
+        dir_size_stats = TranslatedDirSizeStats,
+        storage_location = locations_per_storage_to_protobuf(LocationsPerStorage)
     }};
 to_protobuf(#provider_current_dir_size_stats_browse_result{
     stats = Stats
 }) ->
-    #'ProviderCurrentDirSizeStatsBrowseResult'{
+    {provider_current_dir_size_stats_browse_result, #'ProviderCurrentDirSizeStatsBrowseResult'{
         stats_as_json = json_utils:encode(Stats)
-    };
+    }};
 to_protobuf(#time_series_layout_get_result{
     layout = Layout
 }) ->
@@ -265,7 +269,7 @@ to_protobuf(#provider_reg_storage_locations_result{
     locations_per_storage = LocationsPerStorageMap
 }) ->
     {provider_reg_storage_locations_result, #'ProviderRegStorageLocationsResult'{
-        locations = locations_per_storage_to_proto(LocationsPerStorageMap)
+        locations = locations_per_storage_to_protobuf(LocationsPerStorageMap)
     }};
 to_protobuf(#provider_qos_status_get_result{
     status = Status
@@ -284,8 +288,8 @@ to_protobuf(undefined) -> undefined.
 %%%===================================================================
 
 %% @private
--spec locations_per_storage_from_proto(#'StorageLocation'{}) -> data_distribution:locations_per_storage().
-locations_per_storage_from_proto(Locations) ->
+-spec locations_per_storage_from_protobuf(#'StorageLocation'{}) -> data_distribution:locations_per_storage().
+locations_per_storage_from_protobuf(Locations) ->
     maps_utils:generate_from_list(
         fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
             {StorageId, Location}
@@ -293,8 +297,8 @@ locations_per_storage_from_proto(Locations) ->
 
 
 %% @private
--spec locations_per_storage_to_proto(data_distribution:locations_per_storage()) -> #'StorageLocation'{}.
-locations_per_storage_to_proto(LocationsPerStorageMap) ->
+-spec locations_per_storage_to_protobuf(data_distribution:locations_per_storage()) -> #'StorageLocation'{}.
+locations_per_storage_to_protobuf(LocationsPerStorageMap) ->
     maps:fold(fun(StorageId, Location, Acc) ->
         [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
     end, [], LocationsPerStorageMap).

@@ -301,6 +301,10 @@ group_spaces_by_name(SessId, SpaceIds) ->
             ?ERROR_NOT_FOUND ->
                 Acc;
             ?ERR_FORBIDDEN ->
+                Acc;
+            ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) ->
+                Acc;
+            ?ERR_TOKEN_INVALID ->
                 Acc
         end
     end, #{}, SpaceIds).
