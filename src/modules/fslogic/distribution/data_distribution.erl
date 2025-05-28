@@ -205,7 +205,7 @@ gather_reg_storage_locations(FileCtx) ->
 -spec gather_dir_storage_locations(file_ctx:ctx()) -> storage_locations_per_provider().
 gather_dir_storage_locations(FileCtx) ->
     gather_storage_locations(FileCtx,
-        #provider_dir_distribution_get_request{stats_request = []},
+        #provider_dir_distribution_get_request{stats_request = #provider_current_dir_size_stats_browse_request{}},
         fun(#provider_dir_distribution_get_result{locations_per_storage = LocationsPerStorage}) ->
             LocationsPerStorage
         end

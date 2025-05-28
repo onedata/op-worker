@@ -32,18 +32,26 @@
 
 -spec get(file_ctx:ctx(), current_dir_size_stats_request()) -> {ok, data_distribution:provider_reg_distribution()}.
 get(FileCtx, #provider_current_dir_size_stats_browse_request{stat_names = StatNames}) ->
-    DirSizeStats = case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), StatNames) of
-        {ok, Stats} -> #provider_current_dir_size_stats_browse_result{stats = Stats};
-        {error, _} = Error -> throw(Error)
-    end,
     StorageLocation = case file_ctx:get_dir_location_doc_const(FileCtx) of
         undefined -> undefined;
         DirLocationDoc -> dir_location:get_storage_file_id(DirLocationDoc)
     end,
     {StorageId, _} = file_ctx:get_storage_id(FileCtx),
     {ok, #provider_dir_distribution_get_result{
-        current_dir_size_stats = DirSizeStats,
+        current_dir_size_stats = get_stats(FileCtx, StatNames),
         locations_per_storage = #{StorageId => StorageLocation}
     }}.
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec get_stats(file_ctx:ctx(), [dir_stats_collection:stat_name()]) -> current_dir_size_stats_result().
+get_stats(_FileCtx, []) ->
+    #provider_current_dir_size_stats_browse_result{stats = #{}};
+get_stats(FileCtx, StatNames) ->
+    case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), StatNames) of
+        {ok, Stats} -> #provider_current_dir_size_stats_browse_result{stats = Stats};
+        {error, _} = Error -> throw(Error)
+    end.
