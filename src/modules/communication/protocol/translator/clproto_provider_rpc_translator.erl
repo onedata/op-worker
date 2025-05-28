@@ -94,11 +94,16 @@ from_protobuf(#'ProviderRpcResponse'{
 };
 from_protobuf(#'ProviderDirDistributionGetResult'{
     dir_size_stats = DirSizeStats,
-    storage_location = StorageLocations
+    storage_location = StorageLocations,
+    storage_locations_error = Error
 }) ->
+    LocationsPerStorage = case Error of
+        undefined -> locations_per_storage_from_protobuf(StorageLocations);
+        _ -> errors:from_json(json_utils:decode(Error))
+    end,
     #provider_dir_distribution_get_result{
         current_dir_size_stats = from_protobuf(DirSizeStats),
-        locations_per_storage = locations_per_storage_from_protobuf(StorageLocations)
+        locations_per_storage = LocationsPerStorage
     };
 from_protobuf(#'ProviderCurrentDirSizeStatsBrowseResult'{
     stats_as_json = StatsAsJson
@@ -230,9 +235,15 @@ to_protobuf(#provider_dir_distribution_get_result{
 }) ->
     % @TODO VFS-12867 tuple format kept for compatibility reasons; remove in next major release after 22.02.*
     {provider_current_dir_size_stats_browse_result, TranslatedDirSizeStats} = to_protobuf(DirSizeStats),
+
+    {FinalLocationsPerStorage, Error} = case LocationsPerStorage of
+        {error, _} = E -> {[], json_utils:encode(errors:to_json(E))};
+        _ -> {locations_per_storage_to_protobuf(LocationsPerStorage), undefined}
+    end,
     {provider_dir_distribution_get_result, #'ProviderDirDistributionGetResult'{
         dir_size_stats = TranslatedDirSizeStats,
-        storage_location = locations_per_storage_to_protobuf(LocationsPerStorage)
+        storage_location = FinalLocationsPerStorage,
+        storage_locations_error = Error
     }};
 to_protobuf(#provider_current_dir_size_stats_browse_result{
     stats = Stats

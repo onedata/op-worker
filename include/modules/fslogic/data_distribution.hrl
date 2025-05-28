@@ -25,7 +25,7 @@
 % NOTE: translated to protobuf
 -record(provider_dir_distribution_get_result, {
     current_dir_size_stats :: provider_dir_distribution:current_dir_size_stats_result(),
-    locations_per_storage = #{} :: data_distribution:locations_per_storage()
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | errors:error()
 }).
 
 -record(dir_distribution_gather_result, {

@@ -62,6 +62,10 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                 physical_size_per_storage = PhysicalDirSizePerStorage,
                 locations_per_storage = LocationsPerStorage
             }) ->
+                TranslatedLocationsPerStorage = case translate_locations_per_storage(LocationsPerStorage) of
+                    #{<<"locationsPerStorage">> := LPS} -> LPS;
+                    ErrorMap -> ErrorMap
+                end,
                 #{
                     <<"success">> => true,
                     <<"virtualSize">> => utils:undefined_to_null(VirtualSize),
@@ -70,7 +74,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                         <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
                     }
                     end, PhysicalDirSizePerStorage),
-                    <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
+                    <<"locationsPerStorage">> => TranslatedLocationsPerStorage
                 }
         end, DistributionPerProvider)
     };
@@ -159,7 +163,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                     <<"success">> => true,
                     <<"virtualSize">> => VirtualSize,
                     <<"distributionPerStorage">> => DistributionPerStorage,
-                    <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
+                    <<"locationsPerStorage">> => LocationsPerStorage
                 }
             end, FileBlocksPerProvider)
     }.
@@ -169,18 +173,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
 storage_locations_to_json(StorageLocations) ->
     #{
         <<"locationsPerProvider">> => maps:map(fun(_ProviderId, LocationsPerStorage) ->
-            case LocationsPerStorage of
-                {error, _} = Error ->
-                    #{
-                        <<"success">> => false,
-                        <<"error">> => errors:to_json(Error)
-                    };
-                _ ->
-                    #{
-                        <<"success">> => true,
-                        <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
-                    }
-            end
+            translate_locations_per_storage(LocationsPerStorage)
         end, StorageLocations)
     }.
 
@@ -311,3 +304,18 @@ merge_chunks({BarNum, Fill}, [{_, Fill} | Tail]) ->
     [{BarNum, Fill} | Tail];
 merge_chunks({BarNum, Fill}, Result) ->
     [{BarNum, Fill} | Result].
+
+
+%% @private
+-spec translate_locations_per_storage(data_distribution:locations_per_storage() | errors:error()) ->
+    json_utils:json_map().
+translate_locations_per_storage({error, _} = Error) ->
+    #{
+        <<"success">> => false,
+        <<"error">> => errors:to_json(Error)
+    };
+translate_locations_per_storage(LocationsPerStorage) ->
+    #{
+        <<"success">> => true,
+        <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
+    }.

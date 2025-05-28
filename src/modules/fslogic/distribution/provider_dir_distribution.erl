@@ -15,7 +15,9 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/data_distribution.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get/2]).
@@ -34,14 +36,22 @@
 get(FileCtx, #provider_dir_distribution_get_request{
     stats_request = #provider_current_dir_size_stats_browse_request{stat_names = StatNames}
 }) ->
+    {Storage, _} = file_ctx:get_storage(FileCtx),
+    StorageId = storage:get_id(Storage),
     StorageLocation = case file_ctx:get_dir_location_doc_const(FileCtx) of
-        undefined -> undefined;
-        DirLocationDoc -> dir_location:get_storage_file_id(DirLocationDoc)
+        undefined ->
+            case storage:is_posix_compatible(Storage) of
+                true ->
+                    #{StorageId => undefined};
+                false ->
+                    ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, ?POSIX_COMPATIBLE_HELPERS)
+            end;
+        DirLocationDoc ->
+            #{StorageId => dir_location:get_storage_file_id(DirLocationDoc)}
     end,
-    {StorageId, _} = file_ctx:get_storage_id(FileCtx),
     {ok, #provider_dir_distribution_get_result{
         current_dir_size_stats = get_stats(FileCtx, StatNames),
-        locations_per_storage = #{StorageId => StorageLocation}
+        locations_per_storage = StorageLocation
     }}.
 
 
