@@ -56,7 +56,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
             (ProviderId, {error, _} = Error) ->
                 build_error_response(Error, Guid, ProviderId);
 
-            (_ProviderId, #provider_dir_distribution_get_result{
+            (_ProviderId, #provider_dir_distribution{
                 virtual_size = VirtualSize,
                 logical_size = LogicalSize,
                 physical_size_per_storage = PhysicalDirSizePerStorage,
@@ -75,7 +75,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
         end, DistributionPerProvider)
     };
 
-gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
+gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlink_distribution_gather_result{
     storages_per_provider = StoragesPerProvider
 }}, _Guid) ->
     #{

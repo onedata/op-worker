@@ -12,19 +12,21 @@
 -ifndef(DATA_DISTRIBUTION_HRL).
 -define(DATA_DISTRIBUTION_HRL, 1).
 
+%% Dir distribution
 
--record(provider_dir_distribution_get_result, {
+-record(provider_dir_distribution, {
     logical_size :: file_meta:size(),
     virtual_size :: file_meta:size(),
     physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()},
     locations_per_storage = #{} :: data_distribution:locations_per_storage()
 }).
 
--record(provider_dir_distribution_get_result2, {
+
+% NOTE: translated to protobuf
+-record(provider_dir_distribution_get_result, {
     current_dir_size_stats :: provider_dir_distribution:current_dir_size_stats_result(),
     locations_per_storage = #{} :: data_distribution:locations_per_storage()
 }).
-
 
 -record(dir_distribution_gather_result, {
     distribution_per_provider = #{} :: #{
@@ -32,6 +34,7 @@
     }
 }).
 
+%% Reg distribution
 
 % NOTE: translated to protobuf
 -record(provider_reg_distribution_get_result, {
@@ -47,10 +50,15 @@
 }).
 
 
--record(symlink_distribution_get_result, {
+%% Symlink distribution
+
+-record(symlink_distribution_gather_result, {
     virtual_size = 0 :: 0, % symlink has always 0 virtual size
     storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
 }).
+
+
+%% Common
 
 -record(data_distribution_gather_result, {
     distribution ::

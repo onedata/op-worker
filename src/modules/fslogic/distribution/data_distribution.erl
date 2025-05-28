@@ -27,13 +27,13 @@
 % `undefined` physical size means that file was not yet created on this storage.
 -type dir_physical_size() :: undefined | non_neg_integer().
 
--type provider_dir_distribution() :: #provider_dir_distribution_get_result{}.
+-type provider_dir_distribution() :: #provider_dir_distribution{}.
 -type dir_distribution() :: #dir_distribution_gather_result{}.
 
 -type provider_reg_distribution() :: #provider_reg_distribution_get_result{}.
 -type reg_distribution() :: #reg_distribution_gather_result{}.
 
--type symlink_distribution() :: #symlink_distribution_get_result{}.
+-type symlink_distribution() :: #symlink_distribution_gather_result{}.
 
 -type get_request() :: #data_distribution_gather_request{}.
 -type get_result() :: #data_distribution_gather_result{}.
@@ -90,7 +90,7 @@ gather_storage_locations(UserCtx, FileCtx0) ->
     {FileType, FileCtx3} = file_ctx:get_type(FileCtx2),
     
     case FileType of
-        ?DIRECTORY_TYPE -> ?ERROR_NOT_SUPPORTED;
+        ?DIRECTORY_TYPE -> {ok, gather_dir_storage_locations(FileCtx3)};
         ?SYMLINK_TYPE -> ?ERROR_NOT_SUPPORTED;
         _ -> {ok, gather_reg_storage_locations(FileCtx3)}
     end.
@@ -140,13 +140,13 @@ build_dir_distribution_provider_requests(FileCtx) ->
 
 
 %% @private
--spec build_provider_dir_distribution(#provider_dir_distribution_get_result2{}) ->
+-spec build_provider_dir_distribution(#provider_dir_distribution_get_result{}) ->
     provider_dir_distribution().
-build_provider_dir_distribution(#provider_dir_distribution_get_result2{
+build_provider_dir_distribution(#provider_dir_distribution_get_result{
     current_dir_size_stats = #provider_current_dir_size_stats_browse_result{stats = ProviderDirStats},
     locations_per_storage = LocationsPerStorage
 }) ->
-    #provider_dir_distribution_get_result{
+    #provider_dir_distribution{
         virtual_size = maps:get(?VIRTUAL_SIZE, ProviderDirStats),
         logical_size = maps:get(?LOGICAL_SIZE, ProviderDirStats),
         physical_size_per_storage = maps:fold(fun
@@ -163,7 +163,7 @@ build_provider_dir_distribution(#provider_dir_distribution_get_result2{
 -spec build_symlink_distribution(file_ctx:ctx()) -> symlink_distribution().
 build_symlink_distribution(FileCtx) ->
     {ok, StoragesByProvider} = space_logic:get_storages_by_provider(file_ctx:get_space_id_const(FileCtx)),
-    #symlink_distribution_get_result{
+    #symlink_distribution_gather_result{
         storages_per_provider = maps:map(fun(_ProviderId, ProviderStorages) ->
             maps:keys(ProviderStorages)
         end, StoragesByProvider)
@@ -193,13 +193,38 @@ gather_reg_distribution(FileCtx) ->
 %% @private
 -spec gather_reg_storage_locations(file_ctx:ctx()) -> storage_locations_per_provider().
 gather_reg_storage_locations(FileCtx) ->
+    gather_storage_locations(FileCtx,
+        #provider_reg_storage_locations_get_request{},
+        fun(#provider_reg_storage_locations_result{locations_per_storage = LocationsPerStorage}) ->
+            LocationsPerStorage
+        end
+    ).
+
+
+%% @private
+-spec gather_dir_storage_locations(file_ctx:ctx()) -> storage_locations_per_provider().
+gather_dir_storage_locations(FileCtx) ->
+    gather_storage_locations(FileCtx,
+        #provider_dir_distribution_get_request{stats_request = []},
+        fun(#provider_dir_distribution_get_result{locations_per_storage = LocationsPerStorage}) ->
+            LocationsPerStorage
+        end
+    ).
+
+
+%% @private
+-spec gather_storage_locations(file_ctx:ctx(),
+    #provider_reg_storage_locations_get_request{} | #provider_dir_distribution_get_request{},
+    fun((any()) -> locations_per_storage())
+) -> storage_locations_per_provider().
+gather_storage_locations(FileCtx, Req, LocationsPerStorageFun) ->
     GatheredStorageLocations = provider_rpc:gather_from_cosupporting_providers(
         file_ctx:get_logical_guid_const(FileCtx),
-        #provider_reg_storage_locations_get_request{}
+        Req
     ),
     maps:map(
-        fun (_ProviderId, {ok, #provider_reg_storage_locations_result{locations_per_storage = LocationsPerStorage}}) ->
-                LocationsPerStorage;
+        fun (_ProviderId, {ok, OkResult}) ->
+                LocationsPerStorageFun(OkResult);
             (_ProviderId, {error, _} = Error) ->
                 Error
-    end, GatheredStorageLocations).
+        end, GatheredStorageLocations).

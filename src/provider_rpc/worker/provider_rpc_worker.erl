@@ -40,7 +40,7 @@
 
 -type result() ::
     #provider_reg_distribution_get_result{} |
-    #provider_dir_distribution_get_result2{} |
+    #provider_dir_distribution_get_result{} |
     #time_series_layout_get_result{} | #time_series_slice_get_result{} |
     #provider_reg_storage_locations_result{} |
     #provider_qos_status_get_result{}.

@@ -972,12 +972,12 @@ get_dir_distribution_2_test(Config) ->
 
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 0,
                 logical_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
-            P2Id => #provider_dir_distribution_get_result{
+            P2Id => #provider_dir_distribution{
                 virtual_size = 0,
                 logical_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0}
@@ -992,12 +992,12 @@ get_dir_distribution_2_test(Config) ->
 
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
-            P2Id => #provider_dir_distribution_get_result{
+            P2Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
                 physical_size_per_storage = #{P2StorageId => 20}
@@ -1031,7 +1031,7 @@ get_dir_distribution_3_test(Config) ->
 
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 0,
                 logical_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
@@ -1050,7 +1050,7 @@ get_dir_distribution_3_test(Config) ->
 
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
@@ -1075,7 +1075,7 @@ get_symlink_distribution_test(Config) ->
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
     
-    ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
+    ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_gather_result{
         virtual_size = 0,
         storages_per_provider = #{
             P1Id => [P1StorageId],

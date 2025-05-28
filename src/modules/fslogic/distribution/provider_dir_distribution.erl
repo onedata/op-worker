@@ -22,7 +22,7 @@
 
 -type current_dir_size_stats_request() :: #provider_current_dir_size_stats_browse_request{}.
 -type current_dir_size_stats_result() :: #provider_current_dir_size_stats_browse_result{}.
--type provider_dir_distribution_get_result() :: #provider_dir_distribution_get_result2{}.
+-type provider_dir_distribution_get_result() :: #provider_dir_distribution_get_result{}.
 
 -export_type([current_dir_size_stats_result/0, provider_dir_distribution_get_result/0]).
 
@@ -41,7 +41,7 @@ get(FileCtx, #provider_current_dir_size_stats_browse_request{stat_names = StatNa
         DirLocationDoc -> dir_location:get_storage_file_id(DirLocationDoc)
     end,
     {StorageId, _} = file_ctx:get_storage_id(FileCtx),
-    {ok, #provider_dir_distribution_get_result2{
+    {ok, #provider_dir_distribution_get_result{
         current_dir_size_stats = DirSizeStats,
         locations_per_storage = #{StorageId => StorageLocation}
     }}.

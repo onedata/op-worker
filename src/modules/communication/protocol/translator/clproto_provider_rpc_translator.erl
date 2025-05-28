@@ -96,7 +96,7 @@ from_protobuf(#'ProviderDirDistributionGetResult'{
     dir_size_stats = DirSizeStats,
     storage_location = StorageLocations
 }) ->
-    #provider_dir_distribution_get_result2{
+    #provider_dir_distribution_get_result{
         current_dir_size_stats = from_protobuf(DirSizeStats),
         locations_per_storage = locations_per_storage_from_proto(StorageLocations)
     };
@@ -222,7 +222,7 @@ to_protobuf(#provider_rpc_response{
         status = error,
         result = {error_json, json_utils:encode(errors:to_json(Error))}
     }};
-to_protobuf(#provider_dir_distribution_get_result2{
+to_protobuf(#provider_dir_distribution_get_result{
     current_dir_size_stats = DirSizeStats,
     locations_per_storage = LocationsPerStorage
 }) ->
