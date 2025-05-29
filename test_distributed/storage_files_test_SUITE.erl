@@ -1055,17 +1055,17 @@ space_directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ExpectedDisplayOwner = maps:get(expected_display_owner, TestArgs),
     ExpectedDisplayUid = maps:get(uid, ExpectedDisplayOwner),
     ExpectedDisplayGid = maps:get(gid, ExpectedDisplayOwner),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
 
     % when
-    {ok, _} = lfm_proxy:create_and_open(Worker, SessId, SpaceGuid, FileName, ?DEFAULT_FILE_PERMS),
+    {ok, _} = lfm_proxy:create_and_open(Worker, SessId, SpaceDirGuid, FileName, ?DEFAULT_FILE_PERMS),
 
     % then
     ?assertMatch({ok, #file_attr{
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = ?DEFAULT_DIR_MODE
-    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid))),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceDirGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         SpacePath = storage_test_utils:space_path(Worker, SpaceId),
@@ -1084,7 +1084,7 @@ regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     FilePerms = maps:get(file_perms, TestArgs),
 
     % when
-    {ok, {FileGuid, _}} = lfm_proxy:create_and_open(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, FilePerms),
+    {ok, {FileGuid, _}} = lfm_proxy:create_and_open(Worker, SessId, ?SPACE_DIR_GUID(SpaceId), FileName, FilePerms),
 
     % then
     ?assertMatch({ok, #file_attr{
@@ -1110,7 +1110,7 @@ regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     FilePerms = maps:get(file_perms, TestArgs),
 
     % when
-    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, FilePerms),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, ?SPACE_DIR_GUID(SpaceId), FileName, FilePerms),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
 
     % pretend that files belongs to an unknown user (not yet logged to Onezone)
@@ -1151,7 +1151,7 @@ directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     DirPerms = maps:get(dir_perms, TestArgs),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_GUID(SpaceId), DirName, DirPerms),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_DIR_GUID(SpaceId), DirName, DirPerms),
 
     % directory is created on storage when its child is created on storage
     {ok, _} = lfm_proxy:create_and_open(Worker, SessId, DirGuid, FileName, ?DEFAULT_FILE_PERMS),
@@ -1181,7 +1181,7 @@ directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     DirPerms = maps:get(dir_perms, TestArgs),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_GUID(SpaceId), DirName, DirPerms),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_DIR_GUID(SpaceId), DirName, DirPerms),
     {DirUuid, _} = file_id:unpack_guid(DirGuid),
 
     % pretend that files belongs to an unknown user (not yet logged to Onezone)
@@ -1225,7 +1225,7 @@ rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->
     ExpectedDisplayGid = maps:get(gid, ExpectedDisplayOwner),
 
     % when
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_GUID(SpaceId), DirName, DirPerms),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_DIR_GUID(SpaceId), DirName, DirPerms),
     {ok, {FileGuid, Handle}} = lfm_proxy:create_and_open(Worker, SessId, DirGuid, FileName, FilePerms),
     ok = lfm_proxy:close(Worker, Handle),
 
@@ -1262,7 +1262,7 @@ mapping_not_found_test_base(TestName, Config, SpaceId, TestArgs) ->
     FileName = ?FILE_NAME(TestName),
 
     % when
-    ?assertMatch({error, ?EACCES}, lfm_proxy:create_and_open(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, ?DEFAULT_FILE_PERMS)).
+    ?assertMatch({error, ?EACCES}, lfm_proxy:create_and_open(Worker, SessId, ?SPACE_DIR_GUID(SpaceId), FileName, ?DEFAULT_FILE_PERMS)).
 
 
 remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -1275,7 +1275,7 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, 
     UpdatedPerms = 8#777,
 
     % when
-    {ok, {FileGuid, Handle0}} = lfm_proxy:create_and_open(Worker2, SessId2, ?SPACE_GUID(SpaceId), FileName, InitialPerms),
+    {ok, {FileGuid, Handle0}} = lfm_proxy:create_and_open(Worker2, SessId2, ?SPACE_DIR_GUID(SpaceId), FileName, InitialPerms),
     ok = lfm_proxy:close(Worker2, Handle0),
 
     % then
@@ -1373,8 +1373,8 @@ clean_posix_storage_mountpoints(Worker, SpacesAndSupportingPosixStorageIds) ->
     end, SpacesAndSupportingPosixStorageIds).
 
 clean_posix_storage_mountpoint(Worker, SpaceId, StorageId) ->
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    ok = rpc:call(Worker, dir_location, delete, [SpaceUuid]),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    ok = rpc:call(Worker, dir_location, delete, [SpaceDirUuid]),
     SDHandle = sd_test_utils:new_handle(Worker, SpaceId, <<"/">>, StorageId),
     sd_test_utils:recursive_rm(Worker, SDHandle, true),
     ?assertMatch({ok, []}, sd_test_utils:ls(Worker, SDHandle, 0, 1)).

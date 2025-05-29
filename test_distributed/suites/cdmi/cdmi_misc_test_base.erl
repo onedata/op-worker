@@ -371,7 +371,7 @@ delete_dir_test(Config) ->
         ),
         {Code3, json_utils:decode(Response3)}
     end,
-    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?EPERM)),
+    ExpRestError = rest_test_utils:get_rest_error(?ERR_POSIX(?ENOTSUP)),
     ?assertMatch(ExpRestError, GetResponseFun(), ?ATTEMPTS),
     ?assert(cdmi_test_utils:object_exists("/", Config)).
 

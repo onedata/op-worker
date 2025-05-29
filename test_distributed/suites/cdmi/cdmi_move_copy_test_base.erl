@@ -360,7 +360,7 @@ build_random_src_uri(Path, Guid) ->
         3 ->
             [_SpaceName, RootDir, PathTokens] = filepath_utils:split(PathBin),
             {ok, SpaceObjectId} = file_id:guid_to_objectid(
-                fslogic_file_id:spaceid_to_space_dir_guid(file_id:guid_to_space_id(Guid))
+                space_dir:guid(file_id:guid_to_space_id(Guid))
             ),
 
             PathBin2 = filepath_utils:join([SpaceObjectId, RootDir, PathTokens]),

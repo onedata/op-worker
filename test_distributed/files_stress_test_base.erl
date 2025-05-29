@@ -70,7 +70,7 @@ single_dir_creation_test_base(Config, CreateDeleteLoop) ->
                     D = <<"/", SpaceName/binary>>,
                     put(main_dir, D),
                     put(dirs_created, 0),
-                    {D, {ok, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)}, 0}
+                    {D, {ok, space_dir:guid(SpaceId)}, 0}
             end;
         _ ->
             {get(main_dir), {ok, ok}, RepeatNum}

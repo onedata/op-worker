@@ -50,9 +50,9 @@ schedule_workflow_execution(
     LogLevel,
     CallbackUrl
 ) ->
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_schedule_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_schedule_request{
         atm_workflow_schema_id = AtmWorkflowSchemaId,
         atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
         store_initial_content_overlay = AtmStoreInitialContentOverlay,
@@ -64,9 +64,9 @@ schedule_workflow_execution(
 -spec init_cancel_workflow_execution(session:id(), atm_workflow_execution:id()) ->
     ok | no_return().
 init_cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
-    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+    SpaceDirGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_init_cancel_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_init_cancel_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -74,9 +74,9 @@ init_cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
 -spec init_pause_workflow_execution(session:id(), atm_workflow_execution:id()) ->
     ok | no_return().
 init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
-    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+    SpaceDirGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_init_pause_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_init_pause_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -84,9 +84,9 @@ init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
 -spec resume_workflow_execution(session:id(), atm_workflow_execution:id()) ->
     ok | no_return().
 resume_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
-    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+    SpaceDirGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_resume_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_resume_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -94,9 +94,9 @@ resume_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
 -spec force_continue_workflow_execution(session:id(), atm_workflow_execution:id()) ->
     ok | no_return().
 force_continue_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
-    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+    SpaceDirGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_force_continue_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_force_continue_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -109,9 +109,9 @@ force_continue_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
 ) ->
     ok | errors:error().
 repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector) ->
-    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+    SpaceDirGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_repeat_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_repeat_request{
         type = RepeatType,
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         atm_lane_run_selector = AtmLaneRunSelector
@@ -129,9 +129,9 @@ repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLane
 -spec discard_workflow_execution(session:id(), od_space:id(), atm_workflow_execution:id()) ->
     ok | errors:error().
 discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId) ->
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_discard_request{
+    middleware_worker:check_exec(SessionId, SpaceDirGuid, #atm_workflow_execution_discard_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -148,4 +148,4 @@ atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId) ->
     #atm_workflow_execution{space_id = SpaceId} = ?check(atm_workflow_execution_api:get(
         AtmWorkflowExecutionId
     )),
-    fslogic_file_id:spaceid_to_space_dir_guid(SpaceId).
+    space_dir:guid(SpaceId).

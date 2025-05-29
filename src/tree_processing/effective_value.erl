@@ -199,7 +199,7 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
                 false -> false
             end,
             {ok, Parent} = file_meta:get_parent_uuid(FileDoc),
-            case {CalculationRootParent =:= Parent, fslogic_file_id:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
+            case {CalculationRootParent =:= Parent, special_dirs:is_filesystem_root_dir(Key), ShouldProcessMultipleRefs} of
                 {false, false, false} ->
                     calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options, ShouldCache);
                 {false, false, true} ->

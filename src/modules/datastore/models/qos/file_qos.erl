@@ -419,8 +419,11 @@ get_effective(FileUuid, Options) when is_binary(FileUuid) ->
         {ok, FileDoc} -> get_effective(FileDoc, Options);
         ?ERROR_NOT_FOUND -> {error, ?MISSING_FILE_META(FileUuid)}
     end;
-get_effective(#document{} = FileDoc, Options) ->
-    get_effective(FileDoc, undefined, Options).
+get_effective(#document{key = FileUuid} = FileDoc, Options) ->
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
+        true -> undefined; % effective cache is not set up for filesystem roots
+        false -> get_effective(FileDoc, undefined, Options)
+    end.
 
 
 %% @private
@@ -431,7 +434,7 @@ get_effective(#document{} = FileDoc, OriginalParentDoc, Options) ->
         ([_, {error, _} = Error, _CalculationInfo]) ->
             Error;
         ([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
-            case fslogic_file_id:is_trash_dir_uuid(Uuid) of
+            case trash_dir:is_special(uuid, Uuid) of
                 true ->
                     % qos cannot be set on trash directory
                     {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
