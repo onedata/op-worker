@@ -299,7 +299,7 @@ to_protobuf(undefined) -> undefined.
 %%%===================================================================
 
 %% @private
--spec locations_per_storage_from_protobuf(#'StorageLocation'{}) -> data_distribution:locations_per_storage().
+-spec locations_per_storage_from_protobuf([#'StorageLocation'{}]) -> data_distribution:locations_per_storage().
 locations_per_storage_from_protobuf(Locations) ->
     maps_utils:generate_from_list(
         fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
@@ -308,7 +308,7 @@ locations_per_storage_from_protobuf(Locations) ->
 
 
 %% @private
--spec locations_per_storage_to_protobuf(data_distribution:locations_per_storage()) -> #'StorageLocation'{}.
+-spec locations_per_storage_to_protobuf(data_distribution:locations_per_storage()) -> [#'StorageLocation'{}].
 locations_per_storage_to_protobuf(LocationsPerStorageMap) ->
     maps:fold(fun(StorageId, Location, Acc) ->
         [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]

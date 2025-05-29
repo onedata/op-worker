@@ -32,7 +32,7 @@
 %%% API
 %%%===================================================================
 
--spec get(file_ctx:ctx(), provider_dir_distribution_get_request()) -> {ok, data_distribution:provider_reg_distribution()}.
+-spec get(file_ctx:ctx(), provider_dir_distribution_get_request()) -> {ok, provider_dir_distribution_get_result()}.
 get(FileCtx, #provider_dir_distribution_get_request{
     stats_request = #provider_current_dir_size_stats_browse_request{stat_names = StatNames}
 }) ->
@@ -44,7 +44,7 @@ get(FileCtx, #provider_dir_distribution_get_request{
                 true ->
                     #{StorageId => undefined};
                 false ->
-                    ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                    ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), StorageId, ?POSIX_COMPATIBLE_HELPERS)
             end;
         DirLocationDoc ->
             #{StorageId => dir_location:get_storage_file_id(DirLocationDoc)}
