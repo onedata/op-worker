@@ -1000,7 +1000,7 @@ get_dir_distribution_2_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(P2Node, UserSessIdP2, DirGuid, ?RAND_STR(), 8#707),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    FileStoragePath = get_file_storage_location(posix, DirGuid, P2Node, UserSessIdP2), % fixme test s3
+    FileStoragePath = get_file_storage_location(posix, DirGuid, P2Node, UserSessIdP2),
 
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
@@ -1064,7 +1064,7 @@ get_dir_distribution_3_test(Config) ->
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    FileStoragePath = get_file_storage_location(posix, DirGuid, P1Node, UserSessIdP1), % fixme test s3
+    FileStoragePath = get_file_storage_location(posix, DirGuid, P1Node, UserSessIdP1),
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
