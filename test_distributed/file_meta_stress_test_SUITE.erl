@@ -108,19 +108,15 @@ many_files_creation_test_base(Config) ->
 
     SpaceNameString = "Space" ++ AnswerDesc,
     ct:print("Space name: ~tp", [SpaceNameString]),
-    SpaceName = list_to_binary(SpaceNameString),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    {ok, #document{key = SpaceUuid}} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, create, [{uuid, RootUuid},
-            #document{
-                key = fslogic_file_id:spaceid_to_space_dir_uuid(list_to_binary(SpaceNameString)),
-                value = #file_meta{name = SpaceName, is_scope = true}
-            }
+    {ok, #document{key = SpaceDirUuid}} = ?assertMatch({ok, _}, rpc:call(Worker2, space_dir, ensure_exists, [
+        space_dir:uuid(list_to_binary(SpaceNameString))
     ])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
             Stopwatch = stopwatch:start(),
-            Ans = file_meta:create({uuid, SpaceUuid}, #document{
+            Ans = file_meta:create({uuid, SpaceDirUuid}, #document{
                 value = #file_meta{
                     name = list_to_binary(DocsSet ++ integer_to_list(I))
                 }

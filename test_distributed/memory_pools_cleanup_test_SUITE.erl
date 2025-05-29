@@ -141,9 +141,9 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
     User = <<"user1">>,
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
-    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceGuid,
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceDirGuid,
         generator:gen_name(), ?DEFAULT_FILE_PERMS)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
@@ -151,7 +151,7 @@ memory_pools_cleared_after_disconnection_test_base(Config, Args, Close) ->
 
     {Before, _SizesBefore} = pool_utils:get_pools_entries_and_sizes(Worker1, memory),
 
-    client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceGuid, Close),
+    client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceDirGuid, Close),
     timer:sleep(timer:seconds(30)),
 
     [Worker1 | _] = ?config(op_worker_nodes, Config),

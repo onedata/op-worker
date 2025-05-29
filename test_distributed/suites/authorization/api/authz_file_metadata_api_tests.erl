@@ -59,15 +59,16 @@ test_get_custom_metadata(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = true,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_metadata:get_custom_metadata(Node, SessionId, FileKey, json, [], false)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir, archive_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -84,15 +85,15 @@ test_set_custom_metadata(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_metadata:set_custom_metadata(Node, SessionId, FileKey, json, <<"VAL">>, [])
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -116,14 +117,14 @@ test_remove_custom_metadata(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_metadata:remove_custom_metadata(Node, SessionId, FileKey, json)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -145,14 +146,15 @@ test_get_xattr(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = true,
         available_in_public_data_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:get_xattr(Node, SessionId, FileKey, <<"myxattr">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir],
+        expected_result_for_supporting_special_dirs = {error, ?ENODATA}
     }).
 
 
@@ -171,14 +173,14 @@ test_list_xattr(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = true,
         available_in_public_data_mode = true,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:list_xattr(Node, SessionId, FileKey, false, false)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir, user_root_dir]
     }).
 
 
@@ -195,14 +197,14 @@ test_set_xattr(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:set_xattr(Node, SessionId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -225,13 +227,13 @@ test_remove_xattr(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:remove_xattr(Node, SessionId, FileKey, <<"myxattr">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -248,15 +250,15 @@ test_get_file_distribution(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_metadata:get_distribution_deprecated(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -279,11 +281,9 @@ test_get_historical_dir_size_stats(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/dir1">>, ExtraData),
             ProviderId = opw_test_rpc:get_provider_id(Node),
-
             opt_file_metadata:get_historical_dir_size_stats(
                 Node, SessionId, FileKey, ProviderId, #time_series_layout_get_request{}
             )
@@ -291,7 +291,8 @@ test_get_historical_dir_size_stats(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir, space_archives_dir, dataset_archives_dir, archive_dir, tmp_dir, trash_dir]
     }).
 
 
@@ -308,13 +309,14 @@ test_get_file_storage_locations(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_metadata:get_storage_locations(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERROR_NOT_SUPPORTED % this operation is supported only for regular files
     }).

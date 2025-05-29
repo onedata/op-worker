@@ -39,12 +39,12 @@
 %%% API
 %%%===================================================================
 
-simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
+simulate_client(_Config, Args, Sock, SpaceDirGuid, Close) ->
     AllArgs = [write, read, release, unsub, directory],
     [Write, Read, Release, Unsub, Directory] = lists:map(fun(A) -> lists:member(A, Args) end, AllArgs),
 
     Filename = generator:gen_name(),
-    {ParentGuid, DirSubs} = maybe_create_directory(Sock, SpaceGuid, Directory),
+    {ParentGuid, DirSubs} = maybe_create_directory(Sock, SpaceDirGuid, Directory),
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, ParentGuid, Filename),
     Subs = create_new_file_subscriptions(Sock, FileGuid, 0),
@@ -64,9 +64,9 @@ simulate_client(_Config, Args, Sock, SpaceGuid, Close) ->
         _ -> ok
     end.
 
-prepare_file(Sock, SpaceGuid) ->
+prepare_file(Sock, SpaceDirGuid) ->
     Filename = generator:gen_name(),
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, SpaceGuid, Filename),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, SpaceDirGuid, Filename),
         create_new_file_subscriptions(Sock, FileGuid, 0),
     fuse_test_utils:fsync(Sock, FileGuid, HandleId, false),
 
@@ -130,14 +130,14 @@ reset_sequence_counter() ->
 %%% Internal functions
 %%%===================================================================
 
-maybe_create_directory(Sock, SpaceGuid, Directory) ->
+maybe_create_directory(Sock, SpaceDirGuid, Directory) ->
     case Directory of
         true ->
             Dirname = generator:gen_name(),
-            DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+            DirId = fuse_test_utils:create_directory(Sock, SpaceDirGuid, Dirname),
             {DirId, create_new_file_subscriptions(Sock, DirId, 0)};
         false ->
-            {SpaceGuid, []}
+            {SpaceDirGuid, []}
     end.
 
 maybe_write(Sock, FileGuid, HandleId, Write) ->

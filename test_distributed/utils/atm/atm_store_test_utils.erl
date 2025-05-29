@@ -505,32 +505,32 @@ basic_data_types() -> [
 create_random_file_in_space_root_dir(ProviderSelector, AtmWorkflowExecutionAuth) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     case lists_utils:random_element([?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE, ?LINK_TYPE]) of
         ?REGULAR_FILE_TYPE ->
             {ok, RegFileGuid} = ?rpc(ProviderSelector, lfm:create(
-                SessionId, SpaceGuid, ?RAND_STR(24), undefined
+                SessionId, SpaceDirGuid, ?RAND_STR(24), undefined
             )),
             {ok, RegFileAttrs} = ?rpc(ProviderSelector, lfm:stat(SessionId, ?FILE_REF(RegFileGuid))),
             RegFileAttrs;
         ?DIRECTORY_TYPE ->
             {ok, DirGuid} = ?rpc(ProviderSelector, lfm:mkdir(
-                SessionId, SpaceGuid, ?RAND_STR(24), undefined
+                SessionId, SpaceDirGuid, ?RAND_STR(24), undefined
             )),
             {ok, DirAttrs} = ?rpc(ProviderSelector, lfm:stat(SessionId, ?FILE_REF(DirGuid))),
             DirAttrs;
         ?SYMLINK_TYPE ->
             {ok, SymlinkAttrs} = ?rpc(ProviderSelector, lfm:make_symlink(
-                SessionId, ?FILE_REF(SpaceGuid), ?RAND_STR(24), ?RAND_STR(24)
+                SessionId, ?FILE_REF(SpaceDirGuid), ?RAND_STR(24), ?RAND_STR(24)
             )),
             SymlinkAttrs;
         ?LINK_TYPE ->
             {ok, RegFileGuid} = ?rpc(ProviderSelector, lfm:create(
-                SessionId, SpaceGuid, ?RAND_STR(24), undefined
+                SessionId, SpaceDirGuid, ?RAND_STR(24), undefined
             )),
             {ok, HardlinkAttrs} = ?lfm_check(?rpc(ProviderSelector, lfm:make_link(
-                SessionId, ?FILE_REF(RegFileGuid), ?FILE_REF(SpaceGuid), ?RAND_STR(24)
+                SessionId, ?FILE_REF(RegFileGuid), ?FILE_REF(SpaceDirGuid), ?RAND_STR(24)
             ))),
             HardlinkAttrs
     end.

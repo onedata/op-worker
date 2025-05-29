@@ -56,7 +56,7 @@ get_configuration(SessId) ->
         {error, _} -> []
     end,
     #configuration{
-        root_guid = fslogic_file_id:user_root_dir_guid(UserId),
+        root_guid = user_root_dir:guid(UserId),
         subscriptions = Subs,
         disabled_spaces = DisabledSpaces
     }.
@@ -99,8 +99,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             ?error("Detecting storage ~tp failed due to not existing space.", [StorageId]),
             throw(?ENOENT)
     end,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    SpaceCtx = file_ctx:new_by_guid(SpaceDirGuid),
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
 

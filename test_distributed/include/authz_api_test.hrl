@@ -14,6 +14,7 @@
 
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -define(ALL_PERMS, [
     ?read_object,
@@ -187,7 +188,10 @@
 
         {should_preserve_ownership, LogicalFilePath :: file_meta:path()} |
         {should_change_ownership, LogicalFilePath :: file_meta:path()}
-    )
+    ),
+
+    special_dirs_supporting_the_operation = [] :: not_applicable | [module()],
+    expected_result_for_supporting_special_dirs = ok :: ok | errors:error()
 }).
 
 -endif.

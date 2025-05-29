@@ -92,11 +92,11 @@ find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
 sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    SpaceCtx = file_ctx:new_by_guid(SpaceDirGuid),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     IsManualImport = maps:get(manual, Info, false),
-    case file_ctx:is_root_dir_const(ParentCtx) of
+    case file_ctx:is_filesystem_root_dir_const(ParentCtx) of
         true ->
             check_file_meta_and_maybe_sync(StorageFileCtx, SpaceCtx, Info, true);
         false ->
@@ -237,8 +237,8 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             {ok, Info};
         false ->
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-            SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-            ParentCtx = file_ctx:new_by_guid(SpaceGuid),
+            SpaceDirGuid = space_dir:guid(SpaceId),
+            ParentCtx = file_ctx:new_by_guid(SpaceDirGuid),
             % ParentCtx may not be associated with direct parent of the file.
             % This is caused by the fact that on object storages, file structure is flat
             % and all files are "direct" children of the space directory.

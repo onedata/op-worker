@@ -14,6 +14,7 @@
 
 -include("authz_api_test.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([
     test_add_qos_entry/1,
@@ -37,15 +38,15 @@ test_add_qos_entry(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_qos:add_qos_entry(Node, SessionId, FileKey, <<"country=FR">>, 1)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -73,7 +74,8 @@ test_get_qos_entry(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -101,7 +103,8 @@ test_remove_qos_entry(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -121,15 +124,15 @@ test_get_effective_file_qos(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = not_a_file_guid_based_operation,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_qos:get_effective_file_qos(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -157,5 +160,6 @@ test_check_qos_status(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).

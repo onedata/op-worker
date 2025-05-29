@@ -1859,7 +1859,7 @@ assert_file_location_created(_Node, dir, _DirUuid, _LocationProviderId) ->
     {file_id:file_guid(), file_id:file_guid(), od_share:id()}.
 create_storage_locations_test_file(reg, SpaceId) ->
     #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{
+        user3, space_dir:guid(SpaceId), #file_spec{
             shares = [#share_spec{}],
             mode = 8#707,
             content = crypto:strong_rand_bytes(20)
@@ -1872,7 +1872,7 @@ create_storage_locations_test_file(dir, SpaceId) ->
         shares = [ShareId],
         children = [#object{guid = FileGuid}]
     } = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #dir_spec{
+        user3, space_dir:guid(SpaceId), #dir_spec{
             shares = [#share_spec{}],
             mode = 8#707,
             children = [#file_spec{content = crypto:strong_rand_bytes(10)}]

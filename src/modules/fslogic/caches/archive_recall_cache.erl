@@ -116,13 +116,19 @@ invalidate_on_all_nodes(SpaceId) ->
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
     {ok, undefined | {ongoing | finished, file_meta:uuid()}} 
     | {error, ?MISSING_FILE_META(file_meta:uuid())} | {error, term()}.
-get(SpaceId, Doc = #document{value = #file_meta{}}) ->
+get(SpaceId, Doc = #document{value = #file_meta{}, key = FileUuid}) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, fun find_closest_recall/1) of
-        {ok, Res, _} ->
-            {ok, Res};
-        {error, _} = Error ->
-            Error
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
+        true ->
+            % effective cache is not set up for filesystem roots
+            {ok, undefined};
+        false ->
+            case effective_value:get_or_calculate(CacheName, Doc, fun find_closest_recall/1) of
+                {ok, Res, _} ->
+                    {ok, Res};
+                {error, _} = Error ->
+                    Error
+            end
     end;
 get(SpaceId, Uuid) ->
     case file_meta:get_including_deleted(Uuid) of

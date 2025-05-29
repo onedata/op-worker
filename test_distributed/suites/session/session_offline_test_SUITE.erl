@@ -73,8 +73,8 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
 
     {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
     SpaceKrkId = oct_background:get_space_id(space_krk),
-    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
-    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
+    UserRootDirGuid = user_root_dir:guid(UserId),
 
     {ok, ListedSpaces} = ?assertMatch(
         {ok, [_ | _]},

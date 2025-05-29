@@ -405,7 +405,7 @@ does_fulfill_guid_constraints(
             % file_ctx reset is needed.
             Timestamp = bounded_cache:get_timestamp(),
             FileCtx1 = file_ctx:reset(FileCtx0),
-            case file_ctx:is_root_dir_const(FileCtx1) of
+            case file_ctx:is_filesystem_root_dir_const(FileCtx1) of
                 true ->
                     check_and_cache_guid_constraints_fulfillment(
                         FileCtx1, CacheKey, AllGuidConstraints, Timestamp

@@ -56,7 +56,7 @@ basic_operations_test_core(Config, LastLevel) ->
     % Test
     RootUuid = <<>>,
     SpaceId = <<"Space 1">>,
-    Space1Uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    Space1Uuid = space_dir:uuid(SpaceId),
     {{ok, #document{key = Space1Uuid}}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
         ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
@@ -113,12 +113,6 @@ basic_operations_test_core(Config, LastLevel) ->
     #document{key = Level20Key} = UL20,
 
     space_info_mock(Workers, <<"Space 1">>),
-    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Dir2File1Uuid]),
-    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Dir2File2Uuid]),
-    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Dir2File3Uuid]),
-    ?assertMatch(<<"/Space 1/dir2/file1">>, U30),
-    ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
-    ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
 
     {A41, ResolveLevel2} = ?call_with_time(Worker1, canonical_path, resolve, [<<"/Space 1/">>]),
     {A42, ResolveLevel3} = ?call_with_time(Worker1, canonical_path, resolve, [<<"/Space 1/dir2">>]),
@@ -128,9 +122,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch({ok, #document{key = Level20Key}}, A43),
 
 
-    {UL20_2, GenPathLevel20} = ?call_with_time(Worker2, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Level20Key]),
-    ?assertMatch(Level20Path, UL20_2),
-    test_utils:mock_unload(Workers, [space_logic, fslogic_file_id]),
+    test_utils:mock_unload(Workers, [space_logic, space_dir]),
 
     {_, GetScopeLevel0} = ?assertMatch(
         {{ok, <<>>}, _},
@@ -215,14 +207,6 @@ basic_operations_test_core(Config, LastLevel) ->
             description = "Time of get opertion at level 1 (1 dirs above file)"},
         #parameter{name = get_level_20, value = GetLevel20, unit = "us",
             description = "Time of get opertion at level 20 (20 dirs above file)"},
-        #parameter{name = gen_path_level_1, value = GenPathLevel1, unit = "us",
-            description = "Time of gen path opertion at level 1 (1 dir above file)"},
-        #parameter{name = gen_path_level_2, value = GenPathLevel2, unit = "us",
-            description = "Time of gen path opertion at level 2 (2 dirs above file)"},
-        #parameter{name = gen_path_level_3, value = GenPathLevel3, unit = "us",
-            description = "Time of gen path opertion at level 3 (3 dirs above file)"},
-        #parameter{name = genv_pathv_level_20, value = GenPathLevel20, unit = "us",
-            description = "Time of gen path opertion at level 20 (20 dirs above file)"},
         #parameter{name = resolve_path_level_1, value = ResolveLevel2, unit = "us",
             description = "Time of resolve path opertion at level 1 (1 dirs above file)"},
         #parameter{name = resolve_path_level_2, value = ResolveLevel3, unit = "us",
@@ -305,7 +289,7 @@ space_info_mock(Workers, SpaceName) ->
     test_utils:mock_expect(Workers, space_logic, get_name, fun(_, _) ->
         {ok, SpaceName}
     end),
-    test_utils:mock_expect(Workers, fslogic_file_id, space_dir_uuid_to_spaceid, fun(_) ->
+    test_utils:mock_expect(Workers, space_dir, extract_space_id, fun(_) ->
         SpaceName %% Just return space name since space info mock ignores space id anyway
     end).
 
