@@ -850,6 +850,7 @@ run_public_data_mode_test_case(PermsType, TestCaseCtx = #authz_test_case_ctx{
     % If operation is not available in share/public mode then operation
     % should be rejected even if all permissions are granted
     FullPermsPerFile = set_full_perms(PermsType, TestNode, maps:keys(RequiredPermsPerFile)),
+    %% @TODO VFS-VFS-11790 ensure middleware worker and fslogic worker handle this case in the same way
     ExpErrno = case ReturnedErrors of
         api_errors -> ?EPERM;
         errno_errors -> ?ENOTSUP
