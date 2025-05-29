@@ -875,7 +875,10 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
     file_meta:uuid(), od_space:id()) -> file_meta:doc().
 prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
     {ok, Type} = storage_driver:infer_type(Mode),
-    file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
+    file_meta:new_doc(
+        FileUuid, FileName, Type, Mode band 8#1777, OwnerId,
+        ParentUuid, SpaceId, false, true
+    ).
 
 -spec build_times_from_stat_timestamps(storage_file_ctx:ctx()) ->
     {ok, times:record(), storage_file_ctx:ctx()}.

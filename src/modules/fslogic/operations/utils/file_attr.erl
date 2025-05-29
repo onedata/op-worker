@@ -151,7 +151,8 @@ resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} 
         symlink_value = resolve_symlink_value(FileDoc),
         type = file_meta:get_effective_type(FileDoc),
         hardlink_count = resolve_link_count(FileCtx2, ShareId, Attrs),
-        is_deleted = file_meta:is_deleted(FileDoc)
+        is_deleted = file_meta:is_deleted(FileDoc),
+        is_imported = file_meta:is_imported(FileDoc)
     }}.
 
 

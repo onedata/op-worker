@@ -174,6 +174,7 @@ get_attr_required_perms(?attr_eff_qos_inheritance_path) -> [];
 get_attr_required_perms(?attr_qos_status) -> [];
 get_attr_required_perms(?attr_recall_root_id) -> [];
 get_attr_required_perms(?attr_is_deleted) -> [];
+get_attr_required_perms(?attr_is_imported) -> [];
 get_attr_required_perms(?attr_conflicting_files) -> [];
 get_attr_required_perms(?attr_has_custom_metadata) -> [];
 get_attr_required_perms(?attr_has_json_metadata) -> [];
