@@ -334,5 +334,7 @@ dump_to_op_logs(Logger = #atm_workflow_execution_logger{
         LogSource = AppendReq#audit_log_append_request.source,
         LogContent = AppendReq#audit_log_append_request.content,
 
-        ?log(Severity, ?autoformat_with_msg(Msg, [AtmWorkflowExecutionId, LogSource, LogContent]), [])
+        ?log(Severity, "[workflow_id: ~ts, source: ~ts] ~ts:~n~ts", [
+            AtmWorkflowExecutionId, LogSource, Msg, json_utils:encode(LogContent, [pretty])
+        ])
     end, utils:ensure_list(Logs)).
