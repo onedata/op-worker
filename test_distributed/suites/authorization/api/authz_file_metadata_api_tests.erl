@@ -317,6 +317,5 @@ test_get_file_storage_locations(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
-        special_dirs_supporting_the_operation = [space_dir],
-        expected_result_for_supporting_special_dirs = ?ERROR_NOT_SUPPORTED % this operation is supported only for regular files
+        special_dirs_supporting_the_operation = [space_dir]
     }).
