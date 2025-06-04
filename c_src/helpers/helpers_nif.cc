@@ -1,4 +1,5 @@
 #include "../nifpp.h"
+#include "helpers/cachingStorageHelperCreator.h"
 #include "helpers/init.h"
 #include "helpers/storageHelperCreator.h"
 #include "monitoring/monitoring.h"
@@ -73,22 +74,28 @@ struct HelpersNIF {
                         entry.second.second)));
         }
 
-        SHCreator = std::make_unique<one::helpers::StorageHelperCreator<void>>(
-            executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
-            executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
-            executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
-            executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
-            executors[NFS_HELPER_NAME], executors[NULL_DEVICE_HELPER_NAME],
-            std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
-            buffering::BufferLimits {
-                std::stoul(args["read_buffer_min_size"].toStdString()),
-                std::stoul(args["read_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
-                    args["read_buffer_prefetch_duration"].toStdString())},
-                std::stoul(args["write_buffer_min_size"].toStdString()),
-                std::stoul(args["write_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
-                    args["write_buffer_flush_delay"].toStdString())}});
+        auto storage_helper_creator =
+            std::make_unique<one::helpers::StorageHelperCreator<void>>(
+                executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
+                executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
+                executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
+                executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
+                executors[NFS_HELPER_NAME], executors[NULL_DEVICE_HELPER_NAME],
+                std::stoul(
+                    args["buffer_scheduler_threads_number"].toStdString()),
+                buffering::BufferLimits {
+                    std::stoul(args["read_buffer_min_size"].toStdString()),
+                    std::stoul(args["read_buffer_max_size"].toStdString()),
+                    std::chrono::seconds {std::stoul(
+                        args["read_buffer_prefetch_duration"].toStdString())},
+                    std::stoul(args["write_buffer_min_size"].toStdString()),
+                    std::stoul(args["write_buffer_max_size"].toStdString()),
+                    std::chrono::seconds {std::stoul(
+                        args["write_buffer_flush_delay"].toStdString())}});
+
+        SHCreator =
+            std::make_unique<one::helpers::CachingStorageHelperCreator<void>>(
+                std::move(storage_helper_creator));
 
         umask(0);
     }
@@ -104,7 +111,7 @@ struct HelpersNIF {
     std::unordered_map<folly::fbstring,
         std::shared_ptr<folly::IOThreadPoolExecutor>>
         executors;
-    std::unique_ptr<one::helpers::StorageHelperCreator<void>> SHCreator;
+    std::unique_ptr<one::helpers::CachingStorageHelperCreator<void>> SHCreator;
 };
 
 std::unique_ptr<HelpersNIF> application;
