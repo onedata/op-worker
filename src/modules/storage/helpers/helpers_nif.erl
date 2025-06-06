@@ -26,7 +26,7 @@
 
 %% API
 -export([init/0]).
--export([get_handle/2]).
+-export([get_handle/2, release_handle/1]).
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
@@ -47,6 +47,12 @@
 -spec get_handle(helper:name(), helper:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
 get_handle(_Name, _Params) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec release_handle(helper_handle()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+release_handle(_Handle) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

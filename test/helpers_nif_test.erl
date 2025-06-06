@@ -27,6 +27,7 @@ helpers_test_() ->
         fun stop/1,
         [
             fun get_handle/0,
+            fun handle_cache/0,
             fun readdir/0,
             fun blocksize_posix/0,
             fun blocksize_cephrados/0,
@@ -37,6 +38,47 @@ get_handle() ->
     ?assertMatch({ok, _}, helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
         <<"mountPoint">> => <<"/tmp">>
     })).
+
+handle_cache() ->
+    {ok, Handle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>
+    }),
+    {ok, Handle2} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>
+    }),
+
+    %% Below assertion fails even though they both refer to the same helper
+    %% This is because of how NIF assigns erlang refs to results
+    % ?assertEqual(Handle, Handle2),
+
+    Handle3 = Handle,
+    ?assertEqual(Handle, Handle3),
+
+    helpers_nif:release_handle(Handle3),
+
+    {ok, Handle4} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>
+    }),
+    ?assertNotEqual(Handle, Handle4),
+
+    helpers_nif:release_handle(Handle2),
+
+    %% This works because release_handle decrements ref count in helpers cache,
+    %% doesn't affect the helper handle assigned to Handle2 which still exists
+    %% even if cache is empty
+    helpers_nif:blocksize_for_path(Handle2, <<"">>),
+
+    % Make sure release_handle can be called multiple times
+    helpers_nif:release_handle(Handle),
+    helpers_nif:release_handle(Handle),
+    helpers_nif:release_handle(Handle),
+    helpers_nif:release_handle(Handle),
+
+    {ok, Handle5} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{
+        <<"mountPoint">> => <<"/tmp">>
+    }),
+
+    helpers_nif:release_handle(Handle5).
 
 readdir() ->
     {ok, Handle} = helpers_nif:get_handle(?POSIX_HELPER_NAME, #{

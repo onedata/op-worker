@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_helper_handle/2]).
+-export([get_helper_handle/2, release_helper_handle/1]).
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
@@ -81,6 +81,17 @@ get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
         handle = Handle,
         timeout = helper:get_timeout(Helper)
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:get_helper/2} function and constructs helper handle
+%% record.
+%% @end
+%%--------------------------------------------------------------------
+-spec release_helper_handle(helper_handle()) ->
+    ok | {error, Reason :: term()}.
+release_helper_handle(#helper_handle{} = Handle) ->
+    ?MODULE:apply_helper_nif(Handle, release_handle).
 
 %%--------------------------------------------------------------------
 %% @doc

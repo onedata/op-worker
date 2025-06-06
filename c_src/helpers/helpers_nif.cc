@@ -576,6 +576,12 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     return nifpp::make(env, std::make_tuple(ok, resource));
 }
 
+ERL_NIF_TERM release_handle(NifCTX ctx, helper_ptr helper)
+{
+    application->SHCreator->releaseStorageHelper(helper->id());
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
 {
     handle_result(ctx, helper->updateHelper(args));
@@ -837,6 +843,12 @@ static ERL_NIF_TERM sh_readdir(
     return wrap(readdir, env, argv);
 }
 
+static ERL_NIF_TERM sh_release_handle(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(release_handle, env, argv);
+}
+
 static ERL_NIF_TERM sh_check_storage_availability(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -992,6 +1004,7 @@ static ERL_NIF_TERM sh_fsync(
 
 static ErlNifFunc nif_funcs[] = {
     {"get_handle", 2, get_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"release_handle", 1, sh_release_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"start_monitoring", 0, start_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"stop_monitoring", 0, stop_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"refresh_params", 2, sh_refresh_params, ERL_NIF_DIRTY_JOB_IO_BOUND},
