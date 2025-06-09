@@ -21,18 +21,17 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 
--define(OBSERVABLE_FILE_ATTRS, lists:flatten([
-    ?FILE_META_ATTRS, ?TIMES_FILE_ATTRS, ?LOCATION_FILE_ATTRS, ?METADATA_FILE_ATTRS
-]) -- ?INTERNAL_FILE_ATTRS).
+-define(OBSERVABLE_FILE_ATTRS, lists:flatten(
+    [?FILE_META_ATTRS, ?TIMES_FILE_ATTRS, ?LOCATION_FILE_ATTRS]) -- ?INTERNAL_FILE_ATTRS
+).
 
 
--record(space_file_events_monitoring_spec, {
+-record(space_files_monitoring_spec, {
     observed_dirs :: [file_id:file_guid()],
     observed_attrs_per_doc :: #{
         file_meta => [onedata_file:attr_name()],
         times => [onedata_file:attr_name()],
-        file_location => [onedata_file:attr_name()],
-        custom_metadata => [onedata_file:attr_name()]
+        file_location => [onedata_file:attr_name()]
     }
 }).
 

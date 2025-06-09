@@ -27,7 +27,6 @@
 -export([stream_file_events/2]).
 
 -type state() :: map().
--type space_file_events_monitoring_spec() :: #space_file_events_monitoring_spec{}.
 
 
 %%%===================================================================
@@ -121,13 +120,15 @@ preauthorize(SpaceId, ?USER = Auth) ->
 %%--------------------------------------------------------------------
 -spec stream_file_events(cowboy_req:req(), state()) ->
     {term(), cowboy_req:req(), state()}.
-stream_file_events(Req, State = #{space_id := SpaceId}) ->
+stream_file_events(Req, State = #{space_id := SpaceId, session_id := SessionId}) ->
     try
         middleware_utils:assert_space_supported_locally(SpaceId),
 
-        {SpaceFileEventsMonitoringSpec, Req2} = parse_and_validate_request(Req, State),
+        {SpaceFilesMonitoringSpec, Req2} = space_files_monitoring_spec:parse_and_validate(
+            SpaceId, SessionId, Req
+        ),
 
-        State2 = State#{space_file_events_monitoring_spec => SpaceFileEventsMonitoringSpec},
+        State2 = State#{space_files_monitoring_spec => SpaceFilesMonitoringSpec},
         State3 = init_stream(State2),
         Req3 = cowboy_req:stream_reply(
             ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"application/json">>}, Req2
@@ -148,115 +149,13 @@ stream_file_events(Req, State = #{space_id := SpaceId}) ->
 
 
 %% @private
--spec parse_and_validate_request(cowboy_req:req(), state()) ->
-    {space_file_events_monitoring_spec(), cowboy_req:req()}.
-parse_and_validate_request(Req, State) ->
-    {RawArguments, Req2} = read_arguments(Req),
-
-    ParsedArguments = middleware_sanitizer:sanitize_data(RawArguments, #{
-        required => #{
-            <<"observedDirectories">> => {list_of_binaries, fun(ObjectIds) ->
-                ObjectIds == [] andalso throw(?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"observedDirectories">>)),
-
-                {true, lists:map(fun({Idx, ObjectId}) ->
-                    Key = str_utils:format_bin("observedDirectories[~B]", [Idx]),
-                    parse_and_validate_observed_dir(ObjectId, Key, State)
-                end, lists:enumerate(ObjectIds))}
-            end}
-        },
-        optional => #{
-            <<"observedAttributes">> => file_middleware_handlers_common_utils:build_attributes_param_spec(
-                private, current_events, <<"observedAttributes">>
-            )
-        }
-    }),
-
-    AllObservedAttrs = maps:get(<<"observedAttributes">>, ParsedArguments, ?FILE_META_ATTRS),
-    ObservedAttrsPerDoc = lists:foldl(fun
-        ({DocName = custom_metadata, ObservableAttrs}, Acc) ->
-            ObservedDocAttrs0 = lists_utils:intersect(ObservableAttrs, AllObservedAttrs),
-            ObservedDocAttrs1 = case lists:keyfind(xattrs, 1, AllObservedAttrs) of
-                ?attr_xattrs(_) = ObservedXattrs -> [ObservedXattrs | ObservedDocAttrs0];
-                false -> ObservedDocAttrs0
-            end,
-            maps_utils:put_if_defined(Acc, DocName, ObservedDocAttrs1, []);
-        ({DocName, ObservableAttrs}, Acc) ->
-            ObservedDocAttrs = lists_utils:intersect(ObservableAttrs, AllObservedAttrs),
-            maps_utils:put_if_defined(Acc, DocName, ObservedDocAttrs, [])
-    end, #{}, [
-        {file_meta, ?FILE_META_ATTRS},
-        {times, ?TIMES_FILE_ATTRS},
-        {file_location, ?LOCATION_FILE_ATTRS},
-        {custom_metadata, ?METADATA_FILE_ATTRS}
-    ]),
-    maps_utils:is_empty(ObservedAttrsPerDoc) andalso ?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"observedAttributes">>),
-
-    SpaceFileEventsMonitoringSpec = #space_file_events_monitoring_spec{
-        observed_dirs = maps:get(<<"observedDirectories">>, ParsedArguments),
-        observed_attrs_per_doc = ObservedAttrsPerDoc
-    },
-
-    {SpaceFileEventsMonitoringSpec, Req2}.
-
-
-%% @private
--spec read_arguments(cowboy_req:req()) -> {json_utils:json_map(), cowboy_req:req()}.
-read_arguments(Req) ->
-    try
-        {ok, Body, Req2} = cowboy_req:read_body(Req),
-        ParsedBody = case Body of
-            <<"">> -> #{};
-            _ -> json_utils:decode(Body)
-        end,
-        {ParsedBody, Req2}
-    catch _:_ ->
-        throw(?ERR_MALFORMED_DATA(?err_ctx()))
-    end.
-
-
-%% @private
--spec parse_and_validate_observed_dir(file_id:objectid(), binary(), state()) ->
-    file_id:file_guid() | no_return().
-parse_and_validate_observed_dir(ObjectId, Key, #{
-    space_id := SpaceId,
-    session_id := SessionId
-}) ->
-    FileGuid = middleware_utils:decode_object_id(ObjectId, Key),
-
-    case file_id:guid_to_space_id(FileGuid) of
-        SpaceId -> ok;
-        _ -> throw(?ERR_BAD_VALUE_IDENTIFIER(?err_ctx(), Key))
-    end,
-
-    FileCtx0 = file_ctx:new_by_guid(FileGuid),
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    IsDir orelse throw(?ERR_BAD_DATA(?err_ctx(), Key, ?ERR_POSIX(?err_ctx(), ?ENOTDIR))),
-
-    UserCtx = user_ctx:new(SessionId),
-
-    try
-        fslogic_authz:ensure_authorized(
-            UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS]
-        )
-    catch
-        throw:Errno when is_atom(Errno) ->
-            throw(?ERR_BAD_DATA(?err_ctx(), Key, ?ERR_POSIX(?err_ctx(), Errno)));
-        Class:Reason:Stacktrace ->
-            Error = ?examine_exception(Class, Reason, Stacktrace),
-            throw(?ERR_BAD_DATA(?err_ctx(), Key, Error))
-    end,
-
-    FileGuid.
-
-
-%% @private
 -spec init_stream(state()) -> state().
-init_stream(State = #{space_id := SpaceId, space_file_events_monitoring_spec := SpaceFileEventsMonitoringSpec}) ->
+init_stream(State = #{space_id := SpaceId, space_files_monitoring_spec := SpaceFilesMonitoringSpec}) ->
     ?info("[ space file events ]: Starting stream"),
 
     Pid = self(),
     Ref = make_ref(),
-    Triggers = maps:keys(SpaceFileEventsMonitoringSpec#space_file_events_monitoring_spec.observed_attrs_per_doc),
+    Triggers = maps:keys(SpaceFilesMonitoringSpec#space_files_monitoring_spec.observed_attrs_per_doc),
     Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
 
     % TODO VFS-5570
@@ -281,7 +180,7 @@ stream_loop(Req, State = #{
     changes_stream := Stream,
     ref := Ref,
     session_id := SessionId,
-    space_file_events_monitoring_spec := SpaceFileEventsMonitoringSpec
+    space_files_monitoring_spec := SpaceFilesMonitoringSpec
 }) ->
     receive
         {Ref, stream_ended} ->
@@ -291,7 +190,7 @@ stream_loop(Req, State = #{
             UserCtx = user_ctx:new(SessionId),
             lists:foreach(fun(ChangedDoc) ->
                 try
-                    case process_doc(UserCtx, ChangedDoc, SpaceFileEventsMonitoringSpec) of
+                    case process_doc(UserCtx, ChangedDoc, SpaceFilesMonitoringSpec) of
                         ok ->
                             ok;
                         {ok, Event} ->
@@ -314,16 +213,16 @@ stream_loop(Req, State = #{
 
 
 %% @private
--spec process_doc(user_ctx:ctx(), datastore:doc(), space_file_events_monitoring_spec()) ->
+-spec process_doc(user_ctx:ctx(), datastore:doc(), space_files_monitoring_spec:t()) ->
     ok | {ok, json_utils:json_map()}.
-process_doc(UserCtx, ChangedDoc, SpaceFileEventsMonitoringSpec) ->
+process_doc(UserCtx, ChangedDoc, SpaceFilesMonitoringSpec) ->
     FileCtx = get_file_ctx(ChangedDoc),
 
-    case is_child_of_observed_dir(UserCtx, FileCtx, SpaceFileEventsMonitoringSpec) of
+    case is_child_of_observed_dir(UserCtx, FileCtx, SpaceFilesMonitoringSpec) of
         {true, FileCtx2, ParentGuid} ->
             FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
 
-            ObservedAttrs = get_doc_observed_attrs(ChangedDoc, SpaceFileEventsMonitoringSpec),
+            ObservedAttrs = get_doc_observed_attrs(ChangedDoc, SpaceFilesMonitoringSpec),
             try
                 {FileAttr, _FileCtx3} = file_attr:resolve(UserCtx, FileCtx2, #{attributes => ObservedAttrs}),
                 FileAttrJson = file_attr_translator:to_json(FileAttr, current, ObservedAttrs),
@@ -360,9 +259,9 @@ get_file_ctx(ChangedDoc = #document{value = #file_location{uuid = FileUUid}}) ->
 
 
 %% @private
--spec is_child_of_observed_dir(user_ctx:ctx(), file_ctx:ctx(), space_file_events_monitoring_spec()) ->
+-spec is_child_of_observed_dir(user_ctx:ctx(), file_ctx:ctx(), space_files_monitoring_spec:t()) ->
     {boolean(), file_ctx:ctx(), undefined | file_id:file_guid()}.
-is_child_of_observed_dir(UserCtx, FileCtx, #space_file_events_monitoring_spec{observed_dirs = ObservedDirGuids}) ->
+is_child_of_observed_dir(UserCtx, FileCtx, #space_files_monitoring_spec{observed_dirs = ObservedDirGuids}) ->
     {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
 
     case file_ctx:equals(FileCtx, ParentCtx) of
@@ -375,10 +274,10 @@ is_child_of_observed_dir(UserCtx, FileCtx, #space_file_events_monitoring_spec{ob
 
 
 %% @private
--spec get_doc_observed_attrs(datastore:doc(), space_file_events_monitoring_spec()) -> [onedata_file:attr_name()].
+-spec get_doc_observed_attrs(datastore:doc(), space_files_monitoring_spec:t()) -> [onedata_file:attr_name()].
 get_doc_observed_attrs(
     #document{value = Record},
-    #space_file_events_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}
+    #space_files_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}
 ) ->
     maps:get(utils:record_type(Record), ObservedAttrsPerDoc).
 
