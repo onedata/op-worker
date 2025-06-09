@@ -28,11 +28,15 @@
 
 -record(space_files_monitoring_spec, {
     observed_dirs :: [file_id:file_guid()],
-    observed_attrs_per_doc :: #{
-        file_meta => [onedata_file:attr_name()],
-        times => [onedata_file:attr_name()],
-        file_location => [onedata_file:attr_name()]
-    }
+    observed_attrs_per_doc :: space_files_monitor:observed_attrs_per_doc()
+}).
+
+-record(file_changed_or_created_event, {
+    id :: binary(),
+    file_guid :: file_id:file_guid(),
+    parent_file_guid :: file_id:file_guid(),
+    doc_type :: file_meta | times | file_location,
+    file_attr :: file_attr:record()
 }).
 
 
