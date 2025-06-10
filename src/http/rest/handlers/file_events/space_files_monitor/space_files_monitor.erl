@@ -27,6 +27,8 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-type doc_type() :: file_meta | times | file_location.
+
 -record(observer, {
     session_id :: session:id(),
     files_monitoring_spec :: space_files_monitoring_spec:t()
@@ -34,9 +36,7 @@
 -type observer() :: #observer{}.
 
 -type observed_attrs_per_doc() :: #{
-    file_meta => [onedata_file:attr_name()],
-    times => [onedata_file:attr_name()],
-    file_location => [onedata_file:attr_name()]
+    doc_type() => [onedata_file:attr_name()]
 }.
 
 -record(dir_monitoring_spec, {
@@ -77,6 +77,9 @@
 
 -define(OBSERVABLE_FILE_DOCS, [file_meta, times, file_location]).
 
+%% The process is supposed to die after ?DIE_AFTER_MS time of idling (no subscribers)
+-define(DIE_AFTER_MS, 10_000).
+
 -define(MAX_AUTHORIZE_OBSERVERS_PROCS, op_worker:get_env(
     max_authorize_space_files_observers_procs, 20
 )).
@@ -107,7 +110,7 @@ subscribe(MonitorPid, SessionId, FilesMonitoringSpec) ->
 %%%===================================================================
 
 
--spec init([od_space:id()]) -> {ok, state()}.
+-spec init([od_space:id()]) -> {ok, state(), non_neg_integer()}.
 init([SpaceId]) ->
     process_flag(trap_exit, true),
 
@@ -128,23 +131,26 @@ init([SpaceId]) ->
         [Self]
     ),
 
-    {ok, #state{
+    State = #state{
         space_id = SpaceId,
         changes_stream_pid = ChangesStreamPid
-    }}.
+    },
+    {ok, State, ?DIE_AFTER_MS}.
 
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {noreply, NewState :: #state{}}.
+    {reply, Reply :: term(), state()} |
+    {noreply, state()} |
+    {noreply, state(), non_neg_integer()}.
 handle_call(SubscribeReq = #subscribe_req{}, _From, State = #state{}) ->
     Pid = SubscribeReq#subscribe_req.pid,
-    erlang:link(Pid),
 
     case maps:is_key(Pid, State#state.observers) of
         true ->
             {reply, ?ERROR_ALREADY_EXISTS, State};
         false ->
+            erlang:link(Pid),
+
             Observer = #observer{
                 session_id = SubscribeReq#subscribe_req.session_id,
                 files_monitoring_spec = SubscribeReq#subscribe_req.files_monitoring_spec
@@ -168,27 +174,44 @@ handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
-    {noreply, State}.
+    noreply_with_timeout_if_no_subscribers(State).
 
 
 -spec handle_cast(Request :: term(), state()) ->
-    {noreply, NewState :: #state{}}.
+    {noreply, state()} |
+    {noreply, state(), non_neg_integer()}.
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
-    {noreply, State}.
+    noreply_with_timeout_if_no_subscribers(State).
 
 
 -spec handle_info(timeout() | term(), state()) ->
-    {noreply, #state{}}.
+    {noreply, state()} |
+    {noreply, state(), non_neg_integer()} |
+    {stop, term(), state()}.
 handle_info({'EXIT', ObserverPid, _Reason}, State = #state{}) ->
-    {noreply, remove_observer(State, ObserverPid)};
+    noreply_with_timeout_if_no_subscribers(remove_observer(State, ObserverPid));
 
 handle_info(stream_ended, State = #state{}) ->
-    {stop, stream_ended, State};
+    {stop, {shutdown, stream_ended}, State};
+
+handle_info(timeout, State = #state{}) ->
+    case maps_utils:is_empty(State#state.observers) of
+        true ->
+            ?info(
+                "[ space file events ]: Stopping monitor for space '~ts' due to inactivity",
+                [State#state.space_id]
+            ),
+
+            ?debug("Exiting due to inactivity with state: ~tp", [State]),
+            {stop, {shutdown, timeout}, State};
+        false ->
+            {noreply, State}
+    end;
 
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
-    {noreply, State}.
+    noreply_with_timeout_if_no_subscribers(State).
 
 
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), state()) ->
@@ -226,6 +249,17 @@ call_monitor(MonitorPid, Request) ->
             ?ERROR_TIMEOUT;
         Class:Reason:Stacktrace ->
             ?examine_exception("Cannot call space file monitor", Class, Reason, Stacktrace)
+    end.
+
+
+%% @private
+-spec noreply_with_timeout_if_no_subscribers(state()) ->
+    {noreply, state()} |
+    {noreply, state(), non_neg_integer()}.
+noreply_with_timeout_if_no_subscribers(State) ->
+    case maps_utils:is_empty(State#state.observers) of
+        true -> {noreply, State, ?DIE_AFTER_MS};
+        false -> {noreply, State}
     end.
 
 
@@ -320,14 +354,15 @@ update_observed_attrs_per_doc(AttrsToObservePerDoc, ObservedAttrsPerDoc) ->
 %% @private
 -spec process_doc(user_ctx:ctx(), datastore:doc(), state()) -> ok.
 process_doc(RootUserCtx, ChangedDoc, State) ->
+    ChangedDocType = utils:record_type(ChangedDoc#document.value),
     FileCtx = get_file_ctx(ChangedDoc),
 
-    case is_observed_file(RootUserCtx, FileCtx, ChangedDoc, State) of
+    case is_observed_file(RootUserCtx, FileCtx, ChangedDocType, State) of
         {true, FileCtx2, ParentGuid, ObservedAttrs} ->
             FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
             DirMonitoringSpec = maps:get(ParentGuid, State#state.dir_monitoring_specs),
 
-            case get_authorized_observers(FileCtx2, DirMonitoringSpec, State) of
+            case get_authorized_observers(ChangedDocType, FileCtx2, DirMonitoringSpec, State) of
                 [] ->
                     ok;
                 ObserverPids ->
@@ -361,9 +396,9 @@ get_file_ctx(ChangedDoc = #document{value = #file_location{uuid = FileUUid}}) ->
 
 
 %% @private
--spec is_observed_file(user_ctx:ctx(), file_ctx:ctx(), datastore:doc(), state()) ->
+-spec is_observed_file(user_ctx:ctx(), file_ctx:ctx(), doc_type(), state()) ->
     {true, file_ctx:ctx(), file_id:file_guid(), [onedata_file:attr_name()]} | false.
-is_observed_file(UserCtx, FileCtx, ChangedDoc, State) ->
+is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
     {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
 
     case file_ctx:equals(FileCtx, ParentCtx) of
@@ -374,8 +409,6 @@ is_observed_file(UserCtx, FileCtx, ChangedDoc, State) ->
 
             case maps:find(ParentGuid, State#state.dir_monitoring_specs) of
                 {ok, #dir_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}} ->
-                    ChangedDocType = utils:record_type(ChangedDoc#document.value),
-
                     case maps:get(ChangedDocType, ObservedAttrsPerDoc, undefined) of
                         undefined ->
                             false;
@@ -389,24 +422,39 @@ is_observed_file(UserCtx, FileCtx, ChangedDoc, State) ->
 
 
 %% @private
--spec get_authorized_observers(file_ctx:ctx(), dir_monitoring_spec(), state()) -> [pid()].
-get_authorized_observers(FileCtx, DirMonitoringSpec, State) ->
-    AllObservers = DirMonitoringSpec#dir_monitoring_spec.observers,
+-spec get_authorized_observers(doc_type(), file_ctx:ctx(), dir_monitoring_spec(), state()) ->
+    [pid()].
+get_authorized_observers(ChangedDocType, FileCtx, DirMonitoringSpec, State) ->
+    AllDirObservers = DirMonitoringSpec#dir_monitoring_spec.observers,
 
-    FilterMapFun = fun(ObserverPid) ->
-        Observer = maps:get(ObserverPid, State#state.observers),
-        ObserverUserCtx = user_ctx:new(Observer#observer.session_id),
+    FilterMapFun = fun(DirObserverPid) ->
+        DirObserver = maps:get(DirObserverPid, State#state.observers),
 
-        try
-            fslogic_authz:ensure_authorized(
-                ObserverUserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
-            ),
-            {true, ObserverPid}
-        catch _:_ ->
-            false
+        case is_observer_subscribed_for_doc(ChangedDocType, DirObserver) of
+            true ->
+                DirObserverUserCtx = user_ctx:new(DirObserver#observer.session_id),
+
+                try
+                    fslogic_authz:ensure_authorized(
+                        DirObserverUserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+                    ),
+                    {true, DirObserverPid}
+                catch _:_ ->
+                    false
+                end;
+            false ->
+                false
         end
     end,
-    lists_utils:pfiltermap(FilterMapFun, AllObservers, ?MAX_AUTHORIZE_OBSERVERS_PROCS).
+    lists_utils:pfiltermap(FilterMapFun, AllDirObservers, ?MAX_AUTHORIZE_OBSERVERS_PROCS).
+
+
+%% @private
+-spec is_observer_subscribed_for_doc(doc_type(), observer()) -> boolean().
+is_observer_subscribed_for_doc(ChangedDocType, #observer{
+    files_monitoring_spec = #space_files_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}
+}) ->
+    maps:is_key(ChangedDocType, ObservedAttrsPerDoc).
 
 
 %% @private
