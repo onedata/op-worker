@@ -17,12 +17,13 @@
 -include("modules/fslogic/data_access_control.hrl").
 
 %% API
--export([init/2, info/3, terminate/3]).
+-export([init/2, info/3]).
 
 -record(state, {
     space_id :: od_space:id(),
     auth :: aai:auth(),
-    files_monitoring_spec :: space_files_monitoring_spec:t()
+    files_monitoring_spec :: space_files_monitoring_spec:t(),
+    monitor_pid :: pid()
 }).
 -type state() :: #state{}.
 
@@ -35,6 +36,8 @@
 -spec init(cowboy_req:req(), term()) ->
     {ok, cowboy_req:req(), no_state} | {cowboy_loop, cowboy_req:req(), state()}.
 init(Req, _Opts) ->
+    process_flag(trap_exit, true),
+
     try
         SpaceId = cowboy_req:binding(sid, Req),
         middleware_utils:assert_space_supported_locally(SpaceId),
@@ -56,7 +59,8 @@ init(Req, _Opts) ->
         State = #state{
             space_id = SpaceId,
             auth = Auth,
-            files_monitoring_spec = SpaceFilesMonitoringSpec
+            files_monitoring_spec = SpaceFilesMonitoringSpec,
+            monitor_pid = MonitorPid
         },
         {cowboy_loop, Req3, State}
     catch Class:Reason:Stacktrace ->
@@ -74,14 +78,15 @@ info(Event = #file_changed_or_created_event{id = Id}, Req, State) ->
         data => json_utils:encode(prepare_changed_or_created_event(Event, State))
     },
     cowboy_req:stream_events(ResponseEvent, nofin, Req),
+    {ok, Req, State};
+
+info({'EXIT', MonitorPid, _Reason}, Req, State = #state{monitor_pid = MonitorPid}) ->
+    cowboy_req:stream_events(#{}, fin, Req),
+    {stop, Req, State};
+
+info(Msg, Req, State) ->
+    ?log_bad_request(Msg),
     {ok, Req, State}.
-
-
--spec terminate(Reason :: term(), cowboy_req:req(), state()) -> ok.
-terminate(normal, _Req, _State) ->
-    ok;
-terminate(_Reason, Req, _State) ->
-    cowboy_req:stream_events(#{}, fin, Req).
 
 
 %%%===================================================================
