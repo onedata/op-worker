@@ -47,7 +47,7 @@ init(Req, _Opts) ->
             SpaceId, SessionId, Req
         ),
 
-        {ok, MonitorPid} = space_files_monitor:start_link(SpaceId),
+        MonitorPid = space_files_monitor_sup:ensure_monitor_started(SpaceId),
         ok = space_files_monitor:subscribe(MonitorPid, SessionId, SpaceFilesMonitoringSpec),
         Req3 = cowboy_req:stream_reply(
             ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"text/event-stream">>}, Req2
