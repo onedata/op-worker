@@ -32,7 +32,8 @@
     non_existing_space_test/1,
     unauthorized_client_test/1,
     token_caveats_test/1,
-    invalid_args_test/1
+    invalid_args_test/1,
+    changed_or_created_events_test/1
 ]).
 
 all() ->
@@ -40,7 +41,8 @@ all() ->
         non_existing_space_test,
         unauthorized_client_test,
         token_caveats_test,
-        invalid_args_test
+        invalid_args_test,
+        changed_or_created_events_test
     ]).
 
 
@@ -222,6 +224,60 @@ invalid_args_test(_Config) ->
             ?ERR_BAD_VALUE_NOT_ALLOWED(<<"observedAttributes">>, AllowedAttrs)
         }
     ])).
+
+
+changed_or_created_events_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
+    FileOwnerUserId = oct_background:get_user_id(user1),
+    FileOwnerSessionId = oct_background:get_user_session_id(user1, krakow),
+
+    #object{
+        guid = ObservedDirGuid,
+        children = [
+            #object{guid = ChildDirGuid},
+            #object{guid = ChildFileGuid}
+        ]
+    } = onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, SpaceKrkGuid, krakow, #dir_spec{
+            mode = ?FILE_MODE(8#777),
+            children = [#dir_spec{}, #file_spec{}]
+        }
+    ),
+    ObservedAttrs = [?attr_mode, ?attr_atime, ?attr_mtime, ?attr_ctime, ?attr_size],
+
+    % TODO VFS-12699 should sleep waiting until all docs are flushed? or just filter them in asserts later?
+    timer:sleep(timer:seconds(5)),
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => SpaceKrkId,
+        token => oct_background:get_user_access_token(user2),
+        observed_dirs => [ObservedDirGuid],
+        observed_attrs => ObservedAttrs
+    },
+
+    {ok, SSEClientPid} = ?assertMatch({ok, _}, space_file_events_test_sse_client:start(ClientArgs)),
+
+    % Creating new files in child dir should result in its mtime change
+    onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, ChildDirGuid, krakow, #file_spec{}
+    ),
+
+    % Creating new files in observed dir should result in its events for all observed documents
+    onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, ObservedDirGuid, krakow, #file_spec{}
+    ),
+
+    % mode change should result in event
+    Node = oct_background:get_random_provider_node(krakow),
+    ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerSessionId, ?FILE_REF(ChildFileGuid), 8#740)),
+
+    % TODO VFS-12699 replace sleep with attempts?
+    timer:sleep(timer:seconds(5)),
+
+    % TODO VFS-12699 replace ct pal with assert with exp event matchers (dsl?)
+    ct:pal("~p", [space_file_events_test_sse_client:get_events(SSEClientPid)]).
 
 
 %%%===================================================================
