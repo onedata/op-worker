@@ -13,6 +13,8 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("onenv_test_utils.hrl").
+-include("storage_files_test_SUITE.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -26,12 +28,14 @@
 ]).
 
 -export([
-    token_caveats_test/1
+    token_caveats_test/1,
+    invalid_args_test/1
 ]).
 
 all() ->
     ?ALL([
-        token_caveats_test
+        token_caveats_test,
+        invalid_args_test
     ]).
 
 
@@ -87,6 +91,92 @@ token_caveats_test(_Config) ->
         space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithValidApiCaveat})
     ),
     ok = space_file_events_test_sse_client:stop(Client).
+
+
+invalid_args_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
+    SpaceKrkObjectId = ?check(file_id:guid_to_objectid(SpaceKrkGuid)),
+    FileOwnerUserId = oct_background:get_user_id(user1),
+
+    #object{
+        children = [
+            #object{guid = ForbiddenDirGuid},
+            #object{guid = FileGuid}
+        ]
+    } = onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, SpaceKrkGuid, krakow, #dir_spec{
+            mode = ?FILE_MODE(8#777),
+            children = [
+                #dir_spec{mode = ?FILE_MODE(8#700)},
+                #file_spec{mode = ?FILE_MODE(8#777)}
+            ]
+        }
+    ),
+
+    AllowedAttrs = [
+        <<"index">>, <<"type">>, <<"activePermissionsType">>, <<"posixPermissions">>, <<"acl">>,
+        <<"parentFileId">>, <<"originProviderId">>, <<"directShareIds">>, <<"ownerUserId">>,
+        <<"hardlinkCount">>, <<"symlinkValue">>, <<"creationTime">>, <<"atime">>, <<"mtime">>,
+        <<"ctime">>, <<"size">>, <<"isFullyReplicatedLocally">>, <<"localReplicationRate">>,
+        %% TODO VFS-12699 should not be returned!
+        <<"xattr.*">>
+    ],
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => SpaceKrkId,
+        token => oct_background:get_user_access_token(user2),
+        observed_dirs => [SpaceKrkGuid]
+    },
+
+    lists:foreach(fun({Index, {InvalidArgs, ExpError}}) ->
+        Args = maps:merge(ClientArgs, InvalidArgs),
+
+        ?assertEqual(
+            {Index, {error, {400, ExpError}}},
+            {Index, space_file_events_test_sse_client:start(Args)}
+        )
+    end, lists:enumerate([
+        {#{body_bin => <<"ASD">>}, ?ERR_MALFORMED_DATA},
+        {#{body_json => #{}}, ?ERR_MISSING_REQUIRED_VALUE(<<"observedDirectories">>)},
+        {
+            #{body_json => #{<<"observedDirectories">> => <<"ASD">>}},
+            ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"observedDirectories">>)
+        },
+        {
+            #{body_json => #{<<"observedDirectories">> => [1]}},
+            ?ERR_BAD_VALUE_LIST_OF_STRINGS(<<"observedDirectories">>)
+        },
+        {
+            #{body_json => #{<<"observedDirectories">> => []}},
+            ?ERR_BAD_VALUE_EMPTY(<<"observedDirectories">>)
+        },
+        {
+            #{body_json => #{<<"observedDirectories">> => [<<"ASD">>]}},
+            ?ERR_BAD_VALUE_IDENTIFIER(<<"observedDirectories[1]">>)
+        },
+        {
+            #{observed_dirs => [SpaceKrkGuid, FileGuid]},
+            ?ERR_BAD_DATA(<<"observedDirectories[2]">>, ?ERR_POSIX(?ENOTDIR))
+        },
+        {
+            #{observed_dirs => [SpaceKrkGuid, ForbiddenDirGuid]},
+            ?ERR_BAD_DATA(<<"observedDirectories[2]">>, ?ERR_POSIX(?EACCES))
+        },
+        {
+            #{body_json => #{<<"observedDirectories">> => [SpaceKrkObjectId], <<"observedAttributes">> => <<"ASD">>}},
+            ?ERR_BAD_VALUE_NOT_ALLOWED(<<"observedAttributes">>, AllowedAttrs)
+        },
+        {
+            #{body_json => #{<<"observedDirectories">> => [SpaceKrkObjectId], <<"observedAttributes">> => []}},
+            ?ERR_BAD_VALUE_EMPTY(<<"observedAttributes">>)
+        },
+        {
+            #{body_json => #{<<"observedDirectories">> => [SpaceKrkObjectId], <<"observedAttributes">> => [<<"ASD">>]}},
+            ?ERR_BAD_VALUE_NOT_ALLOWED(<<"observedAttributes">>, AllowedAttrs)
+        }
+    ])).
 
 
 %%%===================================================================

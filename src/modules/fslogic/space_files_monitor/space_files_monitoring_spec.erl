@@ -62,7 +62,9 @@ parse_and_validate(SpaceId, SessionId, Req) ->
         {times, ?TIMES_FILE_ATTRS},
         {file_location, ?LOCATION_FILE_ATTRS}
     ]),
-    maps_utils:is_empty(ObservedAttrsPerDoc) andalso ?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"observedAttributes">>),
+    maps_utils:is_empty(ObservedAttrsPerDoc) andalso throw(
+        ?ERR_BAD_VALUE_EMPTY(?err_ctx(), <<"observedAttributes">>)
+    ),
 
     FilesMonitoringSpec = #space_files_monitoring_spec{
         observed_dirs = maps:get(<<"observedDirectories">>, ParsedArguments),
@@ -109,7 +111,7 @@ parse_and_validate_observed_dir(ObjectId, Key, SpaceId, UserCtx) ->
 
     try
         fslogic_authz:ensure_authorized(
-            UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS]
+            UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)]
         )
     catch
         throw:Errno when is_atom(Errno) ->

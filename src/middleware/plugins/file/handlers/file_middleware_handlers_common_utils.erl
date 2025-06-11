@@ -24,6 +24,8 @@
 %%% API
 %%%===================================================================
 
+
+% TODO VFS-12699 explicitly pass xattr.* as AllowedValues instead of depending on ctool adding it always!
 -spec build_attributes_param_spec(
     middleware:scope(),
     onedata_file:attr_generation() | deprecated_recursive | current_events,

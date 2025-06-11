@@ -174,28 +174,40 @@ event_loop(State = #state{
 send_request(Args = #{
     node := Node,
     space_id := SpaceId,
-    token := Token,
-    observed_dirs := DirsToObserve
+    token := Token
 }) ->
     Path = <<"spaces/", SpaceId/binary, "/events/files">>,
 
     HeadersWithAuth = [rest_test_utils:user_token_header(Token)],
 
-    RequiredBody = #{
-        <<"observedDirectories">> => lists:map(fun(DirGuid) ->
-            {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
-            DirObjectId
-        end, DirsToObserve)
-    },
-    FinalBody = case maps:get(observed_attrs, Args, undefined) of
+    Payload = case maps:get(body_bin, Args, undefined) of
         undefined ->
-            RequiredBody;
-        AttrsToObserve ->
-            RequiredBody#{
-                <<"observedAttributes">> => lists:map(fun onedata_file:attr_name_to_json/1, AttrsToObserve)
-            }
+            BodyJson = case maps:get(body_json, Args, undefined) of
+                undefined ->
+                    RequiredBody = #{
+                        <<"observedDirectories">> => lists:map(fun(DirGuid) ->
+                            {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+                            DirObjectId
+                        end, maps:get(observed_dirs, Args))
+                    },
+                    case maps:get(observed_attrs, Args, undefined) of
+                        undefined ->
+                            RequiredBody;
+                        AttrsToObserve ->
+                            RequiredBody#{
+                                <<"observedAttributes">> => lists:map(
+                                    fun onedata_file:attr_name_to_json/1,
+                                    AttrsToObserve
+                                )
+                            }
+                    end;
+                Json ->
+                    Json
+            end,
+            json_utils:encode(BodyJson);
+        EncodedBody ->
+            EncodedBody
     end,
-    Payload = json_utils:encode(FinalBody),
 
     Opts = [
 %%        {recv_timeout, 50000},

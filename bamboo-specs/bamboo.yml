@@ -1643,7 +1643,7 @@ session_watcher:
 #      name: ct_logs_space_unsupport.tar.gz
 
 space_events_files:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: SPACEEVENTSFILES
   artifacts:
     - <<: *ct_logs
