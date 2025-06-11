@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include("storage_files_test_SUITE.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
@@ -28,12 +29,16 @@
 ]).
 
 -export([
+    non_existing_space_test/1,
+    unauthorized_client_test/1,
     token_caveats_test/1,
     invalid_args_test/1
 ]).
 
 all() ->
     ?ALL([
+        non_existing_space_test,
+        unauthorized_client_test,
         token_caveats_test,
         invalid_args_test
     ]).
@@ -45,6 +50,46 @@ all() ->
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+non_existing_space_test(_Config) ->
+   NonExistingSpaceId = <<"dummy_id">>,
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => NonExistingSpaceId,
+        token => oct_background:get_user_access_token(user2),
+        observed_dirs => []
+    },
+
+    ?assertMatch(
+        {error, {400, ?ERR_SPACE_NOT_SUPPORTED_BY(NonExistingSpaceId, _)}},
+        space_file_events_test_sse_client:start(ClientArgs)
+    ).
+
+
+unauthorized_client_test(_Config) ->
+    Space1Id = oct_background:get_space_id(space1),
+    Space1Guid = fslogic_file_id:spaceid_to_space_dir_guid(Space1Id),
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => Space1Id,
+        observed_dirs => [Space1Guid]
+    },
+
+    % no token == guest auth
+    ?assertMatch(
+        {error, {401, ?ERR_UNAUTHORIZED(undefined)}},
+        space_file_events_test_sse_client:start(ClientArgs)
+    ),
+    % user not belonging to space
+    ?assertMatch(
+        {error, {403, ?ERR_FORBIDDEN}},
+        space_file_events_test_sse_client:start(ClientArgs#{
+            token => oct_background:get_user_access_token(user3)
+        })
+    ).
 
 
 token_caveats_test(_Config) ->

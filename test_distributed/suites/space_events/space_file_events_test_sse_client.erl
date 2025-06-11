@@ -171,14 +171,13 @@ event_loop(State = #state{
 
 
 %% @private
-send_request(Args = #{
-    node := Node,
-    space_id := SpaceId,
-    token := Token
-}) ->
+send_request(Args = #{node := Node, space_id := SpaceId}) ->
     Path = <<"spaces/", SpaceId/binary, "/events/files">>,
 
-    HeadersWithAuth = [rest_test_utils:user_token_header(Token)],
+    HeadersWithAuth = case maps:get(token, Args, undefined) of
+        undefined -> [];
+        Token -> [rest_test_utils:user_token_header(Token)]
+    end,
 
     Payload = case maps:get(body_bin, Args, undefined) of
         undefined ->
@@ -219,8 +218,9 @@ send_request(Args = #{
 %% @private
 decode_events(Data, State, EventsAcc) ->
     case cow_sse:parse(Data, State) of
-        {event, Event, NewState} ->
-            decode_events(<<>>, NewState, [Event | EventsAcc]);
+        {event, Event = #{data := [EncodedData]}, NewState} ->
+            DataJson = json_utils:decode(EncodedData),
+            decode_events(<<>>, NewState, [Event#{data => [DataJson]} | EventsAcc]);
         {more, NewState} ->
             {NewState, EventsAcc}
     end.
