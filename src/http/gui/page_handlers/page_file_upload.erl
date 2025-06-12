@@ -57,22 +57,29 @@ handle(<<"POST">>, InitialReq) ->
         data_access_caveats_policy = disallow_data_access_caveats
     },
     case http_auth:authenticate(Req, AuthCtx) of
-        {ok, ?USER(UserId) = Auth} ->
+        {ok, ?USER(UserId, SessionId) = Auth} ->
             try
+                file_upload_utils:verbose_debug(
+                    "[user_id: ~ts, session_id: ~ts] Initiating file upload",
+                    [UserId, SessionId]
+                ),
                 Req2 = handle_multipart_req(Req, Auth, #{}),
+                file_upload_utils:verbose_debug(
+                    "[user_id: ~ts, session_id: ~ts] Finished file upload",
+                    [UserId, SessionId]
+                ),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
-                throw:upload_not_authorized ->
-                    reply_with_error(?ERR_FORBIDDEN(?err_ctx()), Req);
-                throw:Error ->
-                    reply_with_error(Error, Req);
-                Type:Message:Stacktrace ->
-                    ?error_stacktrace(
-                        "Error while processing file upload from user ~ts~nError was: ~w:~tp",
-                        [UserId, Type, Message],
-                        Stacktrace
+                Class:Reason:Stacktrace ->
+                    Error = ?examine_exception(
+                        "Error while processing file upload for user ~ts", [UserId],
+                        Class, Reason, Stacktrace
                     ),
-                    reply_with_error(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined), Req)
+                    file_upload_utils:verbose_error(
+                        "[user_id: ~ts, session_id: ~ts] Failed to upload file",
+                        [UserId, SessionId], Error
+                    ),
+                    reply_with_error(Error, Req)
             end;
         {ok, ?GUEST} ->
             reply_with_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req);
@@ -139,6 +146,11 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
 
+    file_upload_utils:verbose_debug(
+        "[guid: ~ts] Starting file chunk (no: ~B) upload",
+        [FileGuid, ChunkNumber]
+    ),
+
     authorize_chunk_upload(UserId, FileGuid),
 
     SpaceId = file_id:guid_to_space_id(FileGuid),
@@ -146,10 +158,15 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), write)),
 
     try
-        file_upload_utils:upload_file(
+        Result = file_upload_utils:upload_file(
             FileHandle, Offset, Req,
             fun cowboy_req:read_part_body/2, read_body_opts(SpaceId)
-        )
+        ),
+        file_upload_utils:verbose_debug(
+            "[guid: ~ts] File chunk (no: ~B) uploaded",
+            [FileGuid, ChunkNumber]
+        ),
+        Result
     after
         lfm:monitored_release(FileHandle) % release if possible
     end.
@@ -160,8 +177,12 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ok | no_return().
 authorize_chunk_upload(UserId, FileGuid) ->
     case file_upload_manager:authorize_chunk_upload(UserId, FileGuid) of
-        true -> ok;
-        false -> throw(upload_not_authorized)
+        true ->
+            file_upload_utils:verbose_debug("[guid: ~ts] Authorized file upload", [FileGuid]),
+            ok;
+        false ->
+            file_upload_utils:verbose_debug("[guid: ~ts] Forbade file upload", [FileGuid]),
+            throw(?ERR_FORBIDDEN(?err_ctx()))
     end.
 
 

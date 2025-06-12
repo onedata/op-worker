@@ -251,11 +251,16 @@ handle_info({'DOWN', Monitor, process, _, _}, State = #state{
             % potential race with deregistering upload
             State;
         {FileGuid, NewMonitorToFileMapping} ->
-            UploadCtx = #upload_ctx{monitors = Monitors} = maps:get(FileGuid, Uploads),
+            UploadCtx = #upload_ctx{user_id = UserId, monitors = Monitors} = maps:get(FileGuid, Uploads),
             NewUploadCtx = UploadCtx#upload_ctx{
                 monitors = ordsets:del_element(Monitor, Monitors),
                 latest_activity_timestamp = ?NOW()
             },
+
+            file_upload_utils:verbose_debug(
+                "[user_id: ~ts] Process uploading file (guid: ~ts) died",
+                [UserId, FileGuid]
+            ),
             State#state{
                 uploads = Uploads#{FileGuid => NewUploadCtx},
                 monitor_to_file_mapping = NewMonitorToFileMapping
@@ -346,6 +351,10 @@ remove_stale_uploads(Uploads) ->
 
             case ordsets:is_empty(Monitors) andalso Timestamp + InactivityPeriod < Now of
                 true ->
+                    file_upload_utils:verbose_debug(
+                        "[user_id: ~ts] Aborting file upload (guid: ~ts) due to inactivity",
+                        [UploadCtx#upload_ctx.user_id, FileGuid]
+                    ),
                     lfm:unlink(?ROOT_SESS_ID, ?FILE_REF(FileGuid), false),
                     Acc;
                 false ->
