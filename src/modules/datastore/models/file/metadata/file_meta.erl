@@ -40,14 +40,11 @@
     protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, get_including_deleted/1, get_including_deleted_local_or_remote/2,
-    ensure_space_doc_exist/1, ensure_tmp_dir_exists/1, ensure_tmp_dir_link_exists/1, ensure_opened_deleted_files_dir_exists/1,
-    new_doc/7, new_doc/8, new_doc/9, new_special_dir_doc/6, new_share_root_dir_doc/2,
-    get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1, get_owner/1, get_type/1, get_effective_type/1,
-    get_mode/1]).
--export([
-    check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1,
-    is_deleted/1, is_imported/1
+    new_doc/7, new_doc/8, new_doc/9, new_dir_doc/6, get_ancestors/1, get_locations_by_uuid/1, rename/4, ensure_synced/1,
+    get_owner/1, get_type/1, get_effective_type/1, get_mode/1
 ]).
+-export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/5, is_disambiguated/1, 
+    is_deleted/1, is_imported/1]).
 -export([get_ctx_with_remote_set/2]).
 
 
@@ -94,24 +91,6 @@
 -define(CTX_WITH_REMOTE_SCOPE(Scope), ?CTX_WITH_REMOTE_SCOPE(Scope, Scope)).
 -define(CTX_WITH_REMOTE_SCOPE(Scope, RemoteScope), ?CTX#{scope => Scope, remote_driver_ctx => #{scope => RemoteScope}}).
 
-% For each "normal" file (including spaces) scope is id of a space to
-% which the file belongs.
-% For root directory and users' root directories we use "special" scope
-% as they don't belong to any space
--define(ROOT_DIR_SCOPE, <<>>).
-
-
--define(SPACE_ROOT_DOC(SpaceId), #document{
-    key = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    value = #file_meta{
-        name = SpaceId,
-        type = ?DIRECTORY_TYPE,
-        mode = ?DEFAULT_DIR_MODE,
-        owner = ?SPACE_OWNER_ID(SpaceId),
-        is_scope = true,
-        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-    }
-}).
 
 %%%===================================================================
 %%% API
@@ -133,13 +112,6 @@ save(Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec save(doc(), boolean()) -> {ok, doc()} | {error, term()}.
-save(#document{key = FileUuid, value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    % Spaces are handled specially so as to not overwrite file_meta if it already
-    % exists ('ensure_space_docs_exist' may be called several times for each space)
-    case datastore_model:create(?CTX#{memory_copies => all}, Doc) of
-        ?ERROR_ALREADY_EXISTS -> file_meta:get(FileUuid);
-        Result -> Result
-    end;
 save(Doc, GeneratedKey) ->
     datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc).
 
@@ -156,6 +128,7 @@ create(Parent, FileDoc) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Creates new #file_meta and links it as a new child of given as first argument
 %% existing #file_meta.
@@ -214,13 +187,13 @@ create({uuid, ParentUuid}, FileDoc = #document{
                                     false ->
                                         create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
                                     _ ->
-                                        delete_doc_if_not_special(FileUuid),
+                                        delete_without_link(FileUuid),
                                         Eexists
                                 end;
                             {error, not_found} ->
                                 create({uuid, ParentUuid}, FileDoc, TreesToCheck);
                             _ ->
-                                delete_doc_if_not_special(FileUuid),
+                                delete_without_link(FileUuid),
                                 Eexists
                         end;
                     {error, Reason} ->
@@ -277,48 +250,35 @@ get_including_deleted_local_or_remote(Uuid, Scope) ->
     get_including_deleted(Uuid, ?CTX_WITH_REMOTE_SCOPE(Scope)).
 
 
-get_including_deleted(?GLOBAL_ROOT_DIR_UUID, _Ctx) ->
-    {ok, #document{
-        key = ?GLOBAL_ROOT_DIR_UUID,
-        value = #file_meta{
-            name = ?GLOBAL_ROOT_DIR_NAME,
-            is_scope = true,
-            mode = ?DEFAULT_DIR_PERMS,
-            owner = ?ROOT_USER_ID,
-            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
-        }
-    }};
+%% @private
+-spec get_including_deleted(uuid(), datastore:ctx()) -> {ok, doc()} | {error, term()}.
 get_including_deleted(Uuid, Ctx) ->
-    case fslogic_file_id:is_link_uuid(Uuid) of
-        true ->
-            % When hardlink document is requested it is merged using document
-            % representing hardlink and document representing target file
-            case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
-                {ok, LinkDoc} ->
-                    FileUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
-                    case datastore_model:get(Ctx#{include_deleted => true}, FileUuid) of
-                        {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
-                        Error2 -> Error2
-                    end;
-                Error -> Error
-            end;
-        false ->
-            case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
-                {error, not_found} ->
-                    case fslogic_file_id:is_space_dir_uuid(Uuid) of
-                        true ->
-                            % Until space doc creation is finally properly handled on space creation
-                            % create space document here if it was requested before any user login.
-                            % TODO VFS-11954 analyze whether still needed
-                            ?debug("ensure_space_docs_exist called in file_meta:get_including_deleted"),
-                            space_logic:ensure_required_docs_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
-                            datastore_model:get(Ctx#{include_deleted => true}, Uuid);
-                        false ->
-                            {error, not_found}
-                    end;
-                Other ->
-                    Other
+    %% @TODO VFS-12230 - check if special on file_ctx level
+    case special_dirs:get_file_meta_if_special(Uuid) of
+        {true, Result} ->
+            Result;
+        not_special ->
+            case fslogic_file_id:is_link_uuid(Uuid) of
+                true -> get_hardlink(Uuid, Ctx);
+                false -> datastore_model:get(Ctx#{include_deleted => true}, Uuid)
             end
+    end.
+
+
+%% @private
+-spec get_hardlink(uuid(), datastore:ctx()) -> {ok, doc()} | {error, term()}.
+get_hardlink(Uuid, Ctx) ->
+    % When hardlink document is requested it is merged using document
+    % representing hardlink and document representing target file
+    case datastore_model:get(Ctx#{include_deleted => true}, Uuid) of
+        {ok, LinkDoc} ->
+            FileUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
+            case datastore_model:get(Ctx#{include_deleted => true}, FileUuid) of
+                {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
+                Error2 -> Error2
+            end;
+        Error ->
+            Error
     end.
 
 
@@ -395,14 +355,6 @@ delete_without_link(#document{key = FileUuid}) ->
     delete_without_link(FileUuid);
 delete_without_link(FileUuid) ->
     ?run(begin datastore_model:delete(?CTX, FileUuid) end).
-
-
--spec delete_doc_if_not_special(uuid()) -> ok.
-delete_doc_if_not_special(FileUuid) ->
-    case fslogic_file_id:is_special_uuid(FileUuid) of
-        true -> ok;
-        false -> delete_without_link(FileUuid)
-    end.
 
 
 %%--------------------------------------------------------------------
@@ -654,8 +606,8 @@ get_ancestors(FileUuid, Acc) ->
 -spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id() | undefined} | {error, term()}.
 get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
     % scope has not been set yet
-    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
-        true -> {ok, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)};
+    case space_dir:is_special(uuid, FileUuid) of
+        true -> {ok, space_dir:extract_space_id(FileUuid)};
         false -> {ok, ?ROOT_DIR_SCOPE}
     end;
 get_scope_id(#document{value = #file_meta{is_scope = false}, scope = <<>>}) ->
@@ -752,60 +704,6 @@ get_shares(#file_meta{shares = Shares}) ->
     Shares.
 
 
--spec ensure_space_doc_exist(SpaceId :: od_space:id()) -> ok | no_return().
-ensure_space_doc_exist(SpaceId) ->
-    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, ?SPACE_ROOT_DOC(SpaceId)) of
-        {ok, Doc} ->
-            ok = times_api:report_file_created(file_ctx:new_by_doc(Doc, SpaceId));
-        {error, already_exists} ->
-            ok
-    end.
-
-
--spec ensure_tmp_dir_exists(od_space:id()) -> created | already_exists.
-ensure_tmp_dir_exists(SpaceId) ->
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    TmpDirDoc = new_special_dir_doc(
-        TmpDirUuid, ?TMP_DIR_NAME, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId), SpaceUuid, SpaceId
-    ),
-    ensure_tmp_dir_link_exists(SpaceId),
-    case datastore_model:create(?CTX, TmpDirDoc#document{ignore_in_changes = true}) of
-        {ok, CreatedDoc} ->
-            ok = ?ok_if_exists(
-                times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
-            ),
-            created;
-        {error, already_exists} ->
-            already_exists
-    end.
-
-
--spec ensure_tmp_dir_link_exists(od_space:id()) -> ok.
-ensure_tmp_dir_link_exists(SpaceId) ->
-    ok = ?ok_if_exists(?extract_ok(file_meta_forest:add(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
-        ?TMP_DIR_NAME, fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId)))).
-
-
--spec ensure_opened_deleted_files_dir_exists(od_space:id()) -> ok.
-ensure_opened_deleted_files_dir_exists(SpaceId) ->
-    TmpDirUuid = fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
-    Doc = new_special_dir_doc(
-        ?OPENED_DELETED_FILES_DIR_UUID(SpaceId), ?OPENED_DELETED_FILES_DIR_DIR_NAME, ?DEFAULT_DIR_MODE,
-        ?SPACE_OWNER_ID(SpaceId), TmpDirUuid, SpaceId
-    ),
-    case file_meta:create({uuid, TmpDirUuid}, Doc#document{ignore_in_changes = true}) of
-        {ok, CreatedDoc} ->
-            dir_size_stats:report_file_created(
-                ?DIRECTORY_TYPE, file_id:pack_guid(TmpDirUuid, SpaceId)),
-            ok = ?ok_if_exists(
-                times_api:report_file_created(file_ctx:new_by_doc(CreatedDoc, SpaceId))
-            );
-        {error, already_exists} ->
-            ok
-    end.
-
-
 -spec new_doc(undefined | uuid(), name(), onedata_file:type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
 new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope) ->
@@ -837,33 +735,9 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, Scope, IgnoreInCh
     }.
 
 
--spec new_special_dir_doc(uuid(), name(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
-new_special_dir_doc(FileUuid, FileName, Mode, Owner, ParentUuid, Scope) ->
-    %% @TODO VFS-11644 - Untangle special dirs and place their logic in one, well-explained place
+-spec new_dir_doc(uuid(), name(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
+new_dir_doc(FileUuid, FileName, Mode, Owner, ParentUuid, Scope) ->
     new_doc(FileUuid, FileName, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, Scope).
-
-
--spec new_share_root_dir_doc(uuid(), od_space:id()) -> doc().
-new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
-    ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(ShareRootDirUuid),
-
-    #document{
-        key = ShareRootDirUuid,
-        value = #file_meta{
-            name = ShareId,
-            type = ?DIRECTORY_TYPE,
-            is_scope = false,
-            mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
-            owner = ?ROOT_USER_ID,
-            parent_uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-            provider_id = oneprovider:get_id(),
-            deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
-                {ok, _} -> false;
-                ?ERROR_NOT_FOUND -> true
-            end
-        },
-        scope = SpaceId
-    }.
 
 
 %%--------------------------------------------------------------------
@@ -1053,7 +927,7 @@ check_name_and_get_conflicting_files(#document{
 -spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id(), od_space:id()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: conflicts()}.
 check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId, ChildScope) ->
-    RemoteScope = case fslogic_file_id:is_special_uuid(ParentUuid) of
+    RemoteScope = case special_dirs:is_special(ParentUuid) of
         true -> undefined;
         false -> ChildScope
     end,

@@ -407,7 +407,7 @@ get_user_root_dir_children_test(_Config) ->
     Providers = [P2Node, P1Node],
     
     User4Id = oct_background:get_user_id(user4),
-    User4RootDirGuid = fslogic_file_id:user_root_dir_guid(User4Id),
+    User4RootDirGuid = user_root_dir:guid(User4Id),
     {ok, User4RootDirObjectId} = file_id:guid_to_objectid(User4RootDirGuid),
     
     % Space dir docs are not synchronized between providers but kept locally. Because of that
@@ -416,8 +416,8 @@ get_user_root_dir_children_test(_Config) ->
     GetSpaceInfoFun = fun(SpacePlaceholder, Node) ->
         SpaceId = oct_background:get_space_id(SpacePlaceholder),
         SpaceName = atom_to_binary(SpacePlaceholder, utf8),
-        SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-        {SpaceGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_attrs(Node, SpaceGuid)}
+        SpaceDirGuid = space_dir:guid(SpaceId),
+        {SpaceDirGuid, SpaceName, <<"/", SpaceName/binary>>, get_space_dir_attrs(Node, SpaceDirGuid)}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
         [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node), GetSpaceInfoFun(space_s3, Node)]
@@ -482,7 +482,7 @@ get_dir_children_on_provider_not_supporting_space_test(_Config) ->
     [P2Node] = oct_background:get_provider_nodes(paris),
 
     Space1Id = oct_background:get_space_id(space_krk),
-    Space1Guid = fslogic_file_id:spaceid_to_space_dir_guid(Space1Id),
+    Space1Guid = space_dir:guid(Space1Id),
     {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
 
     ValidateRestListedFilesOnProvidersNotSupportingSpaceFun = fun(_, {ok, RespCode, _, RespBody}) ->
@@ -702,7 +702,7 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles, Node) -
                     maps:with(utils:ensure_list(Attributes),
                         api_test_utils:file_attr_to_json(ShareId, Format, ProviderId, Attrs))
             end,
-            MappedChildAttrs2 = case fslogic_file_id:is_space_dir_guid(Guid) of
+            MappedChildAttrs2 = case space_dir:is_special(guid, Guid) of
                 % do not check localReplicationRate for space dirs as it might be difficult to determine actual correct value
                 true -> maps:remove(<<"localReplicationRate">>, MappedChildAttrs);
                 false -> MappedChildAttrs

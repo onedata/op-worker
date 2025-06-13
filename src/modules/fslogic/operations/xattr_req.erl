@@ -47,14 +47,12 @@ get_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{}, boolean(), boolean()) ->
     fslogic_worker:fuse_response().
 set_xattr(UserCtx, FileCtx, Xattr, Create, Replace) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx),
     set_xattr_internal(UserCtx, FileCtx, Xattr, Create, Replace).
 
 
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), onedata_file:xattr_name()) ->
     fslogic_worker:fuse_response().
 remove_xattr(UserCtx, FileCtx, XattrName) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx),
     remove_xattr_internal(UserCtx, FileCtx, XattrName).
 
 

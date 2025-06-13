@@ -1147,9 +1147,9 @@ qos_status_during_traverse_with_hardlinks_test_base() ->
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
-    {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     
     {ok, FileGuid1} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, FileGuid2} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
@@ -1176,8 +1176,8 @@ qos_status_during_traverse_with_file_deletion_test_base(NumberOfFilesInDir, File
     [Provider1 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     Name = generator:gen_name(),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, FileToLinkGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, FileToLinkGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     DirStructure =
         {?SPACE_NAME, [
             {Name, % Dir1
@@ -1224,8 +1224,8 @@ qos_status_during_traverse_with_dir_deletion_test_base(NumberOfFilesInDir, FileT
     [Provider1 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     Name = generator:gen_name(),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, FileToLinkGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, FileToLinkGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     DirStructure =
         {?SPACE_NAME, [
             {Name, [ % Dir1
@@ -1518,12 +1518,12 @@ qos_with_hardlink_test_base(Mode) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     {FileParent, LinkParent} = case Mode of
-        direct -> {SpaceGuid, SpaceGuid};
+        direct -> {SpaceDirGuid, SpaceDirGuid};
         effective ->
-            {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
-            {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+            {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+            {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
             {Dir1Guid, Dir2Guid}
     end,
     
@@ -1565,10 +1565,10 @@ qos_with_hardlink_deletion_test_base(ToDelete) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    
-    {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), generator:gen_name()),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+
+    {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceDirGuid), generator:gen_name()),
     await_files_sync_between_nodes(oct_background:get_all_providers_nodes(), [FileGuid, LinkGuid]),
     Guids = [FileGuid, LinkGuid],
     
@@ -1591,11 +1591,11 @@ qos_on_symlink_test_base() ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    
-    {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+
+    {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, FilePath} = opt_file_tree:get_path(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid)),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(SpaceGuid), generator:gen_name(), FilePath),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(SpaceDirGuid), generator:gen_name(), FilePath),
     await_files_sync_between_nodes(oct_background:get_all_providers_nodes(), [FileGuid, LinkGuid]),
     
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(LinkGuid), <<"providerId=", Provider2/binary>>, 1),
@@ -1608,9 +1608,9 @@ effective_qos_with_symlink_test_base() ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
-    {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, FilePath} = opt_file_tree:get_path(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid)),
@@ -1640,9 +1640,9 @@ create_hardlink_in_dir_with_qos() ->
     [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = opw_test_rpc:call(Provider1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
-    {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
     
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([FileGuid, Dir1Guid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
@@ -1775,8 +1775,7 @@ prepare_type_spec(random, Nodes, Target) ->
 
 %% @private
 create_link_target(Node, SessId, SpaceId) ->
-    SpaceGuid = opw_test_rpc:call(Node, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, FileToLinkGuid} = lfm_proxy:create(Node, SessId, SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, FileToLinkGuid} = lfm_proxy:create(Node, SessId, space_dir:guid(SpaceId), generator:gen_name(), ?DEFAULT_FILE_PERMS),
     FileToLinkGuid.
 
 

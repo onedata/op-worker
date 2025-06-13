@@ -177,19 +177,21 @@ get(FileDoc) ->
 
 
 -spec get(file_meta:doc(), boolean()) -> {ok, entry()} | error().
-get(FileDoc, true = _CheckInvalidateOnDatasetsGetFlag) ->
+get(FileDoc = #document{key = FileUuid}, true = _CheckInvalidateOnDatasetsGetFlag) ->
     {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
-    case effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET) of
+    case special_dirs:is_affected_by_protection_flags(FileUuid) andalso
+        effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET)
+    of
         {ok, true} -> invalidate(SpaceId, false);
         _ -> ok
     end,
 
     get(FileDoc, false);
 get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFlag) ->
-    case fslogic_file_id:is_root_dir_uuid(FileUuid) orelse fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
-        true ->
-            {ok, #entry{}};
+    case special_dirs:is_affected_by_protection_flags(FileUuid) of
         false ->
+            {ok, #entry{}};
+        true ->
             {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
             CacheName = ?CACHE_NAME(SpaceId),
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
@@ -239,7 +241,7 @@ calculate(Doc = #document{}, undefined) ->
         eff_dataset_protection_flags = ProtectionFlags,
         eff_protection_flags = ProtectionFlags
     };
-calculate(#document{key = ?ARCHIVES_ROOT_DIR_UUID(SpaceId), scope = SpaceId}, _) ->
+calculate(#document{key = ?SPACE_ARCHIVES_DIR_UUID(SpaceId), scope = SpaceId}, _) ->
     % files in archives cannot be established as datasets nor should they inherit dataset membership
     #entry{};
 calculate(#document{key = ?TRASH_DIR_UUID(SpaceId), scope = SpaceId}, _) ->

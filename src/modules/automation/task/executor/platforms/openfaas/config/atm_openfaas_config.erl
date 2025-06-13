@@ -24,6 +24,7 @@
     get_activity_feed_secret/1,
     get_result_streamer_image/1,
 
+    should_enable_function_debug_mode/1,
     should_disable_tls_verification/1,
 
     get_function_namespace/1,
@@ -89,6 +90,11 @@ get_result_streamer_image(_Record) ->
         ResultStreamerImage ->
             str_utils:to_binary(ResultStreamerImage)
     end.
+
+
+-spec should_enable_function_debug_mode(record()) -> boolean().
+should_enable_function_debug_mode(_Record) ->
+    utils:to_boolean(get_env(openfaas_function_debug_mode, false)).
 
 
 -spec should_disable_tls_verification(record()) -> boolean().

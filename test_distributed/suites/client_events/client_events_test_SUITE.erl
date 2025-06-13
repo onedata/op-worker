@@ -84,9 +84,9 @@ subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWo
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     EventProducingWorkerSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(EventProducingWorker)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, SpaceName),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, SpaceName),
 
-    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(EventProducingWorker, <<"0">>, SpaceGuid,
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(EventProducingWorker, <<"0">>, SpaceDirGuid,
         generator:gen_name(), ?DEFAULT_DIR_PERMS)),
     ?assertEqual(ok, lfm_proxy:close(EventProducingWorker, RootHandle)),
 
@@ -97,7 +97,7 @@ subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWo
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
 
-    DirId = fuse_test_utils:create_directory(EventProducingWorkerSock, SpaceGuid, Dirname),
+    DirId = fuse_test_utils:create_directory(EventProducingWorkerSock, SpaceDirGuid, Dirname),
     Seq1 = get_seq(Config, <<"user1">>),
     SubscriptionMessage = fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
@@ -148,11 +148,11 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
-    DirId = fslogic_file_id:user_root_dir_guid(UserId),
+    DirId = user_root_dir:guid(UserId),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
@@ -163,8 +163,8 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     ?assertMatch({ok, [_]},
         rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
 
-    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceGuid), []]),
-    receive_events_and_check(ExpectedAns, SpaceGuid),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceDirGuid), []]),
+    receive_events_and_check(ExpectedAns, SpaceDirGuid),
 
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
@@ -185,12 +185,12 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {DomainUser, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name", SpaceNum/binary>>),
-    SpaceDirUuid = file_id:guid_to_uuid(SpaceGuid),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name", SpaceNum/binary>>),
+    SpaceDirUuid = file_id:guid_to_uuid(SpaceDirGuid),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
-    DirId = fslogic_file_id:user_root_dir_guid(UserId),
+    DirId = user_root_dir:guid(UserId),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
@@ -203,7 +203,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
     
     ok = rpc:call(Worker1, space_logic, ensure_required_docs_exist, [<<"space_id", SpaceNum/binary>>]),
     ok = rpc:call(Worker1, user_root_dir, report_new_spaces_appeared, [[User], [<<"space_id", SpaceNum/binary>>]]),
-    receive_events_and_check(ExpectedAns, SpaceGuid),
+    receive_events_and_check(ExpectedAns, SpaceDirGuid),
 
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
@@ -217,10 +217,10 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 events_on_conflicts_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
 
-    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceDirGuid,
         generator:gen_name(), ?DEFAULT_DIR_PERMS)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
@@ -229,7 +229,7 @@ events_on_conflicts_test(Config) ->
     Filename = ?CONFLICTING_FILE_NAME,
     Dirname = generator:gen_name(),
 
-    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    DirId = fuse_test_utils:create_directory(Sock, SpaceDirGuid, Dirname),
     Seq1 = get_seq(Config, <<"user1">>),
     Seq2 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
@@ -274,14 +274,14 @@ subscribe_on_replication_info_test(Config) ->
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
 
     % Create test dir and file
-    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    DirId = fuse_test_utils:create_directory(Sock, SpaceDirGuid, Dirname),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
@@ -354,14 +354,14 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     SessionIdWorker2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name2">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, EmitterSessionId, <<"/space_name2">>),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
 
     % Create test dir and file
-    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    DirId = fuse_test_utils:create_directory(Sock, SpaceDirGuid, Dirname),
     {FileGuid, HandleId} = fuse_test_utils:create_777_mode_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
@@ -438,11 +438,11 @@ events_for_hardlinks_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    DirWithLinkGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
+    DirWithLinkGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
 
     % Test subscription on link and emission on file
     Seq1 = get_seq(Config, <<"user1">>),
@@ -501,12 +501,12 @@ attr_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file and link
-    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
-    DirWithLinkGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
+    DirWithLinkGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
     LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkGuid, generator:gen_name()),
@@ -575,11 +575,11 @@ location_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
-    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
@@ -607,11 +607,11 @@ remove_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
-    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 
@@ -641,11 +641,11 @@ rename_auth_filtering_test(Config) ->
     [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     % Create file
-    DirGuid = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirGuid = fuse_test_utils:create_directory(Sock, SpaceDirGuid, generator:gen_name()),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirGuid, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
 

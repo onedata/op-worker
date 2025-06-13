@@ -841,10 +841,10 @@ create_remote_dir_import_race_test(Config) ->
     Ctx = rpc:call(W2, file_meta, get_ctx, []),
     TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceDirUuid = space_dir:uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
-        [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
-    ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_DIR), ?ATTEMPTS),
+        [Ctx#{scope => ?SPACE_ID}, SpaceDirUuid, TreeId, {?TEST_DIR, FileUuid}]),
+    ?assertMatch({ok, _, _}, get_link(W1, SpaceDirUuid, ?TEST_DIR), ?ATTEMPTS),
 
     % storage import should import directory with conflicting name
     ProviderId1 = provider_id(W1),
@@ -902,10 +902,10 @@ create_remote_file_import_race_test(Config) ->
     Ctx = rpc:call(W2, file_meta, get_ctx, []),
     TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceDirUuid = space_dir:uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
-        [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
-    ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
+        [Ctx#{scope => ?SPACE_ID}, SpaceDirUuid, TreeId, {?TEST_FILE1, FileUuid}]),
+    ?assertMatch({ok, _, _}, get_link(W1, SpaceDirUuid, ?TEST_FILE1), ?ATTEMPTS),
 
     % storage import should import file with conflicting name
     ProviderId1 = provider_id(W1),
@@ -1297,13 +1297,13 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(ReplicatingNode, Handle2, 0, 10), ?ATTEMPTS),
 
     % pretend that only synchronization of deletion of link has happened
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceDirUuid = space_dir:uuid(?SPACE_ID),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
-    ?assertMatch({ok, _, _}, get_link(W2, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
-    remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
+    ?assertMatch({ok, _, _}, get_link(W2, SpaceDirUuid, ?TEST_FILE1), ?ATTEMPTS),
+    remove_link(W2, SpaceDirUuid, ?TEST_FILE1, FileUuid),
 
     % wait till deletion of link is synchronized
-    ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
+    ?assertMatch({error, not_found}, get_link(W1, SpaceDirUuid, ?TEST_FILE1), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
@@ -3640,8 +3640,8 @@ delete_many_subfiles_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    SpaceGuid = get_space_guid(),
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid),
+    SpaceDirGuid = get_space_guid(),
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceDirGuid),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3666,7 +3666,7 @@ delete_many_subfiles_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceDirGuid).
 
 create_delete_race_test(Config, StorageType) ->
     % this tests checks whether storage import works properly in case of create-delete race
@@ -6191,9 +6191,9 @@ clean_storage(Worker, Storage, ImportedStorage) ->
 
 clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
-    SpaceGuid = rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [?SPACE_ID]),
+    SpaceDirGuid = space_dir:guid(?SPACE_ID),
     lfm_proxy:close_all(W),
-    {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000),
+    {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 10000),
     Attempts = 600,
     Self = self(),
     Guids = lists:filtermap(fun({Guid, Name}) ->
@@ -6207,8 +6207,8 @@ clean_space(Config) ->
         end
     end, Children),
     verify_deletions(Guids, Attempts),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000), ?ATTEMPTS).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 10000), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 10000), ?ATTEMPTS).
 
 
 verify_deletions(Guids, Timeout) ->
@@ -6624,7 +6624,7 @@ close_if_applicable(Node, Handle, _) ->
     ok = lfm_proxy:close(Node, Handle).
 
 get_space_guid() ->
-    fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID).
+    space_dir:guid(?SPACE_ID).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -6929,14 +6929,14 @@ end_per_testcase(force_stop_test, Config) ->
 
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
-    remove_link(W2, SpaceUuid, ?TEST_DIR),
+    SpaceDirUuid = space_dir:uuid(?SPACE_ID),
+    remove_link(W2, SpaceDirUuid, ?TEST_DIR),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_file_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
-    remove_link(W2, SpaceUuid, ?TEST_FILE1),
+    SpaceDirUuid = space_dir:uuid(?SPACE_ID),
+    remove_link(W2, SpaceDirUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config)

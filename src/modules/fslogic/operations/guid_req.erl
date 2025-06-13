@@ -101,7 +101,7 @@ get_parent(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
-    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx1, UserCtx),
+    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx1, UserCtx),
     {ok, ParentGuid}.
 
 

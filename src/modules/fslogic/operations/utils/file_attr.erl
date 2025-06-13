@@ -405,7 +405,7 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs, user_ctx = UserCtx} = State) ->
     case lists:member(?attr_parent_guid, RequestedAttrs) of
         true ->
-            {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+            {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
             {ParentGuid, State#state{file_ctx = FileCtx2}};
         _ ->
             {undefined, State}
@@ -550,12 +550,12 @@ resolve_name_attrs_conflicts(State) ->
     ProviderId = file_meta:get_provider_id(FileDoc),
     Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+    case space_dir:is_special(uuid, FileUuid) of
         true ->
             #state{user_ctx = UserCtx} = UpdatedState,
             {SpaceName, FileCtx2} = file_ctx:get_space_name(FileCtx, UserCtx),
             {ExtendedName, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, SpaceName,
-                fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+                space_dir:extract_space_id(FileUuid)),
             case Conflicts of
                 [] ->
                     {UpdatedState, #file_attr{name = SpaceName}};

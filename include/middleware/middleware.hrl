@@ -329,4 +329,86 @@
 }).
 
 
+
+%%%===================================================================
+%%% Misc
+%%%===================================================================
+
+
+%% NOTE: Any operation added here will be automatically allowed for space dir.
+%% For more details see space_dir:allowed_operations/0.
+-define(MIDDLEWARE_ALL_OPERATIONS, [
+    % ARCHIVE OPERATIONS
+    #archives_list_request{},
+    #dataset_archive_request{},
+    #archivisation_cancel_request{},
+    #archive_info_get_request{},
+    #archive_update_request{},
+    #archive_delete_request{},
+    #archive_recall_request{},
+    #archive_recall_cancel_request{},
+    #archive_recall_details_get_request{},
+    #archive_recall_progress_get_request{},
+    #archive_recall_log_browse_request{},
+
+    % ATM OPERATIONS
+    #atm_workflow_execution_schedule_request{},
+    #atm_workflow_execution_init_cancel_request{},
+    #atm_workflow_execution_init_pause_request{},
+    #atm_workflow_execution_resume_request{},
+    #atm_workflow_execution_force_continue_request{},
+    #atm_workflow_execution_repeat_request{},
+    #atm_workflow_execution_discard_request{},
+
+    % CDMI OPERATIONS
+    #transfer_encoding_get_request{},
+    #transfer_encoding_set_request{},
+    #cdmi_completion_status_get_request{},
+    #cdmi_completion_status_set_request{},
+    #mimetype_get_request{},
+    #mimetype_set_request{},
+
+    % DATASET OPERATIONS
+    #top_datasets_list_request{},
+    #children_datasets_list_request{},
+    #dataset_establish_request{},
+    #dataset_info_get_request{},
+    #dataset_update_request{},
+    #dataset_remove_request {},
+    #file_eff_dataset_summary_get_request{},
+
+    % FILE METADATA OPERATIONS
+    #custom_metadata_get_request{},
+    #custom_metadata_set_request{},
+    #custom_metadata_remove_request{},
+    #data_distribution_gather_request{},
+    #historical_dir_size_stats_get_request{},
+    #file_storage_locations_get_request{},
+
+    % QoS OPERATIONS
+    #qos_entry_add_request{},
+    #qos_entry_get_request{},
+    #qos_entry_remove_request{},
+    #effective_file_qos_get_request{},
+    #qos_status_check_request{},
+
+    % SHARE OPERATIONS
+    #share_create_request{},
+    #share_remove_request{},
+
+    % TRANSFER OPERATIONS
+    #file_transfer_schedule_request{},
+    #view_transfer_schedule_request{},
+
+    % FILE PERMISSIONS OPERATIONS
+    #acl_get_request{},
+    #acl_set_request{},
+    #acl_remove_request{},
+    #check_file_access_request{},
+
+    % FILE TREE OPERATIONS
+    #file_parent_get_request{},
+    #file_path_get_request{}
+]).
+
 -endif.

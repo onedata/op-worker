@@ -275,13 +275,13 @@ file_should_not_be_listed_after_deletion(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>),
-    {ok, #file_attr{guid = SpaceGuid}} = lfm_proxy:stat(Worker, SessId, {path, <<"/", SpaceName/binary>>}),
-    {ok, Children} = lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceGuid), 0,10),
+    {ok, #file_attr{guid = SpaceDirGuid}} = lfm_proxy:stat(Worker, SessId, {path, <<"/", SpaceName/binary>>}),
+    {ok, Children} = lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceDirGuid), 0,10),
     ?assertMatch(#{FileGuid := <<"test_file">>}, maps:from_list(Children)),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(FileGuid))),
 
-    {ok, NewChildren} = lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceGuid), 0,10),
+    {ok, NewChildren} = lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceDirGuid), 0,10),
     ?assertNotMatch(#{FileGuid := <<"test_file">>}, maps:from_list(NewChildren)).
 
 file_stat_should_return_enoent_after_deletion(Config) ->
@@ -401,11 +401,10 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     SpaceId = <<"space1">>,
-    ParentGuid = rpc:call(Worker, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
     FileName = generator:gen_name(),
     FilePath = filepath_utils:join([<<"/">>, SpaceId, FileName]),
     
-    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, FileName, ?DEFAULT_FILE_PERMS),
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId, space_dir:guid(SpaceId), FileName, ?DEFAULT_FILE_PERMS),
     ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G1)),
     {ok, G2} = lfm_proxy:create(Worker, SessId, FilePath),
     {ok, H2} = lfm_proxy:open(Worker, SessId, ?FILE_REF(G2), rdwr),

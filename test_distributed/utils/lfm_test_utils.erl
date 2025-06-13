@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
+-export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_dir_guid/1, get_user1_first_space_name/1,
     get_user1_first_storage_id/2]).
 -export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
 -export([create_files_tree/4, create_files_tree/5]).
@@ -45,8 +45,8 @@ get_user1_first_space_id(Config) ->
     SpaceId.
 
 
-get_user1_first_space_guid(Config) ->
-    fslogic_file_id:spaceid_to_space_dir_guid(get_user1_first_space_id(Config)).
+get_user1_first_space_dir_guid(Config) ->
+    space_dir:guid(get_user1_first_space_id(Config)).
 
 
 get_user1_first_space_name(Config) ->
@@ -139,35 +139,35 @@ clean_space(Workers, SpaceId, Attempts) ->
     clean_space(CleaningWorker, Workers2, SpaceId, Attempts).
 
 clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     BatchSize = 1000,
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, AllWorkers),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceDirGuid, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId), BatchSize, false),
-    ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, trash_dir:guid(SpaceId), BatchSize, false),
+    ArchivesDirGuid = file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId),
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, false),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     lists:foreach(fun(W) ->
         ?assertMatch({ok, []},
             % TODO VFS-7064 after introducing link to trash directory this function must be adapted
-            lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10), Attempts)
+            lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 10), Attempts)
     end, utils:ensure_list(Workers)).
 
 
 assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     lists:foreach(fun(W) ->
         case opw_test_rpc:supports_space(W, SpaceId) of
             true ->
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 100), Attempts),
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceDirGuid), 0, 100), Attempts),
                 % trash directory should be empty
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)), 0, 100), Attempts);
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(trash_dir:guid(SpaceId)), 0, 100), Attempts);
                 % TODO VFS-7809 Check why sometimes after cleanup in tests, space capacity is not equal to 0
                 % ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
             false ->
@@ -211,7 +211,7 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
 
 rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
     Results = lists:map(fun({G, _Name}) ->
-        case fslogic_file_id:is_special_guid(G) of
+        case special_dirs:is_special(file_id:guid_to_uuid(G)) of
             true ->
                 rm_recursive(Worker, SessId, G, BatchSize, false);
             false ->

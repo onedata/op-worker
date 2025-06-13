@@ -152,10 +152,8 @@ create_archive_root_dir(ArchiveDoc, DatasetId, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     UserId = user_ctx:get_user_id(UserCtx),
-    {ok, ArchiveRootDirUuid} = archivisation_tree:create_archive_dir(
-        ArchiveId, DatasetId, SpaceId, UserId),
-    ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
-    archive:set_root_dir_guid(ArchiveId, ArchiveRootDirGuid).
+    ok = archive_dir:ensure_exists(ArchiveId, DatasetId, SpaceId, UserId),
+    archive:set_root_dir_guid(ArchiveId, archive_dir:guid(SpaceId, ArchiveId)).
 
 
 -spec create_archive_data_dir(archive:doc(), user_ctx:ctx()) -> {ok, archive:doc()}.

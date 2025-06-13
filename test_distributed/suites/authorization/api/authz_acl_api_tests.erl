@@ -39,15 +39,15 @@ test_get_acl(SpaceId) ->
         available_in_readonly_mode = true,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_perms:get_acl(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -64,9 +64,8 @@ test_set_acl(SpaceId) ->
         available_in_readonly_mode = false,
         available_for_share_guid = false,
         available_in_public_data_mode = false,
-        operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+        operation = fun (Node, SessionId, TestCaseRootDirPath, ExtraData) ->
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_perms:set_acl(Node, SessionId, FileKey, [
                 ?ALLOW_ACE(
                     ?group,
@@ -78,7 +77,9 @@ test_set_acl(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = {error, ?EACCES} % space dir does not have required perms set
     }).
 
 
@@ -96,12 +97,13 @@ test_remove_acl(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_perms:remove_acl(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = {error, ?EACCES} % space dir does not have required perms set
     }).

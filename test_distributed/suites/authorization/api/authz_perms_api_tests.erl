@@ -40,7 +40,7 @@ test_set_perms(SpaceId) ->
     SpaceMemberSessionId = oct_background:get_user_session_id(user2, krakow),
     NonSpaceMemberSessionId = oct_background:get_user_session_id(user3, krakow),
 
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     #object{
         guid = DirGuid,
@@ -86,7 +86,7 @@ test_set_perms(SpaceId) ->
 
     % but not if that access is via shared guid
     authz_test_utils:set_modes(Node, #{DirGuid => 8#777, FileGuid => 8#777}),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, FileOwnerSessionId, ShareFileRef, 8#000)),
+    ?assertMatch({error, ?ENOTSUP}, lfm_proxy:set_perms(Node, FileOwnerSessionId, ShareFileRef, 8#000)),
     AssertAttrsOnStorage(8#777),
 
     % other users from space can't change perms no matter what
@@ -103,7 +103,7 @@ test_set_perms(SpaceId) ->
     SpaceDirRef = ?FILE_REF(SpaceDirGuid),
     lists:foreach(fun(SessionId) ->
         RandMode = ?RAND_ELEMENT([8#000, 8#555, 8#777]),
-        ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, SessionId, SpaceDirRef, RandMode))
+        ?assertMatch({error, ?ENOTSUP}, lfm_proxy:set_perms(Node, SessionId, SpaceDirRef, RandMode))
     end, [SpaceOwnerSessionId, FileOwnerSessionId, SpaceMemberSessionId]),
 
     % users outside of space shouldn't even see the file
@@ -126,7 +126,7 @@ test_set_perms(SpaceId) ->
     ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerSessionId, FileRef, 8#000)),
 
     % but not if that access is via shared guid
-    ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(Node, FileOwnerSessionId, ShareFileRef, 8#000)),
+    ?assertMatch({error, ?ENOTSUP}, lfm_proxy:set_perms(Node, FileOwnerSessionId, ShareFileRef, 8#000)),
 
     % but space owner always can change perms no matter the ACL
     SetAclFun(#{DirGuid => [], FileGuid => []}),
@@ -155,14 +155,14 @@ test_check_file_read_access(SpaceId) ->
         available_for_share_guid = true,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_perms:check_file_access(Node, SessionId, FileKey, read)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -180,14 +180,14 @@ test_check_file_write_access(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_perms:check_file_access(Node, SessionId, FileKey, write)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -205,12 +205,12 @@ test_check_file_rdwr_access(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_file_perms:check_file_access(Node, SessionId, FileKey, rdwr)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).

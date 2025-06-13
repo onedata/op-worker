@@ -257,10 +257,7 @@ upgrade_cluster(4) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
         lists:foreach(fun(SpaceId) ->
-            case file_meta:ensure_tmp_dir_exists(SpaceId) of
-                created -> ?info("Created tmp dir for space '~ts'.", [SpaceId]);
-                already_exists -> ok
-            end
+            tmp_dir:ensure_exists(SpaceId)
         end, SpaceIds)
     end),
     {ok, 5};
@@ -273,27 +270,27 @@ upgrade_cluster(5) ->
         ?info("Upgrading tmp directory links..."),
         % NOTE: existence of tmp directory was ensured in previous version upgrade, but we still need to ensure,
         % that link exists (it was not ensured then).
-        lists:foreach(fun file_meta:ensure_tmp_dir_link_exists/1, SpaceIds),
+        lists:foreach(fun tmp_dir:ensure_tmp_dir_link_exists/1, SpaceIds),
         % NOTE: there is no link for trash dir, so there is no need to ensure it existence.
         ?info("Upgrading trash directories..."),
-        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+        lists:foreach(fun trash_dir:ensure_exists/1, SpaceIds),
         ?info("Upgrading archive root directories..."),
         % NOTE: below function also ensures existence of archives root link.
-        lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
+        lists:foreach(fun space_archives_dir:ensure_exists/1, SpaceIds),
         % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
         % it will create it if it is not yet synced.
         lists:foreach(fun(SpaceId) ->
             ?info("Upgrading dataset directory links for space '~ts'...", [SpaceId]),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
-                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end),
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
-                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end)
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end)
         end, SpaceIds),
         async_run_with_oz_connection_after_upgrade(fun() ->
             lists:foreach(fun(SpaceId) ->
                 % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
                 ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
-                file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
+                opened_deleted_files_dir:ensure_exists(SpaceId)
             end, SpaceIds)
         end)
     end),

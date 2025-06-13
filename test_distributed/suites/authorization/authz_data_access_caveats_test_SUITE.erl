@@ -121,14 +121,14 @@ all() -> [
 
 
 list_user_root_dir_test(_Config) ->
-    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(oct_background:get_user_id(?LS_USER)),
+    UserRootDirGuid = user_root_dir:guid(oct_background:get_user_id(?LS_USER)),
 
     Space1Name = oct_background:get_space_name(space1),
-    Space1Guid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space1)),
+    Space1Guid = space_dir:guid(oct_background:get_space_id(space1)),
 
     SpaceKrkParPName = oct_background:get_space_name(space_krk_par_p),
     SpaceKrkParPId = oct_background:get_space_id(space_krk_par_p),
-    SpaceKrkParPGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
+    SpaceKrkParPGuid = space_dir:guid(oct_background:get_space_id(space_krk_par_p)),
 
     % With no caveats listing user root dir should list all user spaces
     ?assertEqual(
@@ -148,7 +148,7 @@ list_user_root_dir_test(_Config) ->
 
 
 list_space_root_dir_test(_Config) ->
-    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
+    SpaceRootDirGuid = space_dir:guid(oct_background:get_space_id(?LS_SPACE)),
 
     % With no caveats listing space dir should list all space directories and files
     ?assertEqual(
@@ -277,10 +277,10 @@ list_shared_directory_test(_Config) ->
 
 
 list_ancestors_with_intersecting_caveats_test(_Config) ->
-    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(oct_background:get_user_id(?LS_USER)),
+    UserRootDirGuid = user_root_dir:guid(oct_background:get_user_id(?LS_USER)),
 
     SpaceName = oct_background:get_space_name(?LS_SPACE),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
+    SpaceDirGuid = space_dir:guid(oct_background:get_space_id(?LS_SPACE)),
 
     Caveats = [
         ?CV_OBJECTID([?LS_OBJECT_ID("ls_d3/d1/f1")]),
@@ -288,8 +288,8 @@ list_ancestors_with_intersecting_caveats_test(_Config) ->
     ],
 
     % Only ancestor directories common in all caveats SHOULD be listed
-    ?assertEqual({ok, [{SpaceGuid, SpaceName}]}, ls_with_caveats(UserRootDirGuid, Caveats)),
-    ?assertEqual({ok, [?LS_ENTRY("ls_d3")]}, ls_with_caveats(SpaceGuid, Caveats)),
+    ?assertEqual({ok, [{SpaceDirGuid, SpaceName}]}, ls_with_caveats(UserRootDirGuid, Caveats)),
+    ?assertEqual({ok, [?LS_ENTRY("ls_d3")]}, ls_with_caveats(SpaceDirGuid, Caveats)),
     ?assertEqual({ok, []}, ls_with_caveats(?LS_GUID("ls_d3"), Caveats)).
 
 
@@ -320,7 +320,7 @@ list_files_recursively(_Config) ->
     Node = oct_background:get_random_provider_node(?RAND_ELEMENT([krakow, paris])),
     UserId = oct_background:get_user_id(?LS_USER),
 
-    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?LS_SPACE)),
+    SpaceRootDirGuid = space_dir:guid(oct_background:get_space_id(?LS_SPACE)),
 
     LSFun = fun(SessionId) ->
         {ok, Entries, _, undefined} = lfm_proxy:get_files_recursively(
@@ -460,10 +460,10 @@ allowed_ancestors_operations_test(_Config) ->
 
     UserId = oct_background:get_user_id(user1),
     UserSessionId = oct_background:get_user_session_id(user1, krakow),
-    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
+    UserRootDirGuid = user_root_dir:guid(UserId),
 
     SpaceName = oct_background:get_space_name(space_krk_par_p),
-    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
+    SpaceRootDirGuid = space_dir:guid(oct_background:get_space_id(space_krk_par_p)),
 
     InaccessibleFileName = <<"inaccessible_file">>,
 
@@ -494,14 +494,18 @@ allowed_ancestors_operations_test(_Config) ->
                 _ -> <<ParentPath/binary, "/", DirName/binary>>
             end,
 
+            ExpectedError = case DirGuid of
+                UserRootDirGuid -> ?ENOTSUP;
+                _ -> ?EACCES
+            end,
             % Most operations should be forbidden to perform on dirs/ancestors
             % leading to files allowed by caveats
             ?assertMatch(
-                ?ERR_POSIX(?EACCES),
+                {error, ExpectedError},
                 opt_file_perms:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
             ),
             ?assertMatch(
-                {error, ?EACCES},
+                {error, ExpectedError},
                 lfm_proxy:create(Node, SessionIdWithCaveats, DirGuid, ?RAND_STR(), 8#777)
             ),
 
@@ -565,9 +569,9 @@ data_access_caveats_cache_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     UserId = oct_background:get_user_id(user1),
-    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
+    UserRootDirGuid = user_root_dir:guid(UserId),
 
-    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space_krk_par_p)),
+    SpaceRootDirGuid = space_dir:guid(oct_background:get_space_id(space_krk_par_p)),
 
     #object{
         guid = RootDirGuid,

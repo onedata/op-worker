@@ -27,6 +27,21 @@
 
 -define(LINK_UUID_PREFIX, "link_").
 
+
+-define(ALL_SPECIAL_DIRS, [
+    global_root_dir,
+    user_root_dir,
+        space_dir,
+            share_container,
+            space_archives_dir,
+                dataset_archives_dir,
+                    archive_dir,
+            tmp_dir,
+                opened_deleted_files_dir,
+            trash_dir
+]).
+
+
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 %% Tmp file prefix
@@ -44,9 +59,18 @@
 -define(DELETED_OPENED_FILES_DIR_STRING, binary_to_list(?DELETED_OPENED_FILES_DIR)).
 
 % Global root - parent of all spaces
-% note: spaces are also linked to virtual root directories of each user belonging to space
+% note: spaces are also linked to virtual root directories of each user belonging to space;
+% global_root_dir and user_root_dirs are a filesystem_root_dir as per special_dirs nomenclature (see special_dirs)
 -define(GLOBAL_ROOT_DIR_UUID, <<"">>).
 -define(GLOBAL_ROOT_DIR_NAME, <<"">>).
+-define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
+
+% For each "normal" file (including spaces) scope is id of a space to
+% which the file belongs.
+% For root directory and users' root directories we use "special" scope
+% as they don't belong to any space
+-define(ROOT_DIR_SCOPE, <<>>).
+
 %% root user definitions
 -define(ROOT_CREDENTIALS, root_credentials).
 -define(ROOT_USER_ID, <<"0">>).
@@ -76,7 +100,7 @@
 
 %% Default permissions for directories
 -define(DEFAULT_DIR_PERMS, 8#775).
--define(DEFAULT_SHARE_ROOT_DIR_PERMS, 8#555).
+-define(DEFAULT_SHARE_CONTAINER_PERMS, 8#555).
 -define(DEFAULT_DIR_MODE, ?DEFAULT_DIR_PERMS bor 8#40000).
 
 %% Mode of deleted opened files directory

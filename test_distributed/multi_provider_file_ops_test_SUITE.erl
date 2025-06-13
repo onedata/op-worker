@@ -1079,14 +1079,14 @@ list_children_recreated_remotely(Config0) ->
     [Worker2 | _] = ?config(workers2, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     % Upload file on worker1
-    {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
-    {ok, _, _} = lfm_proxy:get_children_attrs(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
+    {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceDirGuid, <<"file_name">>, undefined),
+    {ok, _, _} = lfm_proxy:get_children_attrs(Worker1, SessId(Worker1), ?FILE_REF(SpaceDirGuid),
         #{offset => 0, limit => 24, tune_for_large_continuous_listing => false}),
     {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(G)),
-    {ok, _, _} = lfm_proxy:get_children_attrs(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
+    {ok, _, _} = lfm_proxy:get_children_attrs(Worker1, SessId(Worker1), ?FILE_REF(SpaceDirGuid),
         #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false}),
     {ok, H} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(G), write),
     {ok, _} = lfm_proxy:write(Worker1, H, 0, <<>>),
@@ -1094,30 +1094,30 @@ list_children_recreated_remotely(Config0) ->
     {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(G)),
 
     % Check on worker2
-    {ok, _, _} = lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    {ok, _, _} = lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false}),
 
     % Delete file on worker2
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(G)), 30),
     ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), ?FILE_REF(G)),
-    ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => -24, limit => 24, tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => 0, limit => 24, tune_for_large_continuous_listing => false})),
-    ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => 0, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false})),
 
     % Recreate file on worker2
-    {ok, NewG} = lfm_proxy:create(Worker2, SessId(Worker2), SpaceGuid, <<"file_name">>, undefined),
-    {ok, _, _} = lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    {ok, NewG} = lfm_proxy:create(Worker2, SessId(Worker2), SpaceDirGuid, <<"file_name">>, undefined),
+    {ok, _, _} = lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => 0, limit => 24, tune_for_large_continuous_listing => false}),
     {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
 
     % Another check on worker2
     % The bug appeared here (badmatch)
-    {ok, _, _} = lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
+    {ok, _, _} = lfm_proxy:get_children_attrs(Worker2, SessId(Worker2), ?FILE_REF(SpaceDirGuid),
         #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false}),
 
     {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(NewG), write),
@@ -1175,12 +1175,12 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
     % Create file on worker1
-    {ok, Guid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"synch_blocking_test_file">>, undefined),
+    {ok, Guid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceDirGuid, <<"synch_blocking_test_file">>, undefined),
     {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, FileContent),
     ok = lfm_proxy:close(Worker1, Handle),
@@ -1224,7 +1224,7 @@ recreate_file_on_storage(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
@@ -1233,7 +1233,7 @@ recreate_file_on_storage(Config0) ->
 
     % Create file on worker1
     {ok, {Guid, Handle0}} = ?assertMatch({ok, _},
-        lfm_proxy:create_and_open(Worker1, SessId(Worker1), SpaceGuid, <<"recreate_file_on_storage">>, undefined)),
+        lfm_proxy:create_and_open(Worker1, SessId(Worker1), SpaceDirGuid, <<"recreate_file_on_storage">>, undefined)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle0)),
 
     % Unload mock - file is created according to metadata but it has not been created on storage
@@ -1263,7 +1263,7 @@ recreate_dir_on_storage(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
@@ -1275,7 +1275,7 @@ recreate_dir_on_storage(Config0) ->
     % Create dirs and file on worker1
     DirName = generator:gen_name(),
     {ok, DirGuid} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, DirName, undefined)),
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceDirGuid, DirName, undefined)),
     {ok, Level2DirGuid} = ?assertMatch({ok, _},
         lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
     {ok, Guid} = ?assertMatch({ok, _},
@@ -1316,11 +1316,11 @@ transfer_with_missing_documents(Config) ->
     [Worker2 | _] = Workers2 = ?config(workers2, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     FileContent = <<"xxx">>,
     % Create dir and files on worker1
     {ok, DirGuid} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), undefined)),
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceDirGuid, generator:gen_name(), undefined)),
     [FileWithoutLocationGuid, DeletedFileWithoutLocationGuid] = lists_utils:generate(fun() ->
         {ok, GuidWithoutLocation} = ?assertMatch({ok, _},
             lfm_proxy:create(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
@@ -1399,7 +1399,7 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
@@ -1413,7 +1413,7 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
 
     % Create file on worker1
     {ok, {Guid, Handle0}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
-        Worker1, SessId(Worker1), SpaceGuid, ?RAND_STR(), undefined
+        Worker1, SessId(Worker1), SpaceDirGuid, ?RAND_STR(), undefined
     )),
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle0)),
 
@@ -1467,20 +1467,16 @@ tmp_files_test_base(Config0, User, SpaceId) ->
     [Worker2 | _] = ?config(workers2, Config),
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
+    TmpDirGuid = tmp_dir:guid(SpaceId),
 
-    {ok, SyncedDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, ?RAND_STR(), undefined)),
+    {ok, SyncedDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceDirGuid, ?RAND_STR(), undefined)),
 
     % Create files and dir directly in tmp_dir on worker1
     {[DirGuid, Dir2Guid] = TmpDirs, [FileGuid1 | _] = TmpRegFiles} = create_tmp_files(Config, SpaceId),
     TmpFiles = TmpDirs ++ TmpRegFiles,
 
     % test file_ctx functions connected to tmp dir
-    ?assertNot(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SyncedDirGuid))),
-    ?assert(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(TmpDirGuid))),
-    ?assertNot(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SpaceGuid), <<"file_name">>)),
-    ?assert(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SpaceGuid), ?TMP_DIR_NAME)),
     ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(SyncedDirGuid)])),
     ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(TmpDirGuid)])),
     ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(DirGuid)])),
@@ -1530,7 +1526,7 @@ tmp_files_delete_test(Config0) ->
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = Workers2 = ?config(workers2, Config),
     SessId = ?config(session, Config),
-    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    TmpDirGuid = tmp_dir:guid(SpaceId),
 
     Master = self(),
     test_utils:mock_expect(Workers2, dbsync_changes, apply, fun
@@ -1619,7 +1615,7 @@ dir_stats_collector_parallel_write_to_empty_file_test(Config0) ->
 create_tmp_files(Config, SpaceId) ->
     [Worker1 | _] = ?config(workers1, Config),
     SessId = ?config(session, Config),
-    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    TmpDirGuid = tmp_dir:guid(SpaceId),
 
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined)),
     {ok, Dir2Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, ?RAND_STR(), undefined)),

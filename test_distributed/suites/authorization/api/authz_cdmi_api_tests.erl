@@ -47,14 +47,15 @@ test_get_transfer_encoding(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_cdmi:get_transfer_encoding(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -72,14 +73,14 @@ test_set_transfer_encoding(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_cdmi:set_transfer_encoding(Node, SessionId, FileKey, <<"base64">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -99,14 +100,15 @@ test_get_cdmi_completion_status(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_cdmi:get_cdmi_completion_status(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -124,14 +126,14 @@ test_set_cdmi_completion_status(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_cdmi:set_cdmi_completion_status(Node, SessionId, FileKey, <<"Completed">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -151,14 +153,15 @@ test_get_mimetype(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_cdmi:get_mimetype(Node, SessionId, FileKey)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir],
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?ENODATA)
     }).
 
 
@@ -176,12 +179,12 @@ test_set_mimetype(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             opt_cdmi:set_mimetype(Node, SessionId, FileKey, <<"mimetype">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).

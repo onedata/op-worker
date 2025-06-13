@@ -76,14 +76,14 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
         true ->
             RootDirGRI = gri:serialize(#gri{
                 type = op_file,
-                id = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+                id = space_dir:guid(SpaceId),
                 aspect = instance,
                 scope = private
             }),
             {#{
                 <<"rootDir">> => RootDirGRI,
                 <<"trashDirId">> => file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId),
-                <<"archivesDirId">> => file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)
+                <<"archivesDirId">> => file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId)
             }, file_upload_utils:get_preferable_write_block_size(SpaceId)};
         false ->
             {#{<<"rootDir">> => null}, undefined}

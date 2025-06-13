@@ -251,10 +251,11 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 
 -spec handle_remote_change(od_space:id(), dataset:doc()) -> ok.
 handle_remote_change(SpaceId, #document{deleted = true, key = DatasetId}) ->
-    ok = file_meta_forest:delete(fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), SpaceId,
-        ?DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId));
+    % Doc was deleted remotely (alongside dataset deletion), but link must
+    % be deleted as it was created on every provider.
+    dataset_archives_dir:delete_parent_link(DatasetId, SpaceId);
 handle_remote_change(SpaceId, #document{deleted = false, key = DatasetId}) ->
-    archivisation_tree:ensure_dataset_archives_dir_exists(DatasetId, SpaceId),
+    dataset_archives_dir:ensure_exists(DatasetId, SpaceId),
     ok.
 
 

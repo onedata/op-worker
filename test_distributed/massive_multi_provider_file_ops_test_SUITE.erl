@@ -592,17 +592,17 @@ resynchronization_test(Config) ->
     SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
     SessId3 = lfm_test_utils:get_user1_session_id(Config, Worker3),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    SpaceDirGuid = lfm_test_utils:get_user1_first_space_dir_guid(Config),
     Structure = [{3, 3}, {3, 3}],
 
     test_utils:mock_expect(Worker1, dbsync_changes, apply, fun(_Doc) -> ok end),
 
     {ok, Worker2Root} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker2, SessId2, SpaceGuid, <<"resynchronization_test_dir2">>, 8#777)),
+        lfm_proxy:mkdir(Worker2, SessId2, SpaceDirGuid, <<"resynchronization_test_dir2">>, 8#777)),
     {Worker2Dirs, Worker2Files} = lfm_test_utils:create_files_tree(Worker2, SessId2, Structure, Worker2Root),
 
     {ok, Worker3Root} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker3, SessId3, SpaceGuid, <<"resynchronization_test_dir3">>, 8#777)),
+        lfm_proxy:mkdir(Worker3, SessId3, SpaceDirGuid, <<"resynchronization_test_dir3">>, 8#777)),
     {Worker3Dirs, Worker3Files} = lfm_test_utils:create_files_tree(Worker3, SessId3, Structure, Worker3Root),
 
     % Sleep to allow synchronization of documents with mocked apply function
@@ -644,7 +644,7 @@ initial_sync_repeat_test(Config) ->
     SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
     SessId3 = lfm_test_utils:get_user1_session_id(Config, Worker3),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    SpaceDirGuid = lfm_test_utils:get_user1_first_space_dir_guid(Config),
     Structure = [{3, 3}, {3, 3}],
 
     Provider2Id = opw_test_rpc:get_provider_id(Worker2),
@@ -657,12 +657,12 @@ initial_sync_repeat_test(Config) ->
     ?assertEqual(continue, rpc:call(Worker1, dbsync_state, set_seq_and_timestamp, [SpaceId, Provider2Id, 1, 0])),
 
     {ok, Worker2Root} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker2, SessId2, SpaceGuid, <<"initial_sync_repeat_test_dir2">>, 8#777)),
+        lfm_proxy:mkdir(Worker2, SessId2, SpaceDirGuid, <<"initial_sync_repeat_test_dir2">>, 8#777)),
     Worker2RootUuid = file_id:guid_to_uuid(Worker2Root),
     {Worker2Dirs, Worker2Files} = lfm_test_utils:create_files_tree(Worker2, SessId2, Structure, Worker2Root),
 
     {ok, Worker3Root} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker3, SessId3, SpaceGuid, <<"initial_sync_repeat_test_dir3">>, 8#777)),
+        lfm_proxy:mkdir(Worker3, SessId3, SpaceDirGuid, <<"initial_sync_repeat_test_dir3">>, 8#777)),
     {Worker3Dirs, Worker3Files} = lfm_test_utils:create_files_tree(Worker3, SessId3, Structure, Worker3Root),
 
     % Sleep to allow synchronization of documents with mocked is_supported function
@@ -697,14 +697,14 @@ range_resynchronization_test(Config) ->
     SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
     Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    SpaceDirGuid = lfm_test_utils:get_user1_first_space_dir_guid(Config),
     Structure = [{3, 3}, {3, 3}],
 
     test_utils:mock_expect(Worker1, dbsync_changes, apply, fun(_Doc) -> ok end),
     InitialSeq = rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider2Id]),
 
     {ok, Worker2Root} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker2, SessId2, SpaceGuid, <<"range_resynchronization_test_dir">>, 8#777)),
+        lfm_proxy:mkdir(Worker2, SessId2, SpaceDirGuid, <<"range_resynchronization_test_dir">>, 8#777)),
     {Worker2Dirs, Worker2Files} = lfm_test_utils:create_files_tree(Worker2, SessId2, Structure, Worker2Root),
 
     % Sleep to allow synchronization of documents with mocked apply function
@@ -741,11 +741,11 @@ remote_driver_test(Config) ->
     SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
     SessId3 = lfm_test_utils:get_user1_session_id(Config, Worker3),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    SpaceDirGuid = lfm_test_utils:get_user1_first_space_dir_guid(Config),
     SpaceName = lfm_test_utils:get_user1_first_space_name(Config),
 
     TestDirName = generator:gen_name(),
-    {ok, TestDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, SpaceGuid, TestDirName, 8#777)),
+    {ok, TestDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId1, SpaceDirGuid, TestDirName, 8#777)),
 
     test_utils:mock_expect(Worker1, dbsync_changes, apply, fun(_Doc) -> ok end),
 
