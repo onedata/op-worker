@@ -35,7 +35,7 @@ helpers_test_() ->
         ]}.
 
 handle_cache() ->
-    CacheStats = helpers_nif:get_helper_cache_stats(),
+    {ok, CacheStats} = helpers_nif:get_helper_cache_stats(),
     ?assertEqual(#{}, CacheStats),
 
     {ok, Handle} = helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
@@ -53,7 +53,7 @@ handle_cache() ->
     Handle3 = Handle,
     ?assertEqual(Handle, Handle3),
 
-    CacheStats2 = helpers_nif:get_helper_cache_stats(),
+    {ok, CacheStats2} = helpers_nif:get_helper_cache_stats(),
     ?assertEqual(maps:get(?POSIX_HELPER_NAME, CacheStats2), 1),
     ?assertEqual(CacheStats2, #{<<"posix">> => 1}),
 

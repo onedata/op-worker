@@ -98,7 +98,7 @@ clean_helper_cache() ->
 %% helper cache statistics.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_cache_stats() -> ok | {error, Reason :: term()}.
+-spec get_helper_cache_stats() -> {ok, map()} | {error, Reason :: term()}.
 get_helper_cache_stats() ->
     helpers_nif:get_helper_cache_stats().
 

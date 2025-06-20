@@ -594,12 +594,12 @@ ERL_NIF_TERM get_helper_cache_stats(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     auto stats = application->SHCreator->cacheStats();
-    return nifpp::make(env, std::move(stats));
+    return nifpp::make(env, std::make_tuple(ok, std::move(stats)));
 }
 
 ERL_NIF_TERM get_helper_id(NifCTX ctx, helper_ptr helper)
 {
-    return nifpp::make(ctx.env, helper->id());
+    return nifpp::make(ctx.env, std::make_tuple(ok, helper->id()));
 }
 
 ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)

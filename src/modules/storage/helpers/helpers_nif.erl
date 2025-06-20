@@ -50,7 +50,8 @@ get_helper_handle(_Name, _Params) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec get_helper_cache_stats() -> ok | {error, Reason :: term()}.
+-spec get_helper_cache_stats() ->
+    {ok, map()} | {error, Reason :: term()}.
 get_helper_cache_stats() ->
     erlang:nif_error(helpers_nif_not_loaded).
 
@@ -73,7 +74,7 @@ check_storage_availability(_Handle) ->
 
 
 -spec get_helper_id(helper_handle()) ->
-    {ok, response_ref()} | {error, Reason :: term()}.
+    {ok, binary()} | {error, Reason :: term()}.
 get_helper_id(_Handle) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
