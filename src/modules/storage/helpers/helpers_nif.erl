@@ -26,8 +26,8 @@
 
 %% API
 -export([init/0]).
--export([get_handle/2, release_handle/1]).
--export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
+-export([get_helper_handle/2, clean_helper_cache/0, get_helper_cache_stats/0]).
+-export([get_helper_id/1, refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
     listxattr/2, flushbuffer/3, open/3, read/3, write/3, release/1, flush/1,
@@ -44,15 +44,19 @@
 %% IMPORTANT! Helper handle is valid only within local Erlang VM.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(helper:name(), helper:args()) ->
+-spec get_helper_handle(helper:name(), helper:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
-get_handle(_Name, _Params) ->
+get_helper_handle(_Name, _Params) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
--spec release_handle(helper_handle()) ->
-    {ok, response_ref()} | {error, Reason :: term()}.
-release_handle(_Handle) ->
+-spec get_helper_cache_stats() -> ok | {error, Reason :: term()}.
+get_helper_cache_stats() ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec clean_helper_cache() -> ok | {error, Reason :: term()}.
+clean_helper_cache() ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
@@ -65,6 +69,12 @@ refresh_params(_Handle, _Args) ->
 -spec check_storage_availability(helper_handle()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 check_storage_availability(_Handle) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec get_helper_id(helper_handle()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+get_helper_id(_Handle) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

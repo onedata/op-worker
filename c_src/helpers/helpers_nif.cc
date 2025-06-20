@@ -93,9 +93,15 @@ struct HelpersNIF {
                     std::chrono::seconds {std::stoul(
                         args["write_buffer_flush_delay"].toStdString())}});
 
+        const auto helpersCacheExpirySeconds =
+            args.count("helpers_cache_expiry_seconds") > 0
+            ? std::stoul(args.at("helpers_cache_expiry_seconds").toStdString())
+            : one::helpers::kHelperCacheDefaultExpirySeconds;
+
         SHCreator =
             std::make_unique<one::helpers::CachingStorageHelperCreator<void>>(
-                std::move(storage_helper_creator));
+                std::move(storage_helper_creator),
+                std::chrono::seconds {helpersCacheExpirySeconds});
 
         umask(0);
     }
@@ -565,7 +571,8 @@ static void configurePerformanceMonitoring(
  *
  *********************************************************************/
 
-ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM get_helper_handle(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     auto name = nifpp::get<folly::fbstring>(env, argv[0]);
     auto params = nifpp::get<helper_args_t>(env, argv[1]);
@@ -576,10 +583,23 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     return nifpp::make(env, std::make_tuple(ok, resource));
 }
 
-ERL_NIF_TERM release_handle(NifCTX ctx, helper_ptr helper)
+ERL_NIF_TERM clean_helper_cache(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-    application->SHCreator->releaseStorageHelper(helper->id());
-    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+    application->SHCreator->clean();
+    return nifpp::make(env, ok);
+}
+
+ERL_NIF_TERM get_helper_cache_stats(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    auto stats = application->SHCreator->cacheStats();
+    return nifpp::make(env, std::move(stats));
+}
+
+ERL_NIF_TERM get_helper_id(NifCTX ctx, helper_ptr helper)
+{
+    return nifpp::make(ctx.env, helper->id());
 }
 
 ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
@@ -831,6 +851,12 @@ static ERL_NIF_TERM sh_refresh_params(
     return wrap(refresh_params, env, argv);
 }
 
+static ERL_NIF_TERM sh_get_helper_id(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(get_helper_id, env, argv);
+}
+
 static ERL_NIF_TERM sh_listobjects(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -841,12 +867,6 @@ static ERL_NIF_TERM sh_readdir(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(readdir, env, argv);
-}
-
-static ERL_NIF_TERM sh_release_handle(
-    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
-{
-    return wrap(release_handle, env, argv);
 }
 
 static ERL_NIF_TERM sh_check_storage_availability(
@@ -1003,8 +1023,8 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {"get_handle", 2, get_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"release_handle", 1, sh_release_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"get_helper_handle", 2, get_helper_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"get_helper_id", 1, sh_get_helper_id, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"start_monitoring", 0, start_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"stop_monitoring", 0, stop_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"refresh_params", 2, sh_refresh_params, ERL_NIF_DIRTY_JOB_IO_BOUND},
@@ -1038,6 +1058,9 @@ static ErlNifFunc nif_funcs[] = {
     {"fsync", 2, sh_fsync, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"flushbuffer", 3, sh_flushbuffer, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"blocksize_for_path", 2, sh_blocksize_for_path,
+        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"clean_helper_cache", 0, clean_helper_cache, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"get_helper_cache_stats", 0, get_helper_cache_stats,
         ERL_NIF_DIRTY_JOB_IO_BOUND}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);

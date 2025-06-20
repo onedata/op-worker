@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_helper_handle/2, release_helper_handle/1]).
+-export([get_helper_handle/2, clean_helper_cache/0, get_helper_cache_stats/0]).
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
@@ -76,7 +76,7 @@
 -spec get_helper_handle(helper(), helper:user_ctx()) -> helper_handle().
 get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
     {ok, Args} = helper:get_args_with_user_ctx(Helper, UserCtx),
-    {ok, Handle} = helpers_nif:get_handle(Name, Args),
+    {ok, Handle} = helpers_nif:get_helper_handle(Name, Args),
     #helper_handle{
         handle = Handle,
         timeout = helper:get_timeout(Helper)
@@ -88,10 +88,19 @@ get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec release_helper_handle(helper_handle()) ->
-    ok | {error, Reason :: term()}.
-release_helper_handle(#helper_handle{} = Handle) ->
-    ?MODULE:apply_helper_nif(Handle, release_handle).
+-spec clean_helper_cache() -> ok | {error, Reason :: term()}.
+clean_helper_cache() ->
+    helpers_nif:clean_helper_cache().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:get_helper_cache_stats/0} returns basic
+%% helper cache statistics.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_helper_cache_stats() -> ok | {error, Reason :: term()}.
+get_helper_cache_stats() ->
+    helpers_nif:get_helper_cache_stats().
 
 %%--------------------------------------------------------------------
 %% @doc
