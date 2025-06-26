@@ -494,18 +494,22 @@ allowed_ancestors_operations_test(_Config) ->
                 _ -> <<ParentPath/binary, "/", DirName/binary>>
             end,
 
-            ExpectedError = case DirGuid of
-                UserRootDirGuid -> ?ENOTSUP;
-                _ -> ?EACCES
+            ExpectedGetAclError = case DirGuid of
+                UserRootDirGuid -> ?ERROR_NOT_SUPPORTED;
+                _ -> ?ERR_POSIX(?EACCES)
             end,
             % Most operations should be forbidden to perform on dirs/ancestors
             % leading to files allowed by caveats
             ?assertMatch(
-                {error, ExpectedError},
+                ExpectedGetAclError,
                 opt_file_perms:get_acl(Node, SessionIdWithCaveats, ?FILE_REF(DirGuid))
             ),
+            ExpectedCreateError = case DirGuid of
+                UserRootDirGuid -> {error, ?ENOTSUP};
+                _ -> {error, ?EACCES}
+            end,
             ?assertMatch(
-                {error, ExpectedError},
+                ExpectedCreateError,
                 lfm_proxy:create(Node, SessionIdWithCaveats, DirGuid, ?RAND_STR(), 8#777)
             ),
 

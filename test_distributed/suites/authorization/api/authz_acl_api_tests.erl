@@ -79,7 +79,7 @@ test_set_acl(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         special_dirs_supporting_the_operation = [space_dir],
-        expected_result_for_supporting_special_dirs = {error, ?EACCES} % space dir does not have required perms set
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?EACCES) % space dir does not have required perms set
     }).
 
 
@@ -105,5 +105,5 @@ test_remove_acl(SpaceId) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end,
         special_dirs_supporting_the_operation = [space_dir],
-        expected_result_for_supporting_special_dirs = {error, ?EACCES} % space dir does not have required perms set
+        expected_result_for_supporting_special_dirs = ?ERR_POSIX(?EACCES) % space dir does not have required perms set
     }).

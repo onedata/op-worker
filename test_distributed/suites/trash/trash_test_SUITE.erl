@@ -206,13 +206,13 @@ remove_xattr_on_trash_dir_is_forbidden(_Config) ->
 set_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?ENOTSUP},
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_file_perms:set_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), [])).
 
 remove_acl_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?ENOTSUP},
+    ?assertMatch(?ERROR_NOT_SUPPORTED,
         opt_file_perms:remove_acl(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)))).
 
 set_metadata_on_trash_dir_is_forbidden(_Config) ->
