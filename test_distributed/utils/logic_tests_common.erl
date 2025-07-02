@@ -287,7 +287,7 @@ mock_async_request(ClientRef, GsRequest = #gs_req{id = ReqId}) ->
             spawn(fun() ->
                 Result = mock_request(GsRequest),
                 timer:sleep(random_request_processing_time(GsRequest)),
-                CallerPid ! {response, ReqId, Result}
+                CallerPid ! {result, ReqId, Result}
             end),
 
             ReqId;
