@@ -101,7 +101,7 @@ struct HelpersNIF {
         SHCreator =
             std::make_unique<one::helpers::CachingStorageHelperCreator<void>>(
                 std::move(storage_helper_creator),
-                std::chrono::seconds {helpersCacheExpirySeconds});
+                std::chrono::milliseconds {helpersCacheExpirySeconds * 1000});
 
         umask(0);
     }
