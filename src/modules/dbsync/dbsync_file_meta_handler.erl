@@ -179,7 +179,7 @@ emit_file_changed_event_or_add_posthook(FileCtx, ParentUuid, Name) ->
 
 
 %% @private
--spec emit_file_changed_event(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok.
+-spec emit_file_changed_event(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok | missing_link.
 emit_file_changed_event(FileCtx, ParentUuid, Name) ->
     case file_meta_forest:get(ParentUuid, all, Name) of
         {ok, _} -> ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
