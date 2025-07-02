@@ -26,7 +26,7 @@ helpers_test_() ->
         fun start/0,
         fun stop/1,
         [
-            fun handle_cache/0,
+            {timeout, 10, fun handle_cache/0},
             fun get_helper_handle/0,
             fun readdir/0,
             fun blocksize_posix/0,
@@ -35,42 +35,40 @@ helpers_test_() ->
         ]}.
 
 handle_cache() ->
-    {ok, CacheStats} = helpers_nif:get_helper_cache_stats(),
-    ?assertEqual(#{}, CacheStats),
+    NestedHelperId = (fun() ->
+        {ok, CacheStats} = helpers_nif:get_helper_cache_stats(),
+        ?assertEqual(#{}, CacheStats),
 
-    {ok, Handle} = helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
-        <<"mountPoint">> => <<"/tmp">>
-    }),
-    {ok, Handle2} = helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
-        <<"mountPoint">> => <<"/tmp">>
-    }),
+        {ok, Handle} = helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
+            <<"mountPoint">> => <<"/tmp">>
+        }),
+        {ok, Handle2} = helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
+            <<"mountPoint">> => <<"/tmp">>
+        }),
 
-    %% Below assertion fails even though they both refer to the same helper
-    %% This is because of how NIF assigns erlang refs to results
-    ?assertNotEqual(Handle, Handle2),
-    ?assertEqual(helpers_nif:get_helper_id(Handle), helpers_nif:get_helper_id(Handle2)),
+        ?assertNotEqual(Handle, Handle2),
+        ?assertEqual(helpers_nif:get_helper_id(Handle), helpers_nif:get_helper_id(Handle2)),
 
-    Handle3 = Handle,
-    ?assertEqual(Handle, Handle3),
+        Handle3 = Handle,
+        ?assertEqual(Handle, Handle3),
 
-    {ok, CacheStats2} = helpers_nif:get_helper_cache_stats(),
-    ?assertEqual(maps:get(?POSIX_HELPER_NAME, CacheStats2), 1),
-    ?assertEqual(CacheStats2, #{<<"posix">> => 1}),
+        {ok, CacheStats2} = helpers_nif:get_helper_cache_stats(),
+        ?assertEqual(maps:get(?POSIX_HELPER_NAME, CacheStats2), 1),
+        ?assertEqual(CacheStats2, #{<<"posix">> => 1}),
+        helpers_nif:get_helper_id(Handle)
+    end)(),
 
-
-    %% T.O.D.O - to make this assertion work it is necessary to somehow unbind
-    %% Handle, Handle2 and Handle3
-    timer:sleep(timer:seconds(3)),
+    erlang:garbage_collect(),
+    timer:sleep(timer:seconds(4)),
     helpers_nif:clean_helper_cache(),
-    %% CacheStats3 = helpers_nif:get_helper_cache_stats(),
-    %% ?assertEqual(CacheStats3, #{}),
+    CacheStats3 = helpers_nif:get_helper_cache_stats(),
+    ?assertEqual(CacheStats3, {ok, #{}}),
 
     {ok, Handle4} = helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
         <<"mountPoint">> => <<"/tmp2">>
     }),
 
-    ?assertNotEqual(Handle, Handle4),
-    ?assertNotEqual(helpers_nif:get_helper_id(Handle), helpers_nif:get_helper_id(Handle4)).
+    ?assertNotEqual(NestedHelperId, helpers_nif:get_helper_id(Handle4)).
 
 get_helper_handle() ->
     ?assertMatch({ok, _}, helpers_nif:get_helper_handle(?POSIX_HELPER_NAME, #{
@@ -212,7 +210,7 @@ prepare_environment() ->
     op_worker:set_env(write_buffer_max_size, 1024),
     op_worker:set_env(write_buffer_flush_delay, 1),
     op_worker:set_env(helpers_cache_expiry_seconds, 2),
-        op_worker:set_env(helpers_performance_monitoring_enabled, true),
+    op_worker:set_env(helpers_performance_monitoring_enabled, true),
     op_worker:set_env(helpers_performance_monitoring_type,
                         <<"graphite">>),
     op_worker:set_env(helpers_performance_monitoring_level,

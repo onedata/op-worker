@@ -312,6 +312,7 @@ prepare_args() ->
         write_buffer_min_size,
         write_buffer_max_size,
         write_buffer_flush_delay,
+        helpers_cache_expiry_seconds,
         helpers_performance_monitoring_enabled,
         helpers_performance_monitoring_type,
         helpers_performance_monitoring_level,
