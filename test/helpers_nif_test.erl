@@ -35,6 +35,9 @@ helpers_test_() ->
         ]}.
 
 handle_cache() ->
+    %% Perform first set of assertions in a nested anonymous function to allow
+    %% garbabe collector to release the helper handles before cleaning helper
+    %% cache
     NestedHelperId = (fun() ->
         {ok, CacheStats} = helpers_nif:get_helper_cache_stats(),
         ?assertEqual(#{}, CacheStats),
