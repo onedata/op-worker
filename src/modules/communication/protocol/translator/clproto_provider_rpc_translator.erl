@@ -94,23 +94,33 @@ from_protobuf(#'ProviderRpcResponse'{
 };
 from_protobuf(#'ProviderDirDistributionGetResult'{
     dir_size_stats = DirSizeStats,
-    storage_location = StorageLocations,
-    storage_locations_error = Error
+    storage_location = StorageLocations
 }) ->
-    LocationsPerStorage = case Error of
-        undefined -> locations_per_storage_from_protobuf(StorageLocations);
-        _ -> errors:from_json(json_utils:decode(Error))
-    end,
+    LocationsPerStorage = locations_per_storage_from_protobuf(StorageLocations),
     #provider_dir_distribution_get_result{
         current_dir_size_stats = from_protobuf(DirSizeStats),
         locations_per_storage = LocationsPerStorage
     };
 from_protobuf(#'ProviderCurrentDirSizeStatsBrowseResult'{
-    stats_as_json = StatsAsJson
+    stats_as_json = StatsAsJson,
+    error_json = ErrorJson
 }) ->
-    #provider_current_dir_size_stats_browse_result{
-        stats = json_utils:decode(StatsAsJson)
-    };
+    case ErrorJson of
+        undefined ->
+            #provider_current_dir_size_stats_browse_result{
+                status = ok,
+                result = json_utils:decode(StatsAsJson)
+            };
+        _ ->
+            #{<<"error">> := Error, <<"storage_list">> := StorageList} = json_utils:decode(ErrorJson),
+            #provider_current_dir_size_stats_browse_result{
+                status = error,
+                result = #{
+                    <<"error">> => errors:from_json(Error),
+                    <<"storage_list">> => StorageList
+                }
+            }
+    end;
 from_protobuf(#'TimeSeriesLayoutGetResult'{
     layout_as_json = LayoutAsJson
 }) ->
@@ -236,20 +246,24 @@ to_protobuf(#provider_dir_distribution_get_result{
     % @TODO VFS-12867 tuple format kept for compatibility reasons; remove in next major release after 22.02.*
     {provider_current_dir_size_stats_browse_result, TranslatedDirSizeStats} = to_protobuf(DirSizeStats),
 
-    {FinalLocationsPerStorage, Error} = case LocationsPerStorage of
-        {error, _} = E -> {[], json_utils:encode(errors:to_json(E))};
-        _ -> {locations_per_storage_to_protobuf(LocationsPerStorage), undefined}
-    end,
     {provider_dir_distribution_get_result, #'ProviderDirDistributionGetResult'{
         dir_size_stats = TranslatedDirSizeStats,
-        storage_location = FinalLocationsPerStorage,
-        storage_locations_error = Error
+        storage_location = locations_per_storage_to_protobuf(LocationsPerStorage)
     }};
 to_protobuf(#provider_current_dir_size_stats_browse_result{
-    stats = Stats
+    status = ok,
+    result = Stats
 }) ->
     {provider_current_dir_size_stats_browse_result, #'ProviderCurrentDirSizeStatsBrowseResult'{
         stats_as_json = json_utils:encode(Stats)
+    }};
+to_protobuf(#provider_current_dir_size_stats_browse_result{
+    status = error,
+    result = #{<<"error">> := Error} = Result
+}) ->
+    {provider_current_dir_size_stats_browse_result, #'ProviderCurrentDirSizeStatsBrowseResult'{
+        stats_as_json = <<>>, % this field is required and must be provided for compatibility with older providers
+        error_json = json_utils:encode(Result#{<<"error">> => errors:to_json(Error)})
     }};
 to_protobuf(#time_series_layout_get_result{
     layout = Layout
@@ -299,18 +313,27 @@ to_protobuf(undefined) -> undefined.
 %%%===================================================================
 
 %% @private
--spec locations_per_storage_from_protobuf([#'StorageLocation'{}]) -> data_distribution:locations_per_storage().
+-spec locations_per_storage_from_protobuf([#'StorageLocation'{}]) -> 
+    data_distribution:locations_per_storage() | #{storage:id() => errors:error()}.
 locations_per_storage_from_protobuf(Locations) ->
     maps_utils:generate_from_list(
-        fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
-            {StorageId, Location}
+        fun(#'StorageLocation'{storage_id = StorageId, location = Location, error_json = ErrorJson}) ->
+            Result = case ErrorJson of
+                undefined -> Location;
+                _ -> errors:from_json(json_utils:decode(ErrorJson))
+            end,
+            {StorageId, Result}
         end, Locations).
 
 
 %% @private
--spec locations_per_storage_to_protobuf(data_distribution:locations_per_storage()) -> [#'StorageLocation'{}].
+-spec locations_per_storage_to_protobuf(data_distribution:locations_per_storage() | #{storage:id() => errors:error()}) -> 
+    [#'StorageLocation'{}].
 locations_per_storage_to_protobuf(LocationsPerStorageMap) ->
-    maps:fold(fun(StorageId, Location, Acc) ->
-        [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
-    end, [], LocationsPerStorageMap).
+    maps:fold(fun
+        (StorageId, {error, _} = Error, Acc) ->
+            [#'StorageLocation'{storage_id = StorageId, error_json = json_utils:encode(errors:to_json(Error))} | Acc];
+        (StorageId, Location, Acc) ->
+            [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
+        end, [], LocationsPerStorageMap).
 

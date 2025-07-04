@@ -38,20 +38,21 @@ get(FileCtx, #provider_dir_distribution_get_request{
 }) ->
     {Storage, _} = file_ctx:get_storage(FileCtx),
     StorageId = storage:get_id(Storage),
-    StorageLocation = case file_ctx:get_dir_location_doc_const(FileCtx) of
-        undefined ->
+    StorageLocation = 
+        case file_ctx:get_dir_location_doc_const(FileCtx) of
+          undefined ->
             case storage:is_posix_compatible(Storage) of
                 true ->
-                    #{StorageId => undefined};
+                    undefined;
                 false ->
                     ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), StorageId, ?POSIX_COMPATIBLE_HELPERS)
             end;
         DirLocationDoc ->
-            #{StorageId => dir_location:get_storage_file_id(DirLocationDoc)}
+            dir_location:get_storage_file_id(DirLocationDoc)
     end,
     {ok, #provider_dir_distribution_get_result{
         current_dir_size_stats = get_stats(FileCtx, StatNames),
-        locations_per_storage = StorageLocation
+        locations_per_storage = #{StorageId => StorageLocation}
     }}.
 
 
@@ -61,9 +62,14 @@ get(FileCtx, #provider_dir_distribution_get_request{
 
 -spec get_stats(file_ctx:ctx(), [dir_stats_collection:stat_name()]) -> current_dir_size_stats_result().
 get_stats(_FileCtx, []) ->
-    #provider_current_dir_size_stats_browse_result{stats = #{}};
+    #provider_current_dir_size_stats_browse_result{status = ok, result = #{}};
 get_stats(FileCtx, StatNames) ->
     case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), StatNames) of
-        {ok, Stats} -> #provider_current_dir_size_stats_browse_result{stats = Stats};
-        {error, _} = Error -> throw(Error)
+        {ok, Stats} -> #provider_current_dir_size_stats_browse_result{status = ok, result = Stats};
+        {error, _} = Error ->
+            {ok, LocalStorages} = space_logic:get_local_storages(file_ctx:get_space_id_const(FileCtx)),
+            #provider_current_dir_size_stats_browse_result{status = error, result = #{
+                <<"error">> => Error,
+                <<"storage_list">> => LocalStorages
+            }}
     end.

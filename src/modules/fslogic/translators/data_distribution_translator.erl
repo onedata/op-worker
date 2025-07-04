@@ -66,9 +66,15 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                     <<"success">> => true,
                     <<"virtualSize">> => utils:undefined_to_null(VirtualSize),
                     <<"logicalSize">> => utils:undefined_to_null(LogicalSize),
-                    <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
-                        <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
-                    }
+                    <<"distributionPerStorage">> => maps:map(fun
+                        (_StorageId, {error, _} = Error) -> #{
+                            <<"success">> => false,
+                            <<"error">> => errors:to_json(Error)
+                        };
+                        (_StorageId, PhysicalSize) -> #{
+                            <<"success">> => true,
+                            <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
+                        }
                     end, PhysicalDirSizePerStorage),
                     <<"locationsPerStorage">> => translate_locations_per_storage(LocationsPerStorage)
                 }
@@ -85,7 +91,10 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlin
                <<"virtualSize">> => 0,
                <<"distributionPerStorage">> =>
                    lists:foldl(fun(StorageId, Acc) ->   
-                       Acc#{StorageId => #{<<"physicalSize">> => 0}}
+                       Acc#{StorageId => #{
+                           <<"success">> => true,
+                           <<"physicalSize">> => 0
+                       }}
                    end, #{}, StoragesList)
                } end, StoragesPerProvider)
     };
@@ -110,6 +119,7 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
                 end, #{}, interpolate_chunks(Blocks, VirtualSize)),
 
                 Acc#{StorageId => #{
+                    <<"success">> => true,
                     <<"physicalSize">> => TotalBlocksSize,
                     <<"chunksBarData">> => Data,
                     <<"blocksPercentage">> => case VirtualSize of
@@ -151,6 +161,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                     {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
 
                     Acc#{StorageId => #{
+                        <<"success">> => true,
                         <<"physicalSize">> => TotalBlocksSize,
                         <<"blocks">> => BlockList
                     }}
@@ -311,12 +322,18 @@ merge_chunks({BarNum, Fill}, Result) ->
 
 
 %% @private
--spec translate_locations_per_storage(data_distribution:locations_per_storage() | errors:error()) ->
+-spec translate_locations_per_storage(data_distribution:locations_per_storage() | #{storage:id() => errors:error()}) ->
     json_utils:json_map().
-translate_locations_per_storage({error, _} = Error) ->
-    #{
-        <<"success">> => false,
-        <<"error">> => errors:to_json(Error)
-    };
 translate_locations_per_storage(LocationsPerStorage) ->
-    maps_utils:undefined_to_null(LocationsPerStorage).
+    maps:map(fun
+        (_StorageId, {error, _} = Error) ->
+            #{
+                <<"success">> => false,
+                <<"error">> => errors:to_json(Error)
+            };
+        (_StorageId, Location) ->
+            #{
+                <<"success">> => true,
+                <<"location">> => utils:undefined_to_null(Location)
+            }
+    end, LocationsPerStorage).

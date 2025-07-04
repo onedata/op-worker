@@ -59,7 +59,8 @@
 %%%===================================================================
 
 -record(provider_current_dir_size_stats_browse_result, {
-    stats :: dir_size_stats:current_stats()
+    status :: ok | error,
+    result :: dir_size_stats:current_stats() | errors:error()
 }).
 
 -record(provider_reg_storage_locations_result, {

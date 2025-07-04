@@ -109,26 +109,24 @@ gather_dir_distribution(FileCtx) ->
     RequestsPerProvider = build_dir_distribution_provider_requests(FileCtx),
     SizeStatsPerProvider = provider_rpc:gather(FileGuid, RequestsPerProvider),
 
-    DistributionPerProvider = maps:map(fun(ProviderId, Result) ->
-        case Result of
-            {ok, ProviderDistributionResult} ->
-                build_provider_dir_distribution(ProviderDistributionResult);
-            ?ERROR_NOT_SUPPORTED ->
-                % peer provider is in older version, maybe it understands older request
-                % @TODO VFS-12867 remove in next major release after 22.02.*
-                case provider_rpc:call(ProviderId, FileGuid,
-                    (maps:get(ProviderId, RequestsPerProvider))#provider_dir_distribution_get_request.stats_request)
-                of
-                    {ok, CurrentDirStats} ->
-                        build_provider_dir_distribution(#provider_dir_distribution_get_result{
-                            current_dir_size_stats = CurrentDirStats
-                        });
-                    {error, _} = E ->
-                        E
-                end;
-            {error, _} = Error ->
-                Error
-        end
+    DistributionPerProvider = maps:map(fun 
+        (_ProviderId, {ok, ProviderDistributionResult}) ->
+            build_provider_dir_distribution(ProviderDistributionResult);
+        (ProviderId, ?ERROR_NOT_SUPPORTED) ->
+            % peer provider is in older version, maybe it understands older request
+            % @TODO VFS-12867 remove in next major release after 22.02.*
+            case provider_rpc:call(ProviderId, FileGuid,
+                (maps:get(ProviderId, RequestsPerProvider))#provider_dir_distribution_get_request.stats_request)
+            of
+                {ok, CurrentDirStats} ->
+                    build_provider_dir_distribution(#provider_dir_distribution_get_result{
+                        current_dir_size_stats = CurrentDirStats
+                    });
+                {error, _} = E ->
+                    E
+            end;
+        (_ProviderId, {error, _} = Error) ->
+            Error
     end, SizeStatsPerProvider),
 
     #dir_distribution_gather_result{distribution_per_provider = DistributionPerProvider}.
@@ -156,7 +154,7 @@ build_dir_distribution_provider_requests(FileCtx) ->
 -spec build_provider_dir_distribution(#provider_dir_distribution_get_result{}) ->
     provider_dir_distribution().
 build_provider_dir_distribution(#provider_dir_distribution_get_result{
-    current_dir_size_stats = #provider_current_dir_size_stats_browse_result{stats = ProviderDirStats},
+    current_dir_size_stats = #provider_current_dir_size_stats_browse_result{status = ok, result = ProviderDirStats},
     locations_per_storage = LocationsPerStorage
 }) ->
     #provider_dir_distribution{
@@ -168,6 +166,17 @@ build_provider_dir_distribution(#provider_dir_distribution_get_result{
             (_, _, Acc) ->
                 Acc
         end, #{}, ProviderDirStats),
+        locations_per_storage = LocationsPerStorage
+    };
+build_provider_dir_distribution(#provider_dir_distribution_get_result{
+    current_dir_size_stats = #provider_current_dir_size_stats_browse_result{status = error, result = #{
+        <<"error">> := Error, <<"storage_list">> := StorageList}},
+    locations_per_storage = LocationsPerStorage
+}) ->
+    #provider_dir_distribution{
+        virtual_size = undefined,
+        logical_size = undefined,
+        physical_size_per_storage = maps:from_list([{S, Error} || S <- StorageList]),
         locations_per_storage = LocationsPerStorage
     }.
 

@@ -14,18 +14,20 @@
 
 %% Dir distribution
 
+% used as a result in middleware_worker
 -record(provider_dir_distribution, {
     logical_size :: file_meta:size(),
     virtual_size :: file_meta:size(),
-    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size()},
-    locations_per_storage = #{} :: data_distribution:locations_per_storage()
+    physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size() | errors:error()},
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
 }).
 
 
+% used in provider communication via provider_rpc
 % NOTE: translated to protobuf
 -record(provider_dir_distribution_get_result, {
     current_dir_size_stats :: provider_dir_distribution:current_dir_size_stats_result(),
-    locations_per_storage = #{} :: data_distribution:locations_per_storage() | errors:error()
+    locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
 }).
 
 -record(dir_distribution_gather_result, {
