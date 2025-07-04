@@ -24,6 +24,7 @@
 -include_lib("kernel/include/file.hrl").
 
 % TODO VFS-6162 move utility functions to storage_import_test_utils module
+% TODO VFS-12937 - add dir stats check to import tests
 
 % CT functions
 -export([init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_testcase/2]).

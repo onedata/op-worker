@@ -90,7 +90,6 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, filepath_utils:join([ParentStorageFileId, DirName]), undefined),
     {ok, DirCtx} = storage_import_engine:create_file_meta_and_handle_conflicts(
         FileUuid, DirName, ?DEFAULT_DIR_MODE, UserId, ParentUuid, SpaceId),
-    % TODO VFS-8891 - Test dir_stats_collector with sync
     times_api:report_file_created(DirCtx),
     {ok, DirCtx}.
 
