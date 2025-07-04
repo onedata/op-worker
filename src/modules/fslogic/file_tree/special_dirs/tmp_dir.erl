@@ -45,6 +45,7 @@
 
     #create_dir{},
     #create_file{},
+    #create_path{},
     #make_file{},
     #make_link{},
     #make_symlink{},
