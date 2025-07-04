@@ -673,9 +673,6 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             file_meta_posthooks:execute_hooks(FileUuid, doc),
             {ok, TimesRecord, StorageFileCtx5} = build_times_from_stat_timestamps(StorageFileCtx4),
             times_api:report_file_created(FileCtx, TimesRecord),
-            ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
-            {ok, FileType} = storage_driver:infer_type(Mode),
-            dir_size_stats:report_file_created(FileType, ParentGuid),
             {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
             {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -845,6 +842,7 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
                 _ ->
                     ok = file_popularity:update_size(FileCtx)
             end,
+            dir_size_stats:report_file_created(FileType, file_id:pack_guid(ParentUuid, SpaceId)),
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
             {ok, FileCtx};
         stalled_link ->
