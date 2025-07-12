@@ -180,15 +180,10 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
 storage_locations_to_json(StorageLocations) ->
     #{
         <<"locationsPerProvider">> => maps:map(fun(_ProviderId, LocationsPerStorage) ->
-            case translate_locations_per_storage(LocationsPerStorage) of
-                #{<<"error">> := _} = ErrorMap ->
-                    ErrorMap;
-                Map ->
-                    #{
-                        <<"success">> => true,
-                        <<"locationsPerStorage">> => Map
-                    }
-            end
+            #{
+                <<"success">> => true,
+                <<"locationsPerStorage">> => translate_locations_per_storage(LocationsPerStorage)
+            }
         end, StorageLocations)
     }.
 

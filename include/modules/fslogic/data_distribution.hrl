@@ -16,8 +16,8 @@
 
 % used as a result in middleware_worker
 -record(provider_dir_distribution, {
-    logical_size :: file_meta:size(),
-    virtual_size :: file_meta:size(),
+    logical_size :: file_meta:size() | undefined,
+    virtual_size :: file_meta:size() | undefined,
     physical_size_per_storage = #{} :: #{storage:id()  => data_distribution:dir_physical_size() | errors:error()},
     locations_per_storage = #{} :: data_distribution:locations_per_storage() | #{storage:id() => errors:error()}
 }).
