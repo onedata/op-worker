@@ -78,6 +78,7 @@ prepare_environment() ->
     op_worker:set_env(write_buffer_min_size, 1024),
     op_worker:set_env(write_buffer_max_size, 1024),
     op_worker:set_env(write_buffer_flush_delay, 1),
+    op_worker:set_env(helpers_cache_expiry_seconds, 2),
     op_worker:set_env(helpers_performance_monitoring_enabled, true),
     op_worker:set_env(helpers_performance_monitoring_type,
                         <<"graphite">>),
