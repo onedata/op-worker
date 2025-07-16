@@ -546,7 +546,7 @@ start_logger_handlers() ->
 
     ok = logger:add_handler(file_access_audit_log, logger_std_h, #{
         level => debug,
-        config => Config#{file => LogDir ++ op_worker:get_env(file_access_audit_log_file_name)},
+        config => Config#{file => filename:join(LogDir, op_worker:get_env(file_access_audit_log_file_name))},
         filter_default => stop,
         filters => [
             {opw_file_access_domain, {fun logger_filters:domain/2, {log, equal, [onedata, opw, file_access]}}}
