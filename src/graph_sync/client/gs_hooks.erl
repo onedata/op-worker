@@ -40,6 +40,8 @@
 handle_connected_to_oz() ->
     try
         ?info("Executing on-connect-to-oz procedures..."),
+        % service setup is attempted right after the connection and double-checked with every healthcheck
+        oneprovider:ensure_service_set_up_in_onezone(),
         on_connect_to_oz(),
         ?info("Finished executing on-connect-to-oz procedures")
     catch
@@ -56,6 +58,7 @@ handle_connected_to_oz() ->
 
 -spec handle_healthcheck_success() -> ok.
 handle_healthcheck_success() ->
+    % service setup is attempted right after the connection and double-checked with every healthcheck
     ok = oneprovider:ensure_service_set_up_in_onezone().
 
 
