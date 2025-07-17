@@ -46,6 +46,14 @@ all() ->
     ]).
 
 
+-define(assert_attr_changed_or_created_events(__EXP_ATTR_DATA, __SSE_CLIENT_PID, __FILE_GUID),
+    ?assertEqual(
+        __EXP_ATTR_DATA,
+        get_data_attributes_from_changed_or_created_events(get_events_for_file(__SSE_CLIENT_PID, __FILE_GUID)),
+        ?ATTEMPTS
+    )
+).
+
 -define(ATTEMPTS, 5).
 
 
@@ -106,13 +114,14 @@ token_caveats_test(_Config) ->
         observed_dirs => [SpaceKrkGuid]
     },
 
-    % Request containing data caveats should be rejected
+    % Request containing data caveats should succeed
     DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceKrkId/binary>>]},
     TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
-    ?assertMatch(
-        {error, {401, ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))}},
+    {ok, ClientWithDataCaveat} = ?assertMatch(
+        {ok, _},
         space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithDataCaveat})
     ),
+    ok = space_file_events_test_sse_client:stop(ClientWithDataCaveat),
 
     % Request containing invalid api caveat should be rejected
     InvalidApiCaveat = #cv_api{whitelist = [
@@ -133,11 +142,11 @@ token_caveats_test(_Config) ->
         {all, all, ?GRI_PATTERN(op_space, SpaceKrkId, <<"file_events">>)}
     ]},
     TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
-    {ok, Client} = ?assertMatch(
+    {ok, ClientWithApiCaveat} = ?assertMatch(
         {ok, _},
         space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithValidApiCaveat})
     ),
-    ok = space_file_events_test_sse_client:stop(Client).
+    ok = space_file_events_test_sse_client:stop(ClientWithApiCaveat).
 
 
 invalid_args_test(_Config) ->
@@ -232,22 +241,21 @@ changed_or_created_events_test(_Config) ->
     FileOwnerUserId = oct_background:get_user_id(user1),
     FileOwnerSessionId = oct_background:get_user_session_id(user1, krakow),
 
+    ChildFileName = ?RAND_STR(),
     #object{
         guid = ObservedDirGuid,
         children = [
-            #object{guid = ChildDirGuid},
+            %% TODO VFS-12699 Test changes for child dir
+            #object{guid = _ChildDirGuid},
             #object{guid = ChildFileGuid}
         ]
     } = onenv_file_test_utils:create_file_tree(
         FileOwnerUserId, SpaceKrkGuid, krakow, #dir_spec{
             mode = ?FILE_MODE(8#777),
-            children = [#dir_spec{}, #file_spec{}]
+            children = [#dir_spec{}, #file_spec{name = ChildFileName}]
         }
     ),
-    ObservedAttrs = [?attr_mode, ?attr_atime, ?attr_mtime, ?attr_ctime, ?attr_size],
-
-    % TODO VFS-12699 should sleep waiting until all docs are flushed? or just filter them in asserts later?
-    timer:sleep(timer:seconds(5)),
+    ObservedAttrs = [?attr_name, ?attr_mode, ?attr_size],
 
     ClientArgs = #{
         node => oct_background:get_random_provider_node(krakow),
@@ -259,25 +267,25 @@ changed_or_created_events_test(_Config) ->
 
     {ok, SSEClientPid} = ?assertMatch({ok, _}, space_file_events_test_sse_client:start(ClientArgs)),
 
-    % Creating new files in child dir should result in its mtime change
-    onenv_file_test_utils:create_file_tree(
-        FileOwnerUserId, ChildDirGuid, krakow, #file_spec{}
-    ),
-
     % Creating new files in observed dir should result in its events for all observed documents
     onenv_file_test_utils:create_file_tree(
         FileOwnerUserId, ObservedDirGuid, krakow, #file_spec{}
     ),
 
+    ExpAttrsForAttrChangedEvents1 = [
+        #{<<"name">> => ChildFileName, <<"posixPermissions">> => <<"664">>},
+        #{<<"size">> => 0}
+    ],
+    ?assert_attr_changed_or_created_events(ExpAttrsForAttrChangedEvents1, SSEClientPid, ChildFileGuid),
+
     % mode change should result in event
     Node = oct_background:get_random_provider_node(krakow),
     ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerSessionId, ?FILE_REF(ChildFileGuid), 8#740)),
 
-    % TODO VFS-12699 replace sleep with attempts?
-    timer:sleep(timer:seconds(5)),
-
-    % TODO VFS-12699 replace ct pal with assert with exp event matchers (dsl?)
-    ct:pal("~p", [space_file_events_test_sse_client:get_events(SSEClientPid)]).
+    ExpAttrsForAttrChangedEvents2 = ExpAttrsForAttrChangedEvents1 ++ [
+        #{<<"name">> => ChildFileName, <<"posixPermissions">> => <<"740">>}
+    ],
+    ?assert_attr_changed_or_created_events(ExpAttrsForAttrChangedEvents2, SSEClientPid, ChildFileGuid).
 
 
 %%%===================================================================
@@ -308,3 +316,23 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+get_events_for_file(SSEClientPid, FileGuid) ->
+    {ok, Events} = space_file_events_test_sse_client:get_events(SSEClientPid),
+
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    lists:filter(fun(#{data := [EventData]}) ->
+        maps:get(<<"fileId">>, EventData) =:= FileObjectId
+    end, Events).
+
+
+%% @private
+get_data_attributes_from_changed_or_created_events(Events) ->
+    lists:filtermap(fun
+        (#{event_type := <<"changedOrCreated">>, data := [#{<<"attributes">> := ChangedAttrs}]}) ->
+            {true, ChangedAttrs};
+        (_) ->
+            false
+    end, Events).

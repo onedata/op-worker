@@ -21,8 +21,15 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 
--define(OBSERVABLE_FILE_ATTRS, lists:flatten(
-    [?FILE_META_ATTRS, ?TIMES_FILE_ATTRS, ?LOCATION_FILE_ATTRS]) -- ?INTERNAL_FILE_ATTRS
+-define(OBSERVABLE_FILE_ATTRS,
+    lists:flatten([
+        % Name belongs to ?LINK_TREE_FILE_ATTRS attr group BUT it is only relevant for other
+        % attrs in this group (file name conflicts related attrs) - if only name is no link
+        % docs are consulted (and as such we do not need to monitor them - file_meta change
+        % trigger name change event)
+        ?attr_name,
+        ?FILE_META_ATTRS, ?TIMES_FILE_ATTRS, ?LOCATION_FILE_ATTRS
+    ]) -- ?INTERNAL_FILE_ATTRS
 ).
 
 

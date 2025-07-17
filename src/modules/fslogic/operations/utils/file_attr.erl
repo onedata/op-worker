@@ -80,7 +80,7 @@
 %%% API
 %%%===================================================================
 
-% TODO VFS-12865 file_meta traverse perms check / metadata read_metadata perms check
+% TODO VFS-12699 file_meta traverse perms check / metadata read_metadata perms check
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of

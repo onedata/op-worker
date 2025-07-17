@@ -367,7 +367,8 @@ process_doc(RootUserCtx, ChangedDoc, State) ->
                     ok;
                 ObserverPids ->
                     {FileAttr, _FileCtx3} = file_attr:resolve(RootUserCtx, FileCtx, #{
-                        attributes => ObservedAttrs
+                        attributes => ObservedAttrs,
+                        name_conflicts_resolution_policy => allow_name_conflicts
                     }),
                     Event = #file_changed_or_created_event{
                         id = str_utils:to_binary(ChangedDoc#document.seq),

@@ -147,7 +147,7 @@ event_loop(State = #state{
     receive
         {{From, TestProcessRef}, get_events} ->
             From ! {TestProcessRef, lists:reverse(Events)},
-            event_loop(State#state{events = []});
+            event_loop(State);
         {{From, TestProcessRef}, stop} ->
             hackney:close(HackneyRef),
             From ! {TestProcessRef, ok};
@@ -209,7 +209,7 @@ send_request(Args = #{node := Node, space_id := SpaceId}) ->
     end,
 
     Opts = [
-%%        {recv_timeout, 50000},
+        {recv_timeout, 50000},
         async
     ],
     rest_test_utils:request(Node, Path, post, HeadersWithAuth, Payload, Opts).

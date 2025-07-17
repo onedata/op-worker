@@ -58,7 +58,7 @@ parse_and_validate(SpaceId, SessionId, Req) ->
         ObservedDocAttrs = lists_utils:intersect(ObservableAttrs, AllObservedAttrs),
         maps_utils:put_if_defined(Acc, DocType, ObservedDocAttrs, [])
     end, #{}, [
-        {file_meta, ?FILE_META_ATTRS},
+        {file_meta, [?attr_name | ?FILE_META_ATTRS]},
         {times, ?TIMES_FILE_ATTRS},
         {file_location, ?LOCATION_FILE_ATTRS}
     ]),
