@@ -12,9 +12,10 @@
 -module(space_file_events_stream_handler).
 -author("Bartosz Walkowicz").
 
+-behaviour(cowboy_loop).
+
 -include("http/space_file_events_stream.hrl").
 -include("middleware/middleware.hrl").
--include("modules/fslogic/data_access_control.hrl").
 
 %% API
 -export([init/2, info/3]).
@@ -36,33 +37,12 @@
 -spec init(cowboy_req:req(), term()) ->
     {ok, cowboy_req:req(), no_state} | {cowboy_loop, cowboy_req:req(), state()}.
 init(Req, _Opts) ->
+    % Trap exits as this connection process will link with space files monitor process
     process_flag(trap_exit, true),
 
     try
-        SpaceId = cowboy_req:binding(sid, Req),
-        middleware_utils:assert_space_supported_locally(SpaceId),
-
-        Auth = authenticate(Req),
-        SessionId = Auth#auth.session_id,
-        ?check(preauthorize(SpaceId, Auth)),
-
-        {SpaceFilesMonitoringSpec, Req2} = space_files_monitoring_spec:parse_and_validate(
-            SpaceId, SessionId, Req
-        ),
-
-        MonitorPid = space_files_monitor_sup:ensure_monitor_started(SpaceId),
-        ok = space_files_monitor:subscribe(MonitorPid, SessionId, SpaceFilesMonitoringSpec),
-        Req3 = cowboy_req:stream_reply(
-            ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"text/event-stream">>}, Req2
-        ),
-
-        State = #state{
-            space_id = SpaceId,
-            auth = Auth,
-            files_monitoring_spec = SpaceFilesMonitoringSpec,
-            monitor_pid = MonitorPid
-        },
-        {cowboy_loop, Req3, State}
+        {ok, State, Req2} = handle_init(Req),
+        {cowboy_loop, Req2, State}
     catch Class:Reason:Stacktrace ->
         Error = ?examine_exception(Class, Reason, Stacktrace),
         {ok, http_req:send_error(Error, Req), no_state}
@@ -95,19 +75,49 @@ info(Msg, Req, State) ->
 
 
 %% @private
--spec authenticate(cowboy_req:req()) -> aai:auth() | no_return().
+-spec handle_init(cowboy_req:req()) -> {ok, state(), cowboy_req:req()} | no_return().
+handle_init(Req) ->
+    SpaceId = cowboy_req:binding(sid, Req),
+    middleware_utils:assert_space_supported_locally(SpaceId),
+
+    Auth = ?check(authenticate(Req)),
+    SessionId = Auth#auth.session_id,
+    ?check(preauthorize(SpaceId, Auth)),
+
+    {SpaceFilesMonitoringSpec, Req2} = space_files_monitoring_spec:parse_and_validate(
+        SpaceId, SessionId, Req
+    ),
+
+    MonitorPid = space_files_monitor_sup:ensure_monitor_started(SpaceId),
+    ok = space_files_monitor:subscribe_link(MonitorPid, SessionId, SpaceFilesMonitoringSpec),
+    Req3 = cowboy_req:stream_reply(
+        ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"text/event-stream">>}, Req2
+    ),
+
+    State = #state{
+        space_id = SpaceId,
+        auth = Auth,
+        files_monitoring_spec = SpaceFilesMonitoringSpec,
+        monitor_pid = MonitorPid
+    },
+
+    {ok, State, Req3}.
+
+
+%% @private
+-spec authenticate(cowboy_req:req()) -> {ok, aai:auth()} | errors:error().
 authenticate(Req) ->
     AuthCtx = #http_auth_ctx{
         interface = rest,
-        data_access_caveats_policy = disallow_data_access_caveats
+        data_access_caveats_policy = allow_data_access_caveats
     },
     case http_auth:authenticate(Req, AuthCtx) of
-        {ok, Auth = ?USER} ->
-            Auth;
+        {ok, ?USER} = Result ->
+            Result;
         {ok, ?GUEST} ->
-            throw(?ERR_UNAUTHORIZED(?err_ctx(), undefined));
+            ?ERR_UNAUTHORIZED(?err_ctx(), undefined);
         ?ERR = Error ->
-            throw(Error)
+            Error
     end.
 
 
@@ -122,7 +132,7 @@ authenticate(Req) ->
 preauthorize(SpaceId, Auth) ->
     case middleware_utils:is_eff_space_member(Auth, SpaceId) of
         true ->
-            GRI = #gri{type = op_metrics, id = SpaceId, aspect = file_events},
+            GRI = #gri{type = op_space, id = SpaceId, aspect = file_events},
             ?catch_exceptions(api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI));
         false ->
             ?ERR_FORBIDDEN(?err_ctx())
@@ -138,13 +148,21 @@ prepare_changed_or_created_event(#file_changed_or_created_event{
     doc_type = DocType,
     file_attr = FileAttr
 }, State) ->
-    FilesMonitoringSpec = State#state.files_monitoring_spec,
-    ObservedAttrsPerDoc = FilesMonitoringSpec#space_files_monitoring_spec.observed_attrs_per_doc,
-    ObservedAttrs = maps:get(DocType, ObservedAttrsPerDoc),
-    FileAttrJson = file_attr_translator:to_json(FileAttr, current, ObservedAttrs),
+    ObservedAttrs = get_observed_doc_attrs(DocType, State),
 
     #{
         <<"parentFileId">> => ?check(file_id:guid_to_objectid(ParentGuid)),
         <<"fileId">> => ?check(file_id:guid_to_objectid(FileGuid)),
-        <<"attributes">> => FileAttrJson
+        <<"attributes">> => file_attr_translator:to_json(
+            FileAttr, current, ObservedAttrs
+        )
     }.
+
+
+%% @private
+-spec get_observed_doc_attrs(file_meta | times | file_location, state()) ->
+    [onedata_file:attr_name()].
+get_observed_doc_attrs(DocType, #state{files_monitoring_spec = #space_files_monitoring_spec{
+    observed_attrs_per_doc = ObservedAttrsPerDoc
+}}) ->
+    maps:get(DocType, ObservedAttrsPerDoc).

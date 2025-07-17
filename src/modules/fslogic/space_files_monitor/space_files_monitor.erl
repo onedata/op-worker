@@ -7,7 +7,6 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Server observing changes in space files and informing subscribed clients.
-%%% TODO VFS-12886 add inactivity DIE_TIMEOUT - similar to replica_synchronizer
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_files_monitor).
@@ -22,7 +21,7 @@
 
 %% API
 -export([start_link/1]).
--export([subscribe/3]).
+-export([subscribe_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -77,10 +76,12 @@
 
 -define(OBSERVABLE_FILE_DOCS, [file_meta, times, file_location]).
 
-%% The process is supposed to die after ?DIE_AFTER_MS time of idling (no subscribers)
--define(DIE_AFTER_MS, 10_000).
+%% The process is supposed to die after ?INACTIVITY_PERIOD_MS time of idling (no subscribers)
+-define(INACTIVITY_PERIOD_MS, 10_000).
 
--define(MAX_AUTHORIZE_OBSERVERS_PROCS, op_worker:get_env(
+%% Maximum number of concurrent processes verifying whether subscribed observers
+%% can see produced events
+-define(MAX_AUTHZ_VERIFY_PROCS, op_worker:get_env(
     max_authorize_space_files_observers_procs, 20
 )).
 
@@ -95,9 +96,9 @@ start_link(SpaceId) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [SpaceId], []).
 
 
--spec subscribe(pid(), session:id(), space_files_monitoring_spec:t()) ->
+-spec subscribe_link(pid(), session:id(), space_files_monitoring_spec:t()) ->
     ok | errors:error().
-subscribe(MonitorPid, SessionId, FilesMonitoringSpec) ->
+subscribe_link(MonitorPid, SessionId, FilesMonitoringSpec) ->
     call_monitor(MonitorPid, #subscribe_req{
         pid = self(),
         session_id = SessionId,
@@ -119,7 +120,6 @@ init([SpaceId]) ->
     Self = self(),
     SinceSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
 
-    % TODO VFS-5570
     % TODO VFS-6389 - maybe, instead of aborting http connection on Node failure
     % (stream process will die and in turn kill this one - terminate),
     % try to restart couchbase_changes stream on different node
@@ -135,7 +135,7 @@ init([SpaceId]) ->
         space_id = SpaceId,
         changes_stream_pid = ChangesStreamPid
     },
-    {ok, State, ?DIE_AFTER_MS}.
+    {ok, State, ?INACTIVITY_PERIOD_MS}.
 
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
@@ -258,7 +258,7 @@ call_monitor(MonitorPid, Request) ->
     {noreply, state(), non_neg_integer()}.
 noreply_with_timeout_if_no_subscribers(State) ->
     case maps_utils:is_empty(State#state.observers) of
-        true -> {noreply, State, ?DIE_AFTER_MS};
+        true -> {noreply, State, ?INACTIVITY_PERIOD_MS};
         false -> {noreply, State}
     end.
 
@@ -311,7 +311,7 @@ remove_observer(State, ObserverPid) ->
                     LeftoverDirObservers ->
                         DirMonitoringSpecsAcc#{ObservedDirGuid => #dir_monitoring_spec{
                             observers = LeftoverDirObservers,
-                            observed_attrs_per_doc = gather_dir_observed_attrs_per_doc(
+                            observed_attrs_per_doc = gather_observed_attrs_per_doc(
                                 LeftoverDirObservers, State
                             )
                         }}
@@ -328,8 +328,8 @@ remove_observer(State, ObserverPid) ->
 
 
 %% @private
--spec gather_dir_observed_attrs_per_doc([pid()], state()) -> observed_attrs_per_doc().
-gather_dir_observed_attrs_per_doc(ObserverPids, #state{observers = Observers}) ->
+-spec gather_observed_attrs_per_doc([pid()], state()) -> observed_attrs_per_doc().
+gather_observed_attrs_per_doc(ObserverPids, #state{observers = Observers}) ->
     lists:foldl(fun(ObserverPid, ObservedAttrsPerDocAcc) ->
         Observer = maps:get(ObserverPid, Observers),
         FilesMonitoringSpec = Observer#observer.files_monitoring_spec,
@@ -378,6 +378,7 @@ process_doc(RootUserCtx, ChangedDoc, State) ->
                     },
                     broadcast_event(ObserverPids, Event)
             end;
+
         false ->
             ok
     end.
@@ -389,8 +390,6 @@ get_file_ctx(ChangedDoc = #document{value = #times{}}) ->
     file_ctx:new_by_uuid(ChangedDoc#document.key, ChangedDoc#document.scope);
 get_file_ctx(ChangedDoc = #document{value = #file_meta{}}) ->
     file_ctx:new_by_doc(ChangedDoc, ChangedDoc#document.scope);
-get_file_ctx(ChangedDoc = #document{value = #custom_metadata{}}) ->
-    file_ctx:new_by_uuid(ChangedDoc#document.key, ChangedDoc#document.scope);
 get_file_ctx(ChangedDoc = #document{value = #file_location{uuid = FileUUid}}) ->
     file_ctx:new_by_uuid(FileUUid, ChangedDoc#document.scope).
 
@@ -446,7 +445,7 @@ get_authorized_observers(ChangedDocType, FileCtx, DirMonitoringSpec, State) ->
                 false
         end
     end,
-    lists_utils:pfiltermap(FilterMapFun, AllDirObservers, ?MAX_AUTHORIZE_OBSERVERS_PROCS).
+    lists_utils:pfiltermap(FilterMapFun, AllDirObservers, ?MAX_AUTHZ_VERIFY_PROCS).
 
 
 %% @private

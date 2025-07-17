@@ -48,7 +48,7 @@ routes() -> [
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_metrics,
+            type = op_space,
             id = ?BINDING(sid),
             aspect = file_events,
             scope = private

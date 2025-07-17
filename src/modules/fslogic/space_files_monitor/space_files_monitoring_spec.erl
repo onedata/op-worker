@@ -54,9 +54,9 @@ parse_and_validate(SpaceId, SessionId, Req) ->
     }),
 
     AllObservedAttrs = maps:get(<<"observedAttributes">>, ParsedArguments, ?FILE_META_ATTRS),
-    ObservedAttrsPerDoc = lists:foldl(fun({DocName, ObservableAttrs}, Acc) ->
+    ObservedAttrsPerDoc = lists:foldl(fun({DocType, ObservableAttrs}, Acc) ->
         ObservedDocAttrs = lists_utils:intersect(ObservableAttrs, AllObservedAttrs),
-        maps_utils:put_if_defined(Acc, DocName, ObservedDocAttrs, [])
+        maps_utils:put_if_defined(Acc, DocType, ObservedDocAttrs, [])
     end, #{}, [
         {file_meta, ?FILE_META_ATTRS},
         {times, ?TIMES_FILE_ATTRS},

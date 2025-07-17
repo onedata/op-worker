@@ -72,7 +72,7 @@ non_existing_space_test(_Config) ->
 
 unauthorized_client_test(_Config) ->
     Space1Id = oct_background:get_space_id(space1),
-    Space1Guid = fslogic_file_id:spaceid_to_space_dir_guid(Space1Id),
+    Space1Guid = space_dir:guid(Space1Id),
 
     ClientArgs = #{
         node => oct_background:get_random_provider_node(krakow),
@@ -96,7 +96,7 @@ unauthorized_client_test(_Config) ->
 
 token_caveats_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
-    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
     Token = oct_background:get_user_access_token(user2),
 
     ClientArgs = #{
@@ -119,7 +119,7 @@ token_caveats_test(_Config) ->
         % valid caveat - operation check user perms and as such permission to get user record is required
         {all, all, ?GRI_PATTERN(od_user, <<"*">>, <<"instance">>, '*')},
         % invalid caveat
-        {all, all, ?GRI_PATTERN(op_metrics, <<"ASD">>, <<"changes">>)}
+        {all, all, ?GRI_PATTERN(op_space, <<"ASD">>, <<"changes">>)}
     ]},
     TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
     ?assertMatch(
@@ -130,7 +130,7 @@ token_caveats_test(_Config) ->
     % Request containing valid api caveat should succeed
     ValidApiCaveat = #cv_api{whitelist = [
         {all, all, ?GRI_PATTERN(od_user, <<"*">>, <<"instance">>, '*')},
-        {all, all, ?GRI_PATTERN(op_metrics, SpaceKrkId, <<"file_events">>)}
+        {all, all, ?GRI_PATTERN(op_space, SpaceKrkId, <<"file_events">>)}
     ]},
     TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
     {ok, Client} = ?assertMatch(
@@ -142,7 +142,7 @@ token_caveats_test(_Config) ->
 
 invalid_args_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
-    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
     SpaceKrkObjectId = ?check(file_id:guid_to_objectid(SpaceKrkGuid)),
     FileOwnerUserId = oct_background:get_user_id(user1),
 
@@ -228,7 +228,7 @@ invalid_args_test(_Config) ->
 
 changed_or_created_events_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
-    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
     FileOwnerUserId = oct_background:get_user_id(user1),
     FileOwnerSessionId = oct_background:get_user_session_id(user1, krakow),
 
