@@ -430,31 +430,36 @@ get_authorized_observers(ChangedDocType, FileCtx, DirMonitoringSpec, State) ->
     FilterMapFun = fun(DirObserverPid) ->
         DirObserver = maps:get(DirObserverPid, State#state.observers),
 
-        case is_observer_subscribed_for_doc(ChangedDocType, DirObserver) of
-            true ->
+        case get_observed_attrs_for_doc(ChangedDocType, DirObserver) of
+            undefined ->
+                false;
+
+            ObservedAttrs ->
                 DirObserverUserCtx = user_ctx:new(DirObserver#observer.session_id),
 
                 try
+                    RequiredPerms = [
+                        ?TRAVERSE_ANCESTORS,
+                        ?OPERATIONS(file_attr:optional_attrs_perms_mask(ObservedAttrs))
+                    ],
                     fslogic_authz:ensure_authorized(
-                        DirObserverUserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+                        DirObserverUserCtx, FileCtx, RequiredPerms
                     ),
                     {true, DirObserverPid}
                 catch _:_ ->
                     false
-                end;
-            false ->
-                false
+                end
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, AllDirObservers, ?MAX_AUTHZ_VERIFY_PROCS).
 
 
 %% @private
--spec is_observer_subscribed_for_doc(doc_type(), observer()) -> boolean().
-is_observer_subscribed_for_doc(ChangedDocType, #observer{
+-spec get_observed_attrs_for_doc(doc_type(), observer()) -> undefined | [onedata_file:attr_name()].
+get_observed_attrs_for_doc(ChangedDocType, #observer{
     files_monitoring_spec = #space_files_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}
 }) ->
-    maps:is_key(ChangedDocType, ObservedAttrsPerDoc).
+    maps:get(ChangedDocType, ObservedAttrsPerDoc, undefined).
 
 
 %% @private

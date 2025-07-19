@@ -104,6 +104,7 @@ test_stat(SpaceId) ->
         true -> [?SPACE_READ_DATA];
         false -> []
     end,
+    ct:pal("Resolving attrs: ~p", [Attributes]),
 
     authz_api_test_runner:run_suite(#authz_test_suite_spec{
         name = str_utils:to_binary(?FUNCTION_NAME),

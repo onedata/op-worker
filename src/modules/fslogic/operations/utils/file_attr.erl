@@ -26,7 +26,8 @@
 %% API
 -export([
     resolve/3,
-    should_fetch_xattrs/1
+    should_fetch_xattrs/1,
+    optional_attrs_perms_mask/1
 ]).
 
 -type name_conflicts_resolution_policy() ::
@@ -84,6 +85,20 @@
 
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
+    FileCtx1 = case file_ctx:is_space_dir_const(FileCtx0) of
+        true ->
+            %% TODO perms check fails for proxy spaces -.-
+            FileCtx0;
+        false ->
+            RequiredPrivs = [
+                ?TRAVERSE_ANCESTORS,
+                ?OPERATIONS(optional_attrs_perms_mask(RequestedAttributes))
+            ],
+            fslogic_authz:ensure_authorized(
+                UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
+            )
+    end,
+
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx0) of
         undefined ->
             RequestedAttributes;
@@ -98,14 +113,6 @@ resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
                 false -> AttrsBase
             end
     end,
-
-    RequiredPrivs = [
-        ?TRAVERSE_ANCESTORS,
-        ?OPERATIONS(optional_attrs_perms_mask(FinalRequestedAttributes))
-    ],
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
-    ),
 
     InitialState = #state{
         file_ctx = FileCtx1,
@@ -136,12 +143,6 @@ should_fetch_xattrs(AttributesList) ->
     end.
 
 
-%%%===================================================================
-%%% Stage functions
-%%%===================================================================
-
-
-%% @private
 -spec optional_attrs_perms_mask([onedata_file:attr_name()]) -> data_access_control:bitmask().
 optional_attrs_perms_mask(AttributesList) ->
     Metadata = case should_fetch_xattrs(AttributesList) of
@@ -152,6 +153,11 @@ optional_attrs_perms_mask(AttributesList) ->
         true -> Metadata bor ?read_acl_mask;
         false -> Metadata
     end.
+
+
+%%%===================================================================
+%%% Stage functions
+%%%===================================================================
 
 
 %% @private

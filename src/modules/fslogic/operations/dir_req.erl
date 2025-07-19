@@ -113,9 +113,14 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
 -spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [onedata_file:attr_name()]) ->
     fslogic_worker:fuse_response().
 list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
-    % Check only dir perms as perms for listing individual file attrs will be
-    % checked in file_attr module before attributes resolution
-    DirOperationsRequirements = ?OPERATIONS(?traverse_container_mask, ?list_container_mask),
+    DirOperationsRequirements = case Attributes -- [?attr_guid, ?attr_name] of
+        [] ->
+            ?OPERATIONS(?list_container_mask);
+        _ ->
+            % Check only dir perms as perms for listing individual file attrs will be
+            % checked in file_attr module before attributes resolution
+            ?OPERATIONS(?traverse_container_mask, ?list_container_mask)
+    end,
     {Whitelist, FileCtx2} = check_listing_permissions(UserCtx, FileCtx, DirOperationsRequirements),
     {ChildrenAttrs, PaginationToken, FileCtx3} = list_children_attrs_internal(
         UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}, Attributes, []),
