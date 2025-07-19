@@ -16,6 +16,7 @@
 -author("Michal Stanisz").
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -80,10 +81,10 @@
 %%% API
 %%%===================================================================
 
-% TODO VFS-12699 file_meta traverse perms check / metadata read_metadata perms check
+
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
-resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
-    FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
+resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
+    FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx0) of
         undefined ->
             RequestedAttributes;
         %% @TODO VFS-11299 left for compatibility with oneclient
@@ -97,22 +98,31 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
                 false -> AttrsBase
             end
     end,
+
+    RequiredPrivs = [
+        ?TRAVERSE_ANCESTORS,
+        ?OPERATIONS(optional_attrs_perms_mask(FinalRequestedAttributes))
+    ],
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
+    ),
+
     InitialState = #state{
-        file_ctx = FileCtx,
+        file_ctx = FileCtx1,
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
     % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
     % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
-    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
-        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
+    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx1) andalso
+        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx1)),
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
         ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsRemoteOnlySpace ->
             {AccState, AccFileAttrRecord};
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
             {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
             {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
-        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
+        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx1)}}, ?STAGES),
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 
@@ -129,6 +139,20 @@ should_fetch_xattrs(AttributesList) ->
 %%%===================================================================
 %%% Stage functions
 %%%===================================================================
+
+
+%% @private
+-spec optional_attrs_perms_mask([onedata_file:attr_name()]) -> data_access_control:bitmask().
+optional_attrs_perms_mask(AttributesList) ->
+    Metadata = case should_fetch_xattrs(AttributesList) of
+        {true, _} -> ?read_metadata_mask;
+        false -> 0
+    end,
+    case lists:member(acl, AttributesList) of
+        true -> Metadata bor ?read_acl_mask;
+        false -> Metadata
+    end.
+
 
 %% @private
 -spec resolve_file_meta_attrs(state()) -> {state(), record()}.

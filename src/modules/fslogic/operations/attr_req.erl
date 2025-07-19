@@ -22,8 +22,7 @@
     get_file_attr_by_path/4,
     get_file_references/2,
     get_child_attr/4, chmod/3, update_times/5,
-    get_fs_stats/2,
-    optional_attrs_perms_mask/1
+    get_fs_stats/2
 ]).
 
 %% Protected API (for use only by *_req level modules)
@@ -45,12 +44,9 @@
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts() | [attribute()]) ->
     fslogic_worker:fuse_response().
-get_file_attr(UserCtx, FileCtx0, Options) when is_map(Options) ->
-    RequiredPrivs = [?TRAVERSE_ANCESTORS, ?OPERATIONS(optional_attrs_perms_mask(Options))],
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
-    ),
-    get_file_attr_insecure(UserCtx, FileCtx1, Options);
+get_file_attr(UserCtx, FileCtx, Options) when is_map(Options) ->
+    % Perms check is done later in file_attr module
+    get_file_attr_insecure(UserCtx, FileCtx, Options);
 get_file_attr(UserCtx, FileCtx, Attributes) when is_list(Attributes) ->
     get_file_attr(UserCtx, FileCtx, #{attributes => Attributes}).
 
@@ -134,20 +130,6 @@ get_fs_stats(UserCtx, FileCtx0) ->
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
     ),
     get_fs_stats_insecure(UserCtx, FileCtx1).
-
-
--spec optional_attrs_perms_mask([attribute()] | file_attr:resolve_opts()) -> data_access_control:bitmask().
-optional_attrs_perms_mask(#{attributes := AttributesList}) ->
-    optional_attrs_perms_mask(AttributesList);
-optional_attrs_perms_mask(AttributesList) ->
-    Metadata = case file_attr:should_fetch_xattrs(AttributesList) of
-        {true, _} -> ?read_metadata_mask;
-        false -> 0
-    end,
-    case lists:member(acl, AttributesList) of
-        true -> Metadata bor ?read_acl_mask;
-        false -> Metadata
-    end.
 
 
 %%%===================================================================

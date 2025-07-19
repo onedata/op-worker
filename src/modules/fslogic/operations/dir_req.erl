@@ -113,12 +113,9 @@ list_children(UserCtx, FileCtx0, ListOpts) ->
 -spec list_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [onedata_file:attr_name()]) ->
     fslogic_worker:fuse_response().
 list_children_attrs(UserCtx, FileCtx, ListOpts, Attributes) ->
-    DirOperationsRequirements = case Attributes -- [?attr_guid, ?attr_name] of
-        [] ->
-            ?OPERATIONS(?list_container_mask);
-        _ ->
-            ?OPERATIONS(?traverse_container_mask, ?list_container_mask, attr_req:optional_attrs_perms_mask(Attributes))
-    end,
+    % Check only dir perms as perms for listing individual file attrs will be
+    % checked in file_attr module before attributes resolution
+    DirOperationsRequirements = ?OPERATIONS(?traverse_container_mask, ?list_container_mask),
     {Whitelist, FileCtx2} = check_listing_permissions(UserCtx, FileCtx, DirOperationsRequirements),
     {ChildrenAttrs, PaginationToken, FileCtx3} = list_children_attrs_internal(
         UserCtx, FileCtx2, ListOpts#{whitelist => Whitelist}, Attributes, []),
@@ -146,10 +143,11 @@ list_children_ctxs(UserCtx, FileCtx, ListOpts) ->
     fslogic_worker:fuse_response().
 list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    OptionalPrivs = attr_req:optional_attrs_perms_mask(Attributes),
+    % Check only dir perms as perms for listing individual file attrs will be
+    % checked in file_attr module before attributes resolution
     AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask, OptionalPrivs)];
-        false-> [?TRAVERSE_ANCESTORS, ?OPERATIONS(OptionalPrivs)]
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
+        false-> [?TRAVERSE_ANCESTORS]
     end,
     {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
