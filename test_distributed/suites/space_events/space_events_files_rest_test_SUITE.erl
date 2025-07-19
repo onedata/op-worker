@@ -171,12 +171,11 @@ invalid_args_test(_Config) ->
     ),
 
     AllowedAttrs = [
-        <<"index">>, <<"type">>, <<"activePermissionsType">>, <<"posixPermissions">>, <<"acl">>,
+        <<"name">>, <<"index">>, <<"type">>, <<"activePermissionsType">>,
+        <<"posixPermissions">>, <<"acl">>,
         <<"parentFileId">>, <<"originProviderId">>, <<"directShareIds">>, <<"ownerUserId">>,
         <<"hardlinkCount">>, <<"symlinkValue">>, <<"creationTime">>, <<"atime">>, <<"mtime">>,
-        <<"ctime">>, <<"size">>, <<"isFullyReplicatedLocally">>, <<"localReplicationRate">>,
-        %% TODO VFS-12699 should not be returned!
-        <<"xattr.*">>
+        <<"ctime">>, <<"size">>, <<"isFullyReplicatedLocally">>, <<"localReplicationRate">>
     ],
 
     ClientArgs = #{
