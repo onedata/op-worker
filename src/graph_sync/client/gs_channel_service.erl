@@ -245,14 +245,14 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            % The on connection procedures require operational db and workers, but
-            % the connection may be established before in order to perform an upgrade.
-            % In such case, the procedures are deferred and will be called
-            % when the 'on_db_and_workers_ready' callback fires.
-            case node_manager:are_db_and_workers_ready() of
-                false ->
-                    ?info("Deferring on-connect-to-oz procedures as not all workers are ready yet");
+            % The on connection procedures require an initialized node (when the safe mode
+            % gets disabled), but the connection may be established before in order to perform an upgrade.
+            % In such a case, the procedures are deferred and will be called later:
+            % @see trigger_pending_on_connect_to_oz_procedures/0
+            case safe_mode:should_enforce() of
                 true ->
+                    ?info("Deferring on-connect-to-oz procedures as the node is not initialized yet");
+                false ->
                     run_on_connect_to_oz_procedures()
             end;
         already_started ->
