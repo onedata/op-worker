@@ -195,7 +195,6 @@ healthcheck(LastInterval) ->
         {true, false} ->
             case try_to_start_connection() of
                 ok ->
-                    gs_hooks:handle_healthcheck_success(),
                     {ok, ?GS_RECONNECT_BASE_INTERVAL};
                 error ->
                     % specific errors are already logged
