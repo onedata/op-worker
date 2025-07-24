@@ -190,7 +190,9 @@ healthcheck(LastInterval) ->
             ?debug("Skipping Onezone connection as the provider is not registered"),
             {ok, calculate_backoff(LastInterval)};
         {true, true} ->
-            gs_hooks:handle_healthcheck_success(),
+            % run the hook only if the node is already set up; as the healthcheck is repeated
+            % often, the hook will be executed in due time
+            safe_mode:should_enforce() orelse gs_hooks:handle_healthcheck_success(),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false} ->
             case try_to_start_connection() of
