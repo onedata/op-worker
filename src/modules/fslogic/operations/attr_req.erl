@@ -46,7 +46,11 @@
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx, Options) when is_map(Options) ->
     % Perms check is done later in file_attr module
-    get_file_attr_insecure(UserCtx, FileCtx, Options);
+    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Options#{check_perms => true}),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = FileAttr
+    };
 get_file_attr(UserCtx, FileCtx, Attributes) when is_list(Attributes) ->
     get_file_attr(UserCtx, FileCtx, #{attributes => Attributes}).
 
@@ -144,7 +148,7 @@ get_fs_stats(UserCtx, FileCtx0) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Opts),
+    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Opts#{check_perms => false}),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = FileAttr

@@ -157,7 +157,7 @@ list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
     {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    list_recursively_insecure(UserCtx, FileCtx2, ListOpts, Attributes).
+    list_recursively_internal(UserCtx, FileCtx2, ListOpts, Attributes).
     
 
 %%%===================================================================
@@ -238,7 +238,8 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
                 ?catch_not_found_as(false, begin
                     {_, FileCtx2} = file_attr:resolve(UserCtx, FileCtx, #{
                         attributes => [?attr_name],
-                        name_conflicts_resolution_policy => resolve_name_conflicts
+                        name_conflicts_resolution_policy => resolve_name_conflicts,
+                        check_perms => false
                     }),
                     {true, FileCtx2}
                 end);
@@ -259,7 +260,7 @@ list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     
     MapperFun = fun(ChildCtx) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{attributes => Attributes}),
+            attr_req:get_file_attr(UserCtx, ChildCtx, #{attributes => Attributes}),
         FileAttr
     end,
 
@@ -282,11 +283,11 @@ list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
 %% For more details consult `recursive_listing` and `recursive_file_listing_node` module doc.
 %% @end
 %%--------------------------------------------------------------------
--spec list_recursively_insecure(
+-spec list_recursively_internal(
     user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [onedata_file:attr_name()]
 ) ->
     fslogic_worker:fuse_response().
-list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
+list_recursively_internal(UserCtx, FileCtx, ListOpts, Attributes) ->
     FinalListOpts = kv_utils:move_found(
         include_directories,
         include_branching_nodes,
@@ -302,7 +303,7 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, Attributes) ->
     
     GetAttrsFun = fun({Path, EntryFileCtx}) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            attr_req:get_file_attr_insecure(UserCtx, EntryFileCtx, #{attributes => AttrsToCalculate}),
+            attr_req:get_file_attr(UserCtx, EntryFileCtx, #{attributes => AttrsToCalculate}),
         FileAttr#file_attr{path = Path, guid = file_ctx:get_logical_guid_const(EntryFileCtx)}
     end,
     MappedEntries = case AttrsToCalculate of

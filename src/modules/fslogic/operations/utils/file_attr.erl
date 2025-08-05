@@ -42,7 +42,10 @@
     % Tells whether to perform a check if file name collide with other files in
     % directory. If it does suffix will be glued to name to differentiate it
     % and conflicting files will be returned (default: resolve_name_conflicts).
-    name_conflicts_resolution_policy => name_conflicts_resolution_policy()
+    name_conflicts_resolution_policy => name_conflicts_resolution_policy(),
+    % Tells whether to perform permissions check (may be omitted if they were already
+    % checked in upper layers)
+    check_perms => boolean()
 }.
 
 -type record() :: #file_attr{}.
@@ -90,17 +93,19 @@ resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
     IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx0) andalso
         not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx0)),
 
-    FileCtx1 = case IsRemoteOnlySpace of
-        true ->
+    FileCtx1 = case maps:get(check_perms, Opts, true) of
+        true when IsRemoteOnlySpace ->
             FileCtx0;
-        false ->
+        true ->
             RequiredPrivs = [
                 ?TRAVERSE_ANCESTORS,
                 ?OPERATIONS(optional_attrs_perms_mask(RequestedAttributes))
             ],
             fslogic_authz:ensure_authorized(
                 UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
-            )
+            );
+        false ->
+            FileCtx0
     end,
 
     FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx0) of
