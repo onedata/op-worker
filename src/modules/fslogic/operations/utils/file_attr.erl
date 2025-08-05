@@ -85,9 +85,13 @@
 
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
 resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
-    FileCtx1 = case file_ctx:is_space_dir_const(FileCtx0) of
+    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
+    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
+    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx0) andalso
+        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx0)),
+
+    FileCtx1 = case IsRemoteOnlySpace of
         true ->
-            %% TODO perms check fails for proxy spaces -.-
             FileCtx0;
         false ->
             RequiredPrivs = [
@@ -119,10 +123,6 @@ resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
-    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
-    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
-    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx1) andalso
-        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx1)),
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
         ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsRemoteOnlySpace ->
             {AccState, AccFileAttrRecord};
