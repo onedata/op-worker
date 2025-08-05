@@ -192,6 +192,9 @@ request(Client, Req, Timeout) ->
                         Err1
                 end;
             true ->
+                ?warning("Dropping a GS request due to safe mode enforcement: ~ts ~ts", [
+                    Req#gs_req_graph.operation, gri:serialize(Req#gs_req_graph.gri)
+                ]),
                 ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain())
         end
     catch
