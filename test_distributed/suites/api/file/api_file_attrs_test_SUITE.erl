@@ -1105,21 +1105,20 @@ get_dir_distribution_3_test(Config) ->
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    FileStoragePathP1 = get_file_storage_location(posix, DirGuid, P1Node, UserSessIdP1),
-    FileStoragePathP2 = get_file_storage_location(posix, DirGuid, P1Node, UserSessIdP1),
+    FileStoragePath = get_file_storage_location(posix, DirGuid, P1Node, UserSessIdP1),
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10},
-                locations_per_storage = #{P1StorageId => FileStoragePathP1}
+                locations_per_storage = #{P1StorageId => FileStoragePath}
             },
             P2Id => #provider_dir_distribution{
                 virtual_size = undefined,
                 logical_size = undefined,
                 physical_size_per_storage = #{P2StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
-                locations_per_storage = #{P2StorageId => FileStoragePathP2}
+                locations_per_storage = #{P2StorageId => FileStoragePath}
             }
         }
     }},
