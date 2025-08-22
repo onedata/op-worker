@@ -10,7 +10,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_files_monitor).
--author("cyfrinet").
+-author("Bartosz Walkowicz").
 
 -behaviour(gen_server).
 
@@ -239,14 +239,11 @@ call_monitor(MonitorPid, Request) ->
         gen_server2:call(MonitorPid, Request, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
-            ?debug("Process '~tp' does not exist", [?MODULE]),
-            ?ERROR_NOT_FOUND;
+            ?report_internal_server_error("Process '~tp' does not exist", [?MODULE]);
         exit:{normal, _} ->
-            ?debug("Exit of '~tp' process", [?MODULE]),
-            ?ERROR_NOT_FOUND;
+            ?report_internal_server_error("Exit of '~tp' process", [?MODULE]);
         exit:{timeout, _} ->
-            ?debug("Timeout of '~tp' process", [?MODULE]),
-            ?ERROR_TIMEOUT;
+            ?report_internal_server_error("Timeout of '~tp' process", [?MODULE]);
         Class:Reason:Stacktrace ->
             ?examine_exception("Cannot call space file monitor", Class, Reason, Stacktrace)
     end.

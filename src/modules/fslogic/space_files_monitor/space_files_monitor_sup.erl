@@ -69,6 +69,9 @@ do_ensure_monitor_started(SpaceId) ->
         {ok, Pid} ->
             Pid;
         {error, already_present} ->
+            % When monitor dies naturally (due to inactivity) it is not restarted but its
+            % spec is also not removed from supervisor (one_for_one supervisor behaviour)
+            % - it needs to be done manually before starting it anew
             supervisor:delete_child(?SPACE_FILES_MONITOR_SUP, ?SPACE_FILES_MONITOR(SpaceId)),
             do_ensure_monitor_started(SpaceId);
         {error, {already_started, Pid}} ->

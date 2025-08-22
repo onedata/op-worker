@@ -55,7 +55,7 @@ info(Event = #file_changed_or_created_event{id = Id}, Req, State) ->
     ResponseEvent = #{
         id => Id,
         event => <<"changedOrCreated">>,
-        data => json_utils:encode(prepare_changed_or_created_event(Event, State))
+        data => json_utils:encode(file_changed_or_created_event_to_json(Event, State))
     },
     cowboy_req:stream_events(ResponseEvent, nofin, Req),
     {ok, Req, State};
@@ -140,9 +140,9 @@ preauthorize(SpaceId, Auth) ->
 
 
 %% @private
--spec prepare_changed_or_created_event(space_files_monitor:file_changed_or_created_event(), state()) ->
+-spec file_changed_or_created_event_to_json(space_files_monitor:file_changed_or_created_event(), state()) ->
     json_utils:json_map().
-prepare_changed_or_created_event(#file_changed_or_created_event{
+file_changed_or_created_event_to_json(#file_changed_or_created_event{
     file_guid = FileGuid,
     parent_file_guid = ParentGuid,
     doc_type = DocType,
@@ -151,8 +151,8 @@ prepare_changed_or_created_event(#file_changed_or_created_event{
     ObservedAttrs = get_observed_doc_attrs(DocType, State),
 
     #{
-        <<"parentFileId">> => ?check(file_id:guid_to_objectid(ParentGuid)),
-        <<"fileId">> => ?check(file_id:guid_to_objectid(FileGuid)),
+        <<"fileId">> => file_id:check_guid_to_objectid(FileGuid),
+        <<"parentFileId">> => file_id:check_guid_to_objectid(ParentGuid),
         <<"attributes">> => file_attr_translator:to_json(
             FileAttr, current, ObservedAttrs
         )

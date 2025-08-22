@@ -45,12 +45,7 @@
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts() | [attribute()]) ->
     fslogic_worker:fuse_response().
 get_file_attr(UserCtx, FileCtx, Options) when is_map(Options) ->
-    % Perms check is done later in file_attr module
-    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Options#{check_perms => true}),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = FileAttr
-    };
+    do_get_file_attr(UserCtx, FileCtx, Options#{check_perms => true});
 get_file_attr(UserCtx, FileCtx, Attributes) when is_list(Attributes) ->
     get_file_attr(UserCtx, FileCtx, #{attributes => Attributes}).
 
@@ -148,11 +143,7 @@ get_fs_stats(UserCtx, FileCtx0) ->
 -spec get_file_attr_insecure(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Opts#{check_perms => false}),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = FileAttr
-    }.
+    do_get_file_attr(UserCtx, FileCtx, Opts#{check_perms => false}).
 
 
 %%--------------------------------------------------------------------
@@ -299,4 +290,15 @@ get_fs_stats_insecure(_UserCtx, FileCtx) ->
                 occupied = Occupied
             }]
         }
+    }.
+
+
+%% @private
+-spec do_get_file_attr(user_ctx:ctx(), file_ctx:ctx(), file_attr:resolve_opts()) ->
+    fslogic_worker:fuse_response().
+do_get_file_attr(UserCtx, FileCtx, Opts) ->
+    {FileAttr, _FileCtx2} = file_attr:resolve(UserCtx, FileCtx, Opts),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = FileAttr
     }.
