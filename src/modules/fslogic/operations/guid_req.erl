@@ -147,7 +147,7 @@ resolve_guid_insecure(_UserCtx, FileCtx) ->
 -spec get_parent_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_parent_insecure(UserCtx, FileCtx) ->
-    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #dir{guid = ParentGuid}

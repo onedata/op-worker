@@ -41,6 +41,8 @@ handle_connected_to_oz() ->
     try
         ?info("Executing on-connect-to-oz procedures..."),
         on_connect_to_oz(),
+        % service setup is attempted right after the connection and double-checked with every healthcheck
+        oneprovider:ensure_service_set_up_in_onezone(),
         ?info("Finished executing on-connect-to-oz procedures")
     catch
         _:{_, ?ERR_NO_CONNECTION_TO_ONEZONE(_)} ->
@@ -56,6 +58,7 @@ handle_connected_to_oz() ->
 
 -spec handle_healthcheck_success() -> ok.
 handle_healthcheck_success() ->
+    % service setup is attempted right after the connection and double-checked with every healthcheck
     ok = oneprovider:ensure_service_set_up_in_onezone().
 
 
@@ -121,9 +124,9 @@ handle_entity_deleted(GRI) ->
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
-    ok = restart_hooks:maybe_execute_hooks(),
     ok = gs_client_worker:enable_cache(),
     ok = auth_cache:report_oz_connection_start(),
+    ok = restart_hooks:maybe_execute_hooks(),
     ok = main_harvesting_stream:revise_all_spaces(),
     % TODO: VFS-5744 potential race condition:
     % provider may perform operations associated with QoS (or any other effective cache) before cache initialization

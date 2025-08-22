@@ -83,9 +83,9 @@ many_files_test_base(Config, TestScenario) ->
     SlavePids = case get(slave_pids) of
         undefined ->
             SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-            SpaceGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
+            SpaceDirGuid = client_simulation_test_utils:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
-            {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceGuid,
+            {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, ?ROOT_SESS_ID, SpaceDirGuid,
                 generator:gen_name(), ?DEFAULT_FILE_PERMS)),
             ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
@@ -96,7 +96,7 @@ many_files_test_base(Config, TestScenario) ->
                 spawn_link(fun() ->
                     try
                         {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
-                        start_slave(Config, Sock, SpaceGuid, Master, TestScenario)
+                        start_slave(Config, Sock, SpaceDirGuid, Master, TestScenario)
                     catch
                         E1:E2:Stacktrace ->
                             Master ! {start_ans, {E1, E2, Stacktrace}}
@@ -160,31 +160,31 @@ many_files_test_base(Config, TestScenario) ->
 %%% Internal functions
 %%%===================================================================
 
-start_slave(Config, Sock, SpaceGuid, Master, test_many) ->
+start_slave(Config, Sock, SpaceDirGuid, Master, test_many) ->
     Master ! {start_ans, ok},
-    many_files_slave_loop(Config, Sock, SpaceGuid, Master);
-start_slave(Config, Sock, SpaceGuid, Master, test_long_usage) ->
+    many_files_slave_loop(Config, Sock, SpaceDirGuid, Master);
+start_slave(Config, Sock, SpaceDirGuid, Master, test_long_usage) ->
     {FileGuid, HandleId, SubId} =
-        client_simulation_test_utils:prepare_file(Sock, SpaceGuid),
+        client_simulation_test_utils:prepare_file(Sock, SpaceDirGuid),
     timer:sleep(5000),
     Master ! {start_ans, ok},
     long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master).
 
-many_files_slave_loop(Config, Sock, SpaceGuid, Master) ->
+many_files_slave_loop(Config, Sock, SpaceDirGuid, Master) ->
     receive
         do_test ->
             try
                 Args = [write, read, release, unsub],
                 Repeats = ?config(proc_repeats_num, Config),
                 lists:foreach(fun(_) ->
-                    client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceGuid, false)
+                    client_simulation_test_utils:simulate_client(Config, Args, Sock, SpaceDirGuid, false)
                 end, lists:seq(1, Repeats)),
                 Master ! {test_ans, ok}
             catch
                 E1:E2:Stacktrace ->
                     Master ! {test_ans, {E1, E2, Stacktrace}}
             end,
-            many_files_slave_loop(Config, Sock, SpaceGuid, Master)
+            many_files_slave_loop(Config, Sock, SpaceDirGuid, Master)
     end.
 
 long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master) ->

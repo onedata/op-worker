@@ -35,7 +35,7 @@
 
 %% file_meta posthooks
 -export([
-    emit_file_changed_event/3
+    emit_file_changed_event_posthook/3
 ]).
 
 %% for tests
@@ -88,7 +88,7 @@ decode_file_meta_posthook_args(hardlink_change_replicated, EncodedArgs) ->
     [SpaceId, HardlinkUuid] = binary_to_term(EncodedArgs),
     {ok, HardlinkDoc} = file_meta:get_including_deleted(HardlinkUuid),
     [SpaceId, HardlinkDoc];
-decode_file_meta_posthook_args(emit_file_changed_event, EncodedArgs) ->
+decode_file_meta_posthook_args(emit_file_changed_event_posthook, EncodedArgs) ->
     [FileGuid, ParentUuid, Name] = binary_to_term(EncodedArgs),
     [file_ctx:new_by_guid(FileGuid), ParentUuid, Name].
 
@@ -97,13 +97,14 @@ decode_file_meta_posthook_args(emit_file_changed_event, EncodedArgs) ->
 %%% file_meta posthooks
 %%%===================================================================
 
--spec emit_file_changed_event(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok.
-emit_file_changed_event(FileCtx, ParentUuid, Name) ->
-    case file_meta_forest:get(ParentUuid, all, Name) of
-        {ok, _} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
-        {error, not_found} ->
-            add_missing_parent_link_posthook(FileCtx, ParentUuid, Name)
+-spec emit_file_changed_event_posthook(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok.
+emit_file_changed_event_posthook(FileCtx, ParentUuid, Name) ->
+    case emit_file_changed_event(FileCtx, ParentUuid, Name) of
+        ok -> ok;
+        % Link document was synchronized but link is still missing (it is stored in multiple documents and all of them 
+        % must be synchronized). Return `repeat` atom instead of adding the posthook again due to posthooks implementation 
+        % ignoring the posthook in the latter case (see `file_meta_posthooks` module for more details).
+        missing_link -> repeat
     end.
 
 
@@ -125,7 +126,7 @@ hardlink_replicated(#document{
     % TODO VFS-7914 - Do not invalidate cache, when it is not needed
     ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
     ok = file_meta_posthooks:execute_hooks(FileUuid, doc),
-    ok = emit_file_changed_event(FileCtx, ParentUuid, Name).
+    ok = emit_file_changed_event_or_add_posthook(FileCtx, ParentUuid, Name).
 
 
 %% @private
@@ -138,7 +139,7 @@ file_meta_change_replicated_internal(#document{
 file_meta_change_replicated_internal(#document{
     value = #file_meta{name = Name, parent_uuid = ParentUuid}
 }, FileCtx) ->
-    ok = emit_file_changed_event(FileCtx, ParentUuid, Name).
+    ok = emit_file_changed_event_or_add_posthook(FileCtx, ParentUuid, Name).
 
 
 %% @private
@@ -163,6 +164,24 @@ add_missing_parent_link_posthook(FileCtx, ParentUuid, Name) ->
         <<"missing_parent_link_", Name/binary>>,
         file_ctx:get_space_id_const(FileCtx),
         ?MODULE,
-        emit_file_changed_event,
+        emit_file_changed_event_posthook,
         [file_ctx:get_logical_guid_const(FileCtx), ParentUuid, Name]
     ).
+
+
+%% @private
+-spec emit_file_changed_event_or_add_posthook(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok.
+emit_file_changed_event_or_add_posthook(FileCtx, ParentUuid, Name) ->
+    case emit_file_changed_event(FileCtx, ParentUuid, Name) of
+        ok -> ok;
+        missing_link -> add_missing_parent_link_posthook(FileCtx, ParentUuid, Name)
+    end.
+
+
+%% @private
+-spec emit_file_changed_event(file_ctx:ctx(), file_meta:uuid(), file_meta:name()) -> ok | missing_link.
+emit_file_changed_event(FileCtx, ParentUuid, Name) ->
+    case file_meta_forest:get(ParentUuid, all, Name) of
+        {ok, _} -> ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+        {error, not_found} -> missing_link
+    end.

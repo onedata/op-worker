@@ -95,7 +95,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     WorkersP1 = oct_background:get_provider_nodes(krakow),
     WorkersP2 = oct_background:get_provider_nodes(paris),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     Attempts = 60,
 
     [WorkerToCheckP2] = WorkersP2 -- [WorkerToKillP2],
@@ -105,14 +105,14 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 %%    ct:pal("Create fuse sessions on nodes: ~n~tp~n~tp", [WorkerToKillP1, WorkerToKillP2]),
 %%    AccessToken = provider_onenv_test_utils:create_oz_temp_access_token(User1),
 %%    {FuseSessIdP1, ConnectionsP1} = setup_fuse_session_with_connections(
-%%        AccessToken, WorkerToKillP1, WorkerToCheckP1, SpaceGuid, Attempts
+%%        AccessToken, WorkerToKillP1, WorkerToCheckP1, SpaceDirGuid, Attempts
 %%    ),
 %%    {FuseSessIdP2, ConnectionsP2} = setup_fuse_session_with_connections(
-%%        AccessToken, WorkerToKillP2, WorkerToCheckP2, SpaceGuid, Attempts
+%%        AccessToken, WorkerToKillP2, WorkerToCheckP2, SpaceDirGuid, Attempts
 %%    ),
 
     ct:pal("Init tests using node ~tp", [WorkerToKillP1]),
-    DirsAndFiles = create_dirs_and_files(WorkerToKillP1, SessId(P1), SpaceGuid),
+    DirsAndFiles = create_dirs_and_files(WorkerToKillP1, SessId(P1), SpaceDirGuid),
 
     failure_test_utils:kill_nodes(Config, [WorkerToKillP1, WorkerToKillP2]),
     ct:pal("Killed nodes: ~n~tp~n~tp", [WorkerToKillP1, WorkerToKillP2]),
@@ -120,7 +120,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     file_ops_test_utils:verify_files_and_dirs(WorkerToCheckP2, SessId(P2), DirsAndFiles, Attempts),
     ct:pal("Files check after node kill: done"),
     timer:sleep(5000),
-    DirsAndFiles2 = create_dirs_and_files(WorkerToCheckP1, SessId(P1), SpaceGuid),
+    DirsAndFiles2 = create_dirs_and_files(WorkerToCheckP1, SessId(P1), SpaceDirGuid),
     ct:pal("New dirs and files created"),
 
     _UpdatedConfig = failure_test_utils:restart_nodes(Config, [WorkerToKillP1, WorkerToKillP2]),
@@ -133,11 +133,11 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 
     % TODO VFS-7037 uncomment and make it pass
 %%    verify_fuse_session_after_restart(
-%%        FuseSessIdP1, ConnectionsP1, WorkerToKillP1, WorkerToCheckP1, SpaceGuid, Attempts
+%%        FuseSessIdP1, ConnectionsP1, WorkerToKillP1, WorkerToCheckP1, SpaceDirGuid, Attempts
 %%    ),
 %%    ct:pal("Fuse session check on P1 after restart: done"),
 %%    verify_fuse_session_after_restart(
-%%        FuseSessIdP2, ConnectionsP2, WorkerToKillP2, WorkerToCheckP2, SpaceGuid, Attempts
+%%        FuseSessIdP2, ConnectionsP2, WorkerToKillP2, WorkerToCheckP2, SpaceDirGuid, Attempts
 %%    ),
 %%    ct:pal("Fuse session check on P2 after restart: done"),
 
@@ -185,8 +185,8 @@ enable_ha(Config) ->
 
     timer:sleep(10000). % Give time to flush data saved before HA settings change
 
-create_dirs_and_files(Worker, SessId, SpaceGuid) ->
-    file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 1, 1).
+create_dirs_and_files(Worker, SessId, SpaceDirGuid) ->
+    file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceDirGuid, 1, 1).
 
 responsible_node(NodeToCall, TermToCheck) ->
     Node = rpc:call(NodeToCall, datastore_key, any_responsible_node, [TermToCheck]),
@@ -200,7 +200,7 @@ verify_gs_channel_node(ExpectedWorker, NodeToCall) ->
     ?assertEqual(ExpectedWorker, rpc:call(NodeToCall, internal_services_manager, get_processing_node,
         [?GS_CHANNEL_SERVICE_NAME])).
 
-setup_fuse_session_with_connections(AccessToken, WorkerToKill, WorkerToCheck, SpaceGuid, Attempts) ->
+setup_fuse_session_with_connections(AccessToken, WorkerToKill, WorkerToCheck, SpaceDirGuid, Attempts) ->
     Nonce = crypto:strong_rand_bytes(10),
 
     Opts = [{active, true}],
@@ -237,11 +237,11 @@ setup_fuse_session_with_connections(AccessToken, WorkerToKill, WorkerToCheck, Sp
     assert_proper_connections_rib(SessId, AsyncReqManager, Cons),
 
     % Assert all working connections
-    lists:foreach(fun(Sock) -> fuse_test_utils:ls(Sock, SpaceGuid) end, [Sock1, Sock2]),
+    lists:foreach(fun(Sock) -> fuse_test_utils:ls(Sock, SpaceDirGuid) end, [Sock1, Sock2]),
 
     {SessId, [{WorkerToKill, Sock1}, {WorkerToCheck, Sock2}]}.
 
-verify_fuse_session_after_restart(SessId, ConnectionPerWorker, WorkerToKill, WorkerToCheck, SpaceGuid, Attempts) ->
+verify_fuse_session_after_restart(SessId, ConnectionPerWorker, WorkerToKill, WorkerToCheck, SpaceDirGuid, Attempts) ->
     {ok, #document{
         value = #session{
             supervisor = Sup,
@@ -269,7 +269,7 @@ verify_fuse_session_after_restart(SessId, ConnectionPerWorker, WorkerToKill, Wor
         ({Worker, Sock}) when Worker == WorkerToKill ->
             ?assertEqual({error, closed}, ssl:send(Sock, <<"msg">>));
         ({Worker, Sock}) when Worker == WorkerToCheck ->
-            fuse_test_utils:ls(Sock, SpaceGuid)
+            fuse_test_utils:ls(Sock, SpaceDirGuid)
     end, ConnectionPerWorker).
 
 assert_processes_reside_on_node(Node, Processes) ->

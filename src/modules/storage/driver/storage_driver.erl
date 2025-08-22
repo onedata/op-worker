@@ -58,10 +58,6 @@ new_handle(SessionId, FileCtx) ->
     new_handle(SessionId, FileCtx, true).
 
 
-%%--------------------------------------------------------------------
-%% @equiv new_handle(SessionId, SpaceUuid, FileUuid, Storage, FileId, undefined).
-%% @end
-%%--------------------------------------------------------------------
 -spec new_handle(session:id(), file_ctx:ctx(), boolean()) ->
     {handle() | undefined, file_ctx:ctx()}.
 new_handle(SessionId, FileCtx, Generate) ->
@@ -383,9 +379,9 @@ get_child_handle(#sd_handle{
     Buffer :: binary()) ->
     {ok, non_neg_integer()} | error_reply().
 write(#sd_handle{open_flag = undefined}, _, _) ->
-    throw(?EPERM);
+    throw(?EBADF);
 write(#sd_handle{open_flag = read}, _, _) ->
-    throw(?EPERM);
+    throw(?EBADF);
 write(SDHandle, Offset, Buffer) ->
     run_with_file_handle(SDHandle, fun(FileHandle) ->
         helpers:write(FileHandle, Offset, Buffer)
@@ -401,9 +397,9 @@ write(SDHandle, Offset, Buffer) ->
     MaxSize :: non_neg_integer()) ->
     {ok, binary()} | error_reply().
 read(#sd_handle{open_flag = undefined}, _, _) ->
-    throw(?EPERM);
+    throw(?EBADF);
 read(#sd_handle{open_flag = write}, _, _) ->
-    throw(?EPERM);
+    throw(?EBADF);
 read(SDHandle, Offset, MaxSize) ->
     run_with_file_handle(SDHandle, fun(_FileHandle) ->
         case read_internal(SDHandle, Offset, MaxSize) of
@@ -467,8 +463,8 @@ create(#sd_handle{file = FileId} = SDHandle, Mode, FileTypeFlag) ->
 -spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer()) ->
     ok | error_reply().
 truncate(#sd_handle{open_flag = undefined}, _, _) ->
-    throw(?EPERM);
-truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);
+    throw(?EBADF);
+truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EBADF);
 truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
     run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
         helpers:truncate(HelperHandle, FileId, Size, CurrentSize)
@@ -761,7 +757,7 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
 } = SDHandle, Fun, SufficientAccessType) ->
     case helpers_runner:run_and_handle_error(SDHandle, Fun, SufficientAccessType) of
         {error, Errno} = Error when Errno == ?EACCES orelse Errno == ?EPERM ->
-            IsSpaceDir = fslogic_file_id:is_space_dir_uuid(FileUuid),
+            IsSpaceDir = space_dir:is_special(uuid, FileUuid),
             IsSpaceOwner = session:is_space_owner(SessionId, SpaceId),
 
             % TODO VFS-11852 Consider fallback to ROOT for other users than space owner.

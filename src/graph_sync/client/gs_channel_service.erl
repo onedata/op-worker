@@ -190,12 +190,13 @@ healthcheck(LastInterval) ->
             ?debug("Skipping Onezone connection as the provider is not registered"),
             {ok, calculate_backoff(LastInterval)};
         {true, true} ->
-            gs_hooks:handle_healthcheck_success(),
+            % run the hook only if the node is already set up; as the healthcheck is repeated
+            % often, the hook will be executed in due time
+            safe_mode:should_enforce() orelse gs_hooks:handle_healthcheck_success(),
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false} ->
             case try_to_start_connection() of
                 ok ->
-                    gs_hooks:handle_healthcheck_success(),
                     {ok, ?GS_RECONNECT_BASE_INTERVAL};
                 error ->
                     % specific errors are already logged
@@ -245,14 +246,14 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            % The on connection procedures require operational db and workers, but
-            % the connection may be established before in order to perform an upgrade.
-            % In such case, the procedures are deferred and will be called
-            % when the 'on_db_and_workers_ready' callback fires.
-            case node_manager:are_db_and_workers_ready() of
-                false ->
-                    ?info("Deferring on-connect-to-oz procedures as not all workers are ready yet");
+            % The on connection procedures require an initialized node (when the safe mode
+            % gets disabled), but the connection may be established before in order to perform an upgrade.
+            % In such a case, the procedures are deferred and will be called later:
+            % @see trigger_pending_on_connect_to_oz_procedures/0
+            case safe_mode:should_enforce() of
                 true ->
+                    ?info("Deferring on-connect-to-oz procedures as the node is not initialized yet");
+                false ->
                     run_on_connect_to_oz_procedures()
             end;
         already_started ->

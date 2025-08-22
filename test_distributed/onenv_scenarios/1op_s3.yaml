@@ -8,9 +8,9 @@ sources:
       - oz-panel
   oneprovider-1:
     node-1:
+      - op-panel
       - op-worker
       - cluster-manager
-      - op-panel
 
 groups:
   - &group1

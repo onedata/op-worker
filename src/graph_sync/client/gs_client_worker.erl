@@ -19,6 +19,10 @@
 -author("Lukasz Opiola").
 
 -behaviour(gen_server).
+% TODO VFS-12743 better logs when gs_client timeouts on a request
+% TODO VFS-12743 do not crash when a stale response is received after gs_client timeouts on a request
+%                (add logs too - what timeouted and what response did not come, what was stale)
+% TODO VFS-12743 consider adding verbose logs for gs_client
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
@@ -188,6 +192,9 @@ request(Client, Req, Timeout) ->
                         Err1
                 end;
             true ->
+                ?warning("Dropping a GS request due to safe mode enforcement: ~ts ~ts", [
+                    Req#gs_req_graph.operation, gri:serialize(Req#gs_req_graph.gri)
+                ]),
                 ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain())
         end
     catch
@@ -389,10 +396,10 @@ handle_cast(Request, #state{} = State) ->
     {stop, Reason :: term(), NewState :: state()}.
 % Received from gs_client as a result of async_request - forwards the response
 % to the caller pid.
-handle_info({response, ReqId, Response}, #state{promises = Promises} = State) ->
+handle_info({result, ReqId, Response}, #state{promises = Promises} = State) ->
     case maps:take(ReqId, Promises) of
         {Pid, NewPromises} ->
-            Pid ! {response, ReqId, Response},
+            Pid ! {result, ReqId, Response},
             {noreply, State#state{promises = NewPromises}};
         error ->
             % Possible if 'check_timeout' for the request has fired and
@@ -405,7 +412,8 @@ handle_info({response, ReqId, Response}, #state{promises = Promises} = State) ->
 handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     case maps:take(ReqId, Promises) of
         {Pid, NewPromises} ->
-            Pid ! {response, ReqId, ?ERROR_TIMEOUT},
+            ?error("Timeout waiting for GS response, id: ~ts", [ReqId]),
+            Pid ! {result, ReqId, ?ERROR_TIMEOUT},
             {noreply, State#state{promises = NewPromises}};
         error ->
             % There is no promise for the ReqId anymore, which means the request
@@ -615,7 +623,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
                 Error;
             {ok, ReqId} ->
                 receive
-                    {response, ReqId, Result} ->
+                    {result, ReqId, Result} ->
                         Result
                 after
                 % the gen_server uses Timeout internally, allow some larger margin

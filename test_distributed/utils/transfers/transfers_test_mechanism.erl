@@ -1107,7 +1107,7 @@ maybe_create_root_dir(Node, RootDirectory, SessionId, SpaceId) ->
     end.
 
 space_guid(SpaceId) ->
-    fslogic_file_id:spaceid_to_space_dir_guid(SpaceId).
+    space_dir:guid(SpaceId).
 
 validate_root_directory(Path = <<"/", _>>) ->
     throw({absolute_root_path, Path});

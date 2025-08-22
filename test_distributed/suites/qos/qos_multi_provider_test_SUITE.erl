@@ -313,13 +313,13 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     Provider2 = oct_background:get_provider_id(paris),
     Providers = [Provider1, Provider2],
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     P1Node = oct_background:get_random_provider_node(Provider1),
     P2Node = oct_background:get_random_provider_node(Provider2),
     
     Name = generator:gen_name(),
     
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceDirGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
     
     mock_dbsync_changes(oct_background:get_provider_nodes(Provider2), ?FUNCTION_NAME),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid), <<"providerId=", Provider2/binary>>, 1),

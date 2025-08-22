@@ -653,13 +653,13 @@ share_root_accessed_via_public_data_mode_should_have_parent_set(_Config) ->
     UserId = oct_background:get_user_id(user3),
     AccessToken = oct_background:get_user_access_token(user3),
     PublicDataSessId = opw_test_rpc:create_session(krakow, UserId, public_data, AccessToken),
-    ShareRootGuid = file_id:share_guid_to_guid(fslogic_file_id:shareid_to_share_root_dir_guid(ShareId, SpaceId)),
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    ShareContainerGuid = file_id:share_guid_to_guid(share_container:guid(SpaceId, ShareId)),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     ?assertMatch({ok, #file_attr{parent_guid = undefined}}, opw_test_rpc:call(
-        krakow, lfm, stat, [?ROOT_SESS_ID, ?FILE_REF(ShareRootGuid), [?attr_parent_guid]])),
+        krakow, lfm, stat, [?ROOT_SESS_ID, ?FILE_REF(ShareContainerGuid), [?attr_parent_guid]])),
     ?assertMatch({ok, #file_attr{parent_guid = SpaceDirGuid}}, opw_test_rpc:call(
-        krakow, lfm, stat, [PublicDataSessId, ?FILE_REF(ShareRootGuid), [?attr_parent_guid]])).
+        krakow, lfm, stat, [PublicDataSessId, ?FILE_REF(ShareContainerGuid), [?attr_parent_guid]])).
 
 
 

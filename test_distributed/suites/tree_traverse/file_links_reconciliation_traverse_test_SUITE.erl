@@ -58,7 +58,7 @@ file_links_reconciliation_traverse_test(Config) ->
     ChildrenCount = 100,
     #object{guid = DirGuid, children = ChildrenObjects} = onenv_file_test_utils:create_file_tree(
         oct_background:get_user_id(user1),
-        fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(space1)),
+        space_dir:guid(oct_background:get_space_id(space1)),
         oct_background:get_provider_id(paris),
         #dir_spec{children = lists:duplicate(ChildrenCount, #file_spec{})}
     ),
@@ -198,7 +198,7 @@ init_per_testcase(file_links_reconciliation_traverse_test, Config) ->
     TestPid = self(),
     ok = test_utils:mock_expect(KrakowNodes, dbsync_changes, apply,
         fun (#document{key = Key, value = #links_node{model = file_meta, key = RelatedKey}} = Doc) ->
-                case fslogic_file_id:is_space_dir_uuid(RelatedKey) of
+                case space_dir:is_special(uuid, RelatedKey) of
                     true ->
                         % do not ignore links_node for space dir as it already exists on this provider (created alongside
                         % archives root dir on space support), so it will never be fetched from remote provider)

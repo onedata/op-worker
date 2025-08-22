@@ -42,14 +42,14 @@ test_create_share(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirKey = maps:get(DirPath, ExtraData),
+            DirKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/dir1">>, ExtraData),
             opt_shares:create(Node, SessionId, DirKey, <<"create_share">>)
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir]
     }).
 
 
@@ -81,13 +81,14 @@ test_remove_share(SpaceId) ->
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
 test_share_perms_are_checked_only_up_to_share_root(SpaceId) ->
     SpaceOwnerUserId = oct_background:get_user_id(space_owner),
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     #object{children = [#object{
         shares = [ShareId],

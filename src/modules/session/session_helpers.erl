@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves a helper associated with the session by
-%% {SessId, SpaceUuid} key. The helper is created and associated
+%% {SessId, SpaceId} key. The helper is created and associated
 %% with the session if it doesn't exist.
 %% @end
 %%--------------------------------------------------------------------
@@ -183,7 +183,7 @@ add_missing_helper(SessId, SpaceId, StorageId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns a key constructed from StorageId and SpaceUuid used for
+%% Returns a key constructed from StorageId and SpaceId used for
 %% link targets.
 %% @end
 %%--------------------------------------------------------------------

@@ -46,9 +46,12 @@
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: file_id:file_guid().
 
+-type operation() :: fuse_request_type() | file_request_type() | provider_request_type() | proxyio_request_type().
+
 -export_type([
     request/0, response/0, file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0
+    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0,
+    operation/0
 ]).
 
 % requests
@@ -162,7 +165,7 @@ is_storage_accessible(FileCtx) ->
         [] ->
             true;
         Storages ->
-            case fslogic_file_id:is_root_dir_guid(file_ctx:get_logical_guid_const(FileCtx))  of
+            case file_ctx:is_filesystem_root_dir_const(FileCtx)  of
                 true -> true;
                 false ->
                     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -397,7 +400,7 @@ infer_eff_user_ctx(UserCtx, Request, FilePartialCtx) ->
         {IsInPublicDataMode, _} ->
             case is_operation_available_in_share_mode(Request, IsInPublicDataMode) of
                 true -> ok;
-                false -> throw(?EPERM)
+                false -> throw(?ENOTSUP)
             end,
             case IsInPublicDataMode of
                 true ->
@@ -428,20 +431,20 @@ is_operation_available_in_share_mode(#provider_request{
 }, _) ->
     Flag == read;
 is_operation_available_in_share_mode(Request, true) ->
-    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
+    lists:member(get_operation_name(Request), ?AVAILABLE_OPERATIONS_IN_PUBLIC_DATA_MODE);
 is_operation_available_in_share_mode(Request, false) ->
-    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+    lists:member(get_operation_name(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 
 
 %% @private
--spec get_operation(request()) -> atom().
-get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
+-spec get_operation_name(request()) -> atom().
+get_operation_name(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
-get_operation(#fuse_request{fuse_request = Req}) ->
+get_operation_name(#fuse_request{fuse_request = Req}) ->
     element(1, Req);
-get_operation(#provider_request{provider_request = Req}) ->
+get_operation_name(#provider_request{provider_request = Req}) ->
     element(1, Req);
-get_operation(#proxyio_request{proxyio_request = Req}) ->
+get_operation_name(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
 
 
@@ -465,11 +468,16 @@ handle_request_and_process_response_locally(OriginalUserId, EffUserCtx, Request,
     end,
     ok = fslogic_log:report_file_access_operation(Request, OriginalUserId, FileCtx1),
     try
-        case is_storage_accessible(FileCtx1) of
-            true ->
-                handle_request_locally(EffUserCtx, Request, FileCtx1);
+        case is_operation_allowed_by_special_dir_logic(FileCtx1, Request) of
             false ->
-                #fuse_response{status = #status{code = ?EAGAIN}}
+                throw(?ENOTSUP);
+            true ->
+                case is_storage_accessible(FileCtx1) of
+                    true ->
+                        handle_request_locally(EffUserCtx, Request, FileCtx1);
+                    false ->
+                        throw(?EAGAIN)
+                end
         end
     catch
         Type:Error:Stacktrace ->
@@ -869,3 +877,21 @@ handle_periodic_storages_check() ->
         UnhealthyStoragesIds ->
             worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStoragesIds)
     end.
+
+
+%% @private
+-spec is_operation_allowed_by_special_dir_logic(file_ctx:ctx() | undefined, request() | operation()) -> boolean().
+is_operation_allowed_by_special_dir_logic(undefined, _Request) ->
+    % FileCtx is undefined for storage related operations (get_helper_params, create_storage_test_file, verify_storage_test_file)
+    % as well as upload_multipart_part operation.
+    true;
+is_operation_allowed_by_special_dir_logic(FileCtx, #fuse_request{fuse_request = FuseRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, FuseRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #file_request{file_request = FileRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, FileRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #provider_request{provider_request = ProviderRequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, ProviderRequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, #proxyio_request{proxyio_request = ProxyIORequest}) ->
+    is_operation_allowed_by_special_dir_logic(FileCtx, ProxyIORequest);
+is_operation_allowed_by_special_dir_logic(FileCtx, Operation) ->
+    special_dirs:is_operation_supported(file_ctx:get_logical_uuid_const(FileCtx), Operation).

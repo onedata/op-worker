@@ -43,12 +43,12 @@ db_error_test(Config) ->
     [User1 | _] = oct_background:get_provider_eff_users(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     oct_environment:disable_panel_healthcheck(Config),
 
-    DirsAndFiles = file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceGuid, 20, 50),
+    DirsAndFiles = file_ops_test_utils:create_files_and_dirs(Worker, SessId, SpaceDirGuid, 20, 50),
     enable_db_error_emulation(),
     ct:pal("Test data created"),
 
@@ -85,10 +85,10 @@ db_error_test(Config) ->
 
     enable_db_error_emulation(),
     test_read_operations_on_db_error(Worker, RecreatedSessId, DirsAndFiles),
-    TestedName1 = test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceGuid),
-    TestedName2 = test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceGuid),
+    TestedName1 = test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceDirGuid),
+    TestedName2 = test_write_operations_on_db_error(Worker, RecreatedSessId, SpaceDirGuid),
     disable_db_error_emulation(),
-    test_write_operations_after_db_error(Worker, RecreatedSessId, SpaceGuid, TestedName1, TestedName2),
+    test_write_operations_after_db_error(Worker, RecreatedSessId, SpaceDirGuid, TestedName1, TestedName2),
 
     ct:pal("Verifying test data"),
     file_ops_test_utils:verify_files_and_dirs(Worker, RecreatedSessId, DirsAndFiles, 1),

@@ -146,7 +146,7 @@ lookup_file_objectid_in_tmp_dir(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
-    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+    TmpDirGuid = tmp_dir:guid(SpaceId),
     TmpDirPath = filename:join(["/", SpaceName, ".__onedata__tmp"]),
     {ok, 200, _, Response1} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
         WorkerP1, <<"lookup-file-id/", TmpDirPath/binary>>, post,
@@ -176,8 +176,8 @@ lookup_file_objectid_duplicated_space_name(Config) ->
         #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
         ObjectId
     end,
-    {ok, Space1ObjectId} = file_id:guid_to_objectid(fslogic_file_id:spaceid_to_space_dir_guid(<<"space_duplicated1">>)),
-    {ok, Space2ObjectId} = file_id:guid_to_objectid(fslogic_file_id:spaceid_to_space_dir_guid(<<"space_duplicated2">>)),
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(space_dir:guid(<<"space_duplicated1">>)),
+    {ok, Space2ObjectId} = file_id:guid_to_objectid(space_dir:guid(<<"space_duplicated2">>)),
     ?assertMatch(Space1ObjectId, Fun(<<"space_duplicated@space_duplicated1">>)),
     ?assertMatch(Space2ObjectId, Fun(<<"space_duplicated@space_duplicated2">>)).
 
@@ -355,10 +355,10 @@ list_spaces(Config) ->
 
     % then
     ExpSpaces = lists:sort(lists:map(fun({SpaceId, Providers}) ->
-        SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+        SpaceDirGuid = space_dir:guid(SpaceId),
         {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
         {ok, TrashRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?TRASH_DIR_UUID(SpaceId), SpaceId)),
-        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId)),
+        {ok, ArchivesRootDirObjectId} = file_id:guid_to_objectid(file_id:pack_guid(?SPACE_ARCHIVES_DIR_UUID(SpaceId), SpaceId)),
 
         #{
             <<"name">> => SpaceId,
@@ -397,7 +397,7 @@ get_space(Config) ->
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"spaces/", SpaceId/binary>>, get, AuthHeaders, [])),
 
-    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     % then
