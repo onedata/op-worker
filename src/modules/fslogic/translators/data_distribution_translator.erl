@@ -49,12 +49,12 @@
     json_utils:json_map().
 gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
     distribution_per_provider = DistributionPerProvider
-}}, Guid) ->
+}}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?DIRECTORY_TYPE),
         <<"distributionPerProvider">> => maps:map(fun
-            (ProviderId, {error, _} = Error) ->
-                build_error_response(Error, Guid, ProviderId);
+            (_ProviderId, {error, _} = Error) ->
+                build_error_response(Error);
 
             (_ProviderId, #provider_dir_distribution{
                 virtual_size = VirtualSize,
@@ -86,25 +86,25 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlin
 }}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?SYMLINK_TYPE),
-            <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) -> #{ 
-                <<"success">> => true,
-               <<"virtualSize">> => 0,
-               <<"distributionPerStorage">> =>
-                   lists:foldl(fun(StorageId, Acc) ->   
-                       Acc#{StorageId => #{
-                           <<"success">> => true,
-                           <<"physicalSize">> => 0
-                       }}
-                   end, #{}, StoragesList)
-               } end, StoragesPerProvider)
+        <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) -> #{ 
+            <<"success">> => true,
+            <<"virtualSize">> => 0,
+            <<"distributionPerStorage">> =>
+                lists:foldl(fun(StorageId, Acc) ->   
+                    Acc#{StorageId => #{
+                       <<"success">> => true,
+                       <<"physicalSize">> => 0
+                    }}
+                end, #{}, StoragesList)
+        } end, StoragesPerProvider)
     };
 
 gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
-}}, Guid) ->
+}}, _Guid) ->
     DistributionMap = maps:map(fun
-        (ProviderId, {error, _} = Error) ->
-            build_error_response(Error, Guid, ProviderId);
+        (_ProviderId, {error, _} = Error) ->
+            build_error_response(Error);
     
         (_ProviderId, #provider_reg_distribution_get_result{
             virtual_size = VirtualSize,
@@ -144,12 +144,12 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
 
 gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
-}}, Guid) ->
+}}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE),
         <<"distributionPerProvider">> => maps:map(fun
-            (ProviderId, {error, _} = Error) ->
-                build_error_response(Error, Guid, ProviderId);
+            (_ProviderId, {error, _} = Error) ->
+                build_error_response(Error);
             
             (_ProviderId, #provider_reg_distribution_get_result{
                 virtual_size = VirtualSize,
@@ -202,18 +202,12 @@ get_blocks_summary(FileBlocks) ->
     ).
 
 
--spec build_error_response({error, term()}, file_id:file_guid(), oneprovider:id()) ->
-    json_utils:json_term().
-build_error_response(Error, Guid, ProviderId) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
+-spec build_error_response({error, term()}) -> json_utils:json_term().
+build_error_response(Error) ->
     ErrorJson = errors:to_json(Error),
     #{
         <<"success">> => false,
-        <<"distributionPerStorage">> => maps:map(fun(_StorageId, _) -> #{
-            <<"error">> => ErrorJson 
-        }
-        end, StoragesMap)
+        <<"error">> => ErrorJson 
     }.
 
 %%--------------------------------------------------------------------
