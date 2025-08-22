@@ -260,7 +260,7 @@ list_children_attrs_internal(UserCtx, FileCtx, ListOpts, Attributes, Acc) ->
     
     MapperFun = fun(ChildCtx) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            attr_req:get_file_attr(UserCtx, ChildCtx, #{attributes => Attributes}),
+            attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{attributes => Attributes}),
         FileAttr
     end,
 
@@ -303,7 +303,7 @@ list_recursively_internal(UserCtx, FileCtx, ListOpts, Attributes) ->
     
     GetAttrsFun = fun({Path, EntryFileCtx}) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttr} =
-            attr_req:get_file_attr(UserCtx, EntryFileCtx, #{attributes => AttrsToCalculate}),
+            attr_req:get_file_attr_insecure(UserCtx, EntryFileCtx, #{attributes => AttrsToCalculate}),
         FileAttr#file_attr{path = Path, guid = file_ctx:get_logical_guid_const(EntryFileCtx)}
     end,
     MappedEntries = case AttrsToCalculate of
