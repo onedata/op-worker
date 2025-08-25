@@ -6,7 +6,75 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Server observing changes in space files and informing subscribed clients.
+%%% Space File Events - real-time streaming of file changes in a space.
+%%%
+%%% This module implements a monitoring system that allows clients to subscribe
+%%% to file change events within specific directories of a space. When files
+%%% are created or modified, subscribers receive real-time notifications via
+%%% Server-Sent Events (SSE).
+%%%
+%%% == How it works ==
+%%%
+%%% 1. Client connects via HTTP SSE to `space_file_events_stream_handler`
+%%% 2. Handler authenticates user and parses monitoring specification
+%%% 3. Handler ensures a space monitor exists and subscribes to it
+%%% 4. Monitor observes Couchbase changes and filters relevant events
+%%% 5. Events are sent to authorized subscribers via SSE stream
+%%%
+%%% == What gets monitored ==
+%%%
+%%% The system monitors three types of document changes:
+%%% - `file_meta`
+%%% - `times`
+%%% - `file_location`
+%%%
+%%% Only direct children of specified directories are monitored - there is
+%%% no recursive monitoring of subdirectories.
+%%%
+%%% == Subscription specification ==
+%%%
+%%% Clients specify what they want to monitor via:
+%%% - `observed_dirs` - list of directory GUIDs to watch
+%%% - `observed_attrs_per_doc` - which file attributes to include for each
+%%%   document type (see `?OBSERVABLE_FILE_ATTRS` in
+%%%   `include/http/space_file_events_stream.hrl`)
+%%%
+%%% == Process architecture ==
+%%%
+%%% One monitor process per space:
+%%% - Started on-demand by `space_files_monitor_sup`
+%%% - Runs a Couchbase changes stream from the last known sequence
+%%% - Multiple clients can subscribe to the same monitor
+%%% - Monitor dies when inactive for `?INACTIVITY_PERIOD_MS`
+%%%
+%%% == Security ==
+%%%
+%%% Two-level authorization:
+%%% 1. Space-level: user must be space member with `file_events` permission
+%%% 2. File-level: for each event, user needs `?TRAVERSE_ANCESTORS` and
+%%%    permissions for requested attributes
+%%%
+%%% == Failure handling ==
+%%%
+%%% - Client disconnect: doesn't affect monitor or other clients
+%%% - Monitor crash: all connected clients are disconnected and must reconnect
+%%% - Couchbase stream error: monitor shuts down, clients must reconnect
+%%%
+%%% == Event format ==
+%%%
+%%% SSE events contain:
+%%% - `id` - unique sequence number from Couchbase
+%%% - `event` - always "changedOrCreated"
+%%% - `data` - JSON with fileId, parentFileId, and requested attributes
+%%%
+%%% == Performance notes ==
+%%%
+%%% Authorization checks are parallelized up to `?MAX_AUTHZ_VERIFY_PROCS`
+%%% concurrent processes to avoid blocking on permission verification.
+%%%
+%%% @see space_file_events_stream_handler
+%%% @see space_files_monitor_sup
+%%% @see include/http/space_file_events_stream.hrl
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_files_monitor).
