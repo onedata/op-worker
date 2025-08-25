@@ -30,7 +30,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([verbose_debug/2, verbose_error/3]).
+-export([verbose_info/2, verbose_error/3]).
 -export([get_preferable_write_block_size/1, upload_file/5]).
 
 
@@ -56,9 +56,9 @@
 %%%===================================================================
 
 
--spec verbose_debug(string(), [term()]) -> ok.
-verbose_debug(Format, Args) ->
-    are_verbose_logs_enabled() andalso ?debug(Format, Args),
+-spec verbose_info(string(), [term()]) -> ok.
+verbose_info(Format, Args) ->
+    are_verbose_logs_enabled() andalso ?info(Format, Args),
     ok.
 
 

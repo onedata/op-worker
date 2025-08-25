@@ -59,12 +59,12 @@ handle(<<"POST">>, InitialReq) ->
     case http_auth:authenticate(Req, AuthCtx) of
         {ok, ?USER(UserId, SessionId) = Auth} ->
             try
-                file_upload_utils:verbose_debug(
+                file_upload_utils:verbose_info(
                     "[user_id: ~ts, session_id: ~ts] Initiating file upload",
                     [UserId, SessionId]
                 ),
                 Req2 = handle_multipart_req(Req, Auth, #{}),
-                file_upload_utils:verbose_debug(
+                file_upload_utils:verbose_info(
                     "[user_id: ~ts, session_id: ~ts] Finished file upload",
                     [UserId, SessionId]
                 ),
@@ -146,9 +146,10 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
 
-    file_upload_utils:verbose_debug(
-        "[guid: ~ts] Starting file chunk (no: ~B) upload",
-        [FileGuid, ChunkNumber]
+    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+    file_upload_utils:verbose_info(
+        "[space_id: ~ts, uuid: ~ts] Starting file chunk (no: ~B) upload",
+        [SpaceId, FileUuid, ChunkNumber]
     ),
 
     authorize_chunk_upload(UserId, FileGuid),
@@ -162,9 +163,9 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
             FileHandle, Offset, Req,
             fun cowboy_req:read_part_body/2, read_body_opts(SpaceId)
         ),
-        file_upload_utils:verbose_debug(
-            "[guid: ~ts] File chunk (no: ~B) uploaded",
-            [FileGuid, ChunkNumber]
+        file_upload_utils:verbose_info(
+            "[space_id: ~ts, uuid: ~ts] File chunk (no: ~B) uploaded",
+            [SpaceId, FileUuid, ChunkNumber]
         ),
         Result
     after
@@ -178,10 +179,10 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 authorize_chunk_upload(UserId, FileGuid) ->
     case file_upload_manager:authorize_chunk_upload(UserId, FileGuid) of
         true ->
-            file_upload_utils:verbose_debug("[guid: ~ts] Authorized file upload", [FileGuid]),
+            file_upload_utils:verbose_info("Authorized file upload", [FileGuid]),
             ok;
         false ->
-            file_upload_utils:verbose_debug("[guid: ~ts] Forbade file upload", [FileGuid]),
+            file_upload_utils:verbose_info("Forbade file upload", [FileGuid]),
             throw(?ERR_FORBIDDEN(?err_ctx()))
     end.
 
