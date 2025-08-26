@@ -1,4 +1,5 @@
 #include "../nifpp.h"
+#include "helpers/cachingStorageHelperCreator.h"
 #include "helpers/init.h"
 #include "helpers/storageHelperCreator.h"
 #include "monitoring/monitoring.h"
@@ -78,22 +79,34 @@ struct HelpersNIF {
                         entry.second.second.toStdString())));
         }
 
-        SHCreator = std::make_unique<one::helpers::StorageHelperCreator<void>>(
-            executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
-            executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
-            executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
-            executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
-            executors[NFS_HELPER_NAME], executors[NULL_DEVICE_HELPER_NAME],
-            std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
-            buffering::BufferLimits {
-                std::stoul(args["read_buffer_min_size"].toStdString()),
-                std::stoul(args["read_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
-                    args["read_buffer_prefetch_duration"].toStdString())},
-                std::stoul(args["write_buffer_min_size"].toStdString()),
-                std::stoul(args["write_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
-                    args["write_buffer_flush_delay"].toStdString())}});
+        auto storage_helper_creator =
+            std::make_unique<one::helpers::StorageHelperCreator<void>>(
+                executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
+                executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
+                executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
+                executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
+                executors[NFS_HELPER_NAME], executors[NULL_DEVICE_HELPER_NAME],
+                std::stoul(
+                    args["buffer_scheduler_threads_number"].toStdString()),
+                buffering::BufferLimits {
+                    std::stoul(args["read_buffer_min_size"].toStdString()),
+                    std::stoul(args["read_buffer_max_size"].toStdString()),
+                    std::chrono::seconds {std::stoul(
+                        args["read_buffer_prefetch_duration"].toStdString())},
+                    std::stoul(args["write_buffer_min_size"].toStdString()),
+                    std::stoul(args["write_buffer_max_size"].toStdString()),
+                    std::chrono::seconds {std::stoul(
+                        args["write_buffer_flush_delay"].toStdString())}});
+
+        const auto helpersCacheExpirySeconds =
+            args.count("helpers_cache_expiry_seconds") > 0
+            ? std::stoul(args.at("helpers_cache_expiry_seconds").toStdString())
+            : one::helpers::kHelperCacheDefaultExpirySeconds;
+
+        SHCreator =
+            std::make_unique<one::helpers::CachingStorageHelperCreator<void>>(
+                std::move(storage_helper_creator),
+                std::chrono::milliseconds {helpersCacheExpirySeconds * 1000});
 
         umask(0);
     }
@@ -109,7 +122,7 @@ struct HelpersNIF {
     std::unordered_map<folly::fbstring,
         std::shared_ptr<folly::IOThreadPoolExecutor>>
         executors;
-    std::unique_ptr<one::helpers::StorageHelperCreator<void>> SHCreator;
+    std::unique_ptr<one::helpers::CachingStorageHelperCreator<void>> SHCreator;
 };
 
 std::unique_ptr<HelpersNIF> application;
@@ -563,7 +576,8 @@ static void configurePerformanceMonitoring(
  *
  *********************************************************************/
 
-ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM get_helper_handle(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     auto name = nifpp::get<folly::fbstring>(env, argv[0]);
     auto params = nifpp::get<helper_args_t>(env, argv[1]);
@@ -572,6 +586,25 @@ ERL_NIF_TERM get_handle(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     auto resource = nifpp::construct_resource<helper_ptr>(helper);
 
     return nifpp::make(env, std::make_tuple(ok, resource));
+}
+
+ERL_NIF_TERM clean_helper_cache(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    application->SHCreator->clean();
+    return nifpp::make(env, ok);
+}
+
+ERL_NIF_TERM get_helper_cache_stats(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    auto stats = application->SHCreator->cacheStats();
+    return nifpp::make(env, std::make_tuple(ok, std::move(stats)));
+}
+
+ERL_NIF_TERM get_helper_id(NifCTX ctx, helper_ptr helper)
+{
+    return nifpp::make(ctx.env, std::make_tuple(ok, helper->id()));
 }
 
 ERL_NIF_TERM refresh_params(NifCTX ctx, helper_ptr helper, helper_args_t args)
@@ -823,6 +856,12 @@ static ERL_NIF_TERM sh_refresh_params(
     return wrap(refresh_params, env, argv);
 }
 
+static ERL_NIF_TERM sh_get_helper_id(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(get_helper_id, env, argv);
+}
+
 static ERL_NIF_TERM sh_listobjects(
     ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -989,7 +1028,8 @@ static ERL_NIF_TERM sh_fsync(
 }
 
 static ErlNifFunc nif_funcs[] = {
-    {"get_handle", 2, get_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"get_helper_handle", 2, get_helper_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"get_helper_id", 1, sh_get_helper_id, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"start_monitoring", 0, start_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"stop_monitoring", 0, stop_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"refresh_params", 2, sh_refresh_params, ERL_NIF_DIRTY_JOB_IO_BOUND},
@@ -1023,6 +1063,9 @@ static ErlNifFunc nif_funcs[] = {
     {"fsync", 2, sh_fsync, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"flushbuffer", 3, sh_flushbuffer, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"blocksize_for_path", 2, sh_blocksize_for_path,
+        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"clean_helper_cache", 0, clean_helper_cache, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"get_helper_cache_stats", 0, get_helper_cache_stats,
         ERL_NIF_DIRTY_JOB_IO_BOUND}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);

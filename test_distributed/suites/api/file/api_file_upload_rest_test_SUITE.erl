@@ -104,11 +104,12 @@ create_file_test(_Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"name">>],
-                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>],
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>, <<"posixPermissions">>],
                     correct_values = #{
                         <<"name">> => [name_placeholder],
                         <<"type">> => [<<"REG">>, <<"DIR">>],
                         <<"mode">> => [<<"0544">>, <<"0707">>],
+                        <<"posixPermissions">> => [<<"0544">>, <<"0707">>],
                         <<"offset">> => [
                             0,
                             ?WRITE_SIZE_BYTES,
@@ -145,6 +146,12 @@ create_file_test(_Config) ->
                         {<<"mode">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
                         {<<"mode">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
                         {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+
+                        {<<"posixPermissions">>, true, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"posixPermissions">>, 0, 8#1777)},
 
                         {<<"offset">>, <<"unicorns">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
                         {<<"offset">>, <<"-123">>, ?ERR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
@@ -244,9 +251,14 @@ build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = case maps:get(<<"mode">>, Data, undefined) of
-                        undefined -> DefaultMode;
-                        ModeBin -> binary_to_integer(ModeBin, 8)
+                    ExpMode = case maps:get(<<"posixPermissions">>, Data, undefined) of
+                        undefined -> 
+                            case maps:get(<<"mode">>, Data, undefined) of
+                                undefined -> DefaultMode;
+                                ModeBin -> binary_to_integer(ModeBin, 8)
+                            end;
+                        PosixPermissionsBin -> 
+                            binary_to_integer(PosixPermissionsBin, 8)
                     end,
 
                     lists:foreach(fun(Provider) ->
@@ -339,7 +351,7 @@ create_file_at_path_test(_Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"path">>],
-                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>],
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>, <<"posixPermissions">>],
                     correct_values = #{
                         <<"path">> => [
                             filename_only_without_create_parents_flag_placeholder,
@@ -350,6 +362,7 @@ create_file_at_path_test(_Config) ->
                         ],
                         <<"type">> => [<<"REG">>, <<"DIR">>],
                         <<"mode">> => [<<"0544">>, <<"0707">>],
+                        <<"posixPermissions">> => [<<"0544">>, <<"0707">>],
                         <<"offset">> => [
                             0,
                             ?WRITE_SIZE_BYTES,
@@ -374,6 +387,12 @@ create_file_at_path_test(_Config) ->
                         {<<"mode">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
                         {<<"mode">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
                         {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+
+                        {<<"posixPermissions">>, true, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+                        {<<"posixPermissions">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"posixPermissions">>, 0, 8#1777)},
 
                         {<<"offset">>, <<"unicorns">>, ?ERR_BAD_VALUE_INTEGER(<<"offset">>)},
                         {<<"offset">>, <<"-123">>, ?ERR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
@@ -458,9 +477,14 @@ build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
                         <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
                         <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
                     end,
-                    ExpMode = case maps:get(<<"mode">>, Data, undefined) of
-                        undefined -> DefaultMode;
-                        ModeBin -> binary_to_integer(ModeBin, 8)
+                    ExpMode = case maps:get(<<"posixPermissions">>, Data, undefined) of
+                        undefined ->
+                            case maps:get(<<"mode">>, Data, undefined) of
+                                undefined -> DefaultMode;
+                                ModeBin -> binary_to_integer(ModeBin, 8)
+                            end;
+                        PosixPermissionsBin ->
+                            binary_to_integer(PosixPermissionsBin, 8)
                     end,
 
                     lists:foreach(fun(Provider) ->
