@@ -132,17 +132,27 @@
 
 -type request() :: #subscribe_req{} | #docs_change_notification{}.
 
+-record(process_doc_ctx, {
+    root_user_ctx :: user_ctx:ctx(),
+    file_ctx :: file_ctx:ctx(),
+    parent_guid :: file_id:file_guid(),
+    dir_monitoring_spec :: dir_monitoring_spec(),
+    changed_doc :: datastore:doc(),
+    state :: state()
+}).
+-type process_doc_ctx() :: #process_doc_ctx{}.
+
+-type file_deleted_event() :: #file_deleted_event{}.
+
 -type file_changed_or_created_event() :: #file_changed_or_created_event{}.
 
--type event() :: file_changed_or_created_event().
+-type event() :: file_deleted_event() | file_changed_or_created_event().
 
 -export_type([
     observed_attrs_per_doc/0,
-    file_changed_or_created_event/0, event/0
+    file_deleted_event/0, file_changed_or_created_event/0, event/0
 ]).
 
-
--define(OBSERVABLE_FILE_DOCS, [file_meta, times, file_location]).
 
 %% The process is supposed to die after ?INACTIVITY_PERIOD_MS time of idling (no subscribers)
 -define(INACTIVITY_PERIOD_MS, 10_000).
@@ -419,30 +429,23 @@ update_observed_attrs_per_doc(AttrsToObservePerDoc, ObservedAttrsPerDoc) ->
 %% @private
 -spec process_doc(user_ctx:ctx(), datastore:doc(), state()) -> ok.
 process_doc(RootUserCtx, ChangedDoc, State) ->
-    ChangedDocType = utils:record_type(ChangedDoc#document.value),
     FileCtx = get_file_ctx(ChangedDoc),
 
-    case is_observed_file(RootUserCtx, FileCtx, ChangedDocType, State) of
-        {true, FileCtx2, ParentGuid, ObservedAttrs} ->
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
-            DirMonitoringSpec = maps:get(ParentGuid, State#state.dir_monitoring_specs),
-
-            case get_authorized_observers(ChangedDocType, FileCtx2, DirMonitoringSpec, State) of
-                [] ->
-                    ok;
-                ObserverPids ->
-                    {FileAttr, _FileCtx3} = file_attr:resolve(RootUserCtx, FileCtx, #{
-                        attributes => ObservedAttrs,
-                        name_conflicts_resolution_policy => allow_name_conflicts
-                    }),
-                    Event = #file_changed_or_created_event{
-                        id = str_utils:to_binary(ChangedDoc#document.seq),
-                        file_guid = FileGuid,
-                        parent_file_guid = ParentGuid,
-                        doc_type = utils:record_type(ChangedDoc#document.value),
-                        file_attr = FileAttr
-                    },
-                    broadcast_event(ObserverPids, Event)
+    case is_observed_file(RootUserCtx, FileCtx, State) of
+        {true, FileCtx2, ParentGuid, DirMonitoringSpec} ->
+            Ctx1 = #process_doc_ctx{
+                root_user_ctx = RootUserCtx,
+                file_ctx = FileCtx2,
+                parent_guid = ParentGuid,
+                dir_monitoring_spec = DirMonitoringSpec,
+                changed_doc = ChangedDoc,
+                state = State
+            },
+            case infer_event_type(Ctx1) of
+                {deleted, Ctx2} ->
+                    process_deleted_event(Ctx2);
+                {changed_or_created, Ctx2} ->
+                    process_changed_or_created_event(Ctx2)
             end;
 
         false ->
@@ -461,9 +464,9 @@ get_file_ctx(ChangedDoc = #document{value = #file_location{uuid = FileUUid}}) ->
 
 
 %% @private
--spec is_observed_file(user_ctx:ctx(), file_ctx:ctx(), doc_type(), state()) ->
-    {true, file_ctx:ctx(), file_id:file_guid(), [onedata_file:attr_name()]} | false.
-is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
+-spec is_observed_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+    {true, file_ctx:ctx(), file_id:file_guid(), dir_monitoring_spec()} | false.
+is_observed_file(UserCtx, FileCtx, State) ->
     {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
 
     case file_ctx:equals(FileCtx, ParentCtx) of
@@ -473,13 +476,8 @@ is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
             ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
 
             case maps:find(ParentGuid, State#state.dir_monitoring_specs) of
-                {ok, #dir_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}} ->
-                    case maps:get(ChangedDocType, ObservedAttrsPerDoc, undefined) of
-                        undefined ->
-                            false;
-                        ObservedAttrs ->
-                            {true, FileCtx2, ParentGuid, ObservedAttrs}
-                    end;
+                {ok, DirMonitoringSpec = #dir_monitoring_spec{}} ->
+                    {true, FileCtx2, ParentGuid, DirMonitoringSpec};
                 error ->
                     false
             end
@@ -487,12 +485,107 @@ is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
 
 
 %% @private
--spec get_authorized_observers(doc_type(), file_ctx:ctx(), dir_monitoring_spec(), state()) ->
-    [pid()].
-get_authorized_observers(ChangedDocType, FileCtx, DirMonitoringSpec, State) ->
+-spec infer_event_type(process_doc_ctx()) ->
+    {deleted | changed_or_created, process_doc_ctx()}.
+infer_event_type(Ctx = #process_doc_ctx{changed_doc = #document{value = #file_meta{}}}) ->
+    FileCtx1 = Ctx#process_doc_ctx.file_ctx,
+    case file_ctx:file_exists_or_is_deleted(FileCtx1) of
+        {?FILE_DELETED, FileCtx2} ->
+            {deleted, Ctx#process_doc_ctx{file_ctx = FileCtx2}};
+        {_, FileCtx2} ->
+            {changed_or_created, Ctx#process_doc_ctx{file_ctx = FileCtx2}}
+    end;
+
+infer_event_type(Ctx) ->
+    {changed_or_created, Ctx}.
+
+
+%% @private
+-spec process_deleted_event(process_doc_ctx()) -> ok.
+process_deleted_event(Ctx = #process_doc_ctx{
+    file_ctx = FileCtx,
+    parent_guid = ParentGuid,
+    changed_doc = ChangedDoc
+}) ->
+    case get_authorized_deleted_event_observers(Ctx) of
+        [] ->
+            ok;
+        ObserverPids ->
+            Event = #file_deleted_event{
+                id = str_utils:to_binary(ChangedDoc#document.seq),
+                file_guid = file_ctx:get_logical_guid_const(FileCtx),
+                parent_file_guid = ParentGuid
+            },
+            broadcast_event(ObserverPids, Event)
+    end.
+
+
+%% @private
+-spec get_authorized_deleted_event_observers(process_doc_ctx()) -> [pid()].
+get_authorized_deleted_event_observers(#process_doc_ctx{
+    file_ctx = FileCtx,
+    dir_monitoring_spec = DirMonitoringSpec,
+    state = State
+}) ->
     AllDirObservers = DirMonitoringSpec#dir_monitoring_spec.observers,
 
     FilterMapFun = fun(DirObserverPid) ->
+        try
+            DirObserver = maps:get(DirObserverPid, State#state.observers),
+            DirObserverUserCtx = user_ctx:new(DirObserver#observer.session_id),
+            fslogic_authz:ensure_authorized(
+                DirObserverUserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+            ),
+            {true, DirObserverPid}
+        catch _:_ ->
+            false
+        end
+    end,
+    lists_utils:pfiltermap(FilterMapFun, AllDirObservers, ?MAX_AUTHZ_VERIFY_PROCS).
+
+
+%% @private
+-spec process_changed_or_created_event(process_doc_ctx()) -> ok.
+process_changed_or_created_event(Ctx = #process_doc_ctx{
+    root_user_ctx = RootUserCtx,
+    file_ctx = FileCtx,
+    parent_guid = ParentGuid,
+    dir_monitoring_spec = #dir_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc},
+    changed_doc = ChangedDoc
+}) ->
+    case get_authorized_changed_or_created_event_observers(Ctx) of
+        [] ->
+            ok;
+        ObserverPids ->
+            ChangedDocType = utils:record_type(ChangedDoc#document.value),
+            ObservedAttrs = maps:get(ChangedDocType, ObservedAttrsPerDoc),
+            {FileAttr, _FileCtx3} = file_attr:resolve(RootUserCtx, FileCtx, #{
+                attributes => ObservedAttrs,
+                name_conflicts_resolution_policy => allow_name_conflicts
+            }),
+            Event = #file_changed_or_created_event{
+                id = str_utils:to_binary(ChangedDoc#document.seq),
+                file_guid = file_ctx:get_logical_guid_const(FileCtx),
+                parent_file_guid = ParentGuid,
+                doc_type = utils:record_type(ChangedDoc#document.value),
+                file_attr = FileAttr
+            },
+            broadcast_event(ObserverPids, Event)
+    end.
+
+
+%% @private
+-spec get_authorized_changed_or_created_event_observers(process_doc_ctx()) -> [pid()].
+get_authorized_changed_or_created_event_observers(#process_doc_ctx{
+    file_ctx = FileCtx,
+    dir_monitoring_spec = DirMonitoringSpec,
+    changed_doc = ChangedDoc,
+    state = State
+}) ->
+    AllDirObservers = DirMonitoringSpec#dir_monitoring_spec.observers,
+
+    FilterMapFun = fun(DirObserverPid) ->
+        ChangedDocType = utils:record_type(ChangedDoc#document.value),
         DirObserver = maps:get(DirObserverPid, State#state.observers),
 
         case get_observed_attrs_for_doc(ChangedDocType, DirObserver) of
@@ -540,7 +633,7 @@ broadcast_event(ObserverPids, Event) ->
 ) ->
     ok.
 notify_monitor(Pid, {ok, {change, #document{} = Doc}}) ->
-    case is_file_doc(Doc) of
+    case is_observable_doc(Doc) of
         true ->
             notify_monitor_about_doc_change(Pid, [Doc]);
         false ->
@@ -549,7 +642,7 @@ notify_monitor(Pid, {ok, {change, #document{} = Doc}}) ->
     ok;
 notify_monitor(Pid, {ok, Docs}) when is_list(Docs) ->
     case lists:filtermap(fun({change, Doc}) ->
-        case is_file_doc(Doc) of
+        case is_observable_doc(Doc) of
             true -> {true, Doc};
             false -> false
         end
@@ -573,12 +666,15 @@ notify_monitor(Pid, {error, _Seq, Reason}) ->
     ok.
 
 
+%% TODO komentarz - sprawdzc czy dokument jest obserwowalny, czyli dotyczy pliku
+%% i nie jest usunięty; wyjątkiem jest file_meta używana na potrzeby wysłania deletion event
 %% @private
--spec is_file_doc(datastore:doc()) -> boolean().
-is_file_doc(#document{value = Record}) when is_tuple(Record) ->
-    lists:member(element(1, Record), ?OBSERVABLE_FILE_DOCS);
-is_file_doc(_Doc) ->
-    false.
+-spec is_observable_doc(datastore:doc()) -> boolean().
+is_observable_doc(#document{value = #file_meta{}}) -> true;
+is_observable_doc(#document{deleted = true}) -> false;
+is_observable_doc(#document{value = #times{}}) -> true;
+is_observable_doc(#document{value = #file_location{}}) -> true;
+is_observable_doc(_Doc) -> false.
 
 
 %% @private

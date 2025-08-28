@@ -51,6 +51,15 @@ init(Req, _Opts) ->
 
 -spec info(space_files_monitor:event(), cowboy_req:req(), state()) ->
     {ok, cowboy_req:req(), state()}.
+info(Event = #file_deleted_event{id = Id}, Req, State) ->
+    ResponseEvent = #{
+        id => Id,
+        event => <<"deleted">>,
+        data => json_utils:encode(file_deleted_event_to_json(Event))
+    },
+    cowboy_req:stream_events(ResponseEvent, nofin, Req),
+    {ok, Req, State};
+
 info(Event = #file_changed_or_created_event{id = Id}, Req, State) ->
     ResponseEvent = #{
         id => Id,
@@ -137,6 +146,19 @@ preauthorize(SpaceId, Auth) ->
         false ->
             ?ERR_FORBIDDEN(?err_ctx())
     end.
+
+
+%% @private
+-spec file_deleted_event_to_json(space_files_monitor:file_deleted_event()) ->
+    json_utils:json_map().
+file_deleted_event_to_json(#file_deleted_event{
+    file_guid = FileGuid,
+    parent_file_guid = ParentGuid
+}) ->
+    #{
+        <<"fileId">> => file_id:check_guid_to_objectid(FileGuid),
+        <<"parentFileId">> => file_id:check_guid_to_objectid(ParentGuid)
+    }.
 
 
 %% @private
