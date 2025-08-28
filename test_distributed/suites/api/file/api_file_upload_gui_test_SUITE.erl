@@ -110,7 +110,7 @@ not_registered_upload_should_fail_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     ?assertMatch(
-        upload_not_authorized,
+        ?ERR_FORBIDDEN,
         rpc:call(Node, page_file_upload, handle_multipart_req, [
             #{size => 20, left => 1},
             ?USER(UserId, UserSessId),

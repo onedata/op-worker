@@ -196,4 +196,4 @@ write_req_body_to_file_in_blocks(
 %% @private
 -spec are_verbose_logs_enabled() -> boolean().
 are_verbose_logs_enabled() ->
-    op_worker:get_env(file_upload_verbose_logs_enabled, false).
+    true == op_worker:get_env(file_upload_verbose_logs_enabled, false).

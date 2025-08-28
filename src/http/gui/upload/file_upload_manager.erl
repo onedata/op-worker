@@ -257,10 +257,10 @@ handle_info({'DOWN', Monitor, process, _, _}, State = #state{
                 latest_activity_timestamp = ?NOW()
             },
 
-            {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+            SpaceId = file_id:guid_to_space_id(FileGuid),
             file_upload_utils:verbose_info(
-                "[user_id: ~ts, space_id: ~ts] Process uploading file (uuid: ~ts) died",
-                [UserId, SpaceId, FileUuid]
+                "Process uploading file ended (user_id: ~ts, space_id: ~ts, guid: ~ts)",
+                [UserId, SpaceId, FileGuid]
             ),
             State#state{
                 uploads = Uploads#{FileGuid => NewUploadCtx},
@@ -352,10 +352,10 @@ remove_stale_uploads(Uploads) ->
 
             case ordsets:is_empty(Monitors) andalso Timestamp + InactivityPeriod < Now of
                 true ->
-                    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+                    SpaceId = file_id:guid_to_space_id(FileGuid),
                     file_upload_utils:verbose_info(
-                        "[user_id: ~ts, space_id: ~ts] Aborting file upload (uuid: ~ts) due to inactivity",
-                        [UploadCtx#upload_ctx.user_id, SpaceId, FileUuid]
+                        "Aborting file upload due to inactivity (user_id: ~ts, space_id: ~ts, guid: ~ts)",
+                        [UploadCtx#upload_ctx.user_id, SpaceId, FileGuid]
                     ),
                     lfm:unlink(?ROOT_SESS_ID, ?FILE_REF(FileGuid), false),
                     Acc;

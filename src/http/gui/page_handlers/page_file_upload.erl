@@ -51,6 +51,8 @@ handle(<<"OPTIONS">>, Req) ->
         Req
     );
 handle(<<"POST">>, InitialReq) ->
+    file_upload_utils:verbose_info("Received file chunk(s) upload POST request", []),
+
     Req = http_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
     AuthCtx = #http_auth_ctx{
         interface = graphsync,
@@ -60,14 +62,11 @@ handle(<<"POST">>, InitialReq) ->
         {ok, ?USER(UserId, SessionId) = Auth} ->
             try
                 file_upload_utils:verbose_info(
-                    "[user_id: ~ts, session_id: ~ts] Initiating file upload",
+                    "Initiating file chunk(s) upload (user_id: ~ts, session_id: ~ts)",
                     [UserId, SessionId]
                 ),
                 Req2 = handle_multipart_req(Req, Auth, #{}),
-                file_upload_utils:verbose_info(
-                    "[user_id: ~ts, session_id: ~ts] Finished file upload",
-                    [UserId, SessionId]
-                ),
+                file_upload_utils:verbose_info("Finished file chunk(s) upload", []),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
                 Class:Reason:Stacktrace ->
@@ -75,15 +74,18 @@ handle(<<"POST">>, InitialReq) ->
                         "Error while processing file upload for user ~ts", [UserId],
                         Class, Reason, Stacktrace
                     ),
-                    file_upload_utils:verbose_error(
-                        "[user_id: ~ts, session_id: ~ts] Failed to upload file",
-                        [UserId, SessionId], Error
-                    ),
+                    ErrLogMsg = "Failed to upload file chunk(s)",
+                    file_upload_utils:verbose_error(ErrLogMsg, [], Error),
                     reply_with_error(Error, Req)
             end;
         {ok, ?GUEST} ->
-            reply_with_error(?ERR_UNAUTHORIZED(?err_ctx(), undefined), Req);
+            Error = ?ERR_UNAUTHORIZED(?err_ctx(), undefined),
+            ErrLogMsg = "Refused unauthorized upload file chunk(s) (no authorization provided)",
+            file_upload_utils:verbose_error(ErrLogMsg, [], Error),
+            reply_with_error(Error, Req);
         {error, _} = Error ->
+            ErrLogMsg = "Failed to authorize upload file chunk(s)",
+            file_upload_utils:verbose_error(ErrLogMsg, [], Error),
             reply_with_error(Error, Req)
     end.
 
@@ -146,10 +148,10 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
 
-    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     file_upload_utils:verbose_info(
-        "[space_id: ~ts, uuid: ~ts] Starting file chunk (no: ~B) upload",
-        [SpaceId, FileUuid, ChunkNumber]
+        "Starting file chunk (no: ~B, size: ~B B) upload (space_id: ~ts, guid: ~ts)",
+        [ChunkNumber, ChunkSize, SpaceId, FileGuid]
     ),
 
     authorize_chunk_upload(UserId, FileGuid),
@@ -163,10 +165,7 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
             FileHandle, Offset, Req,
             fun cowboy_req:read_part_body/2, read_body_opts(SpaceId)
         ),
-        file_upload_utils:verbose_info(
-            "[space_id: ~ts, uuid: ~ts] File chunk (no: ~B) uploaded",
-            [SpaceId, FileUuid, ChunkNumber]
-        ),
+        file_upload_utils:verbose_info("File chunk (no: ~B) uploaded", [ChunkNumber]),
         Result
     after
         lfm:monitored_release(FileHandle) % release if possible
@@ -179,10 +178,10 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 authorize_chunk_upload(UserId, FileGuid) ->
     case file_upload_manager:authorize_chunk_upload(UserId, FileGuid) of
         true ->
-            file_upload_utils:verbose_info("Authorized file upload", [FileGuid]),
+            file_upload_utils:verbose_info("Authorized file chunk(s) upload", []),
             ok;
         false ->
-            file_upload_utils:verbose_info("Forbade file upload", [FileGuid]),
+            file_upload_utils:verbose_info("Forbade file chunk(s) upload", []),
             throw(?ERR_FORBIDDEN(?err_ctx()))
     end.
 
