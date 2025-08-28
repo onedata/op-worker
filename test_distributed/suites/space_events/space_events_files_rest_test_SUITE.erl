@@ -33,6 +33,7 @@
     unauthorized_client_test/1,
     token_caveats_test/1,
     invalid_args_test/1,
+    deleted_events_test/1,
     changed_or_created_events_test/1
 ]).
 
@@ -42,9 +43,18 @@ all() ->
         unauthorized_client_test,
         token_caveats_test,
         invalid_args_test,
+        deleted_events_test,
         changed_or_created_events_test
     ]).
 
+
+-define(assert_deleted_events(__EXP_STATE, __SSE_CLIENT_PID, __FILE_GUID),
+    ?assertEqual(
+        __EXP_STATE,
+        check_is_file_deleted_from_events(get_events_for_file(__SSE_CLIENT_PID, __FILE_GUID)),
+        ?ATTEMPTS
+    )
+).
 
 -define(assert_attr_changed_or_created_events(__EXP_ATTR_DATA, __SSE_CLIENT_PID, __FILE_GUID),
     ?assertEqual(
@@ -54,7 +64,7 @@ all() ->
     )
 ).
 
--define(ATTEMPTS, 5).
+-define(ATTEMPTS, 10).
 
 
 %%%===================================================================
@@ -234,6 +244,47 @@ invalid_args_test(_Config) ->
     ])).
 
 
+deleted_events_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
+    FileOwnerUserId = oct_background:get_user_id(user1),
+
+    ChildFileName = ?RAND_STR(),
+    #object{
+        guid = ObservedDirGuid,
+        children = [
+            %% TODO VFS-12887 Test changes for child dir
+            #object{guid = ChildDirGuid},
+            #object{guid = ChildFileGuid}
+        ]
+    } = onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, SpaceKrkGuid, krakow, #dir_spec{
+            mode = ?FILE_MODE(8#777),
+            children = [#dir_spec{}, #file_spec{name = ChildFileName}]
+        }
+    ),
+    ObservedAttrs = [?attr_name, ?attr_mode, ?attr_size],
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => SpaceKrkId,
+        token => oct_background:get_user_access_token(user2),
+        observed_dirs => [ObservedDirGuid],
+        observed_attrs => ObservedAttrs
+    },
+
+    {ok, SSEClientPid} = ?assertMatch({ok, _}, space_file_events_test_sse_client:start(ClientArgs)),
+
+    % Removing file in observed dir should result in event
+    onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildFileGuid),
+    ?assert_deleted_events(true, SSEClientPid, ChildFileGuid),
+
+    % while deleting dir, at least for now, does not produce events
+    onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildDirGuid),
+    timer:sleep(timer:seconds(2)),
+    ?assert_deleted_events(false, SSEClientPid, ChildDirGuid).
+
+
 changed_or_created_events_test(_Config) ->
     SpaceKrkId = oct_background:get_space_id(space_krk),
     SpaceKrkGuid = space_dir:guid(SpaceKrkId),
@@ -244,7 +295,7 @@ changed_or_created_events_test(_Config) ->
     #object{
         guid = ObservedDirGuid,
         children = [
-            %% TODO VFS-12699 Test changes for child dir
+            %% TODO VFS-12887 Test changes for child dir
             #object{guid = _ChildDirGuid},
             #object{guid = ChildFileGuid}
         ]
@@ -324,6 +375,14 @@ get_events_for_file(SSEClientPid, FileGuid) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     lists:filter(fun(#{data := [EventData]}) ->
         maps:get(<<"fileId">>, EventData) =:= FileObjectId
+    end, Events).
+
+
+%% @private
+check_is_file_deleted_from_events(Events) ->
+    lists:any(fun
+        (#{event_type := <<"deleted">>}) -> true;
+        (_) -> false
     end, Events).
 
 
