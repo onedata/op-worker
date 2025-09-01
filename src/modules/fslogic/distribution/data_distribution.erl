@@ -33,8 +33,6 @@
 -type provider_reg_distribution() :: #provider_reg_distribution_get_result{}.
 -type reg_distribution() :: #reg_distribution_gather_result{}.
 
--type symlink_distribution() :: #symlink_distribution_gather_result{}.
-
 -type get_request() :: #data_distribution_gather_request{}.
 -type get_result() :: #data_distribution_gather_result{}.
 
@@ -49,7 +47,6 @@
     dir_physical_size/0,
     provider_dir_distribution/0, dir_distribution/0,
     provider_reg_distribution/0, reg_distribution/0,
-    symlink_distribution/0,
     get_request/0, get_result/0
 ]).
 
@@ -74,7 +71,7 @@ gather(UserCtx, FileCtx0) ->
 
     {ok, #data_distribution_gather_result{distribution = case FileType of
         ?DIRECTORY_TYPE -> gather_dir_distribution(FileCtx3);
-        ?SYMLINK_TYPE -> build_symlink_distribution(FileCtx3);
+        ?SYMLINK_TYPE -> throw(?ERR_NOT_SUPPORTED_FOR_SYMLINKS);
         _ -> gather_reg_distribution(FileCtx3)
     end}}.
 
@@ -91,7 +88,7 @@ gather_storage_locations(UserCtx, FileCtx0) ->
     
     case FileType of
         ?DIRECTORY_TYPE -> {ok, gather_dir_storage_locations(FileCtx3)};
-        ?SYMLINK_TYPE -> ?ERROR_NOT_SUPPORTED;
+        ?SYMLINK_TYPE -> ?ERR_NOT_SUPPORTED_FOR_SYMLINKS;
         _ -> {ok, gather_reg_storage_locations(FileCtx3)}
     end.
 
@@ -178,17 +175,6 @@ build_provider_dir_distribution(#provider_dir_distribution_get_result{
         logical_size = undefined,
         physical_size_per_storage = maps:from_list([{S, Error} || S <- StorageList]),
         locations_per_storage = LocationsPerStorage
-    }.
-
-
-%% @private
--spec build_symlink_distribution(file_ctx:ctx()) -> symlink_distribution().
-build_symlink_distribution(FileCtx) ->
-    {ok, StoragesByProvider} = space_logic:get_storages_by_provider(file_ctx:get_space_id_const(FileCtx)),
-    #symlink_distribution_gather_result{
-        storages_per_provider = maps:map(fun(_ProviderId, ProviderStorages) ->
-            maps:keys(ProviderStorages)
-        end, StoragesByProvider)
     }.
 
 

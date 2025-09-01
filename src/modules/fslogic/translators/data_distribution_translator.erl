@@ -81,24 +81,6 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
         end, DistributionPerProvider)
     };
 
-gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlink_distribution_gather_result{
-    storages_per_provider = StoragesPerProvider
-}}, _Guid) ->
-    #{
-        <<"type">> => atom_to_binary(?SYMLINK_TYPE),
-        <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) -> #{ 
-            <<"success">> => true,
-            <<"virtualSize">> => 0,
-            <<"distributionPerStorage">> =>
-                lists:foldl(fun(StorageId, Acc) ->   
-                    Acc#{StorageId => #{
-                       <<"success">> => true,
-                       <<"physicalSize">> => 0
-                    }}
-                end, #{}, StoragesList)
-        } end, StoragesPerProvider)
-    };
-
 gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
 }}, _Guid) ->

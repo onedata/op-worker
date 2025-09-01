@@ -51,21 +51,11 @@
     }
 }).
 
-
-%% Symlink distribution
-
--record(symlink_distribution_gather_result, {
-    virtual_size = 0 :: 0, % symlink has always 0 virtual size
-    storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
-}).
-
-
 %% Common
 
 -record(data_distribution_gather_result, {
     distribution ::
         data_distribution:dir_distribution() |
-        data_distribution:symlink_distribution() |
         data_distribution:reg_distribution()
 }).
 

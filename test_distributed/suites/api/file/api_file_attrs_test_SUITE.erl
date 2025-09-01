@@ -1233,23 +1233,12 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
 get_symlink_distribution_test(Config) ->
     FileType = <<"sym">>,
     
-    SpaceId = oct_background:get_space_id(space_krk_par),
-    P1Id = oct_background:get_provider_id(krakow),
-    P1StorageId = get_storage_id(SpaceId, P1Id),
-    P2Id = oct_background:get_provider_id(paris),
-    P2StorageId = get_storage_id(SpaceId, P2Id),
-    
-    #object{guid = SymGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
+
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     
-    ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_gather_result{
-        virtual_size = 0,
-        storages_per_provider = #{
-            P1Id => [P1StorageId],
-            P2Id => [P2StorageId]
-        }
-    }},
     ClientSpec = #client_spec{
         correct = [
             user2, % space owner - doesn't need any perms
@@ -1259,7 +1248,22 @@ get_symlink_distribution_test(Config) ->
         unauthorized = [nobody],
         forbidden_not_in_space = [user1]
     },
-    get_distribution_test_base(FileType, SymGuid, undefined, ExpDist, Config, ClientSpec).
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ClientSpec,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = build_get_distribution_prepare_rest_args_fun(FileObjectId),
+                    validate_result_fun = fun(_TestCtx, {ok, RespCode, _RespHeaders, _RespBody}) ->
+                        ?assertEqual(?HTTP_422_UNPROCESSABLE_CONTENT, RespCode)
+                    end
+                }
+            ]
+        }
+    ])).
 
 %% @private
 -spec enable_dir_stats_collecting_for_space(
