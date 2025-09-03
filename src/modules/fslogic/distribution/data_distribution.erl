@@ -71,7 +71,7 @@ gather(UserCtx, FileCtx0) ->
 
     {ok, #data_distribution_gather_result{distribution = case FileType of
         ?DIRECTORY_TYPE -> gather_dir_distribution(FileCtx3);
-        ?SYMLINK_TYPE -> throw(?ERR_NOT_SUPPORTED_FOR_SYMLINKS);
+        ?SYMLINK_TYPE -> throw(?ERR_NOT_SUPPORTED_FOR_SYMLINKS(?err_ctx()));
         _ -> gather_reg_distribution(FileCtx3)
     end}}.
 
@@ -88,7 +88,7 @@ gather_storage_locations(UserCtx, FileCtx0) ->
     
     case FileType of
         ?DIRECTORY_TYPE -> {ok, gather_dir_storage_locations(FileCtx3)};
-        ?SYMLINK_TYPE -> ?ERR_NOT_SUPPORTED_FOR_SYMLINKS;
+        ?SYMLINK_TYPE -> ?ERR_NOT_SUPPORTED_FOR_SYMLINKS(?err_ctx());
         _ -> {ok, gather_reg_storage_locations(FileCtx3)}
     end.
 
