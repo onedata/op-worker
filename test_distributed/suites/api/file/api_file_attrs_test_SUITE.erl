@@ -687,8 +687,12 @@ set_file_mode_test(Config) ->
                     true;
                 (expected_success, #api_test_ctx{
                     client = ?USER(UserId),
-                    data = #{<<"mode">> := ModeBin}
+                    data = Data
                 }) when UserId == User2Id orelse UserId == User3Id ->
+                    ModeBin = case maps:get(<<"posixPermissions">>, Data, undefined) of
+                        undefined -> maps:get(<<"mode">>, Data);
+                        M -> M
+                    end,
                     Mode = binary_to_integer(ModeBin, 8),
                     lists:foreach(fun(Node) -> ?assertMatch(Mode, GetMode(Node), ?ATTEMPTS) end, Providers),
                     true;
@@ -717,7 +721,6 @@ set_file_mode_test(Config) ->
                     end
                 }
             ],
-            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId, set_mode_data_spec()
             )
@@ -795,14 +798,22 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
 -spec set_mode_data_spec() -> onenv_api_test_runner:data_spec().
 set_mode_data_spec() ->
     #data_spec{
-        required = [<<"mode">>],
-        correct_values = #{<<"mode">> => [<<"0000">>, <<"0111">>, <<"0544">>, <<"0707">>]},
+        at_least_one = [<<"mode">>, <<"posixPermissions">>],
+        correct_values = #{
+            <<"mode">> => [<<"0111">>, <<"0544">>],
+            <<"posixPermissions">> => [<<"0000">>, <<"0707">>]
+        },
         bad_values = [
             {<<"mode">>, true, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
             {<<"mode">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
             {<<"mode">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
             {<<"mode">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
-            {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)}
+            {<<"mode">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+            {<<"posixPermissions">>, true, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"integer">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"0888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"888">>, ?ERR_BAD_VALUE_INTEGER(<<"posixPermissions">>)},
+            {<<"posixPermissions">>, <<"77777">>, ?ERR_BAD_VALUE_NOT_IN_RANGE(<<"posixPermissions">>, 0, 8#1777)}
         ]
     }.
 
