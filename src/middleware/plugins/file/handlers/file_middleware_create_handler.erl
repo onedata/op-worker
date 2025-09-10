@@ -99,21 +99,26 @@ data_spec(#gri{aspect = object_id}, _) ->
     undefined;
 
 data_spec(#gri{aspect = attrs}, _) ->
-    ModeParam = <<"mode">>,
+    ModeCheckFun = fun(ModeParam) -> 
+        fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                    {true, ValidMode};
+                _ ->
+                    throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), ModeParam, 0, 8#1777))
+            catch _:_ ->
+                throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), ModeParam))
+            end
+        end
+    end,
 
     #{
         required => #{
-            id => {binary, guid},
-            ModeParam => {binary, fun(Mode) ->
-                try binary_to_integer(Mode, 8) of
-                    ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
-                        {true, ValidMode};
-                    _ ->
-                        throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), ModeParam, 0, 8#1777))
-                catch _:_ ->
-                    throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), ModeParam))
-                end
-            end}
+            id => {binary, guid}
+        },
+        at_least_one => #{
+            <<"mode">> => {binary, ModeCheckFun(<<"mode">>)},
+            <<"posixPermissions">> => {binary, ModeCheckFun(<<"posixPermissions">>)}
         }
     };
 
@@ -260,7 +265,10 @@ create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
     {ok, value, ObjectId};
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
-    Mode = maps:get(<<"mode">>, Data),
+    Mode = case maps:get(<<"posixPermissions">>, Data, undefined) of
+        undefined -> maps:get(<<"mode">>, Data);
+        M -> M
+    end,
     ?lfm_check(lfm:set_perms(Auth#auth.session_id, ?FILE_REF(Guid), Mode));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->

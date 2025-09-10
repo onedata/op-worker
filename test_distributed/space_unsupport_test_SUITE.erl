@@ -66,7 +66,7 @@ all() -> [
 replicate_stage_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceDirGuid = space_dir:guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
@@ -80,7 +80,7 @@ replicate_stage_test(Config) ->
     Promise = rpc:async_call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     {ok, {EntriesMap, _}} = ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
-        opt_qos:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
+        opt_qos:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceDirGuid)),
         ?ATTEMPTS),
     [QosEntryId] = maps:keys(EntriesMap),
     
@@ -102,14 +102,14 @@ replicate_stage_test(Config) ->
 replicate_stage_persistence_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceDirGuid = space_dir:guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     % Create new QoS entry representing entry created before provider restart.
     % Running stage again with existing entry should not create new one, 
     % but wait for fulfillment of previous one.
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
-    {ok, QosEntryId} = create_qos_entry(Worker1, SessId, SpaceGuid, Expression),
+    {ok, QosEntryId} = create_qos_entry(Worker1, SessId, SpaceDirGuid, Expression),
     
     StageJob = #space_unsupport_job{
         stage = replicate,
@@ -372,9 +372,9 @@ init_per_testcase(overall_test, Config) ->
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceDirGuid = space_dir:guid(?SPACE_ID),
     lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, ?FILE_REF(SpaceGuid), 0, 10), ?ATTEMPTS),
+        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, ?FILE_REF(SpaceDirGuid), 0, 10), ?ATTEMPTS),
         assert_space_on_storage_cleaned_up(Worker, initializer:get_supporting_storage_id(Worker, ?SPACE_ID), ?SPACE_ID)
     end, Workers),
     ct:timetrap({minutes, 30}),
@@ -519,13 +519,13 @@ get_keys(mnesia_driver, MemoryDriverCtx) ->
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
 create_files_and_dirs(Worker, SessId) ->
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceDirGuid = space_dir:guid(?SPACE_ID),
     Name = generator:gen_name(),
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId(Worker), SpaceDirGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
     {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId(Worker), DirGuid, ?filename(Name, 1), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(Worker, H1, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, H1),
-    {ok, {G2, H2}} = lfm_proxy:create_and_open(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 2), ?DEFAULT_FILE_PERMS),
+    {ok, {G2, H2}} = lfm_proxy:create_and_open(Worker, SessId(Worker), SpaceDirGuid, ?filename(Name, 2), ?DEFAULT_FILE_PERMS),
     {ok, _} = lfm_proxy:write(Worker, H2, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, H2),
     {{DirGuid, ?filename(Name, 0)}, {G1, filename:join([?filename(Name, 0), ?filename(Name, 1)])}, {G2, ?filename(Name, 2)}}.

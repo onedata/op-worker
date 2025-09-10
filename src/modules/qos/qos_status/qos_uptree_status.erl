@@ -124,7 +124,7 @@ report_file_deleted(FileCtx, #document{key = QosEntryId}, OriginalRootParentCtx)
     qos_entry:fold_traverses(QosEntryId, fun({TraverseId, _}, _Acc) ->
         case IsDir of
             true ->
-                {ParentFileCtx, _} = file_tree:get_original_parent(FileCtx1, OriginalRootParentCtx),
+                {ParentFileCtx, _} = file_tree:get_original_parent_of_deleted_file(FileCtx1, OriginalRootParentCtx),
                 ok = report_child_dir_traversed(TraverseId, ParentFileCtx, OriginalRootParentCtx),
                 ok = handle_traverse_finished_for_dir(TraverseId, FileCtx1, no_link);
             false ->
@@ -263,7 +263,7 @@ update_status_doc_and_handle_finished(TraverseId, FileCtx, OriginalRootParentCtx
             child_dirs_count = 0, files_list = [], is_last_batch = true}}
         } ->
             handle_traverse_finished_for_dir(TraverseId, FileCtx, add_link),
-            {ParentFileCtx, _} = file_tree:get_original_parent(FileCtx, OriginalRootParentCtx),
+            {ParentFileCtx, _} = file_tree:get_original_parent_of_deleted_file(FileCtx, OriginalRootParentCtx),
             ok = report_child_dir_traversed(TraverseId, ParentFileCtx, OriginalRootParentCtx);
         {ok, _} ->
             ok;

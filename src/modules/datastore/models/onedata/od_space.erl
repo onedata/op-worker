@@ -57,6 +57,7 @@ update_cache(Id, Diff, Default) ->
             {ok, #document{value = V}} -> V;
             {error, not_found} -> #od_space{}
         end,
+        % TODO VFS-12743 what if an error is returned here? will the record be cached? will it be logged?
         case datastore_model:update(?CTX, Id, Diff, Default) of
             {ok, #document{value = #od_space{eff_users = UsersMap} = NewVal}} = Res ->
                 handle_name_change(Id, PrevVal, NewVal, maps:keys(UsersMap)),
@@ -200,7 +201,7 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
         {0, 0} ->
             ok;
         {0, _} ->
-            ok = space_logic:ensure_required_docs_exist(SpaceId),
+            ok = special_dirs:set_up_for_new_space(SpaceId),
             % Fetch docs of co-supporting providers to trigger connection establishment
             % (see od_provider:ensure_connected_to_peer/1).
             lists:foreach(fun provider_logic:get/1, maps:keys(maps:remove(ProviderId, NewProviders))),

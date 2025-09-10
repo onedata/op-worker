@@ -148,7 +148,7 @@ map_parent_id(undefined) ->
     undefined;
 map_parent_id(ParentGuid) ->
     % filter out user root dirs
-    case fslogic_file_id:is_user_root_dir_uuid(file_id:guid_to_uuid(ParentGuid)) of
+    case user_root_dir:is_special(guid, ParentGuid) of
         true -> undefined;
         false -> ParentGuid
     end.

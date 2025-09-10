@@ -157,7 +157,7 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ping | healthcheck | monitor_streams) ->
+-spec handle(ping | healthcheck | {middleware_request, session:id(), file_id:file_guid(), operation()}) ->
     pong | ok | {ok, term()} | errors:error().
 handle(ping) ->
     pong;
@@ -167,15 +167,19 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
-        FileCtx = file_ctx:new_by_guid(FileGuid),
-        UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
+        case special_dirs:is_operation_supported(file_id:guid_to_uuid(FileGuid), Operation) of
+            false ->
+                ?ERROR_NOT_SUPPORTED;
+            true ->
+                FileCtx = file_ctx:new_by_guid(FileGuid),
+                UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
 
-        assert_has_access_to_space(UserCtx, FileCtx),
-        middleware_utils:assert_file_managed_locally(FileGuid),
-
-        case fslogic_worker:is_storage_accessible(FileCtx) of
-            true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
-            false -> ?ERR_SERVICE_UNAVAILABLE(?err_ctx())
+                assert_has_access_to_space(UserCtx, FileCtx),
+                middleware_utils:assert_file_managed_locally(FileGuid),
+                case fslogic_worker:is_storage_accessible(FileCtx) of
+                    true -> middleware_worker_handlers:execute(UserCtx, FileCtx, Operation);
+                    false -> ?ERR_SERVICE_UNAVAILABLE(?err_ctx())
+                end
         end
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
@@ -229,7 +233,7 @@ ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
         _ShareId ->
             case is_operation_available_in_share_mode(Operation) of
                 true -> ensure_guest_ctx(UserCtx);
-                false -> throw(?ERR_POSIX(?err_ctx(), ?EPERM))
+                false -> throw(?ERR_POSIX(?err_ctx(), ?ENOTSUP))
             end
     end.
 

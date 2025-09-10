@@ -57,7 +57,8 @@ get_release_version() ->
 
 -spec get_build_version() -> binary().
 get_build_version() ->
-    case op_worker:get_env(build_version, "unknown") of
-        "" -> <<"unknown">>;
-        Build -> list_to_binary(Build)
+    case ctool:get_env(onedata_service_build_version, undefined) of
+        undefined -> <<"unknown">>;
+        <<>> -> <<"unknown">>;
+        Version -> Version
     end.

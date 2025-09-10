@@ -38,7 +38,6 @@
 delete(UserCtx, FileCtx, Silent) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
-            file_ctx:assert_not_special_const(FileCtx2),
             delete_dir(UserCtx, FileCtx2, Silent);
         {false, FileCtx2} ->
             delete_file(UserCtx, FileCtx2, Silent)
@@ -48,7 +47,6 @@ delete(UserCtx, FileCtx, Silent) ->
 -spec delete_using_trash(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
 delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
-    file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = file_ctx:assert_is_dir(FileCtx0),
 
     {FileParentCtx, FileCtx2} = file_tree:get_parent(FileCtx1, UserCtx),
@@ -66,10 +64,10 @@ delete_using_trash(UserCtx, FileCtx0, EmitEvents) ->
 -spec delete_using_trash_insecure(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
     fslogic_worker:fuse_response().
 delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
-    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
     {Filename, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    FileCtx4 = trash:move_to_trash(FileCtx3, UserCtx),
-    {ok, _} = trash:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
+    FileCtx4 = trash_dir:move_to_trash(FileCtx3, UserCtx),
+    {ok, _} = trash_dir:schedule_deletion_from_trash(FileCtx4, UserCtx, EmitEvents, file_id:guid_to_uuid(ParentGuid), Filename),
     ?FUSE_OK_RESP.
 
 

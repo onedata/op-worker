@@ -325,24 +325,17 @@ on_local_file_delete(FileCtx) ->
 
 -spec report_remote_links_change(file_meta:uuid(), od_space:id()) -> ok.
 report_remote_links_change(Uuid, SpaceId) ->
-    % Check is uuid is dir space uuid to prevent its creation by file_meta:get_including_deleted/1
-    case fslogic_file_id:is_space_dir_uuid(Uuid) of
-        true ->
-            % Send empty update to prevent race between links sync and initialization
-            update_stats(file_id:pack_guid(Uuid, SpaceId), #{});
-        false ->
-            case file_meta:get_including_deleted(Uuid) of
-                {ok, Doc} ->
-                    case file_meta:get_type(Doc) of
-                        ?DIRECTORY_TYPE ->
-                            % Send empty update to prevent race between links sync and initialization
-                            update_stats(file_id:pack_guid(Uuid, SpaceId), #{});
-                        _ ->
-                            ok
-                    end;
-                ?ERROR_NOT_FOUND ->
+    case file_meta:get_including_deleted(Uuid) of
+        {ok, Doc} ->
+            case file_meta:get_type(Doc) of
+                ?DIRECTORY_TYPE ->
+                    % Send empty update to prevent race between links sync and initialization
+                    update_stats(file_id:pack_guid(Uuid, SpaceId), #{});
+                _ ->
                     ok
-            end
+            end;
+        ?ERROR_NOT_FOUND ->
+            ok
     end.
 
 

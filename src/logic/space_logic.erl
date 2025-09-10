@@ -221,6 +221,8 @@ has_eff_group(#document{value = #od_space{eff_groups = EffGroups}}, GroupId) ->
 -spec get_shares(gs_client_worker:client(), od_space:id()) ->
     {ok, [od_share:id()]} | errors:error().
 get_shares(SessionId, SpaceId) ->
+    %% @TODO VFS-12760 fetching new space doc is always required, as due to a bug Onezone does not send updates when share list changes
+    od_space:invalidate_cache(SpaceId),
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{shares = Shares}}} ->
             {ok, Shares};
@@ -492,7 +494,6 @@ get_harvesters(SpaceId) ->
         {ok, Doc} ->
             get_harvesters(Doc);
         {error, _} = Error ->
-            ?error("space_logic:get_harvesters(~tp) failed due to ~tp", [SpaceId, Error]),
             Error
     end.
 
@@ -504,10 +505,7 @@ on_space_supported(SpaceId) ->
     ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
+% TODO VFS-11954 analyze whether still needed
 -spec ensure_required_docs_exist(od_space:id()) -> ok.
 ensure_required_docs_exist(SpaceId) ->
-    file_meta:ensure_space_doc_exist(SpaceId),
-    trash:ensure_exists(SpaceId),
-    archivisation_tree:ensure_archives_root_dir_exists(SpaceId),
-    file_meta:ensure_tmp_dir_exists(SpaceId),
-    file_meta:ensure_opened_deleted_files_dir_exists(SpaceId).
+    special_dirs:set_up_for_new_space(SpaceId).

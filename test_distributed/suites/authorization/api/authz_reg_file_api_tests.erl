@@ -49,8 +49,8 @@ test_create_file(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
+            ?FILE_REF(ParentDirGuid) = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath,
+                <<"/dir1">>, ExtraData),
             case lfm_proxy:create(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777) of
                 {ok, FileGuid} ->
                     storage_test_utils:ensure_file_created_on_storage(Node, FileGuid);
@@ -60,7 +60,8 @@ test_create_file(SpaceId) ->
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir, archive_dir, tmp_dir]
     }).
 
 
@@ -78,13 +79,13 @@ test_open_for_read(SpaceId) ->
         available_for_share_guid = true,
         available_in_public_data_mode = true,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:open(Node, SessionId, FileKey, read)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -102,13 +103,13 @@ test_open_for_write(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:open(Node, SessionId, FileKey, write)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -126,13 +127,13 @@ test_open_for_rdwr(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:open(Node, SessionId, FileKey, rdwr)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -150,13 +151,14 @@ test_create_and_open(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
+            ?FILE_REF(ParentDirGuid) = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath,
+                <<"/dir1">>, ExtraData),
             lfm_proxy:create_and_open(Node, SessionId, ParentDirGuid, <<"file1">>, 8#777)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_assign_ownership, <<TestCaseRootDirPath/binary, "/dir1/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = [space_dir, archive_dir, tmp_dir]
     }).
 
 
@@ -174,13 +176,13 @@ test_truncate(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/file1">>, ExtraData),
             lfm_proxy:truncate(Node, SessionId, FileKey, 0)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -210,15 +212,15 @@ test_mv_file(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
-            SrcFileKey = maps:get(SrcFilePath, ExtraData),
+            SrcFileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/dir1/file11">>, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
             lfm_proxy:mv(Node, SessionId, SrcFileKey, DstDirKey, <<"file21">>)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir2/file21">>}
-        end
+        end,
+        special_dirs_supporting_the_operation = not_applicable
     }).
 
 
@@ -244,9 +246,9 @@ test_rm_file(SpaceId) ->
         available_for_share_guid = false,
         available_in_public_data_mode = false,
         operation = fun(Node, SessionId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
-            FileKey = maps:get(FilePath, ExtraData),
+            FileKey = authz_api_test_runner:extract_test_file_key(TestCaseRootDirPath, <<"/dir1/file1">>, ExtraData),
             lfm_proxy:unlink(Node, SessionId, FileKey)
         end,
-        final_ownership_check = fun(_) -> {inapplicable_due_to, file_removal} end
+        final_ownership_check = fun(_) -> {inapplicable_due_to, file_removal} end,
+        special_dirs_supporting_the_operation = not_applicable
     }).

@@ -151,7 +151,7 @@
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) ->
-    traverse:init_pool(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
+    traverse_utils:init_pool_with_zone_connection(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit,
         #{executor => oneprovider:get_id_or_undefined(), callback_modules => CallbackModules}).
 
 
@@ -227,7 +227,7 @@ run(Pool, FileCtx, UserId, Opts) ->
             file_ctx:get_logical_uuid_const(FileCtx3), #{}, SymlinksResolutionPolicy)
     },
     maybe_create_status_doc(Job, TaskId, ParentUuid),
-    ok = traverse:run(Pool, TaskId, Job, RunOpts4),
+    ok = traverse_utils:run(Pool, TaskId, Job, RunOpts4),
     {ok, TaskId}.
 
 

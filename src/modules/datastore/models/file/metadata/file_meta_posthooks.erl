@@ -17,6 +17,12 @@
 %%% can be triggered by any link document).
 %%% Any exported function can be used as a hook.
 %%% Any module using file_meta_posthooks must implement `file_meta_posthooks_behaviour`.
+%%%  
+%%% !!!!!!!
+%%% WARNING: during a posthook execution adding posthook with the same identifier will not work, as it will be deleted 
+%%% after successful hook execution. If such behaviour is needed a posthook should return the atom `repeat`. 
+%%% @TODO VFS-10296 - handle not fully synced links in this module
+%%% !!!!!!!
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_posthooks).

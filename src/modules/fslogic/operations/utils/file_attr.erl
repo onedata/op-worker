@@ -159,7 +159,7 @@ resolve_parent_attrs(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
     % NOTE: parent_uuid is part of a file meta, but for listed files it is also already cached, so we can try to
     % avoid unnecessary doc fetching; that's why this is a separate stage function and not a part of the
     % file meta stage (which always fetches file_meta doc)
-    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
     {State#state{file_ctx = FileCtx2}, #file_attr{parent_guid = ParentGuid}}.
 
 
@@ -544,12 +544,12 @@ resolve_name_attrs_conflicts(State) ->
     ProviderId = file_meta:get_provider_id(FileDoc),
     Scope = file_meta:get_scope(FileDoc),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+    case space_dir:is_special(uuid, FileUuid) of
         true ->
             #state{user_ctx = UserCtx} = UpdatedState,
             {SpaceName, FileCtx2} = file_ctx:get_space_name(FileCtx, UserCtx),
             {ExtendedName, Conflicts} = user_root_dir:get_space_name_and_conflicts(UserCtx, SpaceName,
-                fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)),
+                space_dir:extract_space_id(FileUuid)),
             case Conflicts of
                 [] ->
                     {UpdatedState, #file_attr{name = SpaceName}};

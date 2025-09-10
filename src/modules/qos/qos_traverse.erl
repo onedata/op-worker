@@ -208,7 +208,7 @@ start_internal(FileCtx, #{task_id := TaskId} = Options, Repeats) ->
         {ok, _} -> ok
     catch _:{badmatch, [{error,already_exists}]} ->
         timer:sleep(timer:seconds(1)), % sleep to ensure different timestamp for traverse link
-        ?warning("Conflict on QoS traverse task id ~tp. Reapeting...", [TaskId]),
+        ?warning("Conflict on QoS traverse task id ~tp. Repeating...", [TaskId]),
         start_internal(FileCtx, Options, Repeats - 1)
     end.
 

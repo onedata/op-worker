@@ -73,8 +73,8 @@ all() -> ?ALL(?TEST_CASES).
     ?SPACE_ID4
 ]).
 
--define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
--define(SPACE_CTX(SpaceId), ?FILE_CTX(?SPACE_GUID(SpaceId))).
+-define(SPACE_DIR_GUID(SpaceId), space_dir:guid(SpaceId)).
+-define(SPACE_CTX(SpaceId), ?FILE_CTX(?SPACE_DIR_GUID(SpaceId))).
 -define(SPACE_STORAGE_CTX(Worker, SpaceId, IsImportedStorage), begin
     storage_file_ctx:new(space_storage_file_id(SpaceId, IsImportedStorage), SpaceId,
         initializer:get_supporting_storage_id(W, SpaceId))
@@ -157,37 +157,37 @@ delete_child_file_basic_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     Child = <<"child1">>,
-    Guid = create_file(W, SpaceGuid, Child, SessionId),
+    Guid = create_file(W, SpaceDirGuid, Child, SessionId),
 
     delete_file_on_storage(W, Guid),
     
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, ?FILE_REF(Guid)), ?TIMEOUT),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 empty_child_dir_should_not_be_deleted_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     Child = <<"child">>,
-    {ok, Guid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, Child, ?DEFAULT_DIR_PERMS),
+    {ok, Guid} = lfm_proxy:mkdir(W, SessionId, SpaceDirGuid, Child, ?DEFAULT_DIR_PERMS),
 
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W, SessionId, ?FILE_REF(Guid)), ?TIMEOUT),
-    ?assertMatch({ok, [{Guid, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, [{Guid, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 delete_child_subtree_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     ChildDir1 = <<"child_dir1">>,
@@ -195,7 +195,7 @@ delete_child_subtree_test_base(Config) ->
     ChildDir3 = <<"child_dir3">>,
     ChildFile = <<"child_file">>,
 
-    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceDirGuid, ChildDir1, ?DEFAULT_DIR_PERMS),
     {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, ?DEFAULT_DIR_PERMS),
     {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, ?DEFAULT_DIR_PERMS),
     FileGuid = create_file(W, DirGuid3, ChildFile, SessionId),
@@ -208,13 +208,13 @@ delete_child_subtree_test_base(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid1), 0, 1), ?TIMEOUT),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid2), 0, 1), ?TIMEOUT),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid3), 0, 1), ?TIMEOUT),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 delete_nested_child_on_object_storage_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
     ChildDir1 = <<"child_dir1">>,
@@ -225,7 +225,7 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     SpaceStorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     SpaceStorageFileId = storage_file_ctx:get_storage_file_id_const(SpaceStorageFileCtx),
 
-    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceDirGuid, ChildDir1, ?DEFAULT_DIR_PERMS),
     {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, ?DEFAULT_DIR_PERMS),
     {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, ?DEFAULT_DIR_PERMS),
     FileGuid = create_file(W, DirGuid3, ChildFile1, SessionId),
@@ -245,19 +245,19 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     ?assertMatch({ok, [{FileGuid, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid3), 0, 1), ?TIMEOUT),
     ?assertMatch({ok, [{DirGuid3, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid2), 0, 1), ?TIMEOUT),
     ?assertMatch({ok, [{DirGuid2, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid1), 0, 1), ?TIMEOUT),
-    ?assertMatch({ok, [{DirGuid1, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, [{DirGuid1, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 delete_nested_child_on_block_storage_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     ChildDir = <<"child_dir">>,
     ChildFile = <<"child_file">>,
     DirStorageFileCtx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildDir),
-    {ok, DirGuid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessionId, SpaceDirGuid, ChildDir, ?DEFAULT_DIR_PERMS),
     FileGuid = create_file(W, DirGuid, ChildFile, SessionId),
 
     delete_file_on_storage(W, FileGuid),
@@ -266,21 +266,21 @@ delete_nested_child_on_block_storage_test_base(Config) ->
 
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, ?FILE_REF(FileGuid)), ?TIMEOUT),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(DirGuid), 0, 1), ?TIMEOUT),
-    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, [{DirGuid, _}]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 do_not_delete_child_file_basic_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     StorageType = ?config(storage_type, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     RootStorageFileId = space_storage_file_id(SpaceId, IsImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     Child = <<"child1">>,
-    FileGuid = create_file(W, SpaceGuid, Child, SessionId),
+    FileGuid = create_file(W, SpaceDirGuid, Child, SessionId),
 
     % pretend that storage_sync_link is added for the file
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
@@ -288,33 +288,33 @@ do_not_delete_child_file_basic_test_base(Config) ->
 
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W, SessionId, ?FILE_REF(FileGuid)), ?TIMEOUT),
-    ?assertMatch({ok, [_]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, [_]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 do_not_delete_child_file_without_location_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     StorageType = ?config(storage_type, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     RootStorageFileId = space_storage_file_id(SpaceId, IsImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, IsImportedStorage),
     Child = <<"child1">>,
-    {ok, _} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, ?DEFAULT_FILE_PERMS),
+    {ok, _} = lfm_proxy:create(W, SessionId, SpaceDirGuid, Child, ?DEFAULT_FILE_PERMS),
 
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
-    ?assertMatch({ok, [_]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, 1), ?TIMEOUT).
+    ?assertMatch({ok, [_]}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, 1), ?TIMEOUT).
 
 delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     StorageType = ?config(storage_type, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = initializer:get_supporting_storage_id(W, SpaceId),
@@ -325,14 +325,14 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
         Child = <<"child", (integer_to_binary(N))/binary>>,
         case {ToStayIn < ChildrenToStayNum, ToDeleteIn < ChildrenToDeleteNum, N rem 2 =:= 0} of
             {_, true, true} ->
-                FileGuid = create_file(W, SpaceGuid, Child, SessionId),
+                FileGuid = create_file(W, SpaceDirGuid, Child, SessionId),
                 delete_file_on_storage(W, FileGuid),
                 {ToStayIn, ToDeleteIn + 1};
             {true, _, false} ->
                 add_storage_sync_link(W, RootStorageFileId, Child, StorageId, MarkLeaves),
                 {ToStayIn + 1, ToDeleteIn};
             {false, true, _} ->
-                FileGuid = create_file(W, SpaceGuid, Child, SessionId),
+                FileGuid = create_file(W, SpaceDirGuid, Child, SessionId),
                 delete_file_on_storage(W, FileGuid),
                 {ToStayIn, ToDeleteIn + 1};
             {true, false, _} ->
@@ -342,13 +342,13 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
     end, {0, 0}, lists:seq(1, ChildrenToStayNum + ChildrenToDeleteNum)),
 
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, ChildrenToStayNum + ChildrenToDeleteNum), 5 * ?TIMEOUT).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, ChildrenToStayNum + ChildrenToDeleteNum), 5 * ?TIMEOUT).
 
 delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     IsImportedStorage = ?config(is_imported_storage, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
+    SpaceDirGuid = ?SPACE_DIR_GUID(SpaceId),
     StorageType = ?config(storage_type, Config),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
@@ -360,14 +360,14 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
         Child = <<"child", (integer_to_binary(N))/binary>>,
         case {ToStayIn < ChildrenToStayNum, ToDeleteIn < ChildrenToDeleteNum, rand:uniform() < 0.5} of
             {_, true, true} ->
-                FileGuid = create_file(W, SpaceGuid, Child, SessionId),
+                FileGuid = create_file(W, SpaceDirGuid, Child, SessionId),
                 delete_file_on_storage(W, FileGuid),
                 {ToStayIn, ToDeleteIn + 1};
             {true, _, false} ->
                 add_storage_sync_link(W, RootStorageFileId, Child, StorageId, MarkLeaves),
                 {ToStayIn + 1, ToDeleteIn};
             {false, true, _} ->
-                FileGuid = create_file(W, SpaceGuid, Child, SessionId),
+                FileGuid = create_file(W, SpaceDirGuid, Child, SessionId),
                 delete_file_on_storage(W, FileGuid),
                 {ToStayIn, ToDeleteIn + 1};
             {true, false, _} ->
@@ -377,7 +377,7 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
     end, {0, 0}, lists:seq(1, ChildrenToStayNum + ChildrenToDeleteNum)),
 
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceGuid), 0, ChildrenToStayNum + ChildrenToDeleteNum), 5 * ?TIMEOUT).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W, SessionId, ?FILE_REF(SpaceDirGuid), 0, ChildrenToStayNum + ChildrenToDeleteNum), 5 * ?TIMEOUT).
 
 %===================================================================
 % SetUp and TearDown functions

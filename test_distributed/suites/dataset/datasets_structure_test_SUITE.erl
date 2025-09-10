@@ -208,8 +208,8 @@ nested_dirs_visible_on_space_dataset_list(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     % create dataset entries
     DatasetsReversed = lists:foldl(fun(I, Acc) ->
@@ -238,8 +238,8 @@ basic_sort(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     % create nested directories
     DatasetPathsAndIds = generate_dataset_paths_and_ids(SpaceDatasetPath, 1, DatasetsCount),
@@ -284,8 +284,8 @@ list_with_start_index_and_negative_offset(_Config) ->
     DatasetsCount = 10,
     [P1Node] = oct_background:get_provider_nodes(krakow),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     % create nested directories
     DatasetPathsAndIds = generate_dataset_paths_and_ids(SpaceDatasetPath, 1, DatasetsCount),
@@ -549,8 +549,8 @@ basic_crud_test_base(Depth) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     % generate nested dataset path
     DatasetPath = generate_dataset_path(SpaceDatasetPath, Depth),
@@ -593,10 +593,10 @@ nested_datasets_test_base(Depth) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
 
     % add entry for space-level dataset
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     % generate nested dataset paths and ids
     DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, true),
@@ -635,8 +635,8 @@ mark_parent_as_dataset_test_base(Depth) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     % generate nested dataset paths and ids
     DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, true),
@@ -690,8 +690,8 @@ rename_dataset_test_base(Depth) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
     TopDatasetTargetName = <<"after rename">>,
 
     DatasetsReversed = generate_nested_datasets(SpaceDatasetPath, Depth, false),
@@ -727,8 +727,8 @@ move_dataset_test_base(Depth, TargetType) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
     TargetParentUuid = ?UUID,
     TargetParentName = ?DATASET_NAME,
     TopDatasetTargetName = <<"after rename">>,
@@ -801,16 +801,16 @@ move_dataset_with_many_children_test_base(ChildrenCount) ->
     % and checks whether children datasets are properly moved and listed.
     [P1Node] = oct_background:get_provider_nodes(krakow),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
 
     TopDatasetUuid = ?UUID,
-    TopDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceUuid, TopDatasetUuid]),
+    TopDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid, TopDatasetUuid]),
     TopDatasetId = ?DATASET_ID(TopDatasetPath),
     TopDatasetName = ?DATASET_NAME,
     TopDatasetNewName = <<"after rename">>,
 
     TargetParentUuid = ?UUID,
-    TargetParentDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceUuid, TargetParentUuid]),
+    TargetParentDatasetPath = filename:join([?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid, TargetParentUuid]),
     TargetParentDatasetId = ?DATASET_ID(TargetParentDatasetPath),
     TargetParentName = ?DATASET_NAME,
 
@@ -878,8 +878,8 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, Starti
     % datasets will be listed as top datasets or as children datasets of dataset attached to space directory
     [P1Node] = oct_background:get_provider_nodes(krakow),
     SpaceId = oct_background:get_space_id(space1),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+    SpaceDirUuid = space_dir:uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceDirUuid),
 
     case ListingType of
         top_datasets ->

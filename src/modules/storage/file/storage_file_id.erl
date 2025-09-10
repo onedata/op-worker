@@ -106,12 +106,12 @@ canonical(FslogicCanonicalPath, SpaceId, StorageDataOrId) ->
 %%--------------------------------------------------------------------
 -spec raw_flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
 raw_flat(FileUuid, SpaceId) ->
-    case fslogic_file_id:is_root_dir_uuid(FileUuid) of
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
         true ->
             <<?DIRECTORY_SEPARATOR>>;
         false ->
             PathTokens = [<<?DIRECTORY_SEPARATOR>>, SpaceId],
-            case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+            case space_dir:is_special(uuid, FileUuid) of
                 true ->
                     filepath_utils:join(PathTokens);
                 false ->

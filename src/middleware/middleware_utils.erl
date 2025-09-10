@@ -74,7 +74,7 @@ resolve_file_path(SessionId, Path) ->
 
     case filepath_utils:split_and_skip_dots(Path) of
         {ok, [<<"/">>]} ->
-            {ok, fslogic_file_id:user_root_dir_guid(UserId)};
+            {ok, user_root_dir:guid(UserId)};
         {ok, [<<"/">>, SpaceName | Rest]} ->
             case user_logic:get_space_by_name(SessionId, UserId, SpaceName) of
                 false ->
@@ -83,9 +83,9 @@ resolve_file_path(SessionId, Path) ->
                     assert_space_supported_locally(SpaceId),
                     {RootGuid, RelPathTokens} = case Rest of
                         [<<".__onedata__tmp">> | Rest2] ->
-                            {fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId), Rest2};
+                            {tmp_dir:guid(SpaceId), Rest2};
                         _ ->
-                            {fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), Rest}
+                            {space_dir:guid(SpaceId), Rest}
                     end,
                     resolve_guid_by_relative_path(SessionId, RootGuid, filepath_utils:join(RelPathTokens))
             end;
@@ -195,7 +195,7 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
 has_access_to_file_space(?GUEST, _Guid) ->
     false;
 has_access_to_file_space(?USER(UserId) = Auth, Guid) ->
-    case fslogic_file_id:user_root_dir_guid(UserId) of
+    case user_root_dir:guid(UserId) of
         Guid ->
             true;
         _ ->
@@ -215,7 +215,7 @@ has_access_to_file_space(?USER(UserId) = Auth, Guid) ->
     ok | no_return().
 assert_file_managed_locally(FileGuid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
-    case fslogic_file_id:is_root_dir_uuid(FileUuid) of
+    case special_dirs:is_filesystem_root_dir(FileUuid) of
         true ->
             ok;
         false ->

@@ -42,7 +42,7 @@
 %===================================================================
 
 create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId) ->
-    rpc:call(Node, archivisation_tree, create_archive_dir, [ArchiveId, DatasetId, SpaceId, UserId]).
+    rpc:call(Node, archive_dir, ensure_exists, [ArchiveId, DatasetId, SpaceId, UserId]).
 
 
 assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, Attempts) ->
@@ -221,21 +221,21 @@ start_verification_traverse(Pid, ArchiveId) ->
 %===================================================================
 
 assert_archives_root_dir_exists(Node, SessionId, SpaceId, Attempts) ->
-    ArchivesRootUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
+    ArchivesRootUuid = ?SPACE_ARCHIVES_DIR_UUID(SpaceId),
     ArchivesRootGuid = file_id:pack_guid(ArchivesRootUuid, SpaceId),
-    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    ArchivesRootDirName = ?SPACE_ARCHIVES_DIR_NAME,
 
     ?assertMatch({ok, #file_attr{
         guid = ArchivesRootGuid,
         name = ArchivesRootDirName,
-        mode = ?ARCHIVES_ROOT_DIR_PERMS,
+        mode = ?SPACE_ARCHIVES_DIR_PERMS,
         owner_id = ?SPACE_OWNER_ID(SpaceId),
         parent_guid = undefined
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchivesRootGuid)), Attempts).
 
 
 assert_dataset_archives_dir_exists(Node, SessionId, SpaceId, DatasetId, Attempts) ->
-    ArchivesRootUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
+    ArchivesRootUuid = ?SPACE_ARCHIVES_DIR_UUID(SpaceId),
     ArchivesRootGuid = file_id:pack_guid(ArchivesRootUuid, SpaceId),
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
     DatasetArchivesDirGuid = file_id:pack_guid(DatasetArchivesDirUuid, SpaceId),
@@ -469,15 +469,16 @@ get_archive_info_without_config(Node, SessionId, ArchiveId) ->
 
 
 assert_incremental_archive_links(Node, SessionId, BaseArchiveId, Guid, ModifiedFiles) ->
-    case lfm_proxy:stat(Node, SessionId, #file_ref{guid = Guid}) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, name = FileName}} ->
+    {ok, FileAttr} = ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessionId, #file_ref{guid = Guid}), 60),
+    case FileAttr of
+        #file_attr{type = ?REGULAR_FILE_TYPE, name = FileName} ->
             case lists:member(FileName, ModifiedFiles) of
                 true -> ?assertNotEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid));
                 false -> ?assertEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid))
             end;
-        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+        #file_attr{type = ?SYMLINK_TYPE} ->
             ok;
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+        #file_attr{type = ?DIRECTORY_TYPE} ->
             {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(Guid), 0, ?LISTED_CHILDREN_LIMIT),
             lists:foreach(fun({ChildGuid, _}) ->
                 assert_incremental_archive_links(Node, SessionId, BaseArchiveId, ChildGuid, ModifiedFiles)

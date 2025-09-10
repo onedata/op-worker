@@ -43,6 +43,8 @@
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
 
+-define(GS_WORKER_POOL_SIZE, op_worker:get_env(graph_sync_worker_pool_size, 20)).
+
 % List of all known cluster generations.
 % When cluster is not in newest generation it will be upgraded during initialization.
 % This can be used to e.g. move models between services.
@@ -56,11 +58,10 @@
     {4, ?LINE_21_02(<<"2">>)},
     {5, ?LINE_21_02(<<"3">>)},
     {6, ?LINE_21_02(<<"5">>)},
-    {7, ?LINE_21_02(<<"9">>)},
+    {7, ?LINE_21_02(<<"8">>)},
     {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
-
 
 %%%===================================================================
 %%% node_manager_plugin_default callbacks
@@ -254,10 +255,7 @@ upgrade_cluster(4) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
         lists:foreach(fun(SpaceId) ->
-            case file_meta:ensure_tmp_dir_exists(SpaceId) of
-                created -> ?info("Created tmp dir for space '~ts'.", [SpaceId]);
-                already_exists -> ok
-            end
+            tmp_dir:ensure_exists(SpaceId)
         end, SpaceIds)
     end),
     {ok, 5};
@@ -270,28 +268,29 @@ upgrade_cluster(5) ->
         ?info("Upgrading tmp directory links..."),
         % NOTE: existence of tmp directory was ensured in previous version upgrade, but we still need to ensure,
         % that link exists (it was not ensured then).
-        lists:foreach(fun file_meta:ensure_tmp_dir_link_exists/1, SpaceIds),
+        lists:foreach(fun tmp_dir:ensure_tmp_dir_link_exists/1, SpaceIds),
         % NOTE: there is no link for trash dir, so there is no need to ensure it existence.
         ?info("Upgrading trash directories..."),
-        lists:foreach(fun trash:ensure_exists/1, SpaceIds),
+        lists:foreach(fun trash_dir:ensure_exists/1, SpaceIds),
         ?info("Upgrading archive root directories..."),
         % NOTE: below function also ensures existence of archives root link.
-        lists:foreach(fun archivisation_tree:ensure_archives_root_dir_exists/1, SpaceIds),
+        lists:foreach(fun space_archives_dir:ensure_exists/1, SpaceIds),
         % NOTE: there is no need to ensure dataset directory existence, as any operation requiring
         % it will create it if it is not yet synced.
         lists:foreach(fun(SpaceId) ->
             ?info("Upgrading dataset directory links for space '~ts'...", [SpaceId]),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?ATTACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
-                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end),
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end),
             ok = datasets_structure:apply_to_all_datasets(SpaceId, ?DETACHED_DATASETS_STRUCTURE, fun(DatasetId) ->
-                archivisation_tree:ensure_dataset_root_link_exists(DatasetId, SpaceId) end)
+                dataset_archives_dir:ensure_parent_link_exists(DatasetId, SpaceId) end)
         end, SpaceIds),
-        lists:foreach(fun(SpaceId) ->
-            % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
-            ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
-            file_meta:ensure_opened_deleted_files_dir_exists(SpaceId)
-        end, SpaceIds),
-        lists:foreach(fun dir_stats_service_state:reinitialize_stats_for_space/1, SpaceIds)
+        async_run_with_oz_connection_after_upgrade(fun() ->
+            lists:foreach(fun(SpaceId) ->
+                % NOTE: this dir is local in tmp dir, so there is no need to ensure its link existence.
+                ?info("Creating directory for opened deleted files for space '~ts'...", [SpaceId]),
+                opened_deleted_files_dir:ensure_exists(SpaceId)
+            end, SpaceIds)
+        end)
     end),
     {ok, 6};
 upgrade_cluster(6) ->
@@ -307,7 +306,27 @@ upgrade_cluster(6) ->
 upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
-    await_zone_connection_and_run(fun storage:upgrade_after_swift_version_update_to_v3/0),
+    await_zone_connection_and_run(fun() ->
+        storage:upgrade_after_swift_version_update_to_v3(),
+
+        % clear cached auto luma entries in db
+        {ok, StorageIds} = provider_logic:get_storages(),
+        lists:foreach(fun(StorageId) ->
+            ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
+            case storage_config:get_luma_feed(StorageId) of
+                ?AUTO_FEED -> luma:clear_db(StorageId);
+                _ -> ok
+            end
+        end, StorageIds)
+    end),
+    % run async so it does not block when waiting for a traverse pool to start (see traverse_utils)
+    async_run_with_oz_connection_after_upgrade(fun() ->
+        {ok, SpaceIds} = provider_logic:get_spaces(),
+        lists:foreach(fun(SpaceId) ->
+            ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
+        end, SpaceIds)
+    end),
     {ok, 8}.
 
 
@@ -318,10 +337,12 @@ upgrade_cluster(7) ->
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
-%% This callback is executed on all cluster nodes.
+%% NOTE: this callback is run on all cluster nodes and is awaited
+%% for before cluster setup proceeds.
 %% @end
 %%--------------------------------------------------------------------
 before_listeners_start() ->
+    gs_worker_pool:init(?GS_WORKER_POOL_SIZE),
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
@@ -330,6 +351,7 @@ before_listeners_start() ->
     atm_workflow_execution_api:init_engine(),
     gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:after_listeners_stop/0}.
@@ -337,7 +359,8 @@ before_listeners_start() ->
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
-%% This callback is executed on all cluster nodes.
+%% NOTE: this callback is run on a cluster node that is being turned off
+%% independently of other cluster nodes (no synchronization is performed).
 %% @end
 %%--------------------------------------------------------------------
 after_listeners_stop() ->
@@ -498,3 +521,15 @@ await_zone_connection_and_run(false, Retries, Fun) ->
     await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
+
+
+%% @private
+-spec async_run_with_oz_connection_after_upgrade(Fun :: fun(() -> ok)) -> ok.
+async_run_with_oz_connection_after_upgrade(Fun) ->
+    spawn(fun() ->
+        utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+        ?catch_exceptions(Fun())
+    end),
+    ok.
+

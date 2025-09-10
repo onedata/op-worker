@@ -742,7 +742,7 @@ has_custom_metadata_test(Config) ->
 resolve_guid_of_root_should_return_root_guid(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    RootGuid = rpc:call(Worker, fslogic_file_id, user_root_dir_guid, [UserId]),
+    RootGuid = user_root_dir:guid(UserId),
 
     ?assertEqual({ok, RootGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/">>)).
 
@@ -750,7 +750,7 @@ resolve_guid_of_space_should_return_space_guid(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    SpaceDirGuid = rpc:call(Worker, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     ?assertEqual({ok, SpaceDirGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)).
 
@@ -873,17 +873,17 @@ do_not_overwrite_space_dir_attrs_on_ensure_space_docs_exist_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
-    {ok, ShareId} = opt_shares:create(Worker, SessId, ?FILE_REF(SpaceGuid), <<"szer">>),
+    {ok, ShareId} = opt_shares:create(Worker, SessId, ?FILE_REF(SpaceDirGuid), <<"szer">>),
     {ok, SpaceAttrs} = ?assertMatch(
         {ok, #file_attr{shares = [ShareId]}},
-        lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid))
+        lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceDirGuid))
     ),
 
     lists:foreach(fun(_) ->
         ?assertEqual(ok, rpc:call(Worker, space_logic, ensure_required_docs_exist, [SpaceId])),
-        ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid)))
+        ?assertMatch({ok, SpaceAttrs}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceDirGuid)))
     end, lists:seq(1, 10)).
 
 
@@ -892,7 +892,7 @@ listing_file_attrs_should_work_properly_in_public_data_mode(Config) ->
 
     User = <<"user1">>,
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = space_dir:guid(SpaceId),
 
     NormalSessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
 
@@ -920,22 +920,22 @@ listing_file_attrs_should_work_properly_in_public_data_mode(Config) ->
     % Assert that when listing in normal mode all space files are returned
     ?assertMatch(
         {ok, [{DirGuid, _}, {File1Guid, _}, {File2Guid, _}, {File3Guid, _}]},
-        lfm_proxy:get_children(Worker, NormalSessId, ?FILE_REF(SpaceGuid), 0, 100)
+        lfm_proxy:get_children(Worker, NormalSessId, ?FILE_REF(SpaceDirGuid), 0, 100)
     ),
 
     % Assert that listing in public_data mode should return nothing as there are no shares exposed as public data
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_children(Worker, PublicDataSessId, ?FILE_REF(SpaceGuid), 0, 100)
+        lfm_proxy:get_children(Worker, PublicDataSessId, ?FILE_REF(SpaceDirGuid), 0, 100)
     ),
 
     BuildShareRootDirFun = fun(ShareId) ->
-        file_id:pack_share_guid(fslogic_file_id:shareid_to_share_root_dir_uuid(ShareId), SpaceId, ShareId)
+        file_id:pack_share_guid(share_container:uuid(ShareId), SpaceId, ShareId)
     end,
 
     SpaceShareId = <<"spaceshare">>,
     SpaceShareRootDirGuid = BuildShareRootDirFun(SpaceShareId),
-    SpaceShareGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
+    SpaceShareGuid = file_id:guid_to_share_guid(SpaceDirGuid, SpaceShareId),
     create_share(Worker, SpaceShareId, <<"szer">>, SpaceId, SpaceShareGuid, ?DIRECTORY_TYPE, <<"handle">>),
 
     Share1Id = <<"share1">>,
@@ -964,27 +964,27 @@ listing_file_attrs_should_work_properly_in_public_data_mode(Config) ->
     {ok, _, ListingToken} = ?assertMatch(
         {ok, [
             #file_attr{
-                guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = undefined,
+                guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = SpaceGuid,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = undefined, owner_id = undefined
+                shares = [DirShareId], provider_id = undefined, owner_id = undefined
             },
             #file_attr{
-                guid = Share1RootDirGuid, name = Share1Id, mode = 8#005, parent_guid = undefined,
+                guid = Share1RootDirGuid, name = Share1Id, mode = 8#005, parent_guid = SpaceGuid,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = undefined, owner_id = undefined
+                shares = [Share1Id], provider_id = undefined, owner_id = undefined
             },
             #file_attr{
-                guid = Share4RootDirGuid, name = Share4Id, mode = 8#005, parent_guid = undefined,
+                guid = Share4RootDirGuid, name = Share4Id, mode = 8#005, parent_guid = SpaceGuid,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = undefined, owner_id = undefined
+                shares = [Share4Id], provider_id = undefined, owner_id = undefined
             },
             #file_attr{
-                guid = SpaceShareRootDirGuid, name = SpaceShareId, mode = 8#005, parent_guid = undefined,
+                guid = SpaceShareRootDirGuid, name = SpaceShareId, mode = 8#005, parent_guid = SpaceGuid,
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
-                shares = [], provider_id = undefined, owner_id = undefined
+                shares = [SpaceShareId], provider_id = undefined, owner_id = undefined
             }
         ], _},
-        lfm_proxy:get_children_attrs(Worker, PublicDataSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})
+        lfm_proxy:get_children_attrs(Worker, PublicDataSessId, ?FILE_REF(SpaceDirGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})
     ),
     ?assert(file_listing:is_finished(ListingToken)),
 
