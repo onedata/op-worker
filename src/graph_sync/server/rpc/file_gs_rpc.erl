@@ -92,6 +92,12 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"not a regular file">>);
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
+            SpaceId = file_id:guid_to_space_id(FileGuid),
+            file_upload_utils:verbose_info(
+                "Registering file upload (user_id: ~ts, session_id: ~ts, space_id: ~ts, guid: ~ts)",
+                [UserId, SessionId, SpaceId, FileGuid]
+            ),
+
             ok = file_upload_manager:register_upload(UserId, FileGuid),
             {ok, #{}};
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0}} ->
@@ -103,12 +109,19 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
 
 -spec deregister_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
-deregister_file_upload(?USER(UserId), Data) ->
+deregister_file_upload(?USER(UserId, SessionId), Data) ->
     SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
     file_upload_manager:deregister_upload(UserId, FileGuid),
+
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    file_upload_utils:verbose_info(
+        "Degistered file upload (user_id: ~ts, session_id: ~ts, space_id: ~ts, guid: ~ts)",
+        [UserId, SessionId, SpaceId, FileGuid]
+    ),
+
     {ok, #{}}.
 
 
