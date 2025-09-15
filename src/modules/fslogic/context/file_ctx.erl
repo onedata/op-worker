@@ -1110,10 +1110,8 @@ file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     end;
 file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = Doc}) ->
     case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
-        {false, false} ->
-            {?FILE_EXISTS, FileCtx#file_ctx{file_doc = Doc}};
-        _ ->
-            {?FILE_DELETED, FileCtx}
+        {false, false} -> {?FILE_EXISTS, FileCtx};
+        _ -> {?FILE_DELETED, FileCtx}
     end.
 
 
