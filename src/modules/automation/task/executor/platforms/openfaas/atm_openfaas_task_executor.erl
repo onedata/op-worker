@@ -409,7 +409,7 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
 %% @private
 -spec add_default_properties(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_default_properties(FunctionDefinition, #initiation_ctx{openfaas_config = OpenfaasConfig}) ->
+add_default_properties(FunctionDefinition, InitiationCtx) ->
     DefaultProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
         case op_worker:get_env(EnvVar, undefined) of
             undefined ->
@@ -430,15 +430,44 @@ add_default_properties(FunctionDefinition, #initiation_ctx{openfaas_config = Ope
         {<<"annotations">>, openfaas_function_annotations}
     ]),
 
-    EnvVars = maps:get(<<"envVars">>, DefaultProperties, #{}),
-    DefaultProperties#{<<"envVars">> => EnvVars#{
+    DefaultProperties#{
+        <<"envVars">> => maps:merge(
+            maps:get(<<"envVars">>, DefaultProperties, #{}),
+            build_system_env_vars(InitiationCtx)
+        )
+    }.
+
+
+%% @private
+-spec build_system_env_vars(initiation_ctx()) -> #{binary() => binary()}.
+build_system_env_vars(#initiation_ctx{
+    openfaas_config = OpenfaasConfig,
+    executor = #atm_openfaas_task_executor{operation_spec = OperationSpec}
+}) ->
+    SystemEnvVars0 = #{
         <<"DEBUG_MODE">> => str_utils:to_binary(
             atm_openfaas_config:should_enable_function_debug_mode(OpenfaasConfig)
         ),
         <<"VERIFY_SSL_CERTIFICATES">> => str_utils:to_binary(
             not atm_openfaas_config:should_disable_tls_verification(OpenfaasConfig)
         )
-    }}.
+    },
+    case OperationSpec of
+        #atm_openfaas_operation_spec{
+            docker_execution_options = #atm_docker_execution_options{
+                mount_oneclient = true,
+                oneclient_mount_point = MountPoint
+            }
+        } ->
+            SystemEnvVars0#{
+                <<"ONECLIENT_MOUNTED">> => <<"true">>,
+                <<"ONECLIENT_MOUNT_POINT">> => MountPoint
+            };
+        _ ->
+            SystemEnvVars0#{
+                <<"ONECLIENT_MOUNTED">> => <<"false">>
+            }
+    end.
 
 
 %% @private

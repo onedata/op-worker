@@ -146,6 +146,20 @@ sanitize_params(#op_req{
             % Do not do anything - exception will be raised by middleware_sanitizer
             RequiredParamsDependingOnAspect
     end,
+    PosixPermissionsValidateFun = fun(Key) ->
+        fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                    {true, ValidMode};
+                _ ->
+                    % TODO VFS-7536 add basis of number system to ?ERR_BAD_VALUE_NOT_IN_RANGE
+                    throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), Key, 0, 8#1777))
+            catch _:_ ->
+                % TODO VFS-7536 add basis of number system to ?ERR_BAD_VALUE_NOT_IN_RANGE
+                throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), Key))
+            end
+        end
+    end,
     AllOptionalParams = OptionalParamsDependingOnAspect#{
         <<"type">> => {binary, fun(TypeBinary) ->
             try
@@ -156,18 +170,8 @@ sanitize_params(#op_req{
                 ])))
             end
         end},
-        <<"mode">> => {binary, fun(Mode) ->
-            try binary_to_integer(Mode, 8) of
-                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
-                    {true, ValidMode};
-                _ ->
-                    % TODO VFS-7536 add basis of number system to ?ERR_BAD_VALUE_NOT_IN_RANGE
-                    throw(?ERR_BAD_VALUE_NOT_IN_RANGE(?err_ctx(), <<"mode">>, 0, 8#1777))
-            catch _:_ ->
-                % TODO VFS-7536 add basis of number system to ?ERR_BAD_VALUE_NOT_IN_RANGE
-                throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), <<"mode">>))
-            end
-        end},
+        <<"posixPermissions">> => {binary, PosixPermissionsValidateFun(<<"posixPermissions">>)},
+        <<"mode">> => {binary, PosixPermissionsValidateFun(<<"mode">>)},
         <<"offset">> => {integer, {not_lower_than, 0}},
         <<"update_existing">> => {boolean, any}
     },
@@ -247,12 +251,12 @@ process_request(#op_req{
 
     {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
         ?DIRECTORY_TYPE ->
-            Mode = maps:get(<<"mode">>, Params, ?DEFAULT_DIR_PERMS),
-            {DirGuid, _NewFileCreated} = create(fun lfm:mkdir/4, SessionId, ParentGuid, Name, Mode, UpdateExisting),
+            PosixPermissions = maps:get(<<"posixPermissions">>, Params, maps:get(<<"mode">>, Params, ?DEFAULT_DIR_PERMS)),
+            {DirGuid, _NewFileCreated} = create(fun lfm:mkdir/4, SessionId, ParentGuid, Name, PosixPermissions, UpdateExisting),
             {DirGuid, Req};
         ?REGULAR_FILE_TYPE ->
-            Mode = maps:get(<<"mode">>, Params, ?DEFAULT_FILE_PERMS),
-            {FileGuid, NewFileCreated} = create(fun lfm:create/4, SessionId, ParentGuid, Name, Mode, UpdateExisting),
+            PosixPermissions = maps:get(<<"posixPermissions">>, Params, maps:get(<<"mode">>, Params, ?DEFAULT_FILE_PERMS)),
+            {FileGuid, NewFileCreated} = create(fun lfm:create/4, SessionId, ParentGuid, Name, PosixPermissions, UpdateExisting),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
