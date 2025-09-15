@@ -721,7 +721,6 @@ set_file_mode_test(Config) ->
                     end
                 }
             ],
-            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId, set_mode_data_spec()
             )
@@ -801,8 +800,8 @@ set_mode_data_spec() ->
     #data_spec{
         at_least_one = [<<"mode">>, <<"posixPermissions">>],
         correct_values = #{
-            <<"mode">> => [<<"0000">>, <<"0111">>, <<"0544">>, <<"0707">>],
-            <<"posixPermissions">> => [<<"0000">>, <<"0111">>, <<"0544">>, <<"0707">>]
+            <<"mode">> => [<<"0111">>, <<"0544">>],
+            <<"posixPermissions">> => [<<"0000">>, <<"0707">>]
         },
         bad_values = [
             {<<"mode">>, true, ?ERR_BAD_VALUE_INTEGER(<<"mode">>)},
