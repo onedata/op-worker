@@ -1269,7 +1269,7 @@ get_symlink_distribution_test(Config) ->
                     type = rest,
                     prepare_args_fun = build_get_distribution_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(_TestCtx, {ok, RespCode, _RespHeaders, _RespBody}) ->
-                        ?assertEqual(?HTTP_422_UNPROCESSABLE_CONTENT, RespCode)
+                        ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode)
                     end
                 }
             ]
