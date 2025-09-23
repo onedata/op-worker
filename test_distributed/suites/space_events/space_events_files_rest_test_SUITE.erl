@@ -51,7 +51,7 @@ all() ->
 -define(assert_deleted_events(__EXP_STATE, __SSE_CLIENT_PID, __FILE_GUID),
     ?assertEqual(
         __EXP_STATE,
-        check_is_file_deleted_from_events(get_events_for_file(__SSE_CLIENT_PID, __FILE_GUID)),
+        check_for_file_deleted_event(get_events_for_file(__SSE_CLIENT_PID, __FILE_GUID)),
         ?ATTEMPTS
     )
 ).
@@ -283,7 +283,6 @@ deleted_events_test(_Config) ->
     % while deleting dir, at least for now, does not produce events
     % NOTE: rm will choose random provider for removal (not necessarily krakow)
     onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildDirGuid),
-    timer:sleep(timer:seconds(2)),
     ?assert_deleted_events(false, SSEClientPid, ChildDirGuid).
 
 
@@ -386,7 +385,7 @@ get_events_for_file(SSEClientPid, FileGuid) ->
 
 
 %% @private
-check_is_file_deleted_from_events(Events) ->
+check_for_file_deleted_event(Events) ->
     lists:any(fun
         (#{event_type := <<"deleted">>}) -> true;
         (_) -> false

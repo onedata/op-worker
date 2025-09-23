@@ -28,8 +28,12 @@
 %%% - `times`
 %%% - `file_location`
 %%%
+%%% === Monitoring Scope ===
+%%%
 %%% Only direct children of specified directories are monitored - there is
-%%% no recursive monitoring of subdirectories.
+%%% no recursive monitoring of subdirectories. To monitor files in nested
+%%% directories, each subdirectory must be explicitly included in the
+%%% subscription specification.
 %%%
 %%% == Subscription specification ==
 %%%
@@ -62,15 +66,61 @@
 %%%
 %%% == Event format ==
 %%%
-%%% SSE events contain:
-%%% - `id` - unique sequence number from Couchbase
-%%% - `event` - always "changedOrCreated"
-%%% - `data` - JSON with fileId, parentFileId, and requested attributes
+%%% The system generates two types of events sent via SSE:
+%%%
+%%% === File Changed/Created Events ===
+%%% - `id` - unique sequence number from Couchbase changes feed
+%%% - `event` - "changedOrCreated"
+%%% - `data` - JSON containing:
+%%%   - `fileId` - GUID of the affected file
+%%%   - `parentFileId` - GUID of the parent directory
+%%%   - `attributes` - requested file attributes as specified in the subscription
+%%%
+%%% === File Deleted Events ===
+%%% - `id` - unique sequence number from Couchbase changes feed
+%%% - `event` - "deleted"
+%%% - `data` - JSON containing:
+%%%   - `fileId` - GUID of the deleted file
+%%%   - `parentFileId` - GUID of the parent directory
 %%%
 %%% == Performance notes ==
 %%%
 %%% Authorization checks are parallelized up to `?MAX_AUTHZ_VERIFY_PROCS`
 %%% concurrent processes to avoid blocking on permission verification.
+%%%
+%%% == Important Caveats and Limitations ==
+%%%
+%%% Due to the architecture based on Couchbase changes feed, several important
+%%% behaviors and edge cases must be understood:
+%%%
+%%% === Document Field Granularity ===
+%%% Individual document fields are not monitored separately, and the change
+%%% notification does not indicate which specific field was modified. The system
+%%% only knows that *some* field in the document changed. Therefore:
+%%% - All observed attributes for a document type are sent to clients, even if
+%%%   only a non-observed field was actually modified
+%%% - Clients must compare received data with their cached state to determine
+%%%   what actually changed
+%%% - This may result in "false positive" change notifications
+%%%
+%%% === Event Ordering and Race Conditions ===
+%%% The Couchbase changes feed does not guarantee strict ordering across different
+%%% document types. Specifically:
+%%% - A `deleted` event is triggered by changes to the `file_meta` document
+%%% - Changes to related documents (`times`, `file_location`) may arrive after
+%%%   the deletion notification
+%%% - Clients may receive `changed_or_created` events for a file that was already
+%%%   reported as deleted
+%%% - **Important**: Always verify file existence before processing change events
+%%%
+%%% === Duplicate Deletion Events ===
+%%% A `file_meta` document may continue to be modified even after being marked
+%%% as deleted, appearing multiple times in the changes feed. This means:
+%%% - The same file deletion may trigger multiple `deleted` events
+%%% - Clients should be idempotent when handling deletion notifications
+%%% - Subsequent deletion events for the same file should be ignored
+%%%
+%%% == Client Implementation Guidelines ==
 %%%
 %%% @see space_file_events_stream_handler
 %%% @see space_files_monitor_sup
