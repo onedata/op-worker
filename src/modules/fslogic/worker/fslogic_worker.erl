@@ -154,7 +154,7 @@ supervisor_children_spec() ->
         auth_cache:spec(),
         lfm_handles_monitor:spec(),
         transfer_onf_stats_aggregator:spec(),
-        space_files_monitor_sup:spec()
+        files_monitoring_sup:spec()
     ].
 
 
