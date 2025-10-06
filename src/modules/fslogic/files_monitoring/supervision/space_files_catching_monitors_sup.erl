@@ -65,7 +65,7 @@ start_link(SpaceId) ->
     supervisor:start_link(?MODULE, [SpaceId]).
 
 
--spec start_catching_monitor(pid(), pid(), space_files_monitor:subscribe_req()) ->
+-spec start_catching_monitor(pid(), pid(), space_files_monitor_common:subscribe_req()) ->
     {ok, pid()} | {error, term()}.
 start_catching_monitor(SupervisorPid, MainMonitorPid, SubscribeReq) ->
     supervisor:start_child(SupervisorPid, [MainMonitorPid, SubscribeReq]).

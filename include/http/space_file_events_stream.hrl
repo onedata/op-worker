@@ -21,6 +21,20 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 
+-record(file_deleted_event, {
+    id :: binary(),
+    file_guid :: file_id:file_guid(),
+    parent_file_guid :: file_id:file_guid()
+}).
+
+-record(file_changed_or_created_event, {
+    id :: binary(),
+    file_guid :: file_id:file_guid(),
+    parent_file_guid :: file_id:file_guid(),
+    doc_type :: space_files_monitor_common:doc_type(),
+    file_attr :: file_attr:record()
+}).
+
 % ?attr_name belongs to ?LINK_TREE_FILE_ATTRS attr group BUT the link docs are only checked
 % when either:
 % - other attrs from that group (file name conflicts related ones) are specified
@@ -36,24 +50,35 @@
     ]) -- ?INTERNAL_FILE_ATTRS
 ).
 
-
 -record(space_files_monitoring_spec, {
     observed_dirs :: [file_id:file_guid()],
-    observed_attrs_per_doc :: space_files_monitor:observed_attrs_per_doc()
+    observed_attrs_per_doc :: space_files_monitor_common:observed_attrs_per_doc()
 }).
 
--record(file_deleted_event, {
-    id :: binary(),
-    file_guid :: file_id:file_guid(),
-    parent_file_guid :: file_id:file_guid()
+-record(subscribe_req, {
+    handler_pid :: pid(),
+    session_id :: session:id(),
+    files_monitoring_spec :: space_files_monitoring_spec:t(),
+    since_seq :: undefined | couchbase_changes:seq()
 }).
 
--record(file_changed_or_created_event, {
-    id :: binary(),
-    file_guid :: file_id:file_guid(),
-    parent_file_guid :: file_id:file_guid(),
-    doc_type :: file_meta | times | file_location,
-    file_attr :: file_attr:record()
+-record(docs_change_notification, {
+    docs :: [datastore:doc()]
+}).
+
+-record(observer, {
+    session_id :: session:id(),
+    files_monitoring_spec :: space_files_monitoring_spec:t()
+}).
+
+-record(dir_monitoring_spec, {
+    observers :: [pid()],
+    observed_attrs_per_doc :: space_files_monitor_common:observed_attrs_per_doc()
+}).
+
+-record(monitoring, {
+    observers = #{} :: #{pid() => space_files_monitor_common:observer()},
+    dir_monitoring_specs = #{} :: #{file_id:file_guid() => space_files_monitor_common:dir_monitoring_spec()}
 }).
 
 
