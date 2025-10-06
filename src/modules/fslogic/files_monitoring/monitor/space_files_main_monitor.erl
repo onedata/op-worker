@@ -16,7 +16,6 @@
 %%%   - Timeout when no observers AND no catching monitors exist
 %%% 
 %%% NOTE: Only one main monitor exists per actively monitored space.
-%%% TODO: ensure couchbase docs changes do not prevent shutdown due to inactivity (such messages can disrupt inactivity timeout)
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_files_main_monitor).
@@ -51,13 +50,16 @@
     changes_stream_pid :: pid() | undefined,
     current_seq = 0 :: couchbase_changes:seq(),
 
-    monitoring :: space_files_monitor_common:monitoring()
+    monitoring :: space_files_monitor_common:monitoring(),
+
+    inactivity_timer = undefined :: undefined | reference()
 }).
 -type state() :: #state{}.
 
 
 %% The process is supposed to die after ?INACTIVITY_PERIOD_MS time of idling (no subscribers)
--define(INACTIVITY_PERIOD_MS, 10_000).
+-define(INACTIVITY_PERIOD_MS, op_worker:get_env(space_files_monitor_inactivity_period_ms, 10_000)).
+-define(SHUTDOWN_INACTIVE_REQ, shutdown_inactive).
 
 
 %%%===================================================================
@@ -119,19 +121,19 @@ init([SpaceId, SpaceMonitoringSupPid]) ->
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
     {reply, Reply :: term(), state()} |
-    {reply, Reply :: term(), state(), non_neg_integer()} |
-    {noreply, state()} |
-    {noreply, state(), non_neg_integer()}.
+    {noreply, state()}.
 handle_call(#subscribe_req{since_seq = SinceSeq}, _From, State = #state{current_seq = CurrentSeq}) when
     is_integer(SinceSeq) andalso CurrentSeq > SinceSeq
 ->
     %% Client is behind - reject and tell to start catching
-    {reply, {error, {main_ahead, CurrentSeq}}, State, ?INACTIVITY_PERIOD_MS};
+    reply({error, {main_ahead, CurrentSeq}}, State);
 
 handle_call(SubscribeReq = #subscribe_req{}, _From, State) ->
     case space_files_monitor_common:add_observer(State#state.monitoring, SubscribeReq) of
-        {ok, NewMonitoring} -> {reply, ok, State#state{monitoring = NewMonitoring}};
-        {error, _} = Error -> {reply, Error, State, ?INACTIVITY_PERIOD_MS}
+        {ok, NewMonitoring} ->
+            reply(ok, State#state{monitoring = NewMonitoring});
+        {error, _} = Error ->
+            reply(Error, State)
     end;
 
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
@@ -140,29 +142,28 @@ handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     NewState = State#state{
         current_seq = space_files_monitor_common:process_docs(ChangedDocs, State#state.monitoring)
     },
-    {noreply, NewState, ?INACTIVITY_PERIOD_MS};
+    noreply(NewState);
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
-    {noreply, State, ?INACTIVITY_PERIOD_MS}.
+    noreply(State).
 
 
 -spec handle_cast(Request :: term(), state()) ->
-    {noreply, state(), non_neg_integer()}.
+    {noreply, state()}.
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
-    {noreply, State, ?INACTIVITY_PERIOD_MS}.
+    noreply(State).
 
 
 -spec handle_info(timeout() | term(), state()) ->
     {noreply, state()} |
-    {noreply, state(), non_neg_integer()} |
     {stop, term(), state()}.
 handle_info({'EXIT', ObserverPid, _Reason}, State = #state{}) ->
     NewState = State#state{
         monitoring = space_files_monitor_common:remove_observer(State#state.monitoring, ObserverPid)
     },
-    {noreply, NewState, ?INACTIVITY_PERIOD_MS};
+    noreply(NewState);
 
 handle_info(stream_ended, State = #state{}) ->
     ?error(
@@ -171,22 +172,22 @@ handle_info(stream_ended, State = #state{}) ->
     ),
     {stop, {shutdown, stream_ended}, State};
 
-handle_info(timeout, State = #state{}) ->
-    case should_timeout(State) of
+handle_info(?SHUTDOWN_INACTIVE_REQ, State = #state{}) ->
+    case is_active(State) of
         true ->
+            noreply(State);
+        false ->
             ?info(
                 "[ space file events ]: Stopping monitor for space '~ts' due to inactivity "
                 "(no observers and no catching monitors)",
                 [State#state.space_id]
             ),
-            {stop, {shutdown, timeout}, State};
-        false ->
-            {noreply, State}
+            {stop, {shutdown, timeout}, State}
     end;
 
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
-    {noreply, State, ?INACTIVITY_PERIOD_MS}.
+    noreply(State).
 
 
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), state()) ->
@@ -207,26 +208,58 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks if monitor should shutdown due to inactivity.
-%% Main monitor exits only when:
-%%   1. No direct observers (all clients disconnected)
-%%   2. No catching monitors exist (no one is catching up)
-%% @end
-%%--------------------------------------------------------------------
--spec should_timeout(state()) -> boolean().
-should_timeout(State) ->
+-spec reply(Response, state()) -> {reply, Response, state()} when Response :: term().
+reply(Response, State) ->
+    {reply, Response, verify_activity(State)}.
+
+
+%% @private
+-spec noreply(state()) -> {noreply, state()}.
+noreply(State) ->
+    {noreply, verify_activity(State)}.
+
+
+%% @private
+-spec verify_activity(state()) -> state().
+verify_activity(State) ->
+    case is_active(State) of
+        true -> cancel_inactivity_shutdown(State);
+        false -> schedule_inactivity_shutdown(State)
+    end.
+
+
+%% @private
+-spec is_active(state()) -> boolean().
+is_active(State) ->
     case space_files_monitor_common:has_observers(State#state.monitoring) of
         true ->
-            false;
+            true;  %% Has direct observers - active
         false ->
             CatchingSupPid = space_files_monitoring_sup:get_catching_monitors_sup_pid(
                 State#state.space_monitoring_sup_pid
             ),
             case space_files_catching_monitors_sup:get_active_children_count(CatchingSupPid) of
-                0 -> true;
-                _ -> false
+                0 -> false;  %% 0 catching monitors - inactive
+                _ -> true  %% > 0 catching monitors - active
             end
     end.
+
+
+%% @private
+-spec schedule_inactivity_shutdown(state()) -> state().
+schedule_inactivity_shutdown(#state{inactivity_timer = undefined} = State) ->
+    State#state{inactivity_timer = erlang:send_after(
+        ?INACTIVITY_PERIOD_MS, self(), ?SHUTDOWN_INACTIVE_REQ
+    )};
+schedule_inactivity_shutdown(State) ->
+    State.
+
+
+%% @private
+-spec cancel_inactivity_shutdown(state()) -> state().
+cancel_inactivity_shutdown(#state{inactivity_timer = undefined} = State) ->
+    State;
+cancel_inactivity_shutdown(#state{inactivity_timer = TimerRef} = State) ->
+    erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]),
+    State#state{inactivity_timer = undefined}.
