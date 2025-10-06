@@ -34,18 +34,14 @@
 %% Supervisor callbacks
 -export([init/1]).
 
--opaque id() :: {?MODULE, od_space:id()}.
--export_type([id/0]).
-
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 
--spec id() -> id().
-id() ->
-    ?MODULE.
+-spec id() -> ?MODULE.
+id() -> ?MODULE.
 
 
 -spec spec(od_space:id()) ->
@@ -73,7 +69,7 @@ start_catching_monitor(SupervisorPid, MainMonitorPid, SubscribeReq) ->
 
 -spec get_active_children_count(pid()) -> non_neg_integer().
 get_active_children_count(SupervisorPid) ->
-    #{active := Count} = supervisor:count_children(SupervisorPid),
+    {active, Count} = lists:keyfind(active, 1, supervisor:count_children(SupervisorPid)),
     Count.
 
 

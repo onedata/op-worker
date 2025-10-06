@@ -46,6 +46,8 @@
 
 -type file_deleted_event() :: #file_deleted_event{}.
 -type file_changed_or_created_event() :: #file_changed_or_created_event{}.
+
+-type event_type() :: deleted | changed_or_created.
 -type event() :: file_deleted_event() | file_changed_or_created_event().
 
 -record(process_doc_ctx, {

@@ -101,7 +101,7 @@ init([SpaceId]) ->
 
 
 %% @private
--spec get_child_pid(pid(), child_id()) -> pid() | undefined.
+-spec get_child_pid(pid(), atom()) -> pid() | undefined.
 get_child_pid(SupervisorPid, ChildId) ->
     Children = supervisor:which_children(SupervisorPid),
 

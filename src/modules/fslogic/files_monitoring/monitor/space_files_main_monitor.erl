@@ -65,9 +65,8 @@
 %%%===================================================================
 
 
--spec id() -> id().
-id() ->
-    ?MODULE.
+-spec id() -> ?MODULE.
+id() -> ?MODULE.
 
 
 -spec spec(od_space:id(), pid()) -> supervisor:child_spec().
@@ -104,9 +103,7 @@ init([SpaceId, SpaceMonitoringSupPid]) ->
     ?info("[ space file events ]: Starting main monitor for space '~ts'", [SpaceId]),
 
     SinceSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
-    {ok, ChangesPid} = space_files_monitor_common:start_link_changes_stream(
-        SpaceId, SinceSeq
-    ),
+    ChangesPid = space_files_monitor_common:start_link_changes_stream(SpaceId, SinceSeq),
 
     State = #state{
         space_id = SpaceId,
@@ -134,7 +131,7 @@ handle_call(#subscribe_req{since_seq = SinceSeq}, _From, State = #state{current_
 handle_call(SubscribeReq = #subscribe_req{}, _From, State) ->
     case space_files_monitor_common:add_observer(State#state.monitoring, SubscribeReq) of
         {ok, NewMonitoring} -> {reply, ok, State#state{monitoring = NewMonitoring}};
-        ?ERR = Error -> {reply, Error, State, ?INACTIVITY_PERIOD_MS}
+        {error, _} = Error -> {reply, Error, State, ?INACTIVITY_PERIOD_MS}
     end;
 
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->

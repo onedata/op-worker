@@ -57,9 +57,8 @@
 %%%===================================================================
 
 
--spec id() -> id().
-id() ->
-    ?MODULE.
+-spec id() -> ?MODULE.
+id() -> ?MODULE.
 
 
 -spec spec(od_space:id()) -> supervisor:child_spec().
@@ -94,9 +93,7 @@ init([SpaceId, MainMonitorPid, SubscribeReq]) ->
         SpaceId, SinceSeq
     ]),
 
-    {ok, ChangesPid} = space_files_monitor_common:start_link_changes_stream(
-        SpaceId, SinceSeq
-    ),
+    ChangesPid = space_files_monitor_common:start_link_changes_stream(SpaceId, SinceSeq),
 
     {ok, Monitoring} = space_files_monitor_common:add_observer(#monitoring{}, SubscribeReq),
 
@@ -184,7 +181,6 @@ propose_takeover(State) ->
     case space_files_main_monitor:try_subscribe(MainPid, ObserverSubscribeReq) of
         ok ->
             %% Takeover accepted - die gracefully
-            erlang:unlink(ObserverSubscribeReq#subscribe_req.observer_pid),
             {stop, {shutdown, caught_up}, State};
 
         {error, {main_ahead, MainCurrentSeq}} ->
@@ -193,7 +189,7 @@ propose_takeover(State) ->
 
             {noreply, State#state{until_seq = MainCurrentSeq}};
 
-        ?ERR = Error ->
+        {error, _} = Error ->
             ?error("[ space file events ]: Takeover failed due to: ~tp, retrying on next docs change", [Error]),
             {noreply, State}
     end.
