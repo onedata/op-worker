@@ -30,6 +30,7 @@
     add_observer/2,
     remove_observer/2,
 
+    process_docs/2,
     process_doc/3
 ]).
 
@@ -208,7 +209,7 @@ has_observers(#monitoring{observers = Observers}) ->
 -spec add_observer(monitoring(), subscribe_req()) ->
     {ok, monitoring()} | errors:error().
 add_observer(Monitoring, SubscribeReq) ->
-    Pid = SubscribeReq#subscribe_req.handler_pid,
+    Pid = SubscribeReq#subscribe_req.observer_pid,
 
     case maps:is_key(Pid, Monitoring#monitoring.observers) of
         true ->
@@ -220,7 +221,7 @@ add_observer(Monitoring, SubscribeReq) ->
                 session_id = SubscribeReq#subscribe_req.session_id,
                 files_monitoring_spec = SubscribeReq#subscribe_req.files_monitoring_spec
             },
-            ok, add_observer(Monitoring, Pid, Observer)
+            {ok, add_observer(Monitoring, Pid, Observer)}
     end.
 
 
@@ -314,6 +315,20 @@ update_observed_attrs_per_doc(AttrsToObservePerDoc, ObservedAttrsPerDoc) ->
 %%%===================================================================
 %%% Document processing
 %%%===================================================================
+
+
+-spec process_docs([datastore:doc()], monitoring()) ->
+    couchbase_changes:seq().
+process_docs(ChangedDocs, Monitoring) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    LastSeenSeq = lists:foldl(fun(ChangedDoc, _PrevDocSeq) ->
+        try
+            space_files_monitor_common:process_doc(RootUserCtx, ChangedDoc, Monitoring)
+        catch Class:Reason:Stacktrace ->
+            ?error_exception("[ space file events ]: Failed to process doc ", Class, Reason, Stacktrace)
+        end,
+        ChangedDoc#document.seq
+    end, 0, ChangedDocs).
 
 
 -spec process_doc(user_ctx:ctx(), datastore:doc(), monitoring()) -> ok.

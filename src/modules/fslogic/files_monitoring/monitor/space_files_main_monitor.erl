@@ -34,8 +34,7 @@
     spec/2,
     start_link/2,
 
-    try_subscribe/2,
-    accept_takeover/5
+    try_subscribe/2
 ]).
 
 %% gen_server callbacks
@@ -88,28 +87,9 @@ start_link(SpaceId, SpaceMonitoringSupPid) ->
 
 
 -spec try_subscribe(pid(), space_files_monitor_common:subscribe_req()) ->
-    ok | {error, {behind, couchbase_changes:seq()}} | errors:error().
+    ok | {error, {main_ahead, couchbase_changes:seq()}} | errors:error().
 try_subscribe(MonitorPid, SubscribeReq) ->
     space_files_monitor_common:call_monitor(MonitorPid, SubscribeReq).
-
-
-%%--------------------------------------------------------------------
-%% TODO: finish takeover
-%% @doc
-%% Accepts a takeover from a catching monitor.
-%% Called by catching monitor when it has caught up.
-%% @end
-%%--------------------------------------------------------------------
--spec accept_takeover(
-    pid(),
-    pid(),
-    session:id(),
-    space_files_monitoring_spec:t(),
-    couchbase_changes:seq()
-) ->
-    takeover_accepted | {takeover_rejected, couchbase_changes:seq()}.
-accept_takeover(MainPid, HandlerPid, SessionId, Spec, CatchingSeq) ->
-    gen_server2:call(MainPid, {accept_takeover, HandlerPid, SessionId, Spec, CatchingSeq}, infinity).
 
 
 %%%===================================================================
@@ -121,7 +101,7 @@ accept_takeover(MainPid, HandlerPid, SessionId, Spec, CatchingSeq) ->
 init([SpaceId, SpaceMonitoringSupPid]) ->
     process_flag(trap_exit, true),
 
-    ?info("[ space file events ]: Starting monitor for space '~ts'", [SpaceId]),
+    ?info("[ space file events ]: Starting main monitor for space '~ts'", [SpaceId]),
 
     SinceSeq = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
     {ok, ChangesPid} = space_files_monitor_common:start_link_changes_stream(
@@ -149,54 +129,21 @@ handle_call(#subscribe_req{since_seq = SinceSeq}, _From, State = #state{current_
     is_integer(SinceSeq) andalso CurrentSeq > SinceSeq
 ->
     %% Client is behind - reject and tell to start catching
-    {reply, {error, {seq_behind, CurrentSeq}}, State, ?INACTIVITY_PERIOD_MS};
+    {reply, {error, {main_ahead, CurrentSeq}}, State, ?INACTIVITY_PERIOD_MS};
 
-handle_call(SubscribeReq, _From, State) ->
+handle_call(SubscribeReq = #subscribe_req{}, _From, State) ->
     case space_files_monitor_common:add_observer(State#state.monitoring, SubscribeReq) of
         {ok, NewMonitoring} -> {reply, ok, State#state{monitoring = NewMonitoring}};
         ?ERR = Error -> {reply, Error, State, ?INACTIVITY_PERIOD_MS}
     end;
 
-%% TODO: finish takeover
-handle_call({accept_takeover, HandlerPid, SessionId, Spec, CatchingSeq}, _From, State) ->
-    CurrentSeq = State#state.current_seq,
-    
-    case CurrentSeq of
-        CatchingSeq ->
-            %% Sequences match - accept takeover
-            try
-                erlang:link(HandlerPid),
-                Observer = #observer{session_id = SessionId, files_monitoring_spec = Spec},
-                NewState = space_files_monitor_common:add_observer(State, HandlerPid, Observer),
-                {reply, takeover_accepted, NewState}
-            catch
-                error:noproc ->
-                    %% Handler died before takeover completed
-                    ?debug("Handler ~p died before takeover", [HandlerPid]),
-                    {reply, takeover_accepted, State}
-            end;
-        CurrentSeq when CurrentSeq > CatchingSeq ->
-            %% Main is ahead - reject
-            {reply, {takeover_rejected, CurrentSeq}, State};
-        _ ->
-            %% Main is behind?! Shouldn't happen
-            ?error("Main behind catching: current=~p, catching=~p", [CurrentSeq, CatchingSeq]),
-            {reply, {takeover_rejected, CurrentSeq}, State}
-    end;
-
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    lists:foreach(fun(ChangedDoc) ->
-        try
-            space_files_monitor_common:process_doc(RootUserCtx, ChangedDoc, State#state.monitoring)
-        catch Class:Reason:Stacktrace ->
-            ?error_exception("[ space file events ]: Failed to process doc ", Class, Reason, Stacktrace)
-        end
-    end, ChangedDocs),
-
-    {noreply, State, ?INACTIVITY_PERIOD_MS};
+    NewState = State#state{
+        current_seq = space_files_monitor_common:process_docs(ChangedDocs, State#state.monitoring)
+    },
+    {noreply, NewState, ?INACTIVITY_PERIOD_MS};
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
@@ -204,7 +151,6 @@ handle_call(Request, _From, #state{} = State) ->
 
 
 -spec handle_cast(Request :: term(), state()) ->
-    {noreply, state()} |
     {noreply, state(), non_neg_integer()}.
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),

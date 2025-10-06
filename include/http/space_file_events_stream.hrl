@@ -56,10 +56,11 @@
 }).
 
 -record(subscribe_req, {
-    handler_pid :: pid(),
+    observer_pid :: pid(),
     session_id :: session:id(),
     files_monitoring_spec :: space_files_monitoring_spec:t(),
-    since_seq :: undefined | couchbase_changes:seq()
+    since_seq :: undefined | couchbase_changes:seq(),
+    until_seq = undefined :: undefined | couchbase_changes:seq()
 }).
 
 -record(docs_change_notification, {
