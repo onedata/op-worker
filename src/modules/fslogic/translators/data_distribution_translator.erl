@@ -66,7 +66,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                     <<"success">> => true,
                     <<"virtualSize">> => utils:undefined_to_null(VirtualSize),
                     <<"logicalSize">> => utils:undefined_to_null(LogicalSize),
-                    <<"distributionPerStorage">> => maps:map(fun
+                    <<"distributionPerStorageBackend">> => maps:map(fun
                         (_StorageId, {error, _} = Error) -> #{
                             <<"success">> => false,
                             <<"error">> => errors:to_json(Error)
@@ -76,7 +76,7 @@ gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_di
                             <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
                         }
                     end, PhysicalDirSizePerStorage),
-                    <<"locationsPerStorage">> => translate_locations_per_storage(LocationsPerStorage)
+                    <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
                 }
         end, DistributionPerProvider)
     };
@@ -114,8 +114,8 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
             #{
                 <<"success">> => true,
                 <<"virtualSize">> => VirtualSize,
-                <<"distributionPerStorage">> => DistributionPerStorage,
-                <<"locationsPerStorage">> => translate_locations_per_storage(LocationsPerStorage)
+                <<"distributionPerStorageBackend">> => DistributionPerStorage,
+                <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
             }
     end, FileBlocksPerProvider),
 
@@ -151,8 +151,8 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                 #{
                     <<"success">> => true,
                     <<"virtualSize">> => VirtualSize,
-                    <<"distributionPerStorage">> => DistributionPerStorage,
-                    <<"locationsPerStorage">> => translate_locations_per_storage(LocationsPerStorage)
+                    <<"distributionPerStorageBackend">> => DistributionPerStorage,
+                    <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
                 }
             end, FileBlocksPerProvider)
     }.
@@ -164,7 +164,7 @@ storage_locations_to_json(StorageLocations) ->
         <<"locationsPerProvider">> => maps:map(fun(_ProviderId, LocationsPerStorage) ->
             #{
                 <<"success">> => true,
-                <<"locationsPerStorage">> => translate_locations_per_storage(LocationsPerStorage)
+                <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
             }
         end, StorageLocations)
     }.

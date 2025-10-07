@@ -210,14 +210,14 @@ transfers_should_be_ordered_by_timestamps(Config) ->
             DomainP1 => #{
                 <<"success">> => true,
                 <<"virtualSize">> => S,
-                <<"distributionPerStorage">> => #{
+                <<"distributionPerStorageBackend">> => #{
                     StorageP1 => #{
                         <<"success">> => true, 
                         <<"blocks">> => [[0, S]], 
                         <<"physicalSize">> => S
                     }
                 },
-                <<"locationsPerStorage">> => #{
+                <<"locationsPerStorageBackend">> => #{
                     StorageP1 => #{
                         <<"success">> => true, 
                         <<"location">> => StoragePath
@@ -227,14 +227,14 @@ transfers_should_be_ordered_by_timestamps(Config) ->
             DomainP2 => #{
                 <<"success">> => true,
                 <<"virtualSize">> => S,
-                <<"distributionPerStorage">> => #{
+                <<"distributionPerStorageBackend">> => #{
                     StorageP2 => #{
                         <<"success">> => true, 
                         <<"blocks">> => [],  
                         <<"physicalSize">> => 0
                     }
                 },
-                <<"locationsPerStorage">> => #{
+                <<"locationsPerStorageBackend">> => #{
                     StorageP2 => #{
                         <<"success">> => true, 
                         <<"location">> => null

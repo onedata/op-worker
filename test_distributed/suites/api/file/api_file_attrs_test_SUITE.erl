@@ -1864,7 +1864,7 @@ get_file_storage_locations_test(Config, FileType, StorageType) ->
         case {FileType, StorageType} of
             {dir, s3} -> #{
                 <<"success">> => true,
-                <<"locationsPerStorage">> => #{
+                <<"locationsPerStorageBackend">> => #{
                     StorageId => #{
                         <<"success">> => false,
                         <<"error">> => errors:to_json(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, ?POSIX_COMPATIBLE_HELPERS))
@@ -1873,7 +1873,7 @@ get_file_storage_locations_test(Config, FileType, StorageType) ->
             };
             _ -> #{
                 <<"success">> => true,
-                <<"locationsPerStorage">> => #{
+                <<"locationsPerStorageBackend">> => #{
                     StorageId => #{
                         <<"success">> => true,
                         <<"location">> => Path
