@@ -154,16 +154,16 @@ event_loop(State = #state{
 
         {hackney_response, HackneyRef, {headers, _}} ->
             event_loop(State);
+        {hackney_response, HackneyRef, done} ->
+            exit(normal);
+        {hackney_response, HackneyRef, {error, _Reason}} ->
+            exit({shutdown, {hackney_error, _Reason}});
         {hackney_response, HackneyRef, Bin} ->
             {NewSSEState, NewEvents} = decode_events(Bin, SSEState, Events),
             event_loop(State#state{
                 events = NewEvents,
                 sse_parser_state = NewSSEState
             });
-        {hackney_response, HackneyRef, done} ->
-            exit(normal);
-        {hackney_response, HackneyRef, {error, _Reason}} ->
-            exit({shutdown, {hackney_error, _Reason}});
         {'DOWN', _, process, TestProcess, Reason} ->
             hackney:close(HackneyRef),
             exit(Reason)
@@ -174,9 +174,10 @@ event_loop(State = #state{
 send_request(Args = #{node := Node, space_id := SpaceId}) ->
     Path = <<"spaces/", SpaceId/binary, "/events/files">>,
 
+    Headers = maps:get(headers, Args, []),
     HeadersWithAuth = case maps:get(token, Args, undefined) of
-        undefined -> [];
-        Token -> [rest_test_utils:user_token_header(Token)]
+        undefined -> Headers;
+        Token -> [rest_test_utils:user_token_header(Token) | Headers]
     end,
 
     Payload = case maps:get(body_bin, Args, undefined) of

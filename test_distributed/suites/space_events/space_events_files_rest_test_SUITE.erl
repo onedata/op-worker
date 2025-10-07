@@ -35,7 +35,8 @@
     invalid_args_test/1,
     deleted_events_test/1,
     changed_or_created_events_test/1,
-    reconnect_without_last_event_id_test/1
+    reconnect_without_last_event_id_test/1,
+    reconnect_with_old_last_event_id_test/1
 ]).
 
 all() ->
@@ -46,7 +47,8 @@ all() ->
         invalid_args_test,
         deleted_events_test,
         changed_or_created_events_test,
-        reconnect_without_last_event_id_test
+        reconnect_without_last_event_id_test,
+        reconnect_with_old_last_event_id_test
     ]).
 
 
@@ -355,6 +357,53 @@ reconnect_without_last_event_id_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(Client2ReconnectedPid).
 
 
+reconnect_with_old_last_event_id_test(_Config) ->
+    TestEnv = create_test_env(krakow),
+
+    % Start control client for synchronization
+    ControlClientPid = start_client(TestEnv),
+
+    % Start Client2 that will reconnect
+    Client2Pid = start_client(TestEnv),
+
+    % Create File1 - both clients receive it
+    File1Guid = create_file_and_await_sync(TestEnv, <<"file1.txt">>, ControlClientPid),
+    await_event_for_file(Client2Pid, File1Guid),
+
+    % Extract Last-Event-Id from Client2
+    LastEventId = get_last_event_id(Client2Pid),
+
+    % Disconnect Client2
+    ok = space_file_events_test_sse_client:stop(Client2Pid),
+
+    % Generate 3 events while Client2 is disconnected (advancing sequence)
+    File2Guid = create_file_and_await_sync(TestEnv, <<"file2.txt">>, ControlClientPid),
+    File3Guid = create_file_and_await_sync(TestEnv, <<"file3.txt">>, ControlClientPid),
+    File4Guid = create_file_and_await_sync(TestEnv, <<"file4.txt">>, ControlClientPid),
+
+    % Reconnect Client2 with old Last-Event-Id
+    Client2ReconnectedPid = start_client_with_last_event_id(TestEnv, LastEventId),
+
+    % Wait for Client2 to receive all historical events (File2, File3, File4)
+    await_event_for_file(Client2ReconnectedPid, File2Guid),
+    await_event_for_file(Client2ReconnectedPid, File3Guid),
+    await_event_for_file(Client2ReconnectedPid, File4Guid),
+
+    % Generate new event after reconnection
+    File5Guid = create_file_and_await_sync(TestEnv, <<"file5.txt">>, ControlClientPid),
+
+    % Verify Client2 receives new event from main monitor
+    await_event_for_file(Client2ReconnectedPid, File5Guid),
+
+    % Verify event IDs are sequential (no gaps, no duplicates)
+    assert_all_client_events_sequential(Client2ReconnectedPid),
+    assert_all_client_events_sequential(ControlClientPid),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ControlClientPid),
+    ok = space_file_events_test_sse_client:stop(Client2ReconnectedPid).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -492,7 +541,7 @@ get_last_event_id(ClientPid) ->
 
 %% @private
 get_event_id(Event) ->
-    maps:get(id, Event).
+    maps:get(last_event_id, Event).
 
 
 %% @private
@@ -526,7 +575,7 @@ get_events_for_file(SSEClientPid, FileGuid) ->
 
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     lists:filter(fun
-        (#{event := <<"heartbeat">>}) ->
+        (#{event_type := <<"heartbeat">>}) ->
             false;
         (#{data := [EventData]}) ->
             maps:get(<<"fileId">>, EventData) =:= FileObjectId
@@ -549,3 +598,15 @@ get_data_attributes_from_changed_or_created_events(Events) ->
         (_) ->
             false
     end, Events).
+
+
+%% @private
+assert_all_client_events_sequential(ClientPid) ->
+    {ok, Events} = space_file_events_test_sse_client:get_events(ClientPid),
+
+    EventIds = [get_event_id(E) || E <- Events, maps:get(event, E, undefined) =/= <<"heartbeat">>],
+    EventIdsInt = [binary_to_integer(Id) || Id <- EventIds],
+    SortedEventIds = lists:sort(EventIdsInt),
+    UniqueSortedEventIds = lists:usort(EventIdsInt),
+
+    ?assertEqual(SortedEventIds, UniqueSortedEventIds).

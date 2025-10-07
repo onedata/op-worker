@@ -87,6 +87,8 @@ start_link(SpaceId, MainMonitorPid, SubscribeReq) ->
 -spec init([od_space:id() | pid() | space_files_monitor_common:subscribe_req()]) ->
     {ok, state()}.
 init([SpaceId, MainMonitorPid, SubscribeReq]) ->
+    process_flag(trap_exit, true),
+
     SinceSeq = SubscribeReq#subscribe_req.since_seq,
     UntilSeq = SubscribeReq#subscribe_req.until_seq,
     ?info("[ space file events ]: Starting catching monitor for space '~ts' from seq ~B", [
@@ -138,6 +140,9 @@ handle_cast(Request, #state{} = State) ->
 -spec handle_info(timeout() | term(), state()) ->
     {noreply, state()} |
     {stop, term(), state()}.
+handle_info({'EXIT', _ObserverPid, _Reason}, State = #state{}) ->
+    {stop, observer_died, State};
+
 handle_info(stream_ended, State = #state{}) ->
     ?error(
         "[ space file events ]: Couchbase changes stream ended for catching monitor space '~ts'",
