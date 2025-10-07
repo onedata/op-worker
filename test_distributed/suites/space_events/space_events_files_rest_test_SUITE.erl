@@ -23,33 +23,46 @@
 
 %% API
 -export([
-    all/0,
+    all/0, groups/0,
     init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 -export([
     non_existing_space_test/1,
-    unauthorized_client_test/1,
-    token_caveats_test/1,
     invalid_args_test/1,
     deleted_events_test/1,
     changed_or_created_events_test/1,
-    reconnect_without_last_event_id_test/1,
+
+    unauthorized_client_test/1,
+    token_caveats_test/1,
+
+    reconnect_without_catching_test/1,
     reconnect_with_old_last_event_id_test/1
 ]).
 
-all() ->
-    ?ALL([
+groups() -> [
+    {basic_tests, [sequential], [
         non_existing_space_test,
-        unauthorized_client_test,
-        token_caveats_test,
         invalid_args_test,
         deleted_events_test,
-        changed_or_created_events_test,
-        reconnect_without_last_event_id_test,
+        changed_or_created_events_test
+    ]},
+    {auth_tests, [sequential], [
+        unauthorized_client_test,
+        token_caveats_test
+    ]},
+    {reconnect_tests, [sequential], [
+        reconnect_without_catching_test,
         reconnect_with_old_last_event_id_test
-    ]).
+    ]}
+].
+
+all() -> [
+    {group, basic_tests},
+    {group, auth_tests},
+    {group, reconnect_tests}
+].
 
 
 -define(assert_deleted_events(__EXP_STATE, __SSE_CLIENT_PID, __FILE_GUID),
@@ -77,7 +90,7 @@ all() ->
 
 
 non_existing_space_test(_Config) ->
-   NonExistingSpaceId = <<"dummy_id">>,
+    NonExistingSpaceId = <<"dummy_id">>,
 
     ClientArgs = #{
         node => oct_background:get_random_provider_node(krakow),
@@ -90,77 +103,6 @@ non_existing_space_test(_Config) ->
         {error, {400, ?ERR_SPACE_NOT_SUPPORTED_BY(NonExistingSpaceId, _)}},
         space_file_events_test_sse_client:start(ClientArgs)
     ).
-
-
-unauthorized_client_test(_Config) ->
-    Space1Id = oct_background:get_space_id(space_krk_par_p),
-    Space1Guid = space_dir:guid(Space1Id),
-
-    ClientArgs = #{
-        node => oct_background:get_random_provider_node(krakow),
-        space_id => Space1Id,
-        observed_dirs => [Space1Guid]
-    },
-
-    % no token == guest auth
-    ?assertMatch(
-        {error, {401, ?ERR_UNAUTHORIZED(undefined)}},
-        space_file_events_test_sse_client:start(ClientArgs)
-    ),
-    % user not belonging to space
-    ?assertMatch(
-        {error, {403, ?ERR_FORBIDDEN}},
-        space_file_events_test_sse_client:start(ClientArgs#{
-            token => oct_background:get_user_access_token(user3)
-        })
-    ).
-
-
-token_caveats_test(_Config) ->
-    SpaceKrkId = oct_background:get_space_id(space_krk_par_p),
-    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
-    Token = oct_background:get_user_access_token(user2),
-
-    ClientArgs = #{
-        node => oct_background:get_random_provider_node(krakow),
-        space_id => SpaceKrkId,
-        token => Token,
-        observed_dirs => [SpaceKrkGuid]
-    },
-
-    % Request containing data caveats should succeed
-    DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceKrkId/binary>>]},
-    TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
-    {ok, ClientWithDataCaveat} = ?assertMatch(
-        {ok, _},
-        space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithDataCaveat})
-    ),
-    ok = space_file_events_test_sse_client:stop(ClientWithDataCaveat),
-
-    % Request containing invalid api caveat should be rejected
-    InvalidApiCaveat = #cv_api{whitelist = [
-        % valid caveat - operation check user perms and as such permission to get user record is required
-        {all, all, ?GRI_PATTERN(od_user, <<"*">>, <<"instance">>, '*')},
-        % invalid caveat
-        {all, all, ?GRI_PATTERN(op_space, <<"ASD">>, <<"changes">>)}
-    ]},
-    TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
-    ?assertMatch(
-        {error, {401, ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat))}},
-        space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithInvalidApiCaveat})
-    ),
-
-    % Request containing valid api caveat should succeed
-    ValidApiCaveat = #cv_api{whitelist = [
-        {all, all, ?GRI_PATTERN(od_user, <<"*">>, <<"instance">>, '*')},
-        {all, all, ?GRI_PATTERN(op_space, SpaceKrkId, <<"file_events">>)}
-    ]},
-    TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
-    {ok, ClientWithApiCaveat} = ?assertMatch(
-        {ok, _},
-        space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithValidApiCaveat})
-    ),
-    ok = space_file_events_test_sse_client:stop(ClientWithApiCaveat).
 
 
 invalid_args_test(_Config) ->
@@ -244,6 +186,14 @@ invalid_args_test(_Config) ->
         {
             #{body_json => #{<<"observedDirectories">> => [SpaceKrkObjectId], <<"observedAttributes">> => [<<"ASD">>]}},
             ?ERR_BAD_VALUE_NOT_ALLOWED(<<"observedAttributes">>, AllowedAttrs)
+        },
+        {
+            #{headers => [{<<"last-event-id">>, <<"last">>}]},
+            ?ERR_BAD_VALUE_INTEGER(<<"last-event-id">>)
+        },
+        {
+            #{headers => [{<<"last-event-id">>, <<"-1">>}]},
+            ?ERR_BAD_VALUE_TOO_LOW(<<"last-event-id">>, 0)
         }
     ])).
 
@@ -323,37 +273,122 @@ changed_or_created_events_test(_Config) ->
     ?assert_attr_changed_or_created_events(ExpAttrsForAttrChangedEvents2, SSEClientPid, ChildFileGuid).
 
 
-reconnect_without_last_event_id_test(_Config) ->
+unauthorized_client_test(_Config) ->
+    Space1Id = oct_background:get_space_id(space_krk_par_p),
+    Space1Guid = space_dir:guid(Space1Id),
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => Space1Id,
+        observed_dirs => [Space1Guid]
+    },
+
+    % no token == guest auth
+    ?assertMatch(
+        {error, {401, ?ERR_UNAUTHORIZED(undefined)}},
+        space_file_events_test_sse_client:start(ClientArgs)
+    ),
+    % user not belonging to space
+    ?assertMatch(
+        {error, {403, ?ERR_FORBIDDEN}},
+        space_file_events_test_sse_client:start(ClientArgs#{
+            token => oct_background:get_user_access_token(user3)
+        })
+    ).
+
+
+token_caveats_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk_par_p),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
+    Token = oct_background:get_user_access_token(user2),
+
+    ClientArgs = #{
+        node => oct_background:get_random_provider_node(krakow),
+        space_id => SpaceKrkId,
+        token => Token,
+        observed_dirs => [SpaceKrkGuid]
+    },
+
+    % Request containing data caveats should succeed
+    DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceKrkId/binary>>]},
+    TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
+    {ok, ClientWithDataCaveat} = ?assertMatch(
+        {ok, _},
+        space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithDataCaveat})
+    ),
+    ok = space_file_events_test_sse_client:stop(ClientWithDataCaveat),
+
+    % Request containing invalid api caveat should be rejected
+    InvalidApiCaveat = #cv_api{whitelist = [
+        % valid caveat - operation check user perms and as such permission to get user record is required
+        {all, all, ?GRI_PATTERN(od_user, <<"*">>, <<"instance">>, '*')},
+        % invalid caveat
+        {all, all, ?GRI_PATTERN(op_space, <<"ASD">>, <<"changes">>)}
+    ]},
+    TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
+    ?assertMatch(
+        {error, {401, ?ERR_UNAUTHORIZED(?ERR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat))}},
+        space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithInvalidApiCaveat})
+    ),
+
+    % Request containing valid api caveat should succeed
+    ValidApiCaveat = #cv_api{whitelist = [
+        {all, all, ?GRI_PATTERN(od_user, <<"*">>, <<"instance">>, '*')},
+        {all, all, ?GRI_PATTERN(op_space, SpaceKrkId, <<"file_events">>)}
+    ]},
+    TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
+    {ok, ClientWithApiCaveat} = ?assertMatch(
+        {ok, _},
+        space_file_events_test_sse_client:start(ClientArgs#{token => TokenWithValidApiCaveat})
+    ),
+    ok = space_file_events_test_sse_client:stop(ClientWithApiCaveat).
+
+
+reconnect_without_catching_test(_Config) ->
     TestEnv = create_test_env(krakow),
 
-    % Start TWO clients - Client1 stays connected (for synchronization), Client2 will disconnect
-    Client1Pid = start_client(TestEnv),
+    % Start control client (for synchronization) and client that will reconnect
+    ControlClientPid = start_client(TestEnv),
     Client2Pid = start_client(TestEnv),
 
     % Create File1 and ensure both clients receive it
-    File1Guid = create_file_and_await_sync(TestEnv,  <<"file1.txt">>, Client1Pid),
+    File1Guid = create_file_and_await_sync(TestEnv, <<"file1.txt">>, ControlClientPid),
     await_event_for_file(Client2Pid, File1Guid),
 
-    % Disconnect Client2 (Client1 stays connected for sync)
+    % Get Last-Event-Id for randomization
+    LastEventId = get_last_event_id(Client2Pid),
+
+    % Disconnect Client2
     ok = space_file_events_test_sse_client:stop(Client2Pid),
 
-    % Create File2 and File3 while Client2 is disconnected (Client1 confirms they're in system)
-    File2Guid = create_file_and_await_sync(TestEnv, <<"file2.txt">>, Client1Pid),
-    File3Guid = create_file_and_await_sync(TestEnv, <<"file3.txt">>, Client1Pid),
+    % Create File2 and File3 while Client2 is disconnected
+    File2Guid = create_file_and_await_sync(TestEnv, <<"file2.txt">>, ControlClientPid),
+    File3Guid = create_file_and_await_sync(TestEnv, <<"file3.txt">>, ControlClientPid),
 
-    % Reconnect Client2 WITHOUT Last-Event-Id (fresh connection)
-    Client2ReconnectedPid = start_client(TestEnv),
+    % Reconnect WITHOUT catching monitor (randomize scenario)
+    Client2ReconnectedPid = case rand:uniform(2) of
+        1 ->
+            % Scenario 1: No Last-Event-Id header (fresh connection)
+            ct:pal("Testing reconnect WITHOUT Last-Event-Id header"),
+            start_client(TestEnv);
+        2 ->
+            % Scenario 2: Future Last-Event-Id (client claims to be ahead)
+            FutureEventId = LastEventId + 1000,
+            ct:pal("Testing reconnect WITH future Last-Event-Id: ~p (current was ~p)", [FutureEventId, LastEventId]),
+            start_client_with_last_event_id(TestEnv, FutureEventId)
+    end,
 
     % Create File4 after reconnection
-    File4Guid = create_file_and_await_sync(TestEnv, <<"file4.txt">>, Client1Pid),
+    File4Guid = create_file_and_await_sync(TestEnv, <<"file4.txt">>, ControlClientPid),
     await_event_for_file(Client2ReconnectedPid, File4Guid),
 
-    % Verify Client2 does NOT have historical events (File2, File3)
+    % CRITICAL: Verify Client2 does NOT have historical events (File2, File3)
+    % This confirms no catching monitor was started
     assert_no_event_for_file(Client2ReconnectedPid, File2Guid),
     assert_no_event_for_file(Client2ReconnectedPid, File3Guid),
 
     % Cleanup
-    ok = space_file_events_test_sse_client:stop(Client1Pid),
+    ok = space_file_events_test_sse_client:stop(ControlClientPid),
     ok = space_file_events_test_sse_client:stop(Client2ReconnectedPid).
 
 

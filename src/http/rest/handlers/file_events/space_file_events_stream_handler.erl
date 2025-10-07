@@ -149,11 +149,22 @@ preauthorize(SpaceId, Auth) ->
 
 
 %% @private
--spec get_since_seq(cowboy_req:req()) -> undefined | couchbase_changes:seq().
+-spec get_since_seq(cowboy_req:req()) -> undefined | couchbase_changes:seq() | no_return().
 get_since_seq(Req) ->
-    case cowboy_req:header(<<"last-event-id">>, Req) of
-        undefined -> undefined;
-        LastEventId -> binary_to_integer(LastEventId)
+    Header = <<"last-event-id">>,
+
+    case cowboy_req:header(Header, Req) of
+        undefined ->
+            undefined;
+        LastEventId ->
+            try binary_to_integer(LastEventId) of
+                InvalidSeq when InvalidSeq < 0 ->
+                    throw(?ERR_BAD_VALUE_TOO_LOW(?err_ctx(), Header, 0));
+                ValidSeq ->
+                    ValidSeq
+            catch _:_ ->
+                throw(?ERR_BAD_VALUE_INTEGER(?err_ctx(), Header))
+            end
     end.
 
 
