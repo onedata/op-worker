@@ -30,8 +30,7 @@
     add_observer/2,
     remove_observer/2,
 
-    process_docs/2,
-    process_doc/3
+    process_docs/2
 ]).
 
 -type subscribe_req() :: #subscribe_req{}.
@@ -44,11 +43,12 @@
 
 -type monitoring() :: #monitoring{}.
 
+-type heartbeat_event() :: #heartbeat_event{}.
 -type file_deleted_event() :: #file_deleted_event{}.
 -type file_changed_or_created_event() :: #file_changed_or_created_event{}.
 
 -type event_type() :: deleted | changed_or_created.
--type event() :: file_deleted_event() | file_changed_or_created_event().
+-type event() :: heartbeat_event() | file_deleted_event() | file_changed_or_created_event().
 
 -record(process_doc_ctx, {
     root_user_ctx :: user_ctx:ctx(),
@@ -63,14 +63,24 @@
 -export_type([
     subscribe_req/0,
     observer/0, doc_type/0, observed_attrs_per_doc/0, dir_monitoring_spec/0, monitoring/0,
-    file_deleted_event/0, file_changed_or_created_event/0, event/0
+    heartbeat_event/0, file_deleted_event/0, file_changed_or_created_event/0, event/0
 ]).
 
 
 %% Maximum number of concurrent processes verifying whether subscribed observers
 %% can see produced events
 -define(MAX_AUTHZ_VERIFY_PROCS, op_worker:get_env(
-    max_authorize_space_files_observers_procs, 20
+    space_files_observers_max_authorize_procs, 20
+)).
+
+%% Minimum difference between current sequence and observer's last_seen_seq 
+%% to trigger a heartbeat event. Prevents reconnecting clients from replaying
+%% events that aren't relevant to their observed directories. For example, if
+%% threshold is 100 and a client hasn't received events for 100+ sequence numbers
+%% (because nothing changed in their observed directories), they'll receive a
+%% heartbeat to update their position and avoid replaying on reconnect.
+-define(LAST_SEEN_SEQ_HEARTBEAT_THRESHOLD, op_worker:get_env(
+    space_files_observers_last_seen_seq_heartbeat_threshold, 100
 )).
 
 
@@ -221,7 +231,11 @@ add_observer(Monitoring, SubscribeReq) ->
 
             Observer = #observer{
                 session_id = SubscribeReq#subscribe_req.session_id,
-                files_monitoring_spec = SubscribeReq#subscribe_req.files_monitoring_spec
+                files_monitoring_spec = SubscribeReq#subscribe_req.files_monitoring_spec,
+                last_seen_seq = case SubscribeReq#subscribe_req.since_seq of
+                    undefined -> 0;
+                    Seq -> Seq
+                end
             },
             {ok, add_observer(Monitoring, Pid, Observer)}
     end.
@@ -320,20 +334,24 @@ update_observed_attrs_per_doc(AttrsToObservePerDoc, ObservedAttrsPerDoc) ->
 
 
 -spec process_docs([datastore:doc()], monitoring()) ->
-    couchbase_changes:seq().
+    {couchbase_changes:seq(), monitoring()}.
 process_docs(ChangedDocs, Monitoring) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    LastSeenSeq = lists:foldl(fun(ChangedDoc, _PrevDocSeq) ->
+    {LastSeenSeq, NewMonitoring} = lists:foldl(fun(ChangedDoc, {_PrevDocSeq, MonitoringAcc}) ->
         try
-            space_files_monitor_common:process_doc(RootUserCtx, ChangedDoc, Monitoring)
+            UpdatedMonitoring = process_doc(RootUserCtx, ChangedDoc, MonitoringAcc),
+            {ChangedDoc#document.seq, UpdatedMonitoring}
         catch Class:Reason:Stacktrace ->
-            ?error_exception("[ space file events ]: Failed to process doc ", Class, Reason, Stacktrace)
-        end,
-        ChangedDoc#document.seq
-    end, 0, ChangedDocs).
+            ?error_exception("[ space file events ]: Failed to process doc ", Class, Reason, Stacktrace),
+            {ChangedDoc#document.seq, MonitoringAcc}
+        end
+    end, {0, Monitoring}, ChangedDocs),
+
+    {LastSeenSeq, send_heartbeats_if_needed(LastSeenSeq, NewMonitoring)}.
 
 
--spec process_doc(user_ctx:ctx(), datastore:doc(), monitoring()) -> ok.
+%% @private
+-spec process_doc(user_ctx:ctx(), datastore:doc(), monitoring()) -> monitoring().
 process_doc(RootUserCtx, ChangedDoc, Monitoring) ->
     FileCtx = get_file_ctx(ChangedDoc),
 
@@ -351,14 +369,15 @@ process_doc(RootUserCtx, ChangedDoc, Monitoring) ->
 
             case get_authorized_observers(EventType, Ctx2) of
                 [] ->
-                    ok;
+                    Monitoring;
                 ObserverPids ->
                     Event = gen_event(EventType, Ctx2),
-                    broadcast_event(ObserverPids, Event)
+                    broadcast_event(ObserverPids, Event),
+                    update_observers_last_seen_seq(ObserverPids, ChangedDoc#document.seq, Monitoring)
             end;
 
         false ->
-            ok
+            Monitoring
     end.
 
 
@@ -531,6 +550,47 @@ gen_changed_or_created_event(#process_doc_ctx{
         doc_type = utils:record_type(ChangedDoc#document.value),
         file_attr = FileAttr
     }.
+
+
+%% @private
+-spec send_heartbeats_if_needed(couchbase_changes:seq(), monitoring()) ->
+    monitoring().
+send_heartbeats_if_needed(CurrentSeq, Monitoring = #monitoring{observers = Observers}) ->
+    SeqThreshold = ?LAST_SEEN_SEQ_HEARTBEAT_THRESHOLD,
+
+    ObserversToHeartbeat = lists:foldl(fun({ObserverPid, Observer}, AccPids) ->
+        case CurrentSeq - Observer#observer.last_seen_seq >= SeqThreshold of
+            true -> [ObserverPid | AccPids];
+            false -> AccPids
+        end
+    end, [], maps:to_list(Observers)),
+
+    case ObserversToHeartbeat of
+        [] ->
+            Monitoring;
+        _ ->
+            HeartbeatEvent = #heartbeat_event{
+                id = str_utils:to_binary(CurrentSeq)
+            },
+            broadcast_event(ObserversToHeartbeat, HeartbeatEvent),
+            update_observers_last_seen_seq(ObserversToHeartbeat, CurrentSeq, Monitoring)
+    end.
+
+
+%% @private
+-spec update_observers_last_seen_seq([pid()], couchbase_changes:seq(), monitoring()) ->
+    monitoring().
+update_observers_last_seen_seq(ObserverPids, Seq, Monitoring = #monitoring{observers = Observers}) ->
+    NewObservers = lists:foldl(fun(ObserverPid, ObserversAcc) ->
+        case maps:find(ObserverPid, ObserversAcc) of
+            {ok, Observer} ->
+                ObserversAcc#{ObserverPid => Observer#observer{last_seen_seq = Seq}};
+            error ->
+                ObserversAcc
+        end
+    end, Observers, ObserverPids),
+
+    Monitoring#monitoring{observers = NewObservers}.
 
 
 %% @private

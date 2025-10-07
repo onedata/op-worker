@@ -51,6 +51,10 @@ init(Req, _Opts) ->
 
 -spec info(space_files_monitor_common:event(), cowboy_req:req(), state()) ->
     {ok, cowboy_req:req(), state()}.
+info(Event = #heartbeat_event{}, Req, State) ->
+    stream_event(build_heartbeat_sse_event(Event), Req),
+    {ok, Req, State};
+
 info(Event = #file_deleted_event{}, Req, State) ->
     stream_event(build_file_deleted_sse_event(Event), Req),
     {ok, Req, State};
@@ -174,6 +178,17 @@ stream_event(Event, Req) ->
 -spec end_stream(cowboy_req:req()) -> ok.
 end_stream(Req) ->
     cowboy_req:stream_events(#{}, fin, Req).
+
+
+%% @private
+-spec build_heartbeat_sse_event(space_files_monitor_common:heartbeat_event()) ->
+    cow_sse:event().
+build_heartbeat_sse_event(#heartbeat_event{id = Id}) ->
+    #{
+        id => Id,
+        event => <<"heartbeat">>,
+        data => json_utils:encode(null)
+    }.
 
 
 %% @private

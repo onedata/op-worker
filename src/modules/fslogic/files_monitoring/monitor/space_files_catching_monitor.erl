@@ -115,8 +115,12 @@ init([SpaceId, MainMonitorPid, SubscribeReq]) ->
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
+    {NewSeq, NewMonitoring} = space_files_monitor_common:process_docs(
+        ChangedDocs, State#state.monitoring
+    ),
     propose_takeover(State#state{
-        current_seq = space_files_monitor_common:process_docs(ChangedDocs, State#state.monitoring)
+        current_seq = NewSeq,
+        monitoring = NewMonitoring
     });
 
 handle_call(Request, _From, #state{} = State) ->

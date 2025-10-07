@@ -21,6 +21,18 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 
+% A heartbeat event sent periodically to clients to keep them informed about the current
+% sequence number. This is necessary because a client may not receive any events for an
+% extended period if no changes occur in their observed directories. However, changes may
+% be happening elsewhere in the space, causing the database document sequences to advance.
+% If the client disconnects and reconnects, it will send the last sequence it observed to 
+% replay from, which may be significantly outdated. Without this heartbeat, the client 
+% would unnecessarily replay and process (then discard) all intermediate documents from 
+% that old sequence, even though none of them are relevant to its observed directories.
+-record(heartbeat_event, {
+    id :: binary()
+}).
+
 -record(file_deleted_event, {
     id :: binary(),
     file_guid :: file_id:file_guid(),
@@ -69,7 +81,8 @@
 
 -record(observer, {
     session_id :: session:id(),
-    files_monitoring_spec :: space_files_monitoring_spec:t()
+    files_monitoring_spec :: space_files_monitoring_spec:t(),
+    last_seen_seq :: couchbase_changes:seq()
 }).
 
 -record(dir_monitoring_spec, {
