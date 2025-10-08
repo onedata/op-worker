@@ -41,7 +41,11 @@
     reconnect_with_old_last_event_id_test/1,
 
     heartbeat_event_during_inactivity_test/1,
-    no_heartbeat_when_receiving_regular_events_test/1
+    no_heartbeat_when_receiving_regular_events_test/1,
+
+    multiple_clients_same_directory_test/1,
+    multiple_clients_different_directories_test/1,
+    multiple_clients_different_attributes_test/1
 ]).
 
 groups() -> [
@@ -62,6 +66,11 @@ groups() -> [
     {heartbeat_tests, [sequential], [
         heartbeat_event_during_inactivity_test,
         no_heartbeat_when_receiving_regular_events_test
+    ]},
+    {multiple_clients_tests, [sequential], [
+        multiple_clients_same_directory_test,
+        multiple_clients_different_directories_test,
+        multiple_clients_different_attributes_test
     ]}
 ].
 
@@ -69,7 +78,8 @@ all() -> [
     {group, basic_tests},
     {group, auth_tests},
     {group, reconnect_tests},
-    {group, heartbeat_tests}
+    {group, heartbeat_tests},
+    {group, multiple_clients_tests}
 ].
 
 
@@ -519,6 +529,108 @@ no_heartbeat_when_receiving_regular_events_test(_Config) ->
 
     % Cleanup
     ok = space_file_events_test_sse_client:stop(ClientPid).
+
+
+multiple_clients_same_directory_test(_Config) ->
+    TestEnv = create_single_provider_test_env(#{}),
+
+    % Start 3 clients observing the same directory
+    Client1Pid = start_client(TestEnv),
+    Client2Pid = start_client(TestEnv),
+    Client3Pid = start_client(TestEnv),
+
+    % Generate a file change event
+    generate_n_events(1, TestEnv, Client1Pid),
+
+    % ASSERTIONS: All 3 clients receive identical event
+    ?assertEqual(ensure_events(Client1Pid), ensure_events(Client2Pid), ?ATTEMPTS),
+    ?assertEqual(ensure_events(Client2Pid), ensure_events(Client3Pid)),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(Client1Pid),
+    ok = space_file_events_test_sse_client:stop(Client2Pid),
+    ok = space_file_events_test_sse_client:stop(Client3Pid).
+
+
+multiple_clients_different_directories_test(_Config) ->
+    % Create test env with two separate directories
+    TestEnv = create_single_provider_test_env(#{
+        file_tree_spec => [
+            #dir_spec{mode = ?FILE_MODE(8#777)},
+            #dir_spec{mode = ?FILE_MODE(8#777)}
+        ]
+    }),
+    [Dir1Object, Dir2Object] = maps:get(file_tree, TestEnv),
+    Dir1Guid = Dir1Object#object.guid,
+    Dir2Guid = Dir2Object#object.guid,
+
+    % Start Client1 observing Dir1, Client2 observing Dir2
+    ClientArgs = maps:get(client_args, TestEnv),
+    Client1Pid = start_client(TestEnv#{client_args => ClientArgs#{observed_dirs => [Dir1Guid]}}),
+    Client2Pid = start_client(TestEnv#{client_args => ClientArgs#{observed_dirs => [Dir2Guid]}}),
+
+    % Create file in Dir1
+    [File1Guid] = generate_n_events(1, TestEnv#{work_dir_guid => Dir1Guid}, Client1Pid),
+
+    % Create file in Dir2
+    [File2Guid] = generate_n_events(1, TestEnv#{work_dir_guid => Dir2Guid}, Client2Pid),
+
+    % ASSERTIONS: Clients receive only events for their observed directories
+    ?assert(length(get_events_for_file(Client1Pid, File1Guid)) > 0),
+    ?assertEqual([], get_events_for_file(Client1Pid, File2Guid)),
+
+    ?assert(length(get_events_for_file(Client2Pid, File2Guid)) > 0),
+    ?assertEqual([], get_events_for_file(Client2Pid, File1Guid)),
+
+    Client1Events = ensure_events(Client1Pid),
+    Client2Events = ensure_events(Client2Pid),
+    ?assertEqual(Client1Events, Client1Events -- Client2Events),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(Client1Pid),
+    ok = space_file_events_test_sse_client:stop(Client2Pid).
+
+
+multiple_clients_different_attributes_test(_Config) ->
+    TestEnv = create_single_provider_test_env(#{
+        file_tree_spec => #dir_spec{
+            mode = ?FILE_MODE(8#777),
+            children = [#file_spec{mode = ?FILE_MODE(8#644)}]
+        },
+        observed_attrs => [?attr_mode]  % Default for Client1
+    }),
+    #object{children = [#object{guid = FileGuid}]} = maps:get(file_tree, TestEnv),
+    SetupProvider = maps:get(setup_provider, TestEnv),
+
+    % Start Client1 with observed_attrs=[size]
+    Client1Pid = start_client(TestEnv),
+
+    % Start Client2 with observed_attrs=[mode]
+    ClientArgs = maps:get(client_args, TestEnv),
+    Client2Args = ClientArgs#{observed_attrs => [?attr_size]},
+    Client2Pid = start_client(TestEnv#{client_args => Client2Args}),
+
+    % Change file mode (Client2 should see this)
+    ProviderNode = oct_background:get_random_provider_node(SetupProvider),
+    FileOwnerSessionId = maps:get(file_owner_session_id, TestEnv),
+    ?assertMatch(ok, lfm_proxy:set_perms(ProviderNode, FileOwnerSessionId, ?FILE_REF(FileGuid), 8#755)),
+
+    % Write data to file (Client1 should see size change)
+    {ok, Handle} = lfm_proxy:open(ProviderNode, FileOwnerSessionId, ?FILE_REF(FileGuid), write),
+    {ok, _} = lfm_proxy:write(ProviderNode, Handle, 0, <<"test data">>),
+    ok = lfm_proxy:close(ProviderNode, Handle),
+
+    ?assert_attr_changed_or_created_events([#{<<"posixPermissions">> => <<"755">>}], Client1Pid, FileGuid),
+    ?assert_attr_changed_or_created_events([#{<<"size">> => 9}], Client2Pid, FileGuid),
+
+    FileGuid2 = create_file_and_await_sync(TestEnv, ?RAND_STR(), Client1Pid),
+
+    ?assert_attr_changed_or_created_events([#{<<"posixPermissions">> => <<"664">>}], Client1Pid, FileGuid2),
+    ?assert_attr_changed_or_created_events([#{<<"size">> => 0}], Client2Pid, FileGuid2),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(Client1Pid),
+    ok = space_file_events_test_sse_client:stop(Client2Pid).
 
 
 %%%===================================================================
