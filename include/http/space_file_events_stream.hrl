@@ -91,6 +91,7 @@
 }).
 
 -record(monitoring, {
+    current_seq :: couchbase_changes:seq(),
     observers = #{} :: #{pid() => space_files_monitor_common:observer()},
     dir_monitoring_specs = #{} :: #{file_id:file_guid() => space_files_monitor_common:dir_monitoring_spec()}
 }).

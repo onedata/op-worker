@@ -44,7 +44,6 @@
     main_monitor_pid :: pid(),
 
     changes_stream_pid :: pid() | undefined,
-    current_seq :: couchbase_changes:seq(),
     until_seq :: couchbase_changes:seq(),
 
     monitoring :: space_files_monitor_common:monitoring()
@@ -97,14 +96,16 @@ init([SpaceId, MainMonitorPid, SubscribeReq]) ->
 
     ChangesPid = space_files_monitor_common:start_link_changes_stream(SpaceId, SinceSeq),
 
-    {ok, Monitoring} = space_files_monitor_common:add_observer(#monitoring{}, SubscribeReq),
+    {ok, Monitoring} = space_files_monitor_common:add_observer(
+        #monitoring{current_seq = SinceSeq},
+        SubscribeReq
+    ),
 
     {ok, #state{
         space_id = SpaceId,
         main_monitor_pid = MainMonitorPid,
 
         changes_stream_pid = ChangesPid,
-        current_seq = SinceSeq,
         until_seq = UntilSeq,
 
         monitoring = Monitoring
@@ -117,13 +118,15 @@ init([SpaceId, MainMonitorPid, SubscribeReq]) ->
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
-    {NewSeq, NewMonitoring} = space_files_monitor_common:process_docs(
-        ChangedDocs, State#state.monitoring
-    ),
-    propose_takeover(State#state{
-        current_seq = NewSeq,
-        monitoring = NewMonitoring
-    });
+    NewState = State#state{
+        monitoring = space_files_monitor_common:process_docs(
+            ChangedDocs, State#state.monitoring
+        )
+    },
+    case has_reached_target_seq(NewState) of
+        true -> propose_takeover(NewState);
+        false -> {noreply, NewState}
+    end;
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
@@ -174,13 +177,18 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 
 %% @private
+-spec has_reached_target_seq(state()) -> boolean().
+has_reached_target_seq(State) ->
+    CurrentSeq = State#state.monitoring#monitoring.current_seq,
+    UntilSeq = State#state.until_seq,
+
+    CurrentSeq >= UntilSeq.
+
+
+%% @private
 -spec propose_takeover(state()) ->
     {noreply, state()} |
     {stop, {shutdown, caught_up}, state()}.
-propose_takeover(State = #state{current_seq = CurrentSeq, until_seq = UntilSeq}) when CurrentSeq < UntilSeq ->
-    % Monitor still hasn't caught up
-    {noreply, State};
-
 propose_takeover(State) ->
     ?debug("[ space file events ]: Catching monitor reached target sequence, proposing takeover"),
 
@@ -206,13 +214,16 @@ propose_takeover(State) ->
 
 %% @private
 -spec build_subscribe_req(state()) -> space_files_monitor_common:subscribe_req().
-build_subscribe_req(#state{current_seq = CurrentSeq, monitoring = #monitoring{observers = Observers}}) ->
+build_subscribe_req(#state{monitoring = #monitoring{
+    current_seq = SinceSeq,
+    observers = Observers
+}}) ->
     [{ObserverPid, Observer}] = maps:to_list(Observers),
 
     #subscribe_req{
         observer_pid = ObserverPid,
         session_id = Observer#observer.session_id,
         files_monitoring_spec = Observer#observer.files_monitoring_spec,
-        since_seq = CurrentSeq,
+        since_seq = SinceSeq,
         until_seq = undefined
     }.

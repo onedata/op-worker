@@ -233,7 +233,7 @@ add_observer(Monitoring, SubscribeReq) ->
                 session_id = SubscribeReq#subscribe_req.session_id,
                 files_monitoring_spec = SubscribeReq#subscribe_req.files_monitoring_spec,
                 last_seen_seq = case SubscribeReq#subscribe_req.since_seq of
-                    undefined -> 0;
+                    undefined -> Monitoring#monitoring.current_seq;
                     Seq -> Seq
                 end
             },
@@ -333,21 +333,21 @@ update_observed_attrs_per_doc(AttrsToObservePerDoc, ObservedAttrsPerDoc) ->
 %%%===================================================================
 
 
--spec process_docs([datastore:doc()], monitoring()) ->
-    {couchbase_changes:seq(), monitoring()}.
+-spec process_docs([datastore:doc()], monitoring()) -> monitoring().
 process_docs(ChangedDocs, Monitoring) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {LastSeenSeq, NewMonitoring} = lists:foldl(fun(ChangedDoc, {_PrevDocSeq, MonitoringAcc}) ->
-        try
-            UpdatedMonitoring = process_doc(RootUserCtx, ChangedDoc, MonitoringAcc),
-            {ChangedDoc#document.seq, UpdatedMonitoring}
+
+    NewMonitoring = lists:foldl(fun(ChangedDoc, MonitoringAcc) ->
+        UpdatedMonitoring = try
+            process_doc(RootUserCtx, ChangedDoc, MonitoringAcc)
         catch Class:Reason:Stacktrace ->
             ?error_exception("[ space file events ]: Failed to process doc ", Class, Reason, Stacktrace),
-            {ChangedDoc#document.seq, MonitoringAcc}
-        end
-    end, {0, Monitoring}, ChangedDocs),
+            MonitoringAcc
+        end,
+        UpdatedMonitoring#monitoring{current_seq = ChangedDoc#document.seq}
+    end, Monitoring, ChangedDocs),
 
-    {LastSeenSeq, send_heartbeats_if_needed(LastSeenSeq, NewMonitoring)}.
+    send_heartbeats_if_needed(NewMonitoring).
 
 
 %% @private
@@ -553,9 +553,11 @@ gen_changed_or_created_event(#process_doc_ctx{
 
 
 %% @private
--spec send_heartbeats_if_needed(couchbase_changes:seq(), monitoring()) ->
-    monitoring().
-send_heartbeats_if_needed(CurrentSeq, Monitoring = #monitoring{observers = Observers}) ->
+-spec send_heartbeats_if_needed(monitoring()) -> monitoring().
+send_heartbeats_if_needed(Monitoring = #monitoring{
+    current_seq = CurrentSeq,
+    observers = Observers
+}) ->
     SeqThreshold = ?LAST_SEEN_SEQ_HEARTBEAT_THRESHOLD,
 
     ObserversToHeartbeat = lists:foldl(fun({ObserverPid, Observer}, AccPids) ->

@@ -47,7 +47,6 @@
     space_monitoring_sup_pid :: pid(),
 
     changes_stream_pid :: pid() | undefined,
-    current_seq = 0 :: couchbase_changes:seq(),
 
     monitoring :: space_files_monitor_common:monitoring(),
 
@@ -111,9 +110,8 @@ init([SpaceId, SpaceMonitoringSupPid]) ->
         space_monitoring_sup_pid = SpaceMonitoringSupPid,
 
         changes_stream_pid = ChangesPid,
-        current_seq = SinceSeq,
 
-        monitoring = #monitoring{}
+        monitoring = #monitoring{current_seq = SinceSeq}
     },
     {ok, State, ?INACTIVITY_PERIOD_MS}.
 
@@ -121,9 +119,9 @@ init([SpaceId, SpaceMonitoringSupPid]) ->
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
     {reply, Reply :: term(), state()} |
     {noreply, state()}.
-handle_call(#subscribe_req{since_seq = SinceSeq}, _From, State = #state{current_seq = CurrentSeq}) when
-    is_integer(SinceSeq) andalso CurrentSeq > SinceSeq
-->
+handle_call(#subscribe_req{since_seq = SinceSeq}, _From, State = #state{monitoring = #monitoring{
+    current_seq = CurrentSeq
+}}) when is_integer(SinceSeq) andalso CurrentSeq > SinceSeq ->
     %% Client is behind - reject and tell to start catching
     reply({error, {main_ahead, CurrentSeq}}, State);
 
@@ -138,12 +136,10 @@ handle_call(SubscribeReq = #subscribe_req{}, _From, State) ->
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
-    {NewSeq, NewMonitoring} = space_files_monitor_common:process_docs(
-        ChangedDocs, State#state.monitoring
-    ),
     NewState = State#state{
-        current_seq = NewSeq,
-        monitoring = NewMonitoring
+        monitoring = space_files_monitor_common:process_docs(
+            ChangedDocs, State#state.monitoring
+        )
     },
     noreply(NewState);
 

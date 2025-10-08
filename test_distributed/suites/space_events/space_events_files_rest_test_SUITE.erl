@@ -38,7 +38,10 @@
     token_caveats_test/1,
 
     reconnect_without_catching_test/1,
-    reconnect_with_old_last_event_id_test/1
+    reconnect_with_old_last_event_id_test/1,
+
+    heartbeat_event_during_inactivity_test/1,
+    no_heartbeat_when_receiving_regular_events_test/1
 ]).
 
 groups() -> [
@@ -55,23 +58,44 @@ groups() -> [
     {reconnect_tests, [sequential], [
         reconnect_without_catching_test,
         reconnect_with_old_last_event_id_test
+    ]},
+    {heartbeat_tests, [sequential], [
+        heartbeat_event_during_inactivity_test,
+        no_heartbeat_when_receiving_regular_events_test
     ]}
 ].
 
 all() -> [
     {group, basic_tests},
     {group, auth_tests},
-    {group, reconnect_tests}
+    {group, reconnect_tests},
+    {group, heartbeat_tests}
 ].
 
 
--define(assert_deleted_events(__EXP_STATE, __SSE_CLIENT_PID, __FILE_GUID),
-    ?assertEqual(
-        __EXP_STATE,
-        check_for_file_deleted_event(get_events_for_file(__SSE_CLIENT_PID, __FILE_GUID)),
-        ?ATTEMPTS
-    )
-).
+-type test_env() :: #{
+    setup_provider => oct_background:entity_selector(),
+    events_provider => oct_background:entity_selector(),
+
+    space => oct_background:entity_selector(),
+    space_id => od_space:id(),
+    space_guid => file_id:file_guid(),
+
+    file_owner => oct_background:entity_selector(),
+    file_owner_user_id => od_user:id(),
+    file_owner_session_id => session:id(),
+
+    file_tree => onenv_file_test_utils:object_spec() | [onenv_file_test_utils:object_spec()],
+    observed_dir_guid => file_id:file_guid(),
+    work_dir_guid => file_id:file_guid(),
+
+    connecting_user => oct_background:entity_selector(),
+    observed_attrs => [onedata_file:attr_name()],
+    client_args => map()
+}.
+
+
+-define(ATTEMPTS, 30).
 
 -define(assert_attr_changed_or_created_events(__EXP_ATTR_DATA, __SSE_CLIENT_PID, __FILE_GUID),
     ?assertEqual(
@@ -80,8 +104,6 @@ all() -> [
         ?ATTEMPTS
     )
 ).
-
--define(ATTEMPTS, 30).
 
 
 %%%===================================================================
@@ -106,7 +128,7 @@ non_existing_space_test(_Config) ->
 
 
 invalid_args_test(_Config) ->
-    SpaceKrkId = oct_background:get_space_id(space_krk_par_p),
+    SpaceKrkId = oct_background:get_space_id(space_krk_p),
     SpaceKrkGuid = space_dir:guid(SpaceKrkId),
     SpaceKrkObjectId = ?check(file_id:guid_to_objectid(SpaceKrkGuid)),
     FileOwnerUserId = oct_background:get_user_id(user1),
@@ -137,7 +159,7 @@ invalid_args_test(_Config) ->
     ClientArgs = #{
         node => oct_background:get_random_provider_node(krakow),
         space_id => SpaceKrkId,
-        token => oct_background:get_user_access_token(user2),
+        token => oct_background:get_user_access_token(user3),
         observed_dirs => [SpaceKrkGuid]
     },
 
@@ -199,35 +221,35 @@ invalid_args_test(_Config) ->
 
 
 deleted_events_test(_Config) ->
-    ChildFileName = ?RAND_STR(),
-    TestEnv = create_test_env(krakow, #{
-        dir_spec => #dir_spec{
+    TestEnv = create_multi_provider_test_env(#{
+        file_tree_spec => #dir_spec{
             mode = ?FILE_MODE(8#777),
-            children = [#dir_spec{}, #file_spec{name = ChildFileName}]
-        },
-        observed_attrs => [?attr_name, ?attr_mode, ?attr_size]
+            children = [#dir_spec{}, #file_spec{}]
+        }
     }),
 
     #{
         file_owner_user_id := FileOwnerUserId,
-        observed_dir_object := #object{children = [
-            %% TODO VFS-12887 Test changes for child dir
+        file_tree := #object{children = [
             #object{guid = ChildDirGuid},
             #object{guid = ChildFileGuid}
         ]}
     } = TestEnv,
 
-    SSEClientPid = start_client(TestEnv),
+    ClientPid = start_client(TestEnv),
 
     % Removing file in observed dir should result in event
     % NOTE: rm will choose random provider for removal (not necessarily krakow)
     onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildFileGuid),
-    ?assert_deleted_events(true, SSEClientPid, ChildFileGuid),
+    ?assert(count_file_deleted_events(get_events_for_file(ClientPid, ChildFileGuid)) > 0, ?ATTEMPTS),
 
+    %% TODO VFS-12134 Assert deleted child event
     % while deleting dir, at least for now, does not produce events
     % NOTE: rm will choose random provider for removal (not necessarily krakow)
     onenv_file_test_utils:rm_and_sync_file(FileOwnerUserId, ChildDirGuid),
-    ?assert_deleted_events(false, SSEClientPid, ChildDirGuid).
+    ?assertEqual(0, count_file_deleted_events(get_events_for_file(ClientPid, ChildDirGuid)), ?ATTEMPTS),
+
+    ok = space_file_events_test_sse_client:stop(ClientPid).
 
 
 changed_or_created_events_test(_Config) ->
@@ -235,25 +257,24 @@ changed_or_created_events_test(_Config) ->
     ModifyingProvider = ?RAND_ELEMENT([krakow, paris]),
     ct:pal("Provider with SSE client: ~ts~nProvider modifying data: ~ts", [ClientProvider, ModifyingProvider]),
 
-    ChildFileName = ?RAND_STR(),
-    TestEnv = create_test_env(ClientProvider, #{
-        dir_spec => #dir_spec{
+    TestEnv = create_multi_provider_test_env(#{
+        setup_provider => ModifyingProvider,
+        events_provider => ClientProvider,
+        file_tree_spec => #dir_spec{
             mode = ?FILE_MODE(8#777),
             children = [#dir_spec{}, #file_spec{}]
         },
         observed_attrs => [?attr_name, ?attr_mode, ?attr_size]
     }),
-
-    #{
-        file_owner_user_id := UserId,
-        observed_dir_guid := ObservedDirGuid
-    } = TestEnv,
+    FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
+    ObservedDirGuid = maps:get(observed_dir_guid, TestEnv),
 
     SSEClientPid = start_client(TestEnv),
 
     % Creating new files in observed dir should result in its events for all observed documents
+    ChildFileName = ?RAND_STR(),
     #object{guid = ChildFileGuid} = onenv_file_test_utils:create_file_tree(
-        UserId, ObservedDirGuid, ModifyingProvider, #file_spec{name = ChildFileName}
+        FileOwnerUserId, ObservedDirGuid, ModifyingProvider, #file_spec{name = ChildFileName}
     ),
 
     ExpAttrsForAttrChangedEvents1 = [
@@ -264,23 +285,25 @@ changed_or_created_events_test(_Config) ->
 
     % mode change should result in event
     Node = oct_background:get_random_provider_node(ModifyingProvider),
-    FileOwnerSessionId = oct_background:get_user_session_id(user1, ModifyingProvider),
+    FileOwnerSessionId = oct_background:get_user_session_id(FileOwnerUserId, ModifyingProvider),
     ?assertMatch(ok, lfm_proxy:set_perms(Node, FileOwnerSessionId, ?FILE_REF(ChildFileGuid), 8#740)),
 
     ExpAttrsForAttrChangedEvents2 = ExpAttrsForAttrChangedEvents1 ++ [
         #{<<"name">> => ChildFileName, <<"posixPermissions">> => <<"740">>}
     ],
-    ?assert_attr_changed_or_created_events(ExpAttrsForAttrChangedEvents2, SSEClientPid, ChildFileGuid).
+    ?assert_attr_changed_or_created_events(ExpAttrsForAttrChangedEvents2, SSEClientPid, ChildFileGuid),
+
+    ok = space_file_events_test_sse_client:stop(SSEClientPid).
 
 
 unauthorized_client_test(_Config) ->
-    Space1Id = oct_background:get_space_id(space_krk_par_p),
-    Space1Guid = space_dir:guid(Space1Id),
+    SpaceKrkId = oct_background:get_space_id(space_krk_p),
+    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
 
     ClientArgs = #{
         node => oct_background:get_random_provider_node(krakow),
-        space_id => Space1Id,
-        observed_dirs => [Space1Guid]
+        space_id => SpaceKrkId,
+        observed_dirs => [SpaceKrkGuid]
     },
 
     % no token == guest auth
@@ -292,15 +315,15 @@ unauthorized_client_test(_Config) ->
     ?assertMatch(
         {error, {403, ?ERR_FORBIDDEN}},
         space_file_events_test_sse_client:start(ClientArgs#{
-            token => oct_background:get_user_access_token(user3)
+            token => oct_background:get_user_access_token(user2)
         })
     ).
 
 
 token_caveats_test(_Config) ->
-    SpaceKrkId = oct_background:get_space_id(space_krk_par_p),
+    SpaceKrkId = oct_background:get_space_id(space_krk_p),
     SpaceKrkGuid = space_dir:guid(SpaceKrkId),
-    Token = oct_background:get_user_access_token(user2),
+    Token = oct_background:get_user_access_token(user3),
 
     ClientArgs = #{
         node => oct_background:get_random_provider_node(krakow),
@@ -345,7 +368,7 @@ token_caveats_test(_Config) ->
 
 
 reconnect_without_catching_test(_Config) ->
-    TestEnv = create_test_env(krakow),
+    TestEnv = create_single_provider_test_env(#{}),
 
     % Start control client (for synchronization) and client that will reconnect
     ControlClientPid = start_client(TestEnv),
@@ -375,7 +398,7 @@ reconnect_without_catching_test(_Config) ->
             % Scenario 2: Future Last-Event-Id (client claims to be ahead)
             FutureEventId = LastEventId + 1000,
             ct:pal("Testing reconnect WITH future Last-Event-Id: ~p (current was ~p)", [FutureEventId, LastEventId]),
-            start_client_with_last_event_id(TestEnv, FutureEventId)
+            start_client(TestEnv, FutureEventId)
     end,
 
     % Create File4 after reconnection
@@ -393,7 +416,7 @@ reconnect_without_catching_test(_Config) ->
 
 
 reconnect_with_old_last_event_id_test(_Config) ->
-    TestEnv = create_test_env(krakow),
+    TestEnv = create_single_provider_test_env(#{}),
 
     % Start control client for synchronization
     ControlClientPid = start_client(TestEnv),
@@ -417,7 +440,7 @@ reconnect_with_old_last_event_id_test(_Config) ->
     File4Guid = create_file_and_await_sync(TestEnv, <<"file4.txt">>, ControlClientPid),
 
     % Reconnect Client2 with old Last-Event-Id
-    Client2ReconnectedPid = start_client_with_last_event_id(TestEnv, LastEventId),
+    Client2ReconnectedPid = start_client(TestEnv, LastEventId),
 
     % Wait for Client2 to receive all historical events (File2, File3, File4)
     await_event_for_file(Client2ReconnectedPid, File2Guid),
@@ -437,6 +460,65 @@ reconnect_with_old_last_event_id_test(_Config) ->
     % Cleanup
     ok = space_file_events_test_sse_client:stop(ControlClientPid),
     ok = space_file_events_test_sse_client:stop(Client2ReconnectedPid).
+
+
+heartbeat_event_during_inactivity_test(_Config) ->
+    % Create test env with two directories - observed and unobserved
+    TestEnv = create_single_provider_test_env(#{
+        file_tree_spec => [
+            #dir_spec{mode = ?FILE_MODE(8#777)},
+            #dir_spec{mode = ?FILE_MODE(8#777)}
+        ]
+    }),
+    [_ObservedDirObject, UnobservedDirObject] = maps:get(file_tree, TestEnv),
+    UnobservedDirGuid = UnobservedDirObject#object.guid,
+
+    % Start control client observing unobserved dir (for sync) and test client observing ONLY "observed" directory
+    ClientArgs = maps:get(client_args, TestEnv),
+    ClientPid = start_client(TestEnv),
+    ControlClientArgs = ClientArgs#{observed_dirs => [UnobservedDirGuid]},
+    ControlClientPid = start_client(TestEnv#{client_args => ControlClientArgs}),
+
+    % Generate 150 file changes in UNOBSERVED directory
+    % This advances space sequence but ClientPid doesn't receive file events
+    generate_n_events(150, TestEnv#{work_dir_guid => UnobservedDirGuid}, ControlClientPid),
+
+    % - Client receives at least one heartbeat event (gap > 100 threshold)
+    ?assert(count_heartbeat_events(ClientPid) >= 1, ?ATTEMPTS),
+    % - No file change events received (files were in unobserved directory)
+    ?assertEqual(0, count_file_events(ClientPid)),
+
+    % Verify heartbeat event has correct structure
+    {ok, ControlClientEvents} = space_file_events_test_sse_client:get_events(ControlClientPid),
+    FirstControlClientEventId = get_event_id(hd(ControlClientEvents)),
+    LastControlClientEventId = get_event_id(lists:last(ControlClientEvents)),
+
+    LastHeartbeatEventId = get_event_id(lists:last(get_heartbeat_events(ClientPid))),
+
+    ?assert(LastHeartbeatEventId - FirstControlClientEventId >= 100),
+    ?assert(LastControlClientEventId - LastHeartbeatEventId < 100),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ControlClientPid),
+    ok = space_file_events_test_sse_client:stop(ClientPid).
+
+
+no_heartbeat_when_receiving_regular_events_test(_Config) ->
+    TestEnv = create_single_provider_test_env(#{}),
+
+    ClientPid = start_client(TestEnv),
+
+    % Generate 50 file changes in OBSERVED directory
+    % Each change updates client's last_seen_seq
+    generate_n_events(50, TestEnv, ClientPid),
+
+    % - Client receives at least 50 file change events
+    ?assert(count_file_events(ClientPid) >= 50, ?ATTEMPTS),
+    % - NO heartbeat events received (last_seen_seq stays current)
+    ?assertEqual(0, count_heartbeat_events(ClientPid)),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ClientPid).
 
 
 %%%===================================================================
@@ -469,6 +551,25 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
+%% @private
+-spec create_single_provider_test_env(map()) -> test_env().
+create_single_provider_test_env(Opts) ->
+    create_test_env(Opts).
+
+
+%% @private
+-spec create_multi_provider_test_env(map()) -> test_env().
+create_multi_provider_test_env(Opts) ->
+    Defaults = #{
+        setup_provider => krakow,
+        events_provider => paris,
+        space => space_krk_par_p,
+        connecting_user => user2,
+        observed_attrs => [?attr_name, ?attr_mode, ?attr_size]
+    },
+    create_test_env(maps:merge(Defaults, Opts)).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -476,52 +577,133 @@ end_per_testcase(_Case, Config) ->
 %% Returns common test setup including space, user, observed directory, and client args.
 %%
 %% Options:
+%%   - setup_provider: selector of a setup provider (default: krakow)
+%%   - events_provider: selector of a provider clients connect to for events (default: <setup_provider>)
+%%   - space: selector of target space (default: space_krk_p)
+%%   - file_owner: selector of user creating files (default: user1)
+%%   - file_tree_spec: description of initial file_tree to create in space root (default: single dir)
+%%   - connecting_user: selector of user subscribing for events (default: user3)
 %%   - observed_attrs: list of attributes to observe (default: [name, size])
-%%   - dir_spec: custom directory spec (default: empty dir with mode 777)
 %% @end
 %%--------------------------------------------------------------------
--spec create_test_env(atom()) -> #{
-    provider => oct_background:entity_selector(),
-    space_id => od_space:id(),
-    space_guid => file_id:file_guid(),
-    file_owner_user_id => od_user:id(),
-    observed_dir_guid => file_id:file_guid(),
-    client_args => map()
-}.
-create_test_env(Provider) ->
-    create_test_env(Provider, #{}).
+-spec create_test_env(map()) -> test_env().
+create_test_env(Opts) ->
+    SetupProviderSelector = maps:get(setup_provider, Opts, krakow),
+    EventsProviderSelector = maps:get(events_provider, Opts, SetupProviderSelector),
+    EventsProviderNode = oct_background:get_random_provider_node(EventsProviderSelector),
 
+    SpaceSelector = maps:get(space, Opts, space_krk_p),
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+    SpaceGuid = space_dir:guid(SpaceId),
 
-%% @private
-create_test_env(Provider, Opts) ->
-    SpaceKrkId = oct_background:get_space_id(space_krk_par_p),
-    SpaceKrkGuid = space_dir:guid(SpaceKrkId),
-    FileOwnerUserId = oct_background:get_user_id(user1),
+    FileOwner = maps:get(file_owner, Opts, user1),
+    FileOwnerUserId = oct_background:get_user_id(FileOwner),
+    FileOwnerSessionId = oct_background:get_user_session_id(FileOwner, SetupProviderSelector),
 
-    DirSpec = maps:get(dir_spec, Opts, #dir_spec{mode = ?FILE_MODE(8#777)}),
-    ObservedDirObject = onenv_file_test_utils:create_and_sync_file_tree(
-        FileOwnerUserId, SpaceKrkGuid, DirSpec, Provider
+    FileTreeSpec = maps:get(file_tree_spec, Opts, #dir_spec{mode = ?FILE_MODE(8#777)}),
+    FileTree = onenv_file_test_utils:create_and_sync_file_tree(
+        FileOwnerUserId, SpaceGuid, FileTreeSpec, SetupProviderSelector
     ),
-    ObservedDirGuid = ObservedDirObject#object.guid,
+    ObservedDirGuid = case FileTree of
+        #object{guid = G1} -> G1;
+        [#object{guid = G2} | _] -> G2  % You may want more than one dir, but the first one will be observed
+    end,
 
+    ConnectingUser = maps:get(connecting_user, Opts, user3),
     ObservedAttrs = maps:get(observed_attrs, Opts, [?attr_name, ?attr_size]),
+
     ClientArgs = #{
-        node => oct_background:get_random_provider_node(Provider),
-        space_id => SpaceKrkId,
-        token => oct_background:get_user_access_token(user2),
+        node => EventsProviderNode,
+        space_id => SpaceId,
+        token => oct_background:get_user_access_token(ConnectingUser),
         observed_dirs => [ObservedDirGuid],
         observed_attrs => ObservedAttrs
     },
 
     #{
-        provider => Provider,
-        space_id => SpaceKrkId,
-        space_guid => SpaceKrkGuid,
+        setup_provider => SetupProviderSelector,
+        events_provider => EventsProviderSelector,
+
+        space => SpaceSelector,
+        space_id => SpaceId,
+        space_guid => SpaceGuid,
+
+        file_owner => FileOwner,
         file_owner_user_id => FileOwnerUserId,
+        file_owner_session_id => FileOwnerSessionId,
+
+        file_tree => FileTree,
         observed_dir_guid => ObservedDirGuid,
-        observed_dir_object => ObservedDirObject,
+        work_dir_guid => ObservedDirGuid,
+
+        connecting_user => ConnectingUser,
+        observed_attrs => ObservedAttrs,
         client_args => ClientArgs
     }.
+
+
+%% @private
+-spec start_client(test_env()) -> pid().
+start_client(TestEnv) ->
+    start_client(TestEnv, undefined).
+
+
+%% @private
+-spec start_client(test_env(), undefined | non_neg_integer() | binary()) -> pid().
+start_client(TestEnv, LastEventId) ->
+    BasicClientArgs = maps:get(client_args, TestEnv),
+    ClientArgsWithHeader = case LastEventId of
+        undefined ->
+            BasicClientArgs;
+        _ ->
+            BasicClientArgs#{
+                headers => [{<<"Last-Event-Id">>, str_utils:to_binary(LastEventId)}]
+            }
+    end,
+    {ok, Pid} = ?assertMatch({ok, _}, space_file_events_test_sse_client:start(ClientArgsWithHeader)),
+    Pid.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates N events by creating files.
+%% Uses control client to ensure all events are in the system.
+%% Returns list of created file GUIDs.
+%% @end
+%%--------------------------------------------------------------------
+generate_n_events(N, TestEnv, ControlClientPid) ->
+    lists_utils:pmap(fun(I) ->
+        FileName = <<"file_", (integer_to_binary(I))/binary, ".txt">>,
+        create_file_and_await_sync(TestEnv, #file_spec{name = FileName}, ControlClientPid)
+    end, lists:seq(1, N)).
+
+
+%% @private
+create_file_and_await_sync(TestEnv, FileName, ControlClientPid) when is_binary(FileName) ->
+    create_file_and_await_sync(TestEnv, #file_spec{name = FileName}, ControlClientPid);
+
+create_file_and_await_sync(TestEnv, FileSpec, ControlClientPid) ->
+    SetupProvider = maps:get(setup_provider, TestEnv),
+    FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
+    WorkDirGuid = maps:get(work_dir_guid, TestEnv),
+
+    #object{guid = FileGuid} = onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, WorkDirGuid, SetupProvider, FileSpec
+    ),
+    await_event_for_file(ControlClientPid, FileGuid),
+    FileGuid.
+
+
+%% @private
+assert_all_client_events_sequential(EventsOrClientPid) ->
+    Events = ensure_events(EventsOrClientPid),
+
+    EventIds = [get_event_id(E) || E <- Events],
+    SortedEventIds = lists:sort(EventIds),
+    UniqueSortedEventIds = lists:usort(EventIds),
+
+    ?assertEqual(SortedEventIds, UniqueSortedEventIds).
 
 
 %% @private
@@ -534,95 +716,82 @@ assert_no_event_for_file(ClientPid, FileGuid) ->
     ?assertEqual([], get_events_for_file(ClientPid, FileGuid)).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Creates file and waits for control client to confirm event arrival.
-%% This ensures the event is in the system before proceeding.
-%% Returns the created file GUID.
-%% @end
-%%--------------------------------------------------------------------
-create_file_and_await_sync(TestEnv, FileName, ControlClientPid) when is_binary(FileName) ->
-    create_file_and_await_sync(TestEnv, #file_spec{name = FileName}, ControlClientPid);
+get_events_for_file(SSEClientPid, FileGuid) ->
+    {ok, Events} = space_file_events_test_sse_client:get_events(SSEClientPid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-create_file_and_await_sync(TestEnv, FileSpec, ControlClientPid) ->
-    #{
-        provider := Provider,
-        file_owner_user_id := UserId,
-        observed_dir_guid := ObservedDirGuid
-    } = TestEnv,
-    #object{guid = FileGuid} = onenv_file_test_utils:create_file_tree(
-        UserId, ObservedDirGuid, Provider, FileSpec
-    ),
-    await_event_for_file(ControlClientPid, FileGuid),
-    FileGuid.
+    lists:filter(fun(Event) ->
+        case is_file_event(Event) of
+            true ->
+                #{data := [EventData]} = Event,
+                maps:get(<<"fileId">>, EventData) =:= FileObjectId;
+            false ->
+                false
+        end
+    end, Events).
 
 
 %% @private
-start_client(TestEnv) ->
-    #{client_args := ClientArgs} = TestEnv,
-    {ok, Pid} = ?assertMatch({ok, _}, space_file_events_test_sse_client:start(ClientArgs)),
-    Pid.
-
-
-%% @private
-get_last_event_id(ClientPid) ->
-    {ok, Events} = space_file_events_test_sse_client:get_events(ClientPid),
-    case Events of
+get_last_event_id(EventsOrClientPid) ->
+    case ensure_events(EventsOrClientPid) of
         [] -> undefined;
-        _ -> get_event_id(lists:last(Events))
+        Events -> get_event_id(lists:last(Events))
     end.
 
 
 %% @private
 get_event_id(Event) ->
-    maps:get(last_event_id, Event).
+    binary_to_integer(maps:get(last_event_id, Event)).
 
 
 %% @private
-start_client_with_last_event_id(TestEnv, LastEventId) ->
-    #{client_args := ClientArgs} = TestEnv,
-    ClientArgsWithHeader = ClientArgs#{
-        headers => [{<<"Last-Event-Id">>, str_utils:to_binary(LastEventId)}]
-    },
-    TestEnvWithHeader = TestEnv#{client_args => ClientArgsWithHeader},
-    start_client(TestEnvWithHeader).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates N events by creating files in observed directory.
-%% Uses control client to ensure all events are in the system.
-%% Returns list of created file GUIDs.
-%% @end
-%%--------------------------------------------------------------------
-generate_n_events(N, TestEnv, ControlClientPid) ->
-    lists:map(fun(I) ->
-        FileName = <<"file_", (integer_to_binary(I))/binary, ".txt">>,
-        create_file_and_await_sync(TestEnv, #file_spec{name = FileName}, ControlClientPid)
-    end, lists:seq(1, N)).
+count_heartbeat_events(EventsOrClientPid) ->
+    length(get_heartbeat_events(EventsOrClientPid)).
 
 
 %% @private
-get_events_for_file(SSEClientPid, FileGuid) ->
-    {ok, Events} = space_file_events_test_sse_client:get_events(SSEClientPid),
-
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    lists:filter(fun
-        (#{event_type := <<"heartbeat">>}) ->
-            false;
-        (#{data := [EventData]}) ->
-            maps:get(<<"fileId">>, EventData) =:= FileObjectId
-    end, Events).
+get_heartbeat_events(EventsOrClientPid) ->
+    filter_events(EventsOrClientPid, fun is_heartbeat_event/1).
 
 
 %% @private
-check_for_file_deleted_event(Events) ->
-    lists:any(fun
-        (#{event_type := <<"deleted">>}) -> true;
-        (_) -> false
-    end, Events).
+count_file_events(EventsOrClientPid) ->
+    length(filter_events(EventsOrClientPid, fun is_file_event/1)).
+
+
+%% @private
+count_file_deleted_events(Events) ->
+    length(filter_events(Events, fun is_file_deleted_event/1)).
+
+
+%% @private
+filter_events(EventsOrClientPid, Predicate) ->
+    [Event || Event <- ensure_events(EventsOrClientPid), Predicate(Event)].
+
+
+%% @private
+ensure_events(ClientPid) when is_pid(ClientPid) ->
+    {ok, Events} = space_file_events_test_sse_client:get_events(ClientPid),
+    Events;
+ensure_events(Events) when is_list(Events) ->
+    Events.
+
+
+%% @private
+is_heartbeat_event(#{event_type := <<"heartbeat">>}) -> true;
+is_heartbeat_event(_) -> false.
+
+
+%% @private
+is_file_event(#{event_type := <<"changedOrCreated">>}) -> true;
+is_file_event(#{event_type := <<"deleted">>}) -> true;
+is_file_event(_) -> false.
+
+
+%% @private
+is_file_deleted_event(#{event_type := <<"deleted">>}) -> true;
+is_file_deleted_event(_) -> false.
 
 
 %% @private
@@ -633,15 +802,3 @@ get_data_attributes_from_changed_or_created_events(Events) ->
         (_) ->
             false
     end, Events).
-
-
-%% @private
-assert_all_client_events_sequential(ClientPid) ->
-    {ok, Events} = space_file_events_test_sse_client:get_events(ClientPid),
-
-    EventIds = [get_event_id(E) || E <- Events, maps:get(event, E, undefined) =/= <<"heartbeat">>],
-    EventIdsInt = [binary_to_integer(Id) || Id <- EventIds],
-    SortedEventIds = lists:sort(EventIdsInt),
-    UniqueSortedEventIds = lists:usort(EventIdsInt),
-
-    ?assertEqual(SortedEventIds, UniqueSortedEventIds).
