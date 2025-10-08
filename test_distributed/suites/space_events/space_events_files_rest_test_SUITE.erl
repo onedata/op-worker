@@ -42,6 +42,7 @@
 
     reconnect_without_catching_test/1,
     reconnect_with_old_last_event_id_test/1,
+    takeover_is_seamless_test/1,
 
     heartbeat_event_during_inactivity_test/1,
     no_heartbeat_when_receiving_regular_events_test/1,
@@ -67,7 +68,8 @@ groups() -> [
     ]},
     {reconnect_tests, [sequential], [
         reconnect_without_catching_test,
-        reconnect_with_old_last_event_id_test
+        reconnect_with_old_last_event_id_test,
+        takeover_is_seamless_test
     ]},
     {heartbeat_tests, [sequential], [
         heartbeat_event_during_inactivity_test,
@@ -572,6 +574,66 @@ reconnect_with_old_last_event_id_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(Client2ReconnectedPid).
 
 
+takeover_is_seamless_test(_Config) ->
+    % Goal: Verify takeover from catching monitor to main monitor is seamless:
+    % - No gaps in received events (all expected files received)
+    % - No duplicate events
+    % - Event IDs in ascending order
+    % - Events generated DURING catching are also received (concurrent writes test)
+    
+    TestEnv = create_single_provider_test_env(#{}),
+    
+    % 1. Start client, receive initial event
+    ClientPid = start_client(TestEnv),
+    ControlClientPid = start_client(TestEnv),
+    
+    InitialFileGuid = create_file_and_await_sync(TestEnv, <<"initial.txt">>, ControlClientPid),
+    await_event_for_file(ClientPid, InitialFileGuid),
+    
+    % Get Last-Event-Id before disconnecting
+    LastEventIdBeforeDisconnect = get_last_event_id(ClientPid),
+    
+    % 2. Stop client
+    ok = space_file_events_test_sse_client:stop(ClientPid),
+    
+    % 3. Generate MANY events while disconnected (ensures catching monitor needed)
+    ct:pal("Generating 150 missed events while client disconnected..."),
+    MissedFileGuids = generate_n_events(150, TestEnv, ControlClientPid),
+    
+    % 4. Reconnect with old Last-Event-Id (catching monitor starts)
+    ct:pal("Reconnecting with old Last-Event-Id=~B (catching monitor should start)...", 
+        [LastEventIdBeforeDisconnect]),
+    ReconnectedPid = start_client(TestEnv, LastEventIdBeforeDisconnect),
+    
+    % 5. While catching up, generate MORE events (tests concurrent writes during catching/takeover)
+    ct:pal("Generating 30 additional events DURING catching phase..."),
+    ConcurrentFileGuids = generate_n_events(30, TestEnv, ControlClientPid),
+
+    % 6. Wait for ALL events to arrive (catching completes, takeover happens, main continues)
+    AllExpectedFileGuids = MissedFileGuids ++ ConcurrentFileGuids,
+    ct:pal("Waiting for all ~B events to be received (takeover should complete)...", 
+        [length(AllExpectedFileGuids)]),
+    
+    lists:foreach(fun(Guid) -> 
+        await_event_for_file(ReconnectedPid, Guid)
+    end, AllExpectedFileGuids),
+    
+    % 7. ASSERTIONS: Seamless takeover
+    % skip first event as it concerns initial.txt file not replayed after reconnection
+    ControlFileEvents = tl([E || E <- ensure_events(ControlClientPid), is_file_event(E)]),
+    ReceivedFileEvents = [E || E <- ensure_events(ReconnectedPid), is_file_event(E)],
+        
+    ct:pal("Received ~B file events total", [length(ReceivedFileEvents)]),
+    
+    assert_all_client_events_sequential(ReconnectedPid),
+
+    ?assertEqual(ControlFileEvents, ReceivedFileEvents),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ControlClientPid),
+    ok = space_file_events_test_sse_client:stop(ReconnectedPid).
+
+
 heartbeat_event_during_inactivity_test(_Config) ->
     % Create test env with two directories - observed and unobserved
     TestEnv = create_single_provider_test_env(#{
@@ -885,9 +947,8 @@ start_client(TestEnv, LastEventId) ->
 %% @end
 %%--------------------------------------------------------------------
 generate_n_events(N, TestEnv, ControlClientPid) ->
-    lists_utils:pmap(fun(I) ->
-        FileName = <<"file_", (integer_to_binary(I))/binary, ".txt">>,
-        create_file_and_await_sync(TestEnv, #file_spec{name = FileName}, ControlClientPid)
+    lists_utils:pmap(fun(_) ->
+        create_file_and_await_sync(TestEnv, #file_spec{}, ControlClientPid)
     end, lists:seq(1, N)).
 
 
@@ -912,10 +973,9 @@ assert_all_client_events_sequential(EventsOrClientPid) ->
     Events = ensure_events(EventsOrClientPid),
 
     EventIds = [get_event_id(E) || E <- Events],
-    SortedEventIds = lists:sort(EventIds),
-    UniqueSortedEventIds = lists:usort(EventIds),
-
-    ?assertEqual(SortedEventIds, UniqueSortedEventIds).
+    % Check that EventIds are sorted (ascending order) AND no duplicates
+    % Note: gaps are OK (other documents in space may create sequence gaps)
+    ?assertEqual(EventIds, lists:usort(EventIds)).
 
 
 %% @private
