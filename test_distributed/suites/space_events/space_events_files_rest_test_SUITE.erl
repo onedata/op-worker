@@ -38,6 +38,7 @@
 
     unauthorized_client_test/1,
     token_caveats_test/1,
+    observer_loses_access_during_monitoring_test/1,
 
     reconnect_without_catching_test/1,
     reconnect_with_old_last_event_id_test/1,
@@ -61,7 +62,8 @@ groups() -> [
     ]},
     {auth_tests, [sequential], [
         unauthorized_client_test,
-        token_caveats_test
+        token_caveats_test,
+        observer_loses_access_during_monitoring_test
     ]},
     {reconnect_tests, [sequential], [
         reconnect_without_catching_test,
@@ -438,6 +440,43 @@ token_caveats_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(ClientWithApiCaveat).
 
 
+observer_loses_access_during_monitoring_test(_Config) ->
+    % Create file with mode=777 so connecting user (non-owner) can access it initially
+    TestEnv = create_single_provider_test_env(#{}),
+    ObservedDirGuid = maps:get(observed_dir_guid, TestEnv),
+    ProviderNode = oct_background:get_random_provider_node(maps:get(setup_provider, TestEnv)),
+    FileOwnerSessionId = oct_background:get_user_session_id(maps:get(file_owner_user_id, TestEnv), maps:get(setup_provider, TestEnv)),
+
+    ClientArgs = maps:get(client_args, TestEnv),
+    ControlClientPid = start_client(TestEnv#{client_args => ClientArgs#{
+        token => oct_background:get_user_access_token(maps:get(file_owner, TestEnv))
+    }}),
+    ClientPid = start_client(TestEnv),
+
+    FileGuid = create_file_and_await_sync(TestEnv, <<"file1.txt">>, ControlClientPid),
+    await_event_for_file(ClientPid, FileGuid),
+    
+    % Change file permissions to 700 (only owner has access)
+    ok = lfm_proxy:set_perms(ProviderNode, FileOwnerSessionId, ?FILE_REF(ObservedDirGuid), 8#700),
+
+    % No event should be received after losing access
+    FileGuid2 = create_file_and_await_sync(TestEnv, <<"file2.txt">>, ControlClientPid),
+    ?assertEqual([], get_events_for_file(ClientPid, FileGuid2)),
+    FileGuid2Events = get_events_for_file(ControlClientPid, FileGuid2),
+
+    % Change file permissions to 770 (owner and connecting user have access)
+    ok = lfm_proxy:set_perms(ProviderNode, FileOwnerSessionId, ?FILE_REF(ObservedDirGuid), 8#770),
+
+    % After regaining access, client should receive new event (but omitted events will not be received)
+    FileGuid3 = create_file_and_await_sync(TestEnv, <<"file3.txt">>, ControlClientPid),
+    await_event_for_file(ClientPid, FileGuid3),
+    ?assertEqual(FileGuid2Events, FileGuid2Events -- ensure_events(ClientPid)),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ControlClientPid),
+    ok = space_file_events_test_sse_client:stop(ClientPid).
+
+
 reconnect_without_catching_test(_Config) ->
     TestEnv = create_single_provider_test_env(#{}),
 
@@ -468,7 +507,7 @@ reconnect_without_catching_test(_Config) ->
         2 ->
             % Scenario 2: Future Last-Event-Id (client claims to be ahead)
             FutureEventId = LastEventId + 1000,
-            ct:pal("Testing reconnect WITH future Last-Event-Id: ~p (current was ~p)", [FutureEventId, LastEventId]),
+            ct:pal("Testing reconnect WITH future Last-Event-Id: ~B (current was ~B)", [FutureEventId, LastEventId]),
             start_client(TestEnv, FutureEventId)
     end,
 
