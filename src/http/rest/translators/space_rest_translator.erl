@@ -33,7 +33,7 @@
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = evaluate_qos_expression}, _, value, Result) ->
-    ?OK_REPLY(maps:with([<<"matchingStorages">>], Result)).
+    ?OK_REPLY(maps:with([<<"matchingStorages">>, <<"matchingStorageBackends">>], Result)).
 
 
 %%--------------------------------------------------------------------
