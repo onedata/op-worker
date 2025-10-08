@@ -33,6 +33,8 @@
     invalid_args_test/1,
     deleted_events_test/1,
     changed_or_created_events_test/1,
+    nested_directory_not_observed_test/1,
+    observe_space_root_test/1,
 
     unauthorized_client_test/1,
     token_caveats_test/1,
@@ -53,7 +55,9 @@ groups() -> [
         non_existing_space_test,
         invalid_args_test,
         deleted_events_test,
-        changed_or_created_events_test
+        changed_or_created_events_test,
+        nested_directory_not_observed_test,
+        observe_space_root_test
     ]},
     {auth_tests, [sequential], [
         unauthorized_client_test,
@@ -304,6 +308,63 @@ changed_or_created_events_test(_Config) ->
     ?assert_attr_changed_or_created_events(ExpAttrsForAttrChangedEvents2, SSEClientPid, ChildFileGuid),
 
     ok = space_file_events_test_sse_client:stop(SSEClientPid).
+
+
+nested_directory_not_observed_test(_Config) ->
+    % Create test env with directory structure: observed_dir/subdir
+    TestEnv = create_single_provider_test_env(#{
+        file_tree_spec => #dir_spec{
+            mode = ?FILE_MODE(8#777),
+            children = [#dir_spec{mode = ?FILE_MODE(8#777)}]
+        }
+    }),
+    #object{children = [#object{guid = SubDirGuid}]} = maps:get(file_tree, TestEnv),
+
+    % Start client observing parent directory only
+    ClientPid = start_client(TestEnv),
+
+    % Create file in subdirectory → should NOT receive event (not recursive)
+    FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
+    SetupProvider = maps:get(setup_provider, TestEnv),
+    #object{guid = FileInSubDirGuid} = onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, SubDirGuid, SetupProvider, #file_spec{name = ?RAND_STR()}
+    ),
+
+    % Create file directly in observed directory → should receive event
+    [FileInParentGuid] = generate_n_events(1, TestEnv, ClientPid),
+
+    % ASSERTIONS: Only direct children events, NOT recursive
+    ?assert(length(get_events_for_file(ClientPid, FileInParentGuid)) > 0, ?ATTEMPTS),
+    ?assertEqual([], get_events_for_file(ClientPid, FileInSubDirGuid)),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ClientPid).
+
+
+observe_space_root_test(_Config) ->
+    % Create test env observing space root instead of subdirectory
+    SpaceId = oct_background:get_space_id(space_krk_p),
+    SpaceGuid = space_dir:guid(SpaceId),
+    
+    TestEnv = create_single_provider_test_env(#{}),
+
+    % Override client to observe space root instead
+    ClientArgs = maps:get(client_args, TestEnv),
+    ClientArgsForRoot = ClientArgs#{observed_dirs => [SpaceGuid]},
+    ClientPid = start_client(TestEnv#{client_args => ClientArgsForRoot}),
+
+    % Create file directly in space root → should receive event
+    FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
+    SetupProvider = maps:get(setup_provider, TestEnv),
+    
+    FileSpecInRoot = #file_spec{name = ?RAND_STR()},
+    #object{guid = FileInRootGuid} = onenv_file_test_utils:create_file_tree(
+        FileOwnerUserId, SpaceGuid, SetupProvider, FileSpecInRoot
+    ),
+    await_event_for_file(ClientPid, FileInRootGuid),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ClientPid).
 
 
 unauthorized_client_test(_Config) ->
