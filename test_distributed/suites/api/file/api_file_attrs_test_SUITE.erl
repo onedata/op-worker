@@ -1211,7 +1211,7 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
                 virtual_size = 0,
                 logical_size = 0,
                 physical_size_per_storage = #{P2StorageId => 0},
-                locations_per_storage = #{}
+                locations_per_storage = #{<<"unknown">> => ?ERROR_NOT_SUPPORTED}
             }
         }
     }},
@@ -1233,7 +1233,7 @@ get_dir_distribution_backwards_compatibility_test(Config) ->
                 virtual_size = 50,
                 logical_size = 50,
                 physical_size_per_storage = #{P2StorageId => 20},
-                locations_per_storage = #{}
+                locations_per_storage = #{<<"unknown">> => ?ERROR_NOT_SUPPORTED}
             }
         }
     }},
