@@ -118,7 +118,7 @@ gather_dir_distribution(FileCtx) ->
                 {ok, CurrentDirStats} ->
                     build_provider_dir_distribution(#provider_dir_distribution_get_result{
                         current_dir_size_stats = CurrentDirStats,
-                        locations_per_storage = ?ERROR_NOT_SUPPORTED
+                        locations_per_storage = #{<<"unknown">> => ?ERROR_NOT_SUPPORTED}
                     });
                 {error, _} = E ->
                     E

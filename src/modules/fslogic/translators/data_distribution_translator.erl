@@ -297,10 +297,6 @@ merge_chunks({BarNum, Fill}, Result) ->
 %% @private
 -spec translate_locations_per_storage(data_distribution:locations_per_storage() | #{storage:id() => errors:error()}) ->
     json_utils:json_map().
-translate_locations_per_storage({error, _} = Error) ->
-    #{
-        <<"unknown">> => build_error_response(Error)
-    };
 translate_locations_per_storage(LocationsPerStorage) ->
     maps:map(fun
         (_StorageId, {error, _} = Error) ->
