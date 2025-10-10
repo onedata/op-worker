@@ -37,7 +37,7 @@
 -type get_result() :: #data_distribution_gather_result{}.
 
 -type locations_per_storage() :: #{
-    storage:id() => file_location:storage_file_id()
+    storage:id() => file_location:storage_file_id() | errors:error()
 }.
 -type storage_locations_per_provider() :: #{
     od_provider:id() => locations_per_storage()
@@ -117,7 +117,8 @@ gather_dir_distribution(FileCtx) ->
             of
                 {ok, CurrentDirStats} ->
                     build_provider_dir_distribution(#provider_dir_distribution_get_result{
-                        current_dir_size_stats = CurrentDirStats
+                        current_dir_size_stats = CurrentDirStats,
+                        locations_per_storage = ?ERROR_NOT_SUPPORTED
                     });
                 {error, _} = E ->
                     E

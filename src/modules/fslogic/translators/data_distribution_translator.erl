@@ -161,11 +161,14 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
 -spec storage_locations_to_json(data_distribution:storage_locations_per_provider()) -> json_utils:json_term().
 storage_locations_to_json(StorageLocations) ->
     #{
-        <<"locationsPerProvider">> => maps:map(fun(_ProviderId, LocationsPerStorage) ->
-            #{
-                <<"success">> => true,
-                <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
-            }
+        <<"locationsPerProvider">> => maps:map(fun
+            (_ProviderId, {error, _} = Error) ->
+                build_error_response(Error);
+            (_ProviderId, LocationsPerStorage) ->
+                #{
+                    <<"success">> => true,
+                    <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
+                }
         end, StorageLocations)
     }.
 
@@ -186,10 +189,9 @@ get_blocks_summary(FileBlocks) ->
 
 -spec build_error_response({error, term()}) -> json_utils:json_term().
 build_error_response(Error) ->
-    ErrorJson = errors:to_json(Error),
     #{
         <<"success">> => false,
-        <<"error">> => ErrorJson 
+        <<"error">> => errors:to_json(Error)
     }.
 
 %%--------------------------------------------------------------------
@@ -295,13 +297,14 @@ merge_chunks({BarNum, Fill}, Result) ->
 %% @private
 -spec translate_locations_per_storage(data_distribution:locations_per_storage() | #{storage:id() => errors:error()}) ->
     json_utils:json_map().
+translate_locations_per_storage({error, _} = Error) ->
+    #{
+        <<"unknown">> => build_error_response(Error)
+    };
 translate_locations_per_storage(LocationsPerStorage) ->
     maps:map(fun
         (_StorageId, {error, _} = Error) ->
-            #{
-                <<"success">> => false,
-                <<"error">> => errors:to_json(Error)
-            };
+            build_error_response(Error);
         (_StorageId, Location) ->
             #{
                 <<"success">> => true,
