@@ -50,7 +50,10 @@
 
     multiple_clients_same_directory_test/1,
     multiple_clients_different_directories_test/1,
-    multiple_clients_different_attributes_test/1
+    multiple_clients_different_attributes_test/1,
+
+    main_monitor_timeout_test/1,
+    main_monitor_doesnt_timeout_with_catching_test/1
 ]).
 
 groups() -> [
@@ -81,6 +84,10 @@ groups() -> [
         multiple_clients_same_directory_test,
         multiple_clients_different_directories_test,
         multiple_clients_different_attributes_test
+    ]},
+    {lifecycle_tests, [sequential], [
+        main_monitor_timeout_test,
+        main_monitor_doesnt_timeout_with_catching_test
     ]}
 ].
 
@@ -89,7 +96,8 @@ all() -> [
     {group, auth_tests},
     {group, reconnect_tests},
     {group, heartbeat_tests},
-    {group, multiple_clients_tests}
+    {group, multiple_clients_tests},
+    {group, lifecycle_tests}
 ].
 
 
@@ -115,7 +123,7 @@ all() -> [
 }.
 
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 40).
 
 -define(assert_attr_changed_or_created_events(__EXP_ATTR_DATA, __SSE_CLIENT_PID, __FILE_GUID),
     ?assertEqual(
@@ -837,6 +845,98 @@ multiple_clients_different_attributes_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(Client2Pid).
 
 
+%% TODO maybe use distinct space for those tests???
+main_monitor_timeout_test(_Config) ->
+    % Goal: Verify main monitor timeouts after inactivity period when no clients are connected
+    % and no catching monitors exist
+
+    % Setup: Configure short inactivity timeout (2 seconds)
+    Workers = oct_background:get_provider_nodes(krakow),
+    test_utils:set_env(Workers, op_worker, space_files_monitor_inactivity_period_ms, 2000),
+
+    TestEnv = create_single_provider_test_env(#{}),
+    SpaceId = maps:get(space_id, TestEnv),
+    SetupProvider = maps:get(setup_provider, TestEnv),
+
+    % 1. Start client (creates monitoring tree)
+    ClientPid = start_client(TestEnv),
+
+    % Verify monitoring tree is alive
+    ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, SetupProvider)),
+    timer:sleep(3000),
+    ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, SetupProvider)),
+
+    % 2. Stop client (starts inactivity timer)
+    ct:pal("Stopping client, inactivity timer should start..."),
+    ok = space_file_events_test_sse_client:stop(ClientPid),
+
+    % 3. Wait longer than inactivity timeout
+    ct:pal("Waiting 3 seconds (> 2s timeout)..."),
+    timer:sleep(3000),
+
+    % 4. ASSERTION: Monitoring tree should be terminated
+    ct:pal("Verifying monitoring tree terminated..."),
+    ?assertEqual(false, is_space_monitoring_tree_alive(SpaceId, SetupProvider), ?ATTEMPTS),
+
+    ct:pal("✓ Main monitor correctly timed out after inactivity").
+
+
+main_monitor_doesnt_timeout_with_catching_test(_Config) ->
+    % Goal: Main monitor does NOT timeout when catching monitor exists
+    % Even if main has no direct observers and inactivity period passes
+
+    % Setup: Configure short inactivity timeout (2 seconds)
+    Workers = oct_background:get_provider_nodes(krakow),
+    test_utils:set_env(Workers, op_worker, space_files_monitor_inactivity_period_ms, 2000),
+
+    TestEnv = create_single_provider_test_env(#{}),
+    SpaceId = maps:get(space_id, TestEnv),
+    SetupProvider = maps:get(setup_provider, TestEnv),
+
+    % 1. Connect → disconnect → generate many events
+    ClientPid = start_client(TestEnv),
+    _ = generate_n_events(50, TestEnv, ClientPid),
+    LastEventId = get_event_id(hd(ensure_events(ClientPid))),
+    ok = space_file_events_test_sse_client:stop(ClientPid),
+
+    % 2. Reconnect with old Last-Event-Id (starts catching monitor)
+    ct:pal("Reconnecting with old Last-Event-Id (catching monitor starts)..."),
+    ReconnectedPid = start_client(TestEnv, LastEventId),
+
+    % 3. Wait for catching to reach end (paused before takeover)
+    CatchingPid = receive
+        {catching_ready_for_takeover, Pid} ->
+            ct:pal("Catching monitor reached end, paused before takeover"),
+            Pid
+    end,
+
+    % 4. Assert: Catching monitor exists
+    ?assertEqual(1, get_catching_monitors_count(SpaceId, SetupProvider)),
+
+    % 5. Sleep LONGER than inactivity timeout
+    ct:pal("Sleeping 3 seconds (> 2s timeout) with catching monitor alive..."),
+    timer:sleep(3000),
+
+    % 6. ASSERTION: Main still alive despite timeout passed (catching blocks it)
+    ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, SetupProvider)),
+    ?assertEqual(1, get_catching_monitors_count(SpaceId, SetupProvider)),
+
+    % 7. Continue takeover
+    ct:pal("Allowing takeover to proceed..."),
+    CatchingPid ! continue_takeover,
+
+    % 8. Wait for takeover completion
+    ?assertEqual(0, get_catching_monitors_count(SpaceId, SetupProvider), ?ATTEMPTS),
+
+    % 9. FINAL ASSERTIONS: Main alive
+    ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, SetupProvider)),
+
+    ct:pal("✓ Main monitor did not timeout while catching monitor existed"),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ReconnectedPid).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -845,7 +945,12 @@ multiple_clients_different_attributes_test(_Config) ->
 init_per_suite(Config) ->
     opt:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+        envs = [{op_worker, op_worker, [
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
+            %% Such small inactivity is only needed in lifecycle_tests BUT in theory everything
+            %% should still work no matter the value so it is setup as such for whole suite
+            {space_files_monitor_inactivity_period_ms, 2000}
+        ]}]
     }).
 
 
@@ -853,11 +958,31 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config) ->
+    Self = self(),
+    Workers = oct_background:get_provider_nodes(krakow),
+    test_utils:mock_new(Workers, [space_files_catching_monitor], [passthrough]),
+    %% TODO block only once
+    test_utils:mock_expect(Workers, space_files_catching_monitor, propose_takeover,
+        fun(State) ->
+            % Catching reached end, about to takeover - pause here
+            Self ! {catching_ready_for_takeover, self()},
+            receive
+                continue_takeover ->
+                    meck:passthrough([State])
+            end
+        end
+    ),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
 
+end_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config) ->
+    Workers = oct_background:get_provider_nodes(krakow),
+    test_utils:mock_unload(Workers),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 
@@ -1116,3 +1241,42 @@ get_data_attributes_from_changed_or_created_events(Events) ->
         (_) ->
             false
     end, Events).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if space monitoring supervision tree is alive on given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_space_monitoring_tree_alive(od_space:id(), oct_background:entity_selector()) -> 
+    boolean().
+is_space_monitoring_tree_alive(SpaceId, ProviderSelector) ->
+    ProviderNode = oct_background:get_random_provider_node(ProviderSelector),
+    ?rpc(ProviderNode, begin
+        case files_monitoring_sup:find_sup_for_space(SpaceId) of
+            undefined -> false;
+            Pid when is_pid(Pid) -> is_process_alive(Pid)
+        end
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Counts active catching monitors for a space on given provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_catching_monitors_count(od_space:id(), oct_background:entity_selector()) -> 
+    non_neg_integer().
+get_catching_monitors_count(SpaceId, ProviderSelector) ->
+    ProviderNode = oct_background:get_random_provider_node(ProviderSelector),
+    ?rpc(ProviderNode, begin
+        case files_monitoring_sup:find_sup_for_space(SpaceId) of
+            undefined -> 
+                0;
+            SpaceSupPid ->
+                CatchingSupPid = space_files_monitoring_sup:get_catching_monitors_sup_pid(SpaceSupPid),
+                space_files_catching_monitors_sup:get_active_children_count(CatchingSupPid)
+        end
+    end).

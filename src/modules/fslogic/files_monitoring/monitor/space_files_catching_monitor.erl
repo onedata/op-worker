@@ -31,6 +31,9 @@
 %% API
 -export([id/0, spec/1, start_link/3]).
 
+%% Exported for mocking in tests
+-export([propose_takeover/1]).
+
 %% gen_server callbacks
 -export([
     init/1,
@@ -124,7 +127,7 @@ handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
         )
     },
     case has_reached_target_seq(NewState) of
-        true -> propose_takeover(NewState);
+        true -> ?MODULE:propose_takeover(NewState);  %% Call via ?MODULE to mock in tests
         false -> {noreply, NewState}
     end;
 
