@@ -89,7 +89,7 @@
 %%%===================================================================
 
 
--spec call_monitor(pid(), term()) -> ok | {ok, term()} | {error, Reason :: term()}.
+-spec call_monitor(atom() | pid(), term()) -> ok | {ok, term()} | {error, Reason :: term()}.
 call_monitor(MonitorPid, Request) ->
     try
         gen_server2:call(MonitorPid, Request, ?DEFAULT_REQUEST_TIMEOUT)

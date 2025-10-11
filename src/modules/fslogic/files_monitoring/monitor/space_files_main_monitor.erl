@@ -29,10 +29,11 @@
 %% API
 -export([
     id/0,
-    spec/2,
-    start_link/2,
+    spec/1,
+    start_link/1,
 
-    try_subscribe/2
+    try_subscribe/2,
+    verify_inactive/1
 ]).
 
 %% gen_server callbacks
@@ -44,7 +45,6 @@
 
 -record(state, {
     space_id :: od_space:id(),
-    space_monitoring_sup_pid :: pid(),
 
     changes_stream_pid :: pid() | undefined,
 
@@ -56,8 +56,8 @@
 
 
 %% The process is supposed to die after ?INACTIVITY_PERIOD_MS time of idling (no subscribers)
--define(INACTIVITY_PERIOD_MS, op_worker:get_env(space_files_monitor_inactivity_period_ms, 10_000)).
--define(SHUTDOWN_INACTIVE_REQ, shutdown_inactive).
+-define(INACTIVITY_PERIOD_MS, op_worker:get_env(space_files_monitor_inactivity_period_ms, 30_000)).
+-define(NOTIFY_INACTIVE_REQ, notify_inactive).
 
 
 %%%===================================================================
@@ -69,20 +69,20 @@
 id() -> ?MODULE.
 
 
--spec spec(od_space:id(), pid()) -> supervisor:child_spec().
-spec(SpaceId, SpaceMonitoringSupPid) ->
+-spec spec(od_space:id()) -> supervisor:child_spec().
+spec(SpaceId) ->
     #{
         id => id(),
-        start => {?MODULE, start_link, [SpaceId, SpaceMonitoringSupPid]},
-        restart => transient,
+        start => {?MODULE, start_link, [SpaceId]},
+        restart => permanent,
         shutdown => timer:seconds(10),
         type => worker
     }.
 
 
--spec start_link(od_space:id(), pid()) -> {ok, pid()} | {error, term()}.
-start_link(SpaceId, SpaceMonitoringSupPid) ->
-    gen_server2:start_link(?MODULE, [SpaceId, SpaceMonitoringSupPid], []).
+-spec start_link(od_space:id()) -> {ok, pid()} | {error, term()}.
+start_link(SpaceId) ->
+    gen_server2:start_link(?MODULE, [SpaceId], []).
 
 
 -spec try_subscribe(pid(), space_files_monitor_common:subscribe_req()) ->
@@ -91,13 +91,18 @@ try_subscribe(MonitorPid, SubscribeReq) ->
     space_files_monitor_common:call_monitor(MonitorPid, SubscribeReq).
 
 
+-spec verify_inactive(pid()) -> {ok, boolean()} | errors:error().
+verify_inactive(MonitorPid) ->
+    space_files_monitor_common:call_monitor(MonitorPid, verify_inactive).
+
+
 %%%===================================================================
 %%% gen_server2 callbacks
 %%%===================================================================
 
 
--spec init([od_space:id() | pid()]) -> {ok, state(), non_neg_integer()}.
-init([SpaceId, SpaceMonitoringSupPid]) ->
+-spec init([od_space:id()]) -> {ok, state(), non_neg_integer()}.
+init([SpaceId]) ->
     process_flag(trap_exit, true),
 
     ?info("[ space file events ]: Starting main monitor for space '~ts'", [SpaceId]),
@@ -107,10 +112,7 @@ init([SpaceId, SpaceMonitoringSupPid]) ->
 
     State = #state{
         space_id = SpaceId,
-        space_monitoring_sup_pid = SpaceMonitoringSupPid,
-
         changes_stream_pid = ChangesPid,
-
         monitoring = #monitoring{current_seq = SinceSeq}
     },
     {ok, State, ?INACTIVITY_PERIOD_MS}.
@@ -133,6 +135,9 @@ handle_call(SubscribeReq = #subscribe_req{}, _From, State) ->
             reply(Error, State)
     end;
 
+handle_call(verify_inactive, _From, State) ->
+    reply({ok, is_inactive(State)}, State);
+
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
@@ -145,7 +150,7 @@ handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
-    noreply(State).
+    reply({error, unknown_request}, State).
 
 
 -spec handle_cast(Request :: term(), state()) ->
@@ -171,18 +176,9 @@ handle_info(stream_ended, State = #state{}) ->
     ),
     {stop, {shutdown, stream_ended}, State};
 
-handle_info(?SHUTDOWN_INACTIVE_REQ, State = #state{}) ->
-    case is_active(State) of
-        true ->
-            noreply(State);
-        false ->
-            ?info(
-                "[ space file events ]: Stopping monitor for space '~ts' due to inactivity "
-                "(no observers and no catching monitors)",
-                [State#state.space_id]
-            ),
-            {stop, {shutdown, timeout}, State}
-    end;
+handle_info(?NOTIFY_INACTIVE_REQ, State = #state{space_id = SpaceId}) ->
+    is_inactive(State) andalso files_monitoring_manager:notify_inactive(SpaceId),
+    noreply(State#state{inactivity_timer = undefined});
 
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -210,46 +206,35 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %% @private
 -spec reply(Response, state()) -> {reply, Response, state()} when Response :: term().
 reply(Response, State) ->
-    {reply, Response, verify_activity(State)}.
+    {reply, Response, check_inactivity_timer(State)}.
 
 
 %% @private
 -spec noreply(state()) -> {noreply, state()}.
 noreply(State) ->
-    {noreply, verify_activity(State)}.
+    {noreply, check_inactivity_timer(State)}.
 
 
 %% @private
--spec verify_activity(state()) -> state().
-verify_activity(State) ->
-    case is_active(State) of
-        true -> cancel_inactivity_shutdown(State);
-        false -> schedule_inactivity_shutdown(State)
+-spec check_inactivity_timer(state()) -> state().
+check_inactivity_timer(State) ->
+    case is_inactive(State) of
+        true -> schedule_inactivity_shutdown(State);
+        false -> cancel_inactivity_shutdown(State)
     end.
 
 
 %% @private
--spec is_active(state()) -> boolean().
-is_active(State) ->
-    case space_files_monitor_common:has_observers(State#state.monitoring) of
-        true ->
-            true;  %% Has direct observers - active
-        false ->
-            CatchingSupPid = space_files_monitoring_sup:get_catching_monitors_sup_pid(
-                State#state.space_monitoring_sup_pid
-            ),
-            case space_files_catching_monitors_sup:get_active_children_count(CatchingSupPid) of
-                0 -> false;  %% 0 catching monitors - inactive
-                _ -> true  %% > 0 catching monitors - active
-            end
-    end.
+-spec is_inactive(state()) -> boolean().
+is_inactive(State) ->
+    not space_files_monitor_common:has_observers(State#state.monitoring).
 
 
 %% @private
 -spec schedule_inactivity_shutdown(state()) -> state().
 schedule_inactivity_shutdown(#state{inactivity_timer = undefined} = State) ->
     State#state{inactivity_timer = erlang:send_after(
-        ?INACTIVITY_PERIOD_MS, self(), ?SHUTDOWN_INACTIVE_REQ
+        ?INACTIVITY_PERIOD_MS, self(), ?NOTIFY_INACTIVE_REQ
     )};
 schedule_inactivity_shutdown(State) ->
     State.

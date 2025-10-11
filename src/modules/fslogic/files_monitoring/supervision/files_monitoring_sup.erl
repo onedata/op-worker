@@ -15,14 +15,13 @@
 
 -behaviour(supervisor).
 
--include_lib("ctool/include/logging.hrl").
-
 %% API
 -export([
     spec/0,
     start_link/0,
 
-    ensure_monitoring_tree_for_space/1
+    ensure_monitoring_tree_for_space/1,
+    find_sup_for_space/1
 ]).
 
 %% Supervisor callbacks
@@ -53,21 +52,27 @@ start_link() ->
     supervisor:start_link({local, ?ID}, ?MODULE, []).
 
 
--spec ensure_monitoring_tree_for_space(od_space:id()) -> {ok, pid()} | errors:error().
+-spec ensure_monitoring_tree_for_space(od_space:id()) -> pid().
 ensure_monitoring_tree_for_space(SpaceId) ->
     ChildSpec = space_files_monitoring_sup:spec(SpaceId),
 
     case supervisor:start_child(?ID, ChildSpec) of
-        {ok, _Pid} = Result ->
-            Result;
-        {error, already_present} ->
-            % When monitor dies naturally (due to inactivity) it is not restarted but its
-            % spec is also not removed from supervisor (one_for_one supervisor behaviour)
-            % - it needs to be done manually before starting it anew
-            supervisor:delete_child(?ID, maps:get(id, ChildSpec)),
-            ensure_monitoring_tree_for_space(SpaceId);
+        {ok, Pid} = Result ->
+            Pid;
         {error, {already_started, Pid}} ->
-            {ok, Pid}
+            % Space supervisor already running with healthy main monitor
+            Pid
+    end.
+
+
+-spec find_sup_for_space(od_space:id()) -> pid() | undefined.
+find_sup_for_space(SpaceId) ->
+    ChildId = space_files_monitoring_sup:id(SpaceId),
+    Children = supervisor:which_children(?ID),
+
+    case lists:keyfind(ChildId, 1, Children) of
+        {ChildId, Pid, _Type, _Modules} -> Pid;
+        _ -> undefined
     end.
 
 
@@ -84,4 +89,5 @@ init([]) ->
         intensity => 10,
         period => 3600
     },
-    {ok, {SupFlags, []}}.
+    ManagerSpec = files_monitoring_manager:spec(),
+    {ok, {SupFlags, [ManagerSpec]}}.

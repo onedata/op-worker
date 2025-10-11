@@ -130,7 +130,7 @@ handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
-    {noreply, State}.
+    {reply, {error, unknown_request}, State}.
 
 
 -spec handle_cast(Request :: term(), state()) ->
@@ -143,8 +143,9 @@ handle_cast(Request, #state{} = State) ->
 -spec handle_info(timeout() | term(), state()) ->
     {noreply, state()} |
     {stop, term(), state()}.
-handle_info({'EXIT', _ObserverPid, _Reason}, State = #state{}) ->
-    {stop, observer_died, State};
+handle_info({'EXIT', _ObserverPid, _Reason}, State = #state{space_id = SpaceId}) ->
+    ?error("[ space file events ]: Observer died for catching monitor space '~ts'", [SpaceId]),
+    {stop, {shutdown, observer_died}, State};
 
 handle_info(stream_ended, State = #state{}) ->
     ?error(

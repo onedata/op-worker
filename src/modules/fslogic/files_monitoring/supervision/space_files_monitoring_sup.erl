@@ -22,6 +22,7 @@
 
 %% API
 -export([
+    id/1,
     spec/1,
     start_link/1,
 
@@ -41,10 +42,15 @@
 %%%===================================================================
 
 
+-spec id(od_space:id()) -> {?MODULE, od_space:id()}.
+id(SpaceId) ->
+    {?MODULE, SpaceId}.
+
+
 -spec spec(od_space:id()) -> supervisor:child_spec().
 spec(SpaceId) ->
     #{
-        id => {?MODULE, SpaceId},
+        id => id(SpaceId),
         start => {?MODULE, start_link, [SpaceId]},
         % Do not restart supervisor on death - reconnecting client will do this
         restart => temporary,
@@ -89,7 +95,7 @@ init([SpaceId]) ->
         intensity => 5,
         period => 60
     },
-    MainMonitorSpec = space_files_main_monitor:spec(SpaceId, self()),
+    MainMonitorSpec = space_files_main_monitor:spec(SpaceId),
     CatchingSupSpec = space_files_catching_monitors_sup:spec(SpaceId),
 
     {ok, {SupFlags, [MainMonitorSpec, CatchingSupSpec]}}.
@@ -105,9 +111,5 @@ init([SpaceId]) ->
 get_child_pid(SupervisorPid, ChildId) ->
     Children = supervisor:which_children(SupervisorPid),
 
-    case lists:keyfind(ChildId, 1, Children) of
-        {ChildId, Pid, _Type, _Modules} when is_pid(Pid) ->
-            Pid;
-        _ ->
-            undefined
-    end.
+    {ChildId, Pid, _Type, _Modules} = lists:keyfind(ChildId, 1, Children),
+    Pid.

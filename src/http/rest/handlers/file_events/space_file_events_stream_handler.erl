@@ -24,7 +24,7 @@
     space_id :: od_space:id(),
     auth :: aai:auth(),
     files_monitoring_spec :: space_files_monitoring_spec:t(),
-    subscription :: space_files_monitoring_api:subscription()
+    subscription :: files_monitoring_manager:subscription()
 }).
 -type state() :: #state{}.
 

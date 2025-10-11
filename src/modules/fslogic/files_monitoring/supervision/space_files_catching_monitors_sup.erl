@@ -21,6 +21,8 @@
 
 -behaviour(supervisor).
 
+-include_lib("ctool/include/logging.hrl").
+
 %% API
 -export([
     id/0,
@@ -50,7 +52,7 @@ spec(SpaceId) ->
     #{
         id => id(),
         start => {?MODULE, start_link, [SpaceId]},
-        restart => transient,
+        restart => permanent,
         shutdown => infinity,  % Wait for all catching monitors to terminate
         type => supervisor
     }.
@@ -62,9 +64,14 @@ start_link(SpaceId) ->
 
 
 -spec start_catching_monitor(pid(), pid(), space_files_monitor_common:subscribe_req()) ->
-    {ok, pid()} | {error, term()}.
+    {ok, pid()} | errors:error().
 start_catching_monitor(SupervisorPid, MainMonitorPid, SubscribeReq) ->
-    supervisor:start_child(SupervisorPid, [MainMonitorPid, SubscribeReq]).
+    case supervisor:start_child(SupervisorPid, [MainMonitorPid, SubscribeReq]) of
+        {ok, _} = Result ->
+            Result;
+        {error, Reason} ->
+            ?report_internal_server_error("Failed to start catching monitor due to: ~tp", [Reason])
+    end.
 
 
 -spec get_active_children_count(pid()) -> non_neg_integer().
