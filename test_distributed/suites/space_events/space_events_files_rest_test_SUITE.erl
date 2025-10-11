@@ -39,6 +39,7 @@
     unauthorized_client_test/1,
     token_caveats_test/1,
     observer_loses_access_during_monitoring_test/1,
+    catching_monitor_with_authorization_changes_test/1,
 
     reconnect_without_catching_test/1,
     reconnect_with_old_last_event_id_test/1,
@@ -64,7 +65,8 @@ groups() -> [
     {auth_tests, [sequential], [
         unauthorized_client_test,
         token_caveats_test,
-        observer_loses_access_during_monitoring_test
+        observer_loses_access_during_monitoring_test,
+        catching_monitor_with_authorization_changes_test
     ]},
     {reconnect_tests, [sequential], [
         reconnect_without_catching_test,
@@ -477,6 +479,46 @@ observer_loses_access_during_monitoring_test(_Config) ->
     % Cleanup
     ok = space_file_events_test_sse_client:stop(ControlClientPid),
     ok = space_file_events_test_sse_client:stop(ClientPid).
+
+
+catching_monitor_with_authorization_changes_test(_Config) ->
+    % Goal: Verify authorization is checked LIVE during catching replay (not stale)
+    % When catching monitor replays events, it should use CURRENT permissions,
+    % not permissions from when events were generated
+
+    TestEnv = create_single_provider_test_env(#{
+        observed_attrs => [?attr_name, ?attr_acl]
+    }),
+
+    ObservedDirGuid = maps:get(observed_dir_guid, TestEnv),
+    ProviderNode = oct_background:get_random_provider_node(maps:get(setup_provider, TestEnv)),
+    FileOwnerSessionId = maps:get(file_owner_session_id, TestEnv),
+
+    ClientArgs = maps:get(client_args, TestEnv),
+    ControlClientPid = start_client(TestEnv#{client_args => ClientArgs#{
+        token => oct_background:get_user_access_token(maps:get(file_owner, TestEnv))
+    }}),
+    ClientPid = start_client(TestEnv),
+
+    ok = lfm_proxy:set_perms(ProviderNode, FileOwnerSessionId, ?FILE_REF(ObservedDirGuid), 8#700),
+
+    FileGuid = create_file_and_await_sync(TestEnv, #file_spec{mode = ?FILE_MODE(8#777)}, ControlClientPid),
+    assert_no_event_for_file(ClientPid, FileGuid),
+
+    LastEventId = get_event_id(hd(ensure_events(ControlClientPid))),
+
+    ok = space_file_events_test_sse_client:stop(ClientPid),
+
+    ok = lfm_proxy:set_perms(ProviderNode, FileOwnerSessionId, ?FILE_REF(ObservedDirGuid), 8#777),
+
+    ct:pal("Reconnecting with old Last-Event-Id (catching monitor should replay with LIVE auth)..."),
+    ReconnectedPid = start_client(TestEnv, LastEventId - 1),
+
+    await_event_for_file(ReconnectedPid, FileGuid),
+
+    % Cleanup
+    ok = space_file_events_test_sse_client:stop(ControlClientPid),
+    ok = space_file_events_test_sse_client:stop(ReconnectedPid).
 
 
 reconnect_without_catching_test(_Config) ->
