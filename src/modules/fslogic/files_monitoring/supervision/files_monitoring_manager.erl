@@ -263,7 +263,7 @@ terminate_space_monitoring_tree(SpaceId) ->
             ok;
         {error, Reason} ->
             ?error(
-                "[ space file events ]: Failed to terminate space monitoring tree for '~ts': ~p",
+                "[ space file events ]: Failed to terminate space monitoring tree for '~ts': ~tp",
                 [SpaceId, Reason]
             ),
             ok
