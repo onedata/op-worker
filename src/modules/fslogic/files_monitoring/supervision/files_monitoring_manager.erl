@@ -34,7 +34,8 @@
     try_subscribe/2,
     handle_monitor_exit/3,
 
-    notify_inactive/1
+    notify_inactive/1,
+    notify_space_unsupported/1
 ]).
 
 %% gen_server callbacks
@@ -116,6 +117,11 @@ notify_inactive(SpaceId) ->
     gen_server2:cast(?MODULE, {inactive_space, SpaceId}).
 
 
+-spec notify_space_unsupported(od_space:id()) -> ok.
+notify_space_unsupported(SpaceId) ->
+    gen_server2:cast(?MODULE, {unsupported_space, SpaceId}).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -150,6 +156,10 @@ handle_cast({inactive_space, SpaceId}, State) ->
         true -> terminate_space_monitoring_tree(SpaceId);
         false -> ok
     end,
+    {noreply, State};
+
+handle_cast({unsupported_space, SpaceId}, State) ->
+    terminate_space_monitoring_tree(SpaceId),
     {noreply, State};
 
 handle_cast(Request, State) ->
@@ -247,7 +257,7 @@ should_terminate_monitoring_tree(SpaceMonitoringSup) ->
 -spec terminate_space_monitoring_tree(od_space:id()) -> ok.
 terminate_space_monitoring_tree(SpaceId) ->
     ?info(
-        "[ space file events ]: Terminating monitoring tree for space '~ts' due to inactivity",
+        "[ space file events ]: Terminating monitoring tree for space '~ts'",
         [SpaceId]
     ),
 

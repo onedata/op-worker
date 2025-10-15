@@ -35,6 +35,7 @@
     changed_or_created_events_test/1,
     nested_directory_not_observed_test/1,
     observe_space_root_test/1,
+    space_unsupported_test/1,
 
     unauthorized_client_test/1,
     token_caveats_test/1,
@@ -63,7 +64,8 @@ groups() -> [
         deleted_events_test,
         changed_or_created_events_test,
         nested_directory_not_observed_test,
-        observe_space_root_test
+        observe_space_root_test,
+        space_unsupported_test
     ]},
     {auth_tests, [sequential], [
         unauthorized_client_test,
@@ -359,7 +361,7 @@ observe_space_root_test(_Config) ->
     % Create test env observing space root instead of subdirectory
     SpaceId = oct_background:get_space_id(space_krk_p),
     SpaceGuid = space_dir:guid(SpaceId),
-    
+
     TestEnv = create_single_provider_test_env(#{}),
 
     % Override client to observe space root instead
@@ -370,7 +372,7 @@ observe_space_root_test(_Config) ->
     % Create file directly in space root → should receive event
     FileOwnerUserId = maps:get(file_owner_user_id, TestEnv),
     SetupProvider = maps:get(setup_provider, TestEnv),
-    
+
     FileSpecInRoot = #file_spec{name = ?RAND_STR()},
     #object{guid = FileInRootGuid} = onenv_file_test_utils:create_file_tree(
         FileOwnerUserId, SpaceGuid, SetupProvider, FileSpecInRoot
@@ -379,6 +381,22 @@ observe_space_root_test(_Config) ->
 
     % Cleanup
     ok = space_file_events_test_sse_client:stop(ClientPid).
+
+
+space_unsupported_test(_Config) ->
+    % Create test env observing space root instead of subdirectory
+    SpaceId = oct_background:get_space_id(space_krk_p),
+
+    TestEnv = create_single_provider_test_env(#{}),
+    Provider = maps:get(setup_provider, TestEnv),
+
+    start_client(TestEnv),
+
+    ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, Provider)),
+    ?rpc(Provider, files_monitoring_manager:notify_space_unsupported(SpaceId)),
+    ?assertEqual(false, is_space_monitoring_tree_alive(SpaceId, Provider), ?ATTEMPTS),
+
+    ok.
 
 
 unauthorized_client_test(_Config) ->
@@ -845,7 +863,6 @@ multiple_clients_different_attributes_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(Client2Pid).
 
 
-%% TODO maybe use distinct space for those tests???
 main_monitor_timeout_test(_Config) ->
     % Goal: Verify main monitor timeouts after inactivity period when no clients are connected
     % and no catching monitors exist
@@ -854,9 +871,13 @@ main_monitor_timeout_test(_Config) ->
     Workers = oct_background:get_provider_nodes(krakow),
     test_utils:set_env(Workers, op_worker, space_files_monitor_inactivity_period_ms, 2000),
 
-    TestEnv = create_single_provider_test_env(#{}),
+    TestEnv = create_single_provider_test_env(#{
+        space => space1,
+        connecting_user => user2
+    }),
     SpaceId = maps:get(space_id, TestEnv),
     SetupProvider = maps:get(setup_provider, TestEnv),
+    ensure_no_supervision_tree(SpaceId),
 
     % 1. Start client (creates monitoring tree)
     ClientPid = start_client(TestEnv),
@@ -889,9 +910,13 @@ main_monitor_doesnt_timeout_with_catching_test(_Config) ->
     Workers = oct_background:get_provider_nodes(krakow),
     test_utils:set_env(Workers, op_worker, space_files_monitor_inactivity_period_ms, 2000),
 
-    TestEnv = create_single_provider_test_env(#{}),
+    TestEnv = create_single_provider_test_env(#{
+        space => space1,
+        connecting_user => user2
+    }),
     SpaceId = maps:get(space_id, TestEnv),
     SetupProvider = maps:get(setup_provider, TestEnv),
+    ensure_no_supervision_tree(SpaceId),
 
     % 1. Connect → disconnect → generate many events
     ClientPid = start_client(TestEnv),
@@ -960,17 +985,20 @@ end_per_suite(_Config) ->
 
 init_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config) ->
     Self = self(),
+    Ref = make_ref(),
     Workers = oct_background:get_provider_nodes(krakow),
     test_utils:mock_new(Workers, [space_files_catching_monitor], [passthrough]),
-    %% TODO block only once
     test_utils:mock_expect(Workers, space_files_catching_monitor, propose_takeover,
         fun(State) ->
-            % Catching reached end, about to takeover - pause here
-            Self ! {catching_ready_for_takeover, self()},
-            receive
-                continue_takeover ->
-                    meck:passthrough([State])
-            end
+            case node_cache:get(Ref, undefined) of
+                undefined ->
+                    node_cache:put(Ref, true),
+                    Self ! {catching_ready_for_takeover, self()},
+                    receive continue_takeover -> ok end;
+                _ ->
+                    ok
+            end,
+            meck:passthrough([State])
         end
     ),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -1280,3 +1308,9 @@ get_catching_monitors_count(SpaceId, ProviderSelector) ->
                 space_files_catching_monitors_sup:get_active_children_count(CatchingSupPid)
         end
     end).
+
+
+%% @private
+ensure_no_supervision_tree(SpaceId) ->
+    ?rpc(krakow, files_monitoring_manager:notify_space_unsupported(SpaceId)),
+    ?assertEqual(false, is_space_monitoring_tree_alive(SpaceId, krakow), ?ATTEMPTS).
