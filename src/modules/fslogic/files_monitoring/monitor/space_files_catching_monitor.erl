@@ -121,15 +121,20 @@ init([SpaceId, MainMonitorPid, SubscribeReq]) ->
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
-    NewState = State#state{
+    handle_seq_advancement(State#state{
         monitoring = space_files_monitor_common:process_docs(
             ChangedDocs, State#state.monitoring
         )
-    },
-    case has_reached_target_seq(NewState) of
-        true -> ?MODULE:propose_takeover(NewState);  %% Call via ?MODULE to mock in tests
-        false -> {noreply, NewState}
-    end;
+    });
+
+handle_call(#seq_advancement_notification{seq = NewSpaceSeq}, From, State = #state{monitoring = Monitoring}) ->
+    gen_server2:reply(From, ok),
+
+    handle_seq_advancement(State#state{
+        monitoring = space_files_monitor_common:send_heartbeats_if_needed(
+            Monitoring#monitoring{current_seq = NewSpaceSeq}
+        )
+    });
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
@@ -178,6 +183,17 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec handle_seq_advancement(state()) ->
+    {noreply, state()} |
+    {stop, {shutdown, caught_up}, state()}.
+handle_seq_advancement(State) ->
+    case has_reached_target_seq(State) of
+        true -> ?MODULE:propose_takeover(State);  %% Call via ?MODULE to mock in tests
+        false -> {noreply, State}
+    end.
 
 
 %% @private

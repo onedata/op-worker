@@ -1002,6 +1002,7 @@ init_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config)
         end
     ),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
@@ -1011,6 +1012,7 @@ end_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config) 
     Workers = oct_background:get_provider_nodes(krakow),
     test_utils:mock_unload(Workers),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 

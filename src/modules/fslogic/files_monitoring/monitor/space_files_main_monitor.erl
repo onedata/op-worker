@@ -141,12 +141,20 @@ handle_call(verify_inactive, _From, State) ->
 handle_call(#docs_change_notification{docs = ChangedDocs}, From, State) ->
     gen_server2:reply(From, ok),
 
-    NewState = State#state{
+    noreply(State#state{
         monitoring = space_files_monitor_common:process_docs(
             ChangedDocs, State#state.monitoring
         )
-    },
-    noreply(NewState);
+    });
+
+handle_call(#seq_advancement_notification{seq = NewSpaceSeq}, From, State = #state{monitoring = Monitoring}) ->
+    gen_server2:reply(From, ok),
+
+    noreply(State#state{
+        monitoring = space_files_monitor_common:send_heartbeats_if_needed(
+            Monitoring#monitoring{current_seq = NewSpaceSeq}
+        )
+    });
 
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),

@@ -215,8 +215,8 @@ definitions:
         items:
           type: "string"
         minItems: 1
-        example: ["dir1_object_id", "dir2_object_id"]
-        
+        example: ["$DIR_ID_1", "DIR_ID_2"]
+
       observedAttributes:
         type: "array"
         description: |
@@ -348,4 +348,3 @@ definitions:
             type: "string"
             description: "Human-readable error description"
             example: "Authentication required"
-

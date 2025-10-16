@@ -79,6 +79,10 @@
     docs :: [datastore:doc()]
 }).
 
+-record(seq_advancement_notification, {
+    seq :: couchbase_changes:seq()
+}).
+
 -record(observer, {
     session_id :: session:id(),
     files_monitoring_spec :: space_files_monitoring_spec:t(),

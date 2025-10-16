@@ -24,13 +24,14 @@
 %% Monitor helpers
 -export([
     start_link_changes_stream/2,
-    start_link_changes_stream/3,
 
     has_observers/1,
     add_observer/2,
     remove_observer/2,
 
-    process_docs/2
+    process_docs/2,
+
+    send_heartbeats_if_needed/1
 ]).
 
 -type subscribe_req() :: #subscribe_req{}.
@@ -112,27 +113,13 @@ call_monitor(MonitorPid, Request) ->
 
 -spec start_link_changes_stream(od_space:id(), couchbase_changes:seq()) -> pid().
 start_link_changes_stream(SpaceId, SinceSeq) ->
-    start_link_changes_stream(SpaceId, SinceSeq, undefined).
-
-
--spec start_link_changes_stream(
-    od_space:id(),
-    couchbase_changes:seq(),
-    undefined | couchbase_changes:seq()
-) ->
-    pid().
-start_link_changes_stream(SpaceId, SinceSeq, UntilSeq) ->
     MonitorPid = self(),
-    StreamOpts = case UntilSeq of
-        undefined -> [{since, SinceSeq}];
-        UntilSeq -> [{since, SinceSeq}, {until, UntilSeq}]
-    end,
 
     {ok, ChangesStreamPid} = couchbase_changes:stream(
         <<"onedata">>,
         SpaceId,
         fun(Feed) -> notify_monitor_callback(MonitorPid, Feed) end,
-        StreamOpts,
+        [{since, SinceSeq}],
         [MonitorPid]
     ),
     ChangesStreamPid.
@@ -156,20 +143,24 @@ notify_monitor_callback(Pid, {ok, {change, #document{} = Doc}}) ->
         true ->
             notify_monitor_about_doc_change(Pid, [Doc]);
         false ->
-            ok
+            notify_monitor_about_seq_advancement(Pid, Doc#document.seq)
     end,
     ok;
 notify_monitor_callback(Pid, {ok, Docs}) when is_list(Docs) ->
-    case lists:filtermap(fun({change, Doc}) ->
-        case is_observable_doc(Doc) of
-            true -> {true, Doc};
-            false -> false
+    case lists:foldl(fun({change, Doc}, Acc) ->
+        case {is_observable_doc(Doc), is_list(Acc)} of
+            {true, true} -> [Doc | Acc];
+            {true, false} -> [Doc];
+            {false, true} -> Acc;
+            {false, false} -> Doc#document.seq
         end
-    end, Docs) of
-        [] ->
+    end, undefined, Docs) of
+        undefined ->
             ok;
+        Seq when is_integer(Seq) ->
+            notify_monitor_about_seq_advancement(Pid, Seq);
         RelevantDocs ->
-            notify_monitor_about_doc_change(Pid, RelevantDocs)
+            notify_monitor_about_doc_change(Pid, lists:reverse(RelevantDocs))
     end,
     ok;
 notify_monitor_callback(Pid, {ok, end_of_stream}) ->
@@ -205,6 +196,13 @@ is_observable_doc(_Doc) -> false.
 -spec notify_monitor_about_doc_change(pid(), [datastore:doc()]) -> ok.
 notify_monitor_about_doc_change(Pid, Docs) ->
     call_monitor(Pid, #docs_change_notification{docs = Docs}),
+    ok.
+
+
+%% @private
+-spec notify_monitor_about_seq_advancement(pid(), couchbase_changes:seq()) -> ok.
+notify_monitor_about_seq_advancement(Pid, Seq) ->
+    call_monitor(Pid, #seq_advancement_notification{seq = Seq}),
     ok.
 
 
@@ -552,7 +550,11 @@ gen_changed_or_created_event(#process_doc_ctx{
     }.
 
 
-%% @private
+%%%===================================================================
+%%% Heartbeat management
+%%%===================================================================
+
+
 -spec send_heartbeats_if_needed(monitoring()) -> monitoring().
 send_heartbeats_if_needed(Monitoring = #monitoring{
     current_seq = CurrentSeq,
@@ -560,12 +562,19 @@ send_heartbeats_if_needed(Monitoring = #monitoring{
 }) ->
     SeqThreshold = ?LAST_SEEN_SEQ_HEARTBEAT_THRESHOLD,
 
-    ObserversToHeartbeat = lists:foldl(fun({ObserverPid, Observer}, AccPids) ->
-        case CurrentSeq - Observer#observer.last_seen_seq >= SeqThreshold of
-            true -> [ObserverPid | AccPids];
-            false -> AccPids
-        end
-    end, [], maps:to_list(Observers)),
+    {ObserversToHeartbeat, NewObservers} = lists:foldl(fun
+        (ObserverPid, Acc = {AccPids, AccObservers}) ->
+            Observer = maps:get(ObserverPid, Observers),
+            case CurrentSeq - Observer#observer.last_seen_seq >= SeqThreshold of
+                true ->
+                    {[ObserverPid | AccPids], AccObservers#{ObserverPid => Observer#observer{
+                        last_seen_seq = CurrentSeq
+                    }}};
+                false ->
+                    Acc
+            end
+        end,
+        {[], Observers}, maps:keys(Observers)),
 
     case ObserversToHeartbeat of
         [] ->
@@ -575,7 +584,8 @@ send_heartbeats_if_needed(Monitoring = #monitoring{
                 id = str_utils:to_binary(CurrentSeq)
             },
             broadcast_event(ObserversToHeartbeat, HeartbeatEvent),
-            update_observers_last_seen_seq(ObserversToHeartbeat, CurrentSeq, Monitoring)
+
+            Monitoring#monitoring{observers = NewObservers}
     end.
 
 
