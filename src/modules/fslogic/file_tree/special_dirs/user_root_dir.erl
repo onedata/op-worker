@@ -397,6 +397,10 @@ group_spaces_by_name(SessId, SpaceIds) ->
             ?ERROR_NOT_FOUND ->
                 Acc;
             ?ERR_FORBIDDEN ->
+                Acc;
+            ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) ->
+                Acc;
+            ?ERR_TOKEN_INVALID ->
                 Acc
         end
     end, #{}, SpaceIds).
@@ -440,7 +444,7 @@ emit_space_dir_created(SessId, SpaceId, SpaceName) ->
     #fuse_response{fuse_response = FileAttr} =
         attr_req:get_file_attr_insecure(user_ctx:new(SessId), FileCtx, #{
             allow_deleted_files => false,
-            attributes => ?ONECLIENT_FILE_ATTRS -- [?attr_name]
+            attributes => ?ONECLIENT_FILE_ATTRS -- [?attr_name, ?attr_size]
         }),
     FileAttr2 = FileAttr#file_attr{size = 0, name = SpaceName},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).

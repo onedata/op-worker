@@ -52,6 +52,7 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
+    %% @TODO VFS-13002 - this hook should not be executed in the calling process
     run_in_critical_section(Id, fun() ->
         PrevVal = case get_from_cache(Id) of
             {ok, #document{value = V}} -> V;
@@ -201,7 +202,7 @@ handle_support_change(SpaceId, #od_space{providers = PrevProviders}, #od_space{p
         {0, 0} ->
             ok;
         {0, _} ->
-            ok = special_dirs:set_up_for_new_space(SpaceId),
+            ok = special_dirs:set_up_for_new_local_space(SpaceId),
             % Fetch docs of co-supporting providers to trigger connection establishment
             % (see od_provider:ensure_connected_to_peer/1).
             lists:foreach(fun provider_logic:get/1, maps:keys(maps:remove(ProviderId, NewProviders))),

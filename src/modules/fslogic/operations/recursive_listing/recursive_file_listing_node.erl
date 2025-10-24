@@ -79,7 +79,8 @@ get_node_path_tokens(FileCtx) ->
         UserCtx = user_ctx:new(?ROOT_SESS_ID),
         PathTokens = lists:map(fun(Uuid) ->
             TokenFileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
-            case ?catch_not_found(file_attr:resolve(UserCtx, TokenFileCtx, #{attributes => [name]})) of
+            Opts = #{attributes => [name], check_perms => false},
+            case ?catch_not_found(file_attr:resolve(UserCtx, TokenFileCtx, Opts)) of
                 not_found ->
                     throw(not_found);
                 {#file_attr{name = Name}, _Ctx} ->

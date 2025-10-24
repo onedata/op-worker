@@ -114,6 +114,7 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = evaluate_qos_expression}} = Req
     {ok, value, #{
         <<"expressionRpn">> => qos_expression:to_rpn(QosExpression),
         %% @TODO VFS-6520 not needed when storage api is implemented
+        <<"matchingStorageBackends">> => StoragesList, 
         <<"matchingStorages">> => StoragesList 
     }}.
 
