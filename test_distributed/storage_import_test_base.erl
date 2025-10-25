@@ -1794,7 +1794,8 @@ sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Con
     % TestFile should not be reimported
     ?assertMatch({ok, [], _},
         lfm_proxy:get_children_attrs(W1, SessId, {path, ?SPACE_PATH}, file_listing:starting_opts_with_tune_for_cont_listing(false),
-            [?attr_parent_guid])), % list attrs requiring file_meta so partially deleted files are not included
+            % fixme
+            [?attr_type])), % list attrs requiring file_meta so partially deleted files are not included
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, SpaceTestFilePath}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT},

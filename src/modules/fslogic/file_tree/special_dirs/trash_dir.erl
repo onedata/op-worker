@@ -218,7 +218,7 @@ list(SpaceId) ->
 
 list(SpaceId, ListOpts) when is_map(ListOpts) ->
     {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
-        file_ctx:new_by_guid(fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)), ListOpts),
+        file_ctx:new_by_guid(trash_dir:guid(SpaceId)), ListOpts),
     {Children, NextPaginationToken};
 list(SpaceId, PaginationToken) ->
     ListOpts = #{pagination_token => PaginationToken},
@@ -236,7 +236,7 @@ clear_all(SpaceId, EmitEvents, Token) ->
     end,
     lists:foreach(fun(FileCtx) ->
         schedule_deletion_from_trash(FileCtx, user_ctx:new(?ROOT_SESS_ID), EmitEvents,
-            fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId), extract_name(FileCtx))
+            space_dir:uuid(SpaceId), extract_name(FileCtx))
     end, List),
     case file_listing:is_finished(NextToken) of
         true -> ok;
