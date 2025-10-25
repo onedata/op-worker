@@ -542,7 +542,7 @@ partially_deleted_files_should_be_cleaned_up(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     DirName = ?RAND_DIR_NAME,
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, ?SPACE_GUID, DirName, ?DEFAULT_DIR_PERMS),
+    {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, space_dir:guid(?SPACE_ID1), DirName, ?DEFAULT_DIR_PERMS),
     {[_ChildDirGuid1, ChildDirGuid2] = DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{2, 0}, {0, 8}], DirGuid),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
@@ -553,7 +553,7 @@ partially_deleted_files_should_be_cleaned_up(_Config) ->
     remove_file_meta(P1Node, Second#file_attr.guid), % remove file meta of a file in the middle of a listing batch
     %% @TODO VFS-12755 currently not working as removing dir's file meta removes its link tree and therefore its children
     %%  cannot be listed anymore
-%%    remove_file_meta(P1Node, ChildDirGuid1), % remove file meta of a non-empty dir -
+%%    remove_file_meta(P1Node, ChildDirGuid1), % remove file meta of a non-empty dir 
 
     schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID, DirName),
 

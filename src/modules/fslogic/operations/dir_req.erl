@@ -242,7 +242,7 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
                         check_perms => false,
                         % allow deleted files so the edge files are not accidentally filtered out
                         % NOTE: fetching attrs later for all files can still result in those files being filtered out, which is expected
-                        allow_deleted_files => true % fixme allow_deleted_file_meta?? include_ghost_files??
+                        allow_deleted_files => true
                     }),
                     {true, file_ctx:clean_cached_deleted_doc(FileCtx2)}
                 end);

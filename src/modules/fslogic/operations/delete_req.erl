@@ -124,7 +124,7 @@ delete_file(UserCtx, FileCtx0, Silent) ->
 -spec check_if_empty_and_delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean()) -> fslogic_worker:fuse_response().
 check_if_empty_and_delete(UserCtx, FileCtx, Silent) ->
     ListOpts = #{offset => 0, limit => 1, tune_for_large_continuous_listing => false},
-    case file_tree:list_children(FileCtx, UserCtx, ListOpts, allow_deleted_file_meta) of
+    case file_tree:list_children(FileCtx, UserCtx, ListOpts) of
         {[], _ListExtendedInfo, FileCtx2} ->
             delete_insecure(UserCtx, FileCtx2, Silent);
         {_, _, _FileCtx2} ->
@@ -155,7 +155,6 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
             % file is already deleted, but some remnants could have remained - try to clean them up
             fslogic_delete:delete_file_locally_idempotent(UserCtx, FileCtx, CreatorProviderId, Silent);
         {error, not_found} ->
-            % fixme somehow check opened files?? (do nothing if opened, release should clean up)
             case file_meta:get_including_deleted(FileUuid) of
                 {ok, #document{value = #file_meta{provider_id = CreatorProviderId}}} ->
                     % file is already deleted, but some remnants could have remained - try to clean them up

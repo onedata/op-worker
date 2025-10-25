@@ -583,7 +583,8 @@ maybe_import_file(StorageFileCtx,  #{parent_ctx := ParentCtx} = Info) ->
                 true ->
                     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
                     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
-                    % fixme check for possible race with deletion of opened file - in such a case file is not deleted on storage, but we do not want to reimport it; this check was done at the beginning, but file could have been deleted in the meantime
+                    % Check for possible race with deletion of opened file - in such a case file is not deleted 
+                    % on storage, but we do not want to reimport it.
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
                             import_file(StorageFileCtx, Info);

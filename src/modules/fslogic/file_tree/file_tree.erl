@@ -93,7 +93,7 @@
     get_original_parent_of_deleted_file/2,
     get_parent/2,
 
-    get_child/3, list_children/3, list_children/4
+    get_child/3, list_children/3
 ]).
 
 -type children_whitelist() :: undefined | [file_meta:name()].
@@ -207,14 +207,6 @@ get_child(FileCtx, Name, UserCtx) ->
 -spec list_children(file_ctx:ctx(), user_ctx:ctx(), file_listing:options()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
 list_children(FileCtx, UserCtx, ListOpts) ->
-    list_children(FileCtx, UserCtx, ListOpts, disallow_deleted_file_meta).
-
-
--spec list_children(file_ctx:ctx(), user_ctx:ctx(), file_listing:options(),
-    allow_deleted_file_meta | disallow_deleted_file_meta
-) ->
-    {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_children(FileCtx, UserCtx, ListOpts, DeletedFileMetaPolicy) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             get_user_root_dir_children(UserCtx, FileCtx, ListOpts);
@@ -227,11 +219,10 @@ list_children(FileCtx, UserCtx, ListOpts, DeletedFileMetaPolicy) ->
                         true ->
                             get_space_public_data_shares(UserCtx, FileCtx, ListOpts);
                         false ->
-                            list_file_children(FileCtx, ListOpts, DeletedFileMetaPolicy)
+                            list_file_children(FileCtx, ListOpts)
                     end
             end
     end.
-
 
 
 %%%===================================================================
@@ -473,13 +464,10 @@ get_dir_child(FileCtx, Name) ->
 
 
 %% @private
--spec list_file_children(file_ctx:ctx(), file_listing:options(), allow_deleted_file_meta | disallow_deleted_file_meta) ->
+-spec list_file_children(file_ctx:ctx(), file_listing:options()) ->
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-list_file_children(FileCtx, ListOpts, DeletedFileMetaPolicy) ->
-    {#document{} = FileDoc, FileCtx2} = case DeletedFileMetaPolicy of
-        allow_deleted_file_meta -> file_ctx:get_file_doc_including_deleted(FileCtx);
-        disallow_deleted_file_meta -> file_ctx:get_file_doc(FileCtx)
-    end,
+list_file_children(FileCtx, ListOpts) ->
+    {#document{} = FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
 
     case file_meta:get_type(FileDoc) of
