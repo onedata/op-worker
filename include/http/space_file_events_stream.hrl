@@ -28,7 +28,7 @@
 %   (see file_attr.erl for details)
 % In case of space file events this is not happening and getting name attr just gets it
 % from file_meta doc
--define(OBSERVABLE_FILE_META_ATTRS, [?attr_name | ?FILE_META_ATTRS]).
+-define(OBSERVABLE_FILE_META_ATTRS, [?attr_name, ?attr_parent_guid | ?FILE_META_ATTRS]).
 
 -define(OBSERVABLE_FILE_ATTRS,
     lists:flatten([
