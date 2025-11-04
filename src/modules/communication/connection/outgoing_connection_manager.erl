@@ -326,19 +326,14 @@ schedule_next_renewal(#state{
 } = State) ->
     MaxRenewalInterval = ?MAX_RENEWAL_INTERVAL,
 
-    case PrevInterval >= MaxRenewalInterval of
-        true ->
-            State;
-        false ->
-            CurrInterval = min(
-                max(ceil(PrevInterval * ?RENEWAL_INTERVAL_BACKOFF_RATE), ?MIN_RENEWAL_INTERVAL),
-                MaxRenewalInterval
-            ),
-            State#state{
-                renewal_timer = erlang:send_after(CurrInterval, self(), ?RENEW_CONNECTIONS_REQ),
-                renewal_interval = CurrInterval
-            }
-    end;
+    CurrInterval = min(
+        max(ceil(PrevInterval * ?RENEWAL_INTERVAL_BACKOFF_RATE), ?MIN_RENEWAL_INTERVAL),
+        MaxRenewalInterval
+    ),
+    State#state{
+        renewal_timer = erlang:send_after(CurrInterval, self(), ?RENEW_CONNECTIONS_REQ),
+        renewal_interval = CurrInterval
+    };
 schedule_next_renewal(State) ->
     State.
 
