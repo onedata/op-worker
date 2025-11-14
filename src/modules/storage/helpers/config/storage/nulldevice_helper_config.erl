@@ -15,8 +15,9 @@
 
 -behaviour(helper_config_behaviour).
 
--include("storage/common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/storage/common.hrl").
+-include_lib("ctool/include/storage/nulldevice.hrl").
 
 %% helper_config_behaviour callbacks
 -export([

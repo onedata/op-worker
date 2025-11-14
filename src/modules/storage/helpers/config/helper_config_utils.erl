@@ -12,9 +12,8 @@
 -module(helper_config_utils).
 -author("Bartosz Walkowicz").
 
--include("storage/s3.hrl").
--include("storage/common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/storage/common.hrl").
 
 %% API
 -export([

@@ -14,8 +14,9 @@
 
 -behaviour(helper_config_behaviour).
 
--include("storage/common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/storage/common.hrl").
+-include_lib("ctool/include/storage/cephrados.hrl").
 
 %% helper_config_behaviour callbacks
 -export([
@@ -151,7 +152,7 @@ supports_storage_access_type(_) -> true.
 
 
 -spec is_auto_import_supported(#helper_config{}) -> boolean().
-is_auto_import_supported(HelperConfig) ->
+is_auto_import_supported(_HelperConfig) ->
     false.
 
 

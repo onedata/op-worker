@@ -12,10 +12,10 @@
 -module(storage_rpc_api).
 -author("Bartosz Walkowicz").
 
--include("storage/common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/storage/common.hrl").
 
 %% API
 -export([

@@ -14,8 +14,9 @@
 
 -behaviour(helper_config_behaviour).
 
--include("storage/common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/storage/common.hrl").
+-include_lib("ctool/include/storage/ceph.hrl").
 
 %% helper_config_behaviour callbacks
 -export([
@@ -151,13 +152,13 @@ is_auto_import_supported(_HelperConfig) ->
 
 
 -spec is_file_registration_supported(#helper_config{}) -> boolean().
-is_file_registration_supported(HelperConfig) ->
-    helper_config_utils:is_canonical(HelperConfig) andalso block_size_equals_0(HelperConfig).
+is_file_registration_supported(_HelperConfig) ->
+    false.
 
 
 -spec is_getting_size_supported(#helper_config{}) -> boolean().
-is_getting_size_supported(HelperConfig) ->
-    block_size_equals_0(HelperConfig).
+is_getting_size_supported(_HelperConfig) ->
+    false.
 
 
 -spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
@@ -204,9 +205,3 @@ build_admin_ctx(#ceph_credentials{
         <<"username">> => Username,
         <<"key">> => Key
     }.
-
-
-%% @private
--spec block_size_equals_0(helper_config:t()) -> boolean().
-block_size_equals_0(HelperConfig) ->
-    get_block_size(HelperConfig) =:= 0.

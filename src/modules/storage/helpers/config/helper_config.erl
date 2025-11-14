@@ -14,7 +14,6 @@
 -module(helper_config).
 -author("Bartosz Walkowicz").
 
--include("storage/common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 
 -include("global_definitions.hrl").
@@ -23,6 +22,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("hackney/include/hackney_lib.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/storage/common.hrl").
 
 %% API
 -export([

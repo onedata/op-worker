@@ -12,10 +12,10 @@
 -module(rpc_api).
 -author("Wojciech Geisler").
 
--include("storage/common.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/storage/common.hrl").
 
 -export([apply/2]).
 -export([
