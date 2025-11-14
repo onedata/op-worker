@@ -30,7 +30,7 @@
 %%%===================================================================
 
 
--spec create(onedata_storage:create()) -> {ok, storage:id()} | errors:error().
+-spec create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
 create(StorageCreateSpec = #storage_create_spec{
     name = StorageName,
     type = StorageType
@@ -56,7 +56,7 @@ create(StorageCreateSpec = #storage_create_spec{
     end.
 
 
--spec update(storage:id(), onedata_storage:update()) -> ok | {error, term()}.
+-spec update(storage:id(), onedata_storage:update_spec()) -> ok | {error, term()}.
 update(StorageId, UpdateSpec) ->
     try do_update(StorageId, UpdateSpec) of
         ok ->
@@ -91,7 +91,7 @@ describe(StorageId) ->
 
 
 %% @private
--spec do_create(onedata_storage:create()) -> {ok, storage:id()} | {error, term()}.
+-spec do_create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
 do_create(StorageCreateSpec = #storage_create_spec{
     name = Name,
     type = Type,
@@ -155,7 +155,7 @@ do_describe(StorageId) ->
 
 
 %% @private
--spec do_update(storage:id(), onedata_storage:update()) -> ok | errors:error().
+-spec do_update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 do_update(StorageId, UpdateSpec = #storage_update_spec{
     name = MaybeName,
     readonly = MaybeNewReadonly,
@@ -228,7 +228,7 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
 
 
 %% @private
--spec assert_valid_type(helper_config:t(), onedata_storage:update()) -> ok | no_return().
+-spec assert_valid_type(helper_config:t(), onedata_storage:update_spec()) -> ok | no_return().
 assert_valid_type(HelperConfig, UpdateSpec) ->
     StorageType = helper_config:get_name(HelperConfig),
 
