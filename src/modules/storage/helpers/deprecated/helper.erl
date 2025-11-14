@@ -51,6 +51,12 @@
 -define(DEFAULT_SWIFT_BLOCK_SIZE, 10485760).
 -define(DEFAULT_S3_BLOCK_SIZE, 10485760).
 
+-record(helper, {
+    name :: helper_config:name(),
+    args = #{} :: helper_config:args(),
+    admin_ctx = #{} :: helper_config:user_ctx()
+}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
