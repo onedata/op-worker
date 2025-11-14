@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Implementation of helper_config_behaviour for HTTP storage.
-%%% HTTP storage is read-only.
+%%% Implementation of helper_config_behaviour for NullDevice storage.
+%%% This is a testing/simulation storage backend.
 %%% @end
 %%%-------------------------------------------------------------------
--module(http_helper_config).
+-module(nulldevice_helper_config).
 -author("Bartosz Walkowicz").
 
 -behaviour(helper_config_behaviour).
@@ -44,9 +44,9 @@
 
 
 -spec build(onedata_storage:create_spec()) -> helper_config:t().
-build(CreateReq = #storage_create_spec{type = ?HTTP_HELPER_NAME, credentials = Credentials}) ->
+build(CreateReq = #storage_create_spec{type = ?NULL_DEVICE_HELPER_NAME, credentials = Credentials}) ->
     #helper_config{
-        name = ?HTTP_HELPER_NAME,
+        name = ?NULL_DEVICE_HELPER_NAME,
         args = build_args(CreateReq),
         admin_ctx = build_admin_ctx(Credentials)
     }.
@@ -54,37 +54,31 @@ build(CreateReq = #storage_create_spec{type = ?HTTP_HELPER_NAME, credentials = C
 
 -spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
 validate_user_ctx(UserCtx) ->
-    AlwaysOptionalFields = [<<"oauth2IdP">>, <<"onedataAccessToken">>],
-
-    {RequiredFields, OptionalFields} = case UserCtx of
-        #{<<"credentialsType">> := Type} when Type /= <<"none">> ->
-            {[<<"credentialsType">>, <<"credentials">>], AlwaysOptionalFields};
-        _ ->
-            {[<<"credentialsType">>], [<<"credentials">> | AlwaysOptionalFields]}
-    end,
-    helper_config_utils:validate_user_ctx(UserCtx, RequiredFields, OptionalFields).
+    helper_config_utils:validate_user_ctx(UserCtx, [<<"uid">>], [<<"gid">>]).
 
 
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
     archive = Archive,
-    configuration = #http_configuration_diff{
-        endpoint = Endpoint,
-        verify_server_certificate = VerifyServerCertificate,
-        authorization_header = AuthorizationHeader,
-        connection_pool_size = ConnectionPoolSize,
-        max_requests_per_session = MaxRequestsPerSession,
-        file_mode = FileMode
+    configuration = #nulldevice_configuration_diff{
+        latency_min = LatencyMin,
+        latency_max = LatencyMax,
+        timeout_probability = TimeoutProbability,
+        filter = Filter,
+        simulated_filesystem_parameters = SimulatedFilesystemParameters,
+        simulated_filesystem_grow_speed = SimulatedFilesystemGrowSpeed,
+        enable_data_verification = EnableDataVerification
     }
 }) ->
     helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.args, [
-        {<<"endpoint">>, Endpoint},
-        {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
-        {<<"authorizationHeader">>, AuthorizationHeader},
-        {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
-        {<<"maxRequestsPerSession">>, MaxRequestsPerSession, fun integer_to_binary/1},
-        {<<"fileMode">>, FileMode},
+        {<<"latencyMin">>, LatencyMin, fun integer_to_binary/1},
+        {<<"latencyMax">>, LatencyMax, fun integer_to_binary/1},
+        {<<"timeoutProbability">>, TimeoutProbability, fun float_to_binary/1},
+        {<<"filter">>, Filter},
+        {<<"simulatedFilesystemParameters">>, SimulatedFilesystemParameters},
+        {<<"simulatedFilesystemGrowSpeed">>, SimulatedFilesystemGrowSpeed, fun float_to_binary/1},
+        {<<"enableDataVerification">>, EnableDataVerification, fun atom_to_binary/1},
         {<<"timeout">>, Timeout, fun integer_to_binary/1},
         {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
     ]).
@@ -95,51 +89,49 @@ build_args_diff(HelperConfig, #storage_update_spec{
 build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
     #{};
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #http_credentials_diff{
-        credentials_type = CredentialsType,
-        credentials = Credentials
+    credentials = #nulldevice_credentials_diff{
+        uid = Uid,
+        gid = Gid
     }
 }) ->
     helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
-        {<<"credentialsType">>, CredentialsType, fun credentials_type_to_binary/1},
-        {<<"credentials">>, Credentials}
+        {<<"uid">>, Uid, fun integer_to_binary/1},
+        {<<"gid">>, Gid, fun integer_to_binary/1}
     ]).
 
 
 -spec describe(helper_config:t()) -> helper_config:description().
 describe(#helper_config{
-    name = ?HTTP_HELPER_NAME,
+    name = ?NULL_DEVICE_HELPER_NAME,
     args = Args,
     admin_ctx = AdminCtx
 }) ->
     %% Reconstruct configuration record from args map
-    BaseConfiguration = #http_configuration{
-        endpoint = maps:get(<<"endpoint">>, Args),
+    BaseConfiguration = #nulldevice_configuration{
         storage_path_type = helper_config_utils:storage_path_type_from_binary(
             maps:get(<<"storagePathType">>, Args)
         )
     },
     Configuration = helper_config_utils:set_optional_record_fields_if_defined(BaseConfiguration, Args, [
-        {<<"verifyServerCertificate">>, #http_configuration.verify_server_certificate, fun utils:to_boolean/1},
-        {<<"authorizationHeader">>, #http_configuration.authorization_header},
-        {<<"connectionPoolSize">>, #http_configuration.connection_pool_size, fun binary_to_integer/1},
-        {<<"maxRequestsPerSession">>, #http_configuration.max_requests_per_session, fun binary_to_integer/1},
-        {<<"fileMode">>, #http_configuration.file_mode}
+        {<<"latencyMin">>, #nulldevice_configuration.latency_min, fun binary_to_integer/1},
+        {<<"latencyMax">>, #nulldevice_configuration.latency_max, fun binary_to_integer/1},
+        {<<"timeoutProbability">>, #nulldevice_configuration.timeout_probability, fun binary_to_float/1},
+        {<<"filter">>, #nulldevice_configuration.filter},
+        {<<"simulatedFilesystemParameters">>, #nulldevice_configuration.simulated_filesystem_parameters},
+        {<<"simulatedFilesystemGrowSpeed">>, #nulldevice_configuration.simulated_filesystem_grow_speed, fun binary_to_float/1},
+        {<<"enableDataVerification">>, #nulldevice_configuration.enable_data_verification, fun utils:to_boolean/1}
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    BaseCredentials = #http_credentials{
-        credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, AdminCtx))
+    BaseCredentials = #nulldevice_credentials{
+        uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
     },
-    %% TODO redact [<<"credentials">>, <<"accessToken">>, <<"onedataAccessToken">>]
     Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-        {<<"credentials">>, #http_credentials.credentials},
-        {<<"oauth2IdP">>, #http_credentials.oauth2_idp},
-        {<<"onedataAccessToken">>, #http_credentials.onedata_access_token}
+        {<<"gid">>, #nulldevice_credentials.gid, fun binary_to_integer/1}
     ]),
 
     #helper_config_description{
-        type = ?HTTP_HELPER_NAME,
+        type = ?NULL_DEVICE_HELPER_NAME,
         credentials = Credentials,
         configuration = Configuration,
         timeout = utils:convert_defined(
@@ -151,7 +143,7 @@ describe(#helper_config{
 
 
 -spec is_posix_compatible() -> boolean().
-is_posix_compatible() -> false.
+is_posix_compatible() -> true.
 
 
 -spec is_object() -> boolean().
@@ -159,7 +151,7 @@ is_object() -> false.
 
 
 -spec is_rename_supported() -> boolean().
-is_rename_supported() -> false.
+is_rename_supported() -> true.
 
 
 -spec is_nfs4_acl_supported() -> boolean().
@@ -167,13 +159,12 @@ is_nfs4_acl_supported() -> false.
 
 
 -spec supports_storage_access_type(helper_config:access_type()) -> boolean().
-supports_storage_access_type(?READWRITE) -> false;  %% HTTP is read-only
-supports_storage_access_type(?READONLY) -> true.
+supports_storage_access_type(_) -> true.
 
 
 -spec is_auto_import_supported(#helper_config{}) -> boolean().
-is_auto_import_supported(_HelperConfig) ->
-    false.
+is_auto_import_supported(HelperConfig) ->
+    helper_config_utils:is_canonical(HelperConfig).
 
 
 -spec is_file_registration_supported(#helper_config{}) -> boolean().
@@ -201,60 +192,43 @@ get_block_size(#helper_config{}) ->
 build_args(#storage_create_spec{
     timeout = Timeout,
     archive = Archive,
-    configuration = #http_configuration{
-        endpoint = Endpoint,
-        verify_server_certificate = VerifyServerCertificate,
-        authorization_header = AuthorizationHeader,
-        connection_pool_size = ConnectionPoolSize,
-        max_requests_per_session = MaxRequestsPerSession,
-        file_mode = FileMode,
+    configuration = #nulldevice_configuration{
+        latency_min = LatencyMin,
+        latency_max = LatencyMax,
+        timeout_probability = TimeoutProbability,
+        filter = Filter,
+        simulated_filesystem_parameters = SimulatedFilesystemParameters,
+        simulated_filesystem_grow_speed = SimulatedFilesystemGrowSpeed,
+        enable_data_verification = EnableDataVerification,
         storage_path_type = StoragePathType
     }
 }) ->
     RequiredArgs = #{
-        <<"endpoint">> => Endpoint,
         <<"storagePathType">> => helper_config_utils:storage_path_type_to_binary(StoragePathType)
     },
     helper_config_utils:add_optional_args_if_defined(RequiredArgs, [
-        {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
-        {<<"authorizationHeader">>, AuthorizationHeader},
-        {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
-        {<<"maxRequestsPerSession">>, MaxRequestsPerSession, fun integer_to_binary/1},
-        {<<"fileMode">>, FileMode},
+        {<<"latencyMin">>, LatencyMin, fun integer_to_binary/1},
+        {<<"latencyMax">>, LatencyMax, fun integer_to_binary/1},
+        {<<"timeoutProbability">>, TimeoutProbability, fun float_to_binary/1},
+        {<<"filter">>, Filter},
+        {<<"simulatedFilesystemParameters">>, SimulatedFilesystemParameters},
+        {<<"simulatedFilesystemGrowSpeed">>, SimulatedFilesystemGrowSpeed, fun float_to_binary/1},
+        {<<"enableDataVerification">>, EnableDataVerification, fun atom_to_binary/1},
         {<<"timeout">>, Timeout, fun integer_to_binary/1},
         {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
     ]).
 
 
 %% @private
--spec build_admin_ctx(#http_credentials{}) -> helper_config:user_ctx().
-build_admin_ctx(#http_credentials{
-    credentials_type = CredentialsType,
-    credentials = Credentials,
-    oauth2_idp = OAuth2IdP,
-    onedata_access_token = OnedataAccessToken
+-spec build_admin_ctx(#nulldevice_credentials{}) -> helper_config:user_ctx().
+build_admin_ctx(#nulldevice_credentials{
+    uid = Uid,
+    gid = Gid
 }) ->
     BaseCtx = #{
-        <<"credentialsType">> => credentials_type_to_binary(CredentialsType)
+        <<"uid">> => integer_to_binary(Uid)
     },
     helper_config_utils:add_optional_args_if_defined(BaseCtx, [
-        {<<"credentials">>, Credentials},
-        {<<"oauth2IdP">>, OAuth2IdP},
-        {<<"onedataAccessToken">>, OnedataAccessToken}
+        {<<"gid">>, Gid, fun integer_to_binary/1}
     ]).
 
-
-%% @private
--spec credentials_type_to_binary(none | basic | token | oauth2) -> binary().
-credentials_type_to_binary(none) -> <<"none">>;
-credentials_type_to_binary(basic) -> <<"basic">>;
-credentials_type_to_binary(token) -> <<"token">>;
-credentials_type_to_binary(oauth2) -> <<"oauth2">>.
-
-
-%% @private
--spec credentials_type_from_binary(binary()) -> none | basic | token | oauth2.
-credentials_type_from_binary(<<"none">>) -> none;
-credentials_type_from_binary(<<"basic">>) -> basic;
-credentials_type_from_binary(<<"token">>) -> token;
-credentials_type_from_binary(<<"oauth2">>) -> oauth2.

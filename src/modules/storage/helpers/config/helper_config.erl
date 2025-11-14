@@ -82,6 +82,7 @@ build(CreateReq = #storage_create_spec{type = Type}) ->
     {ok, nif_args()} | {error, Reason :: term()}.
 build_helper_nif_args(HelperConfig, UserCtx) ->
     Module = get_module(HelperConfig),
+
     case Module:validate_user_ctx(UserCtx) of
         ok -> {ok, maps:merge(HelperConfig#helper_config.args, UserCtx)};
         Error -> Error
@@ -257,14 +258,14 @@ get_proxy_params(Timeout, StorageId) ->
 -spec get_module(t() | name()) -> module().
 get_module(#helper_config{name = HelperName}) ->
     get_module(HelperName);
-get_module(?S3_HELPER_NAME) -> s3_helper_config:module_info(module);
+get_module(?CEPH_HELPER_NAME) -> ceph_helper_config:module_info(module);
+get_module(?CEPHRADOS_HELPER_NAME) -> cephrados_helper_config:module_info(module);
+get_module(?GLUSTERFS_HELPER_NAME) -> glusterfs_helper_config:module_info(module);
+get_module(?HTTP_HELPER_NAME) -> http_helper_config:module_info(module);
+get_module(?NFS_HELPER_NAME) -> nfs_helper_config:module_info(module);
+get_module(?NULL_DEVICE_HELPER_NAME) -> nulldevice_helper_config:module_info(module);
 get_module(?POSIX_HELPER_NAME) -> posix_helper_config:module_info(module);
-get_module(?GLUSTERFS_HELPER_NAME) -> glusterfs_helper_config:module_info(module).
-%%get_module(?CEPH_HELPER_NAME) -> ceph_helper_config:module_info(module);
-%%get_module(?CEPHRADOS_HELPER_NAME) -> cephrados_helper_config:module_info(module);
-%%get_module(?HTTP_HELPER_NAME) -> http_helper_config:module_info(module);
-%%get_module(?NFS_HELPER_NAME) -> nfs_helper_config:module_info(module);
-%%get_module(?NULL_DEVICE_HELPER_NAME) -> nulldevice_helper_config:module_info(module);
-%%get_module(?SWIFT_HELPER_NAME) -> swift_helper_config:module_info(module);
-%%get_module(?WEBDAV_HELPER_NAME) -> webdav_helper_config:module_info(module);
-%%get_module(?XROOTD_HELPER_NAME) -> xrootd_helper_config:module_info(module).
+get_module(?S3_HELPER_NAME) -> s3_helper_config:module_info(module);
+get_module(?SWIFT_HELPER_NAME) -> swift_helper_config:module_info(module);
+get_module(?WEBDAV_HELPER_NAME) -> webdav_helper_config:module_info(module);
+get_module(?XROOTD_HELPER_NAME) -> xrootd_helper_config:module_info(module).
