@@ -72,7 +72,7 @@
 %%%===================================================================
 
 
--spec build(#storage_create_spec{}) -> t().
+-spec build(onedata_storage:create_spec()) -> t().
 build(CreateReq = #storage_create_spec{type = Type}) ->
     Module = get_module(Type),
     Module:build(CreateReq).
@@ -88,11 +88,35 @@ build_helper_nif_args(HelperConfig, UserCtx) ->
     end.
 
 
--spec update(t(), #storage_update_spec{}) ->
+-spec update(t(), onedata_storage:update_spec()) ->
     {ok, t()} | {error, no_change}.
-update(HelperConfig, UpdateSpec) ->
+update(
+    HelperConfig = #helper_config{name = StorageType},
+    UpdateSpec = #storage_update_spec{type = StorageType}
+) ->
     Module = get_module(HelperConfig),
-    Module:update(HelperConfig, UpdateSpec).
+
+    ArgsDiff = Module:build_args_diff(HelperConfig, UpdateSpec),
+    AdminCtxDiff = Module:build_admin_ctx_diff(HelperConfig, UpdateSpec),
+
+    case {maps_utils:is_empty(ArgsDiff), maps_utils:is_empty(AdminCtxDiff)} of
+        {true, true} ->
+            {error, no_change};
+        {IsEmptyArgsDiff, IsEmptyAdminCtxDiff} ->
+            CurrentArgs = HelperConfig#helper_config.args,
+            CurrentAdminCtx = HelperConfig#helper_config.admin_ctx,
+
+            {ok, HelperConfig#helper_config{
+                args = case IsEmptyArgsDiff of
+                    true -> CurrentArgs;
+                    false -> maps:merge(CurrentArgs, ArgsDiff)
+                end,
+                admin_ctx = case IsEmptyAdminCtxDiff of
+                    true -> CurrentAdminCtx;
+                    false -> maps:merge(CurrentAdminCtx, AdminCtxDiff)
+                end
+            }}
+    end.
 
 
 -spec describe(t()) -> description().
@@ -233,11 +257,11 @@ get_proxy_params(Timeout, StorageId) ->
 -spec get_module(t() | name()) -> module().
 get_module(#helper_config{name = HelperName}) ->
     get_module(HelperName);
-get_module(?S3_HELPER_NAME) -> s3_helper_config:module_info(module).
-%%get_module(?POSIX_HELPER_NAME) -> posix_helper_config:module_info(module);
+get_module(?S3_HELPER_NAME) -> s3_helper_config:module_info(module);
+get_module(?POSIX_HELPER_NAME) -> posix_helper_config:module_info(module);
+get_module(?GLUSTERFS_HELPER_NAME) -> glusterfs_helper_config:module_info(module).
 %%get_module(?CEPH_HELPER_NAME) -> ceph_helper_config:module_info(module);
 %%get_module(?CEPHRADOS_HELPER_NAME) -> cephrados_helper_config:module_info(module);
-%%get_module(?GLUSTERFS_HELPER_NAME) -> glusterfs_helper_config:module_info(module);
 %%get_module(?HTTP_HELPER_NAME) -> http_helper_config:module_info(module);
 %%get_module(?NFS_HELPER_NAME) -> nfs_helper_config:module_info(module);
 %%get_module(?NULL_DEVICE_HELPER_NAME) -> nulldevice_helper_config:module_info(module);

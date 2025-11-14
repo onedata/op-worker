@@ -21,7 +21,8 @@
 -export([
     build/1,
     validate_user_ctx/1,
-    update/2,
+    build_args_diff/2,
+    build_admin_ctx_diff/2,
     describe/1,
 
     is_posix_compatible/0,
@@ -44,7 +45,7 @@
 
 
 -spec build(onedata_storage:create_spec()) -> helper_config:t().
-build(CreateReq = #storage_create_spec{type = s3, credentials = Credentials}) ->
+build(CreateReq = #storage_create_spec{type = ?S3_HELPER_NAME, credentials = Credentials}) ->
     #helper_config{
         name = ?S3_HELPER_NAME,
         args = build_args(CreateReq),
@@ -54,38 +55,54 @@ build(CreateReq = #storage_create_spec{type = s3, credentials = Credentials}) ->
 
 -spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
 validate_user_ctx(UserCtx) ->
-    %% TODO
-    ok.
+    helper_config_utils:validate_user_ctx(UserCtx, [<<"accessKey">>, <<"secretKey">>]).
 
 
--spec update(helper_config:t(), onedata_storage:update_spec()) ->
-    {ok, helper_config:t()} | {error, no_change}.
-update(
-    HelperConfig = #helper_config{
-        name = ?S3_HELPER_NAME,
-        args = CurrentArgs,
-        admin_ctx = CurrentAdminCtx
-    },
-    UpdateReq = #storage_update_spec{type = ?S3_HELPER_NAME}
-) ->
-    ArgsDiff = build_args_diff(HelperConfig, UpdateReq),
-    AdminCtxDiff = build_admin_ctx_diff(HelperConfig, UpdateReq),
+-spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
+build_args_diff(HelperConfig, #storage_update_spec{
+    timeout = Timeout,
+    archive = Archive,
+    configuration = #s3_configuration_diff{
+        scheme = Scheme,
+        hostname = Hostname,
+        bucket_name = BucketName,
+        signature_version = SignatureVersion,
+        verify_server_certificate = VerifyServerCertificate,
+        region = Region,
+        maximum_canonical_object_size = MaxCanonicalObjectSize,
+        file_mode = FileMode,
+        dir_mode = DirMode
+    }
+}) ->
+    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.args, [
+        {<<"scheme">>, Scheme},
+        {<<"hostname">>, Hostname},
+        {<<"bucketName">>, BucketName},
+        {<<"signatureVersion">>, SignatureVersion, fun integer_to_binary/1},
+        {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
+        {<<"region">>, Region},
+        {<<"maximumCanonicalObjectSize">>, MaxCanonicalObjectSize, fun integer_to_binary/1},
+        {<<"fileMode">>, FileMode},
+        {<<"dirMode">>, DirMode},
+        {<<"timeout">>, Timeout, fun integer_to_binary/1},
+        {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
+    ]).
 
-    case {maps_utils:is_empty(ArgsDiff), maps_utils:is_empty(AdminCtxDiff)} of
-        {true, true} ->
-            {error, no_change};
-        {IsEmptyArgsDiff, IsEmptyAdminCtxDiff} ->
-            {ok, HelperConfig#helper_config{
-                args = case IsEmptyArgsDiff of
-                    true -> CurrentArgs;
-                    false -> maps:merge(CurrentArgs, ArgsDiff)
-                end,
-                admin_ctx = case IsEmptyAdminCtxDiff of
-                    true -> CurrentAdminCtx;
-                    false -> maps:merge(CurrentAdminCtx, AdminCtxDiff)
-                end
-            }}
-    end.
+
+-spec build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
+    helper_config:user_ctx().
+build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
+    #{};
+build_admin_ctx_diff(HelperConfig, #storage_update_spec{
+    credentials = #s3_credentials_diff{
+        access_key = AccessKey,
+        secret_key = SecretKey
+    }
+}) ->
+    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
+        {<<"accessKey">>, AccessKey},
+        {<<"secretKey">>, SecretKey}
+    ]).
 
 
 -spec describe(helper_config:t()) -> helper_config:description().
@@ -218,38 +235,6 @@ build_args(#storage_create_spec{
 
 
 %% @private
--spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
-build_args_diff(HelperConfig, #storage_update_spec{
-    timeout = Timeout,
-    archive = Archive,
-    configuration = #s3_configuration_diff{
-        scheme = Scheme,
-        hostname = Hostname,
-        bucket_name = BucketName,
-        signature_version = SignatureVersion,
-        verify_server_certificate = VerifyServerCertificate,
-        region = Region,
-        maximum_canonical_object_size = MaxCanonicalObjectSize,
-        file_mode = FileMode,
-        dir_mode = DirMode
-    }
-}) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.args, [
-        {<<"scheme">>, Scheme},
-        {<<"hostname">>, Hostname},
-        {<<"bucketName">>, BucketName},
-        {<<"signatureVersion">>, SignatureVersion, fun integer_to_binary/1},
-        {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
-        {<<"region">>, Region},
-        {<<"maximumCanonicalObjectSize">>, MaxCanonicalObjectSize, fun integer_to_binary/1},
-        {<<"fileMode">>, FileMode},
-        {<<"dirMode">>, DirMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1},
-        {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
-    ]).
-
-
-%% @private
 -spec build_admin_ctx(#s3_credentials{}) -> helper_config:user_ctx().
 build_admin_ctx(#s3_credentials{
     access_key = AccessKey,
@@ -259,23 +244,6 @@ build_admin_ctx(#s3_credentials{
         <<"accessKey">> => AccessKey,
         <<"secretKey">> => SecretKey
     }.
-
-
-%% @private
--spec build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
-    helper_config:user_ctx().
-build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined}) ->
-    #{};
-build_admin_ctx_diff(HelperConfig, #storage_update_spec{
-    credentials = #s3_credentials_diff{
-        access_key = AccessKey,
-        secret_key = SecretKey
-    }
-}) ->
-    helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
-        {<<"accessKey">>, AccessKey},
-        {<<"secretKey">>, SecretKey}
-    ]).
 
 
 %% @private

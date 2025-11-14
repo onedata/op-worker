@@ -36,8 +36,22 @@
     ok | {error, Reason :: term()}.
 
 
--callback update(helper_config:t(), onedata_storage:update_spec()) ->
-    {ok, helper_config:t()} | {error, no_change}.
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds a diff map of args changes from update specification.
+%% @end
+%%--------------------------------------------------------------------
+-callback build_args_diff(helper_config:t(), onedata_storage:update_spec()) ->
+    helper_config:args().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds a diff map of admin_ctx changes from update specification.
+%% @end
+%%--------------------------------------------------------------------
+-callback build_admin_ctx_diff(helper_config:t(), onedata_storage:update_spec()) ->
+    helper_config:user_ctx().
 
 
 %%--------------------------------------------------------------------
