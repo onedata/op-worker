@@ -51,8 +51,8 @@ acquire_user_storage_credentials(Storage, UserId) ->
             Uid = generate_uid(UserId),
             #{<<"uid">> => integer_to_binary(Uid)};
         false ->
-            Helper = storage:get_helper(Storage),
-            helper:get_admin_ctx(Helper)
+            HelperConfig = storage:get_helper_config(Storage),
+            helper_config:get_admin_ctx(HelperConfig)
     end,
     StorageUserMap = #{<<"storageCredentials">> => StorageCredentials},
     {ok, luma_storage_user:new(UserId, StorageUserMap, Storage)}.

@@ -111,8 +111,8 @@ handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
     storage_id = StorageId
 }) ->
     {ok, Storage} = storage:get(StorageId),
-    Helper = storage:get_helper(Storage),
-    case helper:get_name(Helper) of
+    HelperConfig = storage:get_helper_config(Storage),
+    case helper_config:get_name(HelperConfig) of
         ?WEBDAV_HELPER_NAME ->
             % called by module for CT tests
             helpers_reload:refresh_handle_params(FileOrHelperHandle, SessionId, SpaceId, Storage),

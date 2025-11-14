@@ -29,9 +29,9 @@
 %% Onepanel RPC API
 -export([prepare_helper_args/2, prepare_user_ctx_params/2]).
 
--type name() :: helper:name().
--type args() :: helper:args().
--type user_ctx() :: helper:user_ctx().
+-type name() :: helper_config:name().
+-type args() :: helper_config:args().
+-type user_ctx() :: helper_config:user_ctx().
 
 -type field() :: binary().
 -type optional_field() :: {optional, field()}.

@@ -502,7 +502,7 @@ end).
 -define(STORAGE_RECORD(Id, Name, Helper, LumaMode), #document{
     key = Id,
     value = #storage_config{
-        helper = Helper,
+        helper_config = Helper,
         luma_config = ?LUMA_CONFIG(LumaMode)
     }
 }).

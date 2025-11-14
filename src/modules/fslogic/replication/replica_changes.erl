@@ -160,8 +160,8 @@ rename_or_delete(FileCtx,
                     {skipped, NewFileCtx2};
                 {false, NewFileCtx2} ->
                     {TargetStorageId, NewFileCtx3} = file_ctx:get_storage_id(NewFileCtx2),
-                    Helper = storage:get_helper(TargetStorageId),
-                    case helper:get_storage_path_type(Helper) of
+                    HelperConfig = storage:get_helper_config(TargetStorageId),
+                    case helper_config:get_storage_path_type(HelperConfig) of
                         ?CANONICAL_STORAGE_PATH ->
                             TargetStorageFileId = storage_file_id:canonical(RemoteTargetFileId, TargetSpaceId, TargetStorageId),
                             % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?

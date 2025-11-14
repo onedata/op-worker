@@ -657,8 +657,8 @@ get_space_mount_point(Node, SpaceId) ->
 
 
 storage_mount_point(Node, StorageId) ->
-    Helper = opw_test_rpc:call(Node, storage, get_helper, [StorageId]),
-    HelperArgs = helper:get_args(Helper),
+    Helper = opw_test_rpc:call(Node, storage, get_helper_config, [StorageId]),
+    HelperArgs = helper_config:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
 

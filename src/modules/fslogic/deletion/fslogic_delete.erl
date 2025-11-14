@@ -570,8 +570,8 @@ maybe_emit_event(_FileCtx, _UserCtx, _) ->
 -spec get_open_file_handling_method(file_ctx:ctx()) -> {opened_file_deletion_method(), file_ctx:ctx()}.
 get_open_file_handling_method(FileCtx) ->
     {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
-    Helper = storage:get_helper(Storage),
-    case helper:is_rename_supported(Helper) of
+    HelperConfig = storage:get_helper_config(Storage),
+    case helper_config:is_rename_supported(HelperConfig) of
         true -> {?RENAME_DELETED, FileCtx2};
         _ -> {?SET_DELETION_MARKER, FileCtx2}
     end.

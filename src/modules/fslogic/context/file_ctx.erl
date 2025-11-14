@@ -536,10 +536,10 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 get_new_storage_file_id(FileCtx) ->
     ReferencedUuidBasedFileCtx = ensure_based_on_referenced_guid(FileCtx),
     {Storage, ReferencedUuidBasedFileCtx2} = get_storage(ReferencedUuidBasedFileCtx),
-    Helper = storage:get_helper(Storage),
+    HelperConfig = storage:get_helper_config(Storage),
     SpaceId = file_ctx:get_space_id_const(ReferencedUuidBasedFileCtx2),
     {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
-    case helper:get_storage_path_type(Helper) of
+    case helper_config:get_storage_path_type(HelperConfig) of
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx3),
             StorageFileId = storage_file_id:flat(CanonicalPath, FileUuid, SpaceId, Storage),

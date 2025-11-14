@@ -617,8 +617,8 @@ get_space_mount_point(Worker, SpaceId) ->
     storage_mount_point(Worker, StorageId).
 
 storage_mount_point(Worker, StorageId) ->
-    Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
-    HelperArgs = helper:get_args(Helper),
+    HelperConfig = rpc:call(Worker, storage, get_helper_config, [StorageId]),
+    HelperArgs = helper_config:get_args(HelperConfig),
     maps:get(<<"mountPoint">>, HelperArgs).
 
 select_provider_with_imported_storage(Workers) ->

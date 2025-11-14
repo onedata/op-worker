@@ -204,10 +204,10 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %%--------------------------------------------------------------------
 -spec add_storage(storage:id()) -> ok.
 add_storage(StorageId) ->
-    Helper = storage:get_helper(StorageId),
-    AdminCtx = helper:get_admin_ctx(Helper),
-    {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
-    HelperName = helper:get_name(Helper),
+    HelperConfig = storage:get_helper_config(StorageId),
+    AdminCtx = helper_config:get_admin_ctx(HelperConfig),
+    {ok, HelperArgs} = helper_config:build_helper_nif_args(HelperConfig, AdminCtx),
+    HelperName = helper_config:get_name(HelperConfig),
     AllNodes = consistent_hashing:get_all_nodes(),
     {GatheredResults, BadNodes} = utils:rpc_multicall(AllNodes,
                                   rtransfer_link, add_storage,

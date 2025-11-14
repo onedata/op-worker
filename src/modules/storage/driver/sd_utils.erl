@@ -269,10 +269,10 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
             create_storage_file(SDHandle, FileCtx4);
         {ok, FileCtx4} ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
-            Helper = storage:get_helper(Storage),
+            HelperConfig = storage:get_helper_config(Storage),
             case
-                (helper:is_object(Helper) andalso helper:is_import_supported(Helper))
-                orelse (helper:get_name(Helper) =:= ?NULL_DEVICE_HELPER_NAME)
+                (helper_config:is_object(HelperConfig) andalso helper_config:is_import_supported(HelperConfig))
+                orelse (helper_config:get_name(HelperConfig) =:= ?NULL_DEVICE_HELPER_NAME)
             of
                 true ->
                     % pretend that parent directories has been created

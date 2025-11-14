@@ -31,12 +31,9 @@
 %% API
 -export([create/6, get/1, get_all/0, exists/1, delete/1, clear_storages/0]).
 
-%% Functions to retrieve storage details in Onepanel compatible format
--export([describe/1, describe_luma_config/1]).
-
 %%% Functions to retrieve storage details
 -export([
-    get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
+    get_id/1, get_block_size/1, get_helper_config/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1
 ]).
 -export([
@@ -54,7 +51,7 @@
 -export([update_name/2, update_luma_config/2]).
 -export([set_qos_parameters/2, update_readonly_and_imported/3]).
 -export([
-    update_helper_args/2, update_helper_admin_ctx/2, update_helper/2,
+    update_helper_config/2,
     upgrade_after_swift_version_update_to_v3/0, upgrade_after_swift_version_update_to_v3/1
 ]).
 
@@ -93,12 +90,12 @@
 %%% API
 %%%===================================================================
 
--spec create(name(), helpers:helper(), luma_config(),
+-spec create(name(), helper_config:t(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
+create(Name, HelperConfig, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
     Result = case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
         {ok, Id} ->
-            case storage_config:create(Id, Helper, LumaConfig) of
+            case storage_config:create(Id, HelperConfig, LumaConfig) of
                 {ok, Id} ->
                     on_storage_created(Id),
                     {ok, Id};
@@ -135,47 +132,6 @@ get(StorageData = #document{}) ->
 -spec get_all() -> {ok, [data()]} | {error, term()}.
 get_all() ->
     storage_config:list_all().
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns map describing the storage. The data is redacted to
-%% remove sensitive information.
-%% @end
-%%-------------------------------------------------------------------
--spec describe(id() | data()) -> {ok, json_utils:json_term()} | {error, term()}.
-describe(StorageId) when is_binary(StorageId) ->
-    case get(StorageId) of
-        {ok, StorageData} -> describe(StorageData);
-        {error, _} = Error -> Error
-    end;
-describe(StorageData) ->
-    StorageId = get_id(StorageData),
-    Helper = get_helper(StorageData),
-    AdminCtx = helper:get_redacted_admin_ctx(Helper),
-    HelperArgs = helper:get_args(Helper),
-    Base = maps:merge(HelperArgs, AdminCtx),
-    {ok, LumaConfigDescription} = describe_luma_config(StorageData),
-    BaseWithLuma = maps:merge(Base, LumaConfigDescription),
-    {ok, BaseWithLuma#{
-        <<"id">> => StorageId,
-        <<"name">> => fetch_name_of_local_storage(StorageId),
-        <<"type">> => helper:get_name(Helper),
-        <<"importedStorage">> => is_imported(StorageId),
-        <<"readonly">> => is_local_storage_readonly(StorageId),
-        <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
-    }}.
-
-
--spec describe_luma_config(id() | data()) -> {ok, json_utils:json_map()}.
-describe_luma_config(StorageId) when is_binary(StorageId) ->
-    case get(StorageId) of
-        {ok, StorageData} -> describe(StorageData);
-        {error, _} = Error -> Error
-    end;
-describe_luma_config(StorageData) ->
-    LumaConfig = get_luma_config(StorageData),
-    {ok, luma_config:describe(LumaConfig)}.
 
 
 -spec exists(id()) -> boolean().
@@ -226,12 +182,12 @@ clear_storages() ->
     storage_config:delete_all().
 
 
--spec verify_configuration(id() | name(), config(), helpers:helper()) -> ok | {error, term()}.
-verify_configuration(IdOrName, Config, Helper) ->
+-spec verify_configuration(id() | name(), config(), helper_config:t()) -> ok | {error, term()}.
+verify_configuration(IdOrName, Config, HelperConfig) ->
     try
         sanitize_readonly_option(IdOrName, Config),
-        check_helper_against_readonly_option(Config, Helper),
-        check_helper_against_imported_option(Config, Helper)
+        check_helper_against_readonly_option(Config, HelperConfig),
+        check_helper_against_imported_option(Config, HelperConfig)
     catch
         throw:Error -> Error
     end.
@@ -255,17 +211,17 @@ get_id(StorageData) ->
 %%--------------------------------------------------------------------
 -spec get_block_size(id()) -> non_neg_integer() | undefined.
 get_block_size(StorageId) ->
-    helper:get_block_size(get_helper(StorageId)).
+    helper_config:get_block_size(get_helper_config(StorageId)).
 
 
--spec get_helper(data() | id()) -> helpers:helper().
-get_helper(StorageDataOrId) ->
-    storage_config:get_helper(StorageDataOrId).
+-spec get_helper_config(data() | id()) -> helper_config:t().
+get_helper_config(StorageDataOrId) ->
+    storage_config:get_helper_config(StorageDataOrId).
 
--spec get_helper_name(data() | id()) -> helper:name().
+-spec get_helper_name(data() | id()) -> helper_config:name().
 get_helper_name(StorageDataOrId) ->
-    Helper = storage_config:get_helper(StorageDataOrId),
-    helper:get_name(Helper).
+    HelperConfig = storage_config:get_helper_config(StorageDataOrId),
+    helper_config:get_name(HelperConfig).
 
 -spec get_luma_feed(id() | data()) -> luma_feed().
 get_luma_feed(Storage) ->
@@ -345,14 +301,14 @@ is_local(StorageId) ->
 
 -spec is_posix_compatible(id() | data()) -> boolean().
 is_posix_compatible(StorageDataOrId) ->
-    Helper = get_helper(StorageDataOrId),
-    helper:is_posix_compatible(Helper).
+    HelperConfig = get_helper_config(StorageDataOrId),
+    helper_config:is_posix_compatible(HelperConfig).
 
 
 -spec is_archive(id() | data()) -> boolean().
 is_archive(StorageDataOrId) ->
-    Helper = get_helper(StorageDataOrId),
-    helper:is_archive_storage(Helper).
+    HelperConfig = get_helper_config(StorageDataOrId),
+    helper_config:is_archive_storage(HelperConfig).
 
 %%%===================================================================
 %%% Functions to modify storage details
@@ -396,22 +352,10 @@ set_qos_parameters(StorageId, QosParameters) ->
     end.
 
 
--spec update_helper_args(id(), helper:args()) -> ok | {error, term()}.
-update_helper_args(StorageId, Changes) when is_map(Changes) ->
-    UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
-    update_helper(StorageId, UpdateFun).
-
-
--spec update_helper_admin_ctx(id(), helper:user_ctx()) -> ok | {error, term()}.
-update_helper_admin_ctx(StorageId, Changes) ->
-    UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
-    update_helper(StorageId, UpdateFun).
-
-
--spec update_helper(id(), fun((helpers:helper()) -> helpers:helper())) ->
+-spec update_helper_config(id(), fun((helper_config:t()) -> {ok, helper_config:t()} | {error, term()})) ->
     ok | {error, term()}.
-update_helper(StorageId, UpdateFun) ->
-    case storage_config:update_helper(StorageId, UpdateFun) of
+update_helper_config(StorageId, UpdateFun) ->
+    case storage_config:update_helper_config(StorageId, UpdateFun) of
         ok -> on_helper_changed(StorageId);
         {error, no_changes} -> ok;
         {error, _} = Error -> Error
@@ -452,19 +396,19 @@ upgrade_after_swift_version_update_to_v3(StorageData) ->
 %%--------------------------------------------------------------------
 -spec upgrade_swift_helper_after_swift_version_update_to_v3(id()) -> ok | {error, term()}.
 upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
-    storage:update_helper(StorageId, fun(Helper = #helper{
+    storage:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
         args = Args,
         admin_ctx = AdminCtx
     }) ->
         case maps:take(<<"tenantName">>, Args) of
             {ProjectName, NewArgs} ->
-                {ok, Helper#helper{
+                {ok, HelperConfig#helper_config{
                     args = NewArgs,
                     admin_ctx = AdminCtx#{<<"projectName">> => ProjectName}
                 }};
             error ->
                 % ensure update is idempotent
-                {ok, Helper}
+                {ok, HelperConfig}
         end
     end).
 
@@ -609,26 +553,26 @@ lock_on_storage_by_id(Identifier, Fun) ->
 
 
 %% @private
--spec check_helper_against_readonly_option(config(), helpers:helper()) -> ok.
-check_helper_against_readonly_option(#{readonly := true}, _Helper) ->
+-spec check_helper_against_readonly_option(config(), helper_config:t()) -> ok | no_return().
+check_helper_against_readonly_option(#{readonly := true}, _HelperConfig) ->
     ok;
-check_helper_against_readonly_option(#{readonly := false}, Helper) ->
-    case helper:supports_storage_access_type(Helper, ?READWRITE) of
+check_helper_against_readonly_option(#{readonly := false}, HelperConfig) ->
+    case helper_config:supports_storage_access_type(HelperConfig, ?READWRITE) of
         false ->
-            HelperName = helper:get_name(Helper),
+            HelperName = helper_config:get_name(HelperConfig),
             throw(?ERR_REQUIRES_READONLY_STORAGE(?err_ctx(), HelperName));
         true ->
             ok
     end.
 
 %% @private
--spec check_helper_against_imported_option(config(), helpers:helper()) -> ok.
-check_helper_against_imported_option(#{importedStorage := false}, _Helper) ->
+-spec check_helper_against_imported_option(config(), helper_config:t()) -> ok | no_return().
+check_helper_against_imported_option(#{importedStorage := false}, _HelperConfig) ->
     ok;
-check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
-    case helper:is_import_supported(Helper) of
+check_helper_against_imported_option(#{importedStorage := true}, HelperConfig) ->
+    case helper_config:is_import_supported(HelperConfig) of
         false ->
-            HelperName = helper:get_name(Helper),
+            HelperName = helper_config:get_name(HelperConfig),
             throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), HelperName, ?OBJECT_HELPERS));
         true ->
             ok
@@ -636,7 +580,7 @@ check_helper_against_imported_option(#{importedStorage := true}, Helper) ->
 
 
 %% @private
--spec sanitize_readonly_option(id() | name(), config()) -> ok.
+-spec sanitize_readonly_option(id() | name(), config()) -> ok | no_return().
 sanitize_readonly_option(IdOrName, #{
     readonly := Readonly,
     importedStorage := Imported

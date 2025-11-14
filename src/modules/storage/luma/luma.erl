@@ -185,7 +185,7 @@
 -type gid() :: luma_posix_credentials:gid().
 -type acl_who() :: binary().
 -type display_credentials() :: {uid(), gid()}.
--type storage_credentials() :: helper:user_ctx().
+-type storage_credentials() :: helper_config:user_ctx().
 
 -type feed() :: luma_config:feed().
 
@@ -210,7 +210,7 @@ map_to_storage_credentials(SessId, UserId, SpaceId, Storage) ->
     case map_to_storage_credentials_internal(UserId, SpaceId, Storage) of
         {ok, StorageCredentials} ->
             LumaMode = storage:get_luma_feed(Storage),
-            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper(Storage), LumaMode);
+            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper_config(Storage), LumaMode);
         Error ->
             Error
     end.
@@ -322,11 +322,11 @@ clear_db(StorageId, SpaceId) ->
 
 
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper(), luma:feed()) -> any().
-add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper, LumaFeed) ->
-    case helper:get_name(Helper) of
+    helper_config:t(), luma:feed()) -> any().
+add_helper_specific_fields(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed) ->
+    case helper_config:get_name(HelperConfig) of
         ?WEBDAV_HELPER_NAME ->
-            add_webdav_specific_fields(UserId, SessionId, StorageCredentials, Helper, LumaFeed);
+            add_webdav_specific_fields(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed);
         _Other ->
             {ok, StorageCredentials}
     end.
@@ -338,8 +338,8 @@ add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper, LumaFe
 -spec map_to_storage_credentials_internal(od_user:id(), od_space:id(),
     storage:id() | storage:data()) -> {ok, storage_credentials()} | {error, term()}.
 map_to_storage_credentials_internal(?ROOT_USER_ID, _SpaceId, Storage) ->
-    Helper = storage:get_helper(Storage),
-    {ok, helper:get_admin_ctx(Helper)};
+    HelperConfig = storage:get_helper_config(Storage),
+    {ok, helper_config:get_admin_ctx(HelperConfig)};
 map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     try
         {ok, StorageData} = storage:get(Storage),
@@ -360,27 +360,27 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     end.
 
 
--spec add_webdav_specific_fields(od_user:id(), session:id(), storage_credentials(), helpers:helper(), feed()) ->
+-spec add_webdav_specific_fields(od_user:id(), session:id(), storage_credentials(), helper_config:t(), feed()) ->
     {ok, luma:storage_credentials()} | {error, term()}.
 add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
     <<"credentialsType">> := <<"oauth2">>
-}, Helper, LumaFeed) ->
+}, HelperConfig, LumaFeed) ->
     {UserId2, SessionId2} = case fslogic_file_id:is_space_owner(UserId) of
         true ->
-            % space owner uses helper admin_ctx
+            % space owner uses helper_config admin_ctx
             {?ROOT_USER_ID, ?ROOT_SESS_ID};
         false ->
             {UserId, SessionId}
     end,
-    choose_idp_and_fill_in_webdav_oauth2_token(UserId2, SessionId2, StorageCredentials, Helper, LumaFeed);
-add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _Helper, _LumaFeed) ->
+    choose_idp_and_fill_in_webdav_oauth2_token(UserId2, SessionId2, StorageCredentials, HelperConfig, LumaFeed);
+add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _HelperConfig, _LumaFeed) ->
     {ok, StorageCredentials}.
 
 
 -spec choose_idp_and_fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
-choose_idp_and_fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper, LumaFeed) ->
-    HelperArgs = helper:get_args(Helper),
+    helper_config:t(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
+choose_idp_and_fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed) ->
+    HelperArgs = helper_config:get_args(HelperConfig),
     case maps:get(<<"oauth2IdP">>, HelperArgs, undefined) of
         undefined ->
             % OAuth2IdP was not explicitly set, try to infer it
@@ -453,8 +453,8 @@ map_space_owner_to_storage_credentials(Storage, SpaceId) ->
                 <<"gid">> => integer_to_binary(DefaultGid)
             }};
         false ->
-            Helper = storage:get_helper(Storage),
-            {ok, helper:get_admin_ctx(Helper)}
+            HelperConfig = storage:get_helper_config(Storage),
+            {ok, helper_config:get_admin_ctx(HelperConfig)}
     end.
 
 -spec map_onedata_user_to_storage_credentials(od_user:id(), storage:data(), od_space:id()) ->

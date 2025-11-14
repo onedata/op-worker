@@ -176,19 +176,19 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
 
 -spec normalize_storage_file_id(storage:id(), helpers:file_id()) -> helpers:file_id().
 normalize_storage_file_id(StorageId, StorageFileId) ->
-    Helper = storage:get_helper(StorageId),
-    case helper:get_name(Helper) of
+    HelperConfig = storage:get_helper_config(StorageId),
+    case helper_config:get_name(HelperConfig) of
         ?XROOTD_HELPER_NAME ->
-            normalize_xrootd_storage_file_id(Helper, StorageFileId);
+            normalize_xrootd_storage_file_id(HelperConfig, StorageFileId);
         _ ->
             StorageFileId
     end.
 
--spec normalize_xrootd_storage_file_id(helpers:helper(), helpers:file_id()) -> helpers:file_id().
-normalize_xrootd_storage_file_id(Helper, StorageFileId) ->
+-spec normalize_xrootd_storage_file_id(helper_config:t(), helpers:file_id()) -> helpers:file_id().
+normalize_xrootd_storage_file_id(HelperConfig, StorageFileId) ->
     case is_url(StorageFileId) of
         true ->
-            Args = helper:get_args(Helper),
+            Args = helper_config:get_args(HelperConfig),
             HelperUrl = maps:get(<<"url">>, Args),
             HelperUrlSize = byte_size(HelperUrl),
             case binary:match(StorageFileId, HelperUrl) of
@@ -421,21 +421,21 @@ get_default_file_stat(StorageFileCtx) ->
         st_mtime = CurrentTimestamp,
         st_atime = CurrentTimestamp,
         st_ctime = CurrentTimestamp,
-        st_mode = get_default_file_mode(storage:get_helper(Storage)),
+        st_mode = get_default_file_mode(storage:get_helper_config(Storage)),
         st_uid = ?ROOT_UID,
         st_gid = ?ROOT_GID
     },
     {DefaultStat, storage_file_ctx:set_stat(StorageFileCtx2, DefaultStat)}.
 
 
--spec get_default_file_mode(helpers:helper()) -> file_meta:mode().
-get_default_file_mode(#helper{name = HelperName, args = Args})
+-spec get_default_file_mode(helper_config:t()) -> file_meta:mode().
+get_default_file_mode(#helper_config{name = HelperName, args = Args})
     when HelperName =:= ?HTTP_HELPER_NAME
     orelse HelperName =:= ?S3_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
 ->
     maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE);
-get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
+get_default_file_mode(#helper_config{name = ?XROOTD_HELPER_NAME, args = Args}) ->
     maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
 get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.

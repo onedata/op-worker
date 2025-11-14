@@ -265,12 +265,12 @@ enable_webdav_test_mode_on_all_storages(Worker) ->
     end, ?STORAGE_IDS).
 
 enable_webdav_test_mode(Worker, StorageId) ->
-    UpdateHelperFun = fun(#helper{args = Args, admin_ctx = AdminCtx}  = Helper) ->
+    UpdateHelperConfigFun = fun(#helper_config{args = Args, admin_ctx = AdminCtx}  = HelperConfig) ->
         Args2 = Args#{
             <<"testTokenRefreshMode">> => <<"true">>,
             <<"oauth2IdP">> => ?IDP
         },
-        {ok, Helper#helper{
+        {ok, HelperConfig#helper_config{
             args = Args2,
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
@@ -280,7 +280,7 @@ enable_webdav_test_mode(Worker, StorageId) ->
             }
         }}
     end,
-    ok = rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]).
+    ok = rpc:call(Worker, storage, update_helper_config, [StorageId, UpdateHelperConfigFun]).
 
 get_sd_handle(Worker, SpaceId, SessionId, FilePath) ->
     StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),

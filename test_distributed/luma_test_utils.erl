@@ -27,7 +27,7 @@
     new_s3_user_ctx/2, new_swift_user_ctx/3, new_glusterfs_user_ctx/2,
     new_webdav_user_ctx/2, new_nulldevice_user_ctx/2]).
 
--type user_ctx() :: helper:user_ctx().
+-type user_ctx() :: helper_config:user_ctx().
 
 %%%===================================================================
 %%% API functions
@@ -99,59 +99,59 @@ setup_local_feed_luma(Worker, Config, LocalFeedConfigFile) ->
     initializer:setup_luma_local_feed(Worker, Config, LocalFeedConfigFile).
 
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?POSIX_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?POSIX_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_posix_user_ctx(?UID1, ?ROOT_GID),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?POSIX_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?POSIX_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?CEPH_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?CEPH_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_ceph_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?CEPH_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?CEPH_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?S3_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?S3_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_s3_user_ctx(<<"ADMIN_ACCESS_KEY1">>, <<"ADMIN_SECRET_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?S3_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?S3_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?SWIFT_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?SWIFT_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_swift_user_ctx(<<"ADMIN1">>, <<"ADMIN_PASSWD">>, <<"PROJECT_NAME">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?SWIFT_HELPER(ChangedAdminCreds)}}};
+        value = StorageConfig#storage_config{helper_config = ?SWIFT_HELPER(ChangedAdminCreds)}}};
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?CEPHRADOS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_cephrados_user_ctx(<<"ADMIN1">>, <<"ADMIN_KEY">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?CEPHRADOS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?GLUSTERFS_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_glusterfs_user_ctx(1, 0),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?GLUSTERFS_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?GLUSTERFS_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?NULL_DEVICE_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?NULL_DEVICE_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = luma_test_utils:new_nulldevice_user_ctx(1, 0),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?NULLDEVICE_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?NULLDEVICE_HELPER(ChangedAdminCreds)}}
     };
 change_admin_creds(
-    #document{value = #storage_config{helper = #helper{name = ?WEBDAV_HELPER_NAME}} = StorageConfig} = StorageDoc
+    #document{value = #storage_config{helper_config = #helper_config{name = ?WEBDAV_HELPER_NAME}} = StorageConfig} = StorageDoc
 ) ->
     ChangedAdminCreds = ?WEBDAV_BASIC_CREDENTIALS(<<"admin1:password">>),
     {ChangedAdminCreds, StorageDoc#document{
-        value = StorageConfig#storage_config{helper = ?WEBDAV_HELPER(ChangedAdminCreds)}}
+        value = StorageConfig#storage_config{helper_config = ?WEBDAV_HELPER(ChangedAdminCreds)}}
     }.
 
 %%%===================================================================

@@ -52,11 +52,11 @@ refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(Stor
     refresh_handle_params(Handle, SessionId, SpaceId, Storage);
 refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
     % gather information
-    Helper = storage:get_helper(Storage),
+    HelperConfig = storage:get_helper_config(Storage),
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
-    {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
-    ArgsWithUserCtxAndType = maps:put(<<"type">>, helper:get_name(Helper), ArgsWithUserCtx),
+    {ok, ArgsWithUserCtx} = helper_config:build_helper_nif_args(HelperConfig, UserCtx),
+    ArgsWithUserCtxAndType = maps:put(<<"type">>, helper_config:get_name(HelperConfig), ArgsWithUserCtx),
     % do the refresh
     % @TODO VFS-11947 Propagate storage update errors to onepanel and roll back
     helpers:refresh_params(Handle, ArgsWithUserCtxAndType).

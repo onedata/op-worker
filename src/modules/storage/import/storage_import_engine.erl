@@ -728,8 +728,8 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
 -spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
 create_dir_location(FileUuid, StorageFileCtx) ->
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    Helper = storage:get_helper(Storage),
-    {SyncedGid, StorageFileCtx4} = case helper:is_posix_compatible(Helper) of
+    HelperConfig = storage:get_helper_config(Storage),
+    {SyncedGid, StorageFileCtx4} = case helper_config:is_posix_compatible(HelperConfig) of
         true ->
             {#statbuf{st_gid = StGid}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
             {StGid, StorageFileCtx3};
@@ -747,7 +747,7 @@ create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
-    IsPosix = helper:is_posix_compatible(storage:get_helper(Storage)),
+    IsPosix = helper_config:is_posix_compatible(storage:get_helper_config(Storage)),
     {#statbuf{
         st_gid = StGid,
         st_size = StSize
@@ -931,8 +931,8 @@ maybe_import_nfs4_acl(_FileCtx, StorageFileCtx, _Info) ->
 import_nfs4_acl(FileCtx, StorageFileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    Helper = storage:get_helper(StorageId),
-    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported(Helper) of
+    HelperConfig = storage:get_helper_config(StorageId),
+    case not file_ctx:is_space_dir_const(FileCtx) andalso helper_config:is_nfs4_acl_supported(HelperConfig) of
         false ->
             ok;
         true->
@@ -1258,8 +1258,8 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := false}, 
 maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}, ShouldUpdate) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    Helper = storage:get_helper(StorageId),
-    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported(Helper) of
+    HelperConfig = storage:get_helper_config(StorageId),
+    case not file_ctx:is_space_dir_const(FileCtx) andalso helper_config:is_nfs4_acl_supported(HelperConfig) of
         false ->
             {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
         true ->

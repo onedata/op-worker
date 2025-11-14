@@ -297,8 +297,8 @@ assert_auto_storage_import_supported(SpaceId) ->
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             assert_imported_storage(StorageId),
-            Helper = storage:get_helper(StorageId),
-            case helper:is_auto_import_supported(Helper) of
+            HelperConfig = storage:get_helper_config(StorageId),
+            case helper_config:is_auto_import_supported(HelperConfig) of
                 true ->
                     ok;
                 false ->
@@ -316,8 +316,8 @@ assert_manual_storage_import_supported(SpaceId) ->
     case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             assert_imported_storage(StorageId),
-            Helper = storage:get_helper(StorageId),
-            case helper:is_file_registration_supported(Helper) of
+            HelperConfig = storage:get_helper_config(StorageId),
+            case helper_config:is_file_registration_supported(HelperConfig) of
                 true ->
                     ok;
                 false ->

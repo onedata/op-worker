@@ -28,9 +28,9 @@
 
 %% API
 -export([create/2, create/3, get/1, exists/1, delete/1]).
--export([get_id/1, get_helper/1, get_luma_feed/1, get_luma_config/1]).
+-export([get_id/1, get_helper_config/1, get_luma_feed/1, get_luma_config/1]).
 
--export([update_helper/2, update_luma_config/2, set_luma_config/2]).
+-export([update_helper_config/2, update_luma_config/2, set_luma_config/2]).
 
 -export([list_all/0, delete_all/0]).
 
@@ -66,11 +66,11 @@ create(StorageId, StorageConfig) ->
         value = StorageConfig
     })).
 
--spec create(storage:id(), helpers:helper(), undefined | storage:luma_config()) ->
+-spec create(storage:id(), helper_config:t(), undefined | storage:luma_config()) ->
     {ok, storage:id()} | {error, term()}.
-create(StorageId, Helper, LumaConfig) ->
+create(StorageId, HelperConfig, LumaConfig) ->
     create(StorageId, #storage_config{
-        helper = Helper,
+        helper_config = HelperConfig,
         luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED))
     }).
 
@@ -105,14 +105,14 @@ get_id(#document{key = StorageId, value = #storage_config{}}) ->
     StorageId.
 
 
--spec get_helper(doc() | record() | storage:id()) -> helpers:helper().
-get_helper(#document{value = StorageConfig}) ->
-    get_helper(StorageConfig);
-get_helper(#storage_config{helper = Helper}) ->
-    Helper;
-get_helper(StorageId) ->
+-spec get_helper_config(doc() | record() | storage:id()) -> helper_config:t().
+get_helper_config(#document{value = StorageConfig}) ->
+    get_helper_config(StorageConfig);
+get_helper_config(#storage_config{helper_config = HelperConfig}) ->
+    HelperConfig;
+get_helper_config(StorageId) ->
     {ok, StorageDoc} = ?MODULE:get(StorageId),
-    get_helper(StorageDoc).
+    get_helper_config(StorageDoc).
 
 -spec get_luma_feed(storage:id() | doc() | record()) -> storage:luma_feed().
 get_luma_feed(Storage) ->
@@ -129,18 +129,21 @@ get_luma_config(StorageId) ->
     get_luma_config(StorageDoc).
 
 
--spec update_helper(storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
+-spec update_helper_config(
+    storage:id(),
+    fun((helper_config:t()) -> {ok, helper_config:t()} | {error, term()})
+) ->
     ok | {error, term()}.
-update_helper(StorageId, UpdateFun) ->
+update_helper_config(StorageId, UpdateFun) ->
     ?extract_ok(update(StorageId, fun
-        (#storage_config{helper = PreviousHelper} = StorageConfig) ->
-            case UpdateFun(PreviousHelper) of
-                {ok, PreviousHelper} ->
+        (#storage_config{helper_config = PreviousHelperConfig} = StorageConfig) ->
+            case UpdateFun(PreviousHelperConfig) of
+                {ok, PreviousHelperConfig} ->
                     % this error informs higher level module, that no changes were made
                     % and there is no need to execute `on_helper_changed` callback
                     {error, no_changes};
-                {ok, NewHelper} ->
-                    {ok, StorageConfig#storage_config{helper = NewHelper}};
+                {ok, NewHelperConfig} ->
+                    {ok, StorageConfig#storage_config{helper_config = NewHelperConfig}};
                 {error, _} = Error ->
                     Error
             end
@@ -208,7 +211,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 
 %%--------------------------------------------------------------------
@@ -267,6 +270,20 @@ get_record_struct(3) ->
             {api_key, string}
         ]}}
         % deprecated imported_storage field has been removed in this version
+    ]};
+get_record_struct(4) ->
+    {record, [
+        % Replace/rename helper to helper_config
+        {helper_config, {record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}}
+        ]}},
+        {luma_config, {record, [
+            {feed, atom},
+            {url, string},
+            {api_key, string}
+        ]}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -303,5 +320,11 @@ upgrade_record(1, {?MODULE, Helper, Readonly, LumaConfig, ImportedStorage}) ->
         LumaConfig2,
         ImportedStorage
     }};
+
 upgrade_record(2, {?MODULE, Helper, LumaConfig, _ImportedStorage}) ->
-    {3, {?MODULE, Helper, LumaConfig}}.
+    {3, {?MODULE, Helper, LumaConfig}};
+
+upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
+    {helper, Name, Args, AdminCtx} = Helper,
+    HelperConfig = #helper_config{name = Name, args = Args, admin_ctx = AdminCtx},
+    {4, {?MODULE, HelperConfig, LumaConfig}}.

@@ -618,8 +618,8 @@ build_provider_ctx(SpaceOwnerSelector, ProviderSelector) ->
 -spec create_file_tree_on_storage(storage:id(), onenv_file_test_utils:object_spec()) ->
     storage:id().
 create_file_tree_on_storage(StorageId, FileDesc) ->
-    Helper = storage:get_helper(StorageId),
-    HelperHandle = helpers:get_helper_handle(Helper, Helper#helper.admin_ctx),
+    HelperConfig = storage:get_helper_config(StorageId),
+    HelperHandle = helpers:get_helper_handle(HelperConfig, HelperConfig#helper_config.admin_ctx),
     create_file_tree_on_storage(HelperHandle, <<"/">>, FileDesc).
 
 

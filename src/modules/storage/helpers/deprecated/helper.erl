@@ -36,7 +36,6 @@
     is_object/1, is_archive_storage/1
 ]).
 -export([get_args_with_user_ctx/2]).
--export([translate_name/1, translate_arg_name/1]).
 
 -type name() :: binary().
 
@@ -329,67 +328,6 @@ block_size_equals_0(#helper{args = Args}) ->
 %%%===================================================================
 %%% Upgrade functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Translates storage helper name from legacy format.
-%% @end
-%%--------------------------------------------------------------------
--spec translate_name(OldName :: binary()) -> NewName :: binary().
-translate_name(<<"Ceph">>) -> ?CEPH_HELPER_NAME;
-translate_name(<<"CephRados">>) -> ?CEPHRADOS_HELPER_NAME;
-translate_name(<<"DirectIO">>) -> ?POSIX_HELPER_NAME;
-translate_name(<<"ProxyIO">>) -> ?PROXY_HELPER_NAME;
-translate_name(<<"AmazonS3">>) -> ?S3_HELPER_NAME;
-translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
-translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
-translate_name(<<"WebDAV">>) -> ?WEBDAV_HELPER_NAME;
-translate_name(<<"XRootD">>) -> ?XROOTD_HELPER_NAME;
-translate_name(<<"NFS">>) -> ?NFS_HELPER_NAME;
-translate_name(<<"HTTP">>) -> ?HTTP_HELPER_NAME;
-translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
-translate_name(Name) -> Name.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Translates storage helper argument name from legacy format.
-%% @end
-%%--------------------------------------------------------------------
--spec translate_arg_name(OldName :: binary()) -> NewName :: binary().
-translate_arg_name(<<"access_key">>) -> <<"accessKey">>;
-translate_arg_name(<<"auth_url">>) -> <<"authUrl">>;
-translate_arg_name(<<"block_size">>) -> <<"blockSize">>;
-translate_arg_name(<<"bucket_name">>) -> <<"bucketName">>;
-translate_arg_name(<<"cluster_name">>) -> <<"clusterName">>;
-translate_arg_name(<<"container_name">>) -> <<"containerName">>;
-translate_arg_name(<<"host_name">>) -> <<"hostname">>;
-translate_arg_name(<<"mon_host">>) -> <<"monitorHostname">>;
-translate_arg_name(<<"pool_name">>) -> <<"poolName">>;
-translate_arg_name(<<"root_path">>) -> <<"mountPoint">>;
-translate_arg_name(<<"secret_key">>) -> <<"secretKey">>;
-translate_arg_name(<<"project_name">>) -> <<"projectName">>;
-translate_arg_name(<<"user_domain_name">>) -> <<"userDomainName">>;
-translate_arg_name(<<"project_domain_name">>) -> <<"projectDomainName">>;
-translate_arg_name(<<"user_name">>) -> <<"username">>;
-translate_arg_name(<<"xlator_options">>) -> <<"xlatorOptions">>;
-translate_arg_name(<<"verify_server_certificate">>) -> <<"verifyServerCertificate">>;
-translate_arg_name(<<"credentials_type">>) -> <<"credentialsType">>;
-translate_arg_name(<<"authorization_header">>) -> <<"authorizationHeader">>;
-translate_arg_name(<<"range_write_support">>) -> <<"rangeWriteSupport">>;
-translate_arg_name(<<"connection_pool_size">>) -> <<"connectionPoolSize">>;
-translate_arg_name(<<"max_requests_per_session">>) -> <<"maxRequestsPerSession">>;
-translate_arg_name(<<"maximum_upload_size">>) -> <<"maximumUploadSize">>;
-translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
-translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
-translate_arg_name(<<"timeout_probability">>) -> <<"timeoutProbability">>;
-translate_arg_name(<<"simulated_filesystem_parameters">>) ->
-    <<"simulatedFilesystemParameters">>;
-translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
-    <<"simulatedFilesystemGrowSpeed">>;
-translate_arg_name(<<"enable_data_verification">>) ->
-    <<"enableDataVerification">>;
-translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
-translate_arg_name(Name) -> Name.
 
 
 %% @private

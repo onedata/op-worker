@@ -423,6 +423,6 @@ get_file_id(W, OpenAns) ->
 
 get_mount_point(W) ->
     WorkerStorageId = initializer:get_storage_id(W),
-    Helper = rpc:call(W, storage, get_helper, [WorkerStorageId]),
-    #{<<"mountPoint">> := MountPoint} = helper:get_args(Helper),
+    Helper = rpc:call(W, storage, get_helper_config, [WorkerStorageId]),
+    #{<<"mountPoint">> := MountPoint} = helper_config:get_args(Helper),
     MountPoint.

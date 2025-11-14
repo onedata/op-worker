@@ -121,18 +121,18 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             ok
     end,
 
-    Helper = storage:get_helper(Storage),
+    HelperConfig = storage:get_helper_config(Storage),
     case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
         {ok, ClientStorageUserCtx} ->
             {ok, ServerStorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
-            HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
+            HelperParams = helper_config:get_params(HelperConfig, ClientStorageUserCtx),
             {SpaceStorageFileId, _SpaceCtx3} = file_ctx:get_storage_file_id(SpaceCtx2),
             DirName = filename:dirname(SpaceStorageFileId),
             try
-                {ok, TestFileId} = storage_detector:create_test_file(Helper, ServerStorageUserCtx, DirName),
-                {ok, FileContent} = storage_detector:write_test_file(Helper, ServerStorageUserCtx, TestFileId),
+                {ok, TestFileId} = storage_detector:create_test_file(HelperConfig, ServerStorageUserCtx, DirName),
+                {ok, FileContent} = storage_detector:write_test_file(HelperConfig, ServerStorageUserCtx, TestFileId),
                 spawn(storage_req, remove_storage_test_file, [
-                    Helper, ServerStorageUserCtx, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                    HelperConfig, ServerStorageUserCtx, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
                 #fuse_response{
                     status = #status{code = ?OK},
                     fuse_response = #storage_test_file{
@@ -162,9 +162,9 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     {ok, Storage} = storage:get(StorageId),
-    Helper = storage:get_helper(Storage),
+    HelperConfig = storage:get_helper_config(Storage),
     {ok, StorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
-    verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
+    verify_storage_test_file_loop(HelperConfig, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 
 %%%===================================================================
@@ -175,12 +175,12 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
 -spec get_local_storage_helper_params(session:id(), od_user:id(), od_space:id(), atom(),
     storage:data()) -> #fuse_response{}.
 get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageData) ->
-    Helper = storage:get_helper(StorageData),
+    HelperConfig = storage:get_helper_config(StorageData),
     case HelperMode of
         ?FORCE_DIRECT_HELPER_MODE ->
             case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, StorageData) of
                 {ok, ClientStorageUserCtx} ->
-                    HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
+                    HelperParams = helper_config:get_params(HelperConfig, ClientStorageUserCtx),
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = HelperParams};
@@ -188,15 +188,15 @@ get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageD
                     #fuse_response{status = #status{code = ?ENOENT}}
             end;
         _ProxyOrAutoMode ->
-            get_proxy_storage_helper_params(storage:get_id(StorageData), Helper)
+            get_proxy_storage_helper_params(storage:get_id(StorageData), HelperConfig)
     end.
 
 %% @private
--spec get_proxy_storage_helper_params(storage:id(), helpers:helper() | undefined) ->
+-spec get_proxy_storage_helper_params(storage:id(), helper_config:t() | undefined) ->
     #fuse_response{}.
-get_proxy_storage_helper_params(StorageId, Helper) ->
-    Timeout = helper:get_timeout(Helper),
-    HelperParams = helper:get_proxy_params(Timeout, StorageId),
+get_proxy_storage_helper_params(StorageId, HelperConfig) ->
+    Timeout = helper_config:get_timeout(HelperConfig),
+    HelperParams = helper_config:get_proxy_params(Timeout, StorageId),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = HelperParams}.
@@ -207,11 +207,11 @@ get_proxy_storage_helper_params(StorageId, Helper) ->
 %% Removes test file referenced by handle after specified delay.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_storage_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
+-spec remove_storage_test_file(helper_config:t(), helper_config:user_ctx(), helpers:file_id(),
     Size::non_neg_integer(), Delay :: timeout()) -> ok.
-remove_storage_test_file(Helper, StorageUserCtx, FileId, Size, Delay) ->
+remove_storage_test_file(HelperConfig, StorageUserCtx, FileId, Size, Delay) ->
     timer:sleep(Delay),
-    storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, Size).
+    storage_detector:remove_test_file(HelperConfig, StorageUserCtx, FileId, Size).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -221,24 +221,24 @@ remove_storage_test_file(Helper, StorageUserCtx, FileId, Size, Delay) ->
 %% its content doesn't match expected one.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_storage_test_file_loop(helpers:helper(), helper:user_ctx(),
+-spec verify_storage_test_file_loop(helper_config:t(), helper_config:user_ctx(),
     helpers:file_id(), FileContent :: binary(), Code :: atom(),
     Attempts :: non_neg_integer()) -> #fuse_response{}.
 verify_storage_test_file_loop(_, _, _, _, Code, 0) ->
     #fuse_response{status = #status{code = Code}};
-verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, Attempts) ->
-    try storage_detector:read_test_file(Helper, StorageUserCtx, FileId) of
+verify_storage_test_file_loop(HelperConfig, StorageUserCtx, FileId, FileContent, _, Attempts) ->
+    try storage_detector:read_test_file(HelperConfig, StorageUserCtx, FileId) of
         {ok, FileContent} ->
-            storage_detector:remove_test_file(Helper, StorageUserCtx, FileId, size(FileContent)),
+            storage_detector:remove_test_file(HelperConfig, StorageUserCtx, FileId, size(FileContent)),
             #fuse_response{status = #status{code = ?OK}};
         _ ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
+            verify_storage_test_file_loop(HelperConfig, StorageUserCtx, FileId, FileContent,
                 ?EINVAL, Attempts - 1)
     catch
         {_, {error, ?ENOENT}} ->
             timer:sleep(?VERIFY_STORAGE_TEST_FILE_DELAY),
-            verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
+            verify_storage_test_file_loop(HelperConfig, StorageUserCtx, FileId, FileContent,
                 ?ENOENT, Attempts - 1)
     end.
 

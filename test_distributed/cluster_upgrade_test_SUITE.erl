@@ -460,7 +460,7 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
         <<"username">> => <<"user">>,
         <<"password">> => <<"password">>
     },
-    Helper = #helper{
+    Helper = #helper_config{
         name = ?SWIFT_HELPER_NAME,
         args = BaseHelperArgs#{<<"tenantName">> => TenantName},
         admin_ctx = BaseHelperAdminCtx
@@ -469,19 +469,19 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, undefined]),
 
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper = Helper}}},
+        {ok, #document{value = #storage_config{helper_config = Helper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ),
 
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
-    ExpNewHelper = #helper{
+    ExpNewHelper = #helper_config{
         name = ?SWIFT_HELPER_NAME,
         args = BaseHelperArgs,
         admin_ctx = BaseHelperAdminCtx#{<<"projectName">> => TenantName}
     },
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
+        {ok, #document{value = #storage_config{helper_config = ExpNewHelper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ),
 
@@ -489,7 +489,7 @@ upgrade_from_21_02_8_upgrade_swift_storage(Config) ->
     ?assertEqual({ok, 8}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [7])),
 
     ?assertMatch(
-        {ok, #document{value = #storage_config{helper = ExpNewHelper}}},
+        {ok, #document{value = #storage_config{helper_config = ExpNewHelper}}},
         rpc:call(Worker, storage_config, get, [StorageId])
     ).
 
@@ -527,15 +527,15 @@ upgrade_from_21_02_8_luma(Config) ->
 %%%===================================================================
 
 setup_luma(Worker, Helper, UserId, Feed) ->
-    HelperName = helper:get_name(Helper),
+    HelperName = helper_config:get_name(Helper),
     StorageDoc = #document{
         key = <<"storage_id_", (atom_to_binary(Feed))/binary, "_", HelperName/binary>>,
-        value = #storage_config{helper = Helper, luma_config = luma_config:new(Feed)}
+        value = #storage_config{helper_config = Helper, luma_config = luma_config:new(Feed)}
     },
     rpc:call(Worker, storage_config, create, [StorageDoc#document.key, StorageDoc#document.value]),
 
     LumaStorageUser = rpc:call(Worker, luma_storage_user, new,
-        [UserId, #{<<"storageCredentials">> => helper:get_admin_ctx(Helper)}, StorageDoc]),
+        [UserId, #{<<"storageCredentials">> => helper_config:get_admin_ctx(Helper)}, StorageDoc]),
     ok = rpc:call(Worker, luma_db, store, [StorageDoc, UserId, luma_storage_users, LumaStorageUser, Feed]),
     {LumaStorageUser, StorageDoc}.
 
@@ -624,8 +624,8 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
     test_utils:mock_new(Worker, provider_logic, [passthrough]),
     test_utils:mock_expect(Worker, provider_logic, get_storages, fun() ->
         {ok,
-            [<<"storage_id_auto_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
-                [<<"storage_id_local_", (helper:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
+            [<<"storage_id_auto_", (helper_config:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8] ++
+                [<<"storage_id_local_", (helper_config:get_name(Helper))/binary>> || Helper <- ?HELPERS_21_02_8]
         }
     end),
     test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->

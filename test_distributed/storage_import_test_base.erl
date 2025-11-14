@@ -6093,8 +6093,8 @@ create_init_file(Config) ->
     end.
 
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
-    Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
-    HelperName = helper:get_name(Helper),
+    HelperConfig = rpc:call(Worker, storage, get_helper_config, [StorageId]),
+    HelperName = helper_config:get_name(HelperConfig),
     ?assertMatch({ok, []},
         sd_test_utils:storage_ls(Worker, SDHandle, 0, 1, HelperName), ?ATTEMPTS).
 
@@ -6260,9 +6260,9 @@ add_storages(Config, CheckStorageFun) ->
 find_storage(Storages, CheckStorageFun) ->
     lists:foldl(fun
         (Storage, undefined) ->
-            Helper = storage:get_helper(Storage),
+            HelperConfig = storage:get_helper_config(Storage),
             Id = storage:get_id(Storage),
-            case CheckStorageFun(Id, Helper) of
+            case CheckStorageFun(Id, HelperConfig) of
                 true -> Storage;
                 false -> undefined
             end;
@@ -6270,16 +6270,16 @@ find_storage(Storages, CheckStorageFun) ->
             FoundStorage
     end, undefined, Storages).
 
-is_rdwr(StorageId, #helper{name = ?POSIX_HELPER_NAME}) ->
+is_rdwr(StorageId, #helper_config{name = ?POSIX_HELPER_NAME}) ->
     match =:= re:run(StorageId, <<"rdwr_storage">>, [{capture, none}]);
-is_rdwr(<<"rdwr_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
+is_rdwr(<<"rdwr_storage">>, #helper_config{name = ?S3_HELPER_NAME}) ->
     true;
 is_rdwr(_, _) ->
     false.
 
-is_synced(StorageId, #helper{name = ?POSIX_HELPER_NAME}) ->
+is_synced(StorageId, #helper_config{name = ?POSIX_HELPER_NAME}) ->
     match =:= re:run(StorageId, <<"synced_storage">>, [{capture, none}]);
-is_synced(<<"synced_storage">>, #helper{name = ?S3_HELPER_NAME}) ->
+is_synced(<<"synced_storage">>, #helper_config{name = ?S3_HELPER_NAME}) ->
     true.
 
 
@@ -6299,8 +6299,8 @@ get_supporting_storage(Worker, SpaceId) ->
 
 get_mount_point(Storage) ->
     % works only on POSIX storages!!!
-    Helper = storage:get_helper(Storage),
-    HelperArgs = helper:get_args(Helper),
+    Helper = storage:get_helper_config(Storage),
+    HelperArgs = helper_config:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
 get_host_mount_point(Config, Storage) ->

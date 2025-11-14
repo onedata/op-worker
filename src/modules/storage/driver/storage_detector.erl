@@ -52,45 +52,45 @@
 %%% API
 %%%===================================================================
 
--spec run_diagnostics(all_nodes | this_node, helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
+-spec run_diagnostics(all_nodes | this_node, helper_config:t(), luma_config:feed(), diagnostic_opts()) ->
     ok | {errors:error(), diagnostic_error_details()}.
-run_diagnostics(all_nodes, Helper, LumaFeed, Opts) ->
+run_diagnostics(all_nodes, HelperConfig, LumaFeed, Opts) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Opts);
-run_diagnostics(this_node, Helper, LumaFeed, Opts) ->
-    run_diagnostics_on_nodes([node()], Helper, LumaFeed, Opts).
+    run_diagnostics_on_nodes(Nodes, HelperConfig, LumaFeed, Opts);
+run_diagnostics(this_node, HelperConfig, LumaFeed, Opts) ->
+    run_diagnostics_on_nodes([node()], HelperConfig, LumaFeed, Opts).
 
 
--spec check_storage_access(helpers:helper(), helper:user_ctx()) ->
+-spec check_storage_access(helper_config:t(), helper_config:user_ctx()) ->
     ok | {error, term()}.
-check_storage_access(Helper, UserCtx) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+check_storage_access(HelperConfig, UserCtx) ->
+    Handle = helpers:get_helper_handle(HelperConfig, UserCtx),
     ok = helpers:check_storage_availability(Handle).
 
 
--spec create_test_file(helpers:helper(), helper:user_ctx()) ->
+-spec create_test_file(helper_config:t(), helper_config:user_ctx()) ->
     {ok, helpers:file_id()}.
-create_test_file(#helper{name = ?S3_HELPER_NAME, args = #{<<"archiveStorage">> := <<"true">>}} = Helper, UserCtx) ->
+create_test_file(#helper_config{name = ?S3_HELPER_NAME, args = #{<<"archiveStorage">> := <<"true">>}} = HelperConfig, UserCtx) ->
     % S3 storage with archive_storage set to true requires all files to be created in a space directory
     % therefore test file also needs to be created in such a directory.
-    create_test_file(Helper, UserCtx, ?DUMMY_SPACE_DIR_NAME);
-create_test_file(Helper, UserCtx) ->
-    create_test_file(Helper, UserCtx, <<>>).
+    create_test_file(HelperConfig, UserCtx, ?DUMMY_SPACE_DIR_NAME);
+create_test_file(HelperConfig, UserCtx) ->
+    create_test_file(HelperConfig, UserCtx, <<>>).
 
 
--spec create_test_file(helpers:helper(), helper:user_ctx(), binary()) ->
+-spec create_test_file(helper_config:t(), helper_config:user_ctx(), binary()) ->
     {ok, helpers:file_id()}.
-create_test_file(Helper, UserCtx, SpaceDirName) ->
+create_test_file(HelperConfig, UserCtx, SpaceDirName) ->
     FileId = filename:join([SpaceDirName, generate_file_id()]),
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+    Handle = helpers:get_helper_handle(HelperConfig, UserCtx),
     ok = helpers:mknod(Handle, FileId, 8#666, reg),
     {ok, FileId}.
 
 
--spec write_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
+-spec write_test_file(helper_config:t(), helper_config:user_ctx(), helpers:file_id()) ->
     {ok, binary()}.
-write_test_file(Helper, UserCtx, FileId) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+write_test_file(HelperConfig, UserCtx, FileId) ->
+    Handle = helpers:get_helper_handle(HelperConfig, UserCtx),
     {ok, FileHandle} = helpers:open(Handle, FileId, write),
     Content = random_ascii_lowercase_sequence(?TEST_FILE_CONTENT_LEN),
     {ok, _} = helpers:write(FileHandle, 0, Content),
@@ -99,27 +99,27 @@ write_test_file(Helper, UserCtx, FileId) ->
     {ok, Content}.
 
 
--spec check_test_file_content(helpers:helper(), helper:user_ctx(), helpers:file_id(), binary()) ->
+-spec check_test_file_content(helper_config:t(), helper_config:user_ctx(), helpers:file_id(), binary()) ->
     ok.
-check_test_file_content(Helper, UserCtx, FileId, ExpectedContent) ->
-    {ok, ExpectedContent} = read_test_file(Helper, UserCtx, FileId),
+check_test_file_content(HelperConfig, UserCtx, FileId, ExpectedContent) ->
+    {ok, ExpectedContent} = read_test_file(HelperConfig, UserCtx, FileId),
     ok.
 
 
--spec read_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
+-spec read_test_file(helper_config:t(), helper_config:user_ctx(), helpers:file_id()) ->
     {ok, binary()}.
-read_test_file(Helper, UserCtx, FileId) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+read_test_file(HelperConfig, UserCtx, FileId) ->
+    Handle = helpers:get_helper_handle(HelperConfig, UserCtx),
     {ok, FileHandle} = helpers:open(Handle, FileId, read),
     {ok, Content} = helpers:read(FileHandle, 0, ?TEST_FILE_CONTENT_LEN),
     ok = helpers:release(FileHandle),
     {ok, Content}.
 
 
--spec remove_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
+-spec remove_test_file(helper_config:t(), helper_config:user_ctx(), helpers:file_id(),
     Size :: non_neg_integer()) -> ok | no_return().
-remove_test_file(Helper, UserCtx, FileId, Size) ->
-    Handle = helpers:get_helper_handle(Helper, UserCtx),
+remove_test_file(HelperConfig, UserCtx, FileId, Size) ->
+    Handle = helpers:get_helper_handle(HelperConfig, UserCtx),
     case helpers:unlink(Handle, FileId, Size) of
         ok -> ok;
         {error, ?ENOENT} -> ok
@@ -131,21 +131,21 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %%%===================================================================
 
 %% @private
--spec run_diagnostics_on_nodes([node()], helpers:helper(), luma_config:feed(), diagnostic_opts()) ->
+-spec run_diagnostics_on_nodes([node()], helper_config:t(), luma_config:feed(), diagnostic_opts()) ->
     ok | {errors:error(), diagnostic_error_details()}.
-run_diagnostics_on_nodes(_Nodes, #helper{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
+run_diagnostics_on_nodes(_Nodes, #helper_config{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
     ok;
-run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
+run_diagnostics_on_nodes(Nodes, HelperConfig, LumaFeed, Options) ->
     try
         case ?SKIP_STORAGE_DETECTION of
             true ->
                 ok;
             false ->
-                AdminCtx = helper:get_admin_ctx(Helper),
+                AdminCtx = helper_config:get_admin_ctx(HelperConfig),
                 {ok, ExtendedAdminCtx} = luma:add_helper_specific_fields(
-                    ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed
+                    ?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, HelperConfig, LumaFeed
                 ),
-                run_diagnostics_on_nodes_insecure(Nodes, Helper, ExtendedAdminCtx, Options)
+                run_diagnostics_on_nodes_insecure(Nodes, HelperConfig, ExtendedAdminCtx, Options)
         end
     catch throw:?OPERATION_FAILED(Operation, Reason) ->
         {?ERR_STORAGE_TEST_FAILED(?err_ctx(), Operation), Reason}
@@ -153,10 +153,10 @@ run_diagnostics_on_nodes(Nodes, Helper, LumaFeed, Options) ->
 
 
 %% @private
--spec run_diagnostics_on_nodes_insecure([node()], helpers:helper(), helper:user_ctx(), diagnostic_opts()) ->
+-spec run_diagnostics_on_nodes_insecure([node()], helper_config:t(), helper_config:user_ctx(), diagnostic_opts()) ->
     ok.
-run_diagnostics_on_nodes_insecure(Nodes, Helper, UserCtx, Opts) ->
-    BasicArgList = [[Helper, UserCtx] || _N <- Nodes],
+run_diagnostics_on_nodes_insecure(Nodes, HelperConfig, UserCtx, Opts) ->
+    BasicArgList = [[HelperConfig, UserCtx] || _N <- Nodes],
     perform_operation(Nodes, access, check_storage_access, BasicArgList),
     case maps:get(read_write_test, Opts) of
         true -> perform_read_write_test(Nodes, BasicArgList);

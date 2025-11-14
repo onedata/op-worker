@@ -44,7 +44,7 @@
 %% IMPORTANT! Helper handle is valid only within local Erlang VM.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_handle(helper:name(), helper:args()) ->
+-spec get_helper_handle(helper_config:name(), helper_config:args()) ->
     {ok, helper_handle()} | {error, Reason :: term()}.
 get_helper_handle(_Name, _Params) ->
     erlang:nif_error(helpers_nif_not_loaded).

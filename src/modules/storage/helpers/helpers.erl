@@ -47,12 +47,11 @@
 -type marker() :: binary().
 -type open_flag() :: rdwr | write | read.
 -type file_type_flag() :: reg | chr | blk | fifo | sock.
--type helper() :: #helper{}.
 -type helper_handle() :: #helper_handle{}.
 -type file_handle() :: #file_handle{}.
 -type stat() :: #statbuf{}.
 
--export_type([file_id/0, open_flag/0, file_type_flag/0, helper/0, helper_handle/0, file_handle/0,
+-export_type([file_id/0, open_flag/0, file_type_flag/0, helper_handle/0, file_handle/0,
     marker/0, stat/0]).
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
 -define(EXOMETER_TIME_NAME(Param), ?exometer_name(?MODULE, time,
@@ -73,13 +72,13 @@
 %% record.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_handle(helper(), helper:user_ctx()) -> helper_handle().
-get_helper_handle(#helper{name = Name} = Helper, UserCtx) ->
-    {ok, Args} = helper:get_args_with_user_ctx(Helper, UserCtx),
+-spec get_helper_handle(helper_config:t(), helper_config:user_ctx()) -> helper_handle().
+get_helper_handle(#helper_config{name = Name} = HelperConfig, UserCtx) ->
+    {ok, Args} = helper_config:build_helper_nif_args(HelperConfig, UserCtx),
     {ok, Handle} = helpers_nif:get_helper_handle(Name, Args),
     #helper_handle{
         handle = Handle,
-        timeout = helper:get_timeout(Helper)
+        timeout = helper_config:get_timeout(HelperConfig)
     }.
 
 %%--------------------------------------------------------------------
