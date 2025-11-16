@@ -134,7 +134,7 @@ describe(#helper_config{
     %% Reconstruct credentials record from admin_ctx
     Credentials = #s3_credentials{
         access_key = maps:get(<<"accessKey">>, AdminCtx),
-        secret_key = <<"*****">>  %% Redacted for security reasons (user cannot see saved credentials via REST)
+        secret_key = ?CONFIDENTIAL_MASK  %% Redacted for security reasons (user cannot see saved credentials via REST)
     },
 
     #helper_config_description{

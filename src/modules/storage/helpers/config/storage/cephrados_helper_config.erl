@@ -116,7 +116,7 @@ describe(#helper_config{
     %% Reconstruct credentials record from admin_ctx
     Credentials = #cephrados_credentials{
         username = maps:get(<<"username">>, AdminCtx),
-        key = <<"*****">>  %% Redacted for security reasons
+        key = ?CONFIDENTIAL_MASK  %% Redacted for security reasons
     },
 
     #helper_config_description{

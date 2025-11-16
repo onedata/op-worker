@@ -80,4 +80,8 @@
     archive :: boolean()
 }).
 
+
+-define(CONFIDENTIAL_MASK, <<"*****">>).
+
+
 -endif.

@@ -116,13 +116,12 @@ describe(#helper_config{
         {<<"dirModeMask">>, #xrootd_configuration.dir_mode_mask}
     ]),
 
-    %% Reconstruct credentials record from admin_ctx
+    %% Reconstruct credentials record from admin_ctx (with redaction for security)
     BaseCredentials = #xrootd_credentials{
         credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, AdminCtx))
     },
-    %% TODO redact for security
     Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-        {<<"credentials">>, #xrootd_credentials.credentials}
+        {<<"credentials">>, #xrootd_credentials.credentials, fun(_) -> ?CONFIDENTIAL_MASK end}
     ]),
 
     #helper_config_description{

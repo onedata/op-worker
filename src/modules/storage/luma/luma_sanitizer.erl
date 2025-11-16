@@ -113,7 +113,7 @@ storage_credentials_custom_constraint(HelperName) ->
             false ->
                 % storage credentials are passed to helper so we store them as binaries
                 StorageCredentialsBinaries = integers_to_binary(StorageCredentials),
-                case helper_params:validate_user_ctx(HelperName, StorageCredentialsBinaries) of
+                case helper_config:validate_user_ctx(HelperName, StorageCredentialsBinaries) of
                     ok -> {true, StorageCredentialsBinaries};
                     {error, _} -> false
                 end

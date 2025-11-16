@@ -123,7 +123,7 @@ describe(#helper_config{
     %% Reconstruct credentials record from admin_ctx
     BaseCredentials = #swift_credentials{
         username = maps:get(<<"username">>, AdminCtx),
-        password = <<"*****">>,  %% Redacted for security reasons
+        password = ?CONFIDENTIAL_MASK,  %% Redacted for security reasons
         project_name = maps:get(<<"projectName">>, AdminCtx)
     },
     Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [

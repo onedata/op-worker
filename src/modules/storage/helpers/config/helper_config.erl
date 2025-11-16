@@ -28,6 +28,7 @@
 -export([
     build/1,
     build_helper_nif_args/2,
+    validate_user_ctx/2,
     update/2,
     describe/1,
 
@@ -81,12 +82,16 @@ build(CreateReq = #storage_create_spec{type = Type}) ->
 -spec build_helper_nif_args(t(), user_ctx()) ->
     {ok, nif_args()} | {error, Reason :: term()}.
 build_helper_nif_args(HelperConfig, UserCtx) ->
-    Module = get_module(HelperConfig),
-
-    case Module:validate_user_ctx(UserCtx) of
+    case validate_user_ctx(HelperConfig, UserCtx) of
         ok -> {ok, maps:merge(HelperConfig#helper_config.args, UserCtx)};
         Error -> Error
     end.
+
+
+-spec validate_user_ctx(t() | name(), user_ctx()) -> ok | {error, Reason :: term()}.
+validate_user_ctx(HelperConfigOrName, UserCtx) ->
+    Module = get_module(HelperConfigOrName),
+    Module:validate_user_ctx(UserCtx).
 
 
 -spec update(t(), onedata_storage:update_spec()) ->
