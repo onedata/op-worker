@@ -5,10 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Tests for WebDAV helper.
+%%% @doc Tests for null device helpers module.
 %%% @end
 %%%-------------------------------------------------------------------
--module(webdav_helper_test_SUITE).
+-module(helper_nulldevice_test_SUITE).
 -author("Bartek Kryza").
 
 -include("modules/storage/helpers/helpers.hrl").
@@ -16,16 +16,17 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% export for ct
 -export([all/0]).
 
 %% tests
 -export([create_test/1, mkdir_test/1, getattr_test/1, rmdir_test/1,
-    unlink_test/1, rename_test/1, setxattr_test/1, listxattr_test/1,
-    write_test/1, multipart_write_test/1, truncate_test/1,
-    write_read_test/1, multipart_read_test/1, write_unlink_test/1,
+    unlink_test/1, symlink_test/1, rename_test/1, chmod_test/1,
+    chown_test/1, flush_test/1, fsync_test/1, setxattr_test/1,
+    removexattr_test/1, listxattr_test/1, write_test/1,
+    multipart_write_test/1, truncate_test/1, write_read_test/1,
+    multipart_read_test/1, write_unlink_test/1,
     write_read_truncate_unlink_test/1, check_storage_availability_test/1]).
 
 %% test_bases
@@ -40,9 +41,10 @@
 ]).
 
 -define(TEST_CASES, [
-    write_test, getattr_test, mkdir_test, rmdir_test, unlink_test,
-    rename_test, setxattr_test, listxattr_test, write_read_test,
-    multipart_write_test, multipart_read_test, check_storage_availability_test
+    getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test,
+    rename_test, chmod_test, chown_test, flush_test, fsync_test,
+    setxattr_test, listxattr_test, removexattr_test,
+    check_storage_availability_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
@@ -50,7 +52,7 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 -define(FILE_ID_SIZE, 20).
 -define(KB, 1024).
 -define(MB, 1024 * 1024).
--define(TIMEOUT, timer:minutes(1)).
+-define(TIMEOUT, timer:minutes(5)).
 
 -define(THR_NUM(Value), [
     {name, threads_num}, {value, Value}, {description, "Number of threads."}
@@ -85,10 +87,6 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
     {parameters, Params}
 ]}).
 
--define(REPEATS, 10).
--define(TEST_SIZE_BASE, 2).
--define(TEST_BLK_SIZE_BASE, 4).
-
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -99,13 +97,13 @@ check_storage_availability_test(Config) ->
 
 create_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
         {description, "Multiple parallel write operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
+        ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(large, [?THR_NUM(20), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)])
     ]).
 create_test_base(Config) ->
     run(fun() ->
@@ -119,13 +117,13 @@ create_test_base(Config) ->
 
 write_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
         {description, "Multiple parallel write operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
+        ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(large, [?THR_NUM(20), ?OP_NUM(write, 10), ?OP_SIZE(write, 1)])
     ]).
 write_test_base(Config) ->
     run(fun() ->
@@ -142,13 +140,13 @@ write_test_base(Config) ->
 
 multipart_write_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
-        {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)]},
+        {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]},
         {description, "Multipart write operation."},
-        ?PERF_CFG(small, [?OP_SIZE(write, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?OP_SIZE(write, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)]),
-        ?PERF_CFG(large, [?OP_SIZE(write, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)])
+        ?PERF_CFG(small, [?OP_SIZE(write, 10), ?OP_BLK_SIZE(write, 4)]),
+        ?PERF_CFG(medium, [?OP_SIZE(write, 50), ?OP_BLK_SIZE(write, 4)]),
+        ?PERF_CFG(large, [?OP_SIZE(write, 100), ?OP_BLK_SIZE(write, 4)])
     ]).
 multipart_write_test_base(Config) ->
     Helper = new_helper(Config),
@@ -162,13 +160,13 @@ multipart_write_test_base(Config) ->
 
 truncate_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(truncate, 5)]},
         {description, "Multiple parallel truncate operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(truncate, 2 * ?TEST_BLK_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 5 * ?TEST_BLK_SIZE_BASE)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 20 * ?TEST_BLK_SIZE_BASE)])
+        ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(truncate, 10)]),
+        ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(truncate, 100)]),
+        ?PERF_CFG(large, [?THR_NUM(20), ?OP_NUM(truncate, 100)])
     ]).
 truncate_test_base(Config) ->
     run(fun() ->
@@ -181,13 +179,13 @@ truncate_test_base(Config) ->
 
 write_read_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel write followed by read operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(10), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(10), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?THR_NUM(20), ?OP_NUM(10), ?OP_SIZE(1)])
     ]).
 write_read_test_base(Config) ->
     run(fun() ->
@@ -204,13 +202,13 @@ write_read_test_base(Config) ->
 
 multipart_read_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
-        {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)]},
+        {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]},
         {description, "Multipart read operation."},
-        ?PERF_CFG(small, [?OP_SIZE(read, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?OP_SIZE(read, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)]),
-        ?PERF_CFG(large, [?OP_SIZE(read, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)])
+        ?PERF_CFG(small, [?OP_SIZE(read, 10), ?OP_BLK_SIZE(read, 4)]),
+        ?PERF_CFG(medium, [?OP_SIZE(read, 50), ?OP_BLK_SIZE(read, 4)]),
+        ?PERF_CFG(large, [?OP_SIZE(read, 100), ?OP_BLK_SIZE(read, 4)])
     ]).
 multipart_read_test_base(Config) ->
     Helper = new_helper(Config),
@@ -226,13 +224,13 @@ multipart_read_test_base(Config) ->
 
 write_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel write followed by unlink operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(10), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(10), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?THR_NUM(20), ?OP_NUM(10), ?OP_SIZE(1)])
     ]).
 write_unlink_test_base(Config) ->
     run(fun() ->
@@ -245,28 +243,28 @@ write_unlink_test_base(Config) ->
             write(Handle, 0, Size),
             unlink(Helper, FileId, Size)
         end, lists:seq(1, ?config(op_num, Config))),
-     delete_helper(Helper)
+        delete_helper(Helper)
     end, ?config(threads_num, Config)).
 
 write_read_truncate_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
-        {repeats, ?REPEATS},
+        {repeats, 10},
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
         {description, "Multiple parallel sequence of write, read, truncate
         and unlink operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
+        ?PERF_CFG(small, [?THR_NUM(5), ?OP_NUM(10), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?THR_NUM(10), ?OP_NUM(10), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?THR_NUM(20), ?OP_NUM(10), ?OP_SIZE(1)])
     ]).
 write_read_truncate_unlink_test_base(Config) ->
     run(fun() ->
         Helper = new_helper(Config),
         lists:foreach(fun(_) ->
             FileId = random_file_id(),
+            Size = ?config(op_size, Config) * ?MB,
             create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, rdwr),
-            Size = ?config(op_size, Config) * ?MB,
             Content = write(Handle, 0, Size),
             ?assertEqual(Content, read(Handle, size(Content))),
             truncate(Helper, FileId, 0, Size),
@@ -276,11 +274,8 @@ write_read_truncate_unlink_test_base(Config) ->
     end, ?config(threads_num, Config)).
 
 getattr_test(Config) ->
-    ?error("getattr config: ~tp", [Config]),
     Helper = new_helper(Config),
-    ?error("getattr helper: ~tp", [Helper]),
     FileId = random_file_id(),
-    ?error("getattr file_id: ~tp", [FileId]),
     create(Helper, FileId),
     ?assertMatch({ok, #statbuf{}}, call(Helper, getattr, [FileId])).
 
@@ -301,6 +296,13 @@ unlink_test(Config) ->
     create(Helper, FileId),
     ?assertMatch(ok, call(Helper, unlink, [FileId, 0])).
 
+symlink_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    SymLinkId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok, call(Helper, symlink, [FileId, SymLinkId])).
+
 rename_test(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
@@ -309,6 +311,18 @@ rename_test(Config) ->
     ?assertMatch(ok, call(Helper, rename, [FileId, NewFileId])),
     ?assertMatch({ok, _}, open(Helper, NewFileId, read)).
 
+chmod_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok, call(Helper, chmod, [FileId, 0])).
+
+chown_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok, call(Helper, chown, [FileId, -1, -1])).
+
 setxattr_test(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
@@ -316,8 +330,7 @@ setxattr_test(Config) ->
     XattrValue = random_file_id(),
     create(Helper, FileId),
     ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])).
 
 listxattr_test(Config) ->
     Helper = new_helper(Config),
@@ -333,7 +346,36 @@ listxattr_test(Config) ->
         call(Helper, setxattr,
             [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
     {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(3, length(XattrNames)).
+    ?assertEqual(10, length(XattrNames)).
+
+removexattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
+    XattrValue = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok,
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
+    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
+    ?assertEqual(10, length(XattrNames)),
+    ?assertMatch(ok, call(Helper, removexattr, [FileId, XattrName])).
+
+flush_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    {ok, Handle} = call(Helper, open, [FileId, write]),
+    write(Handle, 0, 1024),
+    ?assertMatch(ok, call(Handle, flush, [])).
+
+fsync_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    {ok, Handle} = call(Helper, open, [FileId, write]),
+    write(Handle, 0, 1024),
+    ?assertMatch(ok, call(Handle, fsync, [false])).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -342,16 +384,16 @@ listxattr_test(Config) ->
 new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
-    WebDAVConfig = ?config(webdav, ?config(webdav, ?config(storages, Config))),
-    UserCtx = #{
-        <<"credentialsType">> => atom_to_binary(?config(credentials_type, WebDAVConfig), utf8),
-        <<"credentials">> => atom_to_binary(?config(credentials, WebDAVConfig), utf8)
-    },
+    UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     {ok, Helper} = helper:new_helper(
-        ?WEBDAV_HELPER_NAME,
+        ?NULL_DEVICE_HELPER_NAME,
         #{
-            <<"endpoint">> => atom_to_binary(?config(endpoint, WebDAVConfig), utf8),
-            <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8),
+            <<"latencyMin">> => <<"0">>,
+            <<"latencyMax">> => <<"0">>,
+            <<"timeoutProbability">> => <<"0.0">>,
+            <<"filter">> => <<"*">>,
+            <<"simulatedFilesystemParameters">> => <<"">>,
+            <<"simulatedFilesystemGrowSpeed">> => <<"0.0">>,
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
@@ -415,8 +457,7 @@ run(Fun, ThreadsNum) ->
     ?assert(lists:all(fun(Result) -> Result =:= ok end, Results)).
 
 random_file_id() ->
-    re:replace(http_utils:base64url_encode(crypto:strong_rand_bytes(?FILE_ID_SIZE)),
-        "\\W", "", [global, {return, binary}]).
+    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
 
 create(Helper, FileId) ->
     call(Helper, mknod, [FileId, ?DEFAULT_FILE_PERMS, reg]).

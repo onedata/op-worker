@@ -8,7 +8,7 @@
 %%% @doc Tests for XRootD helper.
 %%% @end
 %%%-------------------------------------------------------------------
--module(xrootd_helper_test_SUITE).
+-module(helper_xrootd_test_SUITE).
 -author("Bartek Kryza").
 
 -include("modules/storage/helpers/helpers.hrl").

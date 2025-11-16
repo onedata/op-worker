@@ -1,52 +1,56 @@
-%%%--------------------------------------------------------------------
+%%%-------------------------------------------------------------------
 %%% @author Bartek Kryza
 %%% @copyright (C) 2018 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
-%%%--------------------------------------------------------------------
-%%% @doc This module tests CephRados helper.
+%%%-------------------------------------------------------------------
+%%% @doc Tests for WebDAV helper.
 %%% @end
-%%%--------------------------------------------------------------------
--module(cephrados_helper_test_SUITE).
+%%%-------------------------------------------------------------------
+-module(helper_webdav_test_SUITE).
 -author("Bartek Kryza").
 
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% export for ct
 -export([all/0]).
 
 %% tests
--export([write_test/1, multipart_write_test/1,
-    truncate_test/1, write_read_test/1, multipart_read_test/1,
-    write_unlink_test/1, write_read_truncate_unlink_test/1]).
+-export([create_test/1, mkdir_test/1, getattr_test/1, rmdir_test/1,
+    unlink_test/1, rename_test/1, setxattr_test/1, listxattr_test/1,
+    write_test/1, multipart_write_test/1, truncate_test/1,
+    write_read_test/1, multipart_read_test/1, write_unlink_test/1,
+    write_read_truncate_unlink_test/1, check_storage_availability_test/1]).
 
 %% test_bases
--export([write_test_base/1, multipart_write_test_base/1,
+-export([create_test_base/1, write_test_base/1, multipart_write_test_base/1,
     truncate_test_base/1, write_read_test_base/1, multipart_read_test_base/1,
-    write_unlink_test_base/1, write_read_truncate_unlink_test_base/1,
-    check_storage_availability_test/1]).
+    write_unlink_test_base/1, write_read_truncate_unlink_test_base/1]).
 
 -define(PERF_TEST_CASES, [
-    write_test, multipart_write_test, truncate_test,
+    create_test, write_test, multipart_write_test, truncate_test,
     write_read_test, multipart_read_test, write_unlink_test,
-    write_read_truncate_unlink_test, check_storage_availability_test
+    write_read_truncate_unlink_test
 ]).
 
--define(TEST_CASES, ?PERF_TEST_CASES).
+-define(TEST_CASES, [
+    write_test, getattr_test, mkdir_test, rmdir_test, unlink_test,
+    rename_test, setxattr_test, listxattr_test, write_read_test,
+    multipart_write_test, multipart_read_test, check_storage_availability_test
+]).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 
--define(CEPHRADOS_STORAGE_NAME, cephrados).
--define(CEPH_CLUSTER_NAME, <<"ceph">>).
--define(CEPH_POOL_NAME, <<"onedata">>).
 -define(FILE_ID_SIZE, 20).
 -define(KB, 1024).
 -define(MB, 1024 * 1024).
--define(TIMEOUT, timer:minutes(5)).
+-define(TIMEOUT, timer:minutes(1)).
 
 -define(THR_NUM(Value), [
     {name, threads_num}, {value, Value}, {description, "Number of threads."}
@@ -82,7 +86,8 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 ]}).
 
 -define(REPEATS, 10).
--define(TEST_SIZE_BASE, 5).
+-define(TEST_SIZE_BASE, 2).
+-define(TEST_BLK_SIZE_BASE, 4).
 
 %%%===================================================================
 %%% Test functions
@@ -91,6 +96,26 @@ all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 check_storage_availability_test(Config) ->
     Helper = new_helper(Config),
     ?assertMatch(ok, call(Helper, check_storage_availability, [])).
+
+create_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, ?REPEATS},
+        {success_rate, 100},
+        {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
+        {description, "Multiple parallel write operations."},
+        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
+    ]).
+create_test_base(Config) ->
+    run(fun() ->
+        Helper = new_helper(Config),
+        lists:foreach(fun(_) ->
+            FileId = random_file_id(),
+            create(Helper, FileId)
+        end, lists:seq(1, ?config(write_num, Config))),
+        delete_helper(Helper)
+    end, ?config(threads_num, Config)).
 
 write_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -107,25 +132,28 @@ write_test_base(Config) ->
         Helper = new_helper(Config),
         lists:foreach(fun(_) ->
             FileId = random_file_id(),
+            create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, write),
             write(Handle, ?config(write_size, Config) * ?MB)
         end, lists:seq(1, ?config(write_num, Config))),
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
 
+
 multipart_write_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]},
+        {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)]},
         {description, "Multipart write operation."},
-        ?PERF_CFG(small, [?OP_SIZE(write, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?OP_SIZE(write, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(large, [?OP_SIZE(write, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)])
+        ?PERF_CFG(small, [?OP_SIZE(write, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(write, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(write, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_BLK_SIZE_BASE)])
     ]).
 multipart_write_test_base(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
+    create(Helper, FileId),
     {ok, Handle} = open(Helper, FileId, write),
     Size = ?config(write_size, Config) * ?MB,
     BlockSize = ?config(write_blk_size, Config) * ?KB,
@@ -138,9 +166,9 @@ truncate_test(Config) ->
         {success_rate, 100},
         {parameters, [?THR_NUM(1), ?OP_NUM(truncate, 5)]},
         {description, "Multiple parallel truncate operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(truncate, 2 * ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 20 * ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 20 * ?TEST_SIZE_BASE)])
+        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(truncate, 2 * ?TEST_BLK_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 5 * ?TEST_BLK_SIZE_BASE)]),
+        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 20 * ?TEST_BLK_SIZE_BASE)])
     ]).
 truncate_test_base(Config) ->
     run(fun() ->
@@ -166,6 +194,7 @@ write_read_test_base(Config) ->
         Helper = new_helper(Config),
         lists:foreach(fun(_) ->
             FileId = random_file_id(),
+            create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, rdwr),
             Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
             ?assertEqual(Content, read(Handle, size(Content)))
@@ -177,15 +206,16 @@ multipart_read_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]},
+        {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)]},
         {description, "Multipart read operation."},
-        ?PERF_CFG(small, [?OP_SIZE(read, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?OP_SIZE(read, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(large, [?OP_SIZE(read, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)])
+        ?PERF_CFG(small, [?OP_SIZE(read, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(read, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(read, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_BLK_SIZE_BASE)])
     ]).
 multipart_read_test_base(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
+    create(Helper, FileId),
     {ok, Handle} = open(Helper, FileId, read),
     Size = ?config(read_size, Config) * ?MB,
     BlockSize = ?config(read_blk_size, Config) * ?KB,
@@ -209,12 +239,13 @@ write_unlink_test_base(Config) ->
         Helper = new_helper(Config),
         lists:foreach(fun(_) ->
             FileId = random_file_id(),
-            {ok, Handle} = open(Helper, FileId, write),
             Size = ?config(op_size, Config) * ?MB,
+            create(Helper, FileId),
+            {ok, Handle} = open(Helper, FileId, write),
             write(Handle, 0, Size),
             unlink(Helper, FileId, Size)
         end, lists:seq(1, ?config(op_num, Config))),
-        delete_helper(Helper)
+     delete_helper(Helper)
     end, ?config(threads_num, Config)).
 
 write_read_truncate_unlink_test(Config) ->
@@ -233,16 +264,76 @@ write_read_truncate_unlink_test_base(Config) ->
         Helper = new_helper(Config),
         lists:foreach(fun(_) ->
             FileId = random_file_id(),
+            create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, rdwr),
             Size = ?config(op_size, Config) * ?MB,
             Content = write(Handle, 0, Size),
             ?assertEqual(Content, read(Handle, size(Content))),
             truncate(Helper, FileId, 0, Size),
-            unlink(Helper, FileId, Size)
+            unlink(Helper, FileId, 0)
         end, lists:seq(1, ?config(op_num, Config))),
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
 
+getattr_test(Config) ->
+    ?error("getattr config: ~tp", [Config]),
+    Helper = new_helper(Config),
+    ?error("getattr helper: ~tp", [Helper]),
+    FileId = random_file_id(),
+    ?error("getattr file_id: ~tp", [FileId]),
+    create(Helper, FileId),
+    ?assertMatch({ok, #statbuf{}}, call(Helper, getattr, [FileId])).
+
+mkdir_test(Config) ->
+    Helper = new_helper(Config),
+    DirId = random_file_id(),
+    ?assertMatch(ok, mkdir(Helper, DirId)).
+
+rmdir_test(Config) ->
+    Helper = new_helper(Config),
+    DirId = random_file_id(),
+    ?assertMatch(ok, mkdir(Helper, DirId)),
+    ?assertMatch(ok, call(Helper, rmdir, [DirId])).
+
+unlink_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok, call(Helper, unlink, [FileId, 0])).
+
+rename_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    NewFileId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok, call(Helper, rename, [FileId, NewFileId])),
+    ?assertMatch({ok, _}, open(Helper, NewFileId, read)).
+
+setxattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
+    XattrValue = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok,
+        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
+    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
+
+listxattr_test(Config) ->
+    Helper = new_helper(Config),
+    FileId = random_file_id(),
+    create(Helper, FileId),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR1">>, random_file_id(), false, false])),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR2">>, random_file_id(), false, false])),
+    ?assertMatch(ok,
+        call(Helper, setxattr,
+            [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
+    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
+    ?assertEqual(3, length(XattrNames)).
 
 %%%===================================================================
 %%% Internal functions
@@ -251,23 +342,20 @@ write_read_truncate_unlink_test_base(Config) ->
 new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
-    CephConfig = ?config(cephrados, ?config(cephrados, ?config(storages, Config))),
-
+    WebDAVConfig = ?config(webdav, ?config(webdav, ?config(storages, Config))),
     UserCtx = #{
-        <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
-        <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
+        <<"credentialsType">> => atom_to_binary(?config(credentials_type, WebDAVConfig), utf8),
+        <<"credentials">> => atom_to_binary(?config(credentials, WebDAVConfig), utf8)
     },
     {ok, Helper} = helper:new_helper(
-        ?CEPHRADOS_HELPER_NAME,
+        ?WEBDAV_HELPER_NAME,
         #{
-            <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
-            <<"clusterName">> => ?CEPH_CLUSTER_NAME,
-            <<"poolName">> => ?CEPH_POOL_NAME,
-            <<"storagePathType">> => ?FLAT_STORAGE_PATH
+            <<"endpoint">> => atom_to_binary(?config(endpoint, WebDAVConfig), utf8),
+            <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8),
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
-    ),
-
+      ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)
     end).
@@ -327,7 +415,14 @@ run(Fun, ThreadsNum) ->
     ?assert(lists:all(fun(Result) -> Result =:= ok end, Results)).
 
 random_file_id() ->
-    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
+    re:replace(http_utils:base64url_encode(crypto:strong_rand_bytes(?FILE_ID_SIZE)),
+        "\\W", "", [global, {return, binary}]).
+
+create(Helper, FileId) ->
+    call(Helper, mknod, [FileId, ?DEFAULT_FILE_PERMS, reg]).
+
+mkdir(Helper, FileId) ->
+    call(Helper, mkdir, [FileId, ?DEFAULT_DIR_PERMS]).
 
 open(Helper, FileId, Flag) ->
     call(Helper, open, [FileId, Flag]).
@@ -351,6 +446,7 @@ write(FileHandle, Offset, Size) ->
 
 truncate(Helper, Size, CurrentSize) ->
     FileId = random_file_id(),
+    create(Helper, FileId),
     truncate(Helper, FileId, Size, CurrentSize).
 
 truncate(Helper, FileId, Size, CurrentSize) ->

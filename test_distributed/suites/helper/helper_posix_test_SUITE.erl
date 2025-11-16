@@ -8,7 +8,7 @@
 %%% @doc Tests for helpers module.
 %%% @end
 %%%-------------------------------------------------------------------
--module(posix_helper_test_SUITE).
+-module(helper_posix_test_SUITE).
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").

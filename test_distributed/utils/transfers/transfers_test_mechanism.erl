@@ -1529,18 +1529,27 @@ set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
             ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
 
+-include_lib("ctool/include/storage/common.hrl").
+
 %% Modifies storage timeout twice in order to
 %% trigger helper reload and restore previous value.
 -spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
 modify_storage_timeout(Node, StorageId, NewValue) ->
-    Helper = rpc:call(Node, storage, get_helper, [StorageId]),
-    OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),
+    HelperConfig = rpc:call(Node, storage, get_helper_config, [StorageId]),
+    OldValue = maps:get(<<"timeout">>, helper_config:get_args(HelperConfig),
         integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
 
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, #{<<"timeout">> => NewValue}])),
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, #{<<"timeout">> => OldValue}])),
+    UpdateSpec = #storage_update_spec{type = helper_config:get_name(HelperConfig)},
+    {ok, NewHelperConfig1} = helper_config:update(HelperConfig, UpdateSpec#storage_update_spec{
+        timeout = NewValue
+    }),
+    ?assertEqual(ok, rpc:call(Node, storage, update_helper_config, [StorageId, NewHelperConfig1])),
+
+    {ok, NewHelperConfig2} = helper_config:update(HelperConfig, UpdateSpec#storage_update_spec{
+        timeout = OldValue
+    }),
+    ?assertEqual(ok, rpc:call(Node, storage, update_helper_config, [StorageId, NewHelperConfig2])),
+
     ok.
 
 

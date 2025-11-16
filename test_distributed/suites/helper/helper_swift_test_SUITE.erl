@@ -1,15 +1,15 @@
 %%%--------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
+%%% @author Michal Wrona
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests Ceph helper.
+%%% @doc This module tests Swift helper.
 %%% @end
 %%%--------------------------------------------------------------------
--module(ceph_helper_test_SUITE).
--author("Krzysztof Trzepla").
+-module(helper_swift_test_SUITE).
+-author("Michal Wrona").
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -23,7 +23,6 @@
 -export([write_test/1, multipart_write_test/1,
     truncate_test/1, write_read_test/1, multipart_read_test/1,
     write_unlink_test/1, write_read_truncate_unlink_test/1,
-    setxattr_test/1, listxattr_test/1, removexattr_test/1,
     check_storage_availability_test/1]).
 
 %% test_bases
@@ -31,30 +30,21 @@
     truncate_test_base/1, write_read_test_base/1, multipart_read_test_base/1,
     write_unlink_test_base/1, write_read_truncate_unlink_test_base/1]).
 
--define(PERF_TEST_CASES, [
+-define(TEST_CASES, [
     write_test, multipart_write_test, truncate_test,
     write_read_test, multipart_read_test, write_unlink_test,
     write_read_truncate_unlink_test, check_storage_availability_test
 ]).
 
--define(XATTR_TEST_CASES, [
-    setxattr_test, listxattr_test, removexattr_test]).
+all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 
--define(TEST_CASES, ?PERF_TEST_CASES ++ ?XATTR_TEST_CASES).
-
-all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
-
--define(CEPH_STORAGE_NAME, ceph).
--define(CEPH_CLUSTER_NAME, <<"ceph">>).
--define(CEPH_POOL_NAME, <<"onedata">>).
--define(FILE_ID_SIZE, 20).
+-define(SWIFT_STORAGE_NAME, swift).
+-define(SWIFT_CONTAINER_NAME, <<"onedata">>).
+-define(FILE_ID_SIZE, 30).
 -define(KB, 1024).
 -define(MB, 1024 * 1024).
 -define(TIMEOUT, timer:minutes(5)).
 
--define(THR_NUM(Value), [
-    {name, threads_num}, {value, Value}, {description, "Number of threads."}
-]).
 -define(OP_NUM(Value), lists:keyreplace(description, 1, ?OP_NUM(op, Value),
     {description, "Number of operations."}
 )).
@@ -100,22 +90,20 @@ write_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(write, 5), ?OP_SIZE(write, 1)]},
-        {description, "Multiple parallel write operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
+        {parameters, [?OP_NUM(write, 1), ?OP_SIZE(write, 1)]},
+        {description, "Multiple write operations."},
+        ?PERF_CFG(small, [?OP_NUM(write, 2 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(medium, [?OP_NUM(write, 4 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)]),
+        ?PERF_CFG(large, [?OP_NUM(write, 10 * ?TEST_SIZE_BASE), ?OP_SIZE(write, 1)])
     ]).
 write_test_base(Config) ->
-    run(fun() ->
-        Helper = new_helper(Config),
-        lists:foreach(fun(_) ->
-            FileId = random_file_id(),
-            {ok, Handle} = open(Helper, FileId, write),
-            write(Handle, ?config(write_size, Config) * ?MB)
-        end, lists:seq(1, ?config(write_num, Config))),
-        delete_helper(Helper)
-    end, ?config(threads_num, Config)).
+    Helper = new_helper(Config),
+    lists:foreach(fun(_) ->
+        FileId = random_file_id(),
+        {ok, Handle} = open(Helper, FileId, write),
+        write(Handle, ?config(write_size, Config) * ?MB)
+    end, lists:seq(1, ?config(write_num, Config))),
+    delete_helper(Helper).
 
 multipart_write_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -123,9 +111,9 @@ multipart_write_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, 4)]},
         {description, "Multipart write operation."},
-        ?PERF_CFG(small, [?OP_SIZE(write, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?OP_SIZE(write, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(large, [?OP_SIZE(write, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)])
+        ?PERF_CFG(small, [?OP_SIZE(write, 1), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(write, 2), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(write, 4), ?OP_BLK_SIZE(write, ?TEST_SIZE_BASE)])
     ]).
 multipart_write_test_base(Config) ->
     Helper = new_helper(Config),
@@ -140,42 +128,38 @@ truncate_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(truncate, 5)]},
-        {description, "Multiple parallel truncate operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(truncate, 2 * ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 20 * ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(truncate, 20 * ?TEST_SIZE_BASE)])
+        {parameters, [?OP_NUM(truncate, 1)]},
+        {description, "Multiple truncate operations."},
+        ?PERF_CFG(small, [?OP_NUM(truncate, 2 * ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_NUM(truncate, 4 * ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_NUM(truncate, 10 * ?TEST_SIZE_BASE)])
     ]).
 truncate_test_base(Config) ->
-    run(fun() ->
-        Helper = new_helper(Config),
-        lists:foreach(fun(_) ->
-            truncate(Helper, 0, 0)
-        end, lists:seq(1, ?config(truncate_num, Config))),
-        delete_helper(Helper)
-    end, ?config(threads_num, Config)).
+    Helper = new_helper(Config),
+    lists:foreach(fun(_) ->
+        truncate(Helper, 0, 0)
+    end, lists:seq(1, ?config(truncate_num, Config))),
+    delete_helper(Helper).
 
 write_read_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
-        {description, "Multiple parallel write followed by read operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
+        {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
+        {description, "Multiple write followed by read operations."},
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_read_test_base(Config) ->
-    run(fun() ->
-        Helper = new_helper(Config),
-        lists:foreach(fun(_) ->
-            FileId = random_file_id(),
-            {ok, Handle} = open(Helper, FileId, rdwr),
-            Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
-            ?assertEqual(Content, read(Handle, size(Content)))
-        end, lists:seq(1, ?config(op_num, Config))),
-        delete_helper(Helper)
-    end, ?config(threads_num, Config)).
+    Helper = new_helper(Config),
+    lists:foreach(fun(_) ->
+        FileId = random_file_id(),
+        {ok, Handle} = open(Helper, FileId, rdwr),
+        Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
+        ?assertEqual(Content, read(Handle, size(Content)))
+    end, lists:seq(1, ?config(op_num, Config))),
+    delete_helper(Helper).
 
 multipart_read_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -183,9 +167,9 @@ multipart_read_test(Config) ->
         {success_rate, 100},
         {parameters, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, 4)]},
         {description, "Multipart read operation."},
-        ?PERF_CFG(small, [?OP_SIZE(read, 2 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(medium, [?OP_SIZE(read, 10 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
-        ?PERF_CFG(large, [?OP_SIZE(read, 20 * ?TEST_SIZE_BASE), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)])
+        ?PERF_CFG(small, [?OP_SIZE(read, 1), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(medium, [?OP_SIZE(read, 2), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)]),
+        ?PERF_CFG(large, [?OP_SIZE(read, 4), ?OP_BLK_SIZE(read, ?TEST_SIZE_BASE)])
     ]).
 multipart_read_test_base(Config) ->
     Helper = new_helper(Config),
@@ -202,90 +186,46 @@ write_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
-        {description, "Multiple parallel write followed by unlink operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
+        {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
+        {description, "Multiple write followed by unlink operations."},
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_unlink_test_base(Config) ->
-    run(fun() ->
-        Helper = new_helper(Config),
-        lists:foreach(fun(_) ->
-            FileId = random_file_id(),
-            {ok, Handle} = open(Helper, FileId, write),
-            Size = ?config(op_size, Config) * ?MB,
-            write(Handle, 0, Size),
-            unlink(Helper, FileId, Size)
-        end, lists:seq(1, ?config(op_num, Config))),
-        delete_helper(Helper)
-    end, ?config(threads_num, Config)).
+    Helper = new_helper(Config),
+    lists:foreach(fun(_) ->
+        FileId = random_file_id(),
+        Size = ?config(op_size, Config) * ?MB,
+        {ok, Handle} = open(Helper, FileId, write),
+        write(Handle, 0, Size),
+        unlink(Helper, FileId, Size)
+    end, lists:seq(1, ?config(op_num, Config))),
+    delete_helper(Helper).
 
 write_read_truncate_unlink_test(Config) ->
     ?PERFORMANCE(Config, [
         {repeats, ?REPEATS},
         {success_rate, 100},
-        {parameters, [?THR_NUM(1), ?OP_NUM(5), ?OP_SIZE(1)]},
-        {description, "Multiple parallel sequence of write, read, truncate
-        and unlink operations."},
-        ?PERF_CFG(small, [?THR_NUM(?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(medium, [?THR_NUM(2 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
-        ?PERF_CFG(large, [?THR_NUM(4 * ?TEST_SIZE_BASE), ?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
+        {parameters, [?OP_NUM(1), ?OP_SIZE(1)]},
+        {description, "Multiple sequences of write, read, truncate and unlink
+        operations."},
+        ?PERF_CFG(small, [?OP_NUM(2 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(medium, [?OP_NUM(4 * ?TEST_SIZE_BASE), ?OP_SIZE(1)]),
+        ?PERF_CFG(large, [?OP_NUM(10 * ?TEST_SIZE_BASE), ?OP_SIZE(1)])
     ]).
 write_read_truncate_unlink_test_base(Config) ->
-    run(fun() ->
-        Helper = new_helper(Config),
-        lists:foreach(fun(_) ->
-            FileId = random_file_id(),
-            {ok, Handle} = open(Helper, FileId, rdwr),
-            Size = ?config(op_size, Config) * ?MB,
-            Content = write(Handle, 0, Size),
-            ?assertEqual(Content, read(Handle, size(Content))),
-            truncate(Helper, FileId, 0, Size),
-            unlink(Helper, FileId, Size)
-        end, lists:seq(1, ?config(op_num, Config))),
-        delete_helper(Helper)
-    end, ?config(threads_num, Config)).
-
-setxattr_test(Config) ->
     Helper = new_helper(Config),
-    FileId = random_file_id(),
-    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
-    XattrValue = random_file_id(),
-    {ok, _} = open(Helper, FileId, rdwr),
-    ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
-
-listxattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    {ok, _} = open(Helper, FileId, rdwr),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR1">>, random_file_id(), false, false])),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR2">>, random_file_id(), false, false])),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
-    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(3, length(XattrNames)).
-
-removexattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
-    XattrValue = random_file_id(),
-    {ok, _} = open(Helper, FileId, rdwr),
-    ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(1, length(XattrNames)),
-    ?assertMatch(ok, call(Helper, removexattr, [FileId, XattrName])),
-    ?assertMatch({ok, []}, call(Helper, listxattr, [FileId])).
-
+    lists:foreach(fun(_) ->
+        FileId = random_file_id(),
+        Size = ?config(op_size, Config) * ?MB,
+        {ok, Handle} = open(Helper, FileId, rdwr),
+        Content = write(Handle, 0, Size),
+        ?assertEqual(Content, read(Handle, size(Content))),
+        truncate(Helper, FileId, 0, Size),
+        unlink(Helper, FileId, 0)
+    end, lists:seq(1, ?config(op_num, Config))),
+    delete_helper(Helper).
 
 %%%===================================================================
 %%% Internal functions
@@ -294,18 +234,19 @@ removexattr_test(Config) ->
 new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
-    CephConfig = ?config(ceph, ?config(ceph, ?config(storages, Config))),
+    SwiftConfig = ?config(swift, ?config(swift, ?config(storages, Config))),
 
     UserCtx = #{
-        <<"username">> => atom_to_binary(?config(username, CephConfig), utf8),
-        <<"key">> => atom_to_binary(?config(key, CephConfig), utf8)
+        <<"username">> => atom_to_binary(?config(user_name, SwiftConfig), utf8),
+        <<"password">> => atom_to_binary(?config(password, SwiftConfig), utf8),
+        <<"projectName">> => atom_to_binary(?config(project_name, SwiftConfig), utf8)
     },
     {ok, Helper} = helper:new_helper(
-        ?CEPH_HELPER_NAME,
+        ?SWIFT_HELPER_NAME,
         #{
-            <<"monitorHostname">> => atom_to_binary(?config(host_name, CephConfig), utf8),
-            <<"clusterName">> => ?CEPH_CLUSTER_NAME,
-            <<"poolName">> => ?CEPH_POOL_NAME,
+            <<"authUrl">> => <<"http://", (atom_to_binary(?config(host_name, SwiftConfig), utf8))/binary,
+            ":", (integer_to_binary(?config(keystone_port, SwiftConfig)))/binary, "/v3">>,
+            <<"containerName">> => ?SWIFT_CONTAINER_NAME,
             <<"storagePathType">> => ?FLAT_STORAGE_PATH
         },
         UserCtx
@@ -362,15 +303,9 @@ receive_result(Helper) ->
         ?TIMEOUT -> {error, timeout}
     end.
 
-run(Fun, ThreadsNum) ->
-    Results = lists_utils:pmap(fun(_) ->
-        Fun(),
-        ok
-    end, lists:seq(1, ThreadsNum)),
-    ?assert(lists:all(fun(Result) -> Result =:= ok end, Results)).
-
 random_file_id() ->
-    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
+    re:replace(http_utils:base64url_encode(crypto:strong_rand_bytes(?FILE_ID_SIZE)),
+        "\\W", "", [global, {return, binary}]).
 
 open(Helper, FileId, Flag) ->
     call(Helper, open, [FileId, Flag]).

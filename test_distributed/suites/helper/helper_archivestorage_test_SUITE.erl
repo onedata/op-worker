@@ -8,10 +8,12 @@
 %%% @doc This module tests archive storage based on S3 helper.
 %%% @end
 %%%--------------------------------------------------------------------
--module(archivestorage_helper_test_SUITE).
+-module(helper_archivestorage_test_SUITE).
 -author("Bartek Kryza").
 
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/storage/common.hrl").
+-include_lib("ctool/include/storage/s3.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -191,25 +193,39 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
 
-    UserCtx = #{
-        <<"accessKey">> => atom_to_binary(?config(access_key, S3Config), utf8),
-        <<"secretKey">> => atom_to_binary(?config(secret_key, S3Config), utf8)
-    },
-    {ok, Helper} = helper:new_helper(
-        <<"s3">>,
-        #{
-            <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
-            <<"bucketName">> => ?S3_BUCKET_NAME,
-            <<"scheme">> => <<"http">>,
-            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-            <<"blockSize">> => list_to_binary(integer_to_list(5 * ?MB)),
-            <<"archiveStorage">> => <<"true">>
+    HelperConfig = helper_config:build(#storage_create_spec{
+        type = ?S3_HELPER_NAME,
+        name = ?RAND_STR(),
+        archive = true,
+        credentials = #s3_credentials{
+            access_key = atom_to_binary(?config(access_key, S3Config), utf8),
+            secret_key = atom_to_binary(?config(secret_key, S3Config), utf8)
         },
-        UserCtx
-    ),
+        configuration = #s3_configuration{
+            scheme = <<"http">>,
+            hostname = atom_to_binary(?config(host_name, S3Config), utf8),
+            bucket_name = ?S3_BUCKET_NAME,
+            block_size = 5 * ?MB,
+            storage_path_type = flat
+        }
+    }),
+
+
+%%    {ok, Helper} = helper:new_helper(
+%%        <<"s3">>,
+%%        #{
+%%            <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
+%%            <<"bucketName">> => ?S3_BUCKET_NAME,
+%%            <<"scheme">> => <<"http">>,
+%%            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+%%            <<"blockSize">> => list_to_binary(integer_to_list(5 * ?MB)),
+%%            <<"archiveStorage">> => <<"true">>
+%%        },
+%%        UserCtx
+%%    ),
 
     spawn(Node, fun() ->
-        helper_loop(Helper, UserCtx)
+        helper_loop(HelperConfig, HelperConfig#helper_config.admin_ctx)
     end).
 
 delete_helper(Helper) ->

@@ -1,14 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartek Kryza
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Tests for GlusterFS helper.
+%%% @doc Tests for NFS helper.
 %%% @end
 %%%-------------------------------------------------------------------
--module(glusterfs_helper_test_SUITE).
+-module(helper_nfs_test_SUITE).
 -author("Bartek Kryza").
 
 -include("modules/storage/helpers/helpers.hrl").
@@ -23,35 +23,36 @@
 %% tests
 -export([create_test/1, mkdir_test/1, getattr_test/1, rmdir_test/1,
     unlink_test/1, symlink_test/1, rename_test/1, chmod_test/1,
-    chown_test/1, flush_test/1, fsync_test/1, setxattr_test/1,
-    removexattr_test/1, listxattr_test/1, write_test/1,
+    chown_test/1, flush_test/1, fsync_test/1, write_test/1,
     multipart_write_test/1, truncate_test/1, write_read_test/1,
     multipart_read_test/1, write_unlink_test/1,
-    write_read_truncate_unlink_test/1]).
+    write_read_truncate_unlink_test/1, check_storage_availability_test/1]).
 
 %% test_bases
 -export([create_test_base/1, write_test_base/1, multipart_write_test_base/1,
     truncate_test_base/1, write_read_test_base/1, multipart_read_test_base/1,
-    write_unlink_test_base/1, write_read_truncate_unlink_test_base/1,
-    check_storage_availability_test/1]).
+    write_unlink_test_base/1, write_read_truncate_unlink_test_base/1]).
 
 -define(PERF_TEST_CASES, [
-    create_test, write_test, multipart_write_test, truncate_test,
-    write_read_test, multipart_read_test, write_unlink_test,
+    create_test,
+    write_test,
+    multipart_write_test,
+    truncate_test,
+    write_read_test,
+    multipart_read_test,
+    write_unlink_test,
     write_read_truncate_unlink_test
 ]).
 
 -define(TEST_CASES, [
-    getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test,
-    rename_test, chmod_test, chown_test, flush_test, fsync_test,
-    setxattr_test, listxattr_test, removexattr_test,
-    check_storage_availability_test
+    flush_test, getattr_test, mkdir_test, rmdir_test, unlink_test, symlink_test,
+    rename_test, chmod_test, chown_test, fsync_test, check_storage_availability_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?PERF_TEST_CASES).
 
--define(GLUSTERFS_PORT, 24007).
--define(GLUSTERFS_VOLUME, <<"data">>).
+-define(NFS_VOLUME, <<"/nfsshare">>).
+-define(NFS_VERSION, <<"3">>).
 
 -define(FILE_ID_SIZE, 20).
 -define(KB, 1024).
@@ -139,7 +140,8 @@ write_test_base(Config) ->
             FileId = random_file_id(),
             create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, write),
-            write(Handle, ?config(write_size, Config) * ?MB)
+            write(Handle, ?config(write_size, Config) * ?MB),
+            release(Handle)
         end, lists:seq(1, ?config(write_num, Config))),
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
@@ -163,6 +165,7 @@ multipart_write_test_base(Config) ->
     Size = ?config(write_size, Config) * ?MB,
     BlockSize = ?config(write_blk_size, Config) * ?KB,
     multipart(Handle, fun write/3, Size, BlockSize),
+    release(Handle),
     delete_helper(Helper).
 
 truncate_test(Config) ->
@@ -202,7 +205,8 @@ write_read_test_base(Config) ->
             create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, rdwr),
             Content = write(Handle, 0, ?config(op_size, Config) * ?MB),
-            ?assertEqual(Content, read(Handle, size(Content)))
+            ?assertEqual(Content, read(Handle, size(Content))),
+            release(Handle)
         end, lists:seq(1, ?config(op_num, Config))),
         delete_helper(Helper)
     end, ?config(threads_num, Config)).
@@ -227,6 +231,7 @@ multipart_read_test_base(Config) ->
     write(Handle, 0, 0),
     truncate(Helper, FileId, Size, 0),
     multipart(Handle, fun read/3, 0, Size, BlockSize),
+    release(Handle),
     delete_helper(Helper).
 
 write_unlink_test(Config) ->
@@ -248,6 +253,7 @@ write_unlink_test_base(Config) ->
             create(Helper, FileId),
             {ok, Handle} = open(Helper, FileId, write),
             write(Handle, 0, Size),
+            release(Handle),
             unlink(Helper, FileId, Size)
         end, lists:seq(1, ?config(op_num, Config))),
         delete_helper(Helper)
@@ -275,6 +281,7 @@ write_read_truncate_unlink_test_base(Config) ->
             Content = write(Handle, 0, Size),
             ?assertEqual(Content, read(Handle, size(Content))),
             truncate(Helper, FileId, 0, Size),
+            release(Handle),
             unlink(Helper, FileId, 0)
         end, lists:seq(1, ?config(op_num, Config))),
         delete_helper(Helper)
@@ -330,45 +337,6 @@ chown_test(Config) ->
     create(Helper, FileId),
     ?assertMatch(ok, call(Helper, chown, [FileId, -1, -1])).
 
-setxattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
-    XattrValue = random_file_id(),
-    create(Helper, FileId),
-    ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    ?assertMatch({ok, XattrValue}, call(Helper, getxattr, [FileId, XattrName])).
-
-listxattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    create(Helper, FileId),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR1">>, random_file_id(), false, false])),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR2">>, random_file_id(), false, false])),
-    ?assertMatch(ok,
-        call(Helper, setxattr,
-            [FileId, <<"user.XATTR3">>, random_file_id(), false, false])),
-    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(3, length(XattrNames)).
-
-removexattr_test(Config) ->
-    Helper = new_helper(Config),
-    FileId = random_file_id(),
-    XattrName = str_utils:join_binary([<<"user.">>, random_file_id()]),
-    XattrValue = random_file_id(),
-    create(Helper, FileId),
-    ?assertMatch(ok,
-        call(Helper, setxattr, [FileId, XattrName, XattrValue, false, false])),
-    {ok, XattrNames} = call(Helper, listxattr, [FileId]),
-    ?assertEqual(1, length(XattrNames)),
-    ?assertMatch(ok, call(Helper, removexattr, [FileId, XattrName])),
-    ?assertMatch({ok, []}, call(Helper, listxattr, [FileId])).
-
 flush_test(Config) ->
     Helper = new_helper(Config),
     FileId = random_file_id(),
@@ -393,17 +361,14 @@ fsync_test(Config) ->
 new_helper(Config) ->
     process_flag(trap_exit, true),
     [Node | _] = ?config(op_worker_nodes, Config),
-    GlusterFSConfig = ?config(glusterfs, ?config(glusterfs, ?config(storages, Config))),
+    NFSConfig = ?config(nfs, ?config(nfs, ?config(storages, Config))),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     {ok, Helper} = helper:new_helper(
-        ?GLUSTERFS_HELPER_NAME,
+        ?NFS_HELPER_NAME,
         #{
-            <<"volume">> => ?GLUSTERFS_VOLUME,
-            <<"hostname">> => atom_to_binary(?config(host_name, GlusterFSConfig), utf8),
-            <<"port">> => integer_to_binary(?GLUSTERFS_PORT),
-            <<"transport">> => atom_to_binary(?config(transport, GlusterFSConfig), utf8),
-            <<"mountPoint">> => atom_to_binary(?config(mountpoint, GlusterFSConfig), utf8),
-            <<"xlatorOptions">> => <<"cluster.write-freq-threshold=100;">>,
+            <<"volume">> => ?NFS_VOLUME,
+            <<"version">> => ?NFS_VERSION,
+            <<"host">> => atom_to_binary(?config(host, NFSConfig), utf8),
             <<"storagePathType">> => ?CANONICAL_STORAGE_PATH
         },
         UserCtx
@@ -467,7 +432,8 @@ run(Fun, ThreadsNum) ->
     ?assert(lists:all(fun(Result) -> Result =:= ok end, Results)).
 
 random_file_id() ->
-    http_utils:url_encode(base64:encode(crypto:strong_rand_bytes(?FILE_ID_SIZE))).
+    re:replace(http_utils:base64url_encode(crypto:strong_rand_bytes(?FILE_ID_SIZE)),
+        "\\W", "", [global, {return, binary}]).
 
 create(Helper, FileId) ->
     call(Helper, mknod, [FileId, ?DEFAULT_FILE_PERMS, reg]).
@@ -477,6 +443,9 @@ mkdir(Helper, FileId) ->
 
 open(Helper, FileId, Flag) ->
     call(Helper, open, [FileId, Flag]).
+
+release(FileHandle) ->
+    call(FileHandle, release, []).
 
 read(FileHandle, Size) ->
     read(FileHandle, 0, Size).
