@@ -56,7 +56,7 @@ create(StorageCreateSpec = #storage_create_spec{
     end.
 
 
--spec update(storage:id(), onedata_storage:update_spec()) -> ok | {error, term()}.
+-spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
     try do_update(StorageId, UpdateSpec) of
         ok ->
@@ -198,12 +198,15 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
             % TODO use critical section for update?
             % @TODO VFS-5513 Modify everything in a single datastore operation
             % TODO VFS-6951 refactor storage configuration API
-            lists:foreach(fun(UpdateFun) ->
-                case UpdateFun() of
-                    ok -> ok;
-                    {error, no_changes} -> ok;
-                    {error, _} = Error -> throw(Error)
-                end
+            lists:foreach(fun
+                ({true, UpdateFun}) ->
+                    case UpdateFun() of
+                        ok -> ok;
+                        {error, no_changes} -> ok;
+                        {error, _} = Error -> throw(Error)
+                    end;
+                (_) ->
+                    ok
             end, [
                 {MaybeQosParams =/= undefined, fun() ->
                     storage:set_qos_parameters(StorageId, MaybeQosParams)
