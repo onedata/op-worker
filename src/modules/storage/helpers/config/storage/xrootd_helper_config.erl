@@ -64,6 +64,10 @@ validate_user_ctx(UserCtx) ->
 
 
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
+build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
+    build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
+        configuration = #xrootd_configuration_diff{}
+    });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
     archive = Archive,

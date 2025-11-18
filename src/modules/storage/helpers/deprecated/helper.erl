@@ -6,9 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides a synchronous interface to the helpers NIF library.
-%%% It wraps {@link helpers_nif} module by calling its functions and awaiting
-%%% results.
+%%% This module is deprecated and kept only because env up mechanism depends
+%%% on it to setup environment. It can be deleted after last envup drops dead
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helper).
@@ -25,13 +24,10 @@
 %%%===================================================================
 
 
-%% TODO rm
 -spec new_helper(helper_config:name(), helper_config:args(), helper_config:user_ctx()) -> {ok, helper_config:t()}.
 new_helper(HelperName, Args, AdminCtx) ->
     BaseAdminCtx = default_admin_ctx(HelperName),
     FullAdminCtx = maps:merge(BaseAdminCtx, AdminCtx),
-%%    ok = helper_params:validate_args(HelperName, Args),
-%%    ok = helper_params:validate_user_ctx(HelperName, FullAdminCtx),
 
     {ok, #helper_config{
         name = HelperName,

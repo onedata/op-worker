@@ -380,8 +380,12 @@ add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _HelperConfi
 -spec choose_idp_and_fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
     helper_config:t(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
 choose_idp_and_fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed) ->
-    HelperArgs = helper_config:get_args(HelperConfig),
-    case maps:get(<<"oauth2IdP">>, HelperArgs, undefined) of
+    HelperAdminCtx = helper_config:get_admin_ctx(HelperConfig),
+    %% TODO https://onedata.org/#/home/api/stable/onepanel?anchor=operation/luma_get_onedata_user_to_credentials_mapping
+    %% oauthIdP is part of webdav credentials but in helper is was saved as part of args - wtf? I fixed it but here -
+    %% it turns out it is not for c++ but some of our code uses it?! da faq?
+    %% HTTP had similar fields but i didn't find it used anywhere wtf?
+    case maps:get(<<"oauth2IdP">>, HelperAdminCtx, undefined) of
         undefined ->
             % OAuth2IdP was not explicitly set, try to infer it
             case provider_logic:zone_get_offline_access_idps() of

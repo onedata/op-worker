@@ -56,7 +56,10 @@ build(CreateReq = #storage_create_spec{type = ?WEBDAV_HELPER_NAME, credentials =
 -spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
 validate_user_ctx(UserCtx) ->
     BaseFields = [<<"credentialsType">>],
-    OptionalFields = [<<"credentials">>, <<"adminId">>, <<"onedataAccessToken">>, <<"oauth2Idp">>],
+    OptionalFields = [
+        <<"credentials">>, <<"adminId">>, <<"onedataAccessToken">>, <<"oauth2Idp">>,
+        <<"accessToken">>, <<"accessTokenTTL">>
+    ],
     
     case UserCtx of
         #{<<"credentialsType">> := Type} when Type /= <<"none">> ->
@@ -70,6 +73,10 @@ validate_user_ctx(UserCtx) ->
 
 
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
+build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = undefined}) ->
+    build_args_diff(HelperConfig, UpdateSpec#storage_update_spec{
+        configuration = #webdav_configuration_diff{}
+    });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
     archive = Archive,

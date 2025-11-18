@@ -154,6 +154,7 @@ do_describe(StorageId) ->
     end.
 
 
+% TODO use critical section for update?
 %% @private
 -spec do_update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 do_update(StorageId, UpdateSpec = #storage_update_spec{
@@ -195,7 +196,6 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
                 (NewImported andalso storage:supports_any_space(StorageId)),
             run_diagnostics(NewHelperConfig, NewLumaFeed, not IgnoreReadWriteTest),
 
-            % TODO use critical section for update?
             % @TODO VFS-5513 Modify everything in a single datastore operation
             % TODO VFS-6951 refactor storage configuration API
             lists:foreach(fun
@@ -208,6 +208,7 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
                 (_) ->
                     ok
             end, [
+                % TODO do all those calls need to be independent? Can't there be only 2 calls: to oz and sotrage_config?
                 {MaybeQosParams =/= undefined, fun() ->
                     storage:set_qos_parameters(StorageId, MaybeQosParams)
                 end},

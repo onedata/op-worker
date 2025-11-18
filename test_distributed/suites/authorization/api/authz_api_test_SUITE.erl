@@ -16,6 +16,7 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("space_setup_utils.hrl").
+-include_lib("ctool/include/storage/common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -648,7 +649,7 @@ find_storage_id(StorageType) ->
 
     [StorageId] = lists:filter(fun(StorageId) ->
         StorageDetails = opw_test_rpc:storage_describe(krakow, StorageId),
-        StorageTypeBin == maps:get(<<"type">>, StorageDetails)
+        StorageTypeBin == StorageDetails#storage_description.type
     end, opw_test_rpc:get_storages(krakow)),
 
     StorageId.

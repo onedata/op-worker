@@ -25,6 +25,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/storage/common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -1529,7 +1530,6 @@ set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
             ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
 
--include_lib("ctool/include/storage/common.hrl").
 
 %% Modifies storage timeout twice in order to
 %% trigger helper reload and restore previous value.

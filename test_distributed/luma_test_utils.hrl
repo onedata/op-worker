@@ -499,10 +499,10 @@ end).
 %%% storage test configs
 %%%===================================================================
 
--define(STORAGE_RECORD(Id, Name, Helper, LumaMode), #document{
+-define(STORAGE_RECORD(Id, Name, HelperConfig, LumaMode), #document{
     key = Id,
     value = #storage_config{
-        helper_config = Helper,
+        helper_config = HelperConfig,
         luma_config = ?LUMA_CONFIG(LumaMode)
     }
 }).
