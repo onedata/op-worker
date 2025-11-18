@@ -57,7 +57,7 @@ build(CreateReq = #storage_create_spec{type = ?WEBDAV_HELPER_NAME, credentials =
 validate_user_ctx(UserCtx) ->
     BaseFields = [<<"credentialsType">>],
     OptionalFields = [
-        <<"credentials">>, <<"adminId">>, <<"onedataAccessToken">>, <<"oauth2Idp">>,
+        <<"credentials">>, <<"adminId">>, <<"onedataAccessToken">>, <<"oauth2IdP">>,
         <<"accessToken">>, <<"accessTokenTTL">>
     ],
     

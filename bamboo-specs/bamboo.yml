@@ -152,6 +152,9 @@ stages:
         - gs_token_logic
         - gs_user_logic
         - gs_zone_connection
+        - harvesting
+        - harvesting_custom_metadata
+        - harvesting_stream
         - helper_archivestorage
         - helper_ceph
         - helper_cephrados
@@ -163,9 +166,6 @@ stages:
         - helper_swift
         - helper_webdav
         - helper_xrootd
-        - harvesting
-        - harvesting_custom_metadata
-        - harvesting_stream
         - idp_access_token
         - lfm_attrs
         - lfm_files_posix
@@ -1197,6 +1197,28 @@ gs_zone_connection:
       name: ct_logs_gs_zone_connection.tar.gz
   requirements: *os-agent
 
+harvesting:
+  <<: *ct-job
+  key: HAR
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_harvesting.tar.gz
+
+harvesting_custom_metadata:
+  <<: *ct-job
+  key: HCM
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_harvesting_custom_metadata.tar.gz
+
+harvesting_stream:
+  <<: *ct-job
+  key: HARMNG
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_harvesting_stream.tar.gz
+  requirements: *os-agent
+
 helper_archivestorage:
   <<: *ct-job
   key: AR
@@ -1279,28 +1301,6 @@ helper_xrootd:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_helper_xrootd.tar.gz
-
-harvesting:
-  <<: *ct-job
-  key: HAR
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_harvesting.tar.gz
-
-harvesting_custom_metadata:
-  <<: *ct-job
-  key: HCM
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_harvesting_custom_metadata.tar.gz
-
-harvesting_stream:
-  <<: *ct-job
-  key: HARMNG
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_harvesting_stream.tar.gz
-  requirements: *os-agent
 
 idp_access_token:
   <<: *ct-job
@@ -1994,6 +1994,9 @@ Coverage report:
     - artifact: ct_logs_gs_token_logic.tar.gz
     - artifact: ct_logs_gs_user_logic.tar.gz
     - artifact: ct_logs_gs_zone_connection.tar.gz
+    - artifact: ct_logs_harvesting.tar.gz
+    - artifact: ct_logs_harvesting_custom_metadata.tar.gz
+    - artifact: ct_logs_harvesting_stream.tar.gz
     - artifact: ct_logs_helper_archivestorage.tar.gz
     - artifact: ct_logs_helper_ceph.tar.gz
     - artifact: ct_logs_helper_cephrados.tar.gz
@@ -2005,9 +2008,6 @@ Coverage report:
     - artifact: ct_logs_helper_swift.tar.gz
     - artifact: ct_logs_helper_webdav.tar.gz
     - artifact: ct_logs_helper_xrootd.tar.gz
-    - artifact: ct_logs_harvesting.tar.gz
-    - artifact: ct_logs_harvesting_custom_metadata.tar.gz
-    - artifact: ct_logs_harvesting_stream.tar.gz
     - artifact: ct_logs_idp_access_token.tar.gz
     - artifact: ct_logs_lfm_attrs.tar.gz
     - artifact: ct_logs_lfm_files_posix.tar.gz

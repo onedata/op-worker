@@ -267,13 +267,14 @@ enable_webdav_test_mode_on_all_storages(Worker) ->
 enable_webdav_test_mode(Worker, StorageId) ->
     UpdateHelperConfigFun = fun(#helper_config{args = Args, admin_ctx = AdminCtx}  = HelperConfig) ->
         Args2 = Args#{
-            <<"testTokenRefreshMode">> => <<"true">>,
-            <<"oauth2IdP">> => ?IDP
+            <<"testTokenRefreshMode">> => <<"true">>
         },
         {ok, HelperConfig#helper_config{
             args = Args2,
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
+                %% TODO ??
+                <<"oauth2IdP">> => ?IDP,
                 <<"onedataAccessToken">> => ?ONEDATA_ACCESS_TOKEN,
                 <<"adminId">> => ?ADMIN_ID,
                 <<"credentials">> => <<"ADMIN">>

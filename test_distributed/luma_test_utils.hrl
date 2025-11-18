@@ -448,10 +448,10 @@ end).
     ?WEBDAV_HELPER_NAME,
     #{
         <<"endpoint">> => <<"endpoint">>,
-        <<"oauth2IdP">> => ?OAUTH2_IDP,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    AdminCtx
+    %% TODO ??
+    maps:merge(AdminCtx, #{<<"oauth2IdP">> => ?OAUTH2_IDP})
 ))).
 -define(WEBDAV_BASIC_HELPER,
     ?WEBDAV_HELPER(?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
