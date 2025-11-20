@@ -5,13 +5,13 @@ guidelines.
 
 ---
 
-## Important Caveats
+## Important caveats
 
 Understanding these limitations is essential for correct client implementation. 
 They arise from the underlying architecture based on Couchbase changes feed and 
 the distributed nature of Onedata.
 
-### Document Field Granularity
+### Document field granularity
 
 **Limitation**: The system monitors **document-level changes**, not field-level 
 changes. You cannot know which specific field within a document was modified.
@@ -64,7 +64,7 @@ fields separately. Adding field-level tracking would require:
 
 The current design prioritizes performance and simplicity over fine-grained change detection.
 
-### Event Ordering and Race Conditions
+### Event ordering and race conditions
 
 **Limitation**: The Couchbase changes feed does not guarantee strict ordering 
 across different document types.
@@ -121,7 +121,7 @@ onEvent(event) {
 `changedOrCreated` events, especially if you've received a `deleted` event 
 for that file previously.
 
-### Duplicate Deletion Events
+### Duplicate deletion events
 
 **Limitation**: You may receive multiple `deleted` events for the same file.
 
@@ -207,7 +207,7 @@ Change: file_meta document updated (unrelated field)
 determine if meaningful changes occurred. Don't assume every event represents 
 a visible change.
 
-## Client Implementation Guidelines
+## Client implementation guidelines
 
 For practical client implementation patterns and examples, see the dedicated 
 **[Client Implementation Guide](../../guides/file_monitoring/client.md)**.
@@ -218,7 +218,7 @@ The guide covers:
 - Complete working implementations
 - Troubleshooting common issues
 
-### Summary of Key Pitfalls
+### Summary of key pitfalls
 
 **Always verify file existence**: Events may arrive out of order
 
@@ -231,9 +231,9 @@ The guide covers:
 See the **[Client Implementation Guide](../../guides/file_monitoring/client.md)** for 
 detailed implementations and complete working examples.
 
-## Performance Considerations
+## Performance considerations
 
-### Parallelized Authorization Checks
+### Parallelized authorization checks
 
 Authorization checks run in parallel (up to 20 concurrent checks by default) to 
 prevent blocking when multiple observers watch the same directory:
@@ -249,7 +249,7 @@ if you have:
 - Many observers per directory (increase for better throughput)
 - Limited system resources (decrease to reduce load)
 
-### Couchbase Stream Throttling
+### Couchbase stream throttling
 
 The monitor uses a call/reply pattern with Couchbase changes stream to prevent 
 flooding:
@@ -272,7 +272,7 @@ handle_call(#docs_change_notification{docs = Docs}, From, State) ->
 - Parallel preparation - stream prepares next batch while monitor processes current
 - No flooding - monitor never gets more than one batch ahead
 
-### Heartbeat Threshold
+### Heartbeat threshold
 
 Default heartbeat threshold is 100 sequence numbers. This balances:
 - Reducing replay size on reconnect (lower threshold = more heartbeats)
@@ -282,11 +282,11 @@ Default heartbeat threshold is 100 sequence numbers. This balances:
 - Frequent reconnects with large gaps (decrease threshold)
 - High event rate with many observers (increase threshold to reduce overhead)
 
-## Future Optimizations
+## Future optimizations
 
 These optimizations are **not currently implemented** but may be added in the future.
 
-### Document Buffer for Fast Reconnects
+### Document buffer for fast reconnects
 
 **Idea**: Maintain a circular buffer of last N documents (e.g., 100) in main monitor 
 to handle short reconnects without starting a catching monitor.
@@ -324,7 +324,7 @@ handle_call(#subscribe_req{since_seq = SinceSeq}, From, State) ->
 **Decision**: Implement only if metrics show frequent catching monitor starts 
 for small gaps (< 100 events).
 
-### Adaptive Heartbeat Threshold
+### Adaptive heartbeat threshold
 
 **Idea**: Dynamically adjust heartbeat threshold based on space activity patterns.
 
@@ -345,7 +345,7 @@ AvgEventsPerMinute < 100 -> Threshold = 50
 
 **Decision**: Implement if user feedback indicates heartbeat tuning is important.
 
-### Smarter Catching Monitor Reuse
+### Smarter catching monitor reuse
 
 **Idea**: If multiple clients reconnect with similar `Last-Event-Id`, share a 
 single catching monitor.
@@ -367,7 +367,7 @@ single catching monitor.
 
 **Decision**: Implement only if metrics show frequent concurrent reconnects.
 
-## Related Documentation
+## Related documentation
 
 - **[Overview](_overview.md)** - System introduction and guarantees
 - **[Architecture](architecture.md)** - Supervisor hierarchy

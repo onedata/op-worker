@@ -5,7 +5,7 @@ into their applications using Server-Sent Events (SSE).
 
 ---
 
-## Quick Start
+## Quick start
 
 ### Example with curl
 
@@ -25,9 +25,9 @@ curl -N -H "X-Auth-Token: YOUR_ACCESS_TOKEN" \
 - `-N` / `--no-buffer`: Disable output buffering (critical for SSE)
 - `-H "Accept: text/event-stream"`: Request SSE format
 
-## Understanding Events
+## Understanding events
 
-### Event Types
+### Event types
 
 The system sends three types of events:
 
@@ -59,7 +59,7 @@ data: {}
 Sent periodically to update your `Last-Event-Id` during inactivity. Prevents 
 unnecessary replay on reconnect.
 
-### Event Structure
+### Event structure
 
 All events share common SSE fields:
 
@@ -67,7 +67,7 @@ All events share common SSE fields:
 - **`event`**: Event type (`changedOrCreated`, `deleted`, or `heartbeat`)
 - **`data`**: JSON payload (structure varies by event type)
 
-### Parsing SSE Format
+### Parsing SSE format
 
 SSE is line-based text format. Each event consists of lines starting with field names:
 
@@ -80,7 +80,7 @@ data: {"fileId":"abc123",...}
 
 Note the blank line separating events. Most SSE libraries handle parsing automatically.
 
-## Implementing Reconnection
+## Implementing reconnection
 
 ### Storing Last-Event-Id
 
@@ -139,7 +139,7 @@ function connect(reconnect = false) {
 - **Behind**: System creates temporary catching monitor, replays missed events, 
   seamlessly transfers to live stream
 
-### Handling Seamless Takeover
+### Handling seamless takeover
 
 Takeover from catching monitor to main monitor is transparent - you just receive 
 events continuously with no gaps or duplicates. No special handling needed!
@@ -156,9 +156,9 @@ for event in sse_stream {
 - ✅ No duplicates: Each sequence number appears exactly once
 - ✅ Ordered: Events arrive in strictly increasing sequence order
 
-## Essential Client Patterns
+## Essential client patterns
 
-### 1. Always Verify File Existence
+### 1. Always verify file existence
 
 **Problem**: Events may arrive out of order - you might receive a `changedOrCreated` 
 event after a `deleted` event for the same file.
@@ -192,7 +192,7 @@ class FileCache {
 }
 ```
 
-### 2. Handle Duplicate Deletions Idempotently
+### 2. Handle duplicate deletions idempotently
 
 **Problem**: You may receive multiple `deleted` events for the same file.
 
@@ -209,7 +209,7 @@ function handle_deletion(file_id) {
 }
 ```
 
-### 3. Compare Received Data with Cache
+### 3. Compare received data with cache
 
 **Problem**: You may receive events where your requested attributes didn't actually change.
 
@@ -238,7 +238,7 @@ function handle_change(file_id, new_attrs) {
 }
 ```
 
-### 4. Maintain Local State
+### 4. Maintain local state
 
 **Why**: Essential for handling out-of-order events, duplicates, and false positives.
 
@@ -271,7 +271,7 @@ class FileMonitoringClient {
 }
 ```
 
-## Complete Client Example
+## Complete client example
 
 Full implementation with reconnection, state management, and error handling:
 
@@ -486,9 +486,9 @@ client = new MyFileMonitor(
 client.run()
 ```
 
-## Troubleshooting Common Issues
+## Troubleshooting common issues
 
-### Connection Drops
+### Connection drops
 
 **Symptom**: Connection closes unexpectedly
 
@@ -499,7 +499,7 @@ client.run()
 
 **Solution**: Implement automatic reconnection with exponential backoff (see example above).
 
-### Missing Events
+### Missing events
 
 **Symptom**: Some file changes not appearing
 
@@ -520,7 +520,7 @@ log("Attributes: " + observed_attrs)
 // (test via Oneprovider UI or API)
 ```
 
-### Authorization Failures
+### Authorization failures
 
 **Symptom**: Connection rejected with 401 or 403
 
@@ -543,9 +543,9 @@ log("Token status: " + response.status_code)
 // - Token must allow: cv_api for op_space/{space_id}/file_events
 ```
 
-## API Reference
+## API reference
 
-### Request Format
+### Request format
 
 **Method**: `POST`  
 **Path**: `/api/v3/oneprovider/spaces/{spaceId}/events/files`  
@@ -569,7 +569,7 @@ log("Token status: " + response.status_code)
 **Optional**:
 - `Last-Event-Id`: Sequence number for reconnection (integer as string)
 
-### Observable Attributes
+### Observable attributes
 
 Available attributes to request:
 
@@ -584,7 +584,7 @@ Available attributes to request:
 **From file_location document**:
 - `size`, `isFullyReplicatedLocally`, `localReplicationRate`
 
-## Next Steps
+## Next steps
 
 - **[System Overview](../../design/files_monitoring/_overview.md)** - Understand the architecture
 - **[Implementation Notes](../../design/files_monitoring/implementation_notes.md)** - Important caveats

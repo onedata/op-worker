@@ -51,7 +51,7 @@ graph LR
     style Y fill:#ffebee
 ```
 
-## Event Types
+## Event types
 
 The system generates three types of events, each with a unique sequence ID 
 (Couchbase sequence number) and specific structure.
@@ -156,7 +156,7 @@ heartbeats, client's sequence stays current.
 
 Learn more: [Reconnection - Heartbeat Mechanism](reconnection.md#heartbeat-mechanism).
 
-## Observable Documents
+## Observable documents
 
 The system monitors changes to three specific Couchbase document types that 
 represent file metadata in Onedata.
@@ -197,7 +197,7 @@ If `times` document is deleted, it's filtered out (no event).
 **Deletion Handling**: Same as `times` - deleted `file_location` documents are 
 filtered out.
 
-### Document Change Filtering
+### Document change filtering
 
 ```erlang
 is_observable_doc(#document{value = #file_meta{}}) -> true;
@@ -210,12 +210,12 @@ is_observable_doc(_Doc) -> false.  % All other doc types ignored
 Only observable documents are forwarded to monitors. Other document types are 
 discarded in the Couchbase stream callback.
 
-## Filtering Logic
+## Filtering logic
 
 Events are filtered through multiple layers to ensure observers receive only 
 relevant and authorized events.
 
-### Direct Children Only
+### Direct children only
 
 **Non-Recursive Monitoring**: Only immediate children of observed directories 
 are monitored.
@@ -260,7 +260,7 @@ in `observedDirectories`:
 }
 ```
 
-### Observed Attributes Per Document
+### Observed attributes per document
 
 Observers specify which attributes they want for each document type:
 
@@ -297,7 +297,7 @@ Observer: {file_meta => [name], times => [mtime]}
 % file_location changes → no event for this observer
 ```
 
-### Parent Directory Lookup
+### Parent directory lookup
 
 Every document change triggers a parent lookup to determine if the file is in 
 an observed directory
@@ -308,13 +308,13 @@ No database queries needed.
 **Space Root**: Files in space root are monitored if space root GUID is in 
 observed directories.
 
-## Authorization Model
+## Authorization model
 
 Every event is subject to authorization checks using the observer's session 
 credentials. Authorization is performed **live** at event generation time, using 
 **current** permissions.
 
-### Two-Level Authorization
+### Two-level authorization
 
 **1. File-Level: TRAVERSE_ANCESTORS**
 
@@ -344,7 +344,7 @@ fslogic_authz:ensure_authorized(ObserverUserCtx, FileCtx, RequiredPerms)
 
 **Deleted Events**: Only require `TRAVERSE_ANCESTORS` (no attributes to check).
 
-### Live Authorization
+### Live authorization
 
 Authorization checks use **current** permissions at event generation time, not 
 historical permissions from when the file was changed.
@@ -365,7 +365,7 @@ historical permissions from when the file was changed.
 **Implication**: Observers may "miss" events if they lose access during disconnect. 
 This is by design - security over completeness.
 
-### Parallelized Authorization
+### Parallelized authorization
 
 Authorization checks are expensive (may involve ACL evaluation, group membership 
 checks). The system parallelizes checks across observers:
@@ -390,7 +390,7 @@ each check is independent.
 **Performance**: Parallel checks prevent blocking when multiple observers watch 
 the same directory.
 
-### Authorization During Replay
+### Authorization during replay
 
 Catching monitors perform the same authorization checks as main monitors. This 
 ensures:
@@ -413,7 +413,7 @@ ensures:
 
 This demonstrates that replay uses current permissions, not historical permissions.
 
-## Document Processing Flow
+## Document processing flow
 
 Complete flow from Couchbase change to client event:
 
@@ -464,7 +464,7 @@ sequenceDiagram
     end
 ```
 
-### Throttling at Stream Level
+### Throttling at stream level
 
 The Couchbase changes stream calls the monitor with `gen_server:call`:
 ```erlang
@@ -496,7 +496,7 @@ Couchbase may deliver documents in batches. The monitor processes each batch ato
 This provides natural checkpointing - if monitor crashes mid-batch, the batch 
 is replayed on restart.
 
-## Observable Attributes
+## Observable attributes
 
 The system defines which file attributes can be observed:
 
@@ -520,7 +520,7 @@ The system defines which file attributes can be observed:
 // → Error: invalid_attr not in OBSERVABLE_FILE_ATTRS
 ```
 
-## Related Documentation
+## Related documentation
 
 - **[Monitors](monitors.md)** - Event generation implementation
 - **[Reconnection](reconnection.md)** - Heartbeat mechanism

@@ -16,7 +16,7 @@ This design ensures proper fault isolation (one space's failure doesn't affect o
 automatic dependency management (main monitor death terminates catching monitors), 
 and efficient resource cleanup (trees terminate on inactivity).
 
-## 3-Level Supervisor Hierarchy
+## 3-level supervisor hierarchy
 
 ```mermaid
 graph TB
@@ -64,7 +64,7 @@ graph TB
     style CatchingSup2 fill:#ffe0b2
 ```
 
-### Level 1: Top-Level Supervisor
+### Level 1: Top-level supervisor
 
 **Module**: `files_monitoring_sup`  
 **Strategy**: `one_for_one`  
@@ -82,7 +82,7 @@ is independent - if one space's supervisor fails, others continue unaffected.
   space supervisor
 - `find_sup_for_space/1` - Looks up existing space supervisor (returns `undefined` if not found)
 
-### Level 2: Per-Space Supervisors
+### Level 2: Per-space supervisors
 
 **Module**: `space_files_monitoring_sup`  
 **Strategy**: `rest_for_one`  
@@ -107,7 +107,7 @@ The order matters:
 **Restart Strategy**: `temporary` - Space supervisor doesn't restart automatically. 
 Reconnecting clients trigger recreation through the manager.
 
-### Level 3: Monitor Processes
+### Level 3: Monitor processes
 
 #### Main Monitor (Worker)
 
@@ -144,7 +144,7 @@ Each catching monitor:
 Restart is `temporary` because catching monitors are one-time use - once they 
 complete their job (takeover or failure), they shouldn't restart.
 
-## Manager Abstraction
+## Manager abstraction
 
 The `files_monitoring_manager` provides a clean abstraction layer between HTTP 
 handlers and the monitoring system.
@@ -178,7 +178,7 @@ graph LR
     style Handler fill:#9ff,stroke:#333
 ```
 
-### Manager Responsibilities
+### Manager responsibilities
 
 **Atomic Tree Creation**:
 ```erlang
@@ -234,9 +234,9 @@ The manager returns an opaque `#subscription{}` record to handlers:
 Handlers don't need to know about supervisor structure or routing logic - they 
 just receive events and call `handle_monitor_exit/3` when receiving EXIT signals.
 
-## Process Relationships
+## Process relationships
 
-### Handler-Monitor Linking
+### Handler-monitor linking
 
 ```mermaid
 sequenceDiagram
@@ -276,7 +276,7 @@ sequenceDiagram
 - Immediate notification when monitor dies (enables reconnection)
 - No manual cleanup code needed
 
-### Catching Monitor Lifecycle
+### Catching monitor lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -312,9 +312,9 @@ propose_takeover(State) -> space_files_main_monitor:try_subscribe(MainPid, ...)
 **Termination**: Dies with `{shutdown, caught_up}` after successful takeover, 
 triggering handler to update subscription
 
-## Lifecycle Management
+## Lifecycle management
 
-### Tree Creation
+### Tree creation
 
 **Trigger**: First client connects to a space
 
@@ -327,7 +327,7 @@ triggering handler to update subscription
 **Idempotency**: Multiple concurrent first subscribers race-safely - 
 `ensure_monitoring_tree_for_space/1` handles `{already_started, Pid}` return.
 
-### Inactivity Timeout
+### Inactivity timeout
 
 **Trigger**: Main monitor has no observers AND catching supervisor has no children
 
@@ -353,7 +353,7 @@ After `?INACTIVITY_PERIOD_MS` (default: 30 seconds) of inactivity:
 Race condition: Between main timeout firing and manager checking, a new subscriber 
 might have connected. The double-check prevents premature termination.
 
-### Catching Monitor Prevents Timeout
+### Catching monitor prevents timeout
 
 Even if main has no direct observers, it doesn't timeout while catching monitors exist:
 
@@ -369,7 +369,7 @@ should_terminate_monitoring_tree(SpaceMonitoringSup) ->
 **Rationale**: Catching monitors will soon transfer their observers to main via 
 takeover. Terminating main would break that handoff.
 
-### Tree Termination
+### Tree termination
 
 **Cascading Shutdown**: When manager terminates space tree, `rest_for_one` ensures 
 proper cleanup:
@@ -389,9 +389,9 @@ terminate(Reason, State) ->
 
 Each monitor cancels its Couchbase stream in terminate callback.
 
-## Design Rationale
+## Design rationale
 
-### Why 3 Levels?
+### Why 3 levels?
 
 **Domain Modeling**: The hierarchy directly reflects the domain:
 - System has multiple spaces (level 1)
@@ -424,7 +424,7 @@ lose their clients anyway (handlers are linked to catching monitors).
 
 **Clean Removal**: Catching monitors self-terminate after takeover, automatic cleanup
 
-### Why Manager as Separate Process?
+### Why manager as separate process?
 
 **Alternative Considered**: Handlers talk directly to supervisors and monitors
 
@@ -435,7 +435,7 @@ lose their clients anyway (handlers are linked to catching monitors).
 - **Clean API**: Single entry point for all monitoring operations
 - **EXIT interpretation**: Manager encodes knowledge of shutdown semantics
 
-## Related Documentation
+## Related documentation
 
 - **[Monitors](monitors.md)** - Main and catching monitor implementations
 - **[Reconnection](reconnection.md)** - Takeover protocol and lifecycle

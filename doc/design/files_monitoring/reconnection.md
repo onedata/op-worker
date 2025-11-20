@@ -36,12 +36,12 @@ stateDiagram-v2
     Streaming --> [*]: Client disconnects
 ```
 
-## Last-Event-Id Support
+## Last-Event-Id support
 
 The `Last-Event-Id` header is part of the SSE specification, designed exactly 
 for this use case: resumable event streams.
 
-### SSE Standard
+### SSE standard
 
 When an SSE client receives an event:
 ```
@@ -60,7 +60,7 @@ Last-Event-Id: 12345
 
 The server interprets this as "I last received sequence 12345, resume from 12346".
 
-### Event IDs are Sequence Numbers
+### Event IDs are sequence numbers
 
 In this system, event IDs are **Couchbase sequence numbers** converted to strings:
 ```erlang
@@ -105,7 +105,7 @@ end.
 - Parsed during request validation
 - Invalid values rejected with `400 Bad Request`
 
-## Routing Decision
+## Routing decision
 
 The manager coordinates with the main monitor to determine if a client needs 
 historical replay:
@@ -139,7 +139,7 @@ sequenceDiagram
     end
 ```
 
-### Routing Logic
+### Routing logic
 
 **Main Monitor Decision** (`try_subscribe`):
 ```erlang
@@ -174,11 +174,11 @@ Client claims to be ahead (SinceSeq=1001, CurrentSeq=1000). This can happen if:
 Safest approach: Connect to main and stream from current sequence forward. Client 
 won't receive duplicate events (sequence only increases).
 
-## Catching Monitor Lifecycle
+## Catching monitor lifecycle
 
 When a client is behind, the manager creates a catching monitor to replay missed events.
 
-### Replay Phase
+### Replay phase
 
 Catching monitor processes documents identically to main monitor:
 - Filter observable documents
@@ -212,12 +212,12 @@ graph LR
     style Takeover fill:#e8f5e8
 ```
 
-## Takeover Protocol
+## Takeover protocol
 
 The takeover protocol transfers a client from catching monitor to main monitor 
 without gaps or duplicates in the event stream.
 
-### Protocol Steps
+### Protocol steps
 
 ```mermaid
 sequenceDiagram
@@ -250,7 +250,7 @@ sequenceDiagram
     end
 ```
 
-### Sequence Continuity Proof
+### Sequence continuity proof
 
 **Catching Range**: `[SinceSeq, UntilSeq)` - **exclusive** upper bound
 ```
@@ -277,7 +277,7 @@ Main streams: 1000, 1001, 1002, ...
   (seq ≥ UntilSeq → seq in Main's range)
 ```
 
-### Handler EXIT Interpretation
+### Handler EXIT interpretation
 
 When catching monitor dies with `{shutdown, caught_up}`, handler interprets this:
 ```erlang
@@ -296,7 +296,7 @@ handle_monitor_exit(
 **No Explicit Handoff Message**: Takeover completion is signaled via process EXIT, 
 not a custom message. This is simpler and more robust than a two-message protocol.
 
-### Retry on Main Ahead
+### Retry on main ahead
 
 If main monitor advances between catching reaching UntilSeq and proposing takeover:
 
@@ -315,7 +315,7 @@ If main monitor advances between catching reaching UntilSeq and proposing takeov
 **Convergence**: Eventually catching will catch up to main's sequence (new changes 
 can't arrive faster than catching processes old ones, assuming bounded load).
 
-### Graceful Termination
+### Graceful termination
 
 Catching monitor's terminate callback:
 ```erlang
@@ -329,12 +329,12 @@ Cancel the bounded Couchbase stream to free resources.
 **Automatic Cleanup**: Catching monitor's supervisor detects termination and 
 removes the child spec (temporary restart strategy).
 
-## Heartbeat Mechanism
+## Heartbeat mechanism
 
 Heartbeat events solve the "stale Last-Event-Id" problem during periods of 
 inactivity.
 
-### The Problem
+### The problem
 
 **Scenario**:
 1. Client observes `/data/input/` directory
@@ -350,7 +350,7 @@ inactivity.
 **Root Cause**: Client's Last-Event-Id becomes stale when observed directories 
 are inactive, even though the space is active overall.
 
-### The Solution
+### The solution
 
 Periodically send "heartbeat" events with current sequence number to keep clients 
 up-to-date:
@@ -384,7 +384,7 @@ Observer B receives heartbeat with id=1100
 Observer B: last_seen_seq = 1100
 ```
 
-### When Heartbeats Are Sent
+### When heartbeats are sent
 
 **After Each Batch**: Heartbeats are checked and sent synchronously after processing 
 each document batch.
@@ -402,7 +402,7 @@ activity, not by a timer.
 no heartbeats are sent. This is acceptable - clients will have fresh Last-Event-Id 
 up to the point of space-wide inactivity.
 
-## Flow Scenarios
+## Flow scenarios
 
 ### Scenario 1: First Connection
 
@@ -574,7 +574,7 @@ sequenceDiagram
 replay 1001-1200 (200 events). With heartbeat, client has Last-Event-Id=1150 
 and replays only 50 events.
 
-## Related Documentation
+## Related documentation
 
 - **[Architecture](architecture.md)** - Supervisor hierarchy and lifecycle
 - **[Monitors](monitors.md)** - Main and catching monitor implementations

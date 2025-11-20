@@ -15,7 +15,7 @@ receive an immediate notification with the file's ID and requested attributes.
 This enables building responsive user interfaces and external integrations that 
 stay synchronized with file system state.
 
-## Why Use It?
+## Why use it?
 
 **Live User Interfaces**: Update file lists in web applications immediately when 
 files change, without polling or manual refreshes.
@@ -29,7 +29,7 @@ and react to changes in real-time, enabling coordinated data processing.
 **Efficient Updates**: Receive only the file attributes you need, reducing bandwidth 
 and processing overhead compared to polling entire directory listings.
 
-## Key Concepts
+## Key concepts
 
 Understanding a few core concepts will help you work effectively with the system:
 
@@ -54,7 +54,7 @@ to main monitor when you've caught up after reconnection.
 **[Heartbeat Events](glossary.md#heartbeat-event)** - Periodic updates keeping your 
 sequence number current during inactivity, preventing unnecessary replay on reconnect.
 
-## Quick Architecture
+## Quick architecture
 
 ```mermaid
 graph TB
@@ -90,7 +90,7 @@ graph TB
     style DB fill:#9ff,stroke:#333
 ```
 
-### How It Works
+### How it works
 
 1. **Subscribe**: Client connects via HTTP SSE, specifying directories to observe 
    and file attributes to receive.
@@ -105,27 +105,27 @@ graph TB
 4. **Reconnect** (optional): On disconnect, client reconnects with `Last-Event-Id` 
    header. System replays missed events, then seamlessly transfers to live stream.
 
-## System Guarantees
+## System guarantees
 
 The monitoring system provides strong consistency and reliability guarantees:
 
-**No Gaps**: When you reconnect with `Last-Event-Id`, you receive every event from 
+**No gaps**: When you reconnect with `Last-Event-Id`, you receive every event from 
 that point forward. No changes are lost.
 
-**No Duplicates**: Event sequence numbers are strictly increasing. You never receive 
+**No duplicates**: Event sequence numbers are strictly increasing. You never receive 
 the same event twice during normal operation.
 
 **Authorization**: Every event is checked against your current permissions. If you 
 lose access to a directory during monitoring, you stop receiving its events (but 
 connection stays alive).
 
-**Eventual Consistency**: Events reflect the state of the underlying database at 
+**Eventual consistency**: Events reflect the state of the underlying database at 
 the time of the change. Due to distributed nature of Onedata, there may be brief 
 propagation delays across providers.
 
-## Quick Start
+## Quick start
 
-### Basic Connection
+### Basic connection
 
 Connect to receive events from a directory:
 
@@ -163,7 +163,7 @@ Content-Type: application/json
 The system will replay events from sequence 12346 onwards, ensuring you don't 
 miss any changes that occurred while disconnected.
 
-### Event Examples
+### Event examples
 
 **File Created/Changed:**
 ```
@@ -197,32 +197,36 @@ event: heartbeat
 data: null
 ```
 
-## Important Limitations
+## Important limitations
 
 Before integrating, understand these key limitations:
 
-**Non-Recursive**: Only direct children of specified directories are monitored. 
+**Non-recursive**: Only direct children of specified directories are monitored. 
 Changes in subdirectories are not reported unless you explicitly observe them.
 
-**Document-Level Granularity**: Events indicate a document changed, not which specific 
+**Document-level granularity**: Events indicate a document changed, not which specific 
 field. You may receive events even when your observed attributes didn't change.
 
-**Ordering Caveats**: Events for related documents (e.g., file_meta, times, file_location) 
+**Ordering caveats**: Events for related documents (e.g., file_meta, times, file_location) 
 may arrive out of order. Always verify file existence before processing change events.
+For example, you might receive an update event for a file after its deletion event has 
+already been processed. This happens because different document types (metadata, times, 
+location) are stored separately and their change notifications may not arrive in perfect 
+synchronization. Always check if the file still exists before processing updates.
 
-**Duplicate Deletions**: You may receive multiple deletion events for the same file 
+**Duplicate deletions**: You may receive multiple deletion events for the same file 
 as its metadata is cleaned up.
 
 See [Implementation Notes](implementation_notes.md) for complete details and client 
 implementation guidelines.
 
-## Next Steps
+## Next steps
 
-**For Client Developers:**
-- **[Client Implementation Guide](../../../guides/file_monitoring/client.md)** ⭐ - 
+**For client developers:**
+- **[Client Implementation Guide](../../../guides/file_monitoring/client.md)** - 
   Complete guide with working examples (Python, curl) and troubleshooting
 
-**For System Understanding:**
+**For system understanding:**
 - **[Architecture](architecture.md)** - Understand the supervisor hierarchy and 
   process relationships
 - **[Monitors](monitors.md)** - Learn how main and catching monitors work

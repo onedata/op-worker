@@ -33,7 +33,7 @@ Both monitors share the same core logic for managing observers, processing docum
 generating events, and performing authorization checks. They differ only in their 
 lifecycle and coordination behavior.
 
-## Monitor Types
+## Monitor types
 
 ### Main Monitor
 
@@ -77,11 +77,11 @@ catching automatically extends its target sequence and continues until caught up
 
 See [Reconnection](reconnection.md#catching-monitor-lifecycle) for detailed lifecycle.
 
-## Shared Logic
+## Shared logic
 
 Both monitor types use the same implementation for core functionality:
 
-### Observer Management
+### Observer management
 
 **Observers** are clients subscribed to a monitor. Each observer has:
 - Session ID (for authorization)
@@ -95,7 +95,7 @@ Both monitor types use the same implementation for core functionality:
 
 This enables efficient filtering - only files in observed directories generate events.
 
-### Document Processing
+### Document processing
 
 When Couchbase reports document changes, monitors:
 
@@ -129,7 +129,7 @@ when multiple observers watch the same directory.
 
 See [Event Streaming - Authorization](event_streaming.md#authorization-model) for details.
 
-### Heartbeat Generation
+### Heartbeat generation
 
 **Problem**: Observers watching inactive directories may have stale `Last-Event-Id` 
 even though the space is active elsewhere.
@@ -146,7 +146,7 @@ not on a timer.
 See [Reconnection - Heartbeat Mechanism](reconnection.md#heartbeat-mechanism) for 
 detailed explanation.
 
-### Couchbase Stream Throttling
+### Couchbase stream throttling
 
 Monitors use a call/reply pattern with Couchbase changes stream to prevent flooding:
 
@@ -161,7 +161,7 @@ Monitors use a call/reply pattern with Couchbase changes stream to prevent flood
 - No flooding - monitor never gets more than one batch ahead
 - Parallel preparation - stream prepares while monitor processes
 
-## Key Differences
+## Key differences
 
 | Aspect | Main Monitor | Catching Monitor |
 |---|---|---|
@@ -172,7 +172,7 @@ Monitors use a call/reply pattern with Couchbase changes stream to prevent flood
 | **Takeover Role** | Accepts proposals | Proposes to main |
 | **EXIT Trapping** | Traps exits (multiple observers) | Doesn't trap (single observer) |
 
-## Takeover Protocol
+## Takeover protocol
 
 When a catching monitor reaches its target sequence, it proposes takeover to the 
 main monitor. This seamlessly transfers the client from catching to main.
@@ -207,15 +207,15 @@ sequenceDiagram
 
 See [Reconnection - Takeover Protocol](reconnection.md#takeover-protocol) for complete details.
 
-## Design Patterns
+## Design patterns
 
-### Stateless Common Logic
+### Stateless common logic
 
 The `space_files_monitor_common` module is pure Erlang - no process state. All 
 functions take a `monitoring()` record and return an updated record. This makes 
 the logic easy to test and reuse between monitor types.
 
-### Process vs. Monitoring Context
+### Process vs. monitoring context
 
 **Process State** (`#state{}`): Monitor-specific concerns
 - Space ID
@@ -232,13 +232,13 @@ the logic easy to test and reuse between monitor types.
 This separation allows common module to focus on pure monitoring logic while 
 monitors handle their specific lifecycle concerns.
 
-### Error Isolation
+### Error isolation
 
 Authorization failures for one observer don't affect others. Each observer's 
 authorization is checked independently in parallel, so one failure doesn't block 
 or crash the monitor.
 
-### Idempotent Operations
+### Idempotent operations
 
 Many operations are designed to be idempotent:
 - Adding an observer that already exists returns an error (doesn't crash)
@@ -247,7 +247,7 @@ Many operations are designed to be idempotent:
 
 This makes the system resilient to race conditions and retry scenarios.
 
-## Related Documentation
+## Related documentation
 
 - **[Architecture](architecture.md)** - Supervisor hierarchy and process relationships
 - **[Reconnection](reconnection.md)** - Takeover protocol and heartbeat mechanism
