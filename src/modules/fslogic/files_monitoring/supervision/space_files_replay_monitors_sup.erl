@@ -6,17 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Supervisor for space files monitoring catching monitors (temporary monitors
+%%% Supervisor for space files monitoring replay monitors (temporary monitors
 %%% for reconnecting clients).
-%%% Strategy: simple_one_for_one (all children are catching monitors).
+%%% Strategy: simple_one_for_one (all children are replay monitors).
 %%% 
-%%% Each catching monitor:
+%%% Each replay monitor:
 %%%   - Replays events from FromSeq to Until
 %%%   - Proposes takeover to main monitor when caught up
 %%%   - Dies after successful takeover
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_files_catching_monitors_sup).
+-module(space_files_replay_monitors_sup).
 -author("Bartosz Walkowicz").
 
 -behaviour(supervisor).
@@ -29,7 +29,7 @@
     spec/1,
     start_link/1,
 
-    start_catching_monitor/3,
+    start_replay_monitor/3,
     get_active_children_count/1
 ]).
 
@@ -53,7 +53,7 @@ spec(SpaceId) ->
         id => id(),
         start => {?MODULE, start_link, [SpaceId]},
         restart => permanent,
-        shutdown => infinity,  % Wait for all catching monitors to terminate
+        shutdown => infinity,  % Wait for all replay monitors to terminate
         type => supervisor
     }.
 
@@ -63,14 +63,14 @@ start_link(SpaceId) ->
     supervisor:start_link(?MODULE, [SpaceId]).
 
 
--spec start_catching_monitor(pid(), pid(), space_files_monitor_common:subscribe_req()) ->
+-spec start_replay_monitor(pid(), pid(), space_files_monitor_common:subscribe_req()) ->
     {ok, pid()} | errors:error().
-start_catching_monitor(SupervisorPid, MainMonitorPid, SubscribeReq) ->
+start_replay_monitor(SupervisorPid, MainMonitorPid, SubscribeReq) ->
     case supervisor:start_child(SupervisorPid, [MainMonitorPid, SubscribeReq]) of
         {ok, _} = Result ->
             Result;
         {error, Reason} ->
-            ?report_internal_server_error("Failed to start catching monitor due to: ~tp", [Reason])
+            ?report_internal_server_error("Failed to start replay monitor due to: ~tp", [Reason])
     end.
 
 
@@ -92,6 +92,6 @@ init([SpaceId]) ->
         intensity => 10,
         period => 60
     },
-    CatchingMonitorSpec = space_files_catching_monitor:spec(SpaceId),
+    ReplayMonitorSpec = space_files_replay_monitor:spec(SpaceId),
 
-    {ok, {SupFlags, [CatchingMonitorSpec]}}.
+    {ok, {SupFlags, [ReplayMonitorSpec]}}.

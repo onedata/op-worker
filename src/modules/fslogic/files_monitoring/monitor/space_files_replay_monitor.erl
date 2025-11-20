@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Catching monitor for space file events - temporary monitor that replays
+%%% Replay monitor for space file events - temporary monitor that replays
 %%% historical events for reconnecting clients.
 %%% 
 %%% Responsibilities:
@@ -15,12 +15,12 @@
 %%%   - Retry if main advanced during takeover
 %%%   - Die gracefully after successful takeover
 %%% 
-%%% NOTE: Only one catching monitor per reconnecting client.
-%%% NOTE: Catching monitor doesn't trap exit as it only manages single subscription -
+%%% NOTE: Only one replay monitor per reconnecting client.
+%%% NOTE: Replay monitor doesn't trap exit as it only manages single subscription -
 %%% when it dies, the observer should get the 'EXIT' signal
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_files_catching_monitor).
+-module(space_files_replay_monitor).
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_server).
@@ -93,7 +93,7 @@ init([SpaceId, MainMonitorPid, SubscribeReq]) ->
 
     SinceSeq = SubscribeReq#subscribe_req.since_seq,
     UntilSeq = SubscribeReq#subscribe_req.until_seq,
-    ?info("[ space file events ]: Starting catching monitor for space '~ts' from seq ~B", [
+    ?info("[ space file events ]: Starting replay monitor for space '~ts' from seq ~B", [
         SpaceId, SinceSeq
     ]),
 
@@ -152,12 +152,12 @@ handle_cast(Request, #state{} = State) ->
     {noreply, state()} |
     {stop, term(), state()}.
 handle_info({'EXIT', _ObserverPid, _Reason}, State = #state{space_id = SpaceId}) ->
-    ?error("[ space file events ]: Observer died for catching monitor space '~ts'", [SpaceId]),
+    ?error("[ space file events ]: Observer died for replay monitor space '~ts'", [SpaceId]),
     {stop, {shutdown, observer_died}, State};
 
 handle_info(stream_ended, State = #state{}) ->
     ?error(
-        "[ space file events ]: Couchbase changes stream ended for catching monitor space '~ts'",
+        "[ space file events ]: Couchbase changes stream ended for replay monitor space '~ts'",
         [State#state.space_id]
     ),
     {stop, {shutdown, stream_ended}, State};
@@ -210,7 +210,7 @@ has_reached_target_seq(State) ->
     {noreply, state()} |
     {stop, {shutdown, caught_up}, state()}.
 propose_takeover(State) ->
-    ?debug("[ space file events ]: Catching monitor reached target sequence, proposing takeover"),
+    ?debug("[ space file events ]: Replay monitor reached target sequence, proposing takeover"),
 
     MainPid = State#state.main_monitor_pid,
     ObserverSubscribeReq = build_subscribe_req(State),

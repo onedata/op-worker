@@ -1642,7 +1642,7 @@ session_watcher:
 #    - <<: *ct_logs
 #      name: ct_logs_space_unsupport.tar.gz
 
-space_events_files_rest:
+space_file_events_rest:
   <<: *ct-onenv-job
   key: SPACEEVENTSFILES
   artifacts:

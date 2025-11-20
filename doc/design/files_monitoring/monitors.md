@@ -18,15 +18,15 @@ graph TB
     subgraph "Specialized Monitors"
         Main[space_files_main_monitor<br/>Live Stream<br/>Subscription Routing<br/>Takeover Acceptance<br/>Inactivity Timeout]
         
-        Catching[space_files_catching_monitor<br/>Bounded Replay<br/>Takeover Proposal<br/>Self-Termination]
+        Replay[space_files_replay_monitor<br/>Bounded Replay<br/>Takeover Proposal<br/>Self-Termination]
     end
     
     Main -.->|uses| Common
-    Catching -.->|uses| Common
+    Replay -.->|uses| Common
     
     style Common fill:#e1f5fe
     style Main fill:#e8f5e8
-    style Catching fill:#fff3e0
+    style Replay fill:#fff3e0
 ```
 
 Both monitors share the same core logic for managing observers, processing documents, 
@@ -42,23 +42,23 @@ The **main monitor** is the primary, long-lived monitor process for a space.
 **Responsibilities**:
 - Stream live events from current Couchbase sequence
 - Accept or reject client subscriptions based on `Last-Event-Id`
-- Accept takeover proposals from catching monitors
+- Accept takeover proposals from replay monitors
 - Timeout after inactivity when no observers are connected
 
 **Lifecycle**:
 - One per actively monitored space
 - Starts from current database sequence
-- Runs until space becomes inactive (no observers + no catching monitors)
+- Runs until space becomes inactive (no observers + no replay monitors)
 
 **Key Decision**: `try_subscribe` atomically determines if a client should:
 - Connect directly to main (if caught up)
-- Start a catching monitor (if behind)
+- Start a replay monitor (if behind)
 
 See [Reconnection](reconnection.md#routing-decision) for detailed routing logic.
 
-### Catching Monitor
+### Replay Monitor
 
-A **catching monitor** is a temporary monitor that replays historical events for 
+A **replay monitor** is a temporary monitor that replays historical events for 
 reconnecting clients who are behind.
 
 **Responsibilities**:
@@ -72,10 +72,10 @@ reconnecting clients who are behind.
 - Replays bounded sequence range
 - Dies with `{shutdown, caught_up}` after successful takeover
 
-**Automatic Extension**: If main monitor advances while catching is replaying, 
-catching automatically extends its target sequence and continues until caught up.
+**Automatic Extension**: If main monitor advances while replay is replaying, 
+replay automatically extends its target sequence and continues until caught up.
 
-See [Reconnection](reconnection.md#catching-monitor-lifecycle) for detailed lifecycle.
+See [Reconnection](reconnection.md#replay-monitor-lifecycle) for detailed lifecycle.
 
 ## Shared logic
 
@@ -121,7 +121,7 @@ Every event is subject to live authorization checks:
 
 **Live checks**: Authorization uses current permissions, not historical. This means:
 - Observers who lose access stop receiving events (security)
-- Catching monitors check current permissions during replay (not stale)
+- Replay monitors check current permissions during replay (not stale)
 - Same observer may receive different events depending on current access
 
 Authorization checks run in parallel (up to 20 concurrent checks) to prevent blocking 
@@ -163,7 +163,7 @@ Monitors use a call/reply pattern with Couchbase changes stream to prevent flood
 
 ## Key differences
 
-| Aspect | Main Monitor | Catching Monitor |
+| Aspect | Main Monitor | Replay Monitor |
 |---|---|---|
 | **Couchbase Stream** | Unbounded (from current sequence) | Bounded (SinceSeq to UntilSeq) |
 | **Observers** | Multiple | Single |
@@ -174,34 +174,34 @@ Monitors use a call/reply pattern with Couchbase changes stream to prevent flood
 
 ## Takeover protocol
 
-When a catching monitor reaches its target sequence, it proposes takeover to the 
-main monitor. This seamlessly transfers the client from catching to main.
+When a replay monitor reaches its target sequence, it proposes takeover to the 
+main monitor. This seamlessly transfers the client from replay to main.
 
 **High-level flow**:
 ```mermaid
 sequenceDiagram
-    participant Catch as Catching Monitor
+    participant Replay as Replay Monitor
     participant Main as Main Monitor
     participant Handler as Client Handler
     
-    Catch->>Catch: Reached UntilSeq
-    Catch->>Main: try_subscribe(observer details)
+    Replay->>Replay: Reached UntilSeq
+    Replay->>Main: try_subscribe(observer details)
     
     alt Sequence matches
         Main->>Main: link(handler) + add_observer
-        Main-->>Catch: ok
-        Catch->>Catch: EXIT {shutdown, caught_up}
-        Catch-xHandler: EXIT signal
+        Main-->>Replay: ok
+        Replay->>Replay: EXIT {shutdown, caught_up}
+        Replay-xHandler: EXIT signal
         Handler->>Handler: Update subscription to main
         Main->>Handler: Continue events
     else Main advanced
-        Main-->>Catch: {error, {main_ahead, NewSeq}}
-        Catch->>Catch: Update UntilSeq, continue
+        Main-->>Replay: {error, {main_ahead, NewSeq}}
+        Replay->>Replay: Update UntilSeq, continue
     end
 ```
 
 **Guarantees**:
-- No gaps: Catching streams `[SinceSeq, UntilSeq)`, Main streams `[UntilSeq, ∞)`
+- No gaps: Replay streams `[SinceSeq, UntilSeq)`, Main streams `[UntilSeq, ∞)`
 - No duplicates: Ranges are disjoint
 - Seamless: Client receives continuous stream with no interruption
 
@@ -220,8 +220,8 @@ the logic easy to test and reuse between monitor types.
 **Process State** (`#state{}`): Monitor-specific concerns
 - Space ID
 - Couchbase stream PID
-- Main monitor PID (catching only)
-- Until sequence (catching only)
+- Main monitor PID (replay only)
+- Until sequence (replay only)
 - Inactivity timer (main only)
 
 **Monitoring Context** (`#monitoring{}`): Shared monitoring logic

@@ -354,7 +354,7 @@ historical permissions from when the file was changed.
 2. Observer disconnects
 3. Administrator revokes observer's access to directory
 4. Observer reconnects at sequence 1001
-5. Catching monitor replays from sequence 1001
+5. Replay monitor replays from sequence 1001
 6. Event for `data.csv` at sequence 1000 is **not sent** (authorization fails)
 
 **Rationale**: 
@@ -392,13 +392,13 @@ the same directory.
 
 ### Authorization during replay
 
-Catching monitors perform the same authorization checks as main monitors. This 
+Replay monitors perform the same authorization checks as main monitors. This 
 ensures:
 - Historical events respect current permissions
 - No security leaks during replay
 - Consistent behavior regardless of connection timing
 
-**Example Test**: `catching_monitor_with_authorization_changes_test`
+**Example Test**: `replay_monitor_with_authorization_changes_test`
 ```erlang
 % 1. Observer connects
 % 2. Set dir permissions to 700 (observer can't access)
@@ -407,7 +407,7 @@ ensures:
 % 5. Observer disconnects
 % 6. Set dir permissions to 777 (observer can access)
 % 7. Observer reconnects with old Last-Event-Id
-% 8. Catching monitor replays with LIVE auth
+% 8. Replay monitor replays with LIVE auth
 % 9. Observer receives event (now has access)
 ```
 

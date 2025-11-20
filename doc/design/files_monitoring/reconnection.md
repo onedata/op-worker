@@ -1,6 +1,6 @@
 # Space Files Monitoring - Reconnection
 
-Complete guide to Last-Event-Id support, catching monitor lifecycle, takeover 
+Complete guide to Last-Event-Id support, replay monitor lifecycle, takeover 
 protocol, and heartbeat mechanism.
 
 ---
@@ -19,11 +19,11 @@ stateDiagram-v2
     Connect --> CheckSequence: Manager checks<br/>Last-Event-Id
     
     CheckSequence --> MainDirect: Caught up or<br/>no Last-Event-Id
-    CheckSequence --> StartCatching: Behind<br/>(Gap > 0)
+    CheckSequence --> StartReplay: Behind<br/>(Gap > 0)
     
     MainDirect --> Streaming: Receive live events
     
-    StartCatching --> Replay: Catching monitor<br/>replays history
+    StartReplay --> Replay: Replay monitor<br/>replays history
     Replay --> ProposeTakeover: Reached UntilSeq
     
     ProposeTakeover --> TakeoverAccepted: Main accepts
@@ -115,8 +115,8 @@ sequenceDiagram
     participant C as Client
     participant Mgr as Manager
     participant Main as Main Monitor
-    participant CS as Catching Supervisor
-    participant Catch as Catching Monitor
+    participant RS as Replay Supervisor
+    participant Replay as Replay Monitor
     
     C->>Mgr: Subscribe with Last-Event-Id=900
     Mgr->>Mgr: Ensure space tree exists
@@ -130,12 +130,12 @@ sequenceDiagram
         
     else Main CurrentSeq > SinceSeq (Behind)
         Main-->>Mgr: {error, {main_ahead, 1000}}
-        Mgr->>CS: start_catching_monitor(SinceSeq=900, UntilSeq=1000)
-        CS->>Catch: Start
-        Catch->>Catch: add_observer(client)
-        Catch-->>Mgr: {ok, CatchingPid}
-        Mgr-->>C: Subscription (catching)
-        Note over C,Catch: Replay historical events
+        Mgr->>RS: start_replay_monitor(SinceSeq=900, UntilSeq=1000)
+        RS->>Replay: Start
+        Replay->>Replay: add_observer(client)
+        Replay-->>Mgr: {ok, ReplayPid}
+        Mgr-->>C: Subscription (replay)
+        Note over C,Replay: Replay historical events
     end
 ```
 
@@ -161,8 +161,8 @@ handle_call(SubscribeReq = #subscribe_req{}, _From, State) ->
 | undefined | 1000 | N/A | Caught up | Connect to main |
 | 1000 | 1000 | 0 | Caught up | Connect to main |
 | 1001 | 1000 | -1 | Ahead | Connect to main (treat as caught up) |
-| 900 | 1000 | 100 | Behind | Start catching monitor |
-| 500 | 1000 | 500 | Behind | Start catching monitor |
+| 900 | 1000 | 100 | Behind | Start replay monitor |
+| 500 | 1000 | 500 | Behind | Start replay monitor |
 
 **Why treat "ahead" as caught up?**
 
@@ -174,13 +174,13 @@ Client claims to be ahead (SinceSeq=1001, CurrentSeq=1000). This can happen if:
 Safest approach: Connect to main and stream from current sequence forward. Client 
 won't receive duplicate events (sequence only increases).
 
-## Catching monitor lifecycle
+## Replay monitor lifecycle
 
-When a client is behind, the manager creates a catching monitor to replay missed events.
+When a client is behind, the manager creates a replay monitor to replay missed events.
 
 ### Replay phase
 
-Catching monitor processes documents identically to main monitor:
+Replay monitor processes documents identically to main monitor:
 - Filter observable documents
 - Check if files are in observed directories
 - Perform live authorization checks
@@ -188,7 +188,7 @@ Catching monitor processes documents identically to main monitor:
 
 ```mermaid
 graph LR
-    subgraph "Catching Monitor Replay"
+    subgraph "Replay Monitor Replay"
         Start[SinceSeq<br/>900]
         
         subgraph "Document Processing"
@@ -214,48 +214,48 @@ graph LR
 
 ## Takeover protocol
 
-The takeover protocol transfers a client from catching monitor to main monitor 
+The takeover protocol transfers a client from replay monitor to main monitor 
 without gaps or duplicates in the event stream.
 
 ### Protocol steps
 
 ```mermaid
 sequenceDiagram
-    participant Catch as Catching Monitor
+    participant Replay as Replay Monitor
     participant Main as Main Monitor
     participant Handler as Client Handler
     
-    Catch->>Catch: Reached UntilSeq=1000
-    Catch->>Main: try_subscribe(ObserverDetails, SinceSeq=1000)
+    Replay->>Replay: Reached UntilSeq=1000
+    Replay->>Main: try_subscribe(ObserverDetails, SinceSeq=1000)
     
     alt Main CurrentSeq == UntilSeq (Perfect match)
         Main->>Main: link(HandlerPid)
         Main->>Main: add_observer
-        Main-->>Catch: ok
-        Catch->>Catch: EXIT {shutdown, caught_up}
-        Catch-xHandler: EXIT {shutdown, caught_up}
+        Main-->>Replay: ok
+        Replay->>Replay: EXIT {shutdown, caught_up}
+        Replay-xHandler: EXIT {shutdown, caught_up}
         Handler->>Handler: Update subscription to main
         Main->>Handler: Event 1001
         Main->>Handler: Event 1002
         Note over Handler,Main: Seamless transition
         
     else Main CurrentSeq > UntilSeq (Main advanced)
-        Main-->>Catch: {error, {main_ahead, 1050}}
-        Catch->>Catch: Update UntilSeq=1050
-        Note over Catch: Continue replaying to 1050
+        Main-->>Replay: {error, {main_ahead, 1050}}
+        Replay->>Replay: Update UntilSeq=1050
+        Note over Replay: Continue replaying to 1050
         
     else Other error
-        Main-->>Catch: {error, Reason}
-        Note over Catch: Retry on next batch
+        Main-->>Replay: {error, Reason}
+        Note over Replay: Retry on next batch
     end
 ```
 
 ### Sequence continuity proof
 
-**Catching Range**: `[SinceSeq, UntilSeq)` - **exclusive** upper bound
+**Replay Range**: `[SinceSeq, UntilSeq)` - **exclusive** upper bound
 ```
 SinceSeq=900, UntilSeq=1000
-Catching streams: 900, 901, 902, ..., 999
+Replay streams: 900, 901, 902, ..., 999
 ```
 
 **Main Range**: `[UntilSeq, ∞)` - **inclusive** lower bound
@@ -265,7 +265,7 @@ Main streams: 1000, 1001, 1002, ...
 ```
 
 **Disjoint Ranges**: No overlap
-- Catching's last event: 999
+- Replay's last event: 999
 - Main's first event: 1000
 - No gap: 999 + 1 = 1000 ✓
 - No duplicate: 999 ≠ 1000 ✓
@@ -273,23 +273,23 @@ Main streams: 1000, 1001, 1002, ...
 **Mathematical Guarantee**:
 ```
 ∀ seq ∈ ℤ⁺:
-  (seq < UntilSeq → seq in Catching's range) XOR 
+  (seq < UntilSeq → seq in Replay's range) XOR 
   (seq ≥ UntilSeq → seq in Main's range)
 ```
 
 ### Handler EXIT interpretation
 
-When catching monitor dies with `{shutdown, caught_up}`, handler interprets this:
+When replay monitor dies with `{shutdown, caught_up}`, handler interprets this:
 ```erlang
 handle_monitor_exit(
-    CatchingPid,
+    ReplayPid,
     {shutdown, caught_up},
-    Subscription = #subscription{catching_pid = CatchingPid}
+    Subscription = #subscription{replay_pid = ReplayPid}
 ) ->
     % Takeover successful - switch to main
     {ok, Subscription#subscription{
         monitor_type = main,
-        catching_pid = undefined
+        replay_pid = undefined
     }}.
 ```
 
@@ -298,26 +298,26 @@ not a custom message. This is simpler and more robust than a two-message protoco
 
 ### Retry on main ahead
 
-If main monitor advances between catching reaching UntilSeq and proposing takeover:
+If main monitor advances between replay reaching UntilSeq and proposing takeover:
 
 ```
-1. Catching reaches UntilSeq=1000 at time T1
+1. Replay reaches UntilSeq=1000 at time T1
 2. Meanwhile, new changes arrive at main
 3. Main's CurrentSeq advances to 1050 at time T2
-4. Catching proposes takeover at time T3
+4. Replay proposes takeover at time T3
 5. Main checks: CurrentSeq(1050) > SinceSeq(1000)
 6. Main replies: {error, {main_ahead, 1050}}
-7. Catching updates: UntilSeq := 1050
-8. Catching continues streaming 1000-1049
-9. Catching proposes again when reaching 1050
+7. Replay updates: UntilSeq := 1050
+8. Replay continues streaming 1000-1049
+9. Replay proposes again when reaching 1050
 ```
 
-**Convergence**: Eventually catching will catch up to main's sequence (new changes 
-can't arrive faster than catching processes old ones, assuming bounded load).
+**Convergence**: Eventually replay will catch up to main's sequence (new changes 
+can't arrive faster than replay processes old ones, assuming bounded load).
 
 ### Graceful termination
 
-Catching monitor's terminate callback:
+Replay monitor's terminate callback:
 ```erlang
 terminate(Reason, State) ->
     couchbase_changes:cancel_stream(ChangesStreamPid),
@@ -326,7 +326,7 @@ terminate(Reason, State) ->
 
 Cancel the bounded Couchbase stream to free resources.
 
-**Automatic Cleanup**: Catching monitor's supervisor detects termination and 
+**Automatic Cleanup**: Replay monitor's supervisor detects termination and 
 removes the child spec (temporary restart strategy).
 
 ## Heartbeat mechanism
@@ -439,7 +439,7 @@ sequenceDiagram
     participant C as Client
     participant M as Manager
     participant Main as Main Monitor
-    participant Catch as Catching Monitor
+    participant Replay as Replay Monitor
     
     Note over C: Connected at seq 800
     C->>C: Last event: 800
@@ -454,24 +454,24 @@ sequenceDiagram
     Main->>Main: Gap = 200 (large)
     Main-->>M: {error, {main_ahead, 1000}}
     
-    M->>Catch: Start (SinceSeq=800, UntilSeq=1000)
-    Catch->>Catch: add_observer
-    Catch-->>M: {ok, CatchingPid}
-    M-->>C: Subscription (catching)
+    M->>Replay: Start (SinceSeq=800, UntilSeq=1000)
+    Replay->>Replay: add_observer
+    Replay-->>M: {ok, ReplayPid}
+    M-->>C: Subscription (replay)
     
     loop Replay 801-999
-        Catch->>C: Event 801
-        Catch->>C: Event 802
-        Catch->>C: ...
-        Catch->>C: Event 999
+        Replay->>C: Event 801
+        Replay->>C: Event 802
+        Replay->>C: ...
+        Replay->>C: Event 999
     end
     
-    Catch->>Catch: Reached UntilSeq=1000
-    Catch->>Main: try_subscribe (takeover)
+    Replay->>Replay: Reached UntilSeq=1000
+    Replay->>Main: try_subscribe (takeover)
     Main->>Main: add_observer
-    Main-->>Catch: ok
-    Catch->>Catch: EXIT {shutdown, caught_up}
-    Catch-xC: EXIT {shutdown, caught_up}
+    Main-->>Replay: ok
+    Replay->>Replay: EXIT {shutdown, caught_up}
+    Replay-xC: EXIT {shutdown, caught_up}
     C->>C: Update subscription to main
     
     loop Live Events
@@ -481,57 +481,57 @@ sequenceDiagram
 ```
 
 **Key Points**:
-- Gap of 200 triggers catching monitor
-- Catching replays 199 events (801-999)
+- Gap of 200 triggers replay monitor
+- Replay replays 199 events (801-999)
 - Seamless takeover to main at 1000
-- No gaps: Catching's last (999) + 1 = Main's first (1000)
+- No gaps: Replay's last (999) + 1 = Main's first (1000)
 - No duplicates: Ranges are disjoint
 
-### Scenario 3: Concurrent Writes During Catching
+### Scenario 3: Concurrent Writes During Replay
 
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant Catch as Catching Monitor
+    participant Replay as Replay Monitor
     participant Main as Main Monitor
     participant DB as Couchbase
     
-    Note over C,Catch: Catching started with UntilSeq=1000
+    Note over C,Replay: Replay started with UntilSeq=1000
     
-    par Catching replays
-        Catch->>DB: Stream 800-1000
-        DB->>Catch: Events 800-850
-        DB->>Catch: Events 851-900
+    par Replay replays
+        Replay->>DB: Stream 800-1000
+        DB->>Replay: Events 800-850
+        DB->>Replay: Events 851-900
     and New writes to main
         DB->>Main: Events 1001-1010
         Main->>Main: CurrentSeq = 1010
     end
     
-    DB->>Catch: Events 901-950
-    DB->>Catch: Events 951-999
+    DB->>Replay: Events 901-950
+    DB->>Replay: Events 951-999
     
-    Catch->>Catch: Reached UntilSeq=1000
-    Catch->>Main: try_subscribe(SinceSeq=1000)
+    Replay->>Replay: Reached UntilSeq=1000
+    Replay->>Main: try_subscribe(SinceSeq=1000)
     Main->>Main: Check: CurrentSeq(1010) > SinceSeq(1000)
-    Main-->>Catch: {error, {main_ahead, 1010}}
+    Main-->>Replay: {error, {main_ahead, 1010}}
     
-    Catch->>Catch: Update UntilSeq=1010
-    Catch->>DB: Continue streaming 1000-1010
-    DB->>Catch: Events 1000-1009
+    Replay->>Replay: Update UntilSeq=1010
+    Replay->>DB: Continue streaming 1000-1010
+    DB->>Replay: Events 1000-1009
     
-    Catch->>Catch: Reached UntilSeq=1010
-    Catch->>Main: try_subscribe(SinceSeq=1010)
+    Replay->>Replay: Reached UntilSeq=1010
+    Replay->>Main: try_subscribe(SinceSeq=1010)
     Main->>Main: Check: CurrentSeq(1010) == SinceSeq(1010)
-    Main-->>Catch: ok
+    Main-->>Replay: ok
     
-    Catch-xC: EXIT {shutdown, caught_up}
+    Replay-xC: EXIT {shutdown, caught_up}
     Main->>C: Event 1010
 ```
 
 **Key Points**:
 - Concurrent writes during replay are normal
-- Catching automatically extends replay range
-- Eventually converges (catching is faster than new writes)
+- Replay automatically extends replay range
+- Eventually converges (replay is faster than new writes)
 - Client receives all events in order without gaps
 
 ### Scenario 4: Heartbeat During Inactivity
@@ -565,8 +565,8 @@ sequenceDiagram
     
     alt Quick reconnect optimization
         Main->>C: Accept, stream from 1150
-    else Start catching
-        Note over C: Catching replays 1151-1200
+    else Start replay
+        Note over C: Replay replays 1151-1200
     end
 ```
 
@@ -577,6 +577,6 @@ and replays only 50 events.
 ## Related documentation
 
 - **[Architecture](architecture.md)** - Supervisor hierarchy and lifecycle
-- **[Monitors](monitors.md)** - Main and catching monitor implementations
+- **[Monitors](monitors.md)** - Main and replay monitor implementations
 - **[Event Streaming](event_streaming.md)** - Event types and generation
 - **[Glossary](glossary.md)** - Term definitions

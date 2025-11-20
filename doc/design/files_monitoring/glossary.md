@@ -7,23 +7,15 @@ A comprehensive glossary of terms used in the Space Files Monitoring system.
 ## Behind
 
 A state where a client's `Last-Event-Id` is older than the **Main Monitor's** current 
-sequence. The client is "behind" and needs a **Catching Monitor** to replay missed events 
+sequence. The client is "behind" and needs a **Replay Monitor** to replay missed events 
 before subscribing to the main monitor.
 Learn more: [Reconnection](reconnection.md#routing-decision).
-
-## Catching Monitor
-
-A temporary monitor process that replays historical events for reconnecting clients 
-who are **Behind**. It streams events from `SinceSeq` to `UntilSeq`, then proposes 
-**Takeover** to the **Main Monitor** and terminates. One catching monitor is created 
-per reconnecting client that is behind.
-Learn more: [Monitors](monitors.md#catching-monitor).
 
 ## Caught Up
 
 A state where a client's `Last-Event-Id` is at or ahead of the **Main Monitor's** 
 current sequence. The client can subscribe directly to the main monitor without 
-needing a **Catching Monitor**.
+needing a **Replay Monitor**.
 Learn more: [Reconnection](reconnection.md#routing-decision).
 
 ## Couchbase Changes Stream
@@ -58,7 +50,7 @@ Learn more: [Event Streaming](event_streaming.md#event-types).
 
 The difference between the **Main Monitor's** current sequence and a client's 
 `Last-Event-Id`. When `Gap > 0`, the client is **Behind** and needs to catch up 
-via a **Catching Monitor**.
+via a **Replay Monitor**.
 Learn more: [Reconnection](reconnection.md#routing-decision).
 
 ## Handler
@@ -127,6 +119,14 @@ The list of directory GUIDs that a client wants to monitor. Only **Direct Childr
 of these directories generate events. Part of the **Monitoring Specification**.
 Learn more: [Event Streaming](event_streaming.md#filtering-logic).
 
+## Replay Monitor
+
+A temporary monitor process that replays historical events for reconnecting clients 
+who are **Behind**. It streams events from `SinceSeq` to `UntilSeq`, then proposes 
+**Takeover** to the **Main Monitor** and terminates. One replay monitor is created 
+per reconnecting client that is behind.
+Learn more: [Monitors](monitors.md#replay-monitor).
+
 ## Sequence Number
 
 A monotonically increasing integer assigned by Couchbase to each document change. 
@@ -136,7 +136,7 @@ Learn more: [Reconnection](reconnection.md#sequence-continuity).
 
 ## Since Seq
 
-The starting Couchbase sequence number for a monitor or subscription. For catching 
+The starting Couchbase sequence number for a monitor or subscription. For replay 
 monitors, this is `Last-Event-Id + 1`. For main monitors without reconnection, 
 this is the current database sequence.
 Learn more: [Reconnection](reconnection.md#routing-decision).
@@ -152,23 +152,23 @@ Learn more: [Overview](_overview.md).
 
 An opaque data structure managed by `files_monitoring_manager` that tracks a 
 client's connection to monitors. Hides monitor PIDs and state from handlers. 
-Contains the monitor type (main or catching) and relevant process IDs.
+Contains the monitor type (main or replay) and relevant process IDs.
 Learn more: [Architecture](architecture.md#manager-abstraction).
 
 ## Takeover
 
-The protocol by which a **Catching Monitor** transfers its client to the 
-**Main Monitor** once caught up. The catching monitor proposes takeover with 
+The protocol by which a **Replay Monitor** transfers its client to the 
+**Main Monitor** once caught up. The replay monitor proposes takeover with 
 observer details, the main monitor atomically links the handler and adds the 
-observer, and the catching monitor terminates with `{shutdown, caught_up}`. 
+observer, and the replay monitor terminates with `{shutdown, caught_up}`. 
 Ensures no events are lost or duplicated during transition.
 Learn more: [Reconnection](reconnection.md#takeover-protocol).
 
 ## Until Seq
 
-The target Couchbase sequence number for a **Catching Monitor**. Fetched from 
-the **Main Monitor** at catching start. When the catching monitor reaches this 
-sequence, it proposes **Takeover**. If the main advances meanwhile, the catching 
+The target Couchbase sequence number for a **Replay Monitor**. Fetched from 
+the **Main Monitor** at replay start. When the replay monitor reaches this 
+sequence, it proposes **Takeover**. If the main advances meanwhile, the replay 
 monitor updates its target and continues.
-Learn more: [Reconnection](reconnection.md#catching-monitor-lifecycle).
+Learn more: [Reconnection](reconnection.md#replay-monitor-lifecycle).
 

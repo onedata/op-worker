@@ -49,9 +49,9 @@
 -type state() :: #state{}.
 
 -record(subscription, {
-    monitor_type :: main | catching,
+    monitor_type :: main | replay,
     main_pid :: pid(),
-    catching_pid :: pid() | undefined
+    replay_pid :: pid() | undefined
 }).
 -opaque subscription() :: #subscription{}.
 
@@ -102,13 +102,13 @@ handle_monitor_exit(ExitPid, _Reason, #subscription{main_pid = ExitPid}) ->
 handle_monitor_exit(
     ExitPid,
     {shutdown, caught_up},
-    Subscription = #subscription{monitor_type = catching, catching_pid = ExitPid}
+    Subscription = #subscription{monitor_type = replay, replay_pid = ExitPid}
 ) ->
-    %% EXIT from catching monitor after successful takeover
-    {ok, Subscription#subscription{monitor_type = main, catching_pid = undefined}};
+    %% EXIT from replay monitor after successful takeover
+    {ok, Subscription#subscription{monitor_type = main, replay_pid = undefined}};
 
-handle_monitor_exit(ExitPid, _Reason, #subscription{catching_pid = ExitPid}) ->
-    %% EXIT from catching monitor before catching to main monitor
+handle_monitor_exit(ExitPid, _Reason, #subscription{replay_pid = ExitPid}) ->
+    %% EXIT from replay monitor before catching to main monitor
     stop.
 
 
@@ -202,11 +202,11 @@ do_try_subscribe(SpaceSupPid, SubscribeReq) ->
             {ok, #subscription{
                 monitor_type = main,
                 main_pid = MainMonitorPid,
-                catching_pid = undefined
+                replay_pid = undefined
             }};
 
         {error, {main_ahead, UntilSeq}} ->
-            start_catching_monitor(SpaceSupPid, MainMonitorPid, SubscribeReq, UntilSeq);
+            start_replay_monitor(SpaceSupPid, MainMonitorPid, SubscribeReq, UntilSeq);
 
         {error, _} = Error ->
             Error
@@ -214,19 +214,19 @@ do_try_subscribe(SpaceSupPid, SubscribeReq) ->
 
 
 %% @private
--spec start_catching_monitor(pid(), pid(), space_files_monitor_common:subscribe_req(), couchbase_changes:seq()) ->
+-spec start_replay_monitor(pid(), pid(), space_files_monitor_common:subscribe_req(), couchbase_changes:seq()) ->
     {ok, subscription()} | errors:error().
-start_catching_monitor(SpaceSupPid, MainMonitorPid, SubscribeReq, UntilSeq) ->
-    case space_files_catching_monitors_sup:start_catching_monitor(
-        space_files_monitoring_sup:get_catching_monitors_sup_pid(SpaceSupPid),
+start_replay_monitor(SpaceSupPid, MainMonitorPid, SubscribeReq, UntilSeq) ->
+    case space_files_replay_monitors_sup:start_replay_monitor(
+        space_files_monitoring_sup:get_replay_monitors_sup_pid(SpaceSupPid),
         MainMonitorPid,
         SubscribeReq#subscribe_req{until_seq = UntilSeq}
     ) of
-        {ok, CatchingPid} ->
+        {ok, ReplayPid} ->
             {ok, #subscription{
-                monitor_type = catching,
+                monitor_type = replay,
                 main_pid = MainMonitorPid,
-                catching_pid = CatchingPid
+                replay_pid = ReplayPid
             }};
         {error, _} = Error ->
             Error
@@ -238,8 +238,8 @@ start_catching_monitor(SpaceSupPid, MainMonitorPid, SubscribeReq, UntilSeq) ->
 should_terminate_monitoring_tree(undefined) ->
     false;
 should_terminate_monitoring_tree(SpaceMonitoringSup) ->
-    CatchingSupPid = space_files_monitoring_sup:get_catching_monitors_sup_pid(SpaceMonitoringSup),
-    case space_files_catching_monitors_sup:get_active_children_count(CatchingSupPid) of
+    ReplaySupPid = space_files_monitoring_sup:get_replay_monitors_sup_pid(SpaceMonitoringSup),
+    case space_files_replay_monitors_sup:get_active_children_count(ReplaySupPid) of
         0 ->
             MainMonitorPid = space_files_monitoring_sup:get_main_monitor_pid(SpaceMonitoringSup),
             case space_files_main_monitor:verify_inactive(MainMonitorPid) of

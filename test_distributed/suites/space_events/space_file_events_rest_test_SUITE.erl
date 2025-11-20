@@ -40,9 +40,9 @@
     unauthorized_client_test/1,
     token_caveats_test/1,
     observer_loses_access_during_monitoring_test/1,
-    catching_monitor_with_authorization_changes_test/1,
+    replay_monitor_with_authorization_changes_test/1,
 
-    reconnect_without_catching_test/1,
+    reconnect_without_replay_test/1,
     reconnect_with_old_last_event_id_test/1,
     takeover_is_seamless_test/1,
 
@@ -54,7 +54,7 @@
     multiple_clients_different_attributes_test/1,
 
     main_monitor_timeout_test/1,
-    main_monitor_doesnt_timeout_with_catching_test/1
+    main_monitor_doesnt_timeout_with_replay_test/1
 ]).
 
 groups() -> [
@@ -71,10 +71,10 @@ groups() -> [
         unauthorized_client_test,
         token_caveats_test,
         observer_loses_access_during_monitoring_test,
-        catching_monitor_with_authorization_changes_test
+        replay_monitor_with_authorization_changes_test
     ]},
     {reconnect_tests, [sequential], [
-        reconnect_without_catching_test,
+        reconnect_without_replay_test,
         reconnect_with_old_last_event_id_test,
         takeover_is_seamless_test
     ]},
@@ -89,7 +89,7 @@ groups() -> [
     ]},
     {lifecycle_tests, [sequential], [
         main_monitor_timeout_test,
-        main_monitor_doesnt_timeout_with_catching_test
+        main_monitor_doesnt_timeout_with_replay_test
     ]}
 ].
 
@@ -507,9 +507,9 @@ observer_loses_access_during_monitoring_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(ClientPid).
 
 
-catching_monitor_with_authorization_changes_test(_Config) ->
-    % Goal: Verify authorization is checked LIVE during catching replay (not stale)
-    % When catching monitor replays events, it should use CURRENT permissions,
+replay_monitor_with_authorization_changes_test(_Config) ->
+    % Goal: Verify authorization is checked LIVE during replay (not stale)
+    % When replay monitor replays events, it should use CURRENT permissions,
     % not permissions from when events were generated
 
     TestEnv = create_single_provider_test_env(#{
@@ -537,7 +537,7 @@ catching_monitor_with_authorization_changes_test(_Config) ->
 
     ok = lfm_proxy:set_perms(ProviderNode, FileOwnerSessionId, ?FILE_REF(ObservedDirGuid), 8#777),
 
-    ct:pal("Reconnecting with old Last-Event-Id (catching monitor should replay with LIVE auth)..."),
+    ct:pal("Reconnecting with old Last-Event-Id (replay monitor should replay with LIVE auth)..."),
     ReconnectedPid = start_client(TestEnv, LastEventId - 1),
 
     await_event_for_file(ReconnectedPid, FileGuid),
@@ -547,7 +547,7 @@ catching_monitor_with_authorization_changes_test(_Config) ->
     ok = space_file_events_test_sse_client:stop(ReconnectedPid).
 
 
-reconnect_without_catching_test(_Config) ->
+reconnect_without_replay_test(_Config) ->
     TestEnv = create_single_provider_test_env(#{}),
 
     % Start control client (for synchronization) and client that will reconnect
@@ -568,7 +568,7 @@ reconnect_without_catching_test(_Config) ->
     File2Guid = create_file_and_await_sync(TestEnv, <<"file2.txt">>, ControlClientPid),
     File3Guid = create_file_and_await_sync(TestEnv, <<"file3.txt">>, ControlClientPid),
 
-    % Reconnect WITHOUT catching monitor (randomize scenario)
+    % Reconnect WITHOUT replay monitor (randomize scenario)
     Client2ReconnectedPid = case rand:uniform(2) of
         1 ->
             % Scenario 1: No Last-Event-Id header (fresh connection)
@@ -586,7 +586,7 @@ reconnect_without_catching_test(_Config) ->
     await_event_for_file(Client2ReconnectedPid, File4Guid),
 
     % CRITICAL: Verify Client2 does NOT have historical events (File2, File3)
-    % This confirms no catching monitor was started
+    % This confirms no replay monitor was started
     assert_no_event_for_file(Client2ReconnectedPid, File2Guid),
     assert_no_event_for_file(Client2ReconnectedPid, File3Guid),
 
@@ -643,11 +643,11 @@ reconnect_with_old_last_event_id_test(_Config) ->
 
 
 takeover_is_seamless_test(_Config) ->
-    % Goal: Verify takeover from catching monitor to main monitor is seamless:
+    % Goal: Verify takeover from replay monitor to main monitor is seamless:
     % - No gaps in received events (all expected files received)
     % - No duplicate events
     % - Event IDs in ascending order
-    % - Events generated DURING catching are also received (concurrent writes test)
+    % - Events generated DURING replay are also received (concurrent writes test)
     
     TestEnv = create_single_provider_test_env(#{}),
     
@@ -664,17 +664,17 @@ takeover_is_seamless_test(_Config) ->
     % 2. Stop client
     ok = space_file_events_test_sse_client:stop(ClientPid),
     
-    % 3. Generate MANY events while disconnected (ensures catching monitor needed)
+    % 3. Generate MANY events while disconnected (ensures replay monitor needed)
     ct:pal("Generating 150 missed events while client disconnected..."),
     MissedFileGuids = generate_n_events(150, TestEnv, ControlClientPid),
     
-    % 4. Reconnect with old Last-Event-Id (catching monitor starts)
-    ct:pal("Reconnecting with old Last-Event-Id=~B (catching monitor should start)...", 
+    % 4. Reconnect with old Last-Event-Id (replay monitor starts)
+    ct:pal("Reconnecting with old Last-Event-Id=~B (replay monitor should start)...", 
         [LastEventIdBeforeDisconnect]),
     ReconnectedPid = start_client(TestEnv, LastEventIdBeforeDisconnect),
     
-    % 5. While catching up, generate MORE events (tests concurrent writes during catching/takeover)
-    ct:pal("Generating 30 additional events DURING catching phase..."),
+    % 5. While catching up, generate MORE events (tests concurrent writes during replay/takeover)
+    ct:pal("Generating 30 additional events DURING replay phase..."),
     ConcurrentFileGuids = generate_n_events(30, TestEnv, ControlClientPid),
 
     % 6. Wait for ALL events to arrive (catching completes, takeover happens, main continues)
@@ -902,8 +902,8 @@ main_monitor_timeout_test(_Config) ->
     ct:pal("✓ Main monitor correctly timed out after inactivity").
 
 
-main_monitor_doesnt_timeout_with_catching_test(_Config) ->
-    % Goal: Main monitor does NOT timeout when catching monitor exists
+main_monitor_doesnt_timeout_with_replay_test(_Config) ->
+    % Goal: Main monitor does NOT timeout when replay monitor exists
     % Even if main has no direct observers and inactivity period passes
 
     % Setup: Configure short inactivity timeout (2 seconds)
@@ -924,39 +924,39 @@ main_monitor_doesnt_timeout_with_catching_test(_Config) ->
     LastEventId = get_event_id(hd(ensure_events(ClientPid))),
     ok = space_file_events_test_sse_client:stop(ClientPid),
 
-    % 2. Reconnect with old Last-Event-Id (starts catching monitor)
-    ct:pal("Reconnecting with old Last-Event-Id (catching monitor starts)..."),
+    % 2. Reconnect with old Last-Event-Id (starts replay monitor)
+    ct:pal("Reconnecting with old Last-Event-Id (replay monitor starts)..."),
     ReconnectedPid = start_client(TestEnv, LastEventId),
 
-    % 3. Wait for catching to reach end (paused before takeover)
-    CatchingPid = receive
-        {catching_ready_for_takeover, Pid} ->
-            ct:pal("Catching monitor reached end, paused before takeover"),
+    % 3. Wait for replay to reach end (paused before takeover)
+    ReplayPid = receive
+        {replay_ready_for_takeover, Pid} ->
+            ct:pal("Replay monitor reached end, paused before takeover"),
             Pid
     end,
 
-    % 4. Assert: Catching monitor exists
-    ?assertEqual(1, get_catching_monitors_count(SpaceId, SetupProvider)),
+    % 4. Assert: Replay monitor exists
+    ?assertEqual(1, get_replay_monitors_count(SpaceId, SetupProvider)),
 
     % 5. Sleep LONGER than inactivity timeout
-    ct:pal("Sleeping 3 seconds (> 2s timeout) with catching monitor alive..."),
+    ct:pal("Sleeping 3 seconds (> 2s timeout) with replay monitor alive..."),
     timer:sleep(3000),
 
-    % 6. ASSERTION: Main still alive despite timeout passed (catching blocks it)
+    % 6. ASSERTION: Main still alive despite timeout passed (replay blocks it)
     ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, SetupProvider)),
-    ?assertEqual(1, get_catching_monitors_count(SpaceId, SetupProvider)),
+    ?assertEqual(1, get_replay_monitors_count(SpaceId, SetupProvider)),
 
     % 7. Continue takeover
     ct:pal("Allowing takeover to proceed..."),
-    CatchingPid ! continue_takeover,
+    ReplayPid ! continue_takeover,
 
     % 8. Wait for takeover completion
-    ?assertEqual(0, get_catching_monitors_count(SpaceId, SetupProvider), ?ATTEMPTS),
+    ?assertEqual(0, get_replay_monitors_count(SpaceId, SetupProvider), ?ATTEMPTS),
 
     % 9. FINAL ASSERTIONS: Main alive
     ?assertEqual(true, is_space_monitoring_tree_alive(SpaceId, SetupProvider)),
 
-    ct:pal("✓ Main monitor did not timeout while catching monitor existed"),
+    ct:pal("✓ Main monitor did not timeout while replay monitor existed"),
 
     % Cleanup
     ok = space_file_events_test_sse_client:stop(ReconnectedPid).
@@ -983,17 +983,17 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config) ->
+init_per_testcase(Case = main_monitor_doesnt_timeout_with_replay_test, Config) ->
     Self = self(),
     Ref = make_ref(),
     Workers = oct_background:get_provider_nodes(krakow),
-    test_utils:mock_new(Workers, [space_files_catching_monitor], [passthrough]),
-    test_utils:mock_expect(Workers, space_files_catching_monitor, propose_takeover,
+    test_utils:mock_new(Workers, [space_files_replay_monitor], [passthrough]),
+    test_utils:mock_expect(Workers, space_files_replay_monitor, propose_takeover,
         fun(State) ->
             case node_cache:get(Ref, undefined) of
                 undefined ->
                     node_cache:put(Ref, true),
-                    Self ! {catching_ready_for_takeover, self()},
+                    Self ! {replay_ready_for_takeover, self()},
                     receive continue_takeover -> ok end;
                 _ ->
                     ok
@@ -1008,7 +1008,7 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
-end_per_testcase(Case = main_monitor_doesnt_timeout_with_catching_test, Config) ->
+end_per_testcase(Case = main_monitor_doesnt_timeout_with_replay_test, Config) ->
     Workers = oct_background:get_provider_nodes(krakow),
     test_utils:mock_unload(Workers),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -1294,20 +1294,20 @@ is_space_monitoring_tree_alive(SpaceId, ProviderSelector) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Counts active catching monitors for a space on given provider.
+%% Counts active replay monitors for a space on given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_catching_monitors_count(od_space:id(), oct_background:entity_selector()) -> 
+-spec get_replay_monitors_count(od_space:id(), oct_background:entity_selector()) -> 
     non_neg_integer().
-get_catching_monitors_count(SpaceId, ProviderSelector) ->
+get_replay_monitors_count(SpaceId, ProviderSelector) ->
     ProviderNode = oct_background:get_random_provider_node(ProviderSelector),
     ?rpc(ProviderNode, begin
         case files_monitoring_sup:find_sup_for_space(SpaceId) of
             undefined -> 
                 0;
             SpaceSupPid ->
-                CatchingSupPid = space_files_monitoring_sup:get_catching_monitors_sup_pid(SpaceSupPid),
-                space_files_catching_monitors_sup:get_active_children_count(CatchingSupPid)
+                ReplaySupPid = space_files_monitoring_sup:get_replay_monitors_sup_pid(SpaceSupPid),
+                space_files_replay_monitors_sup:get_active_children_count(ReplaySupPid)
         end
     end).
 

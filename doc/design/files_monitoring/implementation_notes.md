@@ -289,7 +289,7 @@ These optimizations are **not currently implemented** but may be added in the fu
 ### Document buffer for fast reconnects
 
 **Idea**: Maintain a circular buffer of last N documents (e.g., 100) in main monitor 
-to handle short reconnects without starting a catching monitor.
+to handle short reconnects without starting a replay monitor.
 
 **How It Would Work**:
 ```erlang
@@ -304,14 +304,14 @@ handle_call(#subscribe_req{since_seq = SinceSeq}, From, State) ->
             % Fast path - replay from buffer
             reply({ok, buffer_replay, RelevantDocs}, State);
         false ->
-            % Standard path - reject and start catching monitor
+            % Standard path - reject and start replay monitor
             reply({error, {main_ahead, CurrentSeq}}, State)
     end.
 ```
 
 **Benefits**:
 - Fast reconnect for typical short disconnections (~10ms vs ~100ms)
-- No catching monitor process needed for small gaps
+- No replay monitor process needed for small gaps
 - Less load on Couchbase (no additional changes stream)
 - Reduced latency for common case
 
@@ -321,7 +321,7 @@ handle_call(#subscribe_req{since_seq = SinceSeq}, From, State) ->
 - Buffer size tuning required
 - Need to measure if this optimization is actually needed
 
-**Decision**: Implement only if metrics show frequent catching monitor starts 
+**Decision**: Implement only if metrics show frequent replay monitor starts 
 for small gaps (< 100 events).
 
 ### Adaptive heartbeat threshold
@@ -345,16 +345,16 @@ AvgEventsPerMinute < 100 -> Threshold = 50
 
 **Decision**: Implement if user feedback indicates heartbeat tuning is important.
 
-### Smarter catching monitor reuse
+### Smarter replay monitor reuse
 
 **Idea**: If multiple clients reconnect with similar `Last-Event-Id`, share a 
-single catching monitor.
+single replay monitor.
 
 **How It Would Work**:
 ```erlang
 % Client A reconnects: Last-Event-Id = 900
 % Client B reconnects: Last-Event-Id = 905
-% Share single catching monitor from 900-1000
+% Share single replay monitor from 900-1000
 % Split to separate observers at 905
 ```
 

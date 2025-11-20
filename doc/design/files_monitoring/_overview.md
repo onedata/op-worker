@@ -37,7 +37,7 @@ Understanding a few core concepts will help you work effectively with the system
 that streams live events from the current database sequence. One per actively monitored 
 space.
 
-**[Catching Monitor](glossary.md#catching-monitor)** - A temporary monitor that replays 
+**[Replay Monitor](glossary.md#replay-monitor)** - A temporary monitor that replays 
 historical events when you reconnect after a disconnect. Ensures you don't miss any 
 changes.
 
@@ -48,7 +48,7 @@ specifies which directories to watch and which file attributes to receive.
 sequence number of the last event you received. Used for seamless reconnection without 
 missing events.
 
-**[Takeover](glossary.md#takeover)** - The seamless transfer from catching monitor 
+**[Takeover](glossary.md#takeover)** - The seamless transfer from replay monitor 
 to main monitor when you've caught up after reconnection.
 
 **[Heartbeat Events](glossary.md#heartbeat-event)** - Periodic updates keeping your 
@@ -67,7 +67,7 @@ graph TB
         
         subgraph "Per-Space Processes"
             Main[Main Monitor<br/>Live Events]
-            Catching[Catching Monitor<br/>Historical Replay]
+            Replay[Replay Monitor<br/>Historical Replay]
         end
         
         DB[(Couchbase<br/>Document Changes)]
@@ -75,18 +75,18 @@ graph TB
     
     Client -->|1. Subscribe with Last-Event-Id| Manager
     Manager -->|2a. If caught up| Main
-    Manager -->|2b. If behind| Catching
+    Manager -->|2b. If behind| Replay
     
     DB -->|Changes Stream| Main
-    DB -->|Changes Stream| Catching
+    DB -->|Changes Stream| Replay
     
     Main -->|3. Live Events| Client
-    Catching -->|3. Historical Events| Client
-    Catching -.->|4. Takeover| Main
+    Replay -->|3. Historical Events| Client
+    Replay -.->|4. Takeover| Main
     
     style Manager fill:#f9f,stroke:#333
     style Main fill:#9f9,stroke:#333
-    style Catching fill:#ff9,stroke:#333
+    style Replay fill:#ff9,stroke:#333
     style DB fill:#9ff,stroke:#333
 ```
 
@@ -97,7 +97,7 @@ graph TB
 
 2. **Route**: Manager routes the client to either:
    - **Main Monitor** (if caught up or first connection)
-   - **Catching Monitor** (if behind after disconnect)
+   - **Replay Monitor** (if behind after disconnect)
 
 3. **Stream Events**: Client receives file change notifications as SSE events, 
    each with a unique sequence ID.
@@ -229,7 +229,7 @@ implementation guidelines.
 **For system understanding:**
 - **[Architecture](architecture.md)** - Understand the supervisor hierarchy and 
   process relationships
-- **[Monitors](monitors.md)** - Learn how main and catching monitors work
+- **[Monitors](monitors.md)** - Learn how main and replay monitors work
 - **[Event Streaming](event_streaming.md)** - Explore event generation, filtering, 
   and authorization
 - **[Reconnection](reconnection.md)** - Master the takeover protocol and heartbeat 
