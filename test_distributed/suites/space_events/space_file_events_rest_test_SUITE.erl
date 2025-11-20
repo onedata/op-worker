@@ -9,7 +9,7 @@
 %%% Tests for space file events mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_events_files_rest_test_SUITE).
+-module(space_file_events_rest_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
