@@ -48,8 +48,7 @@
 -export([verify_configuration/3]).
 
 %%% Functions to modify storage details
--export([update_name/2, update_luma_config/2]).
--export([set_qos_parameters/2, update_readonly_and_imported/3]).
+-export([set_qos_parameters/2]).
 -export([
     update_helper_config/2,
     upgrade_after_swift_version_update_to_v3/0, upgrade_after_swift_version_update_to_v3/1
@@ -282,31 +281,6 @@ is_archive(StorageDataOrId) ->
 %%%===================================================================
 %%% Functions to modify storage details
 %%%===================================================================
-
--spec update_name(id(), NewName :: name()) -> ok.
-update_name(StorageId, NewName) ->
-    storage_logic:update_name(StorageId, NewName).
-
-
--spec update_luma_config(id(), Diff :: luma_config:diff()) ->
-    ok | {error, term()}.
-update_luma_config(StorageId, Diff) ->
-    UpdateFun = fun(LumaConfig) ->
-        luma_config:update(LumaConfig, Diff)
-    end,
-    case storage_config:update_luma_config(StorageId, UpdateFun) of
-        ok ->
-            luma:clear_db(StorageId);
-        {error, no_update} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec update_readonly_and_imported(id(), readonly(), imported()) -> ok | {error, term()}.
-update_readonly_and_imported(StorageId, Readonly, Imported) ->
-    storage_logic:update_readonly_and_imported(StorageId, Readonly, Imported).
 
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().

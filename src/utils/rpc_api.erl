@@ -129,7 +129,7 @@ storage_create(StorageCreateSpec) ->
 
 -spec storage_update(storage:id(), onedata_storage:update_spec()) -> ok | {error, term()}.
 storage_update(StorageId, StorageUpdateSpec) ->
-    storage_rpc_api:update(StorageId, StorageUpdateSpec).
+    storage_update:update(StorageId, StorageUpdateSpec).
 
 
 -spec storage_describe(storage:id()) ->
