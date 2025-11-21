@@ -29,7 +29,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, get_all/0, exists/1, delete/1, clear_storages/0]).
+-export([get/1, get_all/0, exists/1, delete/1, clear_storages/0]).
 
 %%% Functions to retrieve storage details
 -export([
@@ -89,37 +89,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
--spec create(name(), helper_config:t(), luma_config(),
-    imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create(Name, HelperConfig, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    Result = case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
-        {ok, Id} ->
-            case storage_config:create(Id, HelperConfig, LumaConfig) of
-                {ok, Id} ->
-                    on_storage_created(Id),
-                    {ok, Id};
-                StorageConfigError ->
-                    case storage_logic:delete_in_zone(Id) of
-                        ok ->
-                            ok;
-                        {error, _} = DeleteError ->
-                            ?error("Could not revert creation of storage ~tp in Onezone: ~tp", [
-                                Id, DeleteError
-                            ])
-                    end,
-                    StorageConfigError
-            end;
-        StorageLogicError ->
-            StorageLogicError
-    end,
-    case Result of
-        {ok, StorageId} ->
-            ?notice("Successfully added storage '~ts' with Id: '~ts'", [Name, StorageId]);
-        {error, _} = Error ->
-            ?error("Failed to add storage '~ts' due to: ~tp", [Name, Error])
-    end,
-    Result.
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.

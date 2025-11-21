@@ -19,7 +19,6 @@
 
 %% API
 -export([
-    create/1,
     update/2,
     describe/1
 ]).
@@ -28,32 +27,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
-create(StorageCreateSpec = #storage_create_spec{
-    name = StorageName,
-    type = StorageType
-}) ->
-    %% TODO log storage configuration?
-%%    log_gathered_storage_configuration(Name, StorageType, Params),
-
-    try do_create(StorageCreateSpec) of
-        {ok, StorageId} = Result ->
-            ?notice("Successfully added storage '~ts' (~ts) with Id: '~ts'", [
-                StorageName, StorageType, StorageId
-            ]),
-            Result;
-        {error, _} = Error ->
-            ?error(?autoformat_with_msg("Failed to add storage '~ts' (~ts)", [StorageName, StorageType], Error)),
-            Error
-    catch Class:Reason:Stacktrace ->
-        ?examine_exception(
-            "Unexpected error when adding storage '~ts' (~ts)",
-            [StorageName, StorageType],
-            Class, Reason, Stacktrace
-        )
-    end.
 
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
@@ -88,37 +61,6 @@ describe(StorageId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec do_create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
-do_create(StorageCreateSpec = #storage_create_spec{
-    name = Name,
-    type = Type,
-    readonly = Readonly,
-    imported = Imported,
-    luma = LumaSpec,
-    qos_parameters = QosParameters
-}) ->
-    HelperConfig = helper_config:build(StorageCreateSpec),
-    verify_storage_configuration(Name, Readonly, Imported, HelperConfig),
-
-    LumaConfig = build_luma_config(LumaSpec),
-    LumaFeed = luma_config:get_feed(LumaConfig),
-
-    ?info("Verifying storage access: '~ts' (~ts)", [Name, Type]),
-    ok = run_diagnostics(HelperConfig, LumaFeed, not Readonly),
-
-    ?info("Adding storage: '~ts' (~ts)", [Name, Type]),
-    storage:create(Name, HelperConfig, LumaConfig, Imported, Readonly, QosParameters).
-
-
-%% @private
--spec build_luma_config(onedata_storage:luma_spec()) -> luma_config:config().
-build_luma_config(#luma_spec{feed = external, url = Url, api_key = ApiKey}) ->
-    luma_config:new_with_external_feed(Url, ApiKey);
-build_luma_config(#luma_spec{feed = Feed}) ->
-    luma_config:new(Feed).
 
 
 %% @private
