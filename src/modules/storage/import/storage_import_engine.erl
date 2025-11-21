@@ -671,13 +671,18 @@ try_to_delete_file(ParentCtx, ChildName) ->
 import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
+    % use id of user in case of manual file registration
+    FinalOwnerId = case {OwnerId, maps:get(manual, Info, false)} of
+        {?SPACE_OWNER_ID(_) = SpacceOwner, true} -> maps:get(user_id, Info, SpacceOwner);
+        _ -> OwnerId
+    end,
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
-    case create_location(FileUuid, StorageFileCtx2, OwnerId) of
+    case create_location(FileUuid, StorageFileCtx2, FinalOwnerId) of
         {ok, StorageFileCtx3} ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
             {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
-            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
+            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, FinalOwnerId,
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.

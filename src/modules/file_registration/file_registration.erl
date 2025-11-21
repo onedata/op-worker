@@ -131,7 +131,8 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             is_posix_storage => storage:is_posix_compatible(StorageId),
             sync_acl => false,
             verify_existence => maps:get(<<"autoDetectAttributes">>, Spec, true),
-            manual => true
+            manual => true,
+            user_id => user_ctx:get_user_id(UserCtx)
         }),
         case FileCtx =/= undefined of
             true ->

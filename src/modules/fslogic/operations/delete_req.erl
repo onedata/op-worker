@@ -150,15 +150,15 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
             {ok, FileMeta#file_meta{deleted = true}}
     end) of
         {ok, #document{value = #file_meta{provider_id = CreatorProviderId}}} ->
-            fslogic_delete:delete_file_locally(UserCtx, FileCtx, CreatorProviderId, Silent);
+            fslogic_delete:delete_file_locally(UserCtx, FileCtx, CreatorProviderId, Silent, update_dir_stats);
         {error, {already_deleted, CreatorProviderId}} ->
             % file is already deleted, but some remnants could have remained - try to clean them up
-            fslogic_delete:delete_file_locally_idempotent(UserCtx, FileCtx, CreatorProviderId, Silent);
+            fslogic_delete:delete_file_locally(UserCtx, FileCtx, CreatorProviderId, Silent, bypass_dir_stats);
         {error, not_found} ->
             case file_meta:get_including_deleted(FileUuid) of
                 {ok, #document{value = #file_meta{provider_id = CreatorProviderId}}} ->
                     % file is already deleted, but some remnants could have remained - try to clean them up
-                    fslogic_delete:delete_file_locally_idempotent(UserCtx, FileCtx, CreatorProviderId, Silent);
+                    fslogic_delete:delete_file_locally(UserCtx, FileCtx, CreatorProviderId, Silent, bypass_dir_stats);
                 {error, not_found} ->
                     %% @TODO VFS-12722 properly handle remote file creation in a deleted dir race
                     ok
