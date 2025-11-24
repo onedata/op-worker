@@ -101,6 +101,7 @@
 ]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1, is_readonly_storage/1]).
 -export([assert_not_readonly_storage/1, assert_file_exists/1, assert_smaller_than_provider_support_size/2]).
+-export([clean_cached_deleted_doc/1]).
 
 
 %%%===================================================================
@@ -1245,6 +1246,16 @@ assert_file_exists(FileCtx0) ->
 -spec get_path_before_deletion(ctx()) -> file_meta:path() | undefined.
 get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) ->
     PathBeforeDeletion.
+
+
+-spec clean_cached_deleted_doc(ctx()) -> ctx().
+clean_cached_deleted_doc(#file_ctx{file_doc = undefined} = FileCtx) ->
+    FileCtx;
+clean_cached_deleted_doc(#file_ctx{file_doc = #document{} = FileDoc} = FileCtx) ->
+    case file_meta:is_deleted(FileDoc) of
+        true -> FileCtx#file_ctx{file_doc = undefined};
+        false -> FileCtx
+    end.
 
 %%%===================================================================
 %%% Internal functions

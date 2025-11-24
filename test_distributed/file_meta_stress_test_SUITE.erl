@@ -108,13 +108,13 @@ many_files_creation_test_base(Config) ->
     SpaceNameString = "Space" ++ AnswerDesc,
     ct:print("Space name: ~tp", [SpaceNameString]),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    SpaceDirUuid = space_dir:uuid(list_to_binary(SpaceNameString)),
-    ?assertEqual(ok, rpc:call(Worker2, space_dir, ensure_exists, [SpaceDirUuid])),
+    SpaceId = list_to_binary(SpaceNameString),
+    ?assertEqual(ok, rpc:call(Worker2, space_dir, ensure_exists, [SpaceId])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
             Stopwatch = stopwatch:start(),
-            Ans = file_meta:create({uuid, SpaceDirUuid}, #document{
+            Ans = file_meta:create({uuid, space_dir:uuid(SpaceId)}, #document{
                 value = #file_meta{
                     name = list_to_binary(DocsSet ++ integer_to_list(I))
                 }
