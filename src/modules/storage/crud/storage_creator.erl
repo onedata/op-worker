@@ -9,7 +9,7 @@
 %%% This module handles storage creation.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_create).
+-module(storage_creator).
 -feature(maybe_expr, enable).
 -compile({feature, maybe_expr, enable}).
 -author("Bartosz Walkowicz").

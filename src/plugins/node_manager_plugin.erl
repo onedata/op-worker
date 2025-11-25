@@ -307,7 +307,7 @@ upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
-        storage:upgrade_after_swift_version_update_to_v3(),
+        storage_upgrader:upgrade_after_swift_version_update_to_v3(),
 
         % clear cached auto luma entries in db
         {ok, StorageIds} = provider_logic:get_storages(),

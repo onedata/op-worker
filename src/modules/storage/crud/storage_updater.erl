@@ -9,7 +9,7 @@
 %%% This module handles storage update.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_update).
+-module(storage_updater).
 -author("Bartosz Walkowicz").
 
 -include("modules/storage/helpers/helpers.hrl").

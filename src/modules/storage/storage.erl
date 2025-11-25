@@ -45,14 +45,10 @@
 -export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
--export([verify_configuration/3]).
 
 %%% Functions to modify storage details
 -export([set_qos_parameters/2]).
--export([
-    update_helper_config/2,
-    upgrade_after_swift_version_update_to_v3/0, upgrade_after_swift_version_update_to_v3/1
-]).
+-export([update_helper_config/2]).
 
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
@@ -72,15 +68,8 @@
 -type imported() :: boolean().
 -type readonly() :: boolean().
 
-%% @formatter:off
--type config() :: #{
-    readonly => readonly(),
-    importedStorage => imported()
-}.
-%% @formatter:on
-
 -export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0, access_type/0,
-    imported/0, readonly/0, config/0]).
+    imported/0, readonly/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -149,16 +138,6 @@ clear_storages() ->
     % provider was deregistered, so clear only local data
     storage_config:delete_all().
 
-
--spec verify_configuration(id() | name(), config(), helper_config:t()) -> ok | {error, term()}.
-verify_configuration(IdOrName, Config, HelperConfig) ->
-    try
-        sanitize_readonly_option(IdOrName, Config),
-        check_helper_against_readonly_option(Config, HelperConfig),
-        check_helper_against_imported_option(Config, HelperConfig)
-    catch
-        throw:Error -> Error
-    end.
 
 %%%===================================================================
 %%% Functions to retrieve storage details
@@ -305,57 +284,6 @@ update_helper_config(StorageId, UpdateFun) ->
     end.
 
 
--spec upgrade_after_swift_version_update_to_v3() -> ok.
-upgrade_after_swift_version_update_to_v3() ->
-    {ok, StorageList} = storage:get_all(),
-    lists:foreach(fun storage:upgrade_after_swift_version_update_to_v3/1, StorageList).
-
-
--spec upgrade_after_swift_version_update_to_v3(data()) -> ok.
-upgrade_after_swift_version_update_to_v3(StorageData) ->
-    case storage:get_helper_name(StorageData) of
-        ?SWIFT_HELPER_NAME ->
-            StorageId = storage:get_id(StorageData),
-            StorageName = storage:fetch_name_of_local_storage(StorageId),
-
-            ?info("Upgrading swift storage '~ts' (~ts)...", [StorageName, StorageId]),
-
-            ok = upgrade_swift_helper_after_swift_version_update_to_v3(StorageId),
-            % Existing luma entries will not work as they lack necessary projectName
-            ok = luma:clear_db(StorageId),
-
-            ?info("Successfully upgraded swift storage '~ts' (~ts)", [StorageName, StorageId]);
-        _ ->
-            ok
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates helper to reflect changes made in feature/VFS-12688-try-to-update-swift-to-v3
-%% (tenantName is moved from helper args to admin ctx as projectName)
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_swift_helper_after_swift_version_update_to_v3(id()) -> ok | {error, term()}.
-upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
-    storage:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
-        args = Args,
-        admin_ctx = AdminCtx
-    }) ->
-        case maps:take(<<"tenantName">>, Args) of
-            {ProjectName, NewArgs} ->
-                {ok, HelperConfig#helper_config{
-                    args = NewArgs,
-                    admin_ctx = AdminCtx#{<<"projectName">> => ProjectName}
-                }};
-            error ->
-                % ensure update is idempotent
-                {ok, HelperConfig}
-        end
-    end).
-
-
 %%%===================================================================
 %%% Support related functions
 %%%===================================================================
@@ -493,46 +421,3 @@ on_helper_changed(StorageId) ->
 -spec lock_on_storage_by_id(id(), fun(() -> Result)) -> Result.
 lock_on_storage_by_id(Identifier, Fun) ->
     critical_section:run({storage_id, Identifier}, Fun).
-
-
-%% @private
--spec check_helper_against_readonly_option(config(), helper_config:t()) -> ok | no_return().
-check_helper_against_readonly_option(#{readonly := true}, _HelperConfig) ->
-    ok;
-check_helper_against_readonly_option(#{readonly := false}, HelperConfig) ->
-    case helper_config:supports_storage_access_type(HelperConfig, ?READWRITE) of
-        false ->
-            HelperName = helper_config:get_name(HelperConfig),
-            throw(?ERR_REQUIRES_READONLY_STORAGE(?err_ctx(), HelperName));
-        true ->
-            ok
-    end.
-
-%% @private
--spec check_helper_against_imported_option(config(), helper_config:t()) -> ok | no_return().
-check_helper_against_imported_option(#{importedStorage := false}, _HelperConfig) ->
-    ok;
-check_helper_against_imported_option(#{importedStorage := true}, HelperConfig) ->
-    case helper_config:is_import_supported(HelperConfig) of
-        false ->
-            HelperName = helper_config:get_name(HelperConfig),
-            throw(?ERR_STORAGE_IMPORT_NOT_SUPPORTED(?err_ctx(), HelperName, ?OBJECT_HELPERS));
-        true ->
-            ok
-    end.
-
-
-%% @private
--spec sanitize_readonly_option(id() | name(), config()) -> ok | no_return().
-sanitize_readonly_option(IdOrName, #{
-    readonly := Readonly,
-    importedStorage := Imported
-}) ->
-    case {
-        utils:to_boolean(Readonly),
-        utils:to_boolean(Imported)
-    } of
-        {false, _} -> ok;
-        {true, false} -> throw(?ERR_REQUIRES_IMPORTED_STORAGE(?err_ctx(), IdOrName));
-        {true, true} -> ok
-    end.
