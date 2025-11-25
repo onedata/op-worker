@@ -42,6 +42,12 @@
     observed_attrs_per_doc :: space_files_monitor:observed_attrs_per_doc()
 }).
 
+-record(file_deleted_event, {
+    id :: binary(),
+    file_guid :: file_id:file_guid(),
+    parent_file_guid :: file_id:file_guid()
+}).
+
 -record(file_changed_or_created_event, {
     id :: binary(),
     file_guid :: file_id:file_guid(),

@@ -1105,17 +1105,16 @@ file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
     case file_meta:get_including_deleted(FileUuid) of
         {ok, Doc} ->
-            case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
-                {false, false} ->
-                    {?FILE_EXISTS, FileCtx#file_ctx{file_doc = Doc}};
-                _ ->
-                    {?FILE_DELETED, FileCtx}
-            end;
+            file_exists_or_is_deleted(FileCtx#file_ctx{file_doc = Doc});
         {error, not_found} ->
             {?FILE_NEVER_EXISTED, FileCtx}
     end;
-file_exists_or_is_deleted(FileCtx) ->
-    {?FILE_EXISTS, FileCtx}.
+file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = Doc}) ->
+    case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
+        {false, false} -> {?FILE_EXISTS, FileCtx};
+        _ -> {?FILE_DELETED, FileCtx}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

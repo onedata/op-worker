@@ -28,8 +28,12 @@
 %%% - `times`
 %%% - `file_location`
 %%%
+%%% === Monitoring Scope ===
+%%%
 %%% Only direct children of specified directories are monitored - there is
-%%% no recursive monitoring of subdirectories.
+%%% no recursive monitoring of subdirectories. To monitor files in nested
+%%% directories, each subdirectory must be explicitly included in the
+%%% subscription specification.
 %%%
 %%% == Subscription specification ==
 %%%
@@ -62,15 +66,61 @@
 %%%
 %%% == Event format ==
 %%%
-%%% SSE events contain:
-%%% - `id` - unique sequence number from Couchbase
-%%% - `event` - always "changedOrCreated"
-%%% - `data` - JSON with fileId, parentFileId, and requested attributes
+%%% The system generates two types of events sent via SSE:
+%%%
+%%% === File Changed/Created Events ===
+%%% - `id` - unique sequence number from Couchbase changes feed
+%%% - `event` - "changedOrCreated"
+%%% - `data` - JSON containing:
+%%%   - `fileId` - GUID of the affected file
+%%%   - `parentFileId` - GUID of the parent directory
+%%%   - `attributes` - requested file attributes as specified in the subscription
+%%%
+%%% === File Deleted Events ===
+%%% - `id` - unique sequence number from Couchbase changes feed
+%%% - `event` - "deleted"
+%%% - `data` - JSON containing:
+%%%   - `fileId` - GUID of the deleted file
+%%%   - `parentFileId` - GUID of the parent directory
 %%%
 %%% == Performance notes ==
 %%%
 %%% Authorization checks are parallelized up to `?MAX_AUTHZ_VERIFY_PROCS`
 %%% concurrent processes to avoid blocking on permission verification.
+%%%
+%%% == Important Caveats and Limitations ==
+%%%
+%%% Due to the architecture based on Couchbase changes feed, several important
+%%% behaviors and edge cases must be understood:
+%%%
+%%% === Document Field Granularity ===
+%%% Individual document fields are not monitored separately, and the change
+%%% notification does not indicate which specific field was modified. The system
+%%% only knows that *some* field in the document changed. Therefore:
+%%% - All observed attributes for a document type are sent to clients, even if
+%%%   only a non-observed field was actually modified
+%%% - Clients must compare received data with their cached state to determine
+%%%   what actually changed
+%%% - This may result in "false positive" change notifications
+%%%
+%%% === Event Ordering and Race Conditions ===
+%%% The Couchbase changes feed does not guarantee strict ordering across different
+%%% document types. Specifically:
+%%% - A `deleted` event is triggered by changes to the `file_meta` document
+%%% - Changes to related documents (`times`, `file_location`) may arrive after
+%%%   the deletion notification
+%%% - Clients may receive `changed_or_created` events for a file that was already
+%%%   reported as deleted
+%%% - **Important**: Always verify file existence before processing change events
+%%%
+%%% === Duplicate Deletion Events ===
+%%% A `file_meta` document may continue to be modified even after being marked
+%%% as deleted, appearing multiple times in the changes feed. This means:
+%%% - The same file deletion may trigger multiple `deleted` events
+%%% - Clients should be idempotent when handling deletion notifications
+%%% - Subsequent deletion events for the same file should be ignored
+%%%
+%%% == Client Implementation Guidelines ==
 %%%
 %%% @see space_file_events_stream_handler
 %%% @see space_files_monitor_sup
@@ -132,17 +182,29 @@
 
 -type request() :: #subscribe_req{} | #docs_change_notification{}.
 
+-record(process_doc_ctx, {
+    root_user_ctx :: user_ctx:ctx(),
+    file_ctx :: file_ctx:ctx(),
+    parent_guid :: file_id:file_guid(),
+    dir_monitoring_spec :: dir_monitoring_spec(),
+    changed_doc :: datastore:doc(),
+    state :: state()
+}).
+-type process_doc_ctx() :: #process_doc_ctx{}.
+
+-type file_deleted_event() :: #file_deleted_event{}.
+
 -type file_changed_or_created_event() :: #file_changed_or_created_event{}.
 
--type event() :: file_changed_or_created_event().
+-type event_type() :: deleted | changed_or_created.
+
+-type event() :: file_deleted_event() | file_changed_or_created_event().
 
 -export_type([
     observed_attrs_per_doc/0,
-    file_changed_or_created_event/0, event/0
+    file_deleted_event/0, file_changed_or_created_event/0, event/0
 ]).
 
-
--define(OBSERVABLE_FILE_DOCS, [file_meta, times, file_location]).
 
 %% The process is supposed to die after ?INACTIVITY_PERIOD_MS time of idling (no subscribers)
 -define(INACTIVITY_PERIOD_MS, 10_000).
@@ -419,29 +481,25 @@ update_observed_attrs_per_doc(AttrsToObservePerDoc, ObservedAttrsPerDoc) ->
 %% @private
 -spec process_doc(user_ctx:ctx(), datastore:doc(), state()) -> ok.
 process_doc(RootUserCtx, ChangedDoc, State) ->
-    ChangedDocType = utils:record_type(ChangedDoc#document.value),
     FileCtx = get_file_ctx(ChangedDoc),
 
-    case is_observed_file(RootUserCtx, FileCtx, ChangedDocType, State) of
-        {true, FileCtx2, ParentGuid, ObservedAttrs} ->
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
-            DirMonitoringSpec = maps:get(ParentGuid, State#state.dir_monitoring_specs),
+    case is_observed_file(RootUserCtx, FileCtx, State) of
+        {true, FileCtx2, ParentGuid, DirMonitoringSpec} ->
+            Ctx1 = #process_doc_ctx{
+                root_user_ctx = RootUserCtx,
+                file_ctx = FileCtx2,
+                parent_guid = ParentGuid,
+                dir_monitoring_spec = DirMonitoringSpec,
+                changed_doc = ChangedDoc,
+                state = State
+            },
+            {EventType, Ctx2} = infer_event_type(Ctx1),
 
-            case get_authorized_observers(ChangedDocType, FileCtx2, DirMonitoringSpec, State) of
+            case get_authorized_observers(EventType, Ctx2) of
                 [] ->
                     ok;
                 ObserverPids ->
-                    {FileAttr, _FileCtx3} = file_attr:resolve(RootUserCtx, FileCtx, #{
-                        attributes => ObservedAttrs,
-                        name_conflicts_resolution_policy => allow_name_conflicts
-                    }),
-                    Event = #file_changed_or_created_event{
-                        id = str_utils:to_binary(ChangedDoc#document.seq),
-                        file_guid = FileGuid,
-                        parent_file_guid = ParentGuid,
-                        doc_type = utils:record_type(ChangedDoc#document.value),
-                        file_attr = FileAttr
-                    },
+                    Event = gen_event(EventType, Ctx2),
                     broadcast_event(ObserverPids, Event)
             end;
 
@@ -461,9 +519,9 @@ get_file_ctx(ChangedDoc = #document{value = #file_location{uuid = FileUUid}}) ->
 
 
 %% @private
--spec is_observed_file(user_ctx:ctx(), file_ctx:ctx(), doc_type(), state()) ->
-    {true, file_ctx:ctx(), file_id:file_guid(), [onedata_file:attr_name()]} | false.
-is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
+-spec is_observed_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+    {true, file_ctx:ctx(), file_id:file_guid(), dir_monitoring_spec()} | false.
+is_observed_file(UserCtx, FileCtx, State) ->
     {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
 
     case file_ctx:equals(FileCtx, ParentCtx) of
@@ -473,13 +531,8 @@ is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
             ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
 
             case maps:find(ParentGuid, State#state.dir_monitoring_specs) of
-                {ok, #dir_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc}} ->
-                    case maps:get(ChangedDocType, ObservedAttrsPerDoc, undefined) of
-                        undefined ->
-                            false;
-                        ObservedAttrs ->
-                            {true, FileCtx2, ParentGuid, ObservedAttrs}
-                    end;
+                {ok, DirMonitoringSpec = #dir_monitoring_spec{}} ->
+                    {true, FileCtx2, ParentGuid, DirMonitoringSpec};
                 error ->
                     false
             end
@@ -487,12 +540,87 @@ is_observed_file(UserCtx, FileCtx, ChangedDocType, State) ->
 
 
 %% @private
--spec get_authorized_observers(doc_type(), file_ctx:ctx(), dir_monitoring_spec(), state()) ->
-    [pid()].
-get_authorized_observers(ChangedDocType, FileCtx, DirMonitoringSpec, State) ->
+-spec infer_event_type(process_doc_ctx()) ->
+    {event_type(), process_doc_ctx()}.
+infer_event_type(Ctx = #process_doc_ctx{changed_doc = #document{value = #file_meta{}}}) ->
+    FileCtx1 = Ctx#process_doc_ctx.file_ctx,
+    case file_ctx:file_exists_or_is_deleted(FileCtx1) of
+        {?FILE_DELETED, FileCtx2} ->
+            {deleted, Ctx#process_doc_ctx{file_ctx = FileCtx2}};
+        {_, FileCtx2} ->
+            {changed_or_created, Ctx#process_doc_ctx{file_ctx = FileCtx2}}
+    end;
+
+infer_event_type(Ctx) ->
+    {changed_or_created, Ctx}.
+
+
+%% @private
+-spec get_authorized_observers(event_type(), process_doc_ctx()) -> [pid()].
+get_authorized_observers(deleted, Ctx) ->
+    get_authorized_deleted_event_observers(Ctx);
+get_authorized_observers(changed_or_created, Ctx) ->
+    get_authorized_changed_or_created_event_observers(Ctx).
+
+
+%% @private
+-spec gen_event(event_type(), process_doc_ctx()) -> event().
+gen_event(deleted, Ctx) ->
+    gen_deleted_event(Ctx);
+gen_event(changed_or_created, Ctx) ->
+    gen_changed_or_created_event(Ctx).
+
+
+%% @private
+-spec get_authorized_deleted_event_observers(process_doc_ctx()) -> [pid()].
+get_authorized_deleted_event_observers(#process_doc_ctx{
+    file_ctx = FileCtx,
+    dir_monitoring_spec = DirMonitoringSpec,
+    state = State
+}) ->
     AllDirObservers = DirMonitoringSpec#dir_monitoring_spec.observers,
 
     FilterMapFun = fun(DirObserverPid) ->
+        try
+            DirObserver = maps:get(DirObserverPid, State#state.observers),
+            DirObserverUserCtx = user_ctx:new(DirObserver#observer.session_id),
+            fslogic_authz:ensure_authorized(
+                DirObserverUserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+            ),
+            {true, DirObserverPid}
+        catch _:_ ->
+            false
+        end
+    end,
+    lists_utils:pfiltermap(FilterMapFun, AllDirObservers, ?MAX_AUTHZ_VERIFY_PROCS).
+
+
+%% @private
+-spec gen_deleted_event(process_doc_ctx()) -> file_deleted_event().
+gen_deleted_event(#process_doc_ctx{
+    file_ctx = FileCtx,
+    parent_guid = ParentGuid,
+    changed_doc = ChangedDoc
+}) ->
+    #file_deleted_event{
+        id = str_utils:to_binary(ChangedDoc#document.seq),
+        file_guid = file_ctx:get_logical_guid_const(FileCtx),
+        parent_file_guid = ParentGuid
+    }.
+
+
+%% @private
+-spec get_authorized_changed_or_created_event_observers(process_doc_ctx()) -> [pid()].
+get_authorized_changed_or_created_event_observers(#process_doc_ctx{
+    file_ctx = FileCtx,
+    dir_monitoring_spec = DirMonitoringSpec,
+    changed_doc = ChangedDoc,
+    state = State
+}) ->
+    AllDirObservers = DirMonitoringSpec#dir_monitoring_spec.observers,
+
+    FilterMapFun = fun(DirObserverPid) ->
+        ChangedDocType = utils:record_type(ChangedDoc#document.value),
         DirObserver = maps:get(DirObserverPid, State#state.observers),
 
         case get_observed_attrs_for_doc(ChangedDocType, DirObserver) of
@@ -528,6 +656,30 @@ get_observed_attrs_for_doc(ChangedDocType, #observer{
 
 
 %% @private
+-spec gen_changed_or_created_event(process_doc_ctx()) -> file_changed_or_created_event().
+gen_changed_or_created_event(#process_doc_ctx{
+    root_user_ctx = RootUserCtx,
+    file_ctx = FileCtx,
+    parent_guid = ParentGuid,
+    dir_monitoring_spec = #dir_monitoring_spec{observed_attrs_per_doc = ObservedAttrsPerDoc},
+    changed_doc = ChangedDoc
+}) ->
+    ChangedDocType = utils:record_type(ChangedDoc#document.value),
+    ObservedAttrs = maps:get(ChangedDocType, ObservedAttrsPerDoc),
+    {FileAttr, _FileCtx3} = file_attr:resolve(RootUserCtx, FileCtx, #{
+        attributes => ObservedAttrs,
+        name_conflicts_resolution_policy => allow_name_conflicts
+    }),
+    #file_changed_or_created_event{
+        id = str_utils:to_binary(ChangedDoc#document.seq),
+        file_guid = file_ctx:get_logical_guid_const(FileCtx),
+        parent_file_guid = ParentGuid,
+        doc_type = utils:record_type(ChangedDoc#document.value),
+        file_attr = FileAttr
+    }.
+
+
+%% @private
 -spec broadcast_event([pid()], event()) -> ok.
 broadcast_event(ObserverPids, Event) ->
     lists:foreach(fun(ObserverPid) -> ObserverPid ! Event end, ObserverPids).
@@ -540,7 +692,7 @@ broadcast_event(ObserverPids, Event) ->
 ) ->
     ok.
 notify_monitor(Pid, {ok, {change, #document{} = Doc}}) ->
-    case is_file_doc(Doc) of
+    case is_observable_doc(Doc) of
         true ->
             notify_monitor_about_doc_change(Pid, [Doc]);
         false ->
@@ -549,7 +701,7 @@ notify_monitor(Pid, {ok, {change, #document{} = Doc}}) ->
     ok;
 notify_monitor(Pid, {ok, Docs}) when is_list(Docs) ->
     case lists:filtermap(fun({change, Doc}) ->
-        case is_file_doc(Doc) of
+        case is_observable_doc(Doc) of
             true -> {true, Doc};
             false -> false
         end
@@ -573,12 +725,20 @@ notify_monitor(Pid, {error, _Seq, Reason}) ->
     ok.
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec is_file_doc(datastore:doc()) -> boolean().
-is_file_doc(#document{value = Record}) when is_tuple(Record) ->
-    lists:member(element(1, Record), ?OBSERVABLE_FILE_DOCS);
-is_file_doc(_Doc) ->
-    false.
+%% @doc
+%% Checks if a document change is relevant for space file events monitoring.
+%% Returns true for file-related documents that are not deleted, except for
+%% file_meta documents which are used to generate deletion events.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_observable_doc(datastore:doc()) -> boolean().
+is_observable_doc(#document{value = #file_meta{}}) -> true;
+is_observable_doc(#document{deleted = true}) -> false;
+is_observable_doc(#document{value = #times{}}) -> true;
+is_observable_doc(#document{value = #file_location{}}) -> true;
+is_observable_doc(_Doc) -> false.
 
 
 %% @private
