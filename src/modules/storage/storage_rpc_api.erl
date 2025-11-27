@@ -62,7 +62,6 @@ do_describe(StorageId) ->
                 timeout = HelperConfigDescription#helper_config_description.timeout,
                 readonly = storage:is_local_storage_readonly(StorageId),
                 imported = storage:is_imported(StorageId),
-                archive = HelperConfigDescription#helper_config_description.archive,
                 luma = #luma_spec{
                     feed = luma_config:get_feed(LumaConfig),
                     url = luma_config:get_url(LumaConfig),

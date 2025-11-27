@@ -34,15 +34,14 @@
 
     %% Property queries
     is_posix_compatible/1,
-    is_object/1,
+    is_object_storage/1,
     is_rename_supported/1,
     is_nfs4_acl_supported/1,
-    supports_storage_access_type/2,
+    is_storage_access_type_supported/2,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_import_supported/1,
     is_getting_size_supported/1,
-    is_archive_storage/1,
 
     get_name/1,
     get_args/1,
@@ -137,10 +136,10 @@ is_posix_compatible(HelperConfigOrName) ->
     Module:is_posix_compatible().
 
 
--spec is_object(t() | helper_config:name()) -> boolean().
-is_object(HelperConfigOrName) ->
+-spec is_object_storage(t() | helper_config:name()) -> boolean().
+is_object_storage(HelperConfigOrName) ->
     Module = get_module(HelperConfigOrName),
-    Module:is_object().
+    Module:is_object_storage().
 
 
 -spec is_rename_supported(t() | helper_config:name()) -> boolean().
@@ -155,10 +154,10 @@ is_nfs4_acl_supported(HelperConfigOrName) ->
     Module:is_nfs4_acl_supported().
 
 
--spec supports_storage_access_type(t() | helper_config:name(), helper_config:access_type()) -> boolean().
-supports_storage_access_type(HelperConfigName, AccessType) ->
+-spec is_storage_access_type_supported(t() | helper_config:name(), helper_config:access_type()) -> boolean().
+is_storage_access_type_supported(HelperConfigName, AccessType) ->
     Module = get_module(HelperConfigName),
-    Module:supports_storage_access_type(AccessType).
+    Module:is_storage_access_type_supported(AccessType).
 
 
 -spec is_auto_import_supported(t()) -> boolean().
@@ -183,11 +182,6 @@ is_import_supported(HelperConfig) ->
 is_getting_size_supported(HelperConfig) ->
     Module = get_module(HelperConfig),
     Module:is_getting_size_supported(HelperConfig).
-
-
--spec is_archive_storage(t()) -> boolean().
-is_archive_storage(#helper_config{args = Args}) ->
-    utils:to_boolean(maps:get(<<"archiveStorage">>, Args, false)).
 
 
 -spec get_name(t()) -> name().

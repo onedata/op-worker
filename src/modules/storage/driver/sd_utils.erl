@@ -271,7 +271,7 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
             HelperConfig = storage:get_helper_config(Storage),
             case
-                (helper_config:is_object(HelperConfig) andalso helper_config:is_import_supported(HelperConfig))
+                (helper_config:is_object_storage(HelperConfig) andalso helper_config:is_import_supported(HelperConfig))
                 orelse (helper_config:get_name(HelperConfig) =:= ?NULL_DEVICE_HELPER_NAME)
             of
                 true ->

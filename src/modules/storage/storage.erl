@@ -29,7 +29,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, get_all/0, exists/1, delete/1, clear_storages/0]).
+-export([
+    create/1,
+    update/2,
+    get/1, get_all/0, exists/1,
+    delete/1, clear_storages/0
+]).
 
 %%% Functions to retrieve storage details
 -export([
@@ -42,7 +47,7 @@
     fetch_provider_id_of_remote_storage/2,
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2
 ]).
--export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
+-export([is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
@@ -77,6 +82,16 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
+create(StorageCreateSpec) ->
+    storage_creator:create(StorageCreateSpec).
+
+
+-spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
+update(StorageId, UpdateSpec) ->
+    storage_updater:update(StorageId, UpdateSpec).
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
@@ -251,11 +266,6 @@ is_posix_compatible(StorageDataOrId) ->
     HelperConfig = get_helper_config(StorageDataOrId),
     helper_config:is_posix_compatible(HelperConfig).
 
-
--spec is_archive(id() | data()) -> boolean().
-is_archive(StorageDataOrId) ->
-    HelperConfig = get_helper_config(StorageDataOrId),
-    helper_config:is_archive_storage(HelperConfig).
 
 %%%===================================================================
 %%% Functions to modify storage details

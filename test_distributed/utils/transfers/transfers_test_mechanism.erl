@@ -240,7 +240,7 @@ change_storage_params(Config, #scenario{
 
     lists:foreach(fun(Node) ->
         StorageId = initializer:get_supporting_storage_id(Node, SpaceId),
-        modify_storage_timeout(Node, StorageId, <<"100000">>)
+        modify_storage_timeout(Node, StorageId, 100000)
     end, ReplicatingNodes),
 
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
@@ -1536,19 +1536,19 @@ set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
 -spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
 modify_storage_timeout(Node, StorageId, NewValue) ->
     HelperConfig = rpc:call(Node, storage, get_helper_config, [StorageId]),
-    OldValue = maps:get(<<"timeout">>, helper_config:get_args(HelperConfig),
-        integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
+    OldValue = binary_to_integer(maps:get(
+        <<"timeout">>,
+        helper_config:get_args(HelperConfig),
+        integer_to_binary(?DEFAULT_HELPER_TIMEOUT)
+    )),
 
     UpdateSpec = #storage_update_spec{type = helper_config:get_name(HelperConfig)},
-    {ok, NewHelperConfig1} = helper_config:update(HelperConfig, UpdateSpec#storage_update_spec{
-        timeout = NewValue
-    }),
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_config, [StorageId, NewHelperConfig1])),
 
-    {ok, NewHelperConfig2} = helper_config:update(HelperConfig, UpdateSpec#storage_update_spec{
-        timeout = OldValue
-    }),
-    ?assertEqual(ok, rpc:call(Node, storage, update_helper_config, [StorageId, NewHelperConfig2])),
+    UpdateToNewTimeoutSpec = UpdateSpec#storage_update_spec{timeout = NewValue},
+    ?assertEqual(ok, rpc:call(Node, storage, update, [StorageId, UpdateToNewTimeoutSpec])),
+
+    RestoreToPrevTimeoutSpec = UpdateSpec#storage_update_spec{timeout = OldValue},
+    ?assertEqual(ok, rpc:call(Node, storage, update, [StorageId, RestoreToPrevTimeoutSpec])),
 
     ok.
 

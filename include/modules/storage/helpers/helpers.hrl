@@ -76,8 +76,7 @@
     type :: onedata_storage:type(),
     configuration :: onedata_storage:configuration(),
     credentials :: onedata_storage:credentials(),
-    timeout :: integer(),
-    archive :: boolean()
+    timeout :: integer()
 }).
 
 

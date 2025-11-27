@@ -70,7 +70,7 @@ sanitize_readonly_option(true, true, _IdOrName) ->
 check_helper_against_readonly_option(true, _HelperConfig) ->
     ok;
 check_helper_against_readonly_option(false, HelperConfig) ->
-    case helper_config:supports_storage_access_type(HelperConfig, ?READWRITE) of
+    case helper_config:is_storage_access_type_supported(HelperConfig, ?READWRITE) of
         false ->
             HelperName = helper_config:get_name(HelperConfig),
             throw(?ERR_REQUIRES_READONLY_STORAGE(?err_ctx(), HelperName));

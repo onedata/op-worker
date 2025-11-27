@@ -124,12 +124,12 @@ apply(Function, Args) ->
 
 -spec storage_create(onedata_storage:create_spec()) -> {ok, storage:id()} | {error, term()}.
 storage_create(StorageCreateSpec) ->
-    storage_creator:create(StorageCreateSpec).
+    storage:create(StorageCreateSpec).
 
 
 -spec storage_update(storage:id(), onedata_storage:update_spec()) -> ok | {error, term()}.
 storage_update(StorageId, StorageUpdateSpec) ->
-    storage_updater:update(StorageId, StorageUpdateSpec).
+    storage:update(StorageId, StorageUpdateSpec).
 
 
 -spec storage_describe(storage:id()) ->

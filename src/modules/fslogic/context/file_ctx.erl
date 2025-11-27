@@ -542,7 +542,7 @@ get_new_storage_file_id(FileCtx) ->
     case helper_config:get_storage_path_type(HelperConfig) of
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx3),
-            StorageFileId = storage_file_id:flat(CanonicalPath, FileUuid, SpaceId, Storage),
+            StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
             FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->

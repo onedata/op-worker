@@ -266,6 +266,12 @@ new_webdav_user_ctx(CredentialsType = <<"none">>, _Credentials) ->
     #{
         <<"credentialsType">> => CredentialsType
     };
+new_webdav_user_ctx(CredentialsType = <<"oauth2">>, Credentials) ->
+    #{
+        <<"credentialsType">> => CredentialsType,
+        <<"credentials">> => Credentials,
+        <<"oauth2IdP">> => ?OAUTH2_IDP
+    };
 new_webdav_user_ctx(CredentialsType, Credentials) ->
     #{
         <<"credentialsType">> => CredentialsType,

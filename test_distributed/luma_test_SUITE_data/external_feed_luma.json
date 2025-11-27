@@ -875,6 +875,7 @@
                 "storageCredentials": {
                     "credentialsType": "oauth2",
                     "credentials": "USER_OAUTH2",
+                    "oauth2IdP": "OAUTH2_IDP",
                     "accessToken": "IDP_USER_TOKEN",
                     "accessTokenTTL": 3600
                 },
@@ -887,33 +888,38 @@
             "user4": {
                 "storageCredentials": {
                     "credentialsType": "oauth2",
-                    "credentials": [1, 2, 3]
+                    "credentials": [1, 2, 3],
+                    "oauth2IdP": "OAUTH2_IDP"
                 }
             },
             "user5": {
                 "storageCredentials": {
                     "credentialsType": "oauth2",
-                    "credentials": {}
+                    "credentials": {},
+                    "oauth2IdP": "OAUTH2_IDP"
                 }
             },
             "user6": {
                 "storageCredentials": {
                     "credentialsType": "oauth2",
-                    "credentials": "USER_OAUTH2"
+                    "credentials": "USER_OAUTH2",
+                    "oauth2IdP": "OAUTH2_IDP"
                 },
                 "displayUid": [1, 2, 3]
             },
             "user7": {
                 "storageCredentials": {
                     "credentialsType": "oauth2",
-                    "credentials": "USER_OAUTH2"
+                    "credentials": "USER_OAUTH2",
+                    "oauth2IdP": "OAUTH2_IDP"
                 },
                 "displayUid": "string"
             },
             "user8": {
                 "storageCredentials": {
                     "credentialsType": "oauth2",
-                    "credentials": "USER_OAUTH2"
+                    "credentials": "USER_OAUTH2",
+                    "oauth2IdP": "OAUTH2_IDP"
                 },
                 "displayUid": {
                     "key": "value"

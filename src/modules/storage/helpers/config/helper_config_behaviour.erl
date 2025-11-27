@@ -65,7 +65,7 @@
 -callback is_posix_compatible() -> boolean().
 
 
--callback is_object() -> boolean().
+-callback is_object_storage() -> boolean().
 
 
 -callback is_rename_supported() -> boolean().
@@ -74,7 +74,7 @@
 -callback is_nfs4_acl_supported() -> boolean().
 
 
--callback supports_storage_access_type(helper_config:access_type()) -> boolean().
+-callback is_storage_access_type_supported(helper_config:access_type()) -> boolean().
 
 
 -callback is_auto_import_supported(helper_config:t()) -> boolean().

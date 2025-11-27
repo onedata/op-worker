@@ -27,10 +27,10 @@
     describe/1,
 
     is_posix_compatible/0,
-    is_object/0,
+    is_object_storage/0,
     is_rename_supported/0,
     is_nfs4_acl_supported/0,
-    supports_storage_access_type/1,
+    is_storage_access_type_supported/1,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
@@ -64,7 +64,6 @@ build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = 
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    archive = Archive,
     configuration = #nfs_configuration_diff{
         version = Version,
         host = Host,
@@ -83,8 +82,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
         {<<"dirCache">>, DirCache, fun atom_to_binary/1},
         {<<"autoReconnect">>, AutoReconnect, fun integer_to_binary/1},
         {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1},
-        {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
+        {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
 
 
@@ -141,8 +139,7 @@ describe(#helper_config{
         timeout = utils:convert_defined(
             maps:get(<<"timeout">>, Args, undefined),
             fun binary_to_integer/1
-        ),
-        archive = utils:to_boolean(maps:get(<<"archiveStorage">>, Args, false))
+        )
     }.
 
 
@@ -150,8 +147,8 @@ describe(#helper_config{
 is_posix_compatible() -> true.
 
 
--spec is_object() -> boolean().
-is_object() -> false.
+-spec is_object_storage() -> boolean().
+is_object_storage() -> false.
 
 
 -spec is_rename_supported() -> boolean().
@@ -162,8 +159,8 @@ is_rename_supported() -> true.
 is_nfs4_acl_supported() -> false.  % TODO is that true ?
 
 
--spec supports_storage_access_type(helper_config:access_type()) -> boolean().
-supports_storage_access_type(_) -> true.
+-spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
+is_storage_access_type_supported(_) -> true.
 
 
 -spec is_auto_import_supported(#helper_config{}) -> boolean().
@@ -195,7 +192,6 @@ get_block_size(#helper_config{}) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    archive = Archive,
     configuration = #nfs_configuration{
         version = Version,
         host = Host,
@@ -218,8 +214,7 @@ build_args(#storage_create_spec{
         {<<"dirCache">>, DirCache, fun atom_to_binary/1},
         {<<"autoReconnect">>, AutoReconnect, fun integer_to_binary/1},
         {<<"connectionPoolSize">>, ConnectionPoolSize, fun integer_to_binary/1},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1},
-        {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
+        {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
 
 

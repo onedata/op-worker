@@ -273,7 +273,6 @@ enable_webdav_test_mode(Worker, StorageId) ->
             args = Args2,
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
-                %% TODO ??
                 <<"oauth2IdP">> => ?IDP,
                 <<"onedataAccessToken">> => ?ONEDATA_ACCESS_TOKEN,
                 <<"adminId">> => ?ADMIN_ID,

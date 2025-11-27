@@ -28,10 +28,10 @@
     describe/1,
 
     is_posix_compatible/0,
-    is_object/0,
+    is_object_storage/0,
     is_rename_supported/0,
     is_nfs4_acl_supported/0,
-    supports_storage_access_type/1,
+    is_storage_access_type_supported/1,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
@@ -79,7 +79,6 @@ build_args_diff(HelperConfig, UpdateSpec = #storage_update_spec{configuration = 
     });
 build_args_diff(HelperConfig, #storage_update_spec{
     timeout = Timeout,
-    archive = Archive,
     configuration = #webdav_configuration_diff{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
@@ -100,8 +99,7 @@ build_args_diff(HelperConfig, #storage_update_spec{
         {<<"maximumUploadSize">>, MaximumUploadSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
         {<<"dirMode">>, DirMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1},
-        {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
+        {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
 
 
@@ -112,12 +110,16 @@ build_admin_ctx_diff(_HelperConfig, #storage_update_spec{credentials = undefined
 build_admin_ctx_diff(HelperConfig, #storage_update_spec{
     credentials = #webdav_credentials_diff{
         credentials_type = CredentialsType,
-        credentials = Credentials
+        credentials = Credentials,
+        oauth2_idp = OAuth2IdP,
+        onedata_access_token = OnedataAccessToken
     }
 }) ->
     helper_config_utils:build_args_diff_from_specs(HelperConfig#helper_config.admin_ctx, [
         {<<"credentialsType">>, CredentialsType, fun credentials_type_to_binary/1},
-        {<<"credentials">>, Credentials}
+        {<<"credentials">>, Credentials},
+        {<<"oauth2IdP">>, OAuth2IdP},
+        {<<"onedataAccessToken">>, OnedataAccessToken}
     ]).
 
 
@@ -161,8 +163,7 @@ describe(#helper_config{
         timeout = utils:convert_defined(
             maps:get(<<"timeout">>, Args, undefined),
             fun binary_to_integer/1
-        ),
-        archive = utils:to_boolean(maps:get(<<"archiveStorage">>, Args, false))
+        )
     }.
 
 
@@ -170,8 +171,8 @@ describe(#helper_config{
 is_posix_compatible() -> false.
 
 
--spec is_object() -> boolean().
-is_object() -> false.
+-spec is_object_storage() -> boolean().
+is_object_storage() -> false.
 
 
 -spec is_rename_supported() -> boolean().
@@ -182,8 +183,8 @@ is_rename_supported() -> true.
 is_nfs4_acl_supported() -> false.
 
 
--spec supports_storage_access_type(helper_config:access_type()) -> boolean().
-supports_storage_access_type(_) -> true.
+-spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
+is_storage_access_type_supported(_) -> true.
 
 
 -spec is_auto_import_supported(#helper_config{}) -> boolean().
@@ -215,7 +216,6 @@ get_block_size(#helper_config{}) ->
 -spec build_args(onedata_storage:create_spec()) -> helper_config:args().
 build_args(#storage_create_spec{
     timeout = Timeout,
-    archive = Archive,
     configuration = #webdav_configuration{
         endpoint = Endpoint,
         verify_server_certificate = VerifyServerCertificate,
@@ -240,8 +240,7 @@ build_args(#storage_create_spec{
         {<<"maximumUploadSize">>, MaximumUploadSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
         {<<"dirMode">>, DirMode},
-        {<<"timeout">>, Timeout, fun integer_to_binary/1},
-        {<<"archiveStorage">>, Archive, fun atom_to_binary/1}
+        {<<"timeout">>, Timeout, fun integer_to_binary/1}
     ]).
 
 

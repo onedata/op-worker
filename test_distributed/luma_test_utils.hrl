@@ -404,7 +404,8 @@ end).
         <<"ADMIN_OAUTH2">>
     ))#{
         <<"onedataAccessToken">> => ?OD_ACCESS_TOKEN,
-        <<"adminId">> => ?ADMIN_ID
+        <<"adminId">> => ?ADMIN_ID,
+        <<"oauth2IdP">> => ?OAUTH2_IDP
     }
 ).
 -define(EXPECTED_WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
@@ -414,7 +415,8 @@ end).
     ))#{
         <<"accessToken">> => ?IDP_ADMIN_TOKEN,
         <<"accessTokenTTL">> => integer_to_binary(?TTL),
-        <<"adminId">> => ?ADMIN_ID
+        <<"adminId">> => ?ADMIN_ID,
+        <<"oauth2IdP">> => ?OAUTH2_IDP
     }
 ).
 
@@ -450,8 +452,7 @@ end).
         <<"endpoint">> => <<"endpoint">>,
         <<"storagePathType">> => ?FLAT_STORAGE_PATH
     },
-    %% TODO ??
-    maps:merge(AdminCtx, #{<<"oauth2IdP">> => ?OAUTH2_IDP})
+    AdminCtx
 ))).
 -define(WEBDAV_BASIC_HELPER,
     ?WEBDAV_HELPER(?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
