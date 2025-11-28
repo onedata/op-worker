@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% High-level unified RPC API for storage management used by Onepanel.
+%%% High-level unified API (to be used by REST?GUI) to describe storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_rpc_api).
+-module(storage_describer).
 -author("Bartosz Walkowicz").
 
 -include("modules/storage/helpers/helpers.hrl").

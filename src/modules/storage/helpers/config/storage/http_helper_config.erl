@@ -16,6 +16,7 @@
 -behaviour(helper_config_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/storage/common.hrl").
 -include_lib("ctool/include/storage/http.hrl").
 
@@ -31,6 +32,7 @@
     is_object_storage/0,
     is_rename_supported/0,
     is_nfs4_acl_supported/0,
+    is_oauth2_supported/0,
     is_storage_access_type_supported/1,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
@@ -55,15 +57,21 @@ build(CreateReq = #storage_create_spec{type = ?HTTP_HELPER_NAME, credentials = C
 
 -spec validate_user_ctx(helper_config:user_ctx()) -> ok | {error, Reason :: term()}.
 validate_user_ctx(UserCtx) ->
-    AlwaysOptionalFields = [<<"oauth2IdP">>, <<"onedataAccessToken">>],
+    BaseFields = [<<"credentialsType">>],
+    OptionalFields = [
+        <<"credentials">>, <<"adminId">>, <<"onedataAccessToken">>, <<"oauth2IdP">>,
+        <<"accessToken">>, <<"accessTokenTTL">>
+    ],
 
-    {RequiredFields, OptionalFields} = case UserCtx of
+    case UserCtx of
         #{<<"credentialsType">> := Type} when Type /= <<"none">> ->
-            {[<<"credentialsType">>, <<"credentials">>], AlwaysOptionalFields};
+            %% credentials is required
+            RequiredFields = [<<"credentialsType">>, <<"credentials">>],
+            RemainingOptionalFields = lists:delete(<<"credentials">>, OptionalFields),
+            helper_config_utils:validate_user_ctx(UserCtx, RequiredFields, RemainingOptionalFields);
         _ ->
-            {[<<"credentialsType">>], [<<"credentials">> | AlwaysOptionalFields]}
-    end,
-    helper_config_utils:validate_user_ctx(UserCtx, RequiredFields, OptionalFields).
+            helper_config_utils:validate_user_ctx(UserCtx, BaseFields, OptionalFields)
+    end.
 
 
 -spec build_args_diff(helper_config:t(), onedata_storage:update_spec()) -> helper_config:args().
@@ -171,6 +179,10 @@ is_rename_supported() -> false.
 is_nfs4_acl_supported() -> false.
 
 
+-spec is_oauth2_supported() -> boolean().
+is_oauth2_supported() -> true.
+
+
 -spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
 is_storage_access_type_supported(?READWRITE) -> false;  %% HTTP is read-only
 is_storage_access_type_supported(?READONLY) -> true.
@@ -229,6 +241,7 @@ build_args(#storage_create_spec{
     ]).
 
 
+%% TODO similar to webdav - maybe some utils?
 %% @private
 -spec build_admin_ctx(#http_credentials{}) -> helper_config:user_ctx().
 build_admin_ctx(#http_credentials{
@@ -237,14 +250,33 @@ build_admin_ctx(#http_credentials{
     oauth2_idp = OAuth2IdP,
     onedata_access_token = OnedataAccessToken
 }) ->
-    BaseCtx = #{
+    BaseCtx0 = #{
         <<"credentialsType">> => credentials_type_to_binary(CredentialsType)
     },
-    helper_config_utils:add_optional_args_if_defined(BaseCtx, [
+    BaseCtx1 = helper_config_utils:add_optional_args_if_defined(BaseCtx0, [
         {<<"credentials">>, Credentials},
         {<<"oauth2IdP">>, OAuth2IdP},
         {<<"onedataAccessToken">>, OnedataAccessToken}
-    ]).
+    ]),
+
+    %% Clear unused credentials if type is 'none'
+    BaseCtx2 = case CredentialsType of
+        none -> maps:remove(<<"credentials">>, BaseCtx1);
+        _ -> BaseCtx1
+    end,
+
+    %% Resolve user ID by token if onedataAccessToken is present
+    case OnedataAccessToken of
+        undefined ->
+            BaseCtx2;
+        AccessToken ->
+            TokenCredentials = auth_manager:build_token_credentials(
+                AccessToken, undefined, undefined,
+                undefined, disallow_data_access_caveats
+            ),
+            {ok, ?USER(UserId), _} = auth_manager:verify_credentials(TokenCredentials),
+            BaseCtx2#{<<"adminId">> => UserId}
+    end.
 
 
 %% @private

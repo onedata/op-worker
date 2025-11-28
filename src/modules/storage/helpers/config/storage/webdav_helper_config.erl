@@ -31,6 +31,7 @@
     is_object_storage/0,
     is_rename_supported/0,
     is_nfs4_acl_supported/0,
+    is_oauth2_supported/0,
     is_storage_access_type_supported/1,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
@@ -183,6 +184,10 @@ is_rename_supported() -> true.
 is_nfs4_acl_supported() -> false.
 
 
+-spec is_oauth2_supported() -> boolean().
+is_oauth2_supported() -> true.
+
+
 -spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().
 is_storage_access_type_supported(_) -> true.
 
@@ -260,13 +265,13 @@ build_admin_ctx(#webdav_credentials{
         {<<"oauth2IdP">>, OAuth2IdP},
         {<<"onedataAccessToken">>, OnedataAccessToken}
     ]),
-    
+
     %% Clear unused credentials if type is 'none'
     BaseCtx2 = case CredentialsType of
         none -> maps:remove(<<"credentials">>, BaseCtx1);
         _ -> BaseCtx1
     end,
-    
+
     %% Resolve user ID by token if onedataAccessToken is present
     case OnedataAccessToken of
         undefined ->

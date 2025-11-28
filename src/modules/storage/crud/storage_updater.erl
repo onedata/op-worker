@@ -7,6 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles storage update.
+%%% NOTE: DO NOT CALL this module directly; always use storage.erl module
+%%%       as it wraps update in critical section
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_updater).
@@ -30,6 +32,9 @@
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
+    %% TODO log storage/helper configuration
+%%    log_gathered_storage_configuration(Name, StorageType, Params),
+
     try do_update(StorageId, UpdateSpec) of
         ok ->
             ?info("Successfully updated storage '~ts'", [StorageId]),
@@ -50,7 +55,6 @@ update(StorageId, UpdateSpec) ->
 %%%===================================================================
 
 
-% TODO use critical section for update?
 %% @private
 -spec do_update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 do_update(StorageId, UpdateSpec = #storage_update_spec{
@@ -104,7 +108,7 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
                 (_) ->
                     ok
             end, [
-                % TODO do all those calls need to be independent? Can't there be only 2 calls: to oz and sotrage_config?
+                % TODO do all those calls need to be independent? Can't there be only 2 calls: to oz and storage_config?
                 {MaybeQosParams =/= undefined, fun() ->
                     storage:set_qos_parameters(StorageId, MaybeQosParams)
                 end},

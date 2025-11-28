@@ -37,6 +37,7 @@
     is_object_storage/1,
     is_rename_supported/1,
     is_nfs4_acl_supported/1,
+    is_oauth2_supported/1,
     is_storage_access_type_supported/2,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
@@ -152,6 +153,12 @@ is_rename_supported(HelperConfigOrName) ->
 is_nfs4_acl_supported(HelperConfigOrName) ->
     Module = get_module(HelperConfigOrName),
     Module:is_nfs4_acl_supported().
+
+
+-spec is_oauth2_supported(t() | helper_config:name()) -> boolean().
+is_oauth2_supported(HelperConfigOrName) ->
+    Module = get_module(HelperConfigOrName),
+    Module:is_oauth2_supported().
 
 
 -spec is_storage_access_type_supported(t() | helper_config:name(), helper_config:access_type()) -> boolean().

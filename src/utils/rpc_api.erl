@@ -135,7 +135,7 @@ storage_update(StorageId, StorageUpdateSpec) ->
 -spec storage_describe(storage:id()) ->
     {ok, onedata_storage:description()} | errors:error().
 storage_describe(StorageId) ->
-    storage_rpc_api:describe(StorageId).
+    storage:describe(StorageId).
 
 
 -spec storage_safe_remove(storage:id()) -> ok | {error, storage_in_use | term()}.

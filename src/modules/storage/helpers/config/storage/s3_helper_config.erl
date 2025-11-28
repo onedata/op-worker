@@ -30,6 +30,7 @@
     is_object_storage/0,
     is_rename_supported/0,
     is_nfs4_acl_supported/0,
+    is_oauth2_supported/0,
     is_storage_access_type_supported/1,
     is_auto_import_supported/1,
     is_file_registration_supported/1,
@@ -164,6 +165,10 @@ is_rename_supported() -> false.
 
 -spec is_nfs4_acl_supported() -> boolean().
 is_nfs4_acl_supported() -> false.
+
+
+-spec is_oauth2_supported() -> boolean().
+is_oauth2_supported() -> false.
 
 
 -spec is_storage_access_type_supported(helper_config:access_type()) -> boolean().

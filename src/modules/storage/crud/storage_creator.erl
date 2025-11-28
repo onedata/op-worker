@@ -31,7 +31,7 @@ create(StorageCreateSpec) ->
     StorageName = StorageCreateSpec#storage_create_spec.name,
     StorageType = StorageCreateSpec#storage_create_spec.type,
 
-    %% TODO log storage/helper configuration?
+    %% TODO log storage/helper configuration
 %%    log_gathered_storage_configuration(Name, StorageType, Params),
 
     try do_create(StorageCreateSpec) of

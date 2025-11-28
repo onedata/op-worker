@@ -32,7 +32,7 @@
 -export([
     create/1,
     update/2,
-    get/1, get_all/0, exists/1,
+    describe/1, get/1, get_all/0, exists/1,
     delete/1, clear_storages/0
 ]).
 
@@ -91,7 +91,14 @@ create(StorageCreateSpec) ->
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
-    storage_updater:update(StorageId, UpdateSpec).
+    lock_on_storage_by_id(StorageId, fun() ->
+        storage_updater:update(StorageId, UpdateSpec)
+    end).
+
+
+-spec describe(storage:id()) -> {ok, onedata_storage:description()} | errors:error().
+describe(StorageId) ->
+    storage_describer:describe(StorageId).
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.

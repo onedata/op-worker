@@ -74,6 +74,9 @@
 -callback is_nfs4_acl_supported() -> boolean().
 
 
+-callback is_oauth2_supported() -> boolean().
+
+
 -callback is_storage_access_type_supported(helper_config:access_type()) -> boolean().
 
 

@@ -324,10 +324,10 @@ clear_db(StorageId, SpaceId) ->
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
     helper_config:t(), luma:feed()) -> any().
 add_helper_specific_fields(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed) ->
-    case helper_config:get_name(HelperConfig) of
-        ?WEBDAV_HELPER_NAME ->
-            add_webdav_specific_fields(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed);
-        _Other ->
+    case helper_config:is_oauth2_supported(HelperConfig) of
+        true ->
+            add_oauth2_specific_fields(UserId, SessionId, StorageCredentials, LumaFeed);
+        false ->
             {ok, StorageCredentials}
     end.
 
@@ -360,11 +360,11 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     end.
 
 
--spec add_webdav_specific_fields(od_user:id(), session:id(), storage_credentials(), helper_config:t(), feed()) ->
+-spec add_oauth2_specific_fields(od_user:id(), session:id(), storage_credentials(), feed()) ->
     {ok, luma:storage_credentials()} | {error, term()}.
-add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
+add_oauth2_specific_fields(UserId, SessionId, StorageCredentials = #{
     <<"credentialsType">> := <<"oauth2">>
-}, HelperConfig, LumaFeed) ->
+}, LumaFeed) ->
     {UserId2, SessionId2} = case fslogic_file_id:is_space_owner(UserId) of
         true ->
             % space owner uses helper_config admin_ctx
@@ -372,25 +372,21 @@ add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
         false ->
             {UserId, SessionId}
     end,
-    choose_idp_and_fill_in_webdav_oauth2_token(UserId2, SessionId2, StorageCredentials, HelperConfig, LumaFeed);
-add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _HelperConfig, _LumaFeed) ->
+    choose_idp_and_fill_in_oauth2_token(UserId2, SessionId2, StorageCredentials, LumaFeed);
+
+add_oauth2_specific_fields(_UserId, _SessionId, StorageCredentials, _LumaFeed) ->
     {ok, StorageCredentials}.
 
 
--spec choose_idp_and_fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
-    helper_config:t(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
-choose_idp_and_fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, HelperConfig, LumaFeed) ->
-    HelperAdminCtx = helper_config:get_admin_ctx(HelperConfig),
-    %% TODO https://onedata.org/#/home/api/stable/onepanel?anchor=operation/luma_get_onedata_user_to_credentials_mapping
-    %% oauthIdP is part of webdav credentials but in helper is was saved as part of args - wtf? I fixed it but here -
-    %% it turns out it is not for c++ but some of our code uses it?! da faq?
-    %% HTTP had similar fields but i didn't find it used anywhere wtf?
-    case maps:get(<<"oauth2IdP">>, HelperAdminCtx, undefined) of
+-spec choose_idp_and_fill_in_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(), feed()) ->
+    {ok, luma:storage_credentials()} | {error, term()}.
+choose_idp_and_fill_in_oauth2_token(UserId, SessionId, StorageCredentials, LumaFeed) ->
+    case maps:get(<<"oauth2IdP">>, StorageCredentials, undefined) of
         undefined ->
             % OAuth2IdP was not explicitly set, try to infer it
             case provider_logic:zone_get_offline_access_idps() of
                 {ok, [OAuth2IdP]} ->
-                    fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed);
+                    fill_in_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed);
                 {ok, []} ->
                     ?error("Empty list of identity providers retrieved from Onezone"),
                     {error, missing_identity_provider};
@@ -399,13 +395,13 @@ choose_idp_and_fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials
                     {error, ambiguous_identity_provider}
             end;
         OAuth2IdP ->
-            fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed)
+            fill_in_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed)
     end.
 
 
--spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
+-spec fill_in_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
     binary(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
-fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
+fill_in_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, OAuth2IdP, _LumaFeed) ->
@@ -421,7 +417,7 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
-fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
+fill_in_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, OAuth2IdP, ?AUTO_FEED) ->
@@ -436,7 +432,7 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
-fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, _LumaFeed) ->
+fill_in_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, _LumaFeed) ->
     {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(UserId, SessionId, OAuth2IdP),
     UserCtx2 = maps:remove(<<"onedataAccessToken">>, StorageCredentials),
     {ok, UserCtx2#{
