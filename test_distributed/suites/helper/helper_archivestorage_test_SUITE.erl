@@ -193,39 +193,26 @@ new_helper(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     S3Config = ?config(s3, ?config(s3, ?config(storages, Config))),
 
-    HelperConfig = helper_config:build(#storage_create_spec{
-        type = ?S3_HELPER_NAME,
-        name = ?RAND_STR(),
-        archive = true,
-        credentials = #s3_credentials{
-            access_key = atom_to_binary(?config(access_key, S3Config), utf8),
-            secret_key = atom_to_binary(?config(secret_key, S3Config), utf8)
+    UserCtx = #{
+        <<"accessKey">> => atom_to_binary(?config(access_key, S3Config), utf8),
+        <<"secretKey">> => atom_to_binary(?config(secret_key, S3Config), utf8)
+    },
+
+    {ok, Helper} = helper:new_helper(
+        <<"s3">>,
+        #{
+            <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
+            <<"bucketName">> => ?S3_BUCKET_NAME,
+            <<"scheme">> => <<"http">>,
+            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+            <<"blockSize">> => list_to_binary(integer_to_list(5 * ?MB)),
+            <<"archiveStorage">> => <<"true">>
         },
-        configuration = #s3_configuration{
-            scheme = <<"http">>,
-            hostname = atom_to_binary(?config(host_name, S3Config), utf8),
-            bucket_name = ?S3_BUCKET_NAME,
-            block_size = 5 * ?MB,
-            storage_path_type = flat
-        }
-    }),
-
-
-%%    {ok, Helper} = helper:new_helper(
-%%        <<"s3">>,
-%%        #{
-%%            <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
-%%            <<"bucketName">> => ?S3_BUCKET_NAME,
-%%            <<"scheme">> => <<"http">>,
-%%            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
-%%            <<"blockSize">> => list_to_binary(integer_to_list(5 * ?MB)),
-%%            <<"archiveStorage">> => <<"true">>
-%%        },
-%%        UserCtx
-%%    ),
+        UserCtx
+    ),
 
     spawn(Node, fun() ->
-        helper_loop(HelperConfig, HelperConfig#helper_config.admin_ctx)
+        helper_loop(Helper, UserCtx)
     end).
 
 delete_helper(Helper) ->
