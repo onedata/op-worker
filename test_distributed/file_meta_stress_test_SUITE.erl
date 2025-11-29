@@ -97,26 +97,24 @@ many_files_creation_test_base(Config) ->
             timer:sleep(timer:minutes(1))
     end,
 
-    [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
+    [_Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     ThreadsNum = ?config(threads_num, Config),
     FilesPerThead = ?config(files_per_thead, Config),
 
     put(file_beg, get_random_string()),
     Master = self(),
     AnswerDesc = get(file_beg),
-    RootUuid = <<>>,
 
     SpaceNameString = "Space" ++ AnswerDesc,
     ct:print("Space name: ~tp", [SpaceNameString]),
     FullSpaceNameString = "/" ++ SpaceNameString,
-    {ok, #document{key = SpaceDirUuid}} = ?assertMatch({ok, _}, rpc:call(Worker2, space_dir, ensure_exists, [
-        space_dir:uuid(list_to_binary(SpaceNameString))
-    ])),
+    SpaceId = list_to_binary(SpaceNameString),
+    ?assertEqual(ok, rpc:call(Worker2, space_dir, ensure_exists, [SpaceId])),
 
     CreateFiles = fun(DocsSet) ->
         for(1, FilesPerThead, fun(I) ->
             Stopwatch = stopwatch:start(),
-            Ans = file_meta:create({uuid, SpaceDirUuid}, #document{
+            Ans = file_meta:create({uuid, space_dir:uuid(SpaceId)}, #document{
                 value = #file_meta{
                     name = list_to_binary(DocsSet ++ integer_to_list(I))
                 }

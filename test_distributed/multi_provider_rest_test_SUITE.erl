@@ -208,26 +208,38 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ExpectedDistributionFun = fun(S, StoragePath) -> #{
         <<"distributionPerProvider">> => #{
             DomainP1 => #{
-                <<"distributionPerStorage">> => #{
-                    StorageP1 =>
-                        #{<<"blocks">> => [[0, S]], <<"physicalSize">> => S}
-                },
-                <<"locationsPerStorage">> => #{
-                    StorageP1 => StoragePath
-                },
+                <<"success">> => true,
                 <<"virtualSize">> => S,
-                <<"success">> => true
+                <<"distributionPerStorageBackend">> => #{
+                    StorageP1 => #{
+                        <<"success">> => true, 
+                        <<"blocks">> => [[0, S]], 
+                        <<"physicalSize">> => S
+                    }
+                },
+                <<"locationsPerStorageBackend">> => #{
+                    StorageP1 => #{
+                        <<"success">> => true, 
+                        <<"location">> => StoragePath
+                    }
+                }
             },
             DomainP2 => #{
-                <<"distributionPerStorage">> => #{
-                    StorageP2 =>
-                        #{<<"blocks">> => [],  <<"physicalSize">> => 0}
-                },
-                <<"locationsPerStorage">> => #{
-                    StorageP2 => null
-                },
+                <<"success">> => true,
                 <<"virtualSize">> => S,
-                <<"success">> => true
+                <<"distributionPerStorageBackend">> => #{
+                    StorageP2 => #{
+                        <<"success">> => true, 
+                        <<"blocks">> => [],  
+                        <<"physicalSize">> => 0
+                    }
+                },
+                <<"locationsPerStorageBackend">> => #{
+                    StorageP2 => #{
+                        <<"success">> => true, 
+                        <<"location">> => null
+                    }
+                }
             }
         },
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE)

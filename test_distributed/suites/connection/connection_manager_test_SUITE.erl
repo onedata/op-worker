@@ -63,11 +63,27 @@ consecutive_failures_to_verify_peer_should_not_terminate_session_test(_Config) -
     start_outgoing_provider_session(KrakowNode, SessId),
     ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
-    % wait for connection manager to reach max backoff and see that session is not terminated
-    timer:sleep(timer:seconds(?ATTEMPTS)),
+    % Collect renewal attempts. Based on backoff config from init_per_testcase:
+    % - min_backoff = 2s, max_backoff = 10s, rate = 2
+    % Expected intervals: 2s, 4s, 8s, 10s (max reached), 10s, ...
+    % Within 40 seconds we should observe:
+    %   t=0s: initial attempt (in start_outgoing_provider_session)
+    %   t=2s: retry #1
+    %   t=6s: retry #2 (2+4)
+    %   t=14s: retry #3 (2+4+8)
+    %   t=24s: retry #4 (2+4+8+10)
+    %   t=34s: retry #5 (2+4+8+10+10)
+    % Total: at least 6 attempts
+    timer:sleep(timer:seconds(40)),
+    Count = count_renewal_attempts(),
+
+    % Should have at least 6 attempts (initial + 5 retries with growing backoff)
+    % Allow upper bound of 8 to account for timing variations
+    ?assert(Count >= 6),
+    ?assert(Count =< 8),
 
     % After reaching max backoff period session should not be terminated
-    ?assertEqual(true, session_exists(KrakowNode, SessId), ?ATTEMPTS),
+    ?assertEqual(true, session_exists(KrakowNode, SessId)),
 
     ok.
 
@@ -153,12 +169,12 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(consecutive_failures_to_verify_peer_should_terminate_session_test = Case, Config) ->
+init_per_testcase(consecutive_failures_to_verify_peer_should_not_terminate_session_test = Case, Config) ->
     [Node] = oct_background:get_provider_nodes(krakow),
     mock_provider_identity_verification_to_always_fail(Node),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_session_test = Case, Config) ->
+init_per_testcase(consecutive_failures_to_perform_handshake_should_not_terminate_session_test = Case, Config) ->
     Nodes = oct_background:get_provider_nodes(paris),
     mock_handshake_to_succeed_after_n_retries(Nodes, infinity),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -187,12 +203,12 @@ init_per_testcase(_Case, Config) ->
     Config.
 
 
-end_per_testcase(consecutive_failures_to_verify_peer_should_terminate_session_test = Case, Config) ->
+end_per_testcase(consecutive_failures_to_verify_peer_should_not_terminate_session_test = Case, Config) ->
     [Node] = oct_background:get_provider_nodes(krakow),
     unmock_provider_identity_verification(Node),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(consecutive_failures_to_perform_handshake_should_terminate_session_test = Case, Config) ->
+end_per_testcase(consecutive_failures_to_perform_handshake_should_not_terminate_session_test = Case, Config) ->
     Nodes = oct_background:get_provider_nodes(paris),
     unmock_provider_handshake(Nodes),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -254,8 +270,10 @@ get_session_connections(Node, SessionId) ->
 %% @private
 -spec mock_provider_identity_verification_to_always_fail(node()) -> ok.
 mock_provider_identity_verification_to_always_fail(Node) ->
+    Self = self(),
     ok = test_utils:mock_new(Node, provider_logic, [passthrough]),
     ok = test_utils:mock_expect(Node, provider_logic, verify_provider_identity, fun(_) ->
+        Self ! renewal,
         {error, unverified_provider}
     end).
 
@@ -307,3 +325,21 @@ mock_existence_of_common_spaces(Node) ->
 -spec unmock_existence_of_common_spaces(node()) -> ok.
 unmock_existence_of_common_spaces(Node) ->
     test_utils:mock_unload(Node, space_logic).
+
+
+%% @private
+%% @doc
+%% Counts renewal attempts by collecting messages sent from mocked function.
+%% @end
+-spec count_renewal_attempts() -> non_neg_integer().
+count_renewal_attempts() ->
+    count_renewal_attempts(0).
+
+
+-spec count_renewal_attempts(non_neg_integer()) -> non_neg_integer().
+count_renewal_attempts(Count) ->
+    receive
+        renewal -> count_renewal_attempts(Count + 1)
+    after 0 ->
+        Count
+    end.

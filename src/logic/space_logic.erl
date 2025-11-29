@@ -508,4 +508,4 @@ on_space_supported(SpaceId) ->
 % TODO VFS-11954 analyze whether still needed
 -spec ensure_required_docs_exist(od_space:id()) -> ok.
 ensure_required_docs_exist(SpaceId) ->
-    special_dirs:set_up_for_new_space(SpaceId).
+    special_dirs:set_up_for_new_local_space(SpaceId).

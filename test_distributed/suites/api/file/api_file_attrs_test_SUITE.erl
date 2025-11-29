@@ -20,6 +20,7 @@
 -include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -49,10 +50,14 @@
     get_dir_distribution_1_test/1,
     get_dir_distribution_2_test/1,
     get_dir_distribution_3_test/1,
+    get_dir_distribution_4_test/1,
+    get_dir_distribution_backwards_compatibility_test/1,
     get_symlink_distribution_test/1,
     
     get_reg_file_storage_locations_test_posix/1,
     get_reg_file_storage_locations_test_s3/1,
+    get_dir_storage_locations_test_posix/1,
+    get_dir_storage_locations_test_s3/1,
 
     test_for_hardlink_between_files_test/1,
     
@@ -79,6 +84,8 @@ groups() -> [
 
         get_reg_file_storage_locations_test_posix,
         get_reg_file_storage_locations_test_s3,
+        get_dir_storage_locations_test_posix,
+        get_dir_storage_locations_test_s3,
 
         test_for_hardlink_between_files_test
     ]},
@@ -86,6 +93,8 @@ groups() -> [
         get_dir_distribution_1_test,
         get_dir_distribution_2_test,
         get_dir_distribution_3_test,
+        get_dir_distribution_4_test,
+        get_dir_distribution_backwards_compatibility_test,
         get_historical_dir_size_stats_schema_test,
         get_historical_dir_size_stats_layout_test,
         get_historical_dir_size_stats_slice_test,
@@ -923,6 +932,7 @@ get_reg_file_distribution_test(Config) ->
 
 
 get_dir_distribution_1_test(Config) ->
+    % dir distributions with disabled dir stats on both providers
     FileType = <<"dir">>,
 
     disable_dir_stats_collecting_for_space(krakow, space_krk_par),
@@ -944,24 +954,57 @@ get_dir_distribution_1_test(Config) ->
             children = [#file_spec{}]
         }
     ),
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1StorageId = get_storage_id(SpaceId, oct_background:get_provider_id(krakow)),
+    P2StorageId = get_storage_id(SpaceId, oct_background:get_provider_id(paris)),
 
-    ExpDist = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
+    ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            oct_background:get_provider_id(krakow) => ?ERR_DIR_STATS_DISABLED_FOR_SPACE,
-            oct_background:get_provider_id(paris) => ?ERR_DIR_STATS_DISABLED_FOR_SPACE
+            oct_background:get_provider_id(krakow) => #provider_dir_distribution{
+                virtual_size = undefined,
+                logical_size = undefined,
+                physical_size_per_storage = #{P1StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
+                locations_per_storage = #{P1StorageId => undefined}
+            },
+            oct_background:get_provider_id(paris) => #provider_dir_distribution{
+                virtual_size = undefined,
+                logical_size = undefined,
+                physical_size_per_storage = #{P2StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
+                locations_per_storage = #{P2StorageId => undefined}
+            }
         }
     }},
-    wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config),
+    wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config),
 
     % Write to file in dir and assert that dir distribution hasn't changed
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config).
+    FileStoragePath = get_file_storage_location(posix, DirGuid, P2Node, UserSessIdP2),
+
+    ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            oct_background:get_provider_id(krakow) => #provider_dir_distribution{
+                virtual_size = undefined,
+                logical_size = undefined,
+                physical_size_per_storage = #{P1StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
+                locations_per_storage = #{P1StorageId => undefined}
+            },
+            oct_background:get_provider_id(paris) => #provider_dir_distribution{
+                virtual_size = undefined,
+                logical_size = undefined,
+                physical_size_per_storage = #{P2StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
+                locations_per_storage = #{P2StorageId => FileStoragePath}
+            }
+        }
+    }},
+
+    wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist2, Config).
 
 
 get_dir_distribution_2_test(Config) ->
+    % dir distributions with enabled dir stats on both providers
     FileType = <<"dir">>,
 
     enable_dir_stats_collecting_for_space(krakow, space_krk_par),
@@ -983,15 +1026,17 @@ get_dir_distribution_2_test(Config) ->
 
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 0,
                 logical_size = 0,
-                physical_size_per_storage = #{P1StorageId => 0}
+                physical_size_per_storage = #{P1StorageId => 0},
+                locations_per_storage = #{P1StorageId => undefined}
             },
-            P2Id => #provider_dir_distribution_get_result{
+            P2Id => #provider_dir_distribution{
                 virtual_size = 0,
                 logical_size = 0,
-                physical_size_per_storage = #{P2StorageId => 0}
+                physical_size_per_storage = #{P2StorageId => 0},
+                locations_per_storage = #{P2StorageId => undefined}
             }
         }
     }},
@@ -1001,17 +1046,21 @@ get_dir_distribution_2_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(P2Node, UserSessIdP2, DirGuid, ?RAND_STR(), 8#707),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
+    FileStoragePath = get_file_storage_location(posix, DirGuid, P2Node, UserSessIdP2),
+
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
-                physical_size_per_storage = #{P1StorageId => 0}
+                physical_size_per_storage = #{P1StorageId => 0},
+                locations_per_storage = #{P1StorageId => undefined}
             },
-            P2Id => #provider_dir_distribution_get_result{
+            P2Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
-                physical_size_per_storage = #{P2StorageId => 20}
+                physical_size_per_storage = #{P2StorageId => 20},
+                locations_per_storage = #{P2StorageId => FileStoragePath}
             }
         }
     }},
@@ -1020,6 +1069,7 @@ get_dir_distribution_2_test(Config) ->
 
 
 get_dir_distribution_3_test(Config) ->
+    % dir distributions with dir stats enabled on one provider and disabled on the other one
     FileType = <<"dir">>,
 
     enable_dir_stats_collecting_for_space(krakow, space_krk_par),
@@ -1029,6 +1079,7 @@ get_dir_distribution_3_test(Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     P1StorageId = get_storage_id(SpaceId, P1Id),
     P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
 
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -1042,12 +1093,18 @@ get_dir_distribution_3_test(Config) ->
 
     ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 0,
                 logical_size = 0,
-                physical_size_per_storage = #{P1StorageId => 0}
+                physical_size_per_storage = #{P1StorageId => 0},
+                locations_per_storage = #{P1StorageId => undefined}
             },
-            P2Id => ?ERR_DIR_STATS_DISABLED_FOR_SPACE
+            P2Id => #provider_dir_distribution{
+                virtual_size = undefined,
+                logical_size = undefined,
+                physical_size_per_storage = #{P2StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
+                locations_per_storage = #{P2StorageId => undefined}
+            }
         }
     }},
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
@@ -1059,14 +1116,125 @@ get_dir_distribution_3_test(Config) ->
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
+    FileStoragePath = get_file_storage_location(posix, DirGuid, P1Node, UserSessIdP1),
     ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
-            P1Id => #provider_dir_distribution_get_result{
+            P1Id => #provider_dir_distribution{
                 virtual_size = 50,
                 logical_size = 50,
-                physical_size_per_storage = #{P1StorageId => 10}
+                physical_size_per_storage = #{P1StorageId => 10},
+                locations_per_storage = #{P1StorageId => FileStoragePath}
             },
-            P2Id => ?ERR_DIR_STATS_DISABLED_FOR_SPACE
+            P2Id => #provider_dir_distribution{
+                virtual_size = undefined,
+                logical_size = undefined,
+                physical_size_per_storage = #{P2StorageId => ?ERR_DIR_STATS_DISABLED_FOR_SPACE},
+                locations_per_storage = #{P2StorageId => FileStoragePath}
+            }
+        }
+    }},
+    wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist2, Config).
+
+
+get_dir_distribution_4_test(Config) ->
+    % dir distributions with a space supported with a s3 storage
+    FileType = <<"dir">>,
+
+    enable_dir_stats_collecting_for_space(krakow, space_s3),
+    enable_dir_stats_collecting_for_space(paris, space_s3),
+
+    SpaceId = oct_background:get_space_id(space_s3),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+
+    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_s3, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+    ),
+
+    ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution{
+                virtual_size = 0,
+                logical_size = 0,
+                physical_size_per_storage = #{P1StorageId => 0},
+                locations_per_storage = #{
+                    P1StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P1StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                }
+            },
+            P2Id => #provider_dir_distribution{
+                virtual_size = 0,
+                logical_size = 0,
+                physical_size_per_storage = #{P2StorageId => 0},
+                locations_per_storage = #{
+                    P2StorageId => ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(P2StorageId, ?POSIX_COMPATIBLE_HELPERS)
+                }
+            }
+        }
+    }},
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config).
+
+
+get_dir_distribution_backwards_compatibility_test(Config) ->
+    % Dir distributions with a provider in version before 21.02.9 (there are no locations_per_storage in response).
+    % Provider in older version is achieved by mocking response to the new provider rpc request as NOT_SUPPORTED.
+    FileType = <<"dir">>,
+
+    enable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    enable_dir_stats_collecting_for_space(paris, space_krk_par),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
+
+    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+    ),
+
+    ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution{
+                virtual_size = 0,
+                logical_size = 0,
+                physical_size_per_storage = #{P1StorageId => 0},
+                locations_per_storage = #{P1StorageId => undefined}
+            },
+            P2Id => #provider_dir_distribution{
+                virtual_size = 0,
+                logical_size = 0,
+                physical_size_per_storage = #{P2StorageId => 0},
+                locations_per_storage = #{<<"unknown">> => ?ERROR_NOT_SUPPORTED}
+            }
+        }
+    }},
+    wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config),
+
+    {ok, FileGuid} = lfm_proxy:create(P2Node, UserSessIdP2, DirGuid, ?RAND_STR(), 8#707),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
+
+    ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution{
+                virtual_size = 50,
+                logical_size = 50,
+                physical_size_per_storage = #{P1StorageId => 0},
+                locations_per_storage = #{P1StorageId => undefined}
+            },
+            P2Id => #provider_dir_distribution{
+                virtual_size = 50,
+                logical_size = 50,
+                physical_size_per_storage = #{P2StorageId => 20},
+                locations_per_storage = #{<<"unknown">> => ?ERROR_NOT_SUPPORTED}
+            }
         }
     }},
     wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
@@ -1076,23 +1244,12 @@ get_dir_distribution_3_test(Config) ->
 get_symlink_distribution_test(Config) ->
     FileType = <<"sym">>,
     
-    SpaceId = oct_background:get_space_id(space_krk_par),
-    P1Id = oct_background:get_provider_id(krakow),
-    P1StorageId = get_storage_id(SpaceId, P1Id),
-    P2Id = oct_background:get_provider_id(paris),
-    P2StorageId = get_storage_id(SpaceId, P2Id),
-    
-    #object{guid = SymGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>}
     ),
+
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     
-    ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
-        virtual_size = 0,
-        storages_per_provider = #{
-            P1Id => [P1StorageId],
-            P2Id => [P2StorageId]
-        }
-    }},
     ClientSpec = #client_spec{
         correct = [
             user2, % space owner - doesn't need any perms
@@ -1102,7 +1259,22 @@ get_symlink_distribution_test(Config) ->
         unauthorized = [nobody],
         forbidden_not_in_space = [user1]
     },
-    get_distribution_test_base(FileType, SymGuid, undefined, ExpDist, Config, ClientSpec).
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ClientSpec,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = build_get_distribution_prepare_rest_args_fun(FileObjectId),
+                    validate_result_fun = fun(_TestCtx, {ok, RespCode, _RespHeaders, _RespBody}) ->
+                        ?assertEqual(?HTTP_400_BAD_REQUEST, RespCode)
+                    end
+                }
+            ]
+        }
+    ])).
 
 %% @private
 -spec enable_dir_stats_collecting_for_space(
@@ -1651,14 +1823,22 @@ build_gather_historical_dir_size_stats_prepare_rest_args_fun(Guid, DefaultData) 
 %%%===================================================================
 
 get_reg_file_storage_locations_test_posix(Config) ->
-    get_reg_file_storage_locations_test(Config, posix).
+    get_file_storage_locations_test(Config, reg, posix).
 
 
 get_reg_file_storage_locations_test_s3(Config) ->
-    get_reg_file_storage_locations_test(Config, s3).
+    get_file_storage_locations_test(Config, reg, s3).
 
 
-get_reg_file_storage_locations_test(Config, StorageType) ->
+get_dir_storage_locations_test_posix(Config) ->
+    get_file_storage_locations_test(Config, dir, posix).
+
+
+get_dir_storage_locations_test_s3(Config) ->
+    get_file_storage_locations_test(Config, dir, s3).
+
+
+get_file_storage_locations_test(Config, FileType, StorageType) ->
     P1Id = oct_background:get_provider_id(krakow),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     
@@ -1674,66 +1854,55 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
     
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
-    
-    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_dir:guid(SpaceId), #file_spec{
-            shares = [#share_spec{}],
-            mode = 8#707,
-            content = crypto:strong_rand_bytes(20)
-        }, krakow
-    ),
+
+    {FileGuid, FileToReadGuid, ShareId} = create_storage_locations_test_file(FileType, SpaceId),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    
-    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
-    [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
-    FileStoragePath = case StorageType of
-        posix -> 
-            filename:join([<<"/">>, SpaceId | PathTokens]);
-        s3 -> 
-            <<A:1/binary, B:1/binary, C:1/binary, _/binary>> = FileUuid,
-            filename:join([<<"/">>, SpaceId, A, B, C, FileUuid])
+
+    FileStoragePath = get_file_storage_location(StorageType, FileGuid, P1Node, UserSessIdP1),
+
+    ExpLocationsBuilder = fun(StorageId, Path) ->
+        case {FileType, StorageType} of
+            {dir, s3} -> #{
+                <<"success">> => true,
+                <<"locationsPerStorageBackend">> => #{
+                    StorageId => #{
+                        <<"success">> => false,
+                        <<"error">> => errors:to_json(?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(StorageId, ?POSIX_COMPATIBLE_HELPERS))
+                    }
+                }
+            };
+            _ -> #{
+                <<"success">> => true,
+                <<"locationsPerStorageBackend">> => #{
+                    StorageId => #{
+                        <<"success">> => true,
+                        <<"location">> => Path
+                    }
+                }
+            }
+        end
     end,
+
     ExpResult1 = #{
         <<"locationsPerProvider">> => #{
-            P1Id => #{
-                <<"locationsPerStorage">> => #{
-                    P1StorageId => FileStoragePath
-                },
-                <<"success">> => true
-            },
-            P2Id => #{
-                <<"locationsPerStorage">> => #{
-                    P2StorageId => null
-                },
-                <<"success">> => true
-            }
+            P1Id => ExpLocationsBuilder(P1StorageId, FileStoragePath),
+            P2Id => ExpLocationsBuilder(P2StorageId, null)
         }
     },
-    assert_file_location_created(P2Node, FileUuid, P1Id),
+    assert_file_location_created(P2Node, FileType, FileUuid, P1Id),
     get_storage_locations_test_base(FileGuid, ShareId, ExpResult1, Config),
     
     % Read file on the other provider and check file storage locations again.
     
-    lfm_test_utils:read_file(P2Node, UserSessIdP2, FileGuid, 20),
-    assert_file_location_created(P1Node, FileUuid, P2Id),
+    lfm_test_utils:read_file(P2Node, UserSessIdP2, FileToReadGuid, 20),
+    assert_file_location_created(P1Node, FileType, FileUuid, P2Id),
     ExpResult2 = #{
         <<"locationsPerProvider">> => #{
-            P1Id => #{
-                <<"locationsPerStorage">> => #{
-                    P1StorageId => FileStoragePath
-                },
-                <<"success">> => true
-            },
-            P2Id => #{
-                <<"locationsPerStorage">> => #{
-                    P2StorageId => FileStoragePath
-                },
-                <<"success">> => true
-            }
+            P1Id => ExpLocationsBuilder(P1StorageId, FileStoragePath),
+            P2Id => ExpLocationsBuilder(P2StorageId, FileStoragePath)
         }
     },
     get_storage_locations_test_base(FileGuid, ShareId, ExpResult2, Config).
-
 
 get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -1808,12 +1977,41 @@ build_get_storage_locations_prepare_gs_args_fun(FileGuid, Scope) ->
 
 
 %% @private
--spec assert_file_location_created(node(), file_id:file_meta_uuid(), oneprovider:id()) -> 
+-spec assert_file_location_created(node(), reg | dir, file_id:file_meta_uuid(), oneprovider:id()) ->
     {ok, file_location:doc()} | no_return().
-assert_file_location_created(Node, FileUuid, LocationProviderId) ->
+assert_file_location_created(Node, reg, FileUuid, LocationProviderId) ->
     ?assertMatch({ok, _}, opw_test_rpc:call(Node, fslogic_location_cache, get_location, [
         file_location:id(FileUuid, LocationProviderId), FileUuid, false
-    ]), ?ATTEMPTS).
+    ]), ?ATTEMPTS);
+assert_file_location_created(_Node, dir, _DirUuid, _LocationProviderId) ->
+    ok.
+
+
+%% @private
+-spec create_storage_locations_test_file(reg | dir, od_space:id()) ->
+    {file_id:file_guid(), file_id:file_guid(), od_share:id()}.
+create_storage_locations_test_file(reg, SpaceId) ->
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_dir:guid(SpaceId), #file_spec{
+            shares = [#share_spec{}],
+            mode = 8#707,
+            content = crypto:strong_rand_bytes(20)
+        }, krakow
+    ),
+    {FileGuid, FileGuid, ShareId};
+create_storage_locations_test_file(dir, SpaceId) ->
+    #object{
+        guid = DirGuid,
+        shares = [ShareId],
+        children = [#object{guid = FileGuid}]
+    } = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_dir:guid(SpaceId), #dir_spec{
+            shares = [#share_spec{}],
+            mode = 8#707,
+            children = [#file_spec{content = crypto:strong_rand_bytes(10)}]
+        }, krakow
+    ),
+    {DirGuid, FileGuid, ShareId}.
 
 
 %% @private
@@ -1833,6 +2031,19 @@ gather_historical_dir_size_stats(DirGuid, ProviderPlaceholder) ->
         SessionId, ?FILE_REF(DirGuid), ProviderId, Request)
     ),
     Value.
+
+
+%% @private
+-spec get_file_storage_location(posix | s3, file_id:file_guid(), node(), session:id()) -> helpers:file_id().
+get_file_storage_location(posix, FileGuid, Node, SessId) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, FilePath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
+    [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
+    filename:join([<<"/">>, SpaceId | PathTokens]);
+get_file_storage_location(s3, FileGuid, _Node, _SessId) ->
+    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+    <<A:1/binary, B:1/binary, C:1/binary, _/binary>> = FileUuid,
+    filename:join([<<"/">>, SpaceId, A, B, C, FileUuid]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1866,7 +2077,16 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
 
-init_per_testcase(get_historical_dir_size_stats_slice_test=Case, Config) ->
+init_per_testcase(get_dir_distribution_backwards_compatibility_test = Case, Config) ->
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    test_utils:mock_new(P2Node, provider_rpc_worker),
+    test_utils:mock_expect(P2Node, provider_rpc_worker, handle, fun
+        (#provider_rpc_call{request = #provider_dir_distribution_get_request{}}) -> {ok, #status{code = ?EINVAL}};
+        (Request) -> meck:passthrough([Request])
+    end),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(get_historical_dir_size_stats_slice_test = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -1874,7 +2094,16 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     Config.
 
-end_per_testcase(get_historical_dir_size_stats_slice_test=Case, Config) ->
+end_per_testcase(get_dir_distribution_3_test = Case, Config) ->
+    enable_dir_stats_collecting_for_space(paris, space_krk_par),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(get_historical_dir_size_stats_slice_test = Case, Config) ->
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    test_utils:mock_unload(P2Node, [provider_rpc_worker]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(get_historical_dir_size_stats_slice_test = Case, Config) ->
     ok = time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

@@ -239,9 +239,12 @@ ensure_extended_name_in_edge_files(UserCtx, FilesBatch) ->
                     {_, FileCtx2} = file_attr:resolve(UserCtx, FileCtx, #{
                         attributes => [?attr_name],
                         name_conflicts_resolution_policy => resolve_name_conflicts,
-                        check_perms => false
+                        check_perms => false,
+                        % allow deleted files so the edge files are not accidentally filtered out
+                        % NOTE: fetching attrs later for all files can still result in those files being filtered out, which is expected
+                        allow_deleted_files => true
                     }),
-                    {true, FileCtx2}
+                    {true, file_ctx:clean_cached_deleted_doc(FileCtx2)}
                 end);
             false ->
                 % Other files than first and last don't need to resolve name

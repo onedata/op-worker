@@ -18,7 +18,7 @@
 
 
 %% NOTE: Any operation added here will be automatically allowed for space dir.
-%% For more details see space_dir:allowed_operations/0.
+%% For more details see space_dir:supported_operations/0.
 -define(FSLOGIC_ALL_OPERATIONS, [
     %% @TODO VFS-12502 - Untangle fslogic operations types
     % FUSE REQUEST

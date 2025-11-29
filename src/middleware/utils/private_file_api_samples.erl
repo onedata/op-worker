@@ -90,7 +90,6 @@ rest_api_endpoints(?SYMLINK_TYPE, FileId) ->
     [
         get_symlink_value_endpoint(FileId),
         get_hardlinks_endpoint(FileId),
-        get_data_distribution_endpoint(FileId),
         remove_file_endpoint(FileId),
         get_attrs_endpoint(FileId)
     ].

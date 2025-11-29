@@ -571,7 +571,7 @@ delete_stalled_file_and_create_missing_parent(StorageFileCtx, FileCtx, Info) ->
 %%-------------------------------------------------------------------
 -spec maybe_import_file(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-maybe_import_file(StorageFileCtx, Info) ->
+maybe_import_file(StorageFileCtx,  #{parent_ctx := ParentCtx} = Info) ->
     SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
     % We must ensure that there was no race with deleting file.
     % We check whether file that we found on storage and that we want to import
@@ -580,8 +580,19 @@ maybe_import_file(StorageFileCtx, Info) ->
     case VerifyExistence of
         true ->
             case storage_driver:exists(SDHandle) of
-                true -> import_file(StorageFileCtx, Info);
-                false -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                true ->
+                    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+                    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
+                    % Check for possible race with deletion of opened file - in such a case file is not deleted 
+                    % on storage, but we do not want to reimport it.
+                    case deletion_marker:check(ParentUuid, FileName) of
+                        {error, not_found} ->
+                            import_file(StorageFileCtx, Info);
+                        {ok, _} ->
+                            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                    end;
+                false -> 
+                    {?FILE_UNMODIFIED, undefined, StorageFileCtx}
             end;
         false ->
             import_file(StorageFileCtx, Info)
@@ -660,13 +671,18 @@ try_to_delete_file(ParentCtx, ChildName) ->
 import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
+    % use id of user in case of manual file registration
+    FinalOwnerId = case {OwnerId, maps:get(manual, Info, false)} of
+        {?SPACE_OWNER_ID(_) = SpacceOwner, true} -> maps:get(user_id, Info, SpacceOwner);
+        _ -> OwnerId
+    end,
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
-    case create_location(FileUuid, StorageFileCtx2, OwnerId) of
+    case create_location(FileUuid, StorageFileCtx2, FinalOwnerId) of
         {ok, StorageFileCtx3} ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
             {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
-            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
+            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, FinalOwnerId,
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.

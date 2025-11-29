@@ -58,6 +58,7 @@
 
 -spec update_cache(id(), diff(), doc()) -> {ok, doc()} | {error, term()}.
 update_cache(Id, Diff, Default) ->
+    %% @TODO VFS-13002 - this hook should not be executed in the calling process
     run_in_critical_section(Id, fun() ->
         PrevVal = case get_from_cache(Id) of
             {ok, #document{value = V}} -> V;
@@ -160,7 +161,9 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
         [] ->
             ok;
         SpacesDiff ->
-            lists:foreach(fun special_dirs:set_up_for_new_space/1, SpacesDiff),
+            % Local spaces are properly set up in when space doc appears (see od_space), 
+            % here only essentials are created so provider proxy can work.
+            lists:foreach(fun special_dirs:set_up_for_new_proxy_space/1, SpacesDiff),
             user_root_dir:report_new_spaces_appeared([UserId], SpacesDiff)
     end.
 

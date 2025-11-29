@@ -321,7 +321,6 @@ exp_operation_list(private, ?REGULAR_FILE_TYPE) -> [
 exp_operation_list(private, ?SYMLINK_TYPE) -> [
     {'GET', <<"get_symlink_value">>, <<"Get symbolic link value">>},
     {'GET', <<"get_file_hardlinks">>, <<"Get file hard links">>},
-    {'GET', <<"get_file_distribution">>, <<"Get data distribution">>},
     {'DELETE', <<"remove_file">>, <<"Remove file">>},
     {'GET', <<"get_attrs">>, <<"Get attributes">>}
 ].

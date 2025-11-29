@@ -56,6 +56,13 @@
 ]).
 
 
+%% Debug functions
+-export([
+    list/1, list/2,
+    clear_all/2, clear_all/3
+]).
+
+
 -define(NAME_UUID_SEPARATOR, "@@").
 -define(NAME_IN_TRASH(FileName, FileUuid), <<FileName/binary, ?NAME_UUID_SEPARATOR, FileUuid/binary>>).
 
@@ -200,6 +207,47 @@ is_logically_detached() -> true.
 -spec exists(file_meta:uuid()) -> boolean().
 exists(Uuid) ->
     file_meta:exists(Uuid).
+
+
+%%%===================================================================
+%%% Debug helpers - functions to be used in debug, should not be used in production code
+%%%===================================================================
+
+list(SpaceId) ->
+    list(SpaceId, file_listing:starting_opts_with_tune_for_cont_listing(false)).
+
+list(SpaceId, ListOpts) when is_map(ListOpts) ->
+    {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
+        file_ctx:new_by_guid(trash_dir:guid(SpaceId)), ListOpts),
+    {Children, NextPaginationToken};
+list(SpaceId, PaginationToken) ->
+    ListOpts = #{pagination_token => PaginationToken},
+    list(SpaceId, ListOpts).
+
+
+% NOTE: this is best effort and is not guaranteed to work properly (mainly due to not having original parent uuid)
+clear_all(SpaceId, EmitEvents) ->
+    clear_all(SpaceId, EmitEvents, undefined).
+
+clear_all(SpaceId, EmitEvents, Token) ->
+    {List, NextToken} = case Token of
+        undefined -> list(SpaceId);
+        _ -> list(SpaceId, Token)
+    end,
+    lists:foreach(fun(FileCtx) ->
+        schedule_deletion_from_trash(FileCtx, user_ctx:new(?ROOT_SESS_ID), EmitEvents,
+            space_dir:uuid(SpaceId), extract_name(FileCtx))
+    end, List),
+    case file_listing:is_finished(NextToken) of
+        true -> ok;
+        false -> clear_all(SpaceId, EmitEvents, NextToken)
+    end.
+
+
+extract_name(FileCtx) ->
+    {ExtendedName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    str_utils:join_binary(
+        lists:droplast(binary:split(ExtendedName, <<?NAME_UUID_SEPARATOR>>, [global])), <<?NAME_UUID_SEPARATOR>>).
 
 
 %%%===================================================================

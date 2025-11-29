@@ -135,6 +135,8 @@ remove_test_file(HelperConfig, UserCtx, FileId, Size) ->
     ok | {errors:error(), diagnostic_error_details()}.
 run_diagnostics_on_nodes(_Nodes, #helper_config{name = ?NULL_DEVICE_HELPER_NAME}, _LumaFeed, _) ->
     ok;
+run_diagnostics_on_nodes(_Nodes, #helper_config{name = ?HTTP_HELPER_NAME}, _LumaFeed, _) ->
+    ok;
 run_diagnostics_on_nodes(Nodes, HelperConfig, LumaFeed, Options) ->
     try
         case ?SKIP_STORAGE_DETECTION of
