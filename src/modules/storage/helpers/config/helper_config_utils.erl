@@ -13,7 +13,8 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/storage/helpers/helpers.hrl").
--include_lib("ctool/include/storage/common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("op_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([
@@ -24,6 +25,7 @@
 
     validate_user_ctx/2,
     validate_user_ctx/3,
+    resolve_admin_id/1,
 
     is_canonical/1,
     get_storage_path_type/1,
@@ -133,6 +135,19 @@ validate_user_ctx(UserCtx, RequiredFields, OptionalFields) ->
         Error ->
             Error
     end.
+
+
+-spec resolve_admin_id(helper_config:user_ctx()) -> helper_config:user_ctx().
+resolve_admin_id(Credentials = #{<<"onedataAccessToken">> := OnedataAccessToken}) ->
+    TokenCredentials = auth_manager:build_token_credentials(
+        OnedataAccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, ?USER(UserId), _} = auth_manager:verify_credentials(TokenCredentials),
+    Credentials#{<<"adminId">> => UserId};
+
+resolve_admin_id(Credentials) ->
+    Credentials.
 
 
 -spec is_canonical(helper_config:t()) -> boolean().

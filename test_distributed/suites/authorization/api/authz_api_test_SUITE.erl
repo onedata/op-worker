@@ -16,9 +16,9 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("space_setup_utils.hrl").
--include_lib("ctool/include/storage/common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("op_panel_contracts/include/storage/common.hrl").
 
 -export([
     groups/0, all/0,

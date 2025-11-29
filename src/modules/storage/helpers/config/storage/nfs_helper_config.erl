@@ -15,8 +15,8 @@
 -behaviour(helper_config_behaviour).
 
 -include("modules/storage/helpers/helpers.hrl").
--include_lib("ctool/include/storage/common.hrl").
--include_lib("ctool/include/storage/nfs.hrl").
+-include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("op_panel_contracts/include/storage/nfs.hrl").
 
 %% helper_config_behaviour callbacks
 -export([

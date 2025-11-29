@@ -17,8 +17,8 @@
 
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/storage/common.hrl").
--include_lib("ctool/include/storage/http.hrl").
+-include_lib("op_panel_contracts/include/storage/common.hrl").
+-include_lib("op_panel_contracts/include/storage/http.hrl").
 
 %% helper_config_behaviour callbacks
 -export([
@@ -262,7 +262,6 @@ build_args(#storage_create_spec{
     ]).
 
 
-%% TODO similar to webdav - maybe some utils?
 %% @private
 -spec build_admin_ctx(#http_credentials{}) -> helper_config:user_ctx().
 build_admin_ctx(#http_credentials{
@@ -279,25 +278,10 @@ build_admin_ctx(#http_credentials{
         {<<"oauth2IdP">>, OAuth2IdP},
         {<<"onedataAccessToken">>, OnedataAccessToken}
     ]),
-
-    %% Clear unused credentials if type is 'none'
-    BaseCtx2 = case CredentialsType of
+    helper_config_utils:resolve_admin_id(case CredentialsType of
         none -> maps:remove(<<"credentials">>, BaseCtx1);
         _ -> BaseCtx1
-    end,
-
-    %% Resolve user ID by token if onedataAccessToken is present
-    case OnedataAccessToken of
-        undefined ->
-            BaseCtx2;
-        AccessToken ->
-            TokenCredentials = auth_manager:build_token_credentials(
-                AccessToken, undefined, undefined,
-                undefined, disallow_data_access_caveats
-            ),
-            {ok, ?USER(UserId), _} = auth_manager:verify_credentials(TokenCredentials),
-            BaseCtx2#{<<"adminId">> => UserId}
-    end.
+    end).
 
 
 %% @private

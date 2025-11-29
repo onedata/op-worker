@@ -388,7 +388,9 @@ assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid, Atte
     GetStorageSize = fun(SDHandle) ->
         case sd_test_utils:stat(Node, SDHandle) of
             {ok, #statbuf{st_size = SourceSize}} -> SourceSize;
-            _ -> error
+            Sth ->
+                ct:pal("~tp", [{?MODULE, ?LINE, Sth}]),
+                error
         end
     end,
     ?assertEqual(SourceSize, GetStorageSize(TargetSDHandle), Attempts).

@@ -15,7 +15,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/storage/common.hrl").
+-include_lib("op_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([

@@ -25,9 +25,9 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/storage/common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("op_panel_contracts/include/storage/common.hrl").
 
 %% API
 -export([run_test/2]).
