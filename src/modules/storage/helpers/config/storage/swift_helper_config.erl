@@ -35,7 +35,10 @@
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
-    get_block_size/1
+    get_block_size/1,
+
+    redact_confidential_credentials/1,
+    redact_confidential_credentials_diff/1
 ]).
 
 -define(DEFAULT_SWIFT_BLOCK_SIZE, 10485760).
@@ -126,13 +129,15 @@ describe(#helper_config{
     %% Reconstruct credentials record from admin_ctx
     BaseCredentials = #swift_credentials{
         username = maps:get(<<"username">>, AdminCtx),
-        password = ?CONFIDENTIAL_MASK,  %% Redacted for security reasons
+        password = maps:get(<<"password">>, AdminCtx),
         project_name = maps:get(<<"projectName">>, AdminCtx)
     },
-    Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-        {<<"userDomainName">>, #swift_credentials.user_domain_name},
-        {<<"projectDomainName">>, #swift_credentials.project_domain_name}
-    ]),
+    Credentials = redact_confidential_credentials(
+        helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
+            {<<"userDomainName">>, #swift_credentials.user_domain_name},
+            {<<"projectDomainName">>, #swift_credentials.project_domain_name}
+        ])
+    ),
 
     #helper_config_description{
         type = ?SWIFT_HELPER_NAME,
@@ -190,6 +195,16 @@ get_block_size(#helper_config{args = Args}) ->
         Bin when is_binary(Bin) -> binary_to_integer(Bin);
         Int when is_integer(Int) -> Int
     end.
+
+
+-spec redact_confidential_credentials(#swift_credentials{}) -> #swift_credentials{}.
+redact_confidential_credentials(Credentials) ->
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#swift_credentials.password]).
+
+
+-spec redact_confidential_credentials_diff(#swift_credentials_diff{}) -> #swift_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff) ->
+    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [#swift_credentials_diff.password]).
 
 
 %%%===================================================================

@@ -35,7 +35,10 @@
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
-    get_block_size/1
+    get_block_size/1,
+
+    redact_confidential_credentials/1,
+    redact_confidential_credentials_diff/1
 ]).
 
 
@@ -123,9 +126,11 @@ describe(#helper_config{
     BaseCredentials = #xrootd_credentials{
         credentials_type = credentials_type_from_binary(maps:get(<<"credentialsType">>, AdminCtx))
     },
-    Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-        {<<"credentials">>, #xrootd_credentials.credentials, fun(_) -> ?CONFIDENTIAL_MASK end}
-    ]),
+    Credentials = redact_confidential_credentials(
+        helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
+            {<<"credentials">>, #xrootd_credentials.credentials}
+        ])
+    ),
 
     #helper_config_description{
         type = ?XROOTD_HELPER_NAME,
@@ -180,6 +185,20 @@ is_getting_size_supported(_HelperConfig) ->
 -spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
 get_block_size(#helper_config{}) ->
     undefined.
+
+
+-spec redact_confidential_credentials(#xrootd_credentials{}) -> #xrootd_credentials{}.
+redact_confidential_credentials(Credentials) ->
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [
+        #xrootd_credentials.credentials
+    ]).
+
+
+-spec redact_confidential_credentials_diff(#xrootd_credentials_diff{}) -> #xrootd_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff) ->
+    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
+        #xrootd_credentials_diff.credentials
+    ]).
 
 
 %%%===================================================================

@@ -31,8 +31,9 @@ create(StorageCreateSpec) ->
     StorageName = StorageCreateSpec#storage_create_spec.name,
     StorageType = StorageCreateSpec#storage_create_spec.type,
 
-    %% TODO log storage/helper configuration
-%%    log_gathered_storage_configuration(Name, StorageType, Params),
+    ?info("Gathered storage configuration for '~ts' (~ts) - parameters: ~n~ts", [
+        StorageName, StorageType, storage_crud_utils:pretty_print_spec(StorageCreateSpec)
+    ]),
 
     try do_create(StorageCreateSpec) of
         {ok, StorageId} = Result ->

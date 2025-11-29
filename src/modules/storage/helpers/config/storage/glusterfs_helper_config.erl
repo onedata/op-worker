@@ -35,7 +35,10 @@
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
-    get_block_size/1
+    get_block_size/1,
+
+    redact_confidential_credentials/1,
+    redact_confidential_credentials_diff/1
 ]).
 
 
@@ -126,9 +129,11 @@ describe(#helper_config{
     BaseCredentials = #glusterfs_credentials{
         uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
     },
-    Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-        {<<"gid">>, #glusterfs_credentials.gid, fun binary_to_integer/1}
-    ]),
+    Credentials = redact_confidential_credentials(
+        helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
+            {<<"gid">>, #glusterfs_credentials.gid, fun binary_to_integer/1}
+        ])
+    ),
 
     #helper_config_description{
         type = ?GLUSTERFS_HELPER_NAME,
@@ -244,3 +249,13 @@ transport_to_binary(socket) -> <<"socket">>.
 transport_from_binary(<<"tcp">>) -> tcp;
 transport_from_binary(<<"rdma">>) -> rdma;
 transport_from_binary(<<"socket">>) -> socket.
+
+
+-spec redact_confidential_credentials(#glusterfs_credentials{}) -> #glusterfs_credentials{}.
+redact_confidential_credentials(Credentials) ->
+    Credentials.
+
+
+-spec redact_confidential_credentials_diff(#glusterfs_credentials_diff{}) -> #glusterfs_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff) ->
+    CredentialsDiff.

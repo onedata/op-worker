@@ -20,6 +20,7 @@
     add_optional_args_if_defined/2,
     build_args_diff_from_specs/2,
     set_optional_record_fields_if_defined/3,
+    redact_record_fields_if_defined/2,
 
     validate_user_ctx/2,
     validate_user_ctx/3,
@@ -93,6 +94,18 @@ set_optional_record_fields_if_defined(BaseRecord, NifMap, FieldSpecs) ->
                     Acc
             end
     end, BaseRecord, FieldSpecs).
+
+
+-spec redact_record_fields_if_defined(tuple(), [pos_integer()]) -> tuple().
+redact_record_fields_if_defined(Record, FieldsToRedact) ->
+    lists:foldl(fun(FieldNo, RecordAcc) ->
+        case erlang:element(FieldNo, RecordAcc) of
+            undefined ->
+                RecordAcc;
+            _ ->
+                erlang:setelement(FieldNo, RecordAcc, ?CONFIDENTIAL_MASK)
+        end
+    end, Record, FieldsToRedact).
 
 
 -spec validate_user_ctx(helper_config:user_ctx(), [binary()]) -> ok | {error, term()}.

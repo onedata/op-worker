@@ -35,7 +35,10 @@
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
-    get_block_size/1
+    get_block_size/1,
+
+    redact_confidential_credentials/1,
+    redact_confidential_credentials_diff/1
 ]).
 
 
@@ -112,10 +115,10 @@ describe(#helper_config{
     },
 
     %% Reconstruct credentials record from admin_ctx
-    Credentials = #ceph_credentials{
+    Credentials = redact_confidential_credentials(#ceph_credentials{
         username = maps:get(<<"username">>, AdminCtx),
-        key = ?CONFIDENTIAL_MASK  %% Redacted for security reasons
-    },
+        key = maps:get(<<"key">>, AdminCtx)
+    }),
 
     #helper_config_description{
         type = ?CEPH_HELPER_NAME,
@@ -170,6 +173,18 @@ is_getting_size_supported(_HelperConfig) ->
 -spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
 get_block_size(#helper_config{}) ->
     undefined.
+
+
+-spec redact_confidential_credentials(#ceph_credentials{}) -> #ceph_credentials{}.
+redact_confidential_credentials(Credentials = #ceph_credentials{}) ->
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#ceph_credentials.key]).
+
+
+-spec redact_confidential_credentials_diff(#ceph_credentials_diff{}) -> #ceph_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff = #ceph_credentials_diff{}) ->
+    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
+        #ceph_credentials_diff.key
+    ]).
 
 
 %%%===================================================================

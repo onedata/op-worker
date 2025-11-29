@@ -51,7 +51,10 @@
     get_block_size/1,
     get_storage_path_type/1,
     get_params/2,
-    get_proxy_params/2
+    get_proxy_params/2,
+
+    redact_confidential_credentials/2,
+    redact_confidential_credentials_diff/2
 ]).
 
 -type t() :: #helper_config{}.
@@ -253,6 +256,20 @@ get_proxy_params(Timeout, StorageId) ->
             #helper_arg{key = <<"timeout">>, value = TimeoutValue}
         ]
     }.
+
+
+-spec redact_confidential_credentials(t() | name(), onedata_storage:credentials()) ->
+    onedata_storage:credentials().
+redact_confidential_credentials(HelperConfigOrName, Credentials) ->
+    Module = get_module(HelperConfigOrName),
+    Module:redact_confidential_credentials(Credentials).
+
+
+-spec redact_confidential_credentials_diff(t() | name(), onedata_storage:credentials_diff()) ->
+    onedata_storage:credentials_diff().
+redact_confidential_credentials_diff(HelperConfigOrName, CredentialsDiff) ->
+    Module = get_module(HelperConfigOrName),
+    Module:redact_confidential_credentials_diff(CredentialsDiff).
 
 
 %%%===================================================================

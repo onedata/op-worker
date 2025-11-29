@@ -35,7 +35,10 @@
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
-    get_block_size/1
+    get_block_size/1,
+
+    redact_confidential_credentials/1,
+    redact_confidential_credentials_diff/1
 ]).
 
 -define(DEFAULT_CEPHRADOS_BLOCK_SIZE, 4194304).
@@ -117,10 +120,10 @@ describe(#helper_config{
     ]),
 
     %% Reconstruct credentials record from admin_ctx
-    Credentials = #cephrados_credentials{
+    Credentials = redact_confidential_credentials(#cephrados_credentials{
         username = maps:get(<<"username">>, AdminCtx),
-        key = ?CONFIDENTIAL_MASK  %% Redacted for security reasons
-    },
+        key = maps:get(<<"key">>, AdminCtx)
+    }),
 
     #helper_config_description{
         type = ?CEPHRADOS_HELPER_NAME,
@@ -225,3 +228,15 @@ build_admin_ctx(#cephrados_credentials{
 -spec block_size_equals_0(helper_config:t()) -> boolean().
 block_size_equals_0(HelperConfig) ->
     get_block_size(HelperConfig) =:= 0.
+
+
+-spec redact_confidential_credentials(#cephrados_credentials{}) -> #cephrados_credentials{}.
+redact_confidential_credentials(Credentials = #cephrados_credentials{}) ->
+    helper_config_utils:redact_record_fields_if_defined(Credentials, [#cephrados_credentials.key]).
+
+
+-spec redact_confidential_credentials_diff(#cephrados_credentials_diff{}) -> #cephrados_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff = #cephrados_credentials_diff{}) ->
+    helper_config_utils:redact_record_fields_if_defined(CredentialsDiff, [
+        #cephrados_credentials_diff.key
+    ]).

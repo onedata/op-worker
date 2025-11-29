@@ -96,3 +96,23 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback get_block_size(helper_config:t()) -> non_neg_integer() | undefined.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Redacts confidential fields in credentials record for security reasons.
+%% Used before logging or displaying credentials.
+%% @end
+%%--------------------------------------------------------------------
+-callback redact_confidential_credentials(onedata_storage:credentials()) ->
+    onedata_storage:credentials().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Redacts confidential fields in credentials diff record for security reasons.
+%% Used before logging or displaying credentials diff.
+%% @end
+%%--------------------------------------------------------------------
+-callback redact_confidential_credentials_diff(onedata_storage:credentials_diff()) ->
+    onedata_storage:credentials_diff().

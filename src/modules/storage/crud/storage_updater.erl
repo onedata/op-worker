@@ -32,8 +32,9 @@
 
 -spec update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 update(StorageId, UpdateSpec) ->
-    %% TODO log storage/helper configuration
-%%    log_gathered_storage_configuration(Name, StorageType, Params),
+    ?info("Gathered storage (id: '~ts') update diff: ~n~ts", [
+        StorageId, storage_crud_utils:pretty_print_spec(UpdateSpec)
+    ]),
 
     try do_update(StorageId, UpdateSpec) of
         ok ->
@@ -97,7 +98,6 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
             storage_crud_utils:run_diagnostics(NewHelperConfig, NewLumaFeed, not IgnoreReadWriteTest),
 
             % @TODO VFS-5513 Modify everything in a single datastore operation
-            % TODO VFS-6951 refactor storage configuration API
             lists:foreach(fun
                 ({true, UpdateFun}) ->
                     case UpdateFun() of
@@ -108,7 +108,7 @@ do_update(StorageId, UpdateSpec = #storage_update_spec{
                 (_) ->
                     ok
             end, [
-                % TODO do all those calls need to be independent? Can't there be only 2 calls: to oz and storage_config?
+                % TODO VFS-11947 do all those calls need to be independent? Can't there be only 2 calls: to oz and storage_config?
                 {MaybeQosParams =/= undefined, fun() ->
                     storage:set_qos_parameters(StorageId, MaybeQosParams)
                 end},

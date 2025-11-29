@@ -35,7 +35,10 @@
     is_auto_import_supported/1,
     is_file_registration_supported/1,
     is_getting_size_supported/1,
-    get_block_size/1
+    get_block_size/1,
+
+    redact_confidential_credentials/1,
+    redact_confidential_credentials_diff/1
 ]).
 
 
@@ -109,9 +112,11 @@ describe(#helper_config{
     BaseCredentials = #posix_credentials{
         uid = binary_to_integer(maps:get(<<"uid">>, AdminCtx))
     },
-    Credentials = helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
-        {<<"gid">>, #posix_credentials.gid, fun binary_to_integer/1}
-    ]),
+    Credentials = redact_confidential_credentials(
+        helper_config_utils:set_optional_record_fields_if_defined(BaseCredentials, AdminCtx, [
+            {<<"gid">>, #posix_credentials.gid, fun binary_to_integer/1}
+        ])
+    ),
 
     #helper_config_description{
         type = ?POSIX_HELPER_NAME,
@@ -166,6 +171,16 @@ is_getting_size_supported(_HelperConfig) ->
 -spec get_block_size(#helper_config{}) -> non_neg_integer() | undefined.
 get_block_size(#helper_config{}) ->
     undefined.
+
+
+-spec redact_confidential_credentials(#posix_credentials{}) -> #posix_credentials{}.
+redact_confidential_credentials(Credentials) ->
+    Credentials.
+
+
+-spec redact_confidential_credentials_diff(#posix_credentials_diff{}) -> #posix_credentials_diff{}.
+redact_confidential_credentials_diff(CredentialsDiff) ->
+    CredentialsDiff.
 
 
 %%%===================================================================
