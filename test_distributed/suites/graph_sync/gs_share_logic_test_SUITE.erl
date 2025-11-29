@@ -410,8 +410,8 @@ init_per_suite(Config) ->
 init_per_testcase(get_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     % Access to cached shares depends on checking if provider supports given space
-    ok = test_utils:mock_expect(Nodes, provider_logic, supports_space,
-        fun(?ROOT_SESS_ID, ?DUMMY_PROVIDER_ID, Space) ->
+    ok = test_utils:mock_expect(Nodes, space_logic, is_supported_locally,
+        fun(Space) ->
             Space == ?SPACE_1 orelse Space == ?SPACE_2
         end),
     init_per_testcase(default, Config);

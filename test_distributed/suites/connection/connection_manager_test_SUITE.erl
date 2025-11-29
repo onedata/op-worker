@@ -315,9 +315,9 @@ unmock_provider_handshake(Nodes) ->
 -spec mock_existence_of_common_spaces(node()) -> ok.
 mock_existence_of_common_spaces(Node) ->
     test_utils:mock_new(Node, space_logic, [passthrough]),
-    test_utils:mock_expect(Node, space_logic, is_supported, fun
+    test_utils:mock_expect(Node, space_logic, is_supported_by, fun
         (SpaceId, _ProviderId) when is_binary(SpaceId) -> true;
-        (DocOrRecord, ProviderId) -> meck:passthrough([DocOrRecord, ProviderId])
+        (SpaceIdOrDoc, ProviderId) -> meck:passthrough([SpaceIdOrDoc, ProviderId])
     end).
 
 

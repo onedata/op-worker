@@ -39,8 +39,7 @@
     get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([update_support_parameters/2]).
--export([is_supported/2, is_supported/3]).
--export([is_supported_by_storage/2]).
+-export([is_supported_locally/1, is_supported_by/2, is_supported_by/3]).
 -export([has_readonly_support_from/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/4]).
@@ -240,7 +239,8 @@ get_shares(SessionId, SpaceId) ->
 get_local_supporting_storage(SpaceId) ->
     % called by module to be mocked in tests
     case space_logic:get_local_storages(SpaceId) of
-        {ok, []} -> ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
+        {ok, []} ->
+            ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
         {ok, [StorageId | _]} -> {ok, StorageId};
         Other -> Other
     end.
@@ -250,11 +250,11 @@ get_local_supporting_storage(SpaceId) ->
 %% Returns list of storage ids supporting given space, belonging to this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_storages(od_space:id()) -> {ok, [storage:id()]} | errors:error().
-get_local_storages(SpaceId) ->
-    case get_provider_storages(SpaceId, oneprovider:get_id()) of
+-spec get_local_storages(od_space:id() | od_space:doc()) -> {ok, [storage:id()]} | errors:error().
+get_local_storages(SpaceIdOrDoc) ->
+    case get_provider_storages(SpaceIdOrDoc, oneprovider:get_id()) of
         {ok, ProviderStorages} -> {ok, maps:keys(ProviderStorages)};
-        Error -> Error
+        {error, _} = Error -> Error
     end.
 
 
@@ -264,25 +264,31 @@ get_local_storages(SpaceId) ->
 %% with storages supporting given space, belonging to ProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_storages(od_space:id(), od_provider:id()) ->
+-spec get_provider_storages(od_space:id() | od_space:doc(), od_provider:id()) ->
     {ok, #{storage:id() => storage:access_type()}} | errors:error().
-get_provider_storages(SpaceId, ProviderId) when is_binary(SpaceId) ->
-    case get_storages_by_provider(SpaceId) of
+get_provider_storages(SpaceIdOrDoc, ProviderId) ->
+    case get_storages_by_provider(SpaceIdOrDoc) of
         {ok, #{ProviderId := ProviderStorages}} ->
             {ok, ProviderStorages};
         {ok, _} ->
+            SpaceId = case SpaceIdOrDoc of
+                Bin when is_binary(Bin) -> Bin;
+                #document{key = Key} -> Key
+            end,
             ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, ProviderId);
         {error, _} = Error ->
             Error
     end.
 
 
--spec get_storages_by_provider(od_space:id()) ->
+-spec get_storages_by_provider(od_space:id() | od_space:doc()) ->
     {ok, #{od_provider:id() => #{storage:id() => storage:access_type()}}} | errors:error().
+get_storages_by_provider(#document{value = #od_space{storages_by_provider = StoragesByProvider}}) ->
+    {ok, StoragesByProvider};
 get_storages_by_provider(SpaceId) when is_binary(SpaceId) ->
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
-        {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider}}} ->
-            {ok, StoragesByProvider};
+        {ok, SpaceDoc} ->
+            get_storages_by_provider(SpaceDoc);
         {error, _} = Error ->
             Error
     end.
@@ -360,34 +366,49 @@ update_support_parameters(SpaceId, SupportParametersOverlay) ->
     end).
 
 
--spec is_supported(od_space:doc() | od_space:record() | od_space:id(), od_provider:id()) ->
-    boolean().
-is_supported(#od_space{providers = Providers}, ProviderId) ->
-    maps:is_key(ProviderId, Providers);
-is_supported(#document{value = Space}, ProviderId) ->
-    is_supported(Space, ProviderId);
-is_supported(SpaceId, ProviderId) ->
-    is_supported(?ROOT_SESS_ID, SpaceId, ProviderId).
-
-
--spec is_supported(gs_client_worker:client(), od_space:id(), od_provider:id()) ->
-    boolean().
-is_supported(SessionId, SpaceId, ProviderId) ->
-    case get(SessionId, SpaceId) of
+%% @doc extra checks are applied for determining local support, to make sure all the GS entities
+%%      have been synchronized
+-spec is_supported_locally(od_space:doc() | od_space:id()) -> boolean().
+is_supported_locally(SpaceId) when is_binary(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
         {ok, SpaceDoc = #document{}} ->
-            is_supported(SpaceDoc, ProviderId);
+            is_supported_locally(SpaceDoc);
         ?ERROR_NOT_FOUND ->  % the space has been deleted or never existed
             false;
         ?ERR_FORBIDDEN ->  % forbidden access due to lack of support
             false
+    end;
+is_supported_locally(#document{key = SpaceId, value = #od_space{providers = Providers}} = SpaceDoc) ->
+    {ok, #document{key = ProviderId, value = #od_provider{eff_spaces = EffSpaces}}} = provider_logic:get(),
+    maps:is_key(ProviderId, Providers) andalso
+        maps:is_key(SpaceId, EffSpaces) andalso
+        case get_local_storages(SpaceDoc) of
+            {ok, [_ | _]} -> true;
+            _ -> false
+        end.
+
+
+-spec is_supported_by(od_space:doc() | od_space:id(), od_provider:id()) -> boolean().
+is_supported_by(SpaceId, ProviderId) when is_binary(SpaceId) ->
+    is_supported_by(?ROOT_SESS_ID, SpaceId, ProviderId);
+is_supported_by(#document{value = #od_space{providers = Providers}} = SpaceDoc, ProviderId) ->
+    case oneprovider:is_self(ProviderId) of
+        true ->
+            is_supported_locally(SpaceDoc);
+        false ->
+            maps:is_key(ProviderId, Providers)
     end.
 
 
--spec is_supported_by_storage(od_space:id(), storage:id()) -> boolean().
-is_supported_by_storage(SpaceId, StorageId) ->
-    case get_all_storage_ids(SpaceId) of
-        {ok, AllStorageIds} -> lists:member(StorageId, AllStorageIds);
-        _ -> false
+-spec is_supported_by(gs_client_worker:client(), od_space:id(), od_provider:id()) -> boolean().
+is_supported_by(SessionId, SpaceId, ProviderId) ->
+    case get(SessionId, SpaceId) of
+        {ok, SpaceDoc = #document{}} ->
+            is_supported_by(SpaceDoc, ProviderId);
+        ?ERROR_NOT_FOUND ->  % the space has been deleted or never existed
+            false;
+        ?ERR_FORBIDDEN ->  % forbidden access due to lack of support
+            false
     end.
 
 

@@ -43,7 +43,6 @@
 -export([get_provider/2]).
 -export([get_spaces/1]).
 -export([is_imported/1, is_local_storage_readonly/1, is_storage_readonly/2]).
--export([is_local_storage_supporting_space/2]).
 -export([supports_access_type/3]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -266,14 +265,6 @@ is_storage_readonly(StorageId, SpaceId) ->
         {ok, #document{value = #od_storage{readonly = Readonly}}} ->
             {ok, Readonly};
         Error -> Error
-    end.
-
-
--spec is_local_storage_supporting_space(storage:id(), od_space:id()) -> boolean().
-is_local_storage_supporting_space(StorageId, SpaceId) ->
-    case space_logic:get_local_storages(SpaceId) of
-        {ok, LocalStorageIds} -> lists:member(StorageId, LocalStorageIds);
-        _ -> false
     end.
 
 

@@ -668,7 +668,7 @@ stat_names(Guid) ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERROR_COUNT, ?DIR_ERROR_COUNT,
                 ?VIRTUAL_SIZE, ?LOGICAL_SIZE, ?PHYSICAL_SIZE(StorageId)];
         ?ERROR_NOT_FOUND ->
-            case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
+            case space_logic:is_supported_locally(SpaceId) of
                 true -> throw({error, not_found});
                 false -> throw({error, space_unsupported})
             end

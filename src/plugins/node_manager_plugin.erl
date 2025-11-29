@@ -230,7 +230,7 @@ custom_workers() -> filter_disabled_workers([
 %%--------------------------------------------------------------------
 -spec before_cluster_upgrade() -> ok.
 before_cluster_upgrade() ->
-    safe_mode:whitelist_pid(self()),
+    whitelist_current_pid([safe_mode]),
     gs_channel_service:setup_internal_service().
 
 
@@ -243,14 +243,14 @@ before_cluster_upgrade() ->
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(3) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
-    safe_mode:whitelist_pid(self()),
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    whitelist_current_pid([safe_mode, gs]),
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
-    safe_mode:whitelist_pid(self()),
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    whitelist_current_pid([safe_mode, gs]),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
@@ -260,8 +260,8 @@ upgrade_cluster(4) ->
     end),
     {ok, 5};
 upgrade_cluster(5) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
-    safe_mode:whitelist_pid(self()),
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    whitelist_current_pid([safe_mode, gs]),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) -> init_etses_for_space_on_all_nodes(SpaceId) end, SpaceIds),
@@ -294,8 +294,8 @@ upgrade_cluster(5) ->
     end),
     {ok, 6};
 upgrade_cluster(6) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
-    safe_mode:whitelist_pid(self()),
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    whitelist_current_pid([safe_mode, gs]),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         % Allow for file links reconciliation traverses to be run again - due to a bug in previous versions it
@@ -304,8 +304,8 @@ upgrade_cluster(6) ->
     end),
     {ok, 7};
 upgrade_cluster(7) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
-    safe_mode:whitelist_pid(self()),
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
+    whitelist_current_pid([safe_mode, gs]),
     await_zone_connection_and_run(fun() ->
         storage:upgrade_after_swift_version_update_to_v3(),
 
@@ -533,3 +533,16 @@ async_run_with_oz_connection_after_upgrade(Fun) ->
     end),
     ok.
 
+
+%% @private
+-spec whitelist_current_pid([safe_mode | gs]) -> ok.
+whitelist_current_pid([]) ->
+    ok;
+whitelist_current_pid([safe_mode | Rest]) ->
+    safe_mode:whitelist_pid(self()),
+    whitelist_current_pid(Rest);
+whitelist_current_pid([gs | Rest]) ->
+    % GS connection starts in disabled mode and must be enabled implicitly; make sure the upgrade procedures
+    % can perform GS requests to Onezone.
+    gs_client_worker:enable_for_pid(self()),
+    whitelist_current_pid(Rest).

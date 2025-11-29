@@ -49,9 +49,9 @@ handle_connected_to_oz() ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
             error;
         Class:Reason:Stacktrace ->
-            ?error_stacktrace("Failed to execute on-connect-to-oz procedures, disconnecting - ~w:~tp", [
-                Class, Reason
-            ], Stacktrace),
+            ?error_exception(
+                "Failed to execute on-connect-to-oz procedures, disconnecting", Class, Reason, Stacktrace
+            ),
             error
     end.
 
