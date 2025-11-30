@@ -260,7 +260,8 @@ deletion_of_not_open_file_test_base(Config, DeferredFileCreation) ->
         [FileUuid, fun(Record) -> {ok, Record#file_meta{deleted = true}} end])),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, is_file_opened, [FileUuid])),
-    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, delete_file_locally, [UserCtx, FileCtx, ProviderId, false])),
+    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, delete_file_locally, 
+        [UserCtx, FileCtx, ProviderId, false, update_dir_stats])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),

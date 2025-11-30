@@ -49,51 +49,44 @@
     json_utils:json_map().
 gather_result_to_json(_, #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
     distribution_per_provider = DistributionPerProvider
-}}, Guid) ->
+}}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?DIRECTORY_TYPE),
         <<"distributionPerProvider">> => maps:map(fun
-            (ProviderId, {error, _} = Error) ->
-                build_error_response(Error, Guid, ProviderId);
+            (_ProviderId, {error, _} = Error) ->
+                build_error_response(Error);
 
-            (_ProviderId, #provider_dir_distribution_get_result{
+            (_ProviderId, #provider_dir_distribution{
                 virtual_size = VirtualSize,
                 logical_size = LogicalSize,
-                physical_size_per_storage = PhysicalDirSizePerStorage
+                physical_size_per_storage = PhysicalDirSizePerStorage,
+                locations_per_storage = LocationsPerStorage
             }) ->
                 #{
                     <<"success">> => true,
                     <<"virtualSize">> => utils:undefined_to_null(VirtualSize),
                     <<"logicalSize">> => utils:undefined_to_null(LogicalSize),
-                    <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
-                        <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
-                    }
-                    end, PhysicalDirSizePerStorage)
+                    <<"distributionPerStorageBackend">> => maps:map(fun
+                        (_StorageId, {error, _} = Error) -> #{
+                            <<"success">> => false,
+                            <<"error">> => errors:to_json(Error)
+                        };
+                        (_StorageId, PhysicalSize) -> #{
+                            <<"success">> => true,
+                            <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
+                        }
+                    end, PhysicalDirSizePerStorage),
+                    <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
                 }
         end, DistributionPerProvider)
     };
 
-gather_result_to_json(_, #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
-    storages_per_provider = StoragesPerProvider
-}}, _Guid) ->
-    #{
-        <<"type">> => atom_to_binary(?SYMLINK_TYPE),
-            <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) -> #{ 
-                <<"success">> => true,
-               <<"virtualSize">> => 0,
-               <<"distributionPerStorage">> =>
-                   lists:foldl(fun(StorageId, Acc) ->   
-                       Acc#{StorageId => #{<<"physicalSize">> => 0}}
-                   end, #{}, StoragesList)
-               } end, StoragesPerProvider)
-    };
-
 gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
-}}, Guid) ->
+}}, _Guid) ->
     DistributionMap = maps:map(fun
-        (ProviderId, {error, _} = Error) ->
-            build_error_response(Error, Guid, ProviderId);
+        (_ProviderId, {error, _} = Error) ->
+            build_error_response(Error);
     
         (_ProviderId, #provider_reg_distribution_get_result{
             virtual_size = VirtualSize,
@@ -108,6 +101,7 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
                 end, #{}, interpolate_chunks(Blocks, VirtualSize)),
 
                 Acc#{StorageId => #{
+                    <<"success">> => true,
                     <<"physicalSize">> => TotalBlocksSize,
                     <<"chunksBarData">> => Data,
                     <<"blocksPercentage">> => case VirtualSize of
@@ -120,8 +114,8 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
             #{
                 <<"success">> => true,
                 <<"virtualSize">> => VirtualSize,
-                <<"distributionPerStorage">> => DistributionPerStorage,
-                <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
+                <<"distributionPerStorageBackend">> => DistributionPerStorage,
+                <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
             }
     end, FileBlocksPerProvider),
 
@@ -132,12 +126,12 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
 
 gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
-}}, Guid) ->
+}}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE),
         <<"distributionPerProvider">> => maps:map(fun
-            (ProviderId, {error, _} = Error) ->
-                build_error_response(Error, Guid, ProviderId);
+            (_ProviderId, {error, _} = Error) ->
+                build_error_response(Error);
             
             (_ProviderId, #provider_reg_distribution_get_result{
                 virtual_size = VirtualSize,
@@ -149,6 +143,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                     {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
 
                     Acc#{StorageId => #{
+                        <<"success">> => true,
                         <<"physicalSize">> => TotalBlocksSize,
                         <<"blocks">> => BlockList
                     }}
@@ -156,8 +151,8 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                 #{
                     <<"success">> => true,
                     <<"virtualSize">> => VirtualSize,
-                    <<"distributionPerStorage">> => DistributionPerStorage,
-                    <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
+                    <<"distributionPerStorageBackend">> => DistributionPerStorage,
+                    <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
                 }
             end, FileBlocksPerProvider)
     }.
@@ -166,19 +161,14 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
 -spec storage_locations_to_json(data_distribution:storage_locations_per_provider()) -> json_utils:json_term().
 storage_locations_to_json(StorageLocations) ->
     #{
-        <<"locationsPerProvider">> => maps:map(fun(_ProviderId, LocationsPerStorage) ->
-            case LocationsPerStorage of
-                {error, _} = Error ->
-                    #{
-                        <<"success">> => false,
-                        <<"error">> => errors:to_json(Error)
-                    };
-                _ ->
-                    #{
-                        <<"success">> => true,
-                        <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
-                    }
-            end
+        <<"locationsPerProvider">> => maps:map(fun
+            (_ProviderId, {error, _} = Error) ->
+                build_error_response(Error);
+            (_ProviderId, LocationsPerStorage) ->
+                #{
+                    <<"success">> => true,
+                    <<"locationsPerStorageBackend">> => translate_locations_per_storage(LocationsPerStorage)
+                }
         end, StorageLocations)
     }.
 
@@ -197,18 +187,11 @@ get_blocks_summary(FileBlocks) ->
     ).
 
 
--spec build_error_response({error, term()}, file_id:file_guid(), oneprovider:id()) ->
-    json_utils:json_term().
-build_error_response(Error, Guid, ProviderId) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
-    ErrorJson = errors:to_json(Error),
+-spec build_error_response({error, term()}) -> json_utils:json_term().
+build_error_response(Error) ->
     #{
         <<"success">> => false,
-        <<"distributionPerStorage">> => maps:map(fun(_StorageId, _) -> #{
-            <<"error">> => ErrorJson 
-        }
-        end, StoragesMap)
+        <<"error">> => errors:to_json(Error)
     }.
 
 %%--------------------------------------------------------------------
@@ -309,3 +292,18 @@ merge_chunks({BarNum, Fill}, [{_, Fill} | Tail]) ->
     [{BarNum, Fill} | Tail];
 merge_chunks({BarNum, Fill}, Result) ->
     [{BarNum, Fill} | Result].
+
+
+%% @private
+-spec translate_locations_per_storage(data_distribution:locations_per_storage() | #{storage:id() => errors:error()}) ->
+    json_utils:json_map().
+translate_locations_per_storage(LocationsPerStorage) ->
+    maps:map(fun
+        (_StorageId, {error, _} = Error) ->
+            build_error_response(Error);
+        (_StorageId, Location) ->
+            #{
+                <<"success">> => true,
+                <<"location">> => utils:undefined_to_null(Location)
+            }
+    end, LocationsPerStorage).
