@@ -84,14 +84,23 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
     gs_protocol:rpc_result().
 register_file_upload(?USER(UserId, SessionId), Data) ->
     SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
+        required => #{<<"guid">> => {binary, non_empty}},
+        optional => #{<<"truncateTo0">> => {boolean, any}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
+    TruncateTo0 = maps:get(<<"truncateTo0">>, SanitizedData, false),
 
-    case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
+    FileRef = ?FILE_REF(FileGuid),
+    case ?lfm_check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"not a regular file">>);
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size, owner_id = UserId}} ->
+            case Size == 0 of
+                true -> ok;
+                false when TruncateTo0 -> ?lfm_check(lfm:truncate(SessionId, FileRef, 0));
+                false -> throw(?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not empty">>))
+            end,
+
             SpaceId = file_id:guid_to_space_id(FileGuid),
             file_upload_utils:verbose_info(
                 "Registering file upload (user_id: ~ts, session_id: ~ts, space_id: ~ts, guid: ~ts)",
