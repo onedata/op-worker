@@ -158,13 +158,7 @@ assert_space_supported_by(SpaceId, ProviderId) ->
 
 -spec assert_space_supported_with_storage(od_space:id(), storage:id()) -> ok | no_return().
 assert_space_supported_with_storage(SpaceId, StorageId) ->
-    IsSupportedWithStorage = case space_logic:get_local_storages(SpaceId) of
-        {ok, LocalStorageIds} ->
-            lists:member(StorageId, LocalStorageIds);
-        _ ->
-            false
-    end,
-    IsSupportedWithStorage orelse throw(
+    space_logic:is_supported_by_local_storage(SpaceId, StorageId) orelse throw(
         ?ERR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(?err_ctx(), oneprovider:get_id(), StorageId, SpaceId)
     ),
     ok.

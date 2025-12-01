@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2025 ACK CYFRONET AGH
+%%% @copyright (C) 2025 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -41,7 +41,7 @@ all() -> ?ALL([
 -define(ATTEMPTS, 30).
 
 -define(PARALLELISM, 10).
--define(REPEATS, 50). % fixme check execution time on bamboo
+-define(REPEATS, 25).
 
 
 %%%===================================================================

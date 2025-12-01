@@ -60,7 +60,7 @@
 update_cache(Id, Diff, Default) ->
     %% @TODO VFS-13002 - this hook should not be executed in the calling process
     run_in_critical_section(Id, fun() ->
-        {NewUserDoc, PrevVal} = case get_from_cache(Id) of
+        {IsNewUserDoc, PrevVal} = case get_from_cache(Id) of
             {ok, #document{value = V}} ->
                 {false, V};
             {error, not_found} ->
@@ -68,7 +68,7 @@ update_cache(Id, Diff, Default) ->
         end,
         case datastore_model:update(?CTX, Id, Diff, Default) of
             {ok, #document{value = NewVal}} = Res ->
-                NewUserDoc andalso handle_new_doc(Id),
+                IsNewUserDoc andalso handle_new_doc(Id),
                 handle_new_spaces(Id, PrevVal, NewVal),
                 handle_spaces_removed(Id, PrevVal, NewVal),
                 Res;
@@ -156,7 +156,7 @@ run_in_critical_section(UserId, Fun) ->
 
 
 %% @private
--spec handle_new_spaces(id(), PrevVal :: record(), NewVal :: record()) -> ok | no_return().
+-spec handle_new_spaces(id(), PrevVal :: record(), NewVal :: record()) -> ok.
 handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
     % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
     case NewSpaces -- PrevSpaces of
@@ -171,7 +171,7 @@ handle_new_spaces(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces
 
 
 %% @private
--spec handle_spaces_removed(id(), PrevVal :: record(), NewVal :: record()) -> ok | no_return().
+-spec handle_spaces_removed(id(), PrevVal :: record(), NewVal :: record()) -> ok.
 handle_spaces_removed(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_spaces = NewSpaces}) ->
     % NOTE: PrevVal is an empty record (see update_cache/3) if previous document does not exist
     case PrevSpaces -- NewSpaces of
@@ -183,6 +183,6 @@ handle_spaces_removed(UserId, #od_user{eff_spaces = PrevSpaces}, #od_user{eff_sp
 
 
 %% @private
--spec handle_new_doc(id()) -> ok | no_return().
+-spec handle_new_doc(id()) -> ok.
 handle_new_doc(UserId) ->
     ok = special_dirs:report_new_user(UserId).

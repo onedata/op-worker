@@ -542,7 +542,7 @@ whitelist_current_pid([safe_mode | Rest]) ->
     safe_mode:whitelist_pid(self()),
     whitelist_current_pid(Rest);
 whitelist_current_pid([gs | Rest]) ->
-    % GS connection starts in disabled mode and must be enabled implicitly; make sure the upgrade procedures
+    % GS connection starts in disabled mode and must be enabled explicitly; make sure the upgrade procedures
     % can perform GS requests to Onezone.
     gs_client_worker:enable_for_pid(self()),
     whitelist_current_pid(Rest).

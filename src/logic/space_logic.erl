@@ -34,9 +34,10 @@
 -export([assert_has_eff_privilege/3]).
 -export([is_owner/2]).
 -export([infer_accessible_eff_groups/2]).
--export([get_eff_groups/2, get_shares/2, get_local_storages/1,
-    get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1,
-    get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
+-export([get_eff_groups/2, get_shares/2]).
+-export([get_local_storages/1, is_supported_by_local_storage/2]).
+-export([get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1]).
+-export([get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([update_support_parameters/2]).
 -export([is_supported_locally/1, is_supported_by/2, is_supported_by/3]).
@@ -239,11 +240,11 @@ get_shares(SessionId, SpaceId) ->
 get_local_supporting_storage(SpaceId) ->
     % called by module to be mocked in tests
     case space_logic:get_local_storages(SpaceId) of
-        {ok, []} ->
-            ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
+        {ok, []} -> ?ERR_SPACE_NOT_SUPPORTED_BY(?err_ctx(), SpaceId, oneprovider:get_id());
         {ok, [StorageId | _]} -> {ok, StorageId};
         Other -> Other
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -255,6 +256,18 @@ get_local_storages(SpaceIdOrDoc) ->
     case get_provider_storages(SpaceIdOrDoc, oneprovider:get_id()) of
         {ok, ProviderStorages} -> {ok, maps:keys(ProviderStorages)};
         {error, _} = Error -> Error
+    end.
+
+
+-spec is_supported_by_local_storage(od_space:id() | od_space:doc(), any | od_storage:id()) -> boolean().
+is_supported_by_local_storage(SpaceIdOrDoc, StorageSelector) ->
+    case get_local_storages(SpaceIdOrDoc) of
+        {ok, LocalStorageIds} ->
+            StorageSelector == any orelse lists:member(StorageSelector, LocalStorageIds);
+        ?ERR_FORBIDDEN ->
+            false;
+        ?ERROR_NOT_FOUND ->
+            false
     end.
 
 
@@ -382,10 +395,7 @@ is_supported_locally(#document{key = SpaceId, value = #od_space{providers = Prov
     {ok, #document{key = ProviderId, value = #od_provider{eff_spaces = EffSpaces}}} = provider_logic:get(),
     maps:is_key(ProviderId, Providers) andalso
         maps:is_key(SpaceId, EffSpaces) andalso
-        case get_local_storages(SpaceDoc) of
-            {ok, [_ | _]} -> true;
-            _ -> false
-        end.
+        is_supported_by_local_storage(SpaceDoc, any).
 
 
 -spec is_supported_by(od_space:doc() | od_space:id(), od_provider:id()) -> boolean().

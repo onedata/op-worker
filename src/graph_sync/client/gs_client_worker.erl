@@ -82,6 +82,7 @@
 
 -define(STALE_REQUEST_MSG, stale_request_msg).
 
+-define(AWAIT_STARTUP_TIMEOUT_MILLIS, timer:seconds(20)).
 
 -define(error_gs_request_failed(DetailsMsg, ReqId, Request),
     ?error("GS ~ts request ~ts (gri: ~ts, id: ~ts)", [
@@ -137,7 +138,7 @@ start() ->
 -spec await_startup() -> ok | error.
 await_startup() ->
     try
-        ok = gen_server2:call(get_connection_pid(), await_startup, timer:seconds(20))
+        ok = gen_server2:call(get_connection_pid(), await_startup, ?AWAIT_STARTUP_TIMEOUT_MILLIS)
     catch Class:Reason:Stacktrace ->
         ?error_exception(Class, Reason, Stacktrace),
         error
@@ -146,7 +147,7 @@ await_startup() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% GS connection starts in disabled mode and must be enabled implicitly.
+%% GS connection starts in disabled mode and must be enabled explicitly.
 %% Providing 'any' will allow all pids to use the GS channel.
 %% @end
 %%--------------------------------------------------------------------

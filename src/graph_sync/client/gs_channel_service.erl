@@ -266,7 +266,7 @@ start_gs_client_worker() ->
 %% @private
 -spec run_on_connect_to_oz_procedures() -> ok | error.
 run_on_connect_to_oz_procedures() ->
-    % GS connection starts in disabled mode and must be enabled implicitly; this makes sure other processes
+    % GS connection starts in disabled mode and must be enabled explicitly; this makes sure other processes
     % don't start using GS before basic setup is performed (which initializes caches etc)
     gs_client_worker:enable_for_pid(self()),
     case gs_hooks:handle_connected_to_oz() of
