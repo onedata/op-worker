@@ -67,7 +67,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"shareId">> => {binary, non_empty},
         <<"handleServiceId">> => {binary, non_empty},
-        <<"metadataPrefix">> => {binary, non_empty},
+        <<"metadataSchema">> => {binary, non_empty},
         <<"metadataString">> => {binary, non_empty}
     }
 };
@@ -171,10 +171,10 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 
     ShareId = maps:get(<<"shareId">>, Data),
     HServiceId = maps:get(<<"handleServiceId">>, Data),
-    MetadataPrefix = maps:get(<<"metadataPrefix">>, Data),
+    MetadataSchema = maps:get(<<"metadataSchema">>, Data),
     Metadata = maps:get(<<"metadataString">>, Data),
 
-    case handle_logic:create(SessionId, HServiceId, <<"Share">>, ShareId, MetadataPrefix, Metadata) of
+    case handle_logic:create(SessionId, HServiceId, <<"Share">>, ShareId, MetadataSchema, Metadata) of
         {ok, HandleId} ->
             {ok, #document{value = Handle}} = handle_logic:get_public_data(SessionId, HandleId),
             {ok, resource, {GRI#gri{id = HandleId, scope = public}, record_to_data(Handle)}};
@@ -218,13 +218,13 @@ delete(#op_req{auth = #auth{session_id = SessionId}, gri = #gri{id = HandleId, a
 -spec record_to_data(od_handle:record()) -> middleware:data().
 record_to_data(#od_handle{
     public_handle = PublicHandle,
-    metadata_prefix = MetadataPrefix,
+    metadata_schema = MetadataSchema,
     metadata = Metadata,
     handle_service = HandleServiceId
 }) ->
     #{
         <<"handleServiceId">> => HandleServiceId,
         <<"url">> => utils:undefined_to_null(PublicHandle),
-        <<"metadataPrefix">> => MetadataPrefix,
+        <<"metadataSchema">> => MetadataSchema,
         <<"metadataString">> => utils:undefined_to_null(Metadata)
     }.
