@@ -13,6 +13,12 @@
 %%%
 %%% The GS cache is disabled upon startup, and then enabled after complete
 %%% Oneprovider cluster initialization - see enable_cache/0.
+%%%
+%%% Similarly, the GS channel is disabled for all PIDs upon startup to ensure
+%%% that the required setup is done before it's available. Any PIDs doing the
+%%% setup must be whitelisted (enable_for_pid/1). After completing the first
+%%% setup, the GS channel remains enabled, even if a disconnect happens - see
+%%% enable_for_any_pid/0.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
@@ -31,8 +37,8 @@
 
 
 %% API
--export([start/0]).
--export([enable_for_pid/1]).
+-export([start/0, await_startup/0]).
+-export([enable_for_pid/1, enable_for_any_pid/0, is_enabled_for_any_pid/0, await_enabled_for_any_pid/0]).
 -export([is_connected/0]).
 -export([get_connection_pid/0]).
 -export([force_terminate/0]).
@@ -68,6 +74,8 @@
 
 -record(state, {
     client_ref = undefined :: undefined | gs_client:client_ref(),
+    % this information is kept in node cache to be persisted between worker restarts,
+    % but also stored in the state for quick lookup
     allowed_pids = [] :: [pid()] | any,
     promises = #{} :: #{gs_protocol:message_id() => pid()}
 }).
@@ -82,7 +90,7 @@
 
 -define(STALE_REQUEST_MSG, stale_request_msg).
 
--define(AWAIT_STARTUP_TIMEOUT_MILLIS, timer:seconds(20)).
+-define(AWAIT_READINESS_TIMEOUT_MILLIS, timer:seconds(20)).
 
 -define(error_gs_request_failed(DetailsMsg, ReqId, Request),
     ?error("GS ~ts request ~ts (gri: ~ts, id: ~ts)", [
@@ -134,11 +142,10 @@ start() ->
     end).
 
 
-%% @private
 -spec await_startup() -> ok | error.
 await_startup() ->
     try
-        ok = gen_server2:call(get_connection_pid(), await_startup, ?AWAIT_STARTUP_TIMEOUT_MILLIS)
+        ok = gen_server2:call(get_connection_pid(), await_startup, ?AWAIT_READINESS_TIMEOUT_MILLIS)
     catch Class:Reason:Stacktrace ->
         ?error_exception(Class, Reason, Stacktrace),
         error
@@ -151,7 +158,7 @@ await_startup() ->
 %% Providing 'any' will allow all pids to use the GS channel.
 %% @end
 %%--------------------------------------------------------------------
--spec enable_for_pid(pid() | any) -> ok | no_return().
+-spec enable_for_pid(pid()) -> ok | no_return().
 enable_for_pid(Pid) ->
     try
         ok = gen_server2:call(get_connection_pid(), {enable_for_pid, Pid})
@@ -161,25 +168,30 @@ enable_for_pid(Pid) ->
     end.
 
 
--spec is_connected() -> boolean().
-is_connected() ->
-    is_pid(get_connection_pid()).
+-spec enable_for_any_pid() -> ok.
+enable_for_any_pid() ->
+    {_, []} = utils:rpc_multicall(consistent_hashing:get_all_nodes(), node_cache, put, [
+        gs_client_worker_enabled_for_any_pid, true
+    ]),
+    ok = gen_server2:call(get_connection_pid(), {enable_for_pid, any}).
 
 
--spec get_connection_pid() -> undefined | pid().
-get_connection_pid() ->
-    global:whereis_name(?GS_CHANNEL_GLOBAL_NAME).
+-spec is_enabled_for_any_pid() -> boolean().
+is_enabled_for_any_pid() ->
+    true == node_cache:get(gs_client_worker_enabled_for_any_pid, false).
 
 
--spec force_terminate() -> ok | not_started.
-force_terminate() ->
-    case get_connection_pid() of
-        undefined ->
-            not_started;
-        Pid when is_pid(Pid) ->
-            ?info("Terminating Onezone connection (forced)..."),
-            gen_server2:call(Pid, {terminate, normal}),
-            ok
+-spec await_enabled_for_any_pid() -> ok | error.
+await_enabled_for_any_pid() ->
+    try
+        utils:wait_until(
+            fun is_enabled_for_any_pid/0,
+            timer:seconds(1),
+            ?AWAIT_READINESS_TIMEOUT_MILLIS div timer:seconds(1)
+        )
+    catch Class:Reason:Stacktrace ->
+        ?error_exception(Class, Reason, Stacktrace),
+        error
     end.
 
 
@@ -203,7 +215,29 @@ enable_cache() ->
 %% @private
 -spec is_cache_enabled() -> boolean().
 is_cache_enabled() ->
-    node_cache:get(gs_client_worker_cache_enabled, false) andalso not safe_mode:should_enforce().
+    true == node_cache:get(gs_client_worker_cache_enabled, false) andalso not safe_mode:should_enforce().
+
+
+-spec is_connected() -> boolean().
+is_connected() ->
+    is_pid(get_connection_pid()).
+
+
+-spec get_connection_pid() -> undefined | pid().
+get_connection_pid() ->
+    global:whereis_name(?GS_CHANNEL_GLOBAL_NAME).
+
+
+-spec force_terminate() -> ok | not_started.
+force_terminate() ->
+    case get_connection_pid() of
+        undefined ->
+            not_started;
+        Pid when is_pid(Pid) ->
+            ?info("Terminating Onezone connection (forced)..."),
+            gen_server2:call(Pid, {terminate, normal}),
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -360,7 +394,13 @@ init([]) ->
             journal_logger:log("Onezone connection established"),
             ?notice("Onezone connection established: ~tp", [ClientRef]),
             yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
-            {ok, #state{client_ref = ClientRef}};
+            {ok, #state{
+                client_ref = ClientRef,
+                allowed_pids = case is_enabled_for_any_pid() of
+                    true -> any;
+                    false -> []
+                end
+            }};
         ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             gs_hooks:handle_deregistered_from_oz(),
@@ -711,7 +751,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
                     {result, ReqId, Result} ->
                         Result
                 after
-                    % the gen_server uses Timeout internally, allow some larger margin
+                % the gen_server uses Timeout internally, allow some larger margin
                     Timeout + 5000 ->
                         ?error_gs_request_failed("timed out client-side", ReqId, Request),
                         ?ERROR_TIMEOUT

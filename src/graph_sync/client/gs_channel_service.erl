@@ -17,7 +17,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_channel_service).
+-feature(maybe_expr, enable).
+-compile({feature, maybe_expr, enable}).
 -author("Lukasz Opiola").
+
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("http/gui_paths.hrl").
@@ -192,7 +195,13 @@ healthcheck(LastInterval) ->
         {true, true} ->
             % run the hook only if the node is already set up; as the healthcheck is repeated
             % often, the hook will be executed in due time
-            safe_mode:should_enforce() orelse gs_hooks:handle_healthcheck_success(),
+            case safe_mode:should_enforce() of
+                true ->
+                    ok;
+                false ->
+                    gs_client_worker:enable_for_pid(self()),
+                    gs_hooks:handle_healthcheck_success()
+            end,
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false} ->
             case try_to_start_connection() of
@@ -223,13 +232,26 @@ responsible_node() ->
 %% @private
 -spec try_to_start_connection() -> ok | error.
 try_to_start_connection() ->
+    maybe
+        ok ?= check_connection_prerequisites(),
+        ok ?= start_gs_client_worker(),
+        case safe_mode:should_enforce() of
+            true -> ok;
+            false -> gs_client_worker:await_enabled_for_any_pid()
+        end
+    end.
+
+
+%% @private
+-spec check_connection_prerequisites() -> ok | error.
+check_connection_prerequisites() ->
     case check_compatibility_with_onezone() of
         false ->
             error;
         true ->
             case is_clock_sync_satisfied() of
                 true ->
-                    start_gs_client_worker();
+                    ok;
                 false ->
                     ?debug("Deferring Onezone connection as the clock has not been yet synchronized with Onepanel"),
                     ?THROTTLE_LOG(?info(
@@ -271,8 +293,8 @@ run_on_connect_to_oz_procedures() ->
     gs_client_worker:enable_for_pid(self()),
     case gs_hooks:handle_connected_to_oz() of
         ok ->
-            % from now on, any process can use GS
-            gs_client_worker:enable_for_pid(any),
+            % after the first setup, the GS channel can be used by any process, even in case of disconnects
+            gs_client_worker:enable_for_any_pid(),
             ok;
         error ->
             % kill the connection, which will cause a retry during the next healthcheck

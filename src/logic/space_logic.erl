@@ -264,6 +264,8 @@ is_supported_by_local_storage(SpaceIdOrDoc, StorageSelector) ->
     case get_local_storages(SpaceIdOrDoc) of
         {ok, LocalStorageIds} ->
             StorageSelector == any orelse lists:member(StorageSelector, LocalStorageIds);
+        ?ERR_SPACE_NOT_SUPPORTED_BY(_, _) ->
+            false;
         ?ERR_FORBIDDEN ->
             false;
         ?ERROR_NOT_FOUND ->

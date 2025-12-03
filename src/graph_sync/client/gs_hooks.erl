@@ -45,7 +45,7 @@ handle_connected_to_oz() ->
         oneprovider:ensure_service_set_up_in_onezone(),
         ?info("Finished executing on-connect-to-oz procedures")
     catch
-        _:{_, ?ERR_NO_CONNECTION_TO_ONEZONE(_)} ->
+        _:{_, ?ERR_NO_CONNECTION_TO_ONEZONE(_)}:_ ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
             error;
         Class:Reason:Stacktrace ->
