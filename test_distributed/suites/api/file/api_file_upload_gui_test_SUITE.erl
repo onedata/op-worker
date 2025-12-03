@@ -102,7 +102,7 @@ registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test(_Co
     assert_file_size(Node, UserSessId, FileGuid, 5),
 
     ?assertMatch({ok, _}, initialize_gui_upload(
-        krakow, user1, FileGuid, #{<<"truncateTo0">> => true}
+        krakow, user1, FileGuid, #{<<"truncateToZero">> => true}
     )),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
     assert_file_size(Node, UserSessId, FileGuid, 0).

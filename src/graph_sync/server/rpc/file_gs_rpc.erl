@@ -85,10 +85,10 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
 register_file_upload(?USER(UserId, SessionId), Data) ->
     SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}},
-        optional => #{<<"truncateTo0">> => {boolean, any}}
+        optional => #{<<"truncateToZero">> => {boolean, any}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
-    TruncateTo0 = maps:get(<<"truncateTo0">>, SanitizedData, false),
+    TruncateTo0 = maps:get(<<"truncateToZero">>, SanitizedData, false),
 
     FileRef = ?FILE_REF(FileGuid),
     case ?lfm_check(lfm:stat(SessionId, FileRef)) of
