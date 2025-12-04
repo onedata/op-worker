@@ -11,14 +11,16 @@
 %%% messages. Whenever the connection dies, this gen_server is killed and a new
 %%% one is instantiated by gs_channel_service.
 %%%
-%%% The GS cache is disabled upon startup, and then enabled after complete
-%%% Oneprovider cluster initialization - see enable_cache/0.
+%%% The GS cache is disabled upon startup, and then enabled after complete Oneprovider
+%%% cluster initialization - see gs_channel_service:run_on_connect_to_oz_procedures/0.
 %%%
-%%% Similarly, the GS channel is disabled for all PIDs upon startup to ensure
-%%% that the required setup is done before it's available. Any PIDs doing the
-%%% setup must be whitelisted (enable_for_pid/1). After completing the first
-%%% setup, the GS channel remains enabled, even if a disconnect happens - see
-%%% enable_for_any_pid/0.
+%%% Similarly, the GS channel is disabled for all PIDs upon startup to ensure that
+%%% the required setup ("on connect to oz procedures") is done before it's available.
+%%% To that end, safe_mode is reused - any PIDs doing the setup must be whitelisted.
+%%%
+%%% After completing the first setup, the GS channel and cache remain enabled, even if
+%%% a disconnect happens. However, the GS channel may be disabled by manually enabling
+%%% the safe mode.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
@@ -38,7 +40,7 @@
 
 %% API
 -export([start/0, await_startup/0]).
--export([enable_for_pid/1, enable_for_any_pid/0, is_enabled_for_any_pid/0, await_enabled_for_any_pid/0]).
+-export([await_enabled_for_any_pid/0]).
 -export([is_connected/0]).
 -export([get_connection_pid/0]).
 -export([force_terminate/0]).
@@ -74,9 +76,6 @@
 
 -record(state, {
     client_ref = undefined :: undefined | gs_client:client_ref(),
-    % this information is kept in node cache to be persisted between worker restarts,
-    % but also stored in the state for quick lookup
-    allowed_pids = [] :: [pid()] | any,
     promises = #{} :: #{gs_protocol:message_id() => pid()}
 }).
 -type state() :: #state{}.
@@ -152,40 +151,11 @@ await_startup() ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% GS connection starts in disabled mode and must be enabled explicitly.
-%% Providing 'any' will allow all pids to use the GS channel.
-%% @end
-%%--------------------------------------------------------------------
--spec enable_for_pid(pid()) -> ok | no_return().
-enable_for_pid(Pid) ->
-    try
-        ok = gen_server2:call(get_connection_pid(), {enable_for_pid, Pid})
-    catch Class:Reason:Stacktrace ->
-        ?error_exception(Class, Reason, Stacktrace),
-        error(cannot_enable_gs_client_worker)
-    end.
-
-
--spec enable_for_any_pid() -> ok.
-enable_for_any_pid() ->
-    {_, []} = utils:rpc_multicall(consistent_hashing:get_all_nodes(), node_cache, put, [
-        gs_client_worker_enabled_for_any_pid, true
-    ]),
-    ok = gen_server2:call(get_connection_pid(), {enable_for_pid, any}).
-
-
--spec is_enabled_for_any_pid() -> boolean().
-is_enabled_for_any_pid() ->
-    true == node_cache:get(gs_client_worker_enabled_for_any_pid, false).
-
-
 -spec await_enabled_for_any_pid() -> ok | error.
 await_enabled_for_any_pid() ->
     try
         utils:wait_until(
-            fun is_enabled_for_any_pid/0,
+            fun() -> not safe_mode:should_enforce() end,
             timer:seconds(1),
             ?AWAIT_READINESS_TIMEOUT_MILLIS div timer:seconds(1)
         )
@@ -394,13 +364,7 @@ init([]) ->
             journal_logger:log("Onezone connection established"),
             ?notice("Onezone connection established: ~tp", [ClientRef]),
             yes = global:register_name(?GS_CHANNEL_GLOBAL_NAME, self()),
-            {ok, #state{
-                client_ref = ClientRef,
-                allowed_pids = case is_enabled_for_any_pid() of
-                    true -> any;
-                    false -> []
-                end
-            }};
+            {ok, #state{client_ref = ClientRef}};
         ?ERR_UNAUTHORIZED(?ERR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             gs_hooks:handle_deregistered_from_oz(),
@@ -434,43 +398,21 @@ handle_call(await_startup, _From, State) ->
     % startup is finished when the gen_server is done doing init; only then it can handle the request
     {reply, ok, State};
 
-handle_call({enable_for_pid, Pid}, _From, #state{allowed_pids = AllowedPids} = State) ->
-    {reply, ok, State#state{
-        allowed_pids = case {Pid, AllowedPids} of
-            {any, _} -> any;
-            {_, any} -> any;
-            _ when is_pid(Pid) -> [Pid | AllowedPids]
-        end
-    }};
-
 handle_call({async_request, _, _}, _From, #state{client_ref = undefined} = State) ->
     {reply, ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()), State};
 
 handle_call({async_request, GsReq, Timeout}, {From, _}, #state{
     client_ref = ClientRef,
-    allowed_pids = AllowedPids,
     promises = Promises
 } = State) ->
-    case AllowedPids == any orelse lists:member(From, AllowedPids) of
-        false ->
-            ?warning(
-                "Dropping a GS request for a disallowed pid (~tp): ~ts ~ts",
-                [From] ++ case GsReq#gs_req.request of
-                    #gs_req_graph{operation = O, gri = G} -> [O, gri:serialize(G)];
-                    #gs_req_unsub{gri = G} -> ["unsub", gri:serialize(G)]
-                end
-            ),
-            {reply, ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()), State};
-        true ->
-            ReqId = gs_client:async_request(ClientRef, GsReq),
-            % Async message triggering a check if the request has timed out
-            erlang:send_after(Timeout, self(), {check_timeout, ReqId}),
-            {reply, {ok, ReqId}, State#state{
-                promises = Promises#{
-                    ReqId => From
-                }
-            }}
-    end;
+    ReqId = gs_client:async_request(ClientRef, GsReq),
+    % Async message triggering a check if the request has timed out
+    erlang:send_after(Timeout, self(), {check_timeout, ReqId}),
+    {reply, {ok, ReqId}, State#state{
+        promises = Promises#{
+            ReqId => From
+        }
+    }};
 
 handle_call({terminate, Reason}, _From, State = #state{client_ref = ClientRef}) ->
     case ClientRef of
@@ -751,8 +693,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
                     {result, ReqId, Result} ->
                         Result
                 after
-                % the gen_server uses Timeout internally, allow some larger margin
-                    Timeout + 5000 ->
+                    Timeout + 5000 ->  % the gen_server uses Timeout internally, allow a larger margin
                         ?error_gs_request_failed("timed out client-side", ReqId, Request),
                         ?ERROR_TIMEOUT
                 end

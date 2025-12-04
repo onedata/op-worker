@@ -31,6 +31,7 @@
 -export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([before_listeners_start/0, after_listeners_stop/0]).
+-export([cluster_init_safe_mode_disabling_method/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
@@ -230,7 +231,7 @@ custom_workers() -> filter_disabled_workers([
 %%--------------------------------------------------------------------
 -spec before_cluster_upgrade() -> ok.
 before_cluster_upgrade() ->
-    whitelist_current_pid([safe_mode]),
+    safe_mode:whitelist_pid(self()),
     gs_channel_service:setup_internal_service().
 
 
@@ -244,13 +245,13 @@ before_cluster_upgrade() ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(3) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
-    whitelist_current_pid([safe_mode, gs]),
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
-    whitelist_current_pid([safe_mode, gs]),
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
 
@@ -261,7 +262,7 @@ upgrade_cluster(4) ->
     {ok, 5};
 upgrade_cluster(5) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
-    whitelist_current_pid([safe_mode, gs]),
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) -> init_etses_for_space_on_all_nodes(SpaceId) end, SpaceIds),
@@ -295,7 +296,7 @@ upgrade_cluster(5) ->
     {ok, 6};
 upgrade_cluster(6) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
-    whitelist_current_pid([safe_mode, gs]),
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         % Allow for file links reconciliation traverses to be run again - due to a bug in previous versions it
@@ -305,7 +306,7 @@ upgrade_cluster(6) ->
     {ok, 7};
 upgrade_cluster(7) ->
     % Upgrade is performed by spawned process, so it also needs to be whitelisted.
-    whitelist_current_pid([safe_mode, gs]),
+    safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         storage:upgrade_after_swift_version_update_to_v3(),
 
@@ -372,6 +373,7 @@ after_listeners_stop() ->
     % (though a working connection cannot be guaranteed here).
     gs_channel_service:terminate_internal_service().
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:listeners/0}.
@@ -381,6 +383,13 @@ after_listeners_stop() ->
 listeners() -> [
     https_listener
 ].
+
+
+%% @doc overrides {@link node_manager_plugin_default:cluster_init_safe_mode_disabling_method/0}
+-spec cluster_init_safe_mode_disabling_method() -> implicit_before_listeners_start | explicit.
+cluster_init_safe_mode_disabling_method() ->
+    explicit.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -532,17 +541,3 @@ async_run_with_oz_connection_after_upgrade(Fun) ->
         ?catch_exceptions(Fun())
     end),
     ok.
-
-
-%% @private
--spec whitelist_current_pid([safe_mode | gs]) -> ok.
-whitelist_current_pid([]) ->
-    ok;
-whitelist_current_pid([safe_mode | Rest]) ->
-    safe_mode:whitelist_pid(self()),
-    whitelist_current_pid(Rest);
-whitelist_current_pid([gs | Rest]) ->
-    % GS connection starts in disabled mode and must be enabled explicitly; make sure the upgrade procedures
-    % can perform GS requests to Onezone.
-    gs_client_worker:enable_for_pid(self()),
-    whitelist_current_pid(Rest).

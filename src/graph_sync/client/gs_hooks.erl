@@ -124,7 +124,6 @@ handle_entity_deleted(GRI) ->
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
-    ok = gs_client_worker:enable_cache(),
     ok = auth_cache:report_oz_connection_start(),
     ok = restart_hooks:maybe_execute_hooks(),
     ok = main_harvesting_stream:revise_all_spaces(),

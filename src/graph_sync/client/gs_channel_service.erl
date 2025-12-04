@@ -118,7 +118,10 @@ force_start_connection() ->
                                 ?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME,
                                 ?GS_RECONNECT_BASE_INTERVAL
                             ),
-                            true;
+                            case gs_client_worker:await_enabled_for_any_pid() of
+                                ok -> true;
+                                error -> false
+                            end;
                         error ->
                             false
                     end;
@@ -199,7 +202,7 @@ healthcheck(LastInterval) ->
                 true ->
                     ok;
                 false ->
-                    gs_client_worker:enable_for_pid(self()),
+                    safe_mode:whitelist_pid(self()),
                     gs_hooks:handle_healthcheck_success()
             end,
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
@@ -234,11 +237,7 @@ responsible_node() ->
 try_to_start_connection() ->
     maybe
         ok ?= check_connection_prerequisites(),
-        ok ?= start_gs_client_worker(),
-        case safe_mode:should_enforce() of
-            true -> ok;
-            false -> gs_client_worker:await_enabled_for_any_pid()
-        end
+        ok ?= start_gs_client_worker()
     end.
 
 
@@ -288,13 +287,14 @@ start_gs_client_worker() ->
 %% @private
 -spec run_on_connect_to_oz_procedures() -> ok | error.
 run_on_connect_to_oz_procedures() ->
-    % GS connection starts in disabled mode and must be enabled explicitly; this makes sure other processes
+    % GS connection starts in safe mode and must be enabled explicitly; this makes sure other processes
     % don't start using GS before basic setup is performed (which initializes caches etc)
-    gs_client_worker:enable_for_pid(self()),
+    safe_mode:whitelist_pid(self()),
+    gs_client_worker:enable_cache(),
     case gs_hooks:handle_connected_to_oz() of
         ok ->
             % after the first setup, the GS channel can be used by any process, even in case of disconnects
-            gs_client_worker:enable_for_any_pid(),
+            safe_mode:report_node_initialized(),
             ok;
         error ->
             % kill the connection, which will cause a retry during the next healthcheck
