@@ -179,11 +179,11 @@ invalid_args_test(_Config) ->
     ),
 
     AllowedAttrs = [
-        <<"name">>, <<"index">>, <<"type">>, <<"activePermissionsType">>,
-        <<"posixPermissions">>, <<"acl">>,
-        <<"parentFileId">>, <<"originProviderId">>, <<"directShareIds">>, <<"ownerUserId">>,
-        <<"hardlinkCount">>, <<"symlinkValue">>, <<"creationTime">>, <<"atime">>, <<"mtime">>,
-        <<"ctime">>, <<"size">>, <<"isFullyReplicatedLocally">>, <<"localReplicationRate">>
+        <<"name">>, <<"parentFileId">>, <<"index">>, <<"type">>, <<"activePermissionsType">>,
+        <<"posixPermissions">>, <<"acl">>, <<"originProviderId">>, <<"directShareIds">>,
+        <<"ownerUserId">>, <<"hardlinkCount">>, <<"symlinkValue">>, <<"creationTime">>,
+        <<"atime">>, <<"mtime">>, <<"ctime">>, <<"size">>, <<"isFullyReplicatedLocally">>,
+        <<"localReplicationRate">>
     ],
 
     ClientArgs = #{

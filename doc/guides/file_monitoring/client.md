@@ -152,7 +152,7 @@ for event in sse_stream {
 }
 ```
 
-**System guarantees**:
+**Event Id guarantees**:
 - ✅ No duplicates: Each sequence number appears exactly once
 - ✅ Ordered: Events arrive in strictly increasing sequence order
 
