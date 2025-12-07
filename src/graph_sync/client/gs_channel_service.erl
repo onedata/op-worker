@@ -165,8 +165,16 @@ force_restart_connection() ->
 %%--------------------------------------------------------------------
 -spec trigger_pending_on_connect_to_oz_procedures() -> ok.
 trigger_pending_on_connect_to_oz_procedures() ->
-    node() =:= responsible_node() andalso is_connected() andalso run_on_connect_to_oz_procedures(),
-    ok.
+    case node() == responsible_node() of
+        true ->
+            % the dedicated GS node will report being fully initialized when the
+            % procedures are run successfully
+            is_connected() andalso run_on_connect_to_oz_procedures(),
+            ok;
+        false ->
+            % nodes that do not host the GS channel are considered initialized already
+            safe_mode:report_node_initialized()
+    end.
 
 %%%===================================================================
 %%% Internal services API
@@ -198,10 +206,10 @@ healthcheck(LastInterval) ->
         {true, true} ->
             % run the hook only if the node is already set up; as the healthcheck is repeated
             % often, the hook will be executed in due time
-            case safe_mode:should_enforce() of
-                true ->
-                    ok;
+            case node_manager:is_cluster_healthy() of
                 false ->
+                    ok;
+                true ->
                     safe_mode:whitelist_pid(self()),
                     gs_hooks:handle_healthcheck_success()
             end,
@@ -271,10 +279,10 @@ start_gs_client_worker() ->
             % gets disabled), but the connection may be established before in order to perform an upgrade.
             % In such a case, the procedures are deferred and will be called later:
             % @see trigger_pending_on_connect_to_oz_procedures/0
-            case safe_mode:should_enforce() of
-                true ->
-                    ?info("Deferring on-connect-to-oz procedures as the node is not initialized yet");
+            case node_manager:is_cluster_healthy() of
                 false ->
+                    ?info("Deferring on-connect-to-oz procedures as the node is not initialized yet");
+                true ->
                     run_on_connect_to_oz_procedures()
             end;
         already_started ->

@@ -23,6 +23,7 @@
 %% export for ct
 -export([
     all/0,
+    init_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -622,6 +623,17 @@ token_expiration(Config) ->
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
+
+
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        Workers = ?config(op_worker_nodes, NewConfig),
+        lists:foreach(fun(Worker) ->
+            ok = rpc:call(Worker, safe_mode, report_node_initialized, [])
+        end, Workers),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook} | Config].
 
 
 init_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->

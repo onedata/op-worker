@@ -638,8 +638,6 @@ init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
     test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
-    test_utils:mock_new(Worker, gs_client_worker, [passthrough]),
-    test_utils:mock_expect(Worker, gs_client_worker, enable_for_pid, fun(_) -> ok end),
     Config.
 
 
@@ -660,7 +658,7 @@ end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Con
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [storage_logic, gs_client_worker, gs_channel_service]),
+    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service]),
     ok.
 
 
