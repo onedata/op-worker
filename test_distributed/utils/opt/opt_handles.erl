@@ -20,7 +20,7 @@
 -export([example_metadata_variant/2, expected_metadata_after_publication/2]).
 
 
--define(DEFAULT_METADATA_PREFIX, <<"oai_dc">>).
+-define(DEFAULT_METADATA_SCHEMA, <<"oai_dc">>).
 
 -define(EXAMPLE_METADATA1, <<
     "<?xml version=\"1.0\" encoding=\"utf-8\"?>
@@ -69,27 +69,27 @@ get_public_handle_url(NodeSelector, UserSelector, HandleId) ->
     od_share:id(), od_handle_service:id()
 ) -> od_handle:id().
 create(NodeSelector, UserSelector, ShareId, HServiceId) ->
-    create(NodeSelector, UserSelector, ShareId, HServiceId, ?DEFAULT_METADATA_PREFIX, ?EXAMPLE_METADATA1).
+    create(NodeSelector, UserSelector, ShareId, HServiceId, ?DEFAULT_METADATA_SCHEMA, ?EXAMPLE_METADATA1).
 
 
 -spec create(
     oct_background:node_selector(), oct_background:entity_selector(), od_share:id(),
-    od_handle_service:id(), od_handle:metadata_prefix(), od_handle:metadata()
+    od_handle_service:id(), od_handle:metadata_schema(), od_handle:metadata()
 ) -> od_handle:id().
-create(NodeSelector, UserSelector, ShareId, HServiceId, MetadataPrefix, MetadataString) ->
+create(NodeSelector, UserSelector, ShareId, HServiceId, MetadataSchema, MetadataString) ->
     Node = oct_background:get_random_provider_node(NodeSelector),
     SessId = oct_background:get_user_session_id(UserSelector, NodeSelector),
 
     {ok, HandleId} = ?rpc(Node, handle_logic:create(
-        SessId, HServiceId, <<"Share">>, ShareId, MetadataPrefix, MetadataString
+        SessId, HServiceId, <<"Share">>, ShareId, MetadataSchema, MetadataString
     )),
     HandleId.
 
 
--spec example_metadata_variant(od_handle:metadata_prefix(), integer()) -> binary().
-example_metadata_variant(?DEFAULT_METADATA_PREFIX, 1) ->
+-spec example_metadata_variant(od_handle:metadata_schema(), integer()) -> binary().
+example_metadata_variant(?DEFAULT_METADATA_SCHEMA, 1) ->
     ?EXAMPLE_METADATA1;
-example_metadata_variant(?DEFAULT_METADATA_PREFIX, 2) ->
+example_metadata_variant(?DEFAULT_METADATA_SCHEMA, 2) ->
     ?EXAMPLE_METADATA2.
 
 
