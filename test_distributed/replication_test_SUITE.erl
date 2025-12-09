@@ -1321,7 +1321,7 @@ override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
         fun(_Client, SpId) when SpId =:= SpaceId ->
             {ok, Providers}
         end),
-    test_utils:mock_expect(Workers, space_logic, is_supported,
+    test_utils:mock_expect(Workers, space_logic, is_supported_by,
         fun(_Client, SpId, ProvId) when SpId =:= SpaceId ->
             lists:member(ProvId, Providers)
         end),

@@ -740,7 +740,7 @@ get_supporting_storage_id(Worker, SpaceId) ->
 
 
 -spec normalize_storage_name(binary()) -> binary().
-normalize_storage_name(Suggestion) -> 
+normalize_storage_name(Suggestion) ->
     re:replace(Suggestion, <<"[^\\w_]">>, <<"">>, [{return, binary}, global]).
 
 
@@ -954,7 +954,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
     utils:rpc_multicall(AllWorkers, dbsync_worker, start_streams, []),
-    
+
     utils:rpc_multicall(AllWorkers, qos_traverse, init_pool, []),
 
     lists:foreach(
@@ -1236,7 +1236,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
             Storage -> {ok, Storage}
         end
     end),
-    
+
     test_utils:mock_expect(Workers, space_logic, get_local_supporting_storage, fun(SpaceId) ->
         case space_logic:get_local_storages(SpaceId) of
             {ok, [StorageId | _]} -> {ok, StorageId};
@@ -1248,7 +1248,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, #document{value = #od_space{storages = StorageIds}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         {ok, maps:keys(StorageIds)}
     end),
-    
+
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(SpaceId) ->
         space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId)
     end),
@@ -1279,14 +1279,26 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, maps:get(UserId, EffUsers, [])}
     end),
 
-    test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
+    test_utils:mock_expect(Workers, space_logic, is_supported_locally, fun
+        (SpaceId) when is_binary(SpaceId) ->
+            {ok, SupportedSpaces} = provider_logic:get_spaces(),
+            lists:member(SpaceId, SupportedSpaces);
+        (#document{value = #od_space{providers = Providers}}) ->
+            maps:is_key(oneprovider:get_id(), Providers)
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, is_supported_by, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         maps:is_key(ProviderId, Providers)
     end),
 
-    test_utils:mock_expect(Workers, space_logic, is_supported, fun
-        (SpaceId, ProviderId) when is_binary(SpaceId) -> space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId);
-        (DocOrRecord, ProviderId) -> meck:passthrough([DocOrRecord, ProviderId])
+    test_utils:mock_expect(Workers, space_logic, is_supported_by, fun
+        F(SpaceId, ProviderId) when is_binary(SpaceId) ->
+            space_logic:is_supported_by(?ROOT_SESS_ID, SpaceId, ProviderId);
+        F(#od_space{providers = Providers}, ProviderId) ->
+            maps:is_key(ProviderId, Providers);
+        F(#document{value = Space}, ProviderId) ->
+            F(Space, ProviderId)
     end),
 
     test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, UserId) ->
@@ -1296,7 +1308,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
     end),
-    
+
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(SessionId, SpaceId),
         maps:is_key(UserId, EffUsers)
@@ -1394,11 +1406,6 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     GetSpacesFun = fun(?ROOT_SESS_ID, PID) ->
         {ok, Supports} = GetSupportsFun(?ROOT_SESS_ID, PID),
         {ok, maps:keys(Supports)}
-    end,
-
-    SupportsSpaceFun = fun(?ROOT_SESS_ID, ProviderId, SpaceId) ->
-        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, ProviderId),
-        lists:member(SpaceId, Spaces)
     end,
 
     GetSupportSizeFun = fun(?ROOT_SESS_ID, PID, SpaceId) ->
@@ -1520,14 +1527,10 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     ),
 
 
-    test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
-        fun(SpaceId) ->
-            SupportsSpaceFun(?ROOT_SESS_ID, oneprovider:get_id(), SpaceId)
-        end),
-
-    test_utils:mock_expect(AllWorkers, provider_logic, supports_space,
-        SupportsSpaceFun
-    ),
+    test_utils:mock_expect(AllWorkers, provider_logic, supports_space, fun(SpaceId) ->
+        {ok, Spaces} = GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id()),
+        lists:member(SpaceId, Spaces)
+    end),
 
 
     test_utils:mock_expect(AllWorkers, provider_logic, get_support_size,
@@ -1553,6 +1556,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     test_utils:mock_expect(AllWorkers, provider_logic, get_service_configuration, fun(_) -> {ok, #{}} end),
 
     test_utils:mock_expect(AllWorkers, token_logic, verify_provider_identity_token, VerifyProviderIdentityFun).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1675,7 +1679,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
         fun(#document{key = Id}) -> {ok, Id};
             (Id) -> {ok, Id}
         end),
-    
+
     ok = test_utils:mock_expect(Workers, storage_logic, get_name_of_remote_storage,
         % storage name is equal to its id
         fun(StorageId, _) -> {ok, StorageId} end),

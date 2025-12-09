@@ -492,9 +492,16 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
                     on_space_supported(SpaceId, StorageId),
                     {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
                     {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
-                    ?notice("New space has been supported: '~ts' (~ts) with ~ts quota on storage '~ts' (~ts)", [
-                        SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
-                    ]),
+                    ?notice(
+                        "New support has been granted:~n"
+                        "> Space:    '~ts' (~ts)~n"
+                        "> Storage:  '~ts' (~ts)~n"
+                        "> Size:     ~ts", [
+                            SpaceName, SpaceId,
+                            StorageName, StorageId,
+                            str_utils:format_byte_size(SupportSize)
+                        ]
+                    ),
                     {ok, SpaceId};
                 {error, _} = SupportError ->
                     ok = dir_stats_service_state:clean(SpaceId),

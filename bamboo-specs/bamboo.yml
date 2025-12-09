@@ -152,6 +152,7 @@ stages:
         - gs_provider_logic
         - gs_share_logic
         - gs_space_logic
+        - gs_space_support
         - gs_storage_logic
         - gs_token_logic
         - gs_user_logic
@@ -1198,6 +1199,13 @@ gs_space_logic:
     - <<: *ct_logs
       name: ct_logs_gs_space_logic.tar.gz
 
+gs_space_support:
+  <<: *ct-onenv-job
+  key: GSSPACESUPPORT
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_gs_space_support.tar.gz
+
 gs_storage_logic:
   <<: *ct-job
   key: STLO
@@ -1994,6 +2002,7 @@ Coverage report:
     - artifact: ct_logs_gs_provider_logic.tar.gz
     - artifact: ct_logs_gs_share_logic.tar.gz
     - artifact: ct_logs_gs_space_logic.tar.gz
+    - artifact: ct_logs_gs_space_support.tar.gz
     - artifact: ct_logs_gs_storage_logic.tar.gz
     - artifact: ct_logs_gs_token_logic.tar.gz
     - artifact: ct_logs_gs_user_logic.tar.gz

@@ -17,7 +17,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_channel_service).
+-feature(maybe_expr, enable).
+-compile({feature, maybe_expr, enable}).
 -author("Lukasz Opiola").
+
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("http/gui_paths.hrl").
@@ -115,7 +118,10 @@ force_start_connection() ->
                                 ?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME,
                                 ?GS_RECONNECT_BASE_INTERVAL
                             ),
-                            true;
+                            case gs_client_worker:await_enabled_for_any_pid() of
+                                ok -> true;
+                                error -> false
+                            end;
                         error ->
                             false
                     end;
@@ -159,8 +165,16 @@ force_restart_connection() ->
 %%--------------------------------------------------------------------
 -spec trigger_pending_on_connect_to_oz_procedures() -> ok.
 trigger_pending_on_connect_to_oz_procedures() ->
-    node() =:= responsible_node() andalso is_connected() andalso run_on_connect_to_oz_procedures(),
-    ok.
+    case node() == responsible_node() of
+        true ->
+            % the dedicated GS node will report being fully initialized when the
+            % procedures are run successfully
+            is_connected() andalso run_on_connect_to_oz_procedures(),
+            ok;
+        false ->
+            % nodes that do not host the GS channel are considered initialized already
+            safe_mode:report_node_initialized()
+    end.
 
 %%%===================================================================
 %%% Internal services API
@@ -192,7 +206,13 @@ healthcheck(LastInterval) ->
         {true, true} ->
             % run the hook only if the node is already set up; as the healthcheck is repeated
             % often, the hook will be executed in due time
-            safe_mode:should_enforce() orelse gs_hooks:handle_healthcheck_success(),
+            case node_manager:is_cluster_healthy() of
+                false ->
+                    ok;
+                true ->
+                    safe_mode:whitelist_pid(self()),
+                    gs_hooks:handle_healthcheck_success()
+            end,
             {ok, ?GS_RECONNECT_BASE_INTERVAL};
         {true, false} ->
             case try_to_start_connection() of
@@ -223,13 +243,22 @@ responsible_node() ->
 %% @private
 -spec try_to_start_connection() -> ok | error.
 try_to_start_connection() ->
+    maybe
+        ok ?= check_connection_prerequisites(),
+        ok ?= start_gs_client_worker()
+    end.
+
+
+%% @private
+-spec check_connection_prerequisites() -> ok | error.
+check_connection_prerequisites() ->
     case check_compatibility_with_onezone() of
         false ->
             error;
         true ->
             case is_clock_sync_satisfied() of
                 true ->
-                    start_gs_client_worker();
+                    ok;
                 false ->
                     ?debug("Deferring Onezone connection as the clock has not been yet synchronized with Onepanel"),
                     ?THROTTLE_LOG(?info(
@@ -246,14 +275,14 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            % The on connection procedures require an initialized node (when the safe mode
-            % gets disabled), but the connection may be established before in order to perform an upgrade.
+            % The on connection procedures require an initialized cluster,
+            % but the connection may be established before in order to perform an upgrade.
             % In such a case, the procedures are deferred and will be called later:
             % @see trigger_pending_on_connect_to_oz_procedures/0
-            case safe_mode:should_enforce() of
-                true ->
-                    ?info("Deferring on-connect-to-oz procedures as the node is not initialized yet");
+            case node_manager:is_cluster_healthy() of
                 false ->
+                    ?info("Deferring on-connect-to-oz procedures as the cluster is not initialized yet");
+                true ->
                     run_on_connect_to_oz_procedures()
             end;
         already_started ->
@@ -266,8 +295,14 @@ start_gs_client_worker() ->
 %% @private
 -spec run_on_connect_to_oz_procedures() -> ok | error.
 run_on_connect_to_oz_procedures() ->
+    % GS connection starts in safe mode and must be enabled explicitly; this makes sure other processes
+    % don't start using GS before basic setup is performed (which initializes caches etc)
+    safe_mode:whitelist_pid(self()),
+    gs_client_worker:enable_cache(),
     case gs_hooks:handle_connected_to_oz() of
         ok ->
+            % after the first setup, the GS channel can be used by any process, even in case of disconnects
+            safe_mode:report_node_initialized(),
             ok;
         error ->
             % kill the connection, which will cause a retry during the next healthcheck

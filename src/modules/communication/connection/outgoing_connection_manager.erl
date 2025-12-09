@@ -395,5 +395,5 @@ log_error(#state{peer_id = PeerId}, ReasonString) ->
 %%cosupports_any_space(ProviderId) ->
 %%    {ok, Spaces} = provider_logic:get_spaces(),
 %%    lists:any(fun(SpaceId) ->
-%%        space_logic:is_supported(SpaceId, ProviderId)
+%%        space_logic:is_supported_by(SpaceId, ProviderId)
 %%    end, Spaces).

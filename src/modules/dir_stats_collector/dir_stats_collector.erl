@@ -635,7 +635,6 @@ update_collection_in_cache(CollectionType, _UpdateType, CollectionUpdate, #cache
     }.
 
 
-
 %% @private
 -spec request_flush(file_id:file_guid(), dir_stats_collection:type(), PruningStrategy :: pruning_strategy()) ->
     ok | od_error_dir_stats_not_ready:t() | od_error_internal_server_error:t().
@@ -852,7 +851,7 @@ ensure_space_collecting_statuses_up_to_date(#state{
             IsAnyInitializing = maps:get(SpaceId, IsAnyInitializingInSpaceMap, false),
             case
                 (not IsAnyInitializing) andalso
-                dir_stats_service_state:get_extended_status(SpaceId) =:= enabled
+                    dir_stats_service_state:get_extended_status(SpaceId) =:= enabled
             of
                 true -> enabled;
                 false -> initializing
@@ -1151,12 +1150,16 @@ add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
 call_designated_node(Guid, Function, Args) ->
     Node = consistent_hashing:get_assigned_node(Guid),
     case erpc:call(Node, pes, Function, Args) of
-        ?ERR_DIR_STATS_NOT_READY = ErrorDirStatsNotReady -> ErrorDirStatsNotReady;
-        ?ERR_DIR_STATS_DISABLED_FOR_SPACE = ErrorDirStatsDisabledForSpace -> ErrorDirStatsDisabledForSpace;
-        ?ERROR_NOT_FOUND = ErrorNotFound -> ErrorNotFound;
+        ?ERR_DIR_STATS_NOT_READY = ErrorDirStatsNotReady ->
+            ErrorDirStatsNotReady;
+        ?ERR_DIR_STATS_DISABLED_FOR_SPACE = ErrorDirStatsDisabledForSpace ->
+            ErrorDirStatsDisabledForSpace;
+        ?ERROR_NOT_FOUND = ErrorNotFound ->
+            ErrorNotFound;
         {error, _} = Error ->
-            ?error("Dir stats collector PES fun ~tp error: ~tp for guid ~tp", [Function, Error, Guid]),
-            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined);
+            ?report_internal_server_error(
+                ?autoformat_with_msg("Dir stats collector PES error", [Function, Guid, Error])
+            );
         Other ->
             Other
     end.
