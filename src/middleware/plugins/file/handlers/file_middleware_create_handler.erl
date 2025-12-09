@@ -233,7 +233,18 @@ validate(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
     middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
-    storage_import:assert_imported_storage(StorageId).
+    storage_import:assert_imported_storage(StorageId),
+
+    AutoDetectAttributes = maps:get(<<"autoDetectAttributes">>, Data, true),
+    StorageType = storage:get_helper_name(StorageId),
+    case StorageType == ?HTTP_HELPER_NAME andalso AutoDetectAttributes == false of
+        true ->
+            % in case of the HTTP helper we don't allow overriding file attributes, as it
+            % requires the stat operation to be supported for correct range reads later on
+            throw(?ERR_BAD_VALUE_NOT_ALLOWED(?err_ctx(), <<"autoDetectAttributes">>, [true]));
+        false ->
+            ok
+    end.
 
 
 -spec create(middleware:req()) -> middleware:create_result().

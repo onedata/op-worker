@@ -289,6 +289,8 @@ maybe_verify_existence(StorageFileCtx, Spec) ->
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
     case IsHttp orelse AutoDetect of
         true ->
+            % in case of the HTTP helper we don't allow overriding file attributes, as it
+            % requires the stat operation to be supported for correct range reads later on
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
         false ->
