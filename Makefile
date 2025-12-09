@@ -172,10 +172,24 @@ package: check_distribution package/$(PKG_ID).tar.gz
 pkgclean:
 	rm -rf package
 
+CODETAG_EXCLUDED_DIRS += node_package
+CODETAG_EXCLUDED_DIRS += ./_build/default/lib/gpb
+CODETAG_EXCLUDED_DIRS += ./_build/default/lib/helpers
+CODETAG_EXCLUDED_DIRS += ./_build/default/lib/gen_server_mock
+CODETAG_EXCLUDED_DIRS += ./_build/default/lib/rrdtool
+CODETAG_EXCLUDED_DIRS += ./_build/default/lib/rtransfer_link
+CODETAG_EXCLUDED_DIRS += ./_build/default/lib/locks
+CODETAG_EXCLUDED_DIRS += codetag_tracker_results
+
+comma := ,
+empty :=
+space := $(empty) $(empty)
+CODETAG_EXCLUDED_DIRS_CSV := $(subst $(space),$(comma),$(CODETAG_EXCLUDED_DIRS))
+
 codetag-tracker:
 	@./bamboos/scripts/run-with-surefire-report.py \
 		--test-name CodetagTracker \
 		--report-path test/codetag_tracker_results/TEST-codetag_tracker.xml \
 		./bamboos/scripts/codetag-tracker.sh --branch=${BRANCH} \
-		--excluded-dirs=node_package,gpb,helpers,gen_server_mock,rrdtool,rtransfer_link,locks,codetag_tracker_results \
+		--excluded-dirs=$(CODETAG_EXCLUDED_DIRS_CSV) \
 		--excluded-files=qos_expression_parser.erl
