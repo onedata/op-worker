@@ -283,7 +283,11 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
-    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    HelperName = storage:get_helper_name(StorageId),
+    IsHttp = HelperName =:= ?HTTP_HELPER_NAME,
+    AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
+    case IsHttp orelse AutoDetect of
         true ->
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
