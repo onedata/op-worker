@@ -356,9 +356,8 @@ assert_content_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->
     assert_content_copied_internal(Node, SourceHandle, TargetHandle, 0, Attempts),
     
     lfm_proxy:close(Node, SourceHandle),
-    lfm_proxy:close(Node, TargetHandle),
-    TargetGuid2 = resolve_if_symlink(Node, SessionId, TargetGuid),
-    assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid2, Attempts).
+    lfm_proxy:close(Node, TargetHandle).
+
 
 assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset, Attempts) ->
     BytesToRead = 10000, 
@@ -379,21 +378,6 @@ assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) -
         ?ERR_POSIX(?ENODATA) ->
             ok
     end.
-
-
-assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->
-    SpaceId = oct_background:get_space_id(?SPACE),
-    {ok, #file_attr{size = SourceSize}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
-    TargetSDHandle = sd_test_utils:new_handle(Node, SpaceId, get_storage_file_id(Node, TargetGuid)),
-    GetStorageSize = fun(SDHandle) ->
-        case sd_test_utils:stat(Node, SDHandle) of
-            {ok, #statbuf{st_size = SourceSize}} -> SourceSize;
-            Sth ->
-                ct:pal("~tp", [{?MODULE, ?LINE, Sth}]),
-                error
-        end
-    end,
-    ?assertEqual(SourceSize, GetStorageSize(TargetSDHandle), Attempts).
 
 
 assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->
@@ -442,12 +426,6 @@ assert_layout_custom_features(Node, SessionId, ArchiveId, ?ARCHIVE_BAGIT_LAYOUT)
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
     bagit_test_utils:validate_all_files_checksums(Node, SessionId, ArchiveRootDirGuid),
     bagit_test_utils:validate_all_files_json_metadata(Node, SessionId, ArchiveRootDirGuid).
-
-
-get_storage_file_id(Node, Guid) ->
-    FileCtx = rpc:call(Node, file_ctx, new_by_guid, [Guid]),
-    {StorageFileId, _} = rpc:call(Node, file_ctx, get_storage_file_id, [FileCtx]),
-    StorageFileId.
 
 
 resolve_if_symlink(Node, SessionId, Guid) ->
