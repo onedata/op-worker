@@ -1,6 +1,80 @@
-# Release notes for project op-worker
+Release notes for project op-worker
+===================================
 
-## CHANGELOG
+CHANGELOG
+---------
+
+### 21.02.9
+
+-   **VFS-13186** Improve handling of HEAD request headers and ensure
+    that HTTP servers without range access are not supported.
+-   **VFS-13110** Fixed handling of Hostname header in requests made by
+    HTTP helper to ensure the Hostname is identical to the specified
+    endpoint in storage parameters.
+-   **VFS-12935** Disabled SSL/TLS ciphers that have been recently
+    deemed unsafe. Added a config option to the ctool library to add
+    extra ciphers or blacklist selected ones for more flexibility.
+-   **VFS-12932** Web GUI: Added infinite scroll to some dropdowns
+    making them load faster when there are large number of items.
+-   **VFS-12892** Web GUI: Added support for DataCite metadata of public
+    share.
+-   **VFS-12891** Added support for DataCite metadata format in public
+    data records, including APIs and the OAI-PMH endpoint for both
+    "datacite" and "oai\_datacite" metadata prefixes.
+-   **VFS-12848** Added storage helper caching in Oneprovider.
+-   **VFS-12803** Fixed GlusterFS storage verification check logic.
+-   **VFS-12767** Added experimental space file events REST API.
+-   **VFS-12765** Web GUI: Improved performance of global providers map
+    with large number of supported spaces by using batch requesting and
+    infinite scroll for spaces lists.
+-   **VFS-12757** Added support for structured error messages in
+    oneclient and ones3 logs.
+-   **VFS-12731** Web GUI: Fixed randomly not showing other user name in
+    ACL.
+-   **VFS-12703** Implemented backpressure mechanisms on the GraphSync
+    channel between Oneprovider and Onezone. Up to this point, in
+    certain pathological situations, the Oneprovider could flood Onezone
+    with requests and effectively DoS the server. Added configurable
+    parallelism of request processing based on a process pool and fair
+    balancing of processing capacity between clients.
+-   **VFS-12688** Updated Swift helper to support Keystone V3
+    authentication.
+-   **VFS-12674** Web GUI: Improved support for large lists in sidebar
+    by making batch requests to backend and showing loading progress.
+-   **VFS-12647** Custom JSON metadata can now be fetched along with
+    file attributes, including file listing endpoints.
+-   **VFS-12620** Fixed handling of quota exceeded error in S3 helper.
+-   **VFS-12594** Web GUI: Fixed showing error message after deleting
+    imported file.
+-   **VFS-12581** Added rich context information to errors across the
+    whole system (expressed in JSON) to improve error reporting and
+    diagnostics.
+-   **VFS-12554** Web GUI: Improved performance of spaces/groups/tokens,
+    etc. sidebar when there are numerous items by using infinite scroll
+    lists.
+-   **VFS-12461** Web GUI: Changed "Open Data" naming to "Public Data".
+-   **VFS-12459** Reworked the concept of Open Data into Public Data; it
+    concerns Shared collections that have been assigned a PID/DOI and
+    are advertised via OAI-PMH. The collections may have different
+    levels of licences assigned, not only the open ones - the rename is
+    to avoid confusion. The `--open-shares-mode` in Oneclient has been
+    renamed to `--public-data-mode`.
+-   **VFS-12443** Extended endpoint with file locations on storage to
+    work with directories. Also directory storage location is now
+    available in data distribution endpoint.
+-   **VFS-12417** Web GUI: Handling rare error, when auto-refresh is
+    disabled after error on deleting files.
+-   **VFS-12376** Web GUI: Fixed broken share header when user has no
+    access to root file path. Improved showing issues with access to the
+    share root file.
+-   **VFS-12267** Web GUI: Improved handling of the "service
+    unavailable" error.
+-   **VFS-12259** Web GUI: Added support for JSON metadata columns in
+    file browser.
+-   **VFS-11284** The OneS3 service can now be deployed by Onepanel in
+    an integrated manner (Oneprovider cluster). Both visual (GUI) and
+    batch modes are supported.
+
 
 ### 21.02.8
 
