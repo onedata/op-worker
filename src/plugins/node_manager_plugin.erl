@@ -53,13 +53,13 @@
 % Human readable version is included to for logging purposes. It's the last version
 % where this cluster generation was the current one.
 -define(CLUSTER_GENERATIONS, [
-    {1, ?LINE_19_02},
-    {2, ?LINE_20_02(<<"0-beta3">>)},
-    {3, ?LINE_20_02(<<"1">>)},
-    {4, ?LINE_21_02(<<"2">>)},
-    {5, ?LINE_21_02(<<"3">>)},
-    {6, ?LINE_21_02(<<"5">>)},
-    {7, ?LINE_21_02(<<"8">>)},
+    {1, <<"19.02.5">>},
+    {2, <<"20.02.0-beta3">>},
+    {3, <<"21.02.1">>},
+    {4, <<"21.02.2">>},
+    {5, <<"21.02.3">>},
+    {6, <<"21.02.5">>},
+    {7, <<"21.02.8">>},
     {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
