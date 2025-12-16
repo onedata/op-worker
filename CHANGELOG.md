@@ -6,6 +6,9 @@ CHANGELOG
 
 ### 25.0
 
+-   **VFS-13222** Switched to the Calendar Versioning model. Version
+    25.0 is equivalent to 21.02.9 in the previous model, and it's
+    cross-compatible with the 21.02 line.
 -   **VFS-13198** Web GUI: Added support for OpenAIRE metadata of public
     share.
 -   **VFS-13186** Improve handling of HEAD request headers and ensure
