@@ -206,8 +206,12 @@ has_eff_space(#document{value = #od_user{eff_spaces = EffSpaces}}, SpaceId) ->
 
 -spec has_eff_space(gs_client_worker:client(), od_user:id(), od_space:id()) -> boolean().
 has_eff_space(Client, UserId, SpaceId) when is_binary(UserId) ->
-    {ok, UserDoc = #document{}} = get(Client, UserId),
-    has_eff_space(UserDoc, SpaceId).
+    case get(Client, UserId) of
+        {ok, UserDoc = #document{}} ->
+            has_eff_space(UserDoc, SpaceId);
+        {error, ?ERR_TOKEN_INVALID} ->
+            false
+    end.
 
 
 -spec get_space_by_name(gs_client_worker:client(), od_user:id() | od_user:doc(),

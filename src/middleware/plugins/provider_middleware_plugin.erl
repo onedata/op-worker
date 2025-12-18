@@ -220,7 +220,7 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
 get(#op_req{gri = #gri{aspect = health}}, _) ->
     case node_manager:is_cluster_healthy() of
         true -> {ok, value, #{<<"status">> => <<"healthy">>}};
-        false -> throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
+        false -> throw(?ERR_TEMPORARY_FAILURE(?err_ctx()))
     end.
 
 %%--------------------------------------------------------------------
