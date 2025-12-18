@@ -787,6 +787,13 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     {ok, ConfigJSONBin} = file:read_file(ConfigPath),
     ConfigJSON = json_utils:decode_deprecated(ConfigJSONBin),
 
+    % due to mocks being set up and torn down between tests, the reconciliation traverse
+    % can fail at any point - skip it to avoid random failures
+    test_utils:mock_new(AllWorkers, file_links_reconciliation_traverse, [passthrough]),
+    test_utils:mock_expect(AllWorkers, file_links_reconciliation_traverse, start_for_space, fun(SpaceId) ->
+        ?notice("Mocked file links reconciliation traverse was started for space ~ts", [SpaceId])
+    end),
+
     % pretend that there is a zone connection
     test_utils:mock_new(AllWorkers, gs_channel_service, [passthrough]),
     test_utils:mock_expect(AllWorkers, gs_channel_service, is_connected_and_initialized, fun() -> true end),
