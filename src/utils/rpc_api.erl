@@ -419,7 +419,7 @@ get_identity_token() ->
 
 -spec is_connected_to_oz() -> boolean().
 is_connected_to_oz() ->
-    gs_channel_service:is_connected().
+    gs_channel_service:is_connected_and_initialized().
 
 
 -spec is_registered() -> boolean().

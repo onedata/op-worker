@@ -637,7 +637,7 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
-    test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
+    test_utils:mock_expect(Worker, gs_channel_service, is_connected_and_initialized, fun() -> true end),
     Config.
 
 

@@ -789,7 +789,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
 
     % pretend that there is a zone connection
     test_utils:mock_new(AllWorkers, gs_channel_service, [passthrough]),
-    test_utils:mock_expect(AllWorkers, gs_channel_service, is_connected, fun() -> true end),
+    test_utils:mock_expect(AllWorkers, gs_channel_service, is_connected_and_initialized, fun() -> true end),
 
     GlobalSetup = proplists:get_value(<<"test_global_setup">>, ConfigJSON, ?DEFAULT_GLOBAL_SETUP),
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
