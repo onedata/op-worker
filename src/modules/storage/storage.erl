@@ -520,25 +520,26 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
 %% @private
 -spec wait_for_space_support(od_space:id()) -> ok.
 wait_for_space_support(SpaceId) ->
-    ?info("Awaiting synchronization of support-related documents (id: ~ts)...", [SpaceId]),
-    utils:wait_until(
-        fun() ->
-            case space_logic:is_supported_locally(SpaceId) of
-                true ->
-                    ?notice("Support-related documents synchronized, the space is fully functional (id: ~ts)", [SpaceId]),
-                    true;
-                false ->
-                    provider_logic:force_fetch(),
-                    false
-            end
-        end,
-        ?WAIT_FOR_SUPPORT_INTERVAL,
-        ?WAIT_FOR_SUPPORT_ATTEMPTS
-    ),
-    space_logic:is_supported_locally(SpaceId) orelse
-        ?warning("Timeout synchronizing support-related documents, the space will not be functional"
-            "for some time - until the synchronization is completed in the background (id: ~ts)", [SpaceId]),
-    ok.
+    try
+        ?info("Awaiting synchronization of support-related documents (id: ~ts)...", [SpaceId]),
+        utils:wait_until(
+            fun() ->
+                case space_logic:is_supported_locally(SpaceId) of
+                    true ->
+                        true;
+                    false ->
+                        provider_logic:force_fetch(),
+                        false
+                end
+            end,
+            ?WAIT_FOR_SUPPORT_INTERVAL,
+            ?WAIT_FOR_SUPPORT_ATTEMPTS
+        ),
+        ?notice("Support-related documents synchronized, the space is fully functional (id: ~ts)", [SpaceId])
+    catch error:timeout ->
+        ?warning("Timeout synchronizing support-related documents, the space will not be functional "
+            "for some time - until the synchronization is completed in the background (id: ~ts)", [SpaceId])
+    end.
 
 
 %%--------------------------------------------------------------------

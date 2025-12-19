@@ -117,6 +117,7 @@ data_spec(#gri{aspect = attrs}, _) ->
             id => {binary, guid}
         },
         at_least_one => #{
+            % WARNING: onedatafilerestclient relies on `mode` field, do not remove before changing it there
             <<"mode">> => {binary, ModeCheckFun(<<"mode">>)},
             <<"posixPermissions">> => {binary, ModeCheckFun(<<"posixPermissions">>)}
         }
