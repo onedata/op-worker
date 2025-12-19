@@ -31,7 +31,7 @@
 %% API
 -export([setup_internal_service/0]).
 -export([terminate_internal_service/0]).
--export([is_connected/0]).
+-export([is_connected_and_initialized/0]).
 -export([force_start_connection/0, force_terminate_connection/0, force_restart_connection/0]).
 -export([trigger_pending_on_connect_to_oz_procedures/0]).
 
@@ -82,14 +82,17 @@ terminate_internal_service() ->
     end.
 
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns if the provider is actively connected to Onezone via GraphSync channel.
+%% Intended as a check from an external process perspective to determine that
+%% the GS channel is ready to take requests, which requires proper setup
+%% (@see gs_client_worker -> main doc).
 %% @end
 %%--------------------------------------------------------------------
--spec is_connected() -> boolean().
-is_connected() ->
-    gs_client_worker:is_connected().
+-spec is_connected_and_initialized() -> boolean().
+is_connected_and_initialized() ->
+    is_connected() andalso not safe_mode:should_enforce_for_pid(self()).
 
 
 %%--------------------------------------------------------------------
@@ -403,3 +406,9 @@ check_for_compatibility_registry_updates(Resolver, OzConfiguration) ->
                 "Cannot check Onezone's compatibility registry revision - got '~w'", [Other]
             ))
     end.
+
+
+%% @private
+-spec is_connected() -> boolean().
+is_connected() ->
+    gs_client_worker:is_connected().

@@ -517,7 +517,7 @@ init_etses_for_space_internal(Space) ->
 -spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(Fun) ->
     ?info("Awaiting Onezone connection..."),
-    await_zone_connection_and_run(gs_channel_service:is_connected(), ?ZONE_CONNECTION_RETRIES, Fun).
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), ?ZONE_CONNECTION_RETRIES, Fun).
 
 -spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
     Fun :: fun(() -> ok)) -> ok.
@@ -527,7 +527,7 @@ await_zone_connection_and_run(false, 0, _) ->
 await_zone_connection_and_run(false, Retries, Fun) ->
     ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),
-    await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
 
@@ -537,7 +537,7 @@ await_zone_connection_and_run(true, _, Fun) ->
 async_run_with_oz_connection_after_upgrade(Fun) ->
     spawn(fun() ->
         utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
-        utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected_and_initialized/0, timer:seconds(10), infinity),
         ?catch_exceptions(Fun())
     end),
     ok.
