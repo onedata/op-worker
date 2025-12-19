@@ -12,7 +12,7 @@
     [
         {description, "Application starts node of oneprovider cluster"},
         %% Beware - this version is parsed and used in Makefile
-        {vsn, "21.02.8"},
+        {vsn, "25.0"},
         {registered, [op_worker_sup]},
         {applications, [
             kernel,
