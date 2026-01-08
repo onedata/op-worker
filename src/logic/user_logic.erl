@@ -209,7 +209,7 @@ has_eff_space(Client, UserId, SpaceId) when is_binary(UserId) ->
     case get(Client, UserId) of
         {ok, UserDoc = #document{}} ->
             has_eff_space(UserDoc, SpaceId);
-        {error, ?ERR_TOKEN_INVALID} ->
+        ?ERR_TOKEN_INVALID ->
             false
     end.
 
