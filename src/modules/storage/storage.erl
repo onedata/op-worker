@@ -89,6 +89,10 @@
 -compile({no_auto_import, [get/1]}).
 
 
+-define(WAIT_FOR_SUPPORT_INTERVAL, 500).
+-define(WAIT_FOR_SUPPORT_ATTEMPTS, 6).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -502,6 +506,7 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
                             str_utils:format_byte_size(SupportSize)
                         ]
                     ),
+                    wait_for_space_support(SpaceId),
                     {ok, SpaceId};
                 {error, _} = SupportError ->
                     ok = dir_stats_service_state:clean(SpaceId),
@@ -509,6 +514,31 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
             end;
         ValidateError ->
             ValidateError
+    end.
+
+
+%% @private
+-spec wait_for_space_support(od_space:id()) -> ok.
+wait_for_space_support(SpaceId) ->
+    try
+        ?info("Awaiting synchronization of support-related documents (id: ~ts)...", [SpaceId]),
+        utils:wait_until(
+            fun() ->
+                case space_logic:is_supported_locally(SpaceId) of
+                    true ->
+                        true;
+                    false ->
+                        provider_logic:force_fetch(),
+                        false
+                end
+            end,
+            ?WAIT_FOR_SUPPORT_INTERVAL,
+            ?WAIT_FOR_SUPPORT_ATTEMPTS
+        ),
+        ?notice("Support-related documents synchronized, the space is fully functional (id: ~ts)", [SpaceId])
+    catch error:timeout ->
+        ?warning("Timeout synchronizing support-related documents, the space will not be functional "
+            "for some time - until the synchronization is completed in the background (id: ~ts)", [SpaceId])
     end.
 
 
