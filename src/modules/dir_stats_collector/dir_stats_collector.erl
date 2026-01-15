@@ -416,7 +416,12 @@ graceful_terminate(State) ->
     end.
 
 
--spec forced_terminate(pes:forced_termination_reason(), state()) -> ok.
+-spec forced_terminate(pes:forced_termination_reason(), state() | undefined) -> ok.
+forced_terminate(Reason, undefined) ->
+    % This plugin is implements async mode which means there are 2 processes connected to it - mester and slave;
+    % only the slave keeps the state and handles normal messages (like graceful termination), 
+    % but a termination message from supervisor can reach both of them.
+    ?warning("Dir stats collector master forced terminate, reason: ~tp", [Reason]);
 forced_terminate(Reason, #state{has_unflushed_changes = false}) ->
     ?warning("Dir stats collector forced terminate, reason: ~tp", [Reason]);
 
