@@ -43,8 +43,9 @@
 
 -type fallback_strategy() :: no_fallback | retry_as_root | retry_as_root_and_chown.
 
+%% default: 5 minutes
 -define(HELPER_MALFUNCTION_THROTTLE_LOG_INTERVAL, op_worker:get_env(
-    storage_driver_helper_malfunction_throttle_log_interval, timer:minutes(5)
+    storage_driver_helper_malfunction_throttle_log_interval, 300
 )).
 
 
