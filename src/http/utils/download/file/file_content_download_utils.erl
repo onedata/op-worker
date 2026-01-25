@@ -27,7 +27,13 @@
 
 -export_type([on_success_callback/0]).
 
-%% TODO opisz czemu takie czary (:
+%% When streaming a file download, if a helper process fails during reading, 
+%% we cannot simply send an error response, as HTTP does not allow it once 
+%% the stream has begun. Therefore, we attempt to read at least the first 
+%% chunk of the file before starting the HTTP stream. If the read is successful, 
+%% we initiate the stream and send this first chunk.
+%% This record stores all information needed to initiate the stream. 
+%% See also: build_streaming_send_fun.
 -record(initial_stream_state, {
     status :: cowboy:http_status(),
     headers :: cowboy:http_headers(),
@@ -196,7 +202,7 @@ stream_whole_file(FileHandle, FileSize, Req0) ->
     StreamingCtx0 = file_content_streamer:build_ctx(FileHandle, FileSize),
     StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun()),
     SendState1 = file_content_streamer:stream_bytes_range(StreamingCtx1, {0, FileSize - 1}, SendState0),
-    {undefined, get_req_from_send_state(SendState1)}.
+    {undefined, ensure_stream_initiated(SendState1)}.
 
 
 %% @private
@@ -214,7 +220,7 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req
     StreamingCtx0 = file_content_streamer:build_ctx(FileHandle, FileSize),
     StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun()),
     SendState1 = file_content_streamer:stream_bytes_range(StreamingCtx1, Range, SendState0),
-    {undefined, get_req_from_send_state(SendState1)}.
+    {undefined, ensure_stream_initiated(SendState1)}.
 
 
 %% @private
@@ -223,34 +229,30 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req
 stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
     Boundary = cow_multipart:boundary(),
     ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
+    BuildNextPartHead = fun(Range) ->
+        cow_multipart:first_part(Boundary, [
+            {?HDR_CONTENT_TYPE, ContentType},
+            {?HDR_CONTENT_RANGE, build_content_range_header_value(Range, FileSize)}
+        ])
+    end,
 
     StreamingCtx0 = file_content_streamer:build_ctx(FileHandle, FileSize),
     StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun()),
 
-    FinalSendState = lists:foldl(fun(Range, AccState) ->
-        NextPartHead = cow_multipart:first_part(Boundary, [
-            {?HDR_CONTENT_TYPE, ContentType},
-            {?HDR_CONTENT_RANGE, build_content_range_header_value(Range, FileSize)}
-        ]),
-
-        CurrSendState = case AccState of
-            undefined ->
-                % first range
-                #initial_stream_state{
-                    status = ?HTTP_206_PARTIAL_CONTENT,
-                    headers = #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
-                    initial_chunk = NextPartHead,
-                    req = Req0
-                };
-            _ ->
-                file_content_streamer:send_data_chunk(NextPartHead, AccState#initial_stream_state.req),
-                AccState
-        end,
-
-        file_content_streamer:stream_bytes_range(StreamingCtx1, Range, CurrSendState)
+    FinalSendState = lists:foldl(fun
+        (FirstRange, undefined) ->
+            file_content_streamer:stream_bytes_range(StreamingCtx1, FirstRange, #initial_stream_state{
+                status = ?HTTP_206_PARTIAL_CONTENT,
+                headers = #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
+                initial_chunk = BuildNextPartHead(FirstRange),
+                req = Req0
+            });
+        (NextRange, ReqAcc0) ->
+            {_, ReqAcc1} = file_content_streamer:send_data_chunk(BuildNextPartHead(NextRange), ReqAcc0),
+            file_content_streamer:stream_bytes_range(StreamingCtx1, NextRange, ReqAcc1)
     end, undefined, Ranges),
 
-    {Boundary, get_req_from_send_state(FinalSendState)}.
+    {Boundary, ensure_stream_initiated(FinalSendState)}.
 
 
 %% @private
@@ -325,19 +327,13 @@ execute_on_success_callback(Guid, OnSuccessCallback) ->
 build_streaming_send_fun() ->
     fun
         (DataChunk, SendState = #initial_stream_state{}, MaxReadBlocksCount, SendRetryDelay) ->
-            Req0 = SendState#initial_stream_state.req,
-
-            Req1 = file_content_streamer:init_stream(
-                SendState#initial_stream_state.status,
-                SendState#initial_stream_state.headers,
-                Req0
-            ),
+            Req = init_stream(SendState),
             Data = case SendState#initial_stream_state.initial_chunk of
                 undefined -> DataChunk;
                 InitialData -> [InitialData, DataChunk]
             end,
             http_download_utils:send_data_chunk(
-                Data, Req1, MaxReadBlocksCount, SendRetryDelay
+                Data, Req, MaxReadBlocksCount, SendRetryDelay
             );
         (DataChunk, Req, MaxReadBlocksCount, SendRetryDelay) ->
             http_download_utils:send_data_chunk(
@@ -346,7 +342,17 @@ build_streaming_send_fun() ->
     end.
 
 
+%% NOTE: handel edge case when stream have been not initiated by send_fun (see 'build_streaming_send_fun')
+%% (e.g. streaming empty file)
 %% @private
--spec get_req_from_send_state(initial_stream_state() | cowboy_req:req()) -> cowboy_req:req().
-get_req_from_send_state(#initial_stream_state{req = Req}) -> Req;
-get_req_from_send_state(Req) -> Req.
+-spec ensure_stream_initiated(initial_stream_state() | cowboy_req:req()) -> cowboy_req:req().
+ensure_stream_initiated(SendState = #initial_stream_state{}) ->
+    init_stream(SendState);
+ensure_stream_initiated(Req) ->
+    Req.
+
+
+%% @private
+-spec init_stream(initial_stream_state()) -> cowboy_req:req().
+init_stream(#initial_stream_state{status = Status, headers = Headers, req = Req}) ->
+    file_content_streamer:init_stream(Status, Headers, Req).
