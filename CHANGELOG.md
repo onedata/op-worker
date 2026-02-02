@@ -6,6 +6,9 @@ CHANGELOG
 
 ### 25.0
 
+-   **VFS-13250** Web GUI: Fixed infinite scroll in archives browser,
+    archive recall target browser and items selector; fixed opening
+    archive DIP in file datasets panel.
 -   **VFS-13222** Switched to the Calendar Versioning model. Version
     25.0 is equivalent to 21.02.9 in the previous model, and it's
     cross-compatible with the 21.02 line.
