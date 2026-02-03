@@ -1638,7 +1638,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
 
         Ans
     catch
-        throw:{error, unregistered_oneprovider} when IgnoreUnregisteredOneproviderError -> []
+        throw:?ERR_UNREGISTERED_ONEPROVIDER when IgnoreUnregisteredOneproviderError -> []
     end,
 
     {FinalAns, set_events_timer(cancel_caching_blocks_timer(
