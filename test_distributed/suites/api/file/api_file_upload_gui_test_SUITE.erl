@@ -29,7 +29,7 @@
     registering_upload_for_directory_should_fail_test/1,
     registering_upload_for_non_empty_file_should_fail_test/1,
     registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test/1,
-    registering_upload_for_not_owned_file_should_fail_test/1,
+    registering_upload_without_write_access_should_fail_test/1,
     not_registered_upload_should_fail_test/1,
     upload_test/1,
 
@@ -47,7 +47,7 @@ groups() -> [
         registering_upload_for_directory_should_fail_test,
         registering_upload_for_non_empty_file_should_fail_test,
         registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test,
-        registering_upload_for_not_owned_file_should_fail_test,
+        registering_upload_without_write_access_should_fail_test,
         not_registered_upload_should_fail_test,
         upload_test
     ]},
@@ -108,13 +108,12 @@ registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test(_Co
     assert_file_size(Node, UserSessId, FileGuid, 0).
 
 
-
-registering_upload_for_not_owned_file_should_fail_test(_Config) ->
+registering_upload_without_write_access_should_fail_test(_Config) ->
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, space_krk, #file_spec{}
+        user2, space_krk, #file_spec{mode = 8#070}
     ),
     ?assertMatch(
-        ?ERR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
+        ?ERR_POSIX(?EACCES),
         initialize_gui_upload(krakow, user2, FileGuid)
     ).
 
