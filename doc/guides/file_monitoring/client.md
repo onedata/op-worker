@@ -95,9 +95,9 @@ class SpaceFilesMonitorClient(ABC):
         self.last_event_id: str | None = None
         ...
         
-async def _handle_event(self, event: MessageEvent):
-    self.last_event_id = event.last_event_id
-    ...
+    async def _handle_event(self, event: MessageEvent):
+        self.last_event_id = event.last_event_id
+        ...
     
 ```
 
@@ -233,32 +233,33 @@ class SSEEvent(Enum):
     DELETED = "deleted"
 
     
-async def _handle_event(self, event: MessageEvent) -> None:
-    event_type: str = event.type
-    data_raw: str = event.data
-    self.last_event_id = event.last_event_id
-
-    try:
-        data: dict = json.loads(data_raw)
-    except json.JSONDecodeError:
-        print(f"Cannot decode data: {data_raw!r}")
-        return
-
-    # Only put heartbeat event to the queue as event id is saved above
-    if event_type == SSEEvent.HEARTBEAT.value:
-        await self.heartbeat_events.put(
-            (
-                event.last_event_id,
-                time.time(),
-            )
-        )
-        return
-    if event_type == SSEEvent.CHANGED_OR_CREATED.value:
-        await self._handle_changed_or_created(data)
-    elif event_type == SSEEvent.DELETED.value:
-        await self._handle_deleted(data)
-    else:
-        print(f"Unknown event type={event_type}, data={data}")
+class SpaceFilesMonitorClient(ABC):
+    async def _handle_event(self, event: MessageEvent) -> None:
+      event_type: str = event.type
+      data_raw: str = event.data
+      self.last_event_id = event.last_event_id
+    
+      try:
+          data: dict = json.loads(data_raw)
+      except json.JSONDecodeError:
+          print(f"Cannot decode data: {data_raw!r}")
+          return
+    
+      # Only put heartbeat event to the queue as event id is saved above
+      if event_type == SSEEvent.HEARTBEAT.value:
+          await self.heartbeat_events.put(
+              (
+                  event.last_event_id,
+                  time.time(),
+              )
+          )
+          return
+      if event_type == SSEEvent.CHANGED_OR_CREATED.value:
+          await self._handle_changed_or_created(data)
+      elif event_type == SSEEvent.DELETED.value:
+          await self._handle_deleted(data)
+      else:
+          print(f"Unknown event type={event_type}, data={data}")
 }
 ```
 
