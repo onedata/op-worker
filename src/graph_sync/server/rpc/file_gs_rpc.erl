@@ -91,10 +91,12 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
     TruncateToZero = maps:get(<<"truncateToZero">>, SanitizedData, false),
 
     FileRef = ?FILE_REF(FileGuid),
+    ?lfm_check(lfm:check_perms(SessionId, FileRef, write)),
+
     case ?lfm_check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"not a regular file">>);
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size, owner_id = UserId}} ->
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = Size}} ->
             case Size == 0 of
                 true ->
                     ok;
@@ -113,8 +115,6 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
 
             ok = file_upload_manager:register_upload(UserId, FileGuid),
             {ok, #{}};
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0}} ->
-            ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not owned by user">>);
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
             ?ERR_BAD_DATA(?err_ctx(), <<"guid">>, <<"file is not empty">>)
     end.
