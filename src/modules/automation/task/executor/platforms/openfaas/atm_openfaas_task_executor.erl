@@ -315,7 +315,11 @@ is_function_registered(#initiation_ctx{
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             false;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason))
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
+        Result ->
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while checking if function is registered", [], Result
+            )))
     end.
 
 
@@ -339,7 +343,11 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
             case is_function_registered(InitiationCtx) of
                 true -> ok;
                 false -> throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason))
-            end
+            end;
+        Result ->
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while registering function", [], Result
+            )))
     end.
 
 
@@ -705,14 +713,20 @@ await_function_readiness(#initiation_ctx{
                     ok;
                 false ->
                     case RetriesLeft < 1 of
-                        true -> throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED(?err_ctx()));
-                        false -> retry
+                        true ->
+                            throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED(?err_ctx()));
+                        false ->
+                            retry
                     end
             end;
-        {ok, _HttpCode, _RespHeaders, ErrorReason} ->
+        OpenfaasAns ->
             case RetriesLeft < 1 of
-                true -> throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
-                false -> retry
+                true ->
+                    throw(?report_internal_server_error(?autoformat_with_msg(
+                        "Unexpected result while checking function readiness", [], OpenfaasAns
+                    )));
+                false ->
+                    retry
             end
     end,
 
@@ -790,7 +804,11 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
             ok;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason))
+            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
+        Result ->
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while scheduling function execution", [], Result
+            )))
     end.
 
 
@@ -834,7 +852,11 @@ remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
             log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             Error = ?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason),
-            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error)
+            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
+        Result ->
+            ?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while removing function", [], Result
+            ))
     end.
 
 
