@@ -260,7 +260,6 @@ class SpaceFilesMonitorClient(ABC):
           await self._handle_deleted(data)
       else:
           print(f"Unknown event type={event_type}, data={data}")
-}
 ```
 
 ## Complete client example
