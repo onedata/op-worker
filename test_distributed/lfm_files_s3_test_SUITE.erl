@@ -89,7 +89,6 @@
     get_recursive_file_list/1,
     get_recursive_file_list_prefix_test/1,
     get_recursive_file_list_inaccessible_paths_test/1,
-    get_recursive_file_list/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -103,7 +102,8 @@
     lfm_open_and_create_open_failure_test/1,
     lfm_mv_failure_multiple_users_test/1,
     sparse_files_should_be_created/1,
-    lfm_close_deleted_open_files/1
+    lfm_close_deleted_open_files/1,
+    lfm_sequential_writes_from_many_processes/1
 ]).
 
 -define(TEST_CASES, [
@@ -186,7 +186,8 @@
     lfm_open_and_create_open_failure_test,
     lfm_mv_failure_multiple_users_test,
     sparse_files_should_be_created,
-    lfm_close_deleted_open_files
+    lfm_close_deleted_open_files,
+    lfm_sequential_writes_from_many_processes
 ]).
 
 -define(SPACE_ID, <<"space1">>).
@@ -436,6 +437,9 @@ sparse_files_should_be_created(Config) ->
 
 lfm_close_deleted_open_files(Config) ->
     lfm_files_test_base:lfm_close_deleted_open_files(Config).
+
+lfm_sequential_writes_from_many_processes(Config) ->
+    lfm_files_test_base:lfm_sequential_writes_from_many_processes(Config).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
