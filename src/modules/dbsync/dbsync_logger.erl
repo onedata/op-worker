@@ -20,13 +20,17 @@
 -export([log_apply/5, log_batch_received/5, log_batch_requested/4, log_batch_sending/4]).
 
 
--define(CHANGES_FILE_MAX_SIZE, op_worker:get_env(dbsync_changes_audit_log_file_max_size, 104857600)). % 100 MB
--define(OUT_STREAM_FILE_MAX_SIZE, op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 104857600)). % 100 MB
+-define(CHANGES_FILE_MAX_SIZE, op_worker:get_env(dbsync_changes_audit_log_file_max_size, 10485760)). % 10 MB
+-define(OUT_STREAM_FILE_MAX_SIZE, op_worker:get_env(dbsync_out_stream_audit_log_file_max_size, 10485760)). % 10 MB
 -define(CHANGES_AUDIT_LOG_ROOT_DIR, op_worker:get_env(
     dbsync_changes_audit_log_root_dir, "/tmp/dbsync_changes/"
 )).
 -define(OUT_STREAM_AUDIT_LOG_ROOT_DIR, op_worker:get_env(
     dbsync_out_stream_audit_log_root_dir, "/tmp/dbsync_out_stream/"
+)).
+%% 1 day
+-define(OUT_STREAM_AUDIT_LOG_LAST_UNIQUE_SEQ_RANGE_TTL, op_worker:get_env(
+    dbsync_out_stream_audit_log_last_unique_seq_range_ttl, 86400
 )).
 
 %%%===================================================================
@@ -85,11 +89,26 @@ log_batch_sending(Since, Until, ProviderId, SpaceId) ->
         0 ->
             ok;
         MaxSize ->
-            LogFile = ?OUT_STREAM_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ ".log",
+            CacheKey = {?MODULE, dbsync_out_stream, SpaceId},
+            ShouldLog = case node_cache:get(CacheKey, false) of
+                false ->
+                    true;
+                LastUniqueSeqRange ->
+                    not (LastUniqueSeqRange == {Since, Until})
+            end,
 
-            Log = "Seqs range ~tp sent to ~tp",
-            Args = [{Since, Until}, ProviderId],
-            onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize)
+            case ShouldLog of
+                true ->
+                    LogFile = ?OUT_STREAM_AUDIT_LOG_ROOT_DIR ++ str_utils:to_list(SpaceId) ++ ".log",
+
+                    Log = "Seqs range ~tp sent to ~tp",
+                    Args = [{Since, Until}, ProviderId],
+                    onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize),
+
+                    node_cache:put(CacheKey, {Since, Until}, ?OUT_STREAM_AUDIT_LOG_LAST_UNIQUE_SEQ_RANGE_TTL);
+                false ->
+                    ok
+            end
     end.
 
 
