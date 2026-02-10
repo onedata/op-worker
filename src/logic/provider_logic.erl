@@ -38,7 +38,7 @@
 -export([get_storages/0, get_storages/1]).
 -export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
--export([supports_space/1, supports_space/2, supports_space/3]).
+-export([supports_space/1]).
 -export([get_support_size/1]).
 -export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
@@ -313,24 +313,9 @@ has_eff_user(SessionId, ProviderId, UserId) ->
 
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
-    supports_space(?ROOT_SESS_ID, ?SELF, SpaceId).
-
-
--spec supports_space(od_provider:doc(), od_space:id()) ->
-    boolean().
-supports_space(#document{value = #od_provider{eff_spaces = Spaces}}, SpaceId) ->
-    maps:is_key(SpaceId, Spaces).
-
-
--spec supports_space(gs_client_worker:client(), od_provider:id(), od_space:id()) ->
-    boolean().
-supports_space(SessionId, ProviderId, SpaceId) ->
-    case get(SessionId, ProviderId) of
-        {ok, ProviderDoc = #document{}} ->
-            supports_space(ProviderDoc, SpaceId);
-        _ ->
-            false
-    end.
+    % NOTE: this function is the only source of truth regarding local support
+    % (combines all necessary checks)
+    space_logic:is_supported_locally(SpaceId).
 
 
 -spec get_support_size(od_space:id()) -> {ok, integer()} | {error, term()}.

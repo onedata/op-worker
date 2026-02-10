@@ -187,7 +187,7 @@
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
     public_handle :: od_handle:public_handle(),
-    metadata_prefix :: od_handle:metadata_prefix() | undefined,
+    metadata_schema :: od_handle:metadata_schema() | undefined,
     metadata :: od_handle:metadata() | undefined,
 
     % Direct relations to other entities

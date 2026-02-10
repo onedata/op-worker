@@ -486,7 +486,7 @@ maybe_break_connection_to_zone(alive, _) ->
     ok;
 maybe_break_connection_to_zone(broken, ProviderSelector) ->
     stop_zone_connection(ProviderSelector),
-    ?assert(not opw_test_rpc:call(ProviderSelector, gs_channel_service, is_connected, []), ?ATTEMPTS).
+    ?assert(not opw_test_rpc:call(ProviderSelector, gs_channel_service, is_connected_and_initialized, []), ?ATTEMPTS).
 
 
 maybe_start_connection_to_zone(alive, _) ->
@@ -501,7 +501,7 @@ stop_zone_connection(ProviderSelector) ->
 
 start_zone_connection(ProviderSelector) ->
     opw_test_rpc:call(ProviderSelector, gs_channel_service, start_service, []),
-    ?assert(opw_test_rpc:call(ProviderSelector, gs_channel_service, is_connected, []), ?ATTEMPTS).
+    ?assert(opw_test_rpc:call(ProviderSelector, gs_channel_service, is_connected_and_initialized, []), ?ATTEMPTS).
 
 
 guid(#space{id = SpaceId}) ->
@@ -531,7 +531,7 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_, Config) ->
     lists:foreach(fun(Provider) ->
-        opw_test_rpc:call(Provider, gs_channel_service, is_connected, []) orelse
+        opw_test_rpc:call(Provider, gs_channel_service, is_connected_and_initialized, []) orelse
             start_zone_connection(Provider)
     end, oct_background:get_provider_ids()),
     lfm_proxy:init(Config).

@@ -11,18 +11,22 @@
 %%% messages. Whenever the connection dies, this gen_server is killed and a new
 %%% one is instantiated by gs_channel_service.
 %%%
-%%% The GS cache is disabled upon startup, and then enabled after complete
-%%% Oneprovider cluster initialization - see enable_cache/0.
+%%% The GS cache is disabled upon startup, and then enabled after complete Oneprovider
+%%% cluster initialization - see gs_channel_service:run_on_connect_to_oz_procedures/0.
+%%%
+%%% Similarly, the GS channel is disabled for all PIDs upon startup to ensure that
+%%% the required setup ("on connect to oz procedures") is done before it's available.
+%%% To that end, safe_mode is reused - any PIDs doing the setup must be whitelisted.
+%%%
+%%% After completing the first setup, the GS channel and cache remain enabled, even if
+%%% a disconnect happens. However, the GS channel may be disabled by manually enabling
+%%% the safe mode.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(gs_client_worker).
 -author("Lukasz Opiola").
 
 -behaviour(gen_server).
-% TODO VFS-12743 better logs when gs_client timeouts on a request
-% TODO VFS-12743 do not crash when a stale response is received after gs_client timeouts on a request
-%                (add logs too - what timeouted and what response did not come, what was stale)
-% TODO VFS-12743 consider adding verbose logs for gs_client
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("proto/common/credentials.hrl").
@@ -32,6 +36,26 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/errors.hrl").
+
+
+%% API
+-export([start/0, await_startup/0]).
+-export([await_enabled_for_any_pid/0]).
+-export([is_connected/0]).
+-export([get_connection_pid/0]).
+-export([force_terminate/0]).
+-export([enable_cache/0]).
+-export([request/1, request/2, request/3]).
+-export([invalidate_cache/1, invalidate_cache/2]).
+-export([force_fetch_entity/1, force_fetch_entity/2]).
+-export([process_push_message/1]).
+
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+    code_change/3]).
+
+
+% TODO VFS-13180 consider adding verbose logs for gs_client
 
 
 %% @formatter:off
@@ -63,24 +87,30 @@
 % Onezone. A registered pid means that the Oneprovider is connected.
 -define(GS_CHANNEL_GLOBAL_NAME, graph_sync_channel).
 
-%% API
--export([start/0]).
--export([is_connected/0]).
--export([get_connection_pid/0]).
--export([force_terminate/0]).
--export([enable_cache/0]).
--export([request/1, request/2, request/3]).
--export([invalidate_cache/1, invalidate_cache/2]).
--export([force_fetch_entity/1, force_fetch_entity/2]).
--export([process_push_message/1]).
+-define(STALE_REQUEST_MSG, stale_request_msg).
 
-%% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
+-define(AWAIT_READINESS_TIMEOUT_MILLIS, timer:seconds(20)).
+
+-define(error_gs_request_failed(DetailsMsg, ReqId, Request),
+    ?error("GS ~ts request ~ts (gri: ~ts, id: ~ts)", [
+        case Request of
+            #gs_req_graph{} -> graph;
+            #gs_req_unsub{} -> unsub
+        end,
+        DetailsMsg,
+        gri:serialize(case Request of
+            #gs_req_graph{} -> Request#gs_req_graph.gri;
+            #gs_req_unsub{} -> Request#gs_req_unsub.gri
+        end),
+        ReqId
+    ])
+).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 -spec start() -> ok | already_started | error.
 start() ->
@@ -93,11 +123,14 @@ start() ->
     critical_section:run(start_gs_client_worker, fun() ->
         case is_connected() of
             true ->
-                already_started;
+                case await_startup() of
+                    ok -> already_started;
+                    error -> error
+                end;
             false ->
                 case gen_server2:start(?MODULE, [], []) of
                     {ok, _Pid} ->
-                        ok;
+                        await_startup();
                     {error, normal} ->
                         error;
                     {error, _} = Error ->
@@ -108,25 +141,27 @@ start() ->
     end).
 
 
--spec is_connected() -> boolean().
-is_connected() ->
-    is_pid(get_connection_pid()).
+-spec await_startup() -> ok | error.
+await_startup() ->
+    try
+        ok = gen_server2:call(get_connection_pid(), await_startup, ?AWAIT_READINESS_TIMEOUT_MILLIS)
+    catch Class:Reason:Stacktrace ->
+        ?error_exception(Class, Reason, Stacktrace),
+        error
+    end.
 
 
--spec get_connection_pid() -> undefined | pid().
-get_connection_pid() ->
-    global:whereis_name(?GS_CHANNEL_GLOBAL_NAME).
-
-
--spec force_terminate() -> ok | not_started.
-force_terminate() ->
-    case get_connection_pid() of
-        undefined ->
-            not_started;
-        Pid when is_pid(Pid) ->
-            ?info("Terminating Onezone connection (forced)..."),
-            gen_server2:call(Pid, {terminate, normal}),
-            ok
+-spec await_enabled_for_any_pid() -> ok | error.
+await_enabled_for_any_pid() ->
+    try
+        utils:wait_until(
+            fun() -> not safe_mode:should_enforce() end,
+            timer:seconds(1),
+            ?AWAIT_READINESS_TIMEOUT_MILLIS div timer:seconds(1)
+        )
+    catch Class:Reason:Stacktrace ->
+        ?error_exception(Class, Reason, Stacktrace),
+        error
     end.
 
 
@@ -150,7 +185,29 @@ enable_cache() ->
 %% @private
 -spec is_cache_enabled() -> boolean().
 is_cache_enabled() ->
-    node_cache:get(gs_client_worker_cache_enabled, false) andalso not safe_mode:should_enforce().
+    true == node_cache:get(gs_client_worker_cache_enabled, false) andalso not safe_mode:should_enforce().
+
+
+-spec is_connected() -> boolean().
+is_connected() ->
+    is_pid(get_connection_pid()).
+
+
+-spec get_connection_pid() -> undefined | pid().
+get_connection_pid() ->
+    global:whereis_name(?GS_CHANNEL_GLOBAL_NAME).
+
+
+-spec force_terminate() -> ok | not_started.
+force_terminate() ->
+    case get_connection_pid() of
+        undefined ->
+            not_started;
+        Pid when is_pid(Pid) ->
+            ?info("Terminating Onezone connection (forced)..."),
+            gen_server2:call(Pid, {terminate, normal}),
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -198,13 +255,8 @@ request(Client, Req, Timeout) ->
                 ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain())
         end
     catch
-        throw:{error, _} = Err2 ->
-            Err2;
-        Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error while processing GS request - ~tp:~tp", [
-                Type, Reason
-            ], Stacktrace),
-            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined)
+        Class:Reason:Stacktrace ->
+            ?examine_exception("Unexpected error while processing GS request", Class, Reason, Stacktrace)
     end.
 
 
@@ -284,10 +336,8 @@ process_push_message(Message) ->
     spawn(fun() ->
         try
             process_push_message_async(Message)
-        catch Type:Reason:Stacktrace ->
-            ?error_stacktrace("Error processing GS push message from Onezone - ~w:~tp", [
-                Type, Reason
-            ], Stacktrace),
+        catch Class:Reason:Stacktrace ->
+            ?error_exception(Class, Reason, Stacktrace),
             force_terminate()
         end
     end).
@@ -344,10 +394,17 @@ init([]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(await_startup, _From, State) ->
+    % startup is finished when the gen_server is done doing init; only then it can handle the request
+    {reply, ok, State};
+
 handle_call({async_request, _, _}, _From, #state{client_ref = undefined} = State) ->
     {reply, ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain()), State};
 
-handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = ClientRef, promises = Promises} = State) ->
+handle_call({async_request, GsReq, Timeout}, {From, _}, #state{
+    client_ref = ClientRef,
+    promises = Promises
+} = State) ->
     ReqId = gs_client:async_request(ClientRef, GsReq),
     % Async message triggering a check if the request has timed out
     erlang:send_after(Timeout, self(), {check_timeout, ReqId}),
@@ -402,6 +459,7 @@ handle_info({result, ReqId, Response}, #state{promises = Promises} = State) ->
             Pid ! {result, ReqId, Response},
             {noreply, State#state{promises = NewPromises}};
         error ->
+            ?warning("GS Response for a stale request received, id: ~ts", [ReqId]),
             % Possible if 'check_timeout' for the request has fired and
             % ?ERROR_TIMEOUT was sent back to the caller pid, in such case just
             % ignore the result
@@ -412,8 +470,8 @@ handle_info({result, ReqId, Response}, #state{promises = Promises} = State) ->
 handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     case maps:take(ReqId, Promises) of
         {Pid, NewPromises} ->
-            ?error("Timeout waiting for GS response, id: ~ts", [ReqId]),
-            Pid ! {result, ReqId, ?ERROR_TIMEOUT},
+            ?warning("Dropping GS request as stale, id: ~ts", [ReqId]),
+            Pid ! {result, ReqId, ?STALE_REQUEST_MSG},
             {noreply, State#state{promises = NewPromises}};
         error ->
             % There is no promise for the ReqId anymore, which means the request
@@ -478,10 +536,8 @@ start_gs_connection() ->
     catch
         throw:{error, _} = Error ->
             Error;
-        Type:Reason:Stacktrace ->
-            ?error_stacktrace("Cannot start gs connection due to ~tp:~tp", [
-                Type, Reason
-            ], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?error_exception(Class, Reason, Stacktrace),
             {error, Reason}
     end.
 
@@ -503,7 +559,9 @@ process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
 process_push_message_async(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
     Revision = maps:get(<<"revision">>, Resource),
     Doc = gs_client_translator:translate(GRI, Resource),
-    maybe_coalesce_cache(get_connection_pid(), GRI, Doc, Revision),
+    % maybe_coalesce_cache/4 has its internal error handling, don't crash and
+    % carry on if something goes sideways
+    catch maybe_coalesce_cache(get_connection_pid(), GRI, Doc, Revision),
     ok.
 
 
@@ -608,13 +666,14 @@ call_onezone(Client, Request, Timeout) ->
 -spec call_onezone(connection_ref(), client(), gs_protocol:graph_req() | gs_protocol:unsub_req(),
     timeout()) -> {ok, gs_protocol:graph_resp() | gs_protocol:unsub_resp()} | errors:error().
 call_onezone(ConnRef, Client, Request, Timeout) ->
+    ReqId = datastore_key:new(),
     try
-        SubType = case Request of
-            #gs_req_graph{} -> graph;
-            #gs_req_unsub{} -> unsub
-        end,
         GsReq = #gs_req{
-            subtype = SubType,
+            id = ReqId,
+            subtype = case Request of
+                #gs_req_graph{} -> graph;
+                #gs_req_unsub{} -> unsub
+            end,
             auth_override = auth_manager:credentials_to_gs_auth_override(client_to_credentials(Client)),
             request = Request
         },
@@ -623,23 +682,30 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
                 Error;
             {ok, ReqId} ->
                 receive
+                    {result, ReqId, ?STALE_REQUEST_MSG} ->
+                        ?error_gs_request_failed("timed out (stale)", ReqId, Request),
+                        ?ERROR_TIMEOUT;
+
+                    {result, ReqId, ?ERROR_TIMEOUT = Result} ->
+                        ?error_gs_request_failed("timed out server-side", ReqId, Request),
+                        Result;
+
                     {result, ReqId, Result} ->
                         Result
                 after
-                % the gen_server uses Timeout internally, allow some larger margin
-                    Timeout + 5000 ->
+                    Timeout + 5000 ->  % the gen_server uses Timeout internally, allow a larger margin
+                        ?error_gs_request_failed("timed out client-side", ReqId, Request),
                         ?ERROR_TIMEOUT
                 end
         end
     catch
-        exit:{timeout, _} -> ?ERROR_TIMEOUT;
-        exit:{normal, _} -> ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain());
-        throw:{error, _} = Err -> Err;
-        Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error during call to gs_client_worker - ~tp:~tp", [
-                Type, Reason
-            ], Stacktrace),
-            throw(?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), undefined))
+        exit:{timeout, _} ->
+            ?error_gs_request_failed("timed out on gen_server:call", ReqId, Request),
+            ?ERROR_TIMEOUT;
+        exit:{normal, _} ->
+            ?ERR_NO_CONNECTION_TO_ONEZONE(?err_ctx(), oneprovider:get_oz_domain());
+        Class:Reason:Stacktrace ->
+            ?examine_exception("Unexpected error during call to gs_client_worker", Class, Reason, Stacktrace)
     end.
 
 
@@ -691,14 +757,23 @@ maybe_coalesce_cache(ConnRef, GRI, Doc, Revision) ->
         false ->
             {ok, Doc};
         true ->
-            case GRI of
-                #gri{aspect = instance} ->
-                    coalesce_cache(ConnRef, GRI, Doc, Revision);
-                #gri{type = temporary_token_secret, aspect = user} ->
-                    coalesce_cache(ConnRef, GRI, Doc, Revision);
-                _ ->
-                    % other resources are not cached by Oneprovider
-                    {ok, Doc}
+            try
+                case GRI of
+                    #gri{aspect = instance} ->
+                        coalesce_cache(ConnRef, GRI, Doc, Revision);
+                    #gri{type = temporary_token_secret, aspect = user} ->
+                        coalesce_cache(ConnRef, GRI, Doc, Revision);
+                    _ ->
+                        % other resources are not cached by Oneprovider
+                        {ok, Doc}
+                end
+            catch Class:Reason:Stacktrace ->
+                ?error_exception(
+                    "Cannot coalesce cache for ~ts, invalidating the entry", [gri:serialize(GRI)],
+                    Class, Reason, Stacktrace
+                ),
+                invalidate_cache(GRI),
+                throw({cannot_coalesce_cache, GRI})
             end
     end.
 
@@ -750,9 +825,14 @@ coalesce_cache(ConnRef, #gri{type = Type, id = Id, scope = Scope} = GRI, Doc = #
                 })}
         end
     end,
-    Type:update_cache(Id, CacheUpdateFun, Doc#document{value = put_cache_state(Record, #{
+    UpdateResult = Type:update_cache(Id, CacheUpdateFun, Doc#document{value = put_cache_state(Record, #{
         scope => Scope, connection_ref => ConnRef, revision => Rev
-    })}).
+    })}),
+    % narrow down the possible return values, crash for unexpected ones
+    case UpdateResult of
+        {ok, _} -> UpdateResult;
+        {error, stale_record} -> UpdateResult
+    end.
 
 
 %% @private
@@ -930,11 +1010,7 @@ is_root_authorized_to_get(_, #gri{type = od_storage, scope = shared}, _) ->
 
 % Provider can access shares of spaces that it supports
 is_root_authorized_to_get(_, #gri{type = od_share, scope = private}, CachedDoc) ->
-    provider_logic:supports_space(
-        ?ROOT_SESS_ID,
-        oneprovider:get_id_or_undefined(),
-        CachedDoc#document.value#od_share.space
-    );
+    space_logic:is_supported_locally(CachedDoc#document.value#od_share.space);
 
 is_root_authorized_to_get(_, #gri{type = od_provider, scope = private}, _) ->
     true;
@@ -1010,7 +1086,7 @@ is_user_authorized_to_get(UserId, Client, AuthHint, #gri{type = od_provider, id 
             provider_logic:has_eff_user(CachedDoc, UserId);
         {#{scope := protected}, ?THROUGH_SPACE(SpaceId)} ->
             space_logic:has_eff_user(Client, SpaceId, UserId) andalso
-                space_logic:is_supported(Client, SpaceId, ProviderId);
+                space_logic:is_supported_by(Client, SpaceId, ProviderId);
         _ ->
             unknown
     end;

@@ -125,9 +125,11 @@ wait_for_mocked_connection(Config) ->
     set_envs_for_correct_connection(Config),
     Nodes = ?NODES(Config),
     CheckConnection = fun() ->
-        case rpc:call(hd(Nodes), gs_client_worker, get_connection_pid, []) of
-            Pid when is_pid(Pid) -> ok;
-            _ -> error
+        case rpc:call(hd(Nodes), gs_client_worker, await_startup, []) of
+            ok ->
+                rpc:call(hd(Nodes), gs_client_worker, await_enabled_for_any_pid, []);
+            error ->
+                error
         end
     end,
     ?assertMatch(ok, CheckConnection(), 60).
@@ -561,6 +563,16 @@ mock_graph_get(GRI = #gri{type = od_provider, id = ProviderId, aspect = instance
         false ->
             ?ERR_FORBIDDEN
     end;
+
+mock_graph_get(GRI = #gri{type = od_cluster, aspect = instance}, undefined, _) ->
+    % undefined Authorization means asking with provider's auth
+    {ok, #gs_resp_graph{data_format = resource, data = #{
+        <<"gri">> => gri:serialize(GRI),
+        <<"revision">> => 1,
+        <<"workerReleaseVersion">> => op_worker:get_release_version(),
+        <<"workerBuildVersion">> => op_worker:get_build_version(),
+        <<"workerGuiHash">> => ?check(gui:package_hash(op_worker:get_env(gui_package_path)))
+    }}};
 
 mock_graph_get(#gri{type = od_handle_service, id = HServiceId, aspect = instance}, _, _) ->
     {ok, #gs_resp_graph{data_format = resource, data = ?HANDLE_SERVICE_PUBLIC_DATA_VALUE(HServiceId)}};

@@ -201,7 +201,7 @@ is_connected_to_oz(Worker) ->
         _ ->
             error
     end,
-    ?assertEqual(Result, rpc:call(Worker, gs_channel_service, is_connected, [])),
+    ?assertEqual(Result, rpc:call(Worker, gs_channel_service, is_connected_and_initialized, [])),
     Result.
 
 %%%===================================================================

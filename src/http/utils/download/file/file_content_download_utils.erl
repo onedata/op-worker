@@ -116,12 +116,12 @@ download_single_regular_file(SessionId, #file_attr{
                         Req3
                     catch Class:Reason:Stacktrace ->
                         {ok, UserId} = session:get_user_id(SessionId),
-                        ?error_stacktrace(
-                            "Error while processing file (~ts) download for user ~ts~nError was: ~w:~tp",
-                            [FileGuid, UserId, Class, Reason],
-                            Stacktrace
+                        Error = ?examine_exception(
+                            "Error while processing file (~ts) download for user ~ts",
+                            [FileGuid, UserId],
+                            Class, Reason, Stacktrace
                         ),
-                        http_req:send_error(Reason, Req0)
+                        http_req:send_error(Error, Req0)
                     after
                         lfm:monitored_release(FileHandle)
                     end;

@@ -430,7 +430,10 @@ upgrade_from_21_02_3_missing_dirs(Config) ->
 
 
 upgrade_from_21_02_5_links_reconciliation_traverses(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = AllWorkers = ?config(op_worker_nodes, Config),
+
+    % the module is mocked in initializer
+    test_utils:mock_unload(AllWorkers, file_links_reconciliation_traverse),
     
     rpc:call(Worker, file_links_reconciliation_traverse, start_for_space, [?SPACE1_ID]),
     ?assertMatch({ok, #document{value = #traverse_task{status = finished}}},
@@ -637,7 +640,7 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
-    test_utils:mock_expect(Worker, gs_channel_service, is_connected, fun() -> true end),
+    test_utils:mock_expect(Worker, gs_channel_service, is_connected_and_initialized, fun() -> true end),
     Config.
 
 

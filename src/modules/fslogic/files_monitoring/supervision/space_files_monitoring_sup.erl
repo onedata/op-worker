@@ -6,13 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Per-space supervisor managing main monitor and catching monitors supervisor.
-%%% Strategy: rest_for_one (main → catching dependency).
+%%% Per-space supervisor managing main monitor and replay monitors supervisor.
+%%% Strategy: rest_for_one (main → replay dependency).
 %%% 
 %%% Children (in order):
 %%%   1. main monitor - space files primary event stream. When it dies,
 %%%                     entire supervision for space is terminated.
-%%%   2. catching monitors supervisor - manages temporary catch-up streams
+%%%   2. replay monitors supervisor - manages temporary catch-up streams
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_files_monitoring_sup).
@@ -27,7 +27,7 @@
     start_link/1,
 
     get_main_monitor_pid/1,
-    get_catching_monitors_sup_pid/1
+    get_replay_monitors_sup_pid/1
 ]).
 
 %% Supervisor callbacks
@@ -69,9 +69,9 @@ get_main_monitor_pid(SpaceMonitoringSupPid) ->
     get_child_pid(SpaceMonitoringSupPid, space_files_main_monitor:id()).
 
 
--spec get_catching_monitors_sup_pid(pid()) -> pid() | undefined.
-get_catching_monitors_sup_pid(SpaceMonitoringSupPid) ->
-    get_child_pid(SpaceMonitoringSupPid, space_files_catching_monitors_sup:id()).
+-spec get_replay_monitors_sup_pid(pid()) -> pid() | undefined.
+get_replay_monitors_sup_pid(SpaceMonitoringSupPid) ->
+    get_child_pid(SpaceMonitoringSupPid, space_files_replay_monitors_sup:id()).
 
 
 %%%===================================================================
@@ -84,7 +84,7 @@ get_catching_monitors_sup_pid(SpaceMonitoringSupPid) ->
 %% Initializes the per-space supervisor.
 %% 
 %% CRITICAL: Order matters with rest_for_one strategy!
-%% Main monitor MUST be first so its death terminates catching monitors sup.
+%% Main monitor MUST be first so its death terminates replay monitors sup.
 %% @end
 %%--------------------------------------------------------------------
 -spec init([od_space:id()]) ->
@@ -96,9 +96,9 @@ init([SpaceId]) ->
         period => 60
     },
     MainMonitorSpec = space_files_main_monitor:spec(SpaceId),
-    CatchingSupSpec = space_files_catching_monitors_sup:spec(SpaceId),
+    ReplaySupSpec = space_files_replay_monitors_sup:spec(SpaceId),
 
-    {ok, {SupFlags, [MainMonitorSpec, CatchingSupSpec]}}.
+    {ok, {SupFlags, [MainMonitorSpec, ReplaySupSpec]}}.
 
 
 %%%===================================================================

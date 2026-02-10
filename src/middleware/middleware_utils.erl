@@ -148,7 +148,7 @@ assert_space_supported_locally(SpaceId) ->
 -spec assert_space_supported_by(od_space:id(), od_provider:id()) ->
     ok | no_return().
 assert_space_supported_by(SpaceId, ProviderId) ->
-    case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, ProviderId) of
+    case space_logic:is_supported_by(?ROOT_SESS_ID, SpaceId, ProviderId) of
         true ->
             ok;
         false ->
@@ -158,12 +158,10 @@ assert_space_supported_by(SpaceId, ProviderId) ->
 
 -spec assert_space_supported_with_storage(od_space:id(), storage:id()) -> ok | no_return().
 assert_space_supported_with_storage(SpaceId, StorageId) ->
-    case storage_logic:is_local_storage_supporting_space(StorageId, SpaceId) of
-        true ->
-            ok;
-        false ->
-            throw(?ERR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(?err_ctx(), oneprovider:get_id(), StorageId, SpaceId))
-    end.
+    space_logic:is_supported_by_local_storage(SpaceId, StorageId) orelse throw(
+        ?ERR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(?err_ctx(), oneprovider:get_id(), StorageId, SpaceId)
+    ),
+    ok.
 
 
 -spec decode_object_id(file_id:objectid(), binary() | atom()) ->

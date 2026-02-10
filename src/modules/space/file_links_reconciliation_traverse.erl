@@ -134,21 +134,42 @@ do_slave_job(#tree_traverse_slave{}, _TaskId) ->
 %% @private
 -spec start_async() -> ok.
 start_async() ->
-    utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
-    utils:wait_until(fun() ->
-        % wait for traverse pool to start
-        case datastore_model:get(traverse_tasks_scheduler:get_ctx(), ?POOL_NAME) of
-            {ok, _} -> true;
-            _ -> false
-        end
-    end, timer:seconds(10), infinity),
-    {ok, Spaces} = provider_logic:get_spaces(),
-    SpacesToStart = lists:filter(fun(SpaceId) ->
-        case space_logic:get_provider_ids(SpaceId) of
-            {ok, [_]} ->
-                false; % no need to execute on spaces supported by just one provider
-            {ok, _} ->
-                true
-        end
-    end, Spaces),
-    lists:foreach(fun start_for_space/1, SpacesToStart).
+    try
+        utils:wait_until(fun gs_channel_service:is_connected_and_initialized/0, timer:seconds(10), infinity),
+        utils:wait_until(fun() ->
+            % wait for traverse pool to start
+            case datastore_model:get(traverse_tasks_scheduler:get_ctx(), ?POOL_NAME) of
+                {ok, _} -> true;
+                _ -> false
+            end
+        end, timer:seconds(10), infinity),
+        Spaces = ?check(provider_logic:get_spaces()),
+        SpacesToStart = lists:filter(fun(SpaceId) ->
+            case ?check(space_logic:get_provider_ids(SpaceId)) of
+                [_] ->
+                    false; % no need to execute on spaces supported by just one provider
+                _ ->
+                    true
+            end
+        end, Spaces),
+        % called by module for mocking in tests
+        lists:foreach(fun ?MODULE:start_for_space/1, SpacesToStart)
+    catch
+        throw:?ERR_UNREGISTERED_ONEPROVIDER ->
+            ?info(
+                "Skipping file links reconciliation traverses as this provider is not registered"
+            );
+        throw:?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
+            ?warning(
+                "Failed to start file links reconciliation traverses due to intermittent "
+                "Onezone connection problems; retrying as long as it takes..."
+            ),
+            timer:sleep(timer:minutes(1)),
+            start_async();
+        Class:Reason:Stacktrace ->
+            ?critical_exception(
+                "Failed to start file links reconciliation traverses, terminating application",
+                Class, Reason, Stacktrace
+            ),
+            init:stop()
+    end.

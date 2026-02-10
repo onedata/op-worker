@@ -49,7 +49,7 @@ test_create_share(SpaceId) ->
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end,
-        special_dirs_supporting_the_operation = [space_dir]
+        special_dirs_supporting_the_operation = [space_dir, archive_dir]
     }).
 
 

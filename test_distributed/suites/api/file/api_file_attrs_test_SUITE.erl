@@ -1178,7 +1178,7 @@ get_dir_distribution_4_test(Config) ->
 
 
 get_dir_distribution_backwards_compatibility_test(Config) ->
-    % Dir distributions with a provider in version before 21.02.9 (there are no locations_per_storage in response).
+    % Dir distributions with a provider in version before 25.0 (there are no locations_per_storage in response).
     % Provider in older version is achieved by mocking response to the new provider rpc request as NOT_SUPPORTED.
     FileType = <<"dir">>,
 

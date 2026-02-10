@@ -119,7 +119,8 @@
     lfm_create_hardlink_to_symlink/1,
     recreate_file_on_storage/1,
     lfm_close_deleted_open_files/1,
-    lfm_create_dir_at_path/1
+    lfm_create_dir_at_path/1,
+    lfm_sequential_writes_from_many_processes/1
 ]).
 
 
@@ -216,7 +217,8 @@
     lfm_create_hardlink_to_symlink,
     recreate_file_on_storage,
     lfm_close_deleted_open_files,
-    lfm_create_dir_at_path
+    lfm_create_dir_at_path,
+    lfm_sequential_writes_from_many_processes
 ]).
 
 
@@ -973,6 +975,10 @@ lfm_close_deleted_open_files(Config) ->
 
 lfm_create_dir_at_path(Config) ->
     lfm_files_test_base:lfm_create_dir_at_path(Config).
+
+
+lfm_sequential_writes_from_many_processes(Config) ->
+    lfm_files_test_base:lfm_sequential_writes_from_many_processes(Config).
 
 
 %%%===================================================================

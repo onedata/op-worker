@@ -180,6 +180,7 @@ CODETAG_EXCLUDED_DIRS += ./_build/default/lib/rrdtool
 CODETAG_EXCLUDED_DIRS += ./_build/default/lib/rtransfer_link
 CODETAG_EXCLUDED_DIRS += ./_build/default/lib/locks
 CODETAG_EXCLUDED_DIRS += codetag_tracker_results
+CODETAG_EXCLUDED_DIRS += ezlib
 
 comma := ,
 empty :=

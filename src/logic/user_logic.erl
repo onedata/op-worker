@@ -204,13 +204,12 @@ has_eff_space(#document{value = #od_user{eff_spaces = EffSpaces}}, SpaceId) ->
     lists:member(SpaceId, EffSpaces).
 
 
--spec has_eff_space(gs_client_worker:client(), od_user:id(), od_space:id()) ->
-    boolean().
+-spec has_eff_space(gs_client_worker:client(), od_user:id(), od_space:id()) -> boolean().
 has_eff_space(Client, UserId, SpaceId) when is_binary(UserId) ->
     case get(Client, UserId) of
         {ok, UserDoc = #document{}} ->
             has_eff_space(UserDoc, SpaceId);
-        {error, _} ->
+        ?ERR_TOKEN_INVALID ->
             false
     end.
 

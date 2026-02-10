@@ -50,7 +50,7 @@ all() -> [
 
 -define(PROVIDERS, [krakow, paris]).
 -define(SPACE_SELECTOR, space_krk_par).
--define(METADATA_PREFIX, <<"oai_dc">>).
+-define(METADATA_SCHEMA, <<"oai_dc">>).
 
 -define(ATTEMPTS, 30).
 
@@ -63,11 +63,11 @@ all() -> [
 create_handle_test(_Config) ->
     HServiceId = hd(ozt_handle_services:list_handle_services()),
     MemRef = api_test_memory:init(),
-    Metadata = opt_handles:example_metadata_variant(?METADATA_PREFIX, 1),
+    Metadata = opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1),
 
     ValidateResultFun = fun(_, {ok, #{
         <<"handleService">> := HServiceInDb,
-        <<"metadataPrefix">> := MetadataPrefixInDb,
+        <<"metadataSchema">> := MetadataSchemaInDb,
         <<"metadataString">> := MetadataInDb,
         <<"url">> := Url
     }}) ->
@@ -77,8 +77,8 @@ create_handle_test(_Config) ->
         ExpectedMetadata = opt_handles:expected_metadata_after_publication(Metadata, Url),
 
         ?assertMatch(
-            {ExpectedHService, ?METADATA_PREFIX, ExpectedMetadata},
-            {HServiceInDb, MetadataPrefixInDb, MetadataInDb}
+            {ExpectedHService, ?METADATA_SCHEMA, ExpectedMetadata},
+            {HServiceInDb, MetadataSchemaInDb, MetadataInDb}
         )
     end,
     ?assert(onenv_api_test_runner:run_tests([
@@ -103,12 +103,12 @@ create_handle_test(_Config) ->
             data_spec = #data_spec{
                 required = [
                     <<"shareId">>, <<"handleServiceId">>,
-                    <<"metadataPrefix">>, <<"metadataString">>
+                    <<"metadataSchema">>, <<"metadataString">>
                 ],
                 correct_values = #{
                     <<"shareId">> => [share_id],
                     <<"handleServiceId">> => [HServiceId],
-                    <<"metadataPrefix">> => [?METADATA_PREFIX],
+                    <<"metadataSchema">> => [?METADATA_SCHEMA],
                     <<"metadataString">> => [Metadata]
                 }
             }
@@ -154,8 +154,8 @@ get_public_handle_data_test(_Config) ->
     Provider = ?RAND_ELEMENT(?PROVIDERS),
     HServiceId = hd(ozt_handle_services:list_handle_services()),
     #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
-    Metadata = opt_handles:example_metadata_variant(?METADATA_PREFIX, 1),
-    HandleId = opt_handles:create(Provider, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata),
+    Metadata = opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1),
+    HandleId = opt_handles:create(Provider, ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_SCHEMA, Metadata),
     PublicHandleUrl = opt_handles:get_public_handle_url(Provider, ?SPACE_OWNER_AND_HS_MEMBER, HandleId),
 
     ValidateResultFun = fun(_, {ok, Result}) ->
@@ -166,7 +166,7 @@ get_public_handle_data_test(_Config) ->
             <<"handleService">> => gri:serialize(#gri{
                 type = op_handle_service, id = HServiceId, aspect = instance, scope = public
             }),
-            <<"metadataPrefix">> => ?METADATA_PREFIX,
+            <<"metadataSchema">> => ?METADATA_SCHEMA,
             <<"metadataString">> => opt_handles:expected_metadata_after_publication(Metadata, PublicHandleUrl),
             <<"revision">> => 1,
             <<"url">> => PublicHandleUrl
@@ -209,7 +209,7 @@ get_handle_prepare_gs_args_fun(HandleId) ->
 
 update_handle_test(_Config) ->
     MemRef = api_test_memory:init(),
-    MetadataAfterUpdate = opt_handles:example_metadata_variant(?METADATA_PREFIX, 2),
+    MetadataAfterUpdate = opt_handles:example_metadata_variant(?METADATA_SCHEMA, 2),
 
     ValidateResultFun = fun(_, ok) ->
         HandleId = api_test_memory:get(MemRef, handle_id),
@@ -236,7 +236,7 @@ update_handle_test(_Config) ->
                 forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
             },
             setup_fun = build_update_delete_handle_setup_fun(
-                MemRef, opt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+                MemRef, opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1)
             ),
             scenario_templates = [
                 #scenario_template{
@@ -264,7 +264,7 @@ build_update_delete_handle_setup_fun(MemRef, Metadata) ->
         HServiceId = hd(ozt_handle_services:list_handle_services()),
         #object{shares = [ShareId]} = create_and_sync_shared_file_of_random_type(),
         HandleId = opt_handles:create(
-            ?RAND_ELEMENT(?PROVIDERS), ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_PREFIX, Metadata
+            ?RAND_ELEMENT(?PROVIDERS), ?SPACE_OWNER_AND_HS_MEMBER, ShareId, HServiceId, ?METADATA_SCHEMA, Metadata
         ),
         api_test_memory:set(MemRef, handle_id, HandleId),
         api_test_memory:set(MemRef, share_id, ShareId)
@@ -310,7 +310,7 @@ delete_handle_test(_Config) ->
                 forbidden_not_in_space = [?NON_SPACE_MEMBER_AND_NON_HS_MEMBER]
             },
             setup_fun = build_update_delete_handle_setup_fun(
-                MemRef, opt_handles:example_metadata_variant(?METADATA_PREFIX, 1)
+                MemRef, opt_handles:example_metadata_variant(?METADATA_SCHEMA, 1)
             ),
             scenario_templates = [
                 #scenario_template{

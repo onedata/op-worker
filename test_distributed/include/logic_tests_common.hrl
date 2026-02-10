@@ -168,7 +168,7 @@ end).
 -define(HANDLE_PUBLIC_HANDLE(__Handle), __Handle).
 -define(HANDLE_RESOURCE_TYPE(__Handle), <<"Share">>).
 -define(HANDLE_RESOURCE_ID(__Handle), ?SHARE_1).
--define(HANDLE_METADATA_PREFIX(__Handle), <<"oai_dc">>).
+-define(HANDLE_METADATA_SCHEMA(__Handle), <<"oai_dc">>).
 -define(HANDLE_METADATA(__Handle), __Handle).
 -define(HANDLE_H_SERVICE(__Handle), ?HANDLE_SERVICE_1).
 
@@ -572,7 +572,7 @@ end).
 
 -define(HANDLE_PUBLIC_DATA_MATCHER(__Handle), #document{key = __Handle, value = #od_handle{
     public_handle = ?HANDLE_PUBLIC_HANDLE(__Handle),
-    metadata_prefix = ?HANDLE_METADATA_PREFIX(__Handle),
+    metadata_schema = ?HANDLE_METADATA_SCHEMA(__Handle),
     metadata = ?HANDLE_METADATA(__Handle),
     handle_service = ?HANDLE_H_SERVICE(__Handle)
 }}).
@@ -751,7 +751,7 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_handle, id = __HandleId, aspect = instance, scope = public}),
     <<"handleServiceId">> => ?HANDLE_H_SERVICE(__HandleId),
     <<"publicHandle">> => ?HANDLE_PUBLIC_HANDLE(__HandleId),
-    <<"metadataPrefix">> => ?HANDLE_METADATA_PREFIX(__HandleId),
+    <<"metadataSchema">> => ?HANDLE_METADATA_SCHEMA(__HandleId),
     <<"metadata">> => ?HANDLE_METADATA(__HandleId)
 }).
 

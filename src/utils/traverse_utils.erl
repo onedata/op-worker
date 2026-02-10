@@ -53,7 +53,7 @@ run(PoolName, TaskId, Job, Options) ->
 
 -spec wait_for_zone_connection() -> ok.
 wait_for_zone_connection() ->
-    utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity).
+    utils:wait_until(fun gs_channel_service:is_connected_and_initialized/0, timer:seconds(10), infinity).
 
 
 -spec wait_for_pool_start(traverse:pool()) -> ok.

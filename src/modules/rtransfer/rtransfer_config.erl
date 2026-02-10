@@ -145,18 +145,17 @@ auth_request(TransferData, ProviderId) ->
         %% transfer document is created.
         {_TransferId, SpaceId, FileGuid} = erlang:binary_to_term(TransferData, [safe]),
 
-        SpaceDoc =
-            case space_logic:get(?ROOT_SESS_ID, SpaceId) of
-                {ok, SD} -> SD;
-                {error, Reason} -> throw({error, {cannot_get_space_document, SpaceId, Reason}})
-            end,
+        SpaceDoc = case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+            {ok, SD} -> SD;
+            {error, Reason} -> throw({error, {cannot_get_space_document, SpaceId, Reason}})
+        end,
 
-        case space_logic:is_supported(SpaceDoc, ProviderId) of
+        case space_logic:is_supported_by(SpaceDoc, ProviderId) of
             true -> ok;
             false -> throw({error, space_not_supported_by_remote_provider, SpaceId})
         end,
 
-        case space_logic:is_supported(SpaceDoc, oneprovider:get_id_or_undefined()) of
+        case space_logic:is_supported_locally(SpaceDoc) of
             true -> ok;
             false -> throw({error, space_not_supported_by_local_provider, SpaceId})
         end,

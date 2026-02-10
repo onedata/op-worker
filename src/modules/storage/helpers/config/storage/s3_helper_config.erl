@@ -77,7 +77,6 @@ build_args_diff(HelperConfig, #storage_update_spec{
         signature_version = SignatureVersion,
         verify_server_certificate = VerifyServerCertificate,
         region = Region,
-        maximum_canonical_object_size = MaxCanonicalObjectSize,
         file_mode = FileMode,
         dir_mode = DirMode
     }
@@ -89,7 +88,6 @@ build_args_diff(HelperConfig, #storage_update_spec{
         {<<"signatureVersion">>, SignatureVersion, fun integer_to_binary/1},
         {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
         {<<"region">>, Region},
-        {<<"maximumCanonicalObjectSize">>, MaxCanonicalObjectSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
         {<<"dirMode">>, DirMode},
         {<<"timeout">>, Timeout, fun integer_to_binary/1}
@@ -132,7 +130,6 @@ describe(#helper_config{
         {<<"verifyServerCertificate">>, #s3_configuration.verify_server_certificate, fun utils:to_boolean/1},
         {<<"region">>, #s3_configuration.region},
         {<<"blockSize">>, #s3_configuration.block_size, fun binary_to_integer/1},
-        {<<"maximumCanonicalObjectSize">>, #s3_configuration.maximum_canonical_object_size, fun binary_to_integer/1},
         {<<"fileMode">>, #s3_configuration.file_mode},
         {<<"dirMode">>, #s3_configuration.dir_mode}
     ]),
@@ -230,7 +227,6 @@ build_args(#storage_create_spec{
         verify_server_certificate = VerifyServerCertificate,
         region = Region,
         block_size = BlockSize,
-        maximum_canonical_object_size = MaxCanonicalObjectSize,
         file_mode = FileMode,
         dir_mode = DirMode,
         storage_path_type = StoragePathType
@@ -247,7 +243,6 @@ build_args(#storage_create_spec{
         {<<"verifyServerCertificate">>, VerifyServerCertificate, fun atom_to_binary/1},
         {<<"region">>, Region},
         {<<"blockSize">>, BlockSize, fun integer_to_binary/1},
-        {<<"maximumCanonicalObjectSize">>, MaxCanonicalObjectSize, fun integer_to_binary/1},
         {<<"fileMode">>, FileMode},
         {<<"dirMode">>, DirMode},
         {<<"timeout">>, Timeout, fun integer_to_binary/1}

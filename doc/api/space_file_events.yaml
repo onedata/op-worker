@@ -7,6 +7,7 @@ info:
     
     **Note**: This endpoint returns a streaming response using Server-Sent Events format.
     The connection remains open and events are pushed to the client as they occur.
+    The server may close the connection if the space is unsupported or deleted.
 
 paths:
   /spaces/{spaceId}/events/files:
@@ -15,10 +16,13 @@ paths:
       description: |
         Opens a Server-Sent Events (SSE) stream for real-time file change notifications.
         
-        The connection remains open indefinitely and the server pushes events as they occur:
+        The connection remains open and the server pushes events as they occur:
         - `changedOrCreated` - File was created or modified
         - `deleted` - File was deleted
-        - `heartbeat` - Periodic keep-alive to update sequence number
+        - `heartbeat` - Periodic keep-alive to update event ID
+        
+        The connection will be closed by the server if the space is unsupported or deleted.
+        In typical usage, clients disconnect before such rare events occur.
         
         ## SSE Format
         
@@ -41,9 +45,9 @@ paths:
         ## Reconnection
         
         To reconnect and resume from last received event, include the `Last-Event-Id` header
-        with the sequence number from the last successfully processed event. The server will:
-        - Replay missed events if behind
-        - Connect directly to live stream if caught up
+        with the event ID from the last successfully processed event. The server will:
+        - Replay missed events if behind and continue streaming live events
+        - Connect directly to live stream if already caught up
         
         ## Authorization
         
@@ -70,8 +74,9 @@ paths:
           type: "integer"
           format: "int64"
           description: |
-            Sequence number of the last successfully processed event. Used for reconnection
-            to resume from where client left off. If not provided, starts from current sequence.
+            Event ID of the last successfully processed event. Event IDs are monotonically
+            increasing integers that can be used as a cursor for reconnection to resume
+            from where client left off. If not provided, starts from current event ID.
             
         - name: "body"
           in: "body"
@@ -89,7 +94,7 @@ paths:
             
             **SSE Stream Format**:
             Each event in the stream has three fields:
-            - `id` - Unique sequence number (monotonically increasing integer)
+            - `id` - Event ID (monotonically increasing integer, can be used as a cursor)
             - `event` - Event type name (discriminator: changedOrCreated, deleted, heartbeat)
             - `data` - JSON-serialized SpaceFileEvent object (polymorphic based on event type)
             
@@ -105,22 +110,19 @@ paths:
           schema:
             $ref: "#/definitions/SpaceFileEvent"
           examples:
-            application/json:
-              changedOrCreated: |
-                id: 12346
-                event: changedOrCreated
-                data: {"fileId":"abc123","parentFileId":"parent456","attributes":{"name":"data.csv","size":1024,"mtime":1704067200}}
-                
-              deleted: |
-                id: 12347
-                event: deleted
-                data: {"fileId":"abc123","parentFileId":"parent456"}
-                
-              heartbeat: |
-                id: 12450
-                event: heartbeat
-                data: null
-                
+            text/event-stream: |
+              id: 12346
+              event: changedOrCreated
+              data: {"fileId":"abc123","parentFileId":"parent456","attributes":{"name":"data.csv","size":1024,"mtime":1704067200}}
+              
+              id: 12347
+              event: deleted
+              data: {"fileId":"abc123","parentFileId":"parent456"}
+              
+              id: 12450
+              event: heartbeat
+              data: null
+              
           headers:
             Content-Type:
               type: "string"
@@ -143,7 +145,7 @@ paths:
             application/json:
               error:
                 id: "badValueInteger"
-                description: "last-event-id must be integer"
+                description: "Last-Event-Id must be an integer"
                 
         401:
           description: "Unauthorized - missing or invalid token"
@@ -215,14 +217,13 @@ definitions:
         items:
           type: "string"
         minItems: 1
-        example: ["$DIR_ID_1", "DIR_ID_2"]
+        example: ["$DIR_ID_1", "$DIR_ID_2"]
 
       observedAttributes:
         type: "array"
         description: |
           File attributes to include in changedOrCreated events. Must specify at least
-          one attribute. Attributes are from three document types: file_meta, times, 
-          and file_location. Optional, if not specified, all attributes are included.
+          one attribute. Optional, if not specified, all attributes are included.
         items:
           type: "string"
           enum:
@@ -320,7 +321,7 @@ definitions:
         
   HeartbeatEvent:
     description: |
-      Periodic keep-alive event sent when the sequence number has advanced significantly
+      Periodic keep-alive event sent when the event ID has advanced significantly
       but no relevant events occurred for the client. Updates the client's Last-Event-Id
       to prevent unnecessary replay on reconnection. This is returned in the SSE `data`
       field when `event: heartbeat`. Always null in actual implementation.

@@ -45,13 +45,13 @@ handle_connected_to_oz() ->
         oneprovider:ensure_service_set_up_in_onezone(),
         ?info("Finished executing on-connect-to-oz procedures")
     catch
-        _:{_, ?ERR_NO_CONNECTION_TO_ONEZONE(_)} ->
+        _:{_, ?ERR_NO_CONNECTION_TO_ONEZONE(_)}:_ ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
             error;
         Class:Reason:Stacktrace ->
-            ?error_stacktrace("Failed to execute on-connect-to-oz procedures, disconnecting - ~w:~tp", [
-                Class, Reason
-            ], Stacktrace),
+            ?error_exception(
+                "Failed to execute on-connect-to-oz procedures, disconnecting", Class, Reason, Stacktrace
+            ),
             error
     end.
 
@@ -124,7 +124,6 @@ handle_entity_deleted(GRI) ->
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
-    ok = gs_client_worker:enable_cache(),
     ok = auth_cache:report_oz_connection_start(),
     ok = restart_hooks:maybe_execute_hooks(),
     ok = main_harvesting_stream:revise_all_spaces(),

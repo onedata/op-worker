@@ -317,24 +317,6 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
 
-
-    % Eff groups are within private scope
-    ?assertMatch(
-        true,
-        rpc:call(Node, provider_logic, supports_space, [?ROOT_SESS_ID, ?PROVIDER_1, ?SPACE_1])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
-    ?assertMatch(
-        true,
-        rpc:call(Node, provider_logic, supports_space, [?ROOT_SESS_ID, ?PROVIDER_1, ?SPACE_2])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
-    ?assertMatch(
-        false,
-        rpc:call(Node, provider_logic, supports_space, [?ROOT_SESS_ID, ?PROVIDER_1, <<"wrongId">>])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, ProviderGriMatcher)),
-
     ok.
 
 

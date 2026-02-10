@@ -283,8 +283,14 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
-    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    HelperName = storage:get_helper_name(StorageId),
+    IsHttp = HelperName =:= ?HTTP_HELPER_NAME,
+    AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
+    case IsHttp orelse AutoDetect of
         true ->
+            % in case of the HTTP helper we don't allow overriding file attributes, as it
+            % requires the stat operation to be supported for correct range reads later on
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
         false ->
