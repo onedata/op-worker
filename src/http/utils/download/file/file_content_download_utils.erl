@@ -342,7 +342,7 @@ build_streaming_send_fun() ->
     end.
 
 
-%% NOTE: handel edge case when stream have been not initiated by send_fun (see 'build_streaming_send_fun')
+%% NOTE: handle edge case when stream have been not initiated by send_fun (see 'build_streaming_send_fun')
 %% (e.g. streaming empty file)
 %% @private
 -spec ensure_stream_initiated(initial_stream_state() | cowboy_req:req()) -> cowboy_req:req().
