@@ -105,7 +105,7 @@ registering_upload_for_non_empty_file_with_truncate_flag_should_succeed_test(_Co
         krakow, user1, FileGuid, #{<<"truncateToZero">> => true}
     )),
     ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
-    assert_file_size(Node, UserSessId, FileGuid, 0).
+    assert_file_size(Node, UserSessId, FileGuid, 0, 1).
 
 
 registering_upload_without_write_access_should_fail_test(_Config) ->
@@ -469,10 +469,16 @@ assert_file_uploaded(ProviderSelector, UserSelector, FileGuid, ExpSize) ->
 %% @private
 -spec assert_file_size(node(), session:id(), file_id:file_guid(), non_neg_integer()) -> ok.
 assert_file_size(Node, SessionId, FileGuid, ExpSize) ->
+    assert_file_size(Node, SessionId, FileGuid, ExpSize, ?ATTEMPTS).
+
+
+%% @private
+-spec assert_file_size(node(), session:id(), file_id:file_guid(), non_neg_integer(), non_neg_integer()) -> ok.
+assert_file_size(Node, SessionId, FileGuid, ExpSize, Attempts) ->
     ?assertMatch(
         {ok, #file_attr{size = ExpSize}},
         lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid)),
-        ?ATTEMPTS
+        Attempts
     ),
     ok.
 
