@@ -152,6 +152,8 @@ boundary simplifies debugging and evolution.
   flows for create, update, describe, delete
 - [Helper Configuration](helper-config.md) — Translation from contracts
   to C++ NIF parameters
+- [Helper Operations](helper-operations.md) — How I/O operations
+  flow from Erlang through the handle system to C++ NIF helpers
 - [Adding a New Storage Type](adding-new-storage-type.md) — Developer
   guide
 
