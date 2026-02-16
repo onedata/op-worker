@@ -188,7 +188,7 @@ On the op-worker side, contracts are translated into `#helper_config{}`:
 - `credentials` → `admin_ctx` (flat binary map)
 
 The helper config uses camelCase keys for the C++ NIF layer. See
-[Helper Configuration](helper-config.md) for details.
+[Helper Configuration](helpers/helper-config.md) for details.
 
 ## Type Safety
 
@@ -214,5 +214,5 @@ at runtime.
 
 - [Storage Configuration Overview](_overview.md)
 - [Storage CRUD Operations](storage-crud-operations.md)
-- [Helper Configuration](helper-config.md)
+- [Helper Configuration](helpers/helper-config.md)
 - [Adding a New Storage Type](adding-new-storage-type.md)

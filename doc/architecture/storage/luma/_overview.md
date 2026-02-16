@@ -13,7 +13,7 @@ ownership in Oneclient).
 ## Key Concepts
 
 - **Storage credentials** — Credentials passed to a
-  [helper](../helper-operations.md) to perform I/O operations on behalf
+  [helper](../helpers/helper-operations.md) to perform I/O operations on behalf
   of a specific user. On POSIX-compatible storages, this is a UID + GID
   pair. On object storages, it may be an access key/secret, an OAuth2
   token, or an admin context.
@@ -81,7 +81,7 @@ graph TB
 | Level | Identity | Example | Purpose |
 |-------|----------|---------|---------|
 | **Logical** | Onedata user ID | `17c5bfccbd49` | Internal file ownership in Onedata |
-| **Storage** | Storage credentials | `uid=1000, gid=2000` | Passed to the [helper](../helper-operations.md) for actual I/O on the storage backend |
+| **Storage** | Storage credentials | `uid=1000, gid=2000` | Passed to the [helper](../helpers/helper-operations.md) for actual I/O on the storage backend |
 | **Display** | Display credentials | `uid=1111, gid=2222` | Shown to the user in Oneclient (`ls -l`); purely presentational — does not affect access control |
 
 LUMA maps from the logical level to the other two. How this mapping
@@ -214,8 +214,10 @@ For details, see [Reverse LUMA](reverse-luma.md).
 
 - **[Storage Overview](../_overview.md)** — Parent documentation for
   the storage configuration subsystem
-- **[Helper Operations](../helper-operations.md)** — How I/O
+- **[Helper Operations](../helpers/helper-operations.md)** — How I/O
   operations use storage credentials via the helper handle system
+- **[Helper Configuration](../helpers/helper-config.md)** — How
+  `#helper_config{}` is built, including OAuth2-specific admin context
 - **[Onepanel LUMA DB API](https://onedata.org/#/home/api/stable/onepanel?anchor=tag/LUMA-DB)**
   — REST API for querying and clearing LUMA DB entries
 - **[Onepanel LUMA Local Feed API](https://onedata.org/#/home/api/stable/onepanel?anchor=tag/LUMA-DB-Local-Feed)**

@@ -11,10 +11,11 @@ type-safety on the Erlang side.
 
 > **Complementary documentation**
 >
-> - [Storage Configuration Architecture Overview](_overview.md) — key
+> - [Storage Configuration Architecture Overview](../_overview.md) — key
 >   concepts, component roles, architecture diagram
-> - [Storage Data Contracts](storage-contracts.md) — `#storage_create_spec{}`,
+> - [Storage Data Contracts](../storage-contracts.md) — `#storage_create_spec{}`,
 >   `#storage_update_spec{}`, `#storage_description{}` definitions
+> - [Helpers Overview](_overview.md) — index of helper-related documentation
 
 ---
 
@@ -255,6 +256,186 @@ scenarios. Merging at call time keeps the separation clean.
 
 ---
 
+## OAuth2-Supporting Storages (HTTP, WebDAV)
+
+HTTP and WebDAV storages differ significantly from all other storage
+types in how their credentials are structured, built, and later used
+at runtime. Most storages have a **1:1 mapping** between the contract
+record fields and the `admin_ctx` map — S3 maps `access_key` →
+`<<"accessKey">>` and `secret_key` → `<<"secretKey">>`, and that is
+the entire admin context. OAuth2-supporting storages are fundamentally
+different: their credentials undergo a **transformation** during
+`build_admin_ctx`, and the resulting admin context contains fields that
+do not exist in the original contract record.
+
+> **Key takeaway:** Understanding how admin_ctx is constructed for
+> HTTP and WebDAV is essential, because these same fields are later
+> used during [LUMA credential resolution](../luma/credential-resolution.md#oauth2-credential-lifecycle)
+> to acquire IdP access tokens and validate the user context before
+> passing it to the C++ helper.
+
+### Credential Types
+
+HTTP and WebDAV support four credential types (`credentials_type`):
+
+| Type | `credentials` field contains | OAuth2 flow | Description |
+|------|------------------------------|-------------|-------------|
+| `none` | (ignored) | No | No authentication; `credentials` is removed from admin_ctx |
+| `basic` | `username:password` | No | HTTP Basic authentication |
+| `token` | Bearer token | No | Static token-based authentication |
+| `oauth2` | WebDAV/HTTP username | Yes | Token obtained dynamically from an Identity Provider |
+
+### Contract Records vs Admin Context
+
+Unlike simple storages where the contract maps 1:1, OAuth2 storages
+undergo a transformation during `build_admin_ctx`. The contract
+records (`#http_credentials{}`, `#webdav_credentials{}`) contain:
+
+```erlang
+-record(http_credentials, {
+    credentials_type :: none | basic | token | oauth2,
+    credentials      :: undefined | binary(),
+    oauth2_idp       :: undefined | binary(),
+    onedata_access_token :: undefined | binary()
+}).
+```
+
+The resulting `admin_ctx` map contains **additional fields** not
+present in the contract:
+
+| Contract field | Admin ctx key | Notes |
+|----------------|---------------|-------|
+| `credentials_type` | `<<"credentialsType">>` | Converted via `credentials_type_to_binary/1` |
+| `credentials` | `<<"credentials">>` | Removed when `credentials_type = none` |
+| `oauth2_idp` | `<<"oauth2IdP">>` | Optional; identifies the Identity Provider |
+| `onedata_access_token` | `<<"onedataAccessToken">>` | The Onedata access token used to acquire IdP tokens |
+| *(not in contract)* | `<<"adminId">>` | **Injected by `resolve_admin_id/1`** — see below |
+
+### The `resolve_admin_id` Mechanism
+
+When the admin context contains an `<<"onedataAccessToken">>`,
+`helper_config_utils:resolve_admin_id/1` verifies the token against
+Onezone and extracts the owning user's ID.
+
+This adds `<<"adminId">>` to the admin context — a field that **does
+not exist in the contract record**. It is injected at build time and
+persisted with the helper config. This admin ID is critical later in
+the OAuth2 credential resolution flow in LUMA: when the system needs
+to acquire an IdP access token on behalf of the admin (for root user,
+space owner, or auto feed scenarios), it uses `<<"adminId">>` and
+`<<"onedataAccessToken">>` from the admin context.
+
+When there is no `<<"onedataAccessToken">>` (e.g. `credentials_type`
+is `none` or `basic`), `resolve_admin_id/1` returns the credentials
+unchanged — no `<<"adminId">>` is added.
+
+### Admin Context Shapes by Credential Type
+
+The shape of the admin_ctx map varies depending on the credential
+type:
+
+**`none`:**
+```erlang
+#{<<"credentialsType">> => <<"none">>}
+```
+
+**`basic`:**
+```erlang
+#{<<"credentialsType">> => <<"basic">>,
+  <<"credentials">> => <<"user:password">>}
+```
+
+**`token`:**
+```erlang
+#{<<"credentialsType">> => <<"token">>,
+  <<"credentials">> => <<"bearer-token-value">>}
+```
+
+**`oauth2`:**
+```erlang
+#{<<"credentialsType">> => <<"oauth2">>,
+  <<"credentials">> => <<"webdav-username">>,
+  <<"oauth2IdP">> => <<"my-idp">>,                     %% optional
+  <<"onedataAccessToken">> => <<"MDAxN...">>,
+  <<"adminId">> => <<"user-id-from-token-verification">>}  %% injected
+```
+
+### User Context Validation
+
+When a C++ helper handle is created at runtime, the user context
+(resolved by [LUMA](../luma/credential-resolution.md)) is validated
+by `validate_user_ctx/1` before being passed to the NIF. For
+OAuth2-supporting storages, the validation is more complex than for
+simple storages because the user context map may contain fields from
+multiple stages of the credential lifecycle.
+
+**Allowed fields in user context for HTTP/WebDAV:**
+
+| Field | Required? | Source                                                                        |
+|-------|-----------|-------------------------------------------------------------------------------|
+| `<<"credentialsType">>` | Always required | From admin_ctx or LUMA record                                                 |
+| `<<"credentials">>` | Required when `credentialsType /= <<"none">>` | From admin_ctx or LUMA record                                                 |
+| `<<"oauth2IdP">>` | Optional | From admin_ctx or LUMA record; identifies the Identity Provider                                              |
+| `<<"onedataAccessToken">>` | Optional | From admin_ctx or LUMA record; **removed after token acquisition** by LUMA OAuth2 post-processing |
+| `<<"adminId">>` | Optional | From admin_ctx; **injected at build time** by `resolve_admin_id`     |
+| `<<"accessToken">>` | Optional | **Injected at runtime** by LUMA OAuth2 post-processing                        |
+| `<<"accessTokenTTL">>` | Optional | **Injected at runtime** by LUMA OAuth2 post-processing                        |
+
+Note that `<<"accessToken">>` and `<<"accessTokenTTL">>` are listed
+as optional fields — they do not exist in the persisted admin_ctx and
+are not present in the contract records. They are **injected at
+runtime** by the
+[LUMA OAuth2 post-processing](../luma/credential-resolution.md#oauth2-credential-lifecycle)
+step, which acquires an IdP access token and adds these fields to the
+credential map before the map reaches validation.
+
+### End-to-End OAuth2 Credential Flow
+
+The following diagram shows how credentials flow from storage
+creation through to runtime I/O for an OAuth2-configured storage:
+
+```mermaid
+flowchart TB
+    subgraph Creation["Storage Creation (build time)"]
+        Contract["#http_credentials{}\ncredentials_type = oauth2\ncredentials = &lt;webdav-user&gt;\noauth2_idp = &lt;my-idp&gt;\nonedata_access_token = &lt;token&gt;"]
+        BuildAdminCtx["build_admin_ctx/1"]
+        ResolveAdminId["resolve_admin_id/1\nverify token → extract UserId"]
+        AdminCtx["admin_ctx =\n#{credentialsType => oauth2,\ncredentials => ...,\noauth2IdP => ...,\nonedataAccessToken => ...,\nadminId => UserId}"]
+
+        Contract --> BuildAdminCtx
+        BuildAdminCtx --> ResolveAdminId
+        ResolveAdminId --> AdminCtx
+    end
+
+    subgraph Runtime["Runtime I/O (per-request)"]
+        LUMA["LUMA: map_to_storage_credentials\n(returns admin_ctx for root/owner/auto)"]
+        OAuth2Post["LUMA: OAuth2 post-processing\nacquire IdP token via\nidp_access_token:acquire/3"]
+        UserCtx["user_ctx =\n#{credentialsType => oauth2,\ncredentials => ...,\noauth2IdP => ...,\nadminId => ...,\naccessToken => &lt;idp-token&gt;,\naccessTokenTTL => &lt;ttl&gt;}"]
+        Validate["validate_user_ctx/1\ncheck required/optional fields"]
+        NIF["build_helper_nif_args/2\nmerge args + user_ctx → C++ NIF"]
+
+        LUMA --> OAuth2Post
+        OAuth2Post --> UserCtx
+        UserCtx --> Validate
+        Validate --> NIF
+    end
+
+    AdminCtx -->|"persisted in\nhelper_config"| LUMA
+```
+
+Notice how `<<"onedataAccessToken">>` from the admin context is 
+**consumed and removed** during OAuth2 post-processing. 
+It is replaced with `<<"accessToken">>` (the actual IdP token) 
+and `<<"accessTokenTTL">>` (its time-to-live).
+The C++ helper never sees `<<"onedataAccessToken">>` — it only
+receives the resolved `<<"accessToken">>`.
+
+For the complete LUMA-side OAuth2 resolution flow including token
+acquisition, IdP selection, and caching, see
+[Credential Resolution — OAuth2 Credential Lifecycle](../luma/credential-resolution.md#oauth2-credential-lifecycle).
+
+---
+
 ## Capability Queries
 
 Each per-storage module declares its capabilities via behaviour
@@ -316,6 +497,11 @@ fields (uid/gid are not considered secrets in the same way).
 
 ## Related Documentation
 
-- [Storage Configuration Architecture Overview](_overview.md)
-- [Storage Data Contracts](storage-contracts.md)
-- [Storage CRUD Operations](storage-crud-operations.md)
+- [Helpers Overview](_overview.md) — index for helper-related docs
+- [Helper Operations](helper-operations.md) — runtime I/O, handle
+  lifecycle, async NIF pattern
+- [Storage Configuration Architecture Overview](../_overview.md)
+- [Storage Data Contracts](../storage-contracts.md)
+- [Storage CRUD Operations](../storage-crud-operations.md)
+- [LUMA Credential Resolution](../luma/credential-resolution.md) —
+  how credentials (including OAuth2 tokens) are resolved at runtime

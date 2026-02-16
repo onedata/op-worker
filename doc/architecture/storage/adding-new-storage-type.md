@@ -377,4 +377,5 @@ tests:
 - [Storage Configuration Overview](_overview.md)
 - [Storage Data Contracts](storage-contracts.md)
 - [Storage CRUD Operations](storage-crud-operations.md)
-- [Helper Configuration](helper-config.md)
+- [Helper Configuration](helpers/helper-config.md)
+- [Helper Operations](helpers/helper-operations.md)

@@ -430,7 +430,9 @@ results and returns HTTP 400 with error details when any storage fails.
 - [Storage Configuration Architecture Overview](_overview.md)
 - [Storage Data Contracts](storage-contracts.md) — Record definitions,
   create vs update patterns
-- [Helper Configuration](helper-config.md) — Translation from contracts
-  to C++ NIF parameters
+- [Helper Configuration](helpers/helper-config.md) — Translation from
+  contracts to C++ NIF parameters
+- [Helper Operations](helpers/helper-operations.md) — Runtime I/O,
+  handle lifecycle, async NIF pattern
 - [Adding a New Storage Type](adding-new-storage-type.md) — Developer
   guide

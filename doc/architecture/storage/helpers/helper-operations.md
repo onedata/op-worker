@@ -2,7 +2,7 @@
 
 The helper operations subsystem is the runtime I/O engine of
 op-worker. While [helper configuration](helper-config.md) describes
-how storage backends are set up, this document describes how actual
+how storage backends are configured, this document describes how actual
 file operations — `read`, `write`, `mkdir`, `stat`, and dozens
 more — flow from Erlang business logic through a layered handle
 system, down to a C++ NIF that communicates with storage backends
@@ -20,8 +20,10 @@ The result is a multi-layer handle architecture with distinct roles at each leve
 
 > **Complementary documentation**
 >
-> - [Storage Configuration Architecture Overview](_overview.md) —
+> - [Storage Configuration Architecture Overview](../_overview.md) —
 >   key concepts, component roles
+> - [Helpers Overview](_overview.md) — index of helper-related
+>   documentation
 > - [Helper Configuration](helper-config.md) — how
 >   `#helper_config{}` is built from contracts and passed to
 >   the NIF
@@ -576,11 +578,14 @@ from creating duplicate handles for the same key.
 
 ## Related Documentation
 
-- [Storage Configuration Architecture Overview](_overview.md) —
+- [Helpers Overview](_overview.md) — index for helper-related docs
+- [Storage Configuration Architecture Overview](../_overview.md) —
   high-level architecture, component roles, supported storage types
 - [Helper Configuration](helper-config.md) — how `#helper_config{}`
   is built from contracts and passed to the NIF
-- [Storage CRUD Operations](storage-crud-operations.md) —
+- [Storage CRUD Operations](../storage-crud-operations.md) —
   create/update/describe/delete flows
-- [Storage Data Contracts](storage-contracts.md) — record
+- [Storage Data Contracts](../storage-contracts.md) — record
   definitions shared between onepanel and op-worker
+- [LUMA Credential Resolution](../luma/credential-resolution.md) —
+  how credentials (including OAuth2 tokens) are resolved at runtime
