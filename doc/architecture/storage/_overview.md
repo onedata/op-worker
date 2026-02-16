@@ -33,9 +33,9 @@ adding new storage types.
   `canonical` (mirrors logical file paths). Chosen at creation time and
   immutable thereafter.
 
-- **LUMA** — Local User Mapping, a separate subsystem for mapping
-  Onedata users to storage-native credentials (out of scope for this doc
-  set).
+- **LUMA** — Local User Mapping, the subsystem for mapping Onedata
+  users to storage-native credentials. See the
+  [LUMA documentation](luma/_overview.md) for details.
 
 ## Architecture Diagram
 
@@ -156,9 +156,12 @@ boundary simplifies debugging and evolution.
   flow from Erlang through the handle system to C++ NIF helpers
 - [Adding a New Storage Type](adding-new-storage-type.md) — Developer
   guide
+- [LUMA — Local User Mapping](luma/_overview.md) — User-to-credential
+  mapping subsystem
 
 ## Related Documentation
 
+- **[LUMA — Local User Mapping](luma/_overview.md)** — How Onedata
+  users are mapped to storage-native credentials
 - (Placeholder: link to parent architecture docs)
-- (Placeholder: link to LUMA documentation when in scope)
 - (Placeholder: link to Onezone / GraphSync overview)

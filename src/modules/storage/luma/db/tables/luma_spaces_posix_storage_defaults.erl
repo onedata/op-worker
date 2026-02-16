@@ -95,7 +95,7 @@ acquire(Storage, SpaceId) ->
             % even if LumaFeed == ?EXTERNAL_FEED
             acquire_from_auto_feed(Storage, SpaceId);
         false ->
-           acquire_from_external_feed(Storage, SpaceId)
+            acquire_from_external_feed(Storage, SpaceId)
     end.
 
 -spec acquire_from_auto_feed(storage(), od_space:id()) ->
