@@ -25,6 +25,14 @@ all helper-related documentation in one place.
   caching, the async NIF call pattern, error handling (including
   `EKEYEXPIRED` for OAuth2 token expiration), and fallback strategies.
 
+- **[C++ Helper Caching](cpp-helper-caching.md)** — How the C++
+  `CachingStorageHelperCreator` deduplicates storage helper instances
+  at the NIF level. When multiple Erlang handles resolve to the same
+  storage arguments and LUMA credentials, they share a single C++
+  helper. Covers cache key generation, the `VersionedStorageHelper`
+  update proxy, eviction policy, sharing scenarios, and implications
+  for Erlang-level refactoring.
+
 ## Key Relationships
 
 ```
@@ -54,6 +62,15 @@ all helper-related documentation in one place.
                     │  sd_handle →            │     merges with args,
                     │  helper_handle →        │     calls C++ NIF
                     │  file_handle → NIF      │
+                    └──────────┬──────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────────┐
+                    │  C++ Helper Caching     │
+                    │  (cpp-helper-caching.md)│ ◄── deduplicates C++ helpers
+                    │  CachingStorageHelper-  │     by args + credentials;
+                    │  Creator → Versioned-   │     VersionedStorageHelper
+                    │  StorageHelper → NIF    │     enables in-place updates
                     └─────────────────────────┘
 ```
 
