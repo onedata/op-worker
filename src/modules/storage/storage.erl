@@ -460,14 +460,6 @@ on_space_unsupported(SpaceId, StorageId) ->
 
 
 %% @private
--spec on_helper_changed(StorageId :: id()) -> ok.
-on_helper_changed(StorageId) ->
-    fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    % TODO VFS-11947 consider error handling here and error propagation / rollback
-    rtransfer_config:add_storage(StorageId).
-
-
-%% @private
 -spec lock_on_storage_by_id(id(), fun(() -> Result)) -> Result.
 lock_on_storage_by_id(Identifier, Fun) ->
     critical_section:run({storage_id, Identifier}, Fun).

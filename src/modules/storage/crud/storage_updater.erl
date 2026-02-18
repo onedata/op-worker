@@ -262,9 +262,7 @@ update_in_op(StorageId, StorageConfig, HelperConfigChanged) ->
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
     emit_helper_params_changed_event(StorageId),
-    ?check(rtransfer_config:add_storage(StorageId)),
-
-    helpers_reload:refresh_helpers_by_storage(StorageId).
+    ?check(rtransfer_config:add_storage(StorageId)).
 
 
 %% @private

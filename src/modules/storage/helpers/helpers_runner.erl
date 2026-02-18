@@ -42,7 +42,7 @@ run_and_handle_error(SDHandle = #sd_handle{
     file = StorageFileId,
     file_uuid = FileUuid
 }, Operation, SufficientAccessType) ->
-    case helpers_resolver:resolve(SessionId, SpaceId, StorageId) of
+    case helper_handle:get(SessionId, SpaceId, StorageId) of
         {ok, HelperHandle} ->
             run_and_handle_error(SDHandle, HelperHandle, Operation, SufficientAccessType);
         {error, not_found} ->
@@ -118,7 +118,7 @@ handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
     case helper_config:is_oauth2_supported(HelperConfig) of
         true ->
             % called by module for CT tests
-            helpers_reload:refresh_handle_params(FileOrHelperHandle, SessionId, SpaceId, Storage),
+            helper_handle:refresh(FileOrHelperHandle, SessionId, SpaceId, Storage),
             retry;
         false ->
             {error, ?EKEYEXPIRED}
