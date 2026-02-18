@@ -17,26 +17,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([refresh_helpers_by_storage/1, refresh_handle_params/4]).
-
-%% RPC
--export([local_refresh_helpers/1]).
+-export([refresh_handle_params/4]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Reloads all helpers of given storage to ensure they use up-to-date
-%% args and ctx.
-%% @end
-%%--------------------------------------------------------------------
--spec refresh_helpers_by_storage(storage:id()) -> ok.
-refresh_helpers_by_storage(StorageId) ->
-    utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, local_refresh_helpers, [StorageId]),
-    ok.
 
 
 %%--------------------------------------------------------------------
@@ -60,25 +46,3 @@ refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
     % do the refresh
     % @TODO VFS-12677 Propagate storage update errors to onepanel and roll back
     helpers:refresh_params(Handle, ArgsWithUserCtxAndType).
-
-%%%===================================================================
-%%% RPC exports
-%%%===================================================================
-
--spec local_refresh_helpers(StorageId :: storage:id()) -> ok.
-local_refresh_helpers(StorageId) ->
-    {ok, Storage} = storage:get(StorageId),
-    {ok, Sessions} = session:list(),
-    try
-        lists:foreach(fun(#document{key = SessId}) ->
-            {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
-            lists:foreach(fun({HandleId, SpaceId}) ->
-                {ok, #document{value = Handle}} = helper_handle:get(HandleId),
-                refresh_handle_params(Handle, SessId, SpaceId, Storage)
-            end, HandlesSpaces)
-        end, Sessions)
-    catch Type:Error ->
-        StorageName = storage:fetch_name_of_local_storage(StorageId),
-        ?error("Error updating active helper for storage ~tp with new args: ~tp:~tp",
-            [StorageName, Type, Error])
-    end.

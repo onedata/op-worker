@@ -242,8 +242,6 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(W, [helpers_reload, helpers]),
-    ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
-    ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.
 
 end_per_suite(Config) ->
