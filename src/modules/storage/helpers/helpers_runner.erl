@@ -42,7 +42,7 @@ run_and_handle_error(SDHandle = #sd_handle{
     file = StorageFileId,
     file_uuid = FileUuid
 }, Operation, SufficientAccessType) ->
-    case session_helpers:get_helper(SessionId, SpaceId, StorageId) of
+    case helpers_resolver:resolve(SessionId, SpaceId, StorageId) of
         {ok, HelperHandle} ->
             run_and_handle_error(SDHandle, HelperHandle, Operation, SufficientAccessType);
         {error, not_found} ->
