@@ -533,7 +533,11 @@ setup_luma(Worker, Helper, UserId, Feed) ->
     HelperName = helper_config:get_name(Helper),
     StorageDoc = #document{
         key = <<"storage_id_", (atom_to_binary(Feed))/binary, "_", HelperName/binary>>,
-        value = #storage_config{helper_config = Helper, luma_config = luma_config:new(Feed)}
+        value = #storage_config{
+            helper_config = Helper,
+            luma_config = luma_config:new(Feed),
+            luma_generation = 0
+        }
     },
     rpc:call(Worker, storage_config, create, [StorageDoc#document.key, StorageDoc#document.value]),
 

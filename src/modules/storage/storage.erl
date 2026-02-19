@@ -39,7 +39,7 @@
 %%% Functions to retrieve storage details
 -export([
     get_id/1, get_block_size/1, get_helper_config/1, get_helper_name/1,
-    get_luma_feed/1, get_luma_config/1
+    get_luma_feed/1, get_luma_config/1, get_luma_generation/1
 ]).
 -export([
     fetch_shared_data/2,
@@ -203,6 +203,11 @@ get_luma_feed(Storage) ->
 -spec get_luma_config(id() | data()) -> luma_config().
 get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
+
+
+-spec get_luma_generation(id() | data()) -> non_neg_integer().
+get_luma_generation(Storage) ->
+    storage_config:get_luma_generation(Storage).
 
 
 -spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
