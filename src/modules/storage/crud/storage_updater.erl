@@ -176,7 +176,7 @@ update_luma_config(StorageId, Diff) ->
     end,
     case storage_config:update_luma_config(StorageId, UpdateFun) of
         ok ->
-            luma:clear_db(StorageId);
+            luma_crud_api:clear_db(StorageId);
         {error, no_update} ->
             ok;
         {error, _} = Error ->

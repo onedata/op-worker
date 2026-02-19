@@ -9,8 +9,9 @@
 %%% This module is a generic datastore model that is used by all
 %%% modules that implement LUMA DB tables.
 %%%
-%%% Ids of documents of this model are results of hashing 3 keys:
+%%% Ids of documents of this model are results of hashing 4 keys:
 %%%  - storage:id(),
+%%%  - luma_generation (included only when > 0 for backward compatibility),
 %%%  - table() - name of the module that implements LUMA DB table
 %%%  - db_key() - internal key in the table
 %%%
@@ -87,33 +88,35 @@
 
 -export_type([db_key/0, db_record/0, table/0, cache_policy/0, db_acquire_fun/0, db_diff/0]).
 
--type storage() :: storage:id() | storage:data().
 -type overwrite_opt() :: ?FORCE_OVERWRITE | ?NO_OVERWRITE.
 -type constraint() :: ?POSIX_STORAGE | ?IMPORTED_STORAGE | ?NON_IMPORTED_STORAGE.
 -type constraints() :: [constraint()].
+
 -define(BATCH_SIZE, 1000).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 
--spec get(storage(), db_key(), table()) ->
-    {ok, db_record()} | {error, term()}.
-get(Storage, Key, Table) ->
-    Id = id(Storage, Table, Key),
+-spec get(storage:data(), db_key(), table()) -> {ok, db_record()} | errors:error().
+get(StorageData, Key, Table) ->
+    Id = id(StorageData, Table, Key),
+
     case datastore_model:get(?CTX, Id) of
         {ok, #document{value = #luma_db{record = Record}}} ->
             {ok, Record};
-        {error, _} = Error ->
-            Error
+        {error, not_found} ->
+            ?ERROR_NOT_FOUND
     end.
 
 
--spec get_or_acquire(storage(), db_key(), table(), db_acquire_fun()) ->
-    {ok, db_record()} | {error, term()}.
-get_or_acquire(Storage, Key, Table, AcquireFun) ->
-    get_or_acquire(Storage, Key, Table, AcquireFun, []).
+-spec get_or_acquire(storage:data(), db_key(), table(), db_acquire_fun()) ->
+    {ok, db_record()} | errors:error().
+get_or_acquire(StorageData, Key, Table, AcquireFun) ->
+    get_or_acquire(StorageData, Key, Table, AcquireFun, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -125,22 +128,24 @@ get_or_acquire(Storage, Key, Table, AcquireFun) ->
 %% it has returned successfully.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_acquire(storage(), db_key(), table(), db_acquire_fun(), constraints()) ->
+-spec get_or_acquire(storage:data(), db_key(), table(), db_acquire_fun(), constraints()) ->
     {ok, db_record()} | {error, term()}.
-get_or_acquire(Storage, Key, Table, AcquireFun, Constraints) ->
-    validate_constraints_end_execute(Storage, Constraints, fun() ->
-        case get(Storage, Key, Table) of
+get_or_acquire(StorageData, Key, Table, AcquireFun, Constraints) ->
+   validate_constraints_end_execute(StorageData, Constraints, fun() ->
+        case get(StorageData, Key, Table) of
             {ok, Record} ->
                 {ok, Record};
-            {error, not_found} ->
-                acquire_and_maybe_store(AcquireFun, Storage, Key, Table)
+            ?ERROR_NOT_FOUND ->
+                acquire_and_maybe_store(AcquireFun, StorageData, Key, Table)
         end
     end).
 
--spec store(storage(), db_key(), table(), db_record(), luma:feed()) ->
-    ok | {error, term()}.
-store(Storage, Key, Table, Record, Feed) ->
-    store(Storage, Key, Table, Record, Feed, ?FORCE_OVERWRITE, []).
+
+-spec store(storage:data(), db_key(), table(), db_record(), luma:feed()) ->
+    ok | errors:error().
+store(StorageData, Key, Table, Record, Feed) ->
+    store(StorageData, Key, Table, Record, Feed, ?FORCE_OVERWRITE, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -150,15 +155,15 @@ store(Storage, Key, Table, Record, Feed) ->
 %% otherwise datastore_model:create will be used.
 %% @end
 %%--------------------------------------------------------------------
--spec store(storage(), db_key(), table(), db_record(), luma:feed(), overwrite_opt(), constraints()) ->
+-spec store(storage:data(), db_key(), table(), db_record(), luma:feed(), overwrite_opt(), constraints()) ->
     ok | {error, term()}.
-store(Storage, Key, Table, Record, Feed, OverwriteFlag, Constraints) ->
-    validate_constraints_end_execute(Storage, Constraints, fun() ->
-        Id = id(Storage, Table, Key),
-        Doc = new_doc(Id, Storage, Table, Record, Feed),
+store(StorageData, Key, Table, Record, Feed, OverwriteFlag, Constraints) ->
+    validate_constraints_end_execute(StorageData, Constraints, fun() ->
+        Id = id(StorageData, Table, Key),
+        Doc = new_doc(Id, StorageData, Table, Record, Feed),
         case store_internal(Doc, OverwriteFlag) of
             ok ->
-                luma_db_links:add_link(Table, Storage, Key, Id),
+                luma_db_links:add_link(Table, StorageData, Key, Id),
                 ok;
             {error, _} = Error ->
                 Error
@@ -174,9 +179,10 @@ store(Storage, Key, Table, Record, Feed, OverwriteFlag, Constraints) ->
 %% rec
 %% @end
 %%--------------------------------------------------------------------
--spec update(storage(), db_key(), table(), db_diff()) -> {ok, db_record()} | {error, term()}.
-update(Storage, Key, Table, Diff) ->
-    Id = id(Storage, Table, Key),
+-spec update(storage:data(), db_key(), table(), db_diff()) ->
+    {ok, db_record()} | {error, term()}.
+update(StorageData, Key, Table, Diff) ->
+    Id = id(StorageData, Table, Key),
     UpdateFun = fun(LumaDb = #luma_db{record = Record}) ->
         case luma_db_record:update(Record, Diff) of
             {ok, Record2} ->
@@ -193,10 +199,10 @@ update(Storage, Key, Table, Diff) ->
     end.
 
 
--spec update_or_store(storage(), db_key(), table(), db_diff(), db_record(), luma:feed()) ->
+-spec update_or_store(storage:data(), db_key(), table(), db_diff(), db_record(), luma:feed()) ->
     ok | {error, term()}.
-update_or_store(Storage, Key, Table, Diff, DefaultRecord, Feed) ->
-    Id = id(Storage, Table, Key),
+update_or_store(StorageData, Key, Table, Diff, DefaultRecord, Feed) ->
+    Id = id(StorageData, Table, Key),
     UpdateFun = fun(LumaDb = #luma_db{record = Record}) ->
         case luma_db_record:update(Record, Diff) of
             {ok, Record2} ->
@@ -206,35 +212,37 @@ update_or_store(Storage, Key, Table, Diff, DefaultRecord, Feed) ->
         end
     end,
     Default = #luma_db{
-        storage_id = storage:get_id(Storage),
+        storage_id = storage:get_id(StorageData),
         table = Table,
         record = DefaultRecord,
         feed = Feed
     },
     case ?extract_ok(datastore_model:update(?CTX, Id, UpdateFun, Default)) of
         ok ->
-            luma_db_links:add_link(Table, Storage, Key, Id);
+            luma_db_links:add_link(Table, StorageData, Key, Id);
         Error ->
             Error
     end.
 
 
--spec delete(storage:id(), db_key(), table()) -> ok.
-delete(StorageId, Key, Table) ->
-    delete(StorageId, Key, Table, []).
+-spec delete(storage:data(), db_key(), table()) -> ok.
+delete(StorageData, Key, Table) ->
+    delete(StorageData, Key, Table, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% This function deletes single record associated with Key, that is
-%% stored in table Table associated with StorageId.
+%% stored in table Table associated with Storage.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(storage:id(), db_key(), table(), constraints()) -> ok | {error, term()}.
-delete(StorageId, Key, Table, Constraints) ->
-    validate_constraints_end_execute(StorageId, Constraints, fun() ->
-        Id = id(StorageId, Table, Key),
-        delete_doc_and_link(Id, StorageId, Key, Table)
+-spec delete(storage:data(), db_key(), table(), constraints()) -> ok | {error, term()}.
+delete(StorageData, Key, Table, Constraints) ->
+    validate_constraints_end_execute(StorageData, Constraints, fun() ->
+        Id = id(StorageData, Table, Key),
+        delete_doc_and_link(Id, StorageData, Key, Table)
     end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -243,12 +251,13 @@ delete(StorageId, Key, Table, Constraints) ->
 % This allows to ensure that user defined records won't be deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_if_auto_feed(storage:id(), db_key(), table()) -> ok.
-delete_if_auto_feed(StorageId, Key, Table) ->
-    Id = id(StorageId, Table, Key),
-    delete_doc_and_link(Id, StorageId, Key, Table, fun(#luma_db{feed = Feed}) ->
+-spec delete_if_auto_feed(storage:data(), db_key(), table()) -> ok.
+delete_if_auto_feed(StorageData, Key, Table) ->
+    Id = id(StorageData, Table, Key),
+    delete_doc_and_link(Id, StorageData, Key, Table, fun(#luma_db{feed = Feed}) ->
         Feed =:= ?AUTO_FEED
     end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -256,50 +265,60 @@ delete_if_auto_feed(StorageId, Key, Table) ->
 %% with StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec clear_all(storage:id(), table()) -> ok.
-clear_all(StorageId, Table) ->
-    clear_all(StorageId, Table, undefined, ?BATCH_SIZE).
+-spec clear_all(storage:data(), table()) -> ok.
+clear_all(StorageData, Table) ->
+    clear_all(StorageData, Table, undefined, ?BATCH_SIZE).
 
 
--spec get_and_describe(storage(), db_key(), table()) ->
+-spec get_and_describe(storage:data(), db_key(), table()) ->
     {ok, json_utils:json_map()} | {error, term()}.
-get_and_describe(Storage, Key, Table) ->
-    get_and_describe(Storage, Key, Table, []).
+get_and_describe(StorageData, Key, Table) ->
+    get_and_describe(StorageData, Key, Table, []).
 
--spec get_and_describe(storage(), db_key(), table(), constraints()) ->
+
+-spec get_and_describe(storage:data(), db_key(), table(), constraints()) ->
     {ok, json_utils:json_map()} | {error, term()}.
-get_and_describe(Storage, Key, Table, Constraints) ->
-    validate_constraints_end_execute(Storage, Constraints, fun() ->
-        case get(Storage, Key, Table) of
+get_and_describe(StorageData, Key, Table, Constraints) ->
+    validate_constraints_end_execute(StorageData, Constraints, fun() ->
+        case get(StorageData, Key, Table) of
             {ok, Record} ->
                 {ok, luma_db_record:to_json(Record)};
-            {error, _} = Error ->
+            ?ERROR_NOT_FOUND = Error ->
                 Error
         end
     end).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec id(storage(), table(), db_key()) -> doc_id().
-id(Storage, Table, Key) ->
-    StorageId = storage:get_id(Storage),
-    datastore_key:new_from_digest([StorageId, atom_to_binary(Table, utf8), Key]).
 
--spec acquire_and_maybe_store(db_acquire_fun() ,storage(), db_key(), table()) ->
+-spec id(storage:data(), table(), db_key()) -> doc_id().
+id(StorageData, Table, Key) ->
+    StorageId = storage:get_id(StorageData),
+    TableBin = atom_to_binary(Table, utf8),
+    DigestComponents = case storage:get_luma_generation(StorageData) of
+        0 -> [StorageId, TableBin, Key];
+        Generation -> [StorageId, integer_to_binary(Generation), TableBin, Key]
+    end,
+    datastore_key:new_from_digest(DigestComponents).
+
+
+-spec acquire_and_maybe_store(db_acquire_fun(), storage:data(), db_key(), table()) ->
     {ok, db_record()} | {error, term()}.
-acquire_and_maybe_store(AcquireFun, Storage, Key, TableModule) ->
+acquire_and_maybe_store(AcquireFun, StorageData, Key, TableModule) ->
     % ensure Storage is a document
     case AcquireFun() of
         {cache, Record, Feed} ->
-            store(Storage, Key, TableModule, Record, Feed),
+            store(StorageData, Key, TableModule, Record, Feed),
             {ok, Record};
         {nocache, Record, _Feed} ->
             {ok, Record};
         Error ->
             Error
     end.
+
 
 -spec store_internal(doc(), overwrite_opt()) -> ok | {error, term()}.
 store_internal(Doc, ?FORCE_OVERWRITE) ->
@@ -308,87 +327,98 @@ store_internal(Doc, ?NO_OVERWRITE) ->
     ?extract_ok(datastore_model:create(?CTX, Doc)).
 
 
--spec validate_constraints_end_execute(storage(), constraints(), function()) ->
+-spec validate_constraints_end_execute(storage:data(), constraints(), function()) ->
     ok | {ok, term()} | {error, term()}.
-validate_constraints_end_execute(_Storage, [], Fun) ->
+validate_constraints_end_execute(_StorageData, [], Fun) ->
     Fun();
-validate_constraints_end_execute(Storage, [Constraint | Rest], Fun) ->
-    case validate_constraint(Storage, Constraint) of
-        ok -> validate_constraints_end_execute(Storage, Rest, Fun);
+validate_constraints_end_execute(StorageData, [Constraint | Rest], Fun) ->
+    case validate_constraint(StorageData, Constraint) of
+        ok -> validate_constraints_end_execute(StorageData, Rest, Fun);
         {error, _} = Error -> Error
     end.
 
--spec validate_constraint(storage(), constraint()) -> ok | {error, term()}.
-validate_constraint(Storage, ?POSIX_STORAGE) ->
-    case storage:is_posix_compatible(Storage) of
+
+-spec validate_constraint(storage:data(), constraint()) -> ok | {error, term()}.
+validate_constraint(StorageData, ?POSIX_STORAGE) ->
+    case storage:is_posix_compatible(StorageData) of
         true -> ok;
-        false -> ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
+        false -> ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(StorageData), ?POSIX_COMPATIBLE_HELPERS)
     end;
-validate_constraint(Storage, ?IMPORTED_STORAGE) ->
-    case storage:is_imported(Storage) of
+
+validate_constraint(StorageData, ?IMPORTED_STORAGE) ->
+    case storage:is_imported(StorageData) of
         true -> ok;
-        false -> ?ERR_REQUIRES_IMPORTED_STORAGE(?err_ctx(), storage:get_id(Storage))
+        false -> ?ERR_REQUIRES_IMPORTED_STORAGE(?err_ctx(), storage:get_id(StorageData))
     end;
-validate_constraint(Storage, ?NON_IMPORTED_STORAGE) ->
-    case storage:is_imported(Storage) of
+
+validate_constraint(StorageData, ?NON_IMPORTED_STORAGE) ->
+    case storage:is_imported(StorageData) of
         false -> ok;
-        true -> ?ERR_REQUIRES_NON_IMPORTED_STORAGE(?err_ctx(), storage:get_id(Storage))
+        true -> ?ERR_REQUIRES_NON_IMPORTED_STORAGE(?err_ctx(), storage:get_id(StorageData))
     end.
 
--spec new_doc(doc_id(), storage(), table(), db_record(), luma:feed()) -> doc().
-new_doc(Id, Storage, Table, Record, Feed) ->
+
+-spec new_doc(doc_id(), storage:data(), table(), db_record(), luma:feed()) -> doc().
+new_doc(Id, StorageData, Table, Record, Feed) ->
     #document{
         key = Id,
         value = #luma_db{
             table = Table,
             record = Record,
-            storage_id = storage:get_id(Storage),
+            storage_id = storage:get_id(StorageData),
             feed = Feed
         }
     }.
 
--spec clear_all(storage:id(), table(), luma_db_links:token(), luma_db_links:limit()) -> ok.
-clear_all(StorageId, Table, Token, Limit) ->
-    case luma_db_links:list(Table, StorageId, Token, Limit) of
+
+-spec clear_all(storage:data(), table(), luma_db_links:token(), luma_db_links:limit()) -> ok.
+clear_all(StorageData, Table, Token, Limit) ->
+    case luma_db_links:list(Table, StorageData, Token, Limit) of
         {{ok, KeysAndDocIds}, NewToken} ->
             lists:foreach(fun({Key, DocId}) ->
-                delete_doc_and_link(DocId, StorageId, Key, Table)
+                delete_doc_and_link(DocId, StorageData, Key, Table)
             end, KeysAndDocIds),
             case NewToken#link_token.is_last of
                 true ->
                     ok;
                 false ->
-                    clear_all(StorageId, Table, NewToken, Limit)
+                    clear_all(StorageData, Table, NewToken, Limit)
             end;
         {error, not_found} ->
             ok
     end.
 
--spec delete_doc_and_link(doc_id(), storage:id(), db_key(), table()) -> ok.
-delete_doc_and_link(DocId, StorageId, Key, Table) ->
-    ok  = delete(DocId),
-    luma_db_links:delete_link(Table, StorageId, Key).
 
--spec delete_doc_and_link(doc_id(), storage:id(), db_key(), table(), db_pred()) -> ok.
-delete_doc_and_link(DocId, StorageId, Key, Table, Pred) ->
-    case delete(DocId, Pred) of
+-spec delete_doc_and_link(doc_id(), storage:data(), db_key(), table()) -> ok.
+delete_doc_and_link(DocId, StorageData, Key, Table) ->
+    ok = delete_by_doc_id(DocId),
+    luma_db_links:delete_link(Table, StorageData, Key).
+
+
+-spec delete_doc_and_link(doc_id(), storage:data(), db_key(), table(), db_pred()) -> ok.
+delete_doc_and_link(DocId, StorageData, Key, Table, Predicate) ->
+    case delete_by_doc_id(DocId, Predicate) of
         ok ->
-            luma_db_links:delete_link(Table, StorageId, Key);
+            luma_db_links:delete_link(Table, StorageData, Key);
         {error, {not_satisfied, _}} ->
             ok
     end.
 
--spec delete(doc_id()) -> ok | {error, term()}.
-delete(DocId) ->
-    delete(DocId, fun(_) -> true end).
 
--spec delete(doc_id(), datastore_doc:pred(doc_record())) -> ok | {error, term()}.
-delete(DocId, Pred) ->
-    datastore_model:delete(?CTX, DocId, Pred).
+-spec delete_by_doc_id(doc_id()) -> ok | {error, term()}.
+delete_by_doc_id(DocId) ->
+    delete_by_doc_id(DocId, fun(_) -> true end).
+
+
+-spec delete_by_doc_id(doc_id(), datastore_doc:pred(doc_record())) -> ok | {error, term()}.
+delete_by_doc_id(DocId, Predicate) ->
+    datastore_model:delete(?CTX, DocId, Predicate).
+
 
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -398,6 +428,7 @@ delete(DocId, Pred) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
 
 %%--------------------------------------------------------------------
 %% @doc

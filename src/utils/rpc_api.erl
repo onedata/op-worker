@@ -169,115 +169,115 @@ storage_get_luma_feed(Storage) ->
 
 -spec luma_clear_db(storage:id()) -> ok.
 luma_clear_db(StorageId) ->
-    luma:clear_db(StorageId).
+    luma_crud_api:clear_db(StorageId).
 
 
 -spec luma_storage_users_get_and_describe(storage:id(), od_user:id()) ->
     {ok, luma_storage_user:user_map()} | {error, term()}.
-luma_storage_users_get_and_describe(Storage, UserId) ->
-    luma_storage_users:get_and_describe(Storage, UserId).
+luma_storage_users_get_and_describe(StorageId, UserId) ->
+    luma_crud_api:storage_users_get_and_describe(StorageId, UserId).
 
 
 -spec luma_storage_users_store(storage:id(), od_user:id() | luma_onedata_user:user_map(),
     luma_storage_user:user_map()) ->
     {ok, od_user:id()} | {error, term()}.
-luma_storage_users_store(Storage, OnedataUserMap, StorageUserMap) ->
-    luma_storage_users:store(Storage, OnedataUserMap, StorageUserMap).
+luma_storage_users_store(StorageId, OnedataUserMap, StorageUserMap) ->
+    luma_crud_api:storage_users_store(StorageId, OnedataUserMap, StorageUserMap).
 
 
 -spec luma_storage_users_update(storage:id(), od_user:id(), luma_storage_user:user_map()) ->
     ok | {error, term()}.
-luma_storage_users_update(Storage, UserId, StorageUserMap) ->
-    luma_storage_users:update(Storage, UserId, StorageUserMap).
+luma_storage_users_update(StorageId, UserId, StorageUserMap) ->
+    luma_crud_api:storage_users_update(StorageId, UserId, StorageUserMap).
 
 
 -spec luma_storage_users_delete(storage:id(), od_user:id()) -> ok.
-luma_storage_users_delete(Storage, UserId) ->
-    luma_storage_users:delete(Storage, UserId).
+luma_storage_users_delete(StorageId, UserId) ->
+    luma_crud_api:storage_users_delete(StorageId, UserId).
 
 
 -spec luma_spaces_display_defaults_get_and_describe(storage:id(), od_space:id()) ->
     {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
-luma_spaces_display_defaults_get_and_describe(Storage, SpaceId) ->
-    luma_spaces_display_defaults:get_and_describe(Storage, SpaceId).
+luma_spaces_display_defaults_get_and_describe(StorageId, SpaceId) ->
+    luma_crud_api:spaces_display_defaults_get_and_describe(StorageId, SpaceId).
 
 
--spec luma_spaces_display_defaults_store(storage:id() | storage:data(), od_space:id(),
+-spec luma_spaces_display_defaults_store(storage:id(), od_space:id(),
     luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
-luma_spaces_display_defaults_store(Storage, SpaceId, DisplayDefaults) ->
-    luma_spaces_display_defaults:store(Storage, SpaceId, DisplayDefaults).
+luma_spaces_display_defaults_store(StorageId, SpaceId, DisplayDefaults) ->
+    luma_crud_api:spaces_display_defaults_store(StorageId, SpaceId, DisplayDefaults).
 
 
 -spec luma_spaces_display_defaults_delete(storage:id(), od_space:id()) -> ok.
-luma_spaces_display_defaults_delete(Storage, SpaceId) ->
-    luma_spaces_display_defaults:delete(Storage, SpaceId).
+luma_spaces_display_defaults_delete(StorageId, SpaceId) ->
+    luma_crud_api:spaces_display_defaults_delete(StorageId, SpaceId).
 
 
 -spec luma_spaces_posix_storage_defaults_get_and_describe(storage:id(), od_space:id()) ->
     {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
-luma_spaces_posix_storage_defaults_get_and_describe(Storage, SpaceId) ->
-    luma_spaces_posix_storage_defaults:get_and_describe(Storage, SpaceId).
+luma_spaces_posix_storage_defaults_get_and_describe(StorageId, SpaceId) ->
+    luma_crud_api:spaces_posix_storage_defaults_get_and_describe(StorageId, SpaceId).
 
 
--spec luma_spaces_posix_storage_defaults_store(storage:id() | storage:data(), od_space:id(),
+-spec luma_spaces_posix_storage_defaults_store(storage:id(), od_space:id(),
     luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
-luma_spaces_posix_storage_defaults_store(Storage, SpaceId, PosixDefaults) ->
-    luma_spaces_posix_storage_defaults:store(Storage, SpaceId, PosixDefaults).
+luma_spaces_posix_storage_defaults_store(StorageId, SpaceId, PosixDefaults) ->
+    luma_crud_api:spaces_posix_storage_defaults_store(StorageId, SpaceId, PosixDefaults).
 
 
 -spec luma_spaces_posix_storage_defaults_delete(storage:id(), od_space:id()) -> ok.
-luma_spaces_posix_storage_defaults_delete(Storage, SpaceId) ->
-    luma_spaces_posix_storage_defaults:delete(Storage, SpaceId).
+luma_spaces_posix_storage_defaults_delete(StorageId, SpaceId) ->
+    luma_crud_api:spaces_posix_storage_defaults_delete(StorageId, SpaceId).
 
 
--spec luma_onedata_users_get_by_uid_and_describe(storage:id() | storage:data(), luma:uid()) ->
+-spec luma_onedata_users_get_by_uid_and_describe(storage:id(), luma:uid()) ->
     {ok, luma_onedata_user:user_map()} | {error, term()}.
-luma_onedata_users_get_by_uid_and_describe(Storage, Uid) ->
-    luma_onedata_users:get_by_uid_and_describe(Storage, Uid).
+luma_onedata_users_get_by_uid_and_describe(StorageId, Uid) ->
+    luma_crud_api:onedata_users_get_by_uid_and_describe(StorageId, Uid).
 
 
--spec luma_onedata_users_store_by_uid(storage:id() | storage:data(), luma:uid(),
+-spec luma_onedata_users_store_by_uid(storage:id(), luma:uid(),
     luma_onedata_user:user_map()) -> ok | {error, term()}.
-luma_onedata_users_store_by_uid(Storage, Uid, OnedataUser) ->
-    luma_onedata_users:store_by_uid(Storage, Uid, OnedataUser).
+luma_onedata_users_store_by_uid(StorageId, Uid, OnedataUser) ->
+    luma_crud_api:onedata_users_store_by_uid(StorageId, Uid, OnedataUser).
 
 
 -spec luma_onedata_users_delete_uid_mapping(storage:id(), luma:uid()) -> ok | {error, term()}.
-luma_onedata_users_delete_uid_mapping(Storage, Uid) ->
-    luma_onedata_users:delete_uid_mapping(Storage, Uid).
+luma_onedata_users_delete_uid_mapping(StorageId, Uid) ->
+    luma_crud_api:onedata_users_delete_uid_mapping(StorageId, Uid).
 
--spec luma_onedata_users_get_by_acl_user_and_describe(storage:id() | storage:data(), luma:acl_who()) ->
+-spec luma_onedata_users_get_by_acl_user_and_describe(storage:id(), luma:acl_who()) ->
     {ok, luma_onedata_user:user_map()} | {error, term()}.
-luma_onedata_users_get_by_acl_user_and_describe(Storage, AclUser) ->
-    luma_onedata_users:get_by_acl_user_and_describe(Storage, AclUser).
+luma_onedata_users_get_by_acl_user_and_describe(StorageId, AclUser) ->
+    luma_crud_api:onedata_users_get_by_acl_user_and_describe(StorageId, AclUser).
 
 
--spec luma_onedata_users_store_by_acl_user(storage:id() | storage:data(), luma:acl_who(),
+-spec luma_onedata_users_store_by_acl_user(storage:id(), luma:acl_who(),
     luma_onedata_user:user_map()) -> ok | {error, term()}.
-luma_onedata_users_store_by_acl_user(Storage, AclUser, OnedataUser) ->
-    luma_onedata_users:store_by_acl_user(Storage, AclUser, OnedataUser).
+luma_onedata_users_store_by_acl_user(StorageId, AclUser, OnedataUser) ->
+    luma_crud_api:onedata_users_store_by_acl_user(StorageId, AclUser, OnedataUser).
 
 
 -spec luma_onedata_users_delete_acl_user_mapping(storage:id(), luma:acl_who()) -> ok | {error, term()}.
-luma_onedata_users_delete_acl_user_mapping(Storage, AclUser) ->
-    luma_onedata_users:delete_acl_user_mapping(Storage, AclUser).
+luma_onedata_users_delete_acl_user_mapping(StorageId, AclUser) ->
+    luma_crud_api:onedata_users_delete_acl_user_mapping(StorageId, AclUser).
 
 
--spec luma_onedata_groups_get_and_describe(storage:id() | storage:data(), luma:acl_who()) ->
+-spec luma_onedata_groups_get_and_describe(storage:id(), luma:acl_who()) ->
     {ok, luma_onedata_group:group_map()} | {error, term()}.
-luma_onedata_groups_get_and_describe(Storage, AclGroup) ->
-    luma_onedata_groups:get_and_describe(Storage, AclGroup).
+luma_onedata_groups_get_and_describe(StorageId, AclGroup) ->
+    luma_crud_api:onedata_groups_get_and_describe(StorageId, AclGroup).
 
 
--spec luma_onedata_groups_store(storage:id() | storage:data(), luma:acl_who(),
+-spec luma_onedata_groups_store(storage:id(), luma:acl_who(),
     luma_onedata_group:group_map()) -> ok | {error, term()}.
-luma_onedata_groups_store(Storage, AclGroup, OnedataGroup) ->
-    luma_onedata_groups:store(Storage, AclGroup, OnedataGroup).
+luma_onedata_groups_store(StorageId, AclGroup, OnedataGroup) ->
+    luma_crud_api:onedata_groups_store(StorageId, AclGroup, OnedataGroup).
 
 
 -spec luma_onedata_groups_delete(storage:id(), luma:acl_who()) -> ok | {error, term()}.
-luma_onedata_groups_delete(Storage, AclGroup) ->
-    luma_onedata_groups:delete(Storage, AclGroup).
+luma_onedata_groups_delete(StorageId, AclGroup) ->
+    luma_crud_api:onedata_groups_delete(StorageId, AclGroup).
 
 
 -spec space_logic_get_storages(od_space:id()) -> {ok, [storage:id()]}.

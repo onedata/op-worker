@@ -177,7 +177,7 @@ map_acl_group_to_onedata_group(Worker, AclGroup, Storage) ->
     rpc:call(Worker, luma, map_acl_group_to_onedata_group, [AclGroup, Storage]).
 
 clear_luma_db(Worker, StorageId) ->
-    ok = rpc:call(Worker, luma, clear_db, [StorageId]).
+    ok = rpc:call(Worker, luma_crud_api, clear_db, [StorageId]).
 
 %%%===================================================================
 %%% Helpers API functions

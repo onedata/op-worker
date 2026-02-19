@@ -175,11 +175,7 @@
 ]).
 
 %% Management API functions
--export([
-    clear_db/1,
-    clear_db/2,
-    add_helper_specific_fields/5
-]).
+-export([add_helper_specific_fields/5]).
 
 -type uid() :: luma_posix_credentials:uid().
 -type gid() :: luma_posix_credentials:gid().
@@ -306,19 +302,6 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
 %%%===================================================================
 %%% Management API functions
 %%%===================================================================
-
--spec clear_db(storage:id()) -> ok | {error, term()}.
-clear_db(StorageId) ->
-    luma_storage_users:clear_all(StorageId),
-    luma_spaces_display_defaults:clear_all(StorageId),
-    luma_spaces_posix_storage_defaults:clear_all(StorageId),
-    luma_onedata_users:clear_all(StorageId),
-    luma_onedata_groups:clear_all(StorageId).
-
--spec clear_db(storage:id(), od_space:id()) -> ok | {error, term()}.
-clear_db(StorageId, SpaceId) ->
-    luma_spaces_display_defaults:delete(StorageId, SpaceId),
-    luma_spaces_posix_storage_defaults:delete(StorageId, SpaceId).
 
 
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),

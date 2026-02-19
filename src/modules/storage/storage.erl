@@ -144,10 +144,12 @@ delete(StorageId) ->
 %% @private
 -spec delete_insecure(id()) -> ok | {error, term()}.
 delete_insecure(StorageId) ->
+    {ok, StorageData} = get(StorageId),
+
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
             ok = storage_config:delete(StorageId),
-            luma:clear_db(StorageId);
+            luma_crud_api:clear_db(StorageData);
         Error ->
             Error
     end.

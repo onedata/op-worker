@@ -22,7 +22,11 @@
 -define(SEPARATOR, <<"##">>).
 -define(FORESTS_PREFIX, <<"LUMA_DB_LINKS">>).
 -define(FOREST_KEY(ForestType, StorageId),
-    str_utils:join_binary([?FORESTS_PREFIX, ForestType, StorageId], ?SEPARATOR)).
+    str_utils:join_binary([?FORESTS_PREFIX, ForestType, StorageId], ?SEPARATOR)
+).
+-define(FOREST_KEY_GEN(ForestType, StorageId, Gen),
+    str_utils:join_binary([?FORESTS_PREFIX, ForestType, StorageId, Gen], ?SEPARATOR)
+).
 
 %% API
 -export([add_link/4, delete_link/3, list/4]).
@@ -35,36 +39,38 @@
 -type doc_id() :: luma_db:doc_id().
 -type limit() :: non_neg_integer() | all.
 -type token() :: datastore_links_iter:token() | undefined.
--type storage() :: storage:id() | storage:data().
 
 -export_type([token/0, limit/0]).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec add_link(forest_type(), storage:id(), key(), doc_id()) -> ok.
-add_link(ForestType, StorageId, Key, DocId) ->
+
+-spec add_link(forest_type(), storage:data(), key(), doc_id()) -> ok.
+add_link(ForestType, StorageData, Key, DocId) ->
     TreeId = oneprovider:get_id(),
-    ForestKey = forest_key(ForestType, StorageId),
+    ForestKey = forest_key(ForestType, StorageData),
     case ?extract_ok(datastore_model:add_links(?CTX, ForestKey, TreeId, {Key, DocId})) of
         ok -> ok;
         {error, already_exists} -> ok
     end.
 
--spec delete_link(forest_type(), storage:id(), key()) -> ok.
-delete_link(ForestType, StorageId, Key) ->
+
+-spec delete_link(forest_type(), storage:data(), key()) -> ok.
+delete_link(ForestType, StorageData, Key) ->
     TreeId = oneprovider:get_id(),
-    ForestKey = forest_key(ForestType, StorageId),
+    ForestKey = forest_key(ForestType, StorageData),
     case datastore_model:delete_links(?CTX, ForestKey, TreeId, Key) of
         ok -> ok;
         {error, not_found} -> ok
     end.
 
 
--spec list(forest_type(), storage:id(), undefined | token(), limit()) ->
+-spec list(forest_type(), storage:data(), undefined | token(), limit()) ->
     {{ok, [{key(), doc_id()}]}, token()} | {error, term()}.
-list(ForestType, StorageId, Token, Limit) ->
+list(ForestType, StorageData, Token, Limit) ->
     Token2 = utils:ensure_defined(Token, #link_token{}),
     Opts = #{token => Token2},
     Opts2 = case Limit of
@@ -72,29 +78,43 @@ list(ForestType, StorageId, Token, Limit) ->
         _ -> Opts#{size => Limit}
     end,
     ListFun = fun(Key, DocId, Acc) -> [{Key, DocId} | Acc] end,
-    case for_each_link(ForestType, StorageId, ListFun, [], Opts2) of
+    case for_each_link(ForestType, StorageData, ListFun, [], Opts2) of
         {{ok, KeysAndDocsIdsReversed}, NewToken} ->
             {{ok, lists:reverse(KeysAndDocsIdsReversed)}, NewToken};
         Error = {error, _} ->
             Error
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec forest_key(forest_type(), storage()) -> forest_key().
-forest_key(ForestType, Storage) ->
-    ?FOREST_KEY(atom_to_binary(ForestType, utf8), storage:get_id(Storage)).
 
+%% @private
+-spec forest_key(forest_type(), storage:data()) -> forest_key().
+forest_key(ForestType, StorageData) ->
+    StorageId = storage:get_id(StorageData),
+    ForestTypeBin = atom_to_binary(ForestType, utf8),
+    case storage:get_luma_generation(StorageData) of
+        0 ->
+            ?FOREST_KEY(ForestTypeBin, StorageId);
+        Generation ->
+            ?FOREST_KEY_GEN(ForestTypeBin, StorageId, integer_to_binary(Generation))
+    end.
+
+
+%% @private
 -spec for_each_link(
-    forest_type(), storage:id(),
+    forest_type(),
+    storage:data(),
     Callback :: fun((key(), doc_id(), AccIn :: term()) -> Acc :: term()),
-    Acc0 :: term(), datastore_model:fold_opts()) ->
+    Acc0 :: term(), datastore_model:fold_opts()
+) ->
     {{ok, Acc :: term()}, token()} | {error, term()}.
-for_each_link(ForestType, StorageId, Callback, Acc0, Options) ->
+for_each_link(ForestType, StorageData, Callback, Acc0, Options) ->
     TreeId = oneprovider:get_id(),
-    ForestKey = forest_key(ForestType, StorageId),
+    ForestKey = forest_key(ForestType, StorageData),
     datastore_model:fold_links(?CTX, ForestKey, TreeId, fun
         (#link{name = Name, target = Target}, Acc) ->
             {ok, Callback(Name, Target, Acc)}

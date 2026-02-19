@@ -6230,7 +6230,7 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
 clean_luma_db(Worker) ->
     {ok, StorageIds} = rpc:call(Worker, provider_logic, get_storages, []),
     lists:foreach(fun(StorageId) ->
-        ok = rpc:call(Worker, luma, clear_db, [StorageId])
+        ok = rpc:call(Worker, luma_crud_api, clear_db, [StorageId])
     end, StorageIds).
 
 
