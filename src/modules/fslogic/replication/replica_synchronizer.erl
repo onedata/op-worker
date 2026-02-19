@@ -1382,10 +1382,12 @@ start_transfers(InitialBlocks, TransferId, State, Priority, MaxJobRestarts) ->
     DestFileId = State#state.dest_file_id,
     lists:flatmap(
         fun({ProviderId, Blocks, {SrcStorageId, SrcFileId}}) ->
+            {ok, ProviderDomain} = provider_logic:get_domain(ProviderId),
             lists:map(
                 fun(#file_block{offset = O, size = S} = FetchedBlock) ->
                     Request = #{
                         provider_id => ProviderId,
+                        provider_domain => ProviderDomain,
                         file_guid => FileGuid,
                         src_storage_id => SrcStorageId,
                         src_file_id => SrcFileId,
