@@ -62,7 +62,7 @@ upgrade_after_swift_version_update_to_v3() ->
 -spec upgrade_swift_helper_after_swift_version_update_to_v3(storage:id()) ->
     ok | {error, term()}.
 upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
-    storage:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
+    storage_updater:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
         args = Args,
         admin_ctx = AdminCtx
     }) ->

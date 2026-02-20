@@ -280,7 +280,7 @@ enable_webdav_test_mode(Worker, StorageId) ->
             }
         }}
     end,
-    ok = rpc:call(Worker, storage, update_helper_config, [StorageId, UpdateHelperConfigFun]).
+    ok = rpc:call(Worker, storage_updater, update_helper_config, [StorageId, UpdateHelperConfigFun]).
 
 get_sd_handle(Worker, SpaceId, SessionId, FilePath) ->
     StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),

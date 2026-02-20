@@ -53,7 +53,6 @@
 
 %%% Functions to modify storage details
 -export([set_qos_parameters/2]).
--export([update_helper_config/2]).
 
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
@@ -290,6 +289,7 @@ is_posix_compatible(StorageDataOrId) ->
 %%%===================================================================
 
 
+%% TODO rm
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
     case storage_logic:set_qos_parameters(StorageId, QosParameters) of
@@ -299,16 +299,6 @@ set_qos_parameters(StorageId, QosParameters) ->
                 ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
             end, Spaces);
         Error -> Error
-    end.
-
-
--spec update_helper_config(id(), fun((helper_config:t()) -> {ok, helper_config:t()} | {error, term()})) ->
-    ok | {error, term()}.
-update_helper_config(StorageId, UpdateFun) ->
-    case storage_config:update_helper_config(StorageId, UpdateFun) of
-        ok -> on_helper_changed(StorageId);
-        {error, no_changes} -> ok;
-        {error, _} = Error -> Error
     end.
 
 
@@ -467,15 +457,6 @@ on_space_unsupported(SpaceId, StorageId) ->
     main_harvesting_stream:space_unsupported(SpaceId),
     files_monitoring_manager:notify_space_unsupported(SpaceId),
     dir_stats_service_state:clean(SpaceId).
-
-
-%% @private
--spec on_helper_changed(StorageId :: id()) -> ok.
-on_helper_changed(StorageId) ->
-    fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    % TODO VFS-11947 consider error handling here and error propagation / rollback
-    rtransfer_config:add_storage(StorageId),
-    helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
 %% @private

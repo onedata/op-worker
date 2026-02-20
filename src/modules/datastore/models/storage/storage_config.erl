@@ -27,10 +27,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/2, create/3, get/1, exists/1, delete/1]).
+-export([create/2, create/3, get/1, update/2, exists/1, delete/1]).
 -export([get_id/1, get_helper_config/1, get_luma_feed/1, get_luma_config/1, get_luma_generation/1]).
 
--export([update_helper_config/2, update_luma_config/2, set_luma_config/2]).
+-export([update_helper_config/2, set_luma_config/2]).
 
 -export([list_all/0, delete_all/0]).
 
@@ -84,7 +84,6 @@ get(Key) ->
     datastore_model:get(?CTX, Key).
 
 
-%% @private
 -spec update(storage:id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
@@ -168,29 +167,6 @@ update_helper_config(StorageId, UpdateFun) ->
                     {error, no_changes};
                 {ok, NewHelperConfig} ->
                     {ok, StorageConfig#storage_config{helper_config = NewHelperConfig}};
-                {error, _} = Error ->
-                    Error
-            end
-    end)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates LUMA configuration of the storage.
-%% LUMA cannot be enabled or disabled, only its parameters may be changed.
-%% @end
-%%--------------------------------------------------------------------
--spec update_luma_config(storage:id(), UpdateFun) -> ok | {error, term()}
-    when UpdateFun :: fun((storage:luma_config()) -> {ok, storage:luma_config()} | {error, term()}).
-update_luma_config(StorageId, UpdateFun) ->
-    ?extract_ok(update(StorageId, fun
-        (#storage_config{luma_config = PreviousLumaConfig} = StorageConfig) ->
-            case UpdateFun(PreviousLumaConfig) of
-                {ok, NewLumaConfig} ->
-                    {ok, StorageConfig#storage_config{
-                        luma_config = NewLumaConfig,
-                        luma_generation = StorageConfig#storage_config.luma_generation + 1
-                    }};
                 {error, _} = Error ->
                     Error
             end
