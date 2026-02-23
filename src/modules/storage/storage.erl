@@ -289,7 +289,7 @@ is_posix_compatible(StorageDataOrId) ->
 %%%===================================================================
 
 
-%% TODO rm
+%% TODO VFS-12677 rm
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
     case storage_logic:set_qos_parameters(StorageId, QosParameters) of

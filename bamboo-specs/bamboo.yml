@@ -173,6 +173,7 @@ stages:
         - lfm_files_s3
         - lfm_symlinks_resolution
         - luma
+        - luma_reverse
         - massive_multi_provider_file_ops
         - massive_multi_provider_file_ops2
         - memory_pools_cleanup
@@ -206,7 +207,6 @@ stages:
         - replication
         - replication_transfers_rest
         - rest_handler
-        - reverse_luma
         - sequencer
         - sequencer_in_stream
         - sequencer_manager
@@ -1352,6 +1352,13 @@ luma:
     - <<: *ct_logs
       name: ct_logs_luma.tar.gz
 
+luma_reverse:
+  <<: *ct-job
+  key: REV
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_luma_reverse.tar.gz
+
 massive_multi_provider_file_ops2:
   <<: *ct-job
   key: MAS2
@@ -1592,13 +1599,6 @@ rest_handler:
   artifacts:
     - <<: *ct_logs
       name: ct_logs_rest_handler.tar.gz
-
-reverse_luma:
-  <<: *ct-job
-  key: REV
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_reverse_luma.tar.gz
 
 sequencer:
   <<: *ct-job
@@ -2023,6 +2023,7 @@ Coverage report:
     - artifact: ct_logs_lfm_files_s3.tar.gz
     - artifact: ct_logs_lfm_symlinks_resolution.tar.gz
     - artifact: ct_logs_luma.tar.gz
+    - artifact: ct_logs_luma_reverse.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops.tar.gz
     - artifact: ct_logs_massive_multi_provider_file_ops2.tar.gz
     - artifact: ct_logs_memory_pools_cleanup.tar.gz
@@ -2056,7 +2057,6 @@ Coverage report:
     - artifact: ct_logs_replication.tar.gz
     - artifact: ct_logs_replication_transfers_rest.tar.gz
     - artifact: ct_logs_rest_handler.tar.gz
-    - artifact: ct_logs_reverse_luma.tar.gz
     - artifact: ct_logs_sequencer.tar.gz
     - artifact: ct_logs_sequencer_in_stream.tar.gz
     - artifact: ct_logs_sequencer_manager.tar.gz

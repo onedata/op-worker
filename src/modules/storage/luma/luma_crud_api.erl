@@ -59,15 +59,15 @@ clear_db(StorageIdOrData) ->
     ?info("Clearing LUMA DB tables for storage '~ts' (generation: ~B)", [StorageId, LumaGeneration]),
 
     Tables = [
-        {luma_storage_users, fun() -> luma_storage_users:clear_all(StorageData) end},
-        {luma_spaces_display_defaults, fun() -> luma_spaces_display_defaults:clear_all(StorageData) end},
-        {luma_spaces_posix_storage_defaults, fun() -> luma_spaces_posix_storage_defaults:clear_all(StorageData) end},
-        {luma_onedata_users, fun() -> luma_onedata_users:clear_all(StorageData) end},
-        {luma_onedata_groups, fun() -> luma_onedata_groups:clear_all(StorageData) end}
+        {luma_storage_users, fun luma_storage_users:clear_all/1},
+        {luma_spaces_display_defaults, fun luma_spaces_display_defaults:clear_all/1},
+        {luma_spaces_posix_storage_defaults, fun luma_spaces_posix_storage_defaults:clear_all/1},
+        {luma_onedata_users, fun luma_onedata_users:clear_all/1},
+        {luma_onedata_groups, fun luma_onedata_groups:clear_all/1}
     ],
     lists:foreach(fun({TableName, ClearFun}) ->
         ?info("Clearing LUMA table '~ts'", [TableName]),
-        ClearFun()
+        ClearFun(StorageData)
     end, Tables),
 
     ?info("Successfully cleared LUMA DB").

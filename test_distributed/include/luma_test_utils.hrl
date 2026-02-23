@@ -504,7 +504,8 @@ end).
     key = Id,
     value = #storage_config{
         helper_config = HelperConfig,
-        luma_config = ?LUMA_CONFIG(LumaMode)
+        luma_config = ?LUMA_CONFIG(LumaMode),
+        luma_generation = 0
     }
 }).
 
