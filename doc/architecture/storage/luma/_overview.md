@@ -28,8 +28,18 @@ ownership in Oneclient).
   See [Feed Types](#feed-types) below.
 
 - **LUMA DB** — A per-storage database of cached credential mappings,
-  organized into five logical tables. See
+  organized into five logical tables. Each table is scoped by
+  storage ID **and** the current [LUMA generation](#luma-generation),
+  which ensures that config changes atomically isolate old data. See
   [Data Model & Persistence](data-model.md) for the storage layout.
+
+- **LUMA generation** — A monotonically increasing counter stored in
+  `storage_config` alongside the LUMA configuration. It is
+  incremented every time the LUMA config changes, causing all
+  subsequent DB operations to target a new key namespace. This
+  provides atomic isolation between old and new configurations
+  without requiring synchronous deletion of stale entries. See
+  [LUMA Generation](#luma-generation) below.
 
 - **POSIX-compatible storage** — A storage backend that uses UID/GID
   for access control (POSIX, GlusterFS, NullDevice). On these storages,
@@ -136,9 +146,10 @@ per feed type, see
 ## The Five Logical Tables
 
 LUMA DB is organized into five logical tables. Each table is scoped
-per storage — keys within a table are implicitly namespaced by
-`storage:id()`. For record types, document structure, and persistence
-details, see [Data Model & Persistence](data-model.md).
+per storage and [LUMA generation](#luma-generation) — keys within a
+table are implicitly namespaced by `(storage:id(), luma_generation)`.
+For record types, document structure, and persistence details, see
+[Data Model & Persistence](data-model.md).
 
 | Table | Key                                       | Record | Purpose |
 |-------|-------------------------------------------|--------|---------|
@@ -197,6 +208,52 @@ reverse tables; ACL mappings require local or external feed to
 function.
 
 For details, see [Reverse LUMA](reverse-luma.md).
+
+## LUMA Generation
+
+When the LUMA configuration of a storage changes (e.g. the feed type
+is switched, or the external server URL is updated), all previously
+cached mappings become stale and must not be used with the new
+configuration. Deleting entries one by one across five tables is both
+slow and fragile — a failure mid-way would leave the database in an
+inconsistent state where some mappings reflect the old config and
+others are missing.
+
+**LUMA generation** solves this by making the config change and the
+invalidation of old data a single atomic step:
+
+1. The `luma_generation` counter in `storage_config` is incremented
+   together with the new LUMA config in the same datastore write
+   (as part of the [storage update saga](../storage-crud-operations.md#4-the-update-saga)).
+2. The generation value is embedded in LUMA DB
+   [document IDs](data-model.md#document-id-generation) and
+   [link forest keys](data-model.md#the-link-system). All subsequent
+   reads and writes automatically target the new generation's
+   namespace.
+3. Old-generation entries become unreachable — no read path will
+   ever construct the old key again. They are cleaned up
+   asynchronously on a best-effort basis; a failure in cleanup does
+   not affect correctness.
+
+```
+Before update:       After update (gen 0 → 1):
+
+gen=0                gen=0  (orphaned, scheduled for cleanup)
+  ├─ user1 → creds    ├─ user1 → creds
+  ├─ user2 → creds    └─ user2 → creds
+  └─ space1 → defs
+                     gen=1  (active — all new ops land here)
+                       └─ (empty, populated on demand)
+```
+
+### Backward Compatibility
+
+Storages created before the introduction of LUMA generation start
+with `luma_generation = 0`. When the generation is `0`, it is
+**omitted** from document IDs and link forest keys, preserving the
+original key format. The first LUMA config change bumps the
+generation to `1`, at which point it becomes part of the key. This
+means no migration is required for existing storages.
 
 ## Next Steps
 

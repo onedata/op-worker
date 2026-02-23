@@ -8,10 +8,12 @@
 
 LUMA DB uses a single generic datastore model (`luma_db`) that stores
 all five logical tables in one document space. Each mapping entry is a
-**separate Couchbase document** identified by a deterministic hash.
-Documents are complemented by **[link forests](#the-link-system)** for
-enumeration and use **in-memory replication** across cluster nodes for
-fast reads.
+**separate Couchbase document** identified by a deterministic hash
+that incorporates the storage ID, the current
+[LUMA generation](_overview.md#luma-generation), the table name, and
+the table-specific key. Documents are complemented by
+**[link forests](#the-link-system)** for enumeration and use
+**in-memory replication** across cluster nodes for fast reads.
 
 ## Document Structure
 
@@ -32,21 +34,33 @@ with the following structure:
 
 ### Document ID Generation
 
-The document ID is a **deterministic hash** of three components:
+The document ID is a **deterministic hash** whose components depend
+on the current [LUMA generation](_overview.md#luma-generation):
 
 ```
+%% Generation 0 (backward-compatible — omits generation):
 DocId = datastore_key:new_from_digest([StorageId, TableName, Key])
+
+%% Generation > 0 (includes generation for namespace isolation):
+DocId = datastore_key:new_from_digest([StorageId, Generation, TableName, Key])
 ```
 
 Where:
 - `StorageId` — The storage the mapping belongs to.
+- `Generation` — The LUMA generation counter from `storage_config`,
+  as a binary. Included only when `> 0` to maintain backward
+  compatibility with storages that have never had their LUMA config
+  updated.
 - `TableName` — The table module name as a binary
   (e.g. `<<"luma_storage_users">>`).
 - `Key` — The table-specific key (e.g. `od_user:id()`,
   `od_space:id()`, or a composite key like `<<"UID%%1000">>`).
 
-This means that the same logical key in different tables or on
-different storages produces different document IDs.
+This means that the same logical key in different tables, on
+different storages, **or in different LUMA generations** produces
+different document IDs. When the LUMA config changes and the
+generation is incremented, all subsequent operations automatically
+land in a new namespace without any explicit deletion of old entries.
 
 ### Record Serialization
 
@@ -221,17 +235,17 @@ and by the `TableName` component in the document ID hash.
 graph LR
     subgraph "luma_db (Couchbase)"
         direction TB
-        D1["Doc: hash(St1, luma_storage_users, User1)<br/>#luma_storage_user{}"]
-        D2["Doc: hash(St1, luma_storage_users, User2)<br/>#luma_storage_user{}"]
-        D3["Doc: hash(St1, luma_spaces_display_defaults, Space1)<br/>#luma_posix_credentials{}"]
-        D4["Doc: hash(St1, luma_onedata_users, UID%%1000)<br/>#luma_onedata_user{}"]
+        D1["Doc: hash(St1, Gen, luma_storage_users, User1)<br/>#luma_storage_user{}"]
+        D2["Doc: hash(St1, Gen, luma_storage_users, User2)<br/>#luma_storage_user{}"]
+        D3["Doc: hash(St1, Gen, luma_spaces_display_defaults, Space1)<br/>#luma_posix_credentials{}"]
+        D4["Doc: hash(St1, Gen, luma_onedata_users, UID%%1000)<br/>#luma_onedata_user{}"]
     end
 
     subgraph "luma_db_links"
         direction TB
-        L1["Forest: LUMA_DB_LINKS##luma_storage_users##St1"]
-        L2["Forest: LUMA_DB_LINKS##luma_spaces_display_defaults##St1"]
-        L3["Forest: LUMA_DB_LINKS##luma_onedata_users##St1"]
+        L1["Forest: LUMA_DB_LINKS##luma_storage_users##St1##Gen"]
+        L2["Forest: LUMA_DB_LINKS##luma_spaces_display_defaults##St1##Gen"]
+        L3["Forest: LUMA_DB_LINKS##luma_onedata_users##St1##Gen"]
     end
 
     L1 -. "User1 → Doc ID" .-> D1
@@ -239,6 +253,13 @@ graph LR
     L2 -. "Space1 → Doc ID" .-> D3
     L3 -. "UID%%1000 → Doc ID" .-> D4
 ```
+
+> [!NOTE]
+> `Gen` represents the current LUMA generation. When `Gen = 0`
+> (storages that have never had their LUMA config updated), the
+> generation component is omitted from both document hashes and forest
+> keys for backward compatibility. See
+> [LUMA Generation](_overview.md#luma-generation).
 
 #### Table Summary
 
@@ -269,8 +290,13 @@ Datastore documents are stored by their hash ID, which makes
 enumeration impossible without an index. The **link forest** system
 provides this index:
 
-- For each `(Table, StorageId)` pair, a link forest exists with key
-  `LUMA_DB_LINKS##<TableName>##<StorageId>`.
+- For each `(Table, StorageId, Generation)` combination, a link
+  forest exists. The forest key depends on the
+  [LUMA generation](_overview.md#luma-generation):
+  - **Generation 0:** `LUMA_DB_LINKS##<TableName>##<StorageId>`
+    (backward-compatible format).
+  - **Generation > 0:**
+    `LUMA_DB_LINKS##<TableName>##<StorageId>##<Generation>`.
 - Each link maps the table-level key (e.g. `od_user:id()`) to the
   document ID.
 - Links are stored in the local provider's tree (`TreeId = oneprovider:get_id()`) — 
@@ -283,9 +309,9 @@ provides this index:
   `already_exists` errors.
 - **`delete_link/3`** — Called when a document is deleted. Removes the
   link. Idempotent.
-- **`list/4`** — Enumerates all entries in a `(Table, StorageId)`
-  forest with pagination support via tokens. Used by `clear_all/2` to
-  iterate and delete all entries.
+- **`list/4`** — Enumerates all entries in a
+  `(Table, StorageId, Generation)` forest with pagination support via
+  tokens. Used by `clear_all/2` to iterate and delete all entries.
 
 #### `clear_all` — Bulk Deletion
 
@@ -594,9 +620,9 @@ The LUMA DB supports several levels of clearing:
 
 ### Full Storage Clear
 
-`luma:clear_db(StorageId)` deletes **all entries** across all five
-tables for the given storage. Internally, it calls `clear_all/1` on
-each table module, which in turn uses
+`luma_crud_api:clear_db/1` deletes **all entries** across all five
+tables for the given storage **at its current generation**. Internally,
+it calls `clear_all/1` on each table module, which in turn uses
 [`luma_db:clear_all/2`](#clear_all--bulk-deletion) to iterate through
 the [link forest](#the-link-system) in batches and delete each
 document and link.
@@ -607,10 +633,60 @@ This function is called in several situations:
   administrator to wipe the LUMA DB for a storage.
 - **On storage deletion** — `storage:delete_insecure/1` clears the
   LUMA DB before removing the storage.
-- **On LUMA config change** — When the storage's LUMA configuration is
-  updated (e.g. changing the feed type or the external server URL),
-  `storage_updater` clears the entire DB to ensure stale mappings are
-  not used with the new configuration.
+- **On LUMA config change (best-effort cleanup)** — After a LUMA
+  config update succeeds, `storage_updater` calls `clear_db` on the
+  **previous** generation's `storage_config` to clean up orphaned
+  entries. This is a best-effort operation — failures are logged but
+  do not affect the update result. See
+  [Generation-Based Isolation](#generation-based-isolation-on-config-change)
+  below.
+
+### Generation-Based Isolation on Config Change
+
+When the LUMA configuration changes, the system does **not** rely on
+synchronous deletion of old entries to ensure correctness. Instead,
+it uses [LUMA generation](_overview.md#luma-generation) for atomic
+isolation:
+
+1. The `luma_generation` counter is incremented atomically with the
+   new config in a single `storage_config` update (as part of the
+   storage update [saga](../storage-crud-operations.md#4-the-update-saga)).
+2. All subsequent LUMA DB operations (reads and writes) use the new
+   generation value in their key computation, which means they
+   automatically target a fresh namespace.
+3. Old-generation entries become unreachable — no code path
+   constructs keys with the old generation value.
+4. After the saga completes, the old generation's entries are
+   cleaned up on a best-effort basis via
+   `storage_updater:best_effort_clear_luma/2`.
+
+```
+storage_updater:do_update(StorageId, UpdateSpec)
+  │
+  ├─ prepare_new_storage_config(...)
+  │   └─ if LumaChanged: new_generation = prev_generation + 1
+  │
+  ├─ execute_saga([
+  │     Step 1: update_in_op(StorageId, NewStorageConfig)   ← gen is now incremented
+  │     Step 2: update_in_zone(StorageId, UpdateSpec)
+  │     Step 3: on_qos_change(StorageId)                    ← if applicable
+  │   ])
+  │
+  └─ if LumaChanged:
+      best_effort_clear_luma(StorageId, PrevStorageConfig)  ← clean up old gen
+```
+
+This design guarantees that even if cleanup fails (e.g. due to a
+Couchbase timeout), the system remains correct — old entries are
+simply orphaned and never read. They can be retried later or will
+eventually be reclaimed.
+
+If the saga itself fails and rolls back, the original
+`storage_config` (with the old generation) is restored, so reads
+continue to hit the old namespace as expected. In this case,
+`best_effort_clear_luma` is called with the **new** (failed)
+generation's config to clean up any entries that may have been
+written to the new namespace before the rollback.
 
 ### Per-Space Clear
 

@@ -241,72 +241,138 @@ already created the storage ID.
 
 ## Update Storage
 
-**Update** applies partial changes to an existing storage. The storage type
-cannot change.
+**Update** applies partial changes to an existing storage's
+configuration. The operation uses a **saga pattern** — a sequence of
+steps with compensations (rollbacks) that are executed in reverse
+order if any step fails. This ensures the system either fully applies
+the update or restores the previous state.
 
 ### Key Constraint
 
-- **Storage type cannot change** — `storage_updater:assert_valid_type/2` throws
-  `?ERR_BAD_VALUE_NOT_ALLOWED` if `UpdateSpec#storage_update_spec.type` does
-  not match the current helper config.
+- **Storage type cannot change** — `storage_updater:assert_valid_type/2`
+  throws `?ERR_BAD_VALUE_NOT_ALLOWED` if `UpdateSpec#storage_update_spec.type`
+  does not match the current helper config.
+
+### High-Level Flow
+
+```mermaid
+flowchart TB
+    REST["REST PATCH /provider/storages/:id"]
+    SpecBuild["Onepanel builds #storage_update_spec{}"]
+    CritSec["critical_section:run({storage_id, Id})"]
+    Prep["prepare_new_storage_config\n(compute full diff upfront)"]
+    Diag["run_diagnostics on all nodes"]
+    Saga["execute_saga"]
+
+    S1["Step 1: update_in_op\n(helper + luma + generation → storage_config)"]
+    S2["Step 2: update_in_zone\n(name, readonly, imported, qos → Onezone)"]
+    S3["Step 3: on_qos_change\n(reevaluate impossible QoS)"]
+
+    Cleanup["best_effort_clear_luma\n(clean up old LUMA generation)"]
+
+    REST --> SpecBuild --> CritSec --> Prep --> Diag --> Saga
+    Saga --> S1 --> S2 --> S3 --> Cleanup
+
+    S1 -. "compensation:\nrestore PrevStorageConfig" .-> S1
+    S2 -. "compensation:\nrollback OZ fields" .-> S2
+```
 
 ### Step-by-Step
 
-1. **REST PATCH → spec building**
+#### 1. REST PATCH → spec building
 
-   Onepanel builds `#storage_update_spec{}` via `storage_spec_builder:build_update_spec/2`.
-   The spec uses `credentials_diff` and `configuration_diff`; `undefined` means
-   no change.
+Onepanel builds `#storage_update_spec{}` via
+`storage_spec_builder:build_update_spec/2`. The spec uses
+`credentials_diff` and `configuration_diff`; `undefined` means no
+change.
 
-2. **RPC call wrapped in critical_section**
+#### 2. RPC call wrapped in critical_section
 
-   `storage:update/2` runs `critical_section:run({storage_id, Id}, Fun)` before
-   calling `storage_updater:update/2`. This serializes concurrent updates.
+`storage:update/2` runs `critical_section:run({storage_id, Id}, Fun)`
+before calling `storage_updater:update/2`. This serializes concurrent
+updates.
 
-3. **storage_updater:update/2**
+#### 3. Preparation phase (`prepare_new_storage_config`)
 
-   a. **Assert type matches** — `assert_valid_type(CurrentHelperConfig, UpdateSpec)`.
+Before any persistence, the updater computes the **complete new state**
+upfront and determines what has changed:
 
-   b. **Build helper_config diff** — `helper_config:update(CurrentHelperConfig,
-      UpdateSpec)` returns `{ok, NewHelperConfig}` or `{error, no_change}`.
+a. **Assert type matches**
 
-   c. **Verify new configuration** — `storage_crud_utils:verify_configuration/4`
-      with the new readonly/imported values and helper config.
+b. **Compute helper config diff**
 
-   d. **Determine if read-write test needed** — Read-write test is skipped if:
-      - readonly is true, or
-      - imported is true and storage supports any space (imported storage
-        already in use).
+c. **Compute LUMA config diff**
 
-   e. **Run diagnostics** — `storage_crud_utils:run_diagnostics/3` on all nodes.
+d. **Increment LUMA generation** — If the LUMA config changed, the
+   `luma_generation` counter is incremented. This is a critical part
+   of the [LUMA generation](luma/_overview.md#luma-generation)
+   mechanism: the new generation value will be persisted atomically
+   with the new config, causing all subsequent LUMA DB operations to
+   target a new key namespace.
 
-   f. **Apply updates sequentially** — Each update is applied in order:
-      QoS parameters, name, helper_config, LUMA config, readonly/imported
-      flags. No rollback of prior steps on failure.
+e. **Verify new configuration** —
+   `storage_crud_utils:verify_configuration/4` with the new
+   readonly/imported values and helper config.
 
-### Sequential Updates
+f. **Run diagnostics** — `storage_crud_utils:run_diagnostics/3`
+   on all nodes. Read-write test is skipped if readonly is `true`,
+   or if the storage is imported and already supports a space.
 
-Updates are applied in a fixed order:
+The preparation phase produces three values:
+- `HelperConfigChanged :: boolean()`
+- `LumaChanged :: boolean()`
+- `NewStorageConfig :: #storage_config{}` (the complete new record)
 
-| Order | Field | Update function |
-|-------|-------|-----------------|
-| 1 | QoS | `storage:set_qos_parameters/2` |
-| 2 | Name | `storage_logic:update_name/2` |
-| 3 | Helper config | `storage:update_helper_config/2` |
-| 4 | LUMA | `storage_config:update_luma_config/2` + `luma:clear_db/1` |
-| 5 | Readonly/imported | `storage_logic:update_readonly_and_imported/3` |
+#### 4. The Update Saga
 
-If a later step fails, prior steps are **not** rolled back. The storage may be
-left in a partially updated state.
+The saga consists of three steps executed in order. Each step has a
+compensation function. If a step fails, all previously succeeded
+steps are rolled back via their compensations (in reverse order).
+
+| Step | Runs when | Action | Compensation |
+|------|-----------|--------|-------------|
+| 1 | Helper or LUMA changed | `update_in_op(StorageId, NewStorageConfig)` — atomically writes the new `storage_config` (helper + luma + generation) | Restore `PrevStorageConfig` via the same `update_in_op` |
+| 2 | Always | `storage_logic:update_in_zone(StorageId, UpdateSpec)` — updates name, readonly, imported, qos in Onezone | `update_in_zone` with `build_rollback_oz_spec` (original values for any fields that were changed) |
+| 3 | QoS parameters changed | `on_qos_change(StorageId)` — reevaluates all impossible QoS in affected spaces | No-op (best effort) |
+
+**Step 1 details (`update_in_op`):** Persists the new
+`#storage_config{}` record (which contains `helper_config`,
+`luma_config`, and `luma_generation`) in a single datastore write.
+If the helper config changed, also triggers side effects (see
+[Side Effects of Helper Config Change](#side-effects-of-helper-config-change)).
+
+**Step 2 rollback (`build_rollback_oz_spec`):** Constructs a
+`#storage_update_spec{}` with the **previous** Onezone values for
+every field that the original update would have changed. Fields not
+present in the original update are left as `undefined` (no-op).
+
+#### 5. Post-Saga: LUMA Cleanup
+
+After the saga completes (regardless of success or failure), if the
+LUMA config changed, the updater runs a best-effort cleanup of the
+now-orphaned LUMA generation:
+
+- **On success:** Cleans up the **previous** generation's entries
+  (`PrevStorageConfig`). These entries are unreachable because all
+  new reads use the incremented generation.
+- **On failure (rollback):** Cleans up the **new** generation's
+  entries (`NewStorageConfig`). The rollback restored the old config,
+  so any entries written to the new generation during the brief
+  window before rollback are orphaned.
+
+The cleanup is best-effort — failures are logged but do not affect
+the update result. For the full rationale, see
+[LUMA Generation](luma/_overview.md#luma-generation) and
+[Generation-Based Isolation](luma/data-model.md#generation-based-isolation-on-config-change).
 
 ### Side Effects of Helper Config Change
 
-When `storage:update_helper_config/2` is called (e.g. credentials or
-configuration change):
+When `update_in_op` detects that the helper config changed, it
+triggers:
 
-- `fslogic_event_emitter:emit_helper_params_changed(StorageId)`
-- `rtransfer_config:add_storage(StorageId)`
-- `helpers_reload:refresh_helpers_by_storage(StorageId)`
+- notifies connected clients
+- re-registers storage in rtransfer
+- recreation of all cached helper handles for this storage
 
 ---
 
@@ -351,7 +417,9 @@ format.
 3. **Delete sequence** — `delete_insecure/1`:
    - `storage_logic:delete_in_zone(StorageId)` — remove from Onezone
    - `storage_config:delete(StorageId)` — remove local config
-   - `luma:clear_db(StorageId)` — clear LUMA DB
+   - `luma_crud_api:clear_db(StorageData)` — clear LUMA DB for the
+     current generation (uses the full storage document to derive the
+     generation-scoped keys)
 
 4. **Onepanel validation** — `op_worker_storage:can_be_removed/1` checks
    `storage_supports_any_space` before calling delete. If validation fails, the
@@ -413,7 +481,7 @@ storage ID across the cluster.
 | RPC | `{badrpc, nodedown}` | `?ERR_SERVICE_UNAVAILABLE` |
 | RPC | `{badrpc, {'EXIT', {Error, Stacktrace}}}` | Thrown (from op-worker) |
 | Create | Zone created, local fails | Revert zone creation |
-| Update | Update step fails | Prior steps NOT rolled back |
+| Update | Saga step fails | Prior steps rolled back via compensations |
 | Delete | Storage in use | `?ERR_STORAGE_IN_USE` |
 | Diagnostics | Failure | Logged and thrown |
 | Onepanel add | Any error | Returns `{error, Reason}`; REST 400 |
@@ -434,5 +502,9 @@ results and returns HTTP 400 with error details when any storage fails.
   contracts to C++ NIF parameters
 - [Helper Operations](helpers/helper-operations.md) — Runtime I/O,
   handle lifecycle, async NIF pattern
+- [LUMA Overview](luma/_overview.md) — Credential mapping subsystem,
+  including [LUMA generation](luma/_overview.md#luma-generation)
+- [LUMA Data Model](luma/data-model.md) — Database structure,
+  [generation-based isolation](luma/data-model.md#generation-based-isolation-on-config-change)
 - [Adding a New Storage Type](adding-new-storage-type.md) — Developer
   guide
