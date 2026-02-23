@@ -238,20 +238,24 @@ get_file_noncdmi_test(Config) ->
     ),
 
     %% selective value multi range read non-cdmi
-    {ok, _, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges; boundary=", Boundary/binary>>},
-        Response2} = ?assertMatch( {ok, ?HTTP_206_PARTIAL_CONTENT, _, _},
+    {ok, _, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges; boundary=", Boundary/binary>>}, Response2} = ?assertMatch(
+        {ok, ?HTTP_206_PARTIAL_CONTENT, _, _},
         cdmi_test_utils:do_request(?WORKERS(Config), FilledFilePath, get, [
             {?HDR_RANGE, <<"bytes=1-3,5-5,-3">>}, cdmi_test_utils:user_2_token_header()]
-        )),
+        )
+    ),
     ExpResponse2 = <<
         "--", Boundary/binary,
-        "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 1-3/13",
+        "\r\ncontent-type: application/octet-stream",
+        "\r\ncontent-range: bytes 1-3/13",
         "\r\n\r\nile",
         "--", Boundary/binary,
-        "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 5-5/13",
+        "\r\ncontent-type: application/octet-stream",
+        "\r\ncontent-range: bytes 5-5/13",
         "\r\n\r\nc",
         "--", Boundary/binary,
-        "\r\ncontent-type: application/octet-stream\r\ncontent-range: bytes 10-12/13",
+        "\r\ncontent-type: application/octet-stream",
+        "\r\ncontent-range: bytes 10-12/13",
         "\r\n\r\nnt!\r\n",
         "--", Boundary/binary, "--"
     >>,

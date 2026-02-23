@@ -110,7 +110,8 @@
     lfm_mv_failure_multiple_users/1,
     sparse_files_should_be_created/2,
     lfm_close_deleted_open_files/1,
-    lfm_create_dir_at_path/1
+    lfm_create_dir_at_path/1,
+    lfm_sequential_writes_from_many_processes/1
 ]).
 
 -export([
@@ -2411,6 +2412,44 @@ lfm_create_dir_at_path(Config) ->
     
     {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, _}, lfm_proxy:create_dir_at_path(W, SessId1, ParentGuid, Path)),
     ?assertMatch({ok, #file_attr{guid = Guid}}, lfm_proxy:create_dir_at_path(W, SessId1, ParentGuid, Path)).
+
+
+lfm_sequential_writes_from_many_processes(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    ParentGuid = space_dir:guid(<<"space_id1">>),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, ParentGuid, ?RAND_STR(), ?DEFAULT_FILE_MODE),
+    
+    Pid = self(),
+    
+    ReadWriteFun = fun(Key) ->
+        critical_section:run(?FUNCTION_NAME, fun() ->
+            {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
+            {ok, Content} = lfm_proxy:check_size_and_read(W, Handle, 0, 1024*1024*1024),
+            Json = json_utils:decode(Content),
+            lfm_proxy:write(W, Handle, 0, json_utils:encode(Json#{integer_to_binary(Key) => ?RAND_STR(1024)})),
+            lfm_proxy:close(W, Handle), % note: lfm:fsync is called on close
+            Pid ! finished,
+            ok
+        end)
+    end,
+    
+    Processes = lists:map(fun(X) -> spawn(fun() -> ReadWriteFun(X) end) end, lists:seq(1, 1024)),
+    
+    lists:foreach(fun(_) ->
+        receive finished -> ok
+        end
+    end, Processes),
+
+    {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
+    {ok, Content} = lfm_proxy:check_size_and_read(W, Handle, 0, 1024*1024*1024),
+    Json = json_utils:decode(Content),
+    ?assertEqual(length(Processes), maps:size(Json)),
+    maps:map(fun(_Key, Value) ->
+        ?assertEqual(1024, byte_size(Value))
+    end, Json).
+
 
 
 %%%====================================================================

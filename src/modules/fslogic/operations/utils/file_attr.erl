@@ -16,6 +16,7 @@
 -author("Michal Stanisz").
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -25,7 +26,8 @@
 %% API
 -export([
     resolve/3,
-    should_fetch_xattrs/1
+    should_fetch_xattrs/1,
+    optional_attrs_perms_mask/1
 ]).
 
 -type name_conflicts_resolution_policy() ::
@@ -40,7 +42,10 @@
     % Tells whether to perform a check if file name collide with other files in
     % directory. If it does suffix will be glued to name to differentiate it
     % and conflicting files will be returned (default: resolve_name_conflicts).
-    name_conflicts_resolution_policy => name_conflicts_resolution_policy()
+    name_conflicts_resolution_policy => name_conflicts_resolution_policy(),
+    % Tells whether to perform permissions check (may be omitted if they were already
+    % checked in upper layers)
+    check_perms => boolean()
 }.
 
 -type record() :: #file_attr{}.
@@ -62,6 +67,7 @@
 
 -define(STAGES, [
     {?FILE_META_ATTRS, direct, fun resolve_file_meta_attrs/1},
+    {?PARENT_ATTRS, direct, fun resolve_parent_attrs/1},
     {?LINK_TREE_FILE_ATTRS, direct, fun resolve_name_attrs/1},
     {?PATH_FILE_ATTRS, effective, fun resolve_path/1},
     {?LUMA_FILE_ATTRS, direct, fun resolve_luma_attrs/1},
@@ -80,9 +86,30 @@
 %%% API
 %%%===================================================================
 
+
 -spec resolve(user_ctx:ctx(), file_ctx:ctx(), resolve_opts()) -> {record(), file_ctx:ctx()}.
-resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
-    FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx) of
+resolve(UserCtx, FileCtx0, #{attributes := RequestedAttributes} = Opts) ->
+    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
+    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
+    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx0) andalso
+        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx0)),
+
+    FileCtx1 = case maps:get(check_perms, Opts, true) of
+        true when IsRemoteOnlySpace ->
+            FileCtx0;
+        true ->
+            RequiredPrivs = [
+                ?TRAVERSE_ANCESTORS,
+                ?OPERATIONS(optional_attrs_perms_mask(RequestedAttributes))
+            ],
+            fslogic_authz:ensure_authorized(
+                UserCtx, FileCtx0, RequiredPrivs, allow_ancestors
+            );
+        false ->
+            FileCtx0
+    end,
+
+    FinalRequestedAttributes = case file_ctx:get_share_id_const(FileCtx0) of
         undefined ->
             RequestedAttributes;
         %% @TODO VFS-11299 left for compatibility with oneclient
@@ -96,22 +123,19 @@ resolve(UserCtx, FileCtx, #{attributes := RequestedAttributes} = Opts) ->
                 false -> AttrsBase
             end
     end,
+
     InitialState = #state{
-        file_ctx = FileCtx,
+        file_ctx = FileCtx1,
         user_ctx = UserCtx,
         options = Opts#{attributes => FinalRequestedAttributes}
     },
-    % For spaces not supported locally (accessed via provider proxy) effective value cache is not initialized.
-    % Provider proxy is only available in oneclient, which does not require those attrs, so we can safely ignore them.
-    IsRemoteOnlySpace = file_ctx:is_space_dir_const(FileCtx) andalso
-        not provider_logic:supports_space(file_ctx:get_space_id_const(FileCtx)),
     {FinalState, FinalFileAttrRecord} = lists:foldl(fun
         ({_, effective, _}, {AccState, AccFileAttrRecord}) when IsRemoteOnlySpace ->
             {AccState, AccFileAttrRecord};
         ({AttrsSubset, _Type, StageFun}, {AccState, AccFileAttrRecord}) ->
             {StageState, StageFileAttrRecord} = resolve_stage(AccState, AttrsSubset, StageFun),
             {StageState, merge_records(AccFileAttrRecord, StageFileAttrRecord)}
-        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx)}}, ?STAGES),
+        end, {InitialState, #file_attr{guid = file_ctx:get_logical_guid_const(FileCtx1)}}, ?STAGES),
     {FinalFileAttrRecord, FinalState#state.file_ctx}.
 
 
@@ -125,15 +149,27 @@ should_fetch_xattrs(AttributesList) ->
     end.
 
 
+-spec optional_attrs_perms_mask([onedata_file:attr_name()]) -> data_access_control:bitmask().
+optional_attrs_perms_mask(AttributesList) ->
+    Metadata = case should_fetch_xattrs(AttributesList) of
+        {true, _} -> ?read_metadata_mask;
+        false -> 0
+    end,
+    case lists:member(acl, AttributesList) of
+        true -> Metadata bor ?read_acl_mask;
+        false -> Metadata
+    end.
+
+
 %%%===================================================================
 %%% Stage functions
 %%%===================================================================
 
+
 %% @private
 -spec resolve_file_meta_attrs(state()) -> {state(), record()}.
-resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} = State) ->
+resolve_file_meta_attrs(#state{user_ctx = UserCtx, file_ctx = FileCtx, current_stage_attrs = Attrs} = State) ->
     {FileDoc, State2} = get_file_doc(State),
-    {ParentGuid, #state{file_ctx = FileCtx} = State3} = resolve_parent_guid(State2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
     ShareId = file_ctx:get_share_id_const(FileCtx),
     BaseAttrs = case ShareId of
@@ -142,16 +178,25 @@ resolve_file_meta_attrs(#state{user_ctx = UserCtx, current_stage_attrs = Attrs} 
     end,
     {Acl, FileCtx2} = file_ctx:get_acl(FileCtx),
     
-    {State3#state{file_ctx = FileCtx2}, BaseAttrs#file_attr{
+    {State2#state{file_ctx = FileCtx2}, BaseAttrs#file_attr{
         active_permissions_type = ActivePermissionsType,
         index = build_index(FileCtx, FileDoc),
-        parent_guid = ParentGuid,
         acl = Acl,
         symlink_value = resolve_symlink_value(FileDoc),
         type = file_meta:get_effective_type(FileDoc),
         hardlink_count = resolve_link_count(FileCtx2, ShareId, Attrs),
         is_deleted = file_meta:is_deleted(FileDoc)
     }}.
+
+
+%% @private
+-spec resolve_parent_attrs(state()) -> {state(), record()}.
+resolve_parent_attrs(#state{file_ctx = FileCtx, user_ctx = UserCtx} = State) ->
+    % NOTE: parent_uuid is part of a file meta, but for listed files it is also already cached, so we can try to
+    % avoid unnecessary doc fetching; that's why this is a separate stage function and not a part of the
+    % file meta stage (which always fetches file_meta doc)
+    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
+    {State#state{file_ctx = FileCtx2}, #file_attr{parent_guid = ParentGuid}}.
 
 
 %% @private
@@ -398,19 +443,6 @@ get_masked_private_base_attrs(ShareId, #document{value = #file_meta{
 
 
 %% @private
--spec resolve_parent_guid(state()) ->
-    {file_id:file_guid() | undefined, state()}.
-resolve_parent_guid(#state{file_ctx = FileCtx, current_stage_attrs = RequestedAttrs, user_ctx = UserCtx} = State) ->
-    case lists:member(?attr_parent_guid, RequestedAttrs) of
-        true ->
-            {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_logically_detached(FileCtx, UserCtx),
-            {ParentGuid, State#state{file_ctx = FileCtx2}};
-        _ ->
-            {undefined, State}
-    end.
-
-
-%% @private
 -spec resolve_link_count(file_ctx:ctx(), od_share:id(), [onedata_file:attr_name()]) ->
     non_neg_integer() | undefined.
 resolve_link_count(FileCtx, ShareId, RequestedAttrs) ->
@@ -587,7 +619,7 @@ handle_conflicting_name(State, FileCtx, ExtendedName, ConflictingName, Conflicti
 %% @private
 -spec get_file_doc(state()) -> {file_meta:doc(), state()}.
 get_file_doc(#state{file_ctx = FileCtx} = State) ->
-    {FileDoc, FileCtx2} = case read_option(allow_deleted_files, State, false) of
+    {#document{} = FileDoc, FileCtx2} = case read_option(allow_deleted_files, State, false) of
         true ->
             file_ctx:get_and_cache_file_doc_including_deleted(FileCtx);
         false ->

@@ -1792,8 +1792,8 @@ sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Con
     }, ?SPACE_ID),
 
     % TestFile should not be reimported
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
+    ?assertMatch({ok, [], _},
+        lfm_proxy:get_children_attrs(W1, SessId, {path, ?SPACE_PATH}, file_listing:starting_opts_with_tune_for_cont_listing(false))),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, SpaceTestFilePath}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT},

@@ -152,6 +152,7 @@ stages:
         - gs_provider_logic
         - gs_share_logic
         - gs_space_logic
+        - gs_space_support
         - gs_storage_logic
         - gs_token_logic
         - gs_user_logic
@@ -213,6 +214,7 @@ stages:
         - session_watcher
 #        - single_node_failure # TODO VFS-11953
 #        - space_unsupport # TODO VFS-12430
+        - space_file_events_rest
         - storage_cleanup
         - storage_files
         - storage_import
@@ -1197,6 +1199,13 @@ gs_space_logic:
     - <<: *ct_logs
       name: ct_logs_gs_space_logic.tar.gz
 
+gs_space_support:
+  <<: *ct-onenv-job
+  key: GSSPACESUPPORT
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_gs_space_support.tar.gz
+
 gs_storage_logic:
   <<: *ct-job
   key: STLO
@@ -1641,6 +1650,13 @@ session_watcher:
 #    - <<: *ct_logs
 #      name: ct_logs_space_unsupport.tar.gz
 
+space_file_events_rest:
+  <<: *ct-onenv-job
+  key: SPACEEVENTSFILES
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_space_file_events_rest.tar.gz
+
 storage_cleanup:
   <<: *ct-job
   key: STCL
@@ -1986,6 +2002,7 @@ Coverage report:
     - artifact: ct_logs_gs_provider_logic.tar.gz
     - artifact: ct_logs_gs_share_logic.tar.gz
     - artifact: ct_logs_gs_space_logic.tar.gz
+    - artifact: ct_logs_gs_space_support.tar.gz
     - artifact: ct_logs_gs_storage_logic.tar.gz
     - artifact: ct_logs_gs_token_logic.tar.gz
     - artifact: ct_logs_gs_user_logic.tar.gz
@@ -2047,6 +2064,7 @@ Coverage report:
     - artifact: ct_logs_session_watcher.tar.gz
 #    - artifact: ct_logs_single_node_failure.tar.gz # TODO VFS-11953
 #    - artifact: ct_logs_space_unsupport.tar.gz # TODO VFS-12430
+    - artifact: ct_logs_space_file_events_rest.tar.gz
     - artifact: ct_logs_storage_cleanup.tar.gz
     - artifact: ct_logs_storage_files.tar.gz
     - artifact: ct_logs_storage_import.tar.gz

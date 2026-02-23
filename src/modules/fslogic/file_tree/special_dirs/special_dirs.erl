@@ -26,7 +26,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([set_up_for_new_space/1, report_new_user/1]).
+-export([set_up_for_new_local_space/1, set_up_for_new_proxy_space/1, report_new_user/1]).
 -export([exists/1, is_special/1, is_special/3, is_filesystem_root_dir/1, is_operation_supported/2,
     is_affected_by_protection_flags/1, is_included_in_harvesting/1, is_included_in_dir_stats/1,
     is_included_in_events/1, is_logically_detached/1]).
@@ -38,13 +38,19 @@
 %%%===================================================================
 
 % NOTE: this function MUST be idempotent.
--spec set_up_for_new_space(od_space:id()) -> ok.
-set_up_for_new_space(SpaceId) ->
+-spec set_up_for_new_local_space(od_space:id()) -> ok.
+set_up_for_new_local_space(SpaceId) ->
     space_dir:ensure_exists(SpaceId),
     trash_dir:ensure_exists(SpaceId),
     space_archives_dir:ensure_exists(SpaceId),
     tmp_dir:ensure_exists(SpaceId),
     opened_deleted_files_dir:ensure_exists(SpaceId).
+
+
+% NOTE: this function MUST be idempotent.
+-spec set_up_for_new_proxy_space(od_space:id()) -> ok.
+set_up_for_new_proxy_space(SpaceId) ->
+    space_dir:ensure_exists(SpaceId).
 
 
 % NOTE: this function MUST be idempotent.

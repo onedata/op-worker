@@ -43,6 +43,11 @@
 
 -type fallback_strategy() :: no_fallback | retry_as_root | retry_as_root_and_chown.
 
+%% default: 5 minutes
+-define(HELPER_MALFUNCTION_THROTTLE_LOG_INTERVAL, op_worker:get_env(
+    storage_driver_helper_malfunction_throttle_log_interval, 300
+)).
+
 
 %%%===================================================================
 %%% API
@@ -409,13 +414,17 @@ read(SDHandle, Offset, MaxSize) ->
                         {ok, Bytes};
                     MaxSize ->
                         {ok, Bytes};
-                    Size ->
+                    Size when Size < MaxSize ->
                         case read(SDHandle, Offset + Size, MaxSize - Size) of
                             {ok, Bytes2} ->
                                 {ok, <<Bytes/binary, Bytes2/binary>>};
                             Error = {error, _} ->
                                 Error
-                        end
+                        end;
+                    ReadSize ->
+                        % helper returns more bytes than requested
+                        log_helper_read_too_much(SDHandle, Offset, MaxSize, ReadSize),
+                        {error, ?EIO}
                 end;
             {error, Error} when Error == ?ENOENT orelse Error == ?EIO, Offset > 0 ->
                 % some object storages return enoent or eio when trying to read bytes
@@ -429,6 +438,23 @@ read(SDHandle, Offset, MaxSize) ->
             Error = {error, _} ->
                 Error
         end
+    end).
+
+
+%% @private
+-spec log_helper_read_too_much(handle(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
+    ok.
+log_helper_read_too_much(#sd_handle{
+    space_id = SpaceId,
+    file_uuid = FileUuid,
+    storage_id = StorageId,
+    file = StorageFileId
+}, Offset, MaxSize, HelperReturnedSize) ->
+    Key = {?MODULE, SpaceId, StorageId},
+    utils:throttle(Key, ?HELPER_MALFUNCTION_THROTTLE_LOG_INTERVAL, fun() ->
+        ?error(?autoformat_with_msg("Helper returned more bytes than requested on file read", [
+            SpaceId, FileUuid, StorageId, StorageFileId, Offset, MaxSize, HelperReturnedSize
+        ]))
     end).
 
 

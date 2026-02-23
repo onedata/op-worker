@@ -85,7 +85,10 @@
     dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow/1,
     dip_archive_nested_datasets_bagit_layout/1,
     modify_preserved_plain_archive_test/1,
-    modify_preserved_bagit_archive_test/1
+    modify_preserved_bagit_archive_test/1,
+
+    share_archive_dir_plain/1,
+    share_archive_dir_bagit/1
 ]).
 
 groups() -> [
@@ -144,7 +147,10 @@ groups() -> [
         dip_archive_nested_datasets_bagit_layout,
 
         modify_preserved_plain_archive_test,
-        modify_preserved_bagit_archive_test
+        modify_preserved_bagit_archive_test,
+        
+        share_archive_dir_plain,
+        share_archive_dir_bagit
     ]}
 ].
 
@@ -368,6 +374,12 @@ modify_preserved_plain_archive_test(_Config) ->
 
 modify_preserved_bagit_archive_test(_Config) ->
     modify_preserved_archive_test_base(?ARCHIVE_BAGIT_LAYOUT).
+
+share_archive_dir_plain(_Config) ->
+    share_archive_dir_test_base(?ARCHIVE_PLAIN_LAYOUT).
+
+share_archive_dir_bagit(_Config) ->
+    share_archive_dir_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 %===================================================================
 % Test bases
@@ -735,6 +747,27 @@ modify_preserved_archive_test_base(Layout) ->
     ?assertEqual({error, eperm}, lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, write)),
     ?assertEqual(?ERR_POSIX(?EPERM), opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])),
     ?assertEqual({error, eperm}, lfm_proxy:rm_recursive(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid})).
+
+
+share_archive_dir_test_base(Layout) ->
+    #object{
+        guid = Guid,
+        dataset = #dataset_object{
+            archives = [#archive_object{id = ArchiveId}]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]}
+        }),
+    [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
+    Node = oct_background:get_random_provider_node(Provider),
+    ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, rpc:call(Node, archive, get, [ArchiveId]), ?ATTEMPTS),
+    
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
+    {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(krakow, SessId, ?FILE_REF(Guid), ?RAND_STR())),
+    ?assertMatch(ok, opt_shares:remove(krakow, SessId, ShareId)).
+    
+
 
 %===================================================================
 % SetUp and TearDown functions

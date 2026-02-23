@@ -31,6 +31,7 @@
 -export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([before_listeners_start/0, after_listeners_stop/0]).
+-export([cluster_init_safe_mode_disabling_method/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
@@ -52,13 +53,13 @@
 % Human readable version is included to for logging purposes. It's the last version
 % where this cluster generation was the current one.
 -define(CLUSTER_GENERATIONS, [
-    {1, ?LINE_19_02},
-    {2, ?LINE_20_02(<<"0-beta3">>)},
-    {3, ?LINE_20_02(<<"1">>)},
-    {4, ?LINE_21_02(<<"2">>)},
-    {5, ?LINE_21_02(<<"3">>)},
-    {6, ?LINE_21_02(<<"5">>)},
-    {7, ?LINE_21_02(<<"8">>)},
+    {1, <<"19.02.5">>},
+    {2, <<"20.02.0-beta3">>},
+    {3, <<"21.02.1">>},
+    {4, <<"21.02.2">>},
+    {5, <<"21.02.3">>},
+    {6, <<"21.02.5">>},
+    {7, <<"21.02.8">>},
     {8, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
@@ -153,7 +154,7 @@ renamed_models() ->
 before_init() ->
     try
         op_worker_sup:start_link(),
-        start_logger_handlers(),
+        start_custom_logger_handlers(),
         ok = helpers_nif:init()
     catch
         _:Error:Stacktrace ->
@@ -244,13 +245,13 @@ before_cluster_upgrade() ->
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(3) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
@@ -261,7 +262,7 @@ upgrade_cluster(4) ->
     end),
     {ok, 5};
 upgrade_cluster(5) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
@@ -295,7 +296,7 @@ upgrade_cluster(5) ->
     end),
     {ok, 6};
 upgrade_cluster(6) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
@@ -305,7 +306,7 @@ upgrade_cluster(6) ->
     end),
     {ok, 7};
 upgrade_cluster(7) ->
-    % Upgrade is performed by spawned process, so it also needs to be whitelisted by safe mode.
+    % Upgrade is performed by spawned process, so it also needs to be whitelisted.
     safe_mode:whitelist_pid(self()),
     await_zone_connection_and_run(fun() ->
         storage:upgrade_after_swift_version_update_to_v3(),
@@ -373,6 +374,7 @@ after_listeners_stop() ->
     % (though a working connection cannot be guaranteed here).
     gs_channel_service:terminate_internal_service().
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:listeners/0}.
@@ -382,6 +384,13 @@ after_listeners_stop() ->
 listeners() -> [
     https_listener
 ].
+
+
+%% @doc overrides {@link node_manager_plugin_default:cluster_init_safe_mode_disabling_method/0}
+-spec cluster_init_safe_mode_disabling_method() -> implicit_before_listeners_start | explicit.
+cluster_init_safe_mode_disabling_method() ->
+    explicit.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -509,7 +518,7 @@ init_etses_for_space_internal(Space) ->
 -spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
 await_zone_connection_and_run(Fun) ->
     ?info("Awaiting Onezone connection..."),
-    await_zone_connection_and_run(gs_channel_service:is_connected(), ?ZONE_CONNECTION_RETRIES, Fun).
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), ?ZONE_CONNECTION_RETRIES, Fun).
 
 -spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
     Fun :: fun(() -> ok)) -> ok.
@@ -519,7 +528,7 @@ await_zone_connection_and_run(false, 0, _) ->
 await_zone_connection_and_run(false, Retries, Fun) ->
     ?warning("The Onezone connection is down. Next retry in 10 seconds..."),
     timer:sleep(timer:seconds(10)),
-    await_zone_connection_and_run(gs_channel_service:is_connected(), Retries - 1, Fun);
+    await_zone_connection_and_run(gs_channel_service:is_connected_and_initialized(), Retries - 1, Fun);
 await_zone_connection_and_run(true, _, Fun) ->
     Fun().
 
@@ -529,15 +538,15 @@ await_zone_connection_and_run(true, _, Fun) ->
 async_run_with_oz_connection_after_upgrade(Fun) ->
     spawn(fun() ->
         utils:wait_until(fun() -> not safe_mode:should_enforce() end, timer:seconds(10), infinity),
-        utils:wait_until(fun gs_channel_service:is_connected/0, timer:seconds(10), infinity),
+        utils:wait_until(fun gs_channel_service:is_connected_and_initialized/0, timer:seconds(10), infinity),
         ?catch_exceptions(Fun())
     end),
     ok.
 
 
 %% @private
--spec start_logger_handlers() -> ok.
-start_logger_handlers() ->
+-spec start_custom_logger_handlers() -> ok.
+start_custom_logger_handlers() ->
     LogDir = ctool:get_env(log_dir),
     Config = ctool:get_env(logger_base_config),
 

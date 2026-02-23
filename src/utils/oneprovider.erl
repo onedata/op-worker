@@ -263,12 +263,17 @@ get_all_nodes_ips(NodeList) ->
 %% @private
 -spec is_service_set_up_in_onezone() -> boolean().
 is_service_set_up_in_onezone() ->
-    {ok, #document{value = #od_cluster{
-        worker_release_version = ClusterReleaseVsn,
-        worker_build_version = ClusterBuildVsn,
-        worker_gui_hash = ClusterGuiHash
-    }}} = cluster_logic:get(),
-    {ClusterReleaseVsn, ClusterBuildVsn, ClusterGuiHash} == current_version_info().
+    case cluster_logic:get() of
+        ?ERR_NO_CONNECTION_TO_ONEZONE(_) ->
+            % possible with intermittent connection problems
+            false;
+        {ok, #document{value = #od_cluster{
+            worker_release_version = ClusterReleaseVsn,
+            worker_build_version = ClusterBuildVsn,
+            worker_gui_hash = ClusterGuiHash
+        }}} ->
+            {ClusterReleaseVsn, ClusterBuildVsn, ClusterGuiHash} == current_version_info()
+    end.
 
 
 %% @private

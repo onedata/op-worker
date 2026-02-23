@@ -316,8 +316,10 @@ is_function_registered(#initiation_ctx{
             false;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
-        _ ->
-            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), undefined))
+        Result ->
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while checking if function is registered", [], Result
+            )))
     end.
 
 
@@ -342,8 +344,10 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
                 true -> ok;
                 false -> throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason))
             end;
-        _ ->
-            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), undefined))
+        Result ->
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while registering function", [], Result
+            )))
     end.
 
 
@@ -409,7 +413,7 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
 %% @private
 -spec add_default_properties(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_default_properties(FunctionDefinition, #initiation_ctx{openfaas_config = OpenfaasConfig}) ->
+add_default_properties(FunctionDefinition, InitiationCtx) ->
     DefaultProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
         case op_worker:get_env(EnvVar, undefined) of
             undefined ->
@@ -430,15 +434,44 @@ add_default_properties(FunctionDefinition, #initiation_ctx{openfaas_config = Ope
         {<<"annotations">>, openfaas_function_annotations}
     ]),
 
-    EnvVars = maps:get(<<"envVars">>, DefaultProperties, #{}),
-    DefaultProperties#{<<"envVars">> => EnvVars#{
+    DefaultProperties#{
+        <<"envVars">> => maps:merge(
+            maps:get(<<"envVars">>, DefaultProperties, #{}),
+            build_system_env_vars(InitiationCtx)
+        )
+    }.
+
+
+%% @private
+-spec build_system_env_vars(initiation_ctx()) -> #{binary() => binary()}.
+build_system_env_vars(#initiation_ctx{
+    openfaas_config = OpenfaasConfig,
+    executor = #atm_openfaas_task_executor{operation_spec = OperationSpec}
+}) ->
+    SystemEnvVars0 = #{
         <<"DEBUG_MODE">> => str_utils:to_binary(
             atm_openfaas_config:should_enable_function_debug_mode(OpenfaasConfig)
         ),
         <<"VERIFY_SSL_CERTIFICATES">> => str_utils:to_binary(
             not atm_openfaas_config:should_disable_tls_verification(OpenfaasConfig)
         )
-    }}.
+    },
+    case OperationSpec of
+        #atm_openfaas_operation_spec{
+            docker_execution_options = #atm_docker_execution_options{
+                mount_oneclient = true,
+                oneclient_mount_point = MountPoint
+            }
+        } ->
+            SystemEnvVars0#{
+                <<"ONECLIENT_MOUNTED">> => <<"true">>,
+                <<"ONECLIENT_MOUNT_POINT">> => MountPoint
+            };
+        _ ->
+            SystemEnvVars0#{
+                <<"ONECLIENT_MOUNTED">> => <<"false">>
+            }
+    end.
 
 
 %% @private
@@ -662,9 +695,6 @@ await_function_readiness(InitiationCtx) ->
 
 %% @private
 -spec await_function_readiness(initiation_ctx(), non_neg_integer()) -> ok | no_return().
-await_function_readiness(_InitiationCtx, 0) ->
-    throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED(?err_ctx()));
-
 await_function_readiness(#initiation_ctx{
     openfaas_config = OpenfaasConfig,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
@@ -679,17 +709,31 @@ await_function_readiness(#initiation_ctx{
             RespBody = json_utils:decode(EncodedRespBody),
 
             case maps:get(<<"availableReplicas">>, RespBody, 0) > 0 of
-                true -> ready;
-                false -> not_ready
+                true ->
+                    ok;
+                false ->
+                    case RetriesLeft < 1 of
+                        true ->
+                            throw(?ERR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED(?err_ctx()));
+                        false ->
+                            retry
+                    end
             end;
-        _ ->
-            not_ready
+        OpenfaasAns ->
+            case RetriesLeft < 1 of
+                true ->
+                    throw(?report_internal_server_error(?autoformat_with_msg(
+                        "Unexpected result while checking function readiness", [], OpenfaasAns
+                    )));
+                false ->
+                    retry
+            end
     end,
 
     case Result of
-        ready ->
+        ok ->
             log_function_ready(InitiationCtx);
-        not_ready ->
+        retry ->
             assert_atm_workflow_execution_is_not_stopping(InitiationCtx),
             timer:sleep(timer:seconds(?AWAIT_INTERVAL_SEC)),
             await_function_readiness(InitiationCtx, RetriesLeft - 1)
@@ -761,8 +805,10 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
             ok;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason));
-        _ ->
-            throw(?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), undefined))
+        Result ->
+            throw(?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while scheduling function execution", [], Result
+            )))
     end.
 
 
@@ -806,7 +852,11 @@ remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
             log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             Error = ?ERR_ATM_OPENFAAS_QUERY_FAILED(?err_ctx(), ErrorReason),
-            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error)
+            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
+        Result ->
+            ?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected result while removing function", [], Result
+            ))
     end.
 
 
