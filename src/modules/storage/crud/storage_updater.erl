@@ -27,6 +27,14 @@
 ]).
 
 
+-record(saga_step, {
+    should_run :: boolean(),
+    action :: fun(() -> ok | {error, term()}),
+    compensation :: fun(() -> ok | {error, term()})
+}).
+-type saga_step() :: #saga_step{}.
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -71,38 +79,52 @@ update_helper_config(StorageId, UpdateFun) ->
 %% @private
 -spec do_update(storage:id(), onedata_storage:update_spec()) -> ok | errors:error().
 do_update(StorageId, UpdateSpec) ->
-    CurrentOpStorageData = get_op_storage_data(StorageId),
-    assert_valid_type(CurrentOpStorageData, UpdateSpec),
+    PrevStorageConfigDoc = get_op_storage_config_doc(StorageId),
+    PrevStorageConfig = PrevStorageConfigDoc#document.value,
 
-    CurrentOzStorageData = get_oz_storage_data(StorageId),
+    assert_valid_type(PrevStorageConfig, UpdateSpec),
+
+    PrevOzStorageData = get_oz_storage_data(StorageId),
 
     {HelperConfigChanged, LumaChanged, NewStorageConfig} = prepare_new_storage_config(
-        StorageId, UpdateSpec, CurrentOpStorageData, CurrentOzStorageData
+        StorageId, UpdateSpec, PrevStorageConfig, PrevOzStorageData
     ),
 
-    MaybeQosParams = UpdateSpec#storage_update_spec.qos_parameters,
-
-    % TODO fld with rollback and compensation ?
-    lists:foreach(fun
-        ({true, UpdateFun}) ->
-            case UpdateFun() of
-                ok -> ok;
-                {error, _} = Error -> throw(Error)
-            end;
-        (_) ->
-            ok
-    end, [
-        {HelperConfigChanged orelse LumaChanged, fun() ->
-            case storage_config:update(StorageId, fun(_) -> {ok, NewStorageConfig} end) of
-                {ok, _} -> ok;
-                {error, _} = Error -> Error
+    Result = execute_saga([
+        #saga_step{
+            should_run = HelperConfigChanged orelse LumaChanged,
+            action = fun() ->
+                update_in_op(StorageId, NewStorageConfig, HelperConfigChanged)
+            end,
+            compensation = fun() ->
+                % TODO log here and in the function? function itself has many steps ??
+                update_in_op(StorageId, PrevStorageConfig, HelperConfigChanged)
             end
-        end},
-        {HelperConfigChanged, fun() -> on_helper_changed(StorageId) end},
-        {true, fun() -> storage_logic:update_in_zone(StorageId, UpdateSpec) end},
-        {MaybeQosParams /= undefined, fun() -> on_qos_change(StorageId) end},
-        {LumaChanged, fun() -> luma_crud_api:clear_db(CurrentOpStorageData) end}
-    ]).
+        },
+        #saga_step{
+            should_run = true,
+            action = fun() ->
+                storage_logic:update_in_zone(StorageId, UpdateSpec)
+            end,
+            compensation = fun() ->
+                %% TODO log ?
+                RollbackUpdateSpec = build_rollback_oz_spec(UpdateSpec, PrevOzStorageData),
+                storage_logic:update_in_zone(StorageId, RollbackUpdateSpec)
+            end
+        },
+        #saga_step{
+            should_run = UpdateSpec#storage_update_spec.qos_parameters /= undefined,
+            action = fun() -> on_qos_change(StorageId) end,
+            compensation = fun() -> ok end
+        }
+    ]),
+
+    LumaChanged andalso best_effort_clear_luma(StorageId, case Result of
+        ok -> PrevStorageConfig;
+        {error, _} -> NewStorageConfig
+    end),
+
+    Result.
 
 
 %% @private
@@ -115,18 +137,18 @@ get_oz_storage_data(StorageId) ->
 
 
 %% @private
--spec get_op_storage_data(storage:id()) -> storage:data() | no_return().
-get_op_storage_data(StorageId) ->
-    case storage:get(StorageId) of
-        {ok, StorageData} -> StorageData;
+-spec get_op_storage_config_doc(storage:id()) -> storage_config:doc() | no_return().
+get_op_storage_config_doc(StorageId) ->
+    case storage_config:get(StorageId) of
+        {ok, StorageConfigDoc} -> StorageConfigDoc;
         {error, not_found} -> throw(?ERROR_NOT_FOUND)
     end.
 
 
 %% @private
--spec assert_valid_type(storage:data(), onedata_storage:update_spec()) -> ok | no_return().
-assert_valid_type(OpStorageData, UpdateSpec) ->
-    HelperConfig = storage:get_helper_config(OpStorageData),
+-spec assert_valid_type(storage_config:record(), onedata_storage:update_spec()) -> ok | no_return().
+assert_valid_type(StorageConfig, UpdateSpec) ->
+    HelperConfig = StorageConfig#storage_config.helper_config,
     StorageType = helper_config:get_name(HelperConfig),
 
     case StorageType == UpdateSpec#storage_update_spec.type of
@@ -139,23 +161,23 @@ assert_valid_type(OpStorageData, UpdateSpec) ->
 -spec prepare_new_storage_config(
     storage:id(),
     onedata_storage:update_spec(),
-    storage:data(),
+    storage_config:record(),
     od_storage:record()
 ) ->
     {boolean(), boolean(), storage_config:record()} | no_return().
-prepare_new_storage_config(StorageId, UpdateSpec, CurrentOpStorageData, CurrentOzStorageData) ->
-    CurrentHelperConfig = storage:get_helper_config(CurrentOpStorageData),
+prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStorageData) ->
+    PrevHelperConfig = PrevStorageConfig#storage_config.helper_config,
 
     {ReadonlyChanged, NewReadonly} = infer_new_value(
         UpdateSpec#storage_update_spec.readonly,
-        CurrentOzStorageData#od_storage.readonly
+        PrevOzStorageData#od_storage.readonly
     ),
     {ImportedChanged, NewImported} = infer_new_value(
         UpdateSpec#storage_update_spec.imported,
-        CurrentOzStorageData#od_storage.imported
+        PrevOzStorageData#od_storage.imported
     ),
 
-    {HelperConfigChanged, NewHelperConfig} = case helper_config:update(CurrentHelperConfig, UpdateSpec) of
+    {HelperConfigChanged, NewHelperConfig} = case helper_config:update(PrevHelperConfig, UpdateSpec) of
         {ok, UpdatedHelperConfig} ->
             storage_crud_utils:verify_configuration(
                 StorageId, NewReadonly, NewImported, UpdatedHelperConfig
@@ -163,26 +185,26 @@ prepare_new_storage_config(StorageId, UpdateSpec, CurrentOpStorageData, CurrentO
             {true, UpdatedHelperConfig};
         {error, no_change} when ReadonlyChanged orelse ImportedChanged ->
             storage_crud_utils:verify_configuration(
-                StorageId, NewReadonly, NewImported, CurrentHelperConfig
+                StorageId, NewReadonly, NewImported, PrevHelperConfig
             ),
-            {false, CurrentHelperConfig};
+            {false, PrevHelperConfig};
         {error, no_change} ->
-            {false, CurrentHelperConfig}
+            {false, PrevHelperConfig}
     end,
 
-    CurrentLumaConfig = storage:get_luma_config(CurrentOpStorageData),
-    CurrentLumaGeneration = storage:get_luma_generation(CurrentOpStorageData),
+    PrevLumaConfig = PrevStorageConfig#storage_config.luma_config,
+    PrevLumaGeneration = PrevStorageConfig#storage_config.luma_generation,
 
     {LumaChanged, NewLumaConfig} = case UpdateSpec#storage_update_spec.luma of
         undefined ->
-            {false, CurrentLumaConfig};
+            {false, PrevLumaConfig};
         LumaSpec ->
             LumaDiff = build_luma_diff(LumaSpec),
-            case luma_config:update(CurrentLumaConfig, LumaDiff) of
+            case luma_config:update(PrevLumaConfig, LumaDiff) of
                 {ok, UpdatedLumaConfig} ->
                     {true, UpdatedLumaConfig};
                 {error, no_update} ->
-                    {false, CurrentLumaConfig};
+                    {false, PrevLumaConfig};
                 {error, _} = Error ->
                     throw(Error)
             end
@@ -197,16 +219,16 @@ prepare_new_storage_config(StorageId, UpdateSpec, CurrentOpStorageData, CurrentO
         helper_config = NewHelperConfig,
         luma_config = NewLumaConfig,
         luma_generation = case LumaChanged of
-            true -> CurrentLumaGeneration + 1;
-            false -> CurrentLumaGeneration
+            true -> PrevLumaGeneration + 1;
+            false -> PrevLumaGeneration
         end
     }}.
 
 
 %% @private
 -spec infer_new_value(undefined | term(), term()) -> {boolean(), term()}.
-infer_new_value(undefined, CurrentValue) -> {false, CurrentValue};
-infer_new_value(NewValue, CurrentValue) -> {NewValue /= CurrentValue, CurrentValue}.
+infer_new_value(undefined, PrevValue) -> {false, PrevValue};
+infer_new_value(NewValue, PrevValue) -> {NewValue /= PrevValue, PrevValue}.
 
 
 %% @private
@@ -220,12 +242,56 @@ build_luma_diff(#luma_spec{feed = Feed, url = Url, api_key = ApiKey}) ->
 
 
 %% @private
+-spec update_in_op(storage:id(), storage_config:record(), boolean()) -> ok | {error, term()}.
+update_in_op(StorageId, StorageConfig, HelperConfigChanged) ->
+    case storage_config:update(StorageId, fun(_) -> {ok, StorageConfig} end) of
+        {ok, _} when HelperConfigChanged ->
+            on_helper_changed(StorageId);
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     % TODO VFS-11947 consider error handling here and error propagation / rollback
     rtransfer_config:add_storage(StorageId),
     helpers_reload:refresh_helpers_by_storage(StorageId).
+
+
+%% @private
+-spec build_rollback_oz_spec(onedata_storage:update_spec(), od_storage:record()) ->
+    onedata_storage:update_spec().
+build_rollback_oz_spec(UpdateSpec, PrevOzData) ->
+    #storage_update_spec{
+        type = UpdateSpec#storage_update_spec.type,
+        name = rollback_value(
+            UpdateSpec#storage_update_spec.name,
+            PrevOzData#od_storage.name
+        ),
+        readonly = rollback_value(
+            UpdateSpec#storage_update_spec.readonly,
+            PrevOzData#od_storage.readonly
+        ),
+        imported = rollback_value(
+            UpdateSpec#storage_update_spec.imported,
+            PrevOzData#od_storage.imported
+        ),
+        qos_parameters = rollback_value(
+            UpdateSpec#storage_update_spec.qos_parameters,
+            PrevOzData#od_storage.qos_parameters
+        )
+    }.
+
+
+%% @private
+-spec rollback_value(undefined | term(), term()) -> undefined | term().
+rollback_value(undefined, _OldValue) -> undefined;
+rollback_value(_NewValue, OldValue) -> OldValue.
 
 
 %% @private
@@ -236,3 +302,74 @@ on_qos_change(StorageId) ->
     lists:foreach(fun(SpaceId) ->
         ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
     end, Spaces).
+
+
+%% @private
+-spec best_effort_clear_luma(storage:id(), storage_config:record()) -> ok.
+best_effort_clear_luma(StorageId, StorageConfig) ->
+    try
+        luma_crud_api:clear_db(#document{
+            key = StorageId,
+            value = StorageConfig
+        })
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception(
+            "Failed to clear LUMA DB for generation ~B of storage '~ts'",
+            [StorageConfig#storage_config.luma_generation, StorageId],
+            Class, Reason, Stacktrace
+        )
+    end,
+
+    ok.
+
+
+%%%===================================================================
+%%% Saga execution
+%%%===================================================================
+
+
+%% @private
+-spec execute_saga([saga_step()]) -> ok | {error, term()}.
+execute_saga(Steps) ->
+    execute_saga(Steps, []).
+
+
+%% @private
+-spec execute_saga([saga_step()], [fun()]) -> ok | {error, term()}.
+execute_saga([], _Compensations) ->
+    ok;
+
+execute_saga([#saga_step{should_run = false} | Rest], Compensations) ->
+    execute_saga(Rest, Compensations);
+
+execute_saga([Step = #saga_step{should_run = true} | Rest], Compensations) ->
+    case run_saga_action(Step#saga_step.action) of
+        ok ->
+            execute_saga(Rest, [Step#saga_step.compensation | Compensations]);
+        {error, _} = Error ->
+            run_compensations(Compensations),
+            Error
+    end.
+
+
+%% @private
+-spec run_saga_action(fun(() -> ok | {error, term()})) -> ok | {error, term()}.
+run_saga_action(Action) ->
+    try
+        Action()
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception("Storage update step failed", Class, Reason, Stacktrace)
+    end.
+
+
+%% @private
+-spec run_compensations([fun()]) -> ok.
+run_compensations([]) ->
+    ok;
+run_compensations([Compensation | Rest]) ->
+    try
+        Compensation()
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception("Storage update rollback compensation failed", Class, Reason, Stacktrace)
+    end,
+    run_compensations(Rest).
