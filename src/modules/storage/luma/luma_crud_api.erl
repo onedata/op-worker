@@ -13,6 +13,8 @@
 -module(luma_crud_api).
 -author("Bartosz Walkowicz").
 
+-include_lib("ctool/include/logging.hrl").
+
 -export([
     clear_db/1,
     clear_db/2,
@@ -48,15 +50,27 @@
 %%%===================================================================
 
 
--spec clear_db(storage:id() | storage:data()) -> ok | {error, term()}.
+-spec clear_db(storage:id() | storage:data() | storage_config:doc()) -> ok.
 clear_db(StorageIdOrData) ->
     StorageData = ensure_storage_data(StorageIdOrData),
+    StorageId = storage:get_id(StorageData),
+    LumaGeneration = storage:get_luma_generation(StorageData),
 
-    luma_storage_users:clear_all(StorageData),
-    luma_spaces_display_defaults:clear_all(StorageData),
-    luma_spaces_posix_storage_defaults:clear_all(StorageData),
-    luma_onedata_users:clear_all(StorageData),
-    luma_onedata_groups:clear_all(StorageData).
+    ?info("Clearing LUMA DB tables for storage '~ts' (generation: ~B)", [StorageId, LumaGeneration]),
+
+    Tables = [
+        {luma_storage_users, fun() -> luma_storage_users:clear_all(StorageData) end},
+        {luma_spaces_display_defaults, fun() -> luma_spaces_display_defaults:clear_all(StorageData) end},
+        {luma_spaces_posix_storage_defaults, fun() -> luma_spaces_posix_storage_defaults:clear_all(StorageData) end},
+        {luma_onedata_users, fun() -> luma_onedata_users:clear_all(StorageData) end},
+        {luma_onedata_groups, fun() -> luma_onedata_groups:clear_all(StorageData) end}
+    ],
+    lists:foreach(fun({TableName, ClearFun}) ->
+        ?info("Clearing LUMA table '~ts'", [TableName]),
+        ClearFun()
+    end, Tables),
+
+    ?info("Successfully cleared LUMA DB").
 
 
 -spec clear_db(storage:id() | storage:data(), od_space:id()) -> ok | {error, term()}.
@@ -252,9 +266,7 @@ onedata_groups_delete(StorageIdOrData, AclGroup) ->
 
 
 %% @private
--spec ensure_storage_data(storage:id() | storage:data()) -> storage:data().
-ensure_storage_data(StorageId) when is_binary(StorageId) ->
-    {ok, Data} = storage:get(StorageId),
-    Data;
-ensure_storage_data(StorageData) ->
-    StorageData.
+-spec ensure_storage_data(storage:id() | storage:data() | storage_config:doc()) -> storage:data().
+ensure_storage_data(StorageIdOrDataOrConfig) ->
+    {ok, Data} = storage:get(StorageIdOrDataOrConfig),
+    Data.

@@ -28,11 +28,14 @@
 
 
 -record(saga_step, {
+    name :: binary(),
     should_run :: boolean(),
     action :: fun(() -> ok | {error, term()}),
     compensation :: fun(() -> ok | {error, term()})
 }).
 -type saga_step() :: #saga_step{}.
+
+-type named_compensation() :: {Name :: binary(), fun(() -> ok | {error, term()})}.
 
 
 %%%===================================================================
@@ -92,27 +95,28 @@ do_update(StorageId, UpdateSpec) ->
 
     Result = execute_saga([
         #saga_step{
+            name = <<"update OP storage config">>,
             should_run = HelperConfigChanged orelse LumaChanged,
             action = fun() ->
                 update_in_op(StorageId, NewStorageConfig, HelperConfigChanged)
             end,
             compensation = fun() ->
-                % TODO log here and in the function? function itself has many steps ??
                 update_in_op(StorageId, PrevStorageConfig, HelperConfigChanged)
             end
         },
         #saga_step{
+            name = <<"update storage data in Onezone">>,
             should_run = true,
             action = fun() ->
                 storage_logic:update_in_zone(StorageId, UpdateSpec)
             end,
             compensation = fun() ->
-                %% TODO log ?
                 RollbackUpdateSpec = build_rollback_oz_spec(UpdateSpec, PrevOzStorageData),
                 storage_logic:update_in_zone(StorageId, RollbackUpdateSpec)
             end
         },
         #saga_step{
+            name = <<"reevaluate QoS entries">>,
             should_run = UpdateSpec#storage_update_spec.qos_parameters /= undefined,
             action = fun() -> on_qos_change(StorageId) end,
             compensation = fun() -> ok end
@@ -228,7 +232,7 @@ prepare_new_storage_config(StorageId, UpdateSpec, PrevStorageConfig, PrevOzStora
 %% @private
 -spec infer_new_value(undefined | term(), term()) -> {boolean(), term()}.
 infer_new_value(undefined, PrevValue) -> {false, PrevValue};
-infer_new_value(NewValue, PrevValue) -> {NewValue /= PrevValue, PrevValue}.
+infer_new_value(NewValue, PrevValue) -> {NewValue /= PrevValue, NewValue}.
 
 
 %% @private
@@ -258,7 +262,7 @@ update_in_op(StorageId, StorageConfig, HelperConfigChanged) ->
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    % TODO VFS-11947 consider error handling here and error propagation / rollback
+    % TODO VFS-12677 consider error handling here and error propagation / rollback
     rtransfer_config:add_storage(StorageId),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
@@ -307,6 +311,8 @@ on_qos_change(StorageId) ->
 %% @private
 -spec best_effort_clear_luma(storage:id(), storage_config:record()) -> ok.
 best_effort_clear_luma(StorageId, StorageConfig) ->
+    LumaGeneration = StorageConfig#storage_config.luma_generation,
+
     try
         luma_crud_api:clear_db(#document{
             key = StorageId,
@@ -314,8 +320,9 @@ best_effort_clear_luma(StorageId, StorageConfig) ->
         })
     catch Class:Reason:Stacktrace ->
         ?examine_exception(
-            "Failed to clear LUMA DB for generation ~B of storage '~ts'",
-            [StorageConfig#storage_config.luma_generation, StorageId],
+            "Failed to clear LUMA DB for generation ~B of storage '~ts' - "
+            "stale LUMA entries may remain in the database and require manual cleanup",
+            [LumaGeneration, StorageId],
             Class, Reason, Stacktrace
         )
     end,
@@ -335,17 +342,19 @@ execute_saga(Steps) ->
 
 
 %% @private
--spec execute_saga([saga_step()], [fun()]) -> ok | {error, term()}.
+-spec execute_saga([saga_step()], [named_compensation()]) -> ok | {error, term()}.
 execute_saga([], _Compensations) ->
     ok;
 
 execute_saga([#saga_step{should_run = false} | Rest], Compensations) ->
     execute_saga(Rest, Compensations);
 
-execute_saga([Step = #saga_step{should_run = true} | Rest], Compensations) ->
-    case run_saga_action(Step#saga_step.action) of
+execute_saga([#saga_step{should_run = true, name = Name} = Step | Rest], Compensations) ->
+    ?info("Storage update saga - executing step: ~ts", [Name]),
+    case run_saga_action(Name, Step#saga_step.action) of
         ok ->
-            execute_saga(Rest, [Step#saga_step.compensation | Compensations]);
+            NewCompensations = [{Name, Step#saga_step.compensation} | Compensations],
+            execute_saga(Rest, NewCompensations);
         {error, _} = Error ->
             run_compensations(Compensations),
             Error
@@ -353,23 +362,31 @@ execute_saga([Step = #saga_step{should_run = true} | Rest], Compensations) ->
 
 
 %% @private
--spec run_saga_action(fun(() -> ok | {error, term()})) -> ok | {error, term()}.
-run_saga_action(Action) ->
+-spec run_saga_action(binary(), fun(() -> ok | {error, term()})) -> ok | {error, term()}.
+run_saga_action(Name, Action) ->
     try
         Action()
     catch Class:Reason:Stacktrace ->
-        ?examine_exception("Storage update step failed", Class, Reason, Stacktrace)
+        ?examine_exception(
+            "Storage update saga step '~ts' failed", [Name],
+            Class, Reason, Stacktrace
+        )
     end.
 
 
 %% @private
--spec run_compensations([fun()]) -> ok.
+-spec run_compensations([named_compensation()]) -> ok.
 run_compensations([]) ->
     ok;
-run_compensations([Compensation | Rest]) ->
+run_compensations([{Name, Compensation} | Rest]) ->
+    ?warning("Storage update saga - compensating step: ~ts", [Name]),
     try
         Compensation()
     catch Class:Reason:Stacktrace ->
-        ?examine_exception("Storage update rollback compensation failed", Class, Reason, Stacktrace)
+        ?examine_exception(
+            "Storage update saga - FAILED to compensate step; "
+            "manual intervention may be required to restore consistent state",
+            Class, Reason, Stacktrace
+        )
     end,
     run_compensations(Rest).

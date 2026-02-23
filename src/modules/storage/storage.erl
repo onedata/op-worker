@@ -104,7 +104,7 @@ describe(StorageId) ->
     storage_describer:describe(StorageId).
 
 
--spec get(id() | data()) -> {ok, data()} | {error, term()}.
+-spec get(id() | data() | storage_config:doc()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
 get(StorageData = #document{}) ->
