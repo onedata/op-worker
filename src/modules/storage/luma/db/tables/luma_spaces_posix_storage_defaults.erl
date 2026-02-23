@@ -30,33 +30,35 @@
 
 -type key() :: od_space:id().
 -type record() :: luma_posix_credentials:credentials().
--type storage() :: storage:id() | storage:data().
 
 -export_type([key/0, record/0]).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec get_or_acquire(storage(), key()) -> {ok, record()} | {error, term()}.
-get_or_acquire(Storage, SpaceId) ->
-    luma_db:get_or_acquire(Storage, SpaceId, ?MODULE, fun() ->
-        acquire(Storage, SpaceId)
+
+-spec get_or_acquire(storage:data(), key()) -> {ok, record()} | {error, term()}.
+get_or_acquire(StorageData, SpaceId) ->
+    luma_db:get_or_acquire(StorageData, SpaceId, ?MODULE, fun() ->
+        acquire(StorageData, SpaceId)
     end).
 
--spec store(storage(), key(), luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
-store(Storage, SpaceId, PosixDefaultsMap) ->
-    case storage:is_posix_compatible(Storage) of
+
+-spec store(storage:data(), key(), luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
+store(StorageData, SpaceId, PosixDefaultsMap) ->
+    case storage:is_posix_compatible(StorageData) of
         true ->
             case luma_sanitizer:sanitize_posix_credentials(PosixDefaultsMap) of
                 {ok, PosixDefaultsMap2} ->
-                    PosixDefaultsMap3 = ensure_all_fields_are_defined(PosixDefaultsMap2, Storage, SpaceId),
+                    PosixDefaultsMap3 = ensure_all_fields_are_defined(PosixDefaultsMap2, StorageData, SpaceId),
                     Record = luma_posix_credentials:new(PosixDefaultsMap3),
-                    case luma_db:store(Storage, SpaceId, ?MODULE, Record, ?LOCAL_FEED, ?FORCE_OVERWRITE,
+                    case luma_db:store(StorageData, SpaceId, ?MODULE, Record, ?LOCAL_FEED, ?FORCE_OVERWRITE,
                         [?POSIX_STORAGE, ?NON_IMPORTED_STORAGE])
                     of
                         ok ->
-                            luma_spaces_display_defaults:delete_if_auto_feed(Storage, SpaceId);
+                            luma_spaces_display_defaults:delete_if_auto_feed(StorageData, SpaceId);
                         Error ->
                             Error
                     end;
@@ -64,75 +66,88 @@ store(Storage, SpaceId, PosixDefaultsMap) ->
                     Error2
             end;
         false ->
-            ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
+            ?ERR_REQUIRES_POSIX_COMPATIBLE_STORAGE(?err_ctx(), storage:get_id(StorageData), ?POSIX_COMPATIBLE_HELPERS)
     end.
 
--spec delete(storage:id(), key()) -> ok.
-delete(StorageId, SpaceId) ->
-    ok = luma_db:delete(StorageId, SpaceId, ?MODULE),
-    luma_spaces_display_defaults:delete_if_auto_feed(StorageId, SpaceId).
 
--spec clear_all(storage:id()) -> ok | {error, term()}.
-clear_all(StorageId) ->
-    luma_db:clear_all(StorageId, ?MODULE).
+-spec delete(storage:data(), key()) -> ok.
+delete(StorageData, SpaceId) ->
+    ok = luma_db:delete(StorageData, SpaceId, ?MODULE),
+    luma_spaces_display_defaults:delete_if_auto_feed(StorageData, SpaceId).
 
--spec get_and_describe(storage(), key()) ->
+
+-spec clear_all(storage:data()) -> ok | {error, term()}.
+clear_all(StorageData) ->
+    luma_db:clear_all(StorageData, ?MODULE).
+
+
+-spec get_and_describe(storage:data(), key()) ->
     {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
-get_and_describe(Storage, SpaceId) ->
-    luma_db:get_and_describe(Storage, SpaceId, ?MODULE).
+get_and_describe(StorageData, SpaceId) ->
+    luma_db:get_and_describe(StorageData, SpaceId, ?MODULE).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
 -spec acquire(storage:data(), key()) -> {luma_db:cache_policy(), record(), luma:feed()}.
-acquire(Storage, SpaceId) ->
-    IsImportedStorage = storage:is_imported(Storage),
-    LumaFeed = storage:get_luma_feed(Storage),
+acquire(StorageData, SpaceId) ->
+    IsImportedStorage = storage:is_imported(StorageData),
+    LumaFeed = storage:get_luma_feed(StorageData),
     case IsImportedStorage orelse LumaFeed =/= ?EXTERNAL_FEED of
         true ->
             % On imported storages this record is always taken from ?AUTO_FEED
             % even if LumaFeed == ?EXTERNAL_FEED
-            acquire_from_auto_feed(Storage, SpaceId);
+            acquire_from_auto_feed(StorageData, SpaceId);
         false ->
-            acquire_from_external_feed(Storage, SpaceId)
+            acquire_from_external_feed(StorageData, SpaceId)
     end.
 
--spec acquire_from_auto_feed(storage(), od_space:id()) ->
+
+%% @private
+-spec acquire_from_auto_feed(storage:data(), od_space:id()) ->
     {luma_db:cache_policy(), record(), luma:feed()}.
-acquire_from_auto_feed(Storage, SpaceId) ->
-    {ok, PosixDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
+acquire_from_auto_feed(StorageData, SpaceId) ->
+    {ok, PosixDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(StorageData, SpaceId),
     {cache, PosixDefaults, ?AUTO_FEED}.
 
--spec acquire_from_external_feed(storage(), od_space:id()) ->
+
+%% @private
+-spec acquire_from_external_feed(storage:data(), od_space:id()) ->
     {luma_db:cache_policy(), record(), luma:feed()}.
-acquire_from_external_feed(Storage, SpaceId) ->
-    PosixDefaultsMap0 = fetch_default_posix_credentials(Storage, SpaceId),
+acquire_from_external_feed(StorageData, SpaceId) ->
+    PosixDefaultsMap0 = fetch_default_posix_credentials(StorageData, SpaceId),
     RealFeed = case map_size(PosixDefaultsMap0) =:= 0 of
         true -> ?AUTO_FEED; % if returned map was empty, none of the fields were set by external feed
         false -> ?EXTERNAL_FEED
     end,
-    PosixDefaultsMap1 = ensure_all_fields_are_defined(PosixDefaultsMap0, Storage, SpaceId),
+    PosixDefaultsMap1 = ensure_all_fields_are_defined(PosixDefaultsMap0, StorageData, SpaceId),
     {cache, luma_posix_credentials:new(PosixDefaultsMap1), RealFeed}.
 
--spec fetch_default_posix_credentials(storage:data(), key()) -> 
+
+%% @private
+-spec fetch_default_posix_credentials(storage:data(), key()) ->
     luma_posix_credentials:credentials_map().
-fetch_default_posix_credentials(Storage, SpaceId) ->
-    case luma_external_feed:fetch_default_posix_credentials(SpaceId, Storage) of
+fetch_default_posix_credentials(StorageData, SpaceId) ->
+    case luma_external_feed:fetch_default_posix_credentials(SpaceId, StorageData) of
         {ok, DefaultCredentials} -> DefaultCredentials;
         {error, not_found} -> #{};
         {error, Reason} -> throw(Reason)
     end.
 
 
--spec ensure_all_fields_are_defined(luma_posix_credentials:credentials_map(), storage(), od_space:id()) ->
+%% @private
+-spec ensure_all_fields_are_defined(luma_posix_credentials:credentials_map(), storage:data(), od_space:id()) ->
     luma_posix_credentials:credentials_map().
-ensure_all_fields_are_defined(PosixDefaultsMap, Storage, SpaceId) ->
+ensure_all_fields_are_defined(PosixDefaultsMap, StorageData, SpaceId) ->
     case luma_posix_credentials:all_fields_defined(PosixDefaultsMap) of
         true ->
             PosixDefaultsMap;
         false ->
-            {ok, FallbackDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
+            {ok, FallbackDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(StorageData, SpaceId),
             FallbackDefaultsJson = luma_posix_credentials:to_json(FallbackDefaults),
             maps:merge(FallbackDefaultsJson, PosixDefaultsMap)
     end.

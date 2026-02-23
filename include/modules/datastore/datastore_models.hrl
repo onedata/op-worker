@@ -504,7 +504,8 @@
 
 -record(storage_config, {
     helper_config :: helper_config:t(),
-    luma_config :: storage:luma_config()
+    luma_config :: storage:luma_config(),
+    luma_generation :: non_neg_integer()
 }).
 
 

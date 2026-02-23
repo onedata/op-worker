@@ -8,7 +8,7 @@
 %%% @doc This module tests reverse LUMA
 %%% @end
 %%%--------------------------------------------------------------------
--module(reverse_luma_test_SUITE).
+-module(luma_reverse_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("luma_test_utils.hrl").

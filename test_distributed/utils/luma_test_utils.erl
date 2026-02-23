@@ -58,14 +58,13 @@ run_test(TestFun, Module, Config, StorageConfig) ->
     end.
 
 clear_luma_db_for_all_storages(Worker) ->
-    StorageIds = lists:usort(lists:map(fun(StorageLumaConfig) ->
-        Storage = maps:get(storage_record, StorageLumaConfig),
-        storage:get_id(Storage)
+    Storages = lists:usort(lists:map(fun(StorageLumaConfig) ->
+        maps:get(storage_record, StorageLumaConfig)
     end, ?ALL_STORAGE_CONFIGS )),
 
-    lists:foreach(fun(StorageId) ->
-        clear_luma_db(Worker, StorageId)
-    end, StorageIds).
+    lists:foreach(fun(Storage) ->
+        clear_luma_db(Worker, Storage)
+    end, Storages).
 
 mock_stat_on_space_mount_dir(Worker) ->
     ok = test_utils:mock_new(Worker, storage_file_ctx),
@@ -176,8 +175,8 @@ map_acl_user_to_onedata_user(Worker, AclUser, Storage) ->
 map_acl_group_to_onedata_group(Worker, AclGroup, Storage) ->
     rpc:call(Worker, luma, map_acl_group_to_onedata_group, [AclGroup, Storage]).
 
-clear_luma_db(Worker, StorageId) ->
-    ok = rpc:call(Worker, luma, clear_db, [StorageId]).
+clear_luma_db(Worker, Storage) ->
+    ok = rpc:call(Worker, luma_crud_api, clear_db, [Storage]).
 
 %%%===================================================================
 %%% Helpers API functions

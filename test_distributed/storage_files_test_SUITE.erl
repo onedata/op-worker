@@ -1364,7 +1364,10 @@ clean_posix_storage_mountpoints(Worker) ->
 
 clear_luma_db(Worker) ->
     lists:foreach(fun(StorageId) ->
-        ok = rpc:call(Worker, luma, clear_db, [StorageId])
+        ok = rpc:call(Worker, luma_crud_api, clear_db, [#document{
+            key = StorageId,
+            value = #storage_config{luma_generation = 0}
+        }])
     end, ?AUTO_FEED_LUMA_STORAGES ++ ?EXTERNAL_FEED_LUMA_STORAGES).
 
 clean_posix_storage_mountpoints(Worker, SpacesAndSupportingPosixStorageIds) ->

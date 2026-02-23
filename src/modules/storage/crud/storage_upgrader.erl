@@ -38,7 +38,7 @@ upgrade_after_swift_version_update_to_v3() ->
 
                 ok = upgrade_swift_helper_after_swift_version_update_to_v3(StorageId),
                 % Existing luma entries will not work as they lack necessary projectName
-                ok = luma:clear_db(StorageId),
+                ok = luma_crud_api:clear_db(StorageId),
 
                 ?info("Successfully upgraded swift storage '~ts' (~ts)", [StorageName, StorageId]);
             _ ->
@@ -62,7 +62,7 @@ upgrade_after_swift_version_update_to_v3() ->
 -spec upgrade_swift_helper_after_swift_version_update_to_v3(storage:id()) ->
     ok | {error, term()}.
 upgrade_swift_helper_after_swift_version_update_to_v3(StorageId) ->
-    storage:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
+    storage_updater:update_helper_config(StorageId, fun(HelperConfig = #helper_config{
         args = Args,
         admin_ctx = AdminCtx
     }) ->

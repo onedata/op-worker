@@ -27,10 +27,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/2, create/3, get/1, exists/1, delete/1]).
--export([get_id/1, get_helper_config/1, get_luma_feed/1, get_luma_config/1]).
+-export([create/2, create/3, get/1, update/2, exists/1, delete/1]).
+-export([get_id/1, get_helper_config/1, get_luma_feed/1, get_luma_config/1, get_luma_generation/1]).
 
--export([update_helper_config/2, update_luma_config/2, set_luma_config/2]).
+-export([update_helper_config/2, set_luma_config/2]).
 
 -export([list_all/0, delete_all/0]).
 
@@ -55,9 +55,11 @@
 
 -compile({no_auto_import, [get/1]}).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 -spec create(storage:id(), record()) -> {ok, storage:id()} | {error, term()}.
 create(StorageId, StorageConfig) ->
@@ -66,12 +68,14 @@ create(StorageId, StorageConfig) ->
         value = StorageConfig
     })).
 
+
 -spec create(storage:id(), helper_config:t(), undefined | storage:luma_config()) ->
     {ok, storage:id()} | {error, term()}.
 create(StorageId, HelperConfig, LumaConfig) ->
     create(StorageId, #storage_config{
         helper_config = HelperConfig,
-        luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED))
+        luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED)),
+        luma_generation = 0
     }).
 
 
@@ -80,7 +84,6 @@ get(Key) ->
     datastore_model:get(?CTX, Key).
 
 
-%% @private
 -spec update(storage:id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
@@ -96,9 +99,11 @@ exists(Key) ->
 delete(StorageId) ->
     datastore_model:delete(?CTX, StorageId).
 
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
 
 -spec get_id(doc()) -> storage:id().
 get_id(#document{key = StorageId, value = #storage_config{}}) ->
@@ -108,25 +113,43 @@ get_id(#document{key = StorageId, value = #storage_config{}}) ->
 -spec get_helper_config(doc() | record() | storage:id()) -> helper_config:t().
 get_helper_config(#document{value = StorageConfig}) ->
     get_helper_config(StorageConfig);
+
 get_helper_config(#storage_config{helper_config = HelperConfig}) ->
     HelperConfig;
+
 get_helper_config(StorageId) ->
     {ok, StorageDoc} = ?MODULE:get(StorageId),
     get_helper_config(StorageDoc).
+
 
 -spec get_luma_feed(storage:id() | doc() | record()) -> storage:luma_feed().
 get_luma_feed(Storage) ->
     LumaConfig = get_luma_config(Storage),
     luma_config:get_feed(LumaConfig).
 
+
 -spec get_luma_config(storage:id() | doc() | record()) -> storage:luma_config().
 get_luma_config(#document{value = Storage = #storage_config{}}) ->
     get_luma_config(Storage);
+
 get_luma_config(#storage_config{luma_config = LumaConfig}) ->
     LumaConfig;
+
 get_luma_config(StorageId) ->
     {ok, StorageDoc} = get(StorageId),
     get_luma_config(StorageDoc).
+
+
+-spec get_luma_generation(storage:id() | doc() | record()) -> non_neg_integer().
+get_luma_generation(#document{value = StorageConfig = #storage_config{}}) ->
+    get_luma_generation(StorageConfig);
+
+get_luma_generation(#storage_config{luma_generation = Generation}) ->
+    Generation;
+
+get_luma_generation(StorageId) ->
+    {ok, StorageDoc} = get(StorageId),
+    get_luma_generation(StorageDoc).
 
 
 -spec update_helper_config(
@@ -144,26 +167,6 @@ update_helper_config(StorageId, UpdateFun) ->
                     {error, no_changes};
                 {ok, NewHelperConfig} ->
                     {ok, StorageConfig#storage_config{helper_config = NewHelperConfig}};
-                {error, _} = Error ->
-                    Error
-            end
-    end)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates LUMA configuration of the storage.
-%% LUMA cannot be enabled or disabled, only its parameters may be changed.
-%% @end
-%%--------------------------------------------------------------------
--spec update_luma_config(storage:id(), UpdateFun) -> ok | {error, term()}
-    when UpdateFun :: fun((storage:luma_config()) -> {ok, storage:luma_config()} | {error, term()}).
-update_luma_config(StorageId, UpdateFun) ->
-    ?extract_ok(update(StorageId, fun
-        (#storage_config{luma_config = PreviousLumaConfig} = StorageConfig) ->
-            case UpdateFun(PreviousLumaConfig) of
-                {ok, NewLumaConfig} ->
-                    {ok, StorageConfig#storage_config{luma_config = NewLumaConfig}};
                 {error, _} = Error ->
                     Error
             end
@@ -193,6 +196,7 @@ delete_all() ->
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -238,6 +242,7 @@ get_record_struct(1) ->
         ]}},
         {imported_storage, boolean}
     ]};
+
 get_record_struct(2) ->
     {record, [
         {helper, {record, [
@@ -257,6 +262,7 @@ get_record_struct(2) ->
         ]}},
         {imported_storage, boolean}
     ]};
+
 get_record_struct(3) ->
     {record, [
         {helper, {record, [
@@ -271,6 +277,7 @@ get_record_struct(3) ->
         ]}}
         % deprecated imported_storage field has been removed in this version
     ]};
+
 get_record_struct(4) ->
     {record, [
         % Replace/rename helper to helper_config
@@ -283,8 +290,10 @@ get_record_struct(4) ->
             {feed, atom},
             {url, string},
             {api_key, string}
-        ]}}
+        ]}},
+        {luma_generation, integer}  % new field
     ]}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -327,4 +336,4 @@ upgrade_record(2, {?MODULE, Helper, LumaConfig, _ImportedStorage}) ->
 upgrade_record(3, {?MODULE, Helper, LumaConfig}) ->
     {helper, Name, Args, AdminCtx} = Helper,
     HelperConfig = #helper_config{name = Name, args = Args, admin_ctx = AdminCtx},
-    {4, {?MODULE, HelperConfig, LumaConfig}}.
+    {4, {?MODULE, HelperConfig, LumaConfig, 0}}.

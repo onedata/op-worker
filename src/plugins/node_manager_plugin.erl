@@ -315,7 +315,7 @@ upgrade_cluster(7) ->
         lists:foreach(fun(StorageId) ->
             ?info("Clearing cached auto-feed LUMA entries for storage: ~ts", [StorageId]),
             case storage_config:get_luma_feed(StorageId) of
-                ?AUTO_FEED -> luma:clear_db(StorageId);
+                ?AUTO_FEED -> luma_crud_api:clear_db(StorageId);
                 _ -> ok
             end
         end, StorageIds)

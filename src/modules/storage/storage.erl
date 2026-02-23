@@ -39,7 +39,7 @@
 %%% Functions to retrieve storage details
 -export([
     get_id/1, get_block_size/1, get_helper_config/1, get_helper_name/1,
-    get_luma_feed/1, get_luma_config/1
+    get_luma_feed/1, get_luma_config/1, get_luma_generation/1
 ]).
 -export([
     fetch_shared_data/2,
@@ -53,7 +53,6 @@
 
 %%% Functions to modify storage details
 -export([set_qos_parameters/2]).
--export([update_helper_config/2]).
 
 %%% Support related functions
 -export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
@@ -105,7 +104,7 @@ describe(StorageId) ->
     storage_describer:describe(StorageId).
 
 
--spec get(id() | data()) -> {ok, data()} | {error, term()}.
+-spec get(id() | data() | storage_config:doc()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
 get(StorageData = #document{}) ->
@@ -144,10 +143,12 @@ delete(StorageId) ->
 %% @private
 -spec delete_insecure(id()) -> ok | {error, term()}.
 delete_insecure(StorageId) ->
+    {ok, StorageData} = get(StorageId),
+
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
             ok = storage_config:delete(StorageId),
-            luma:clear_db(StorageId);
+            luma_crud_api:clear_db(StorageData);
         Error ->
             Error
     end.
@@ -203,6 +204,11 @@ get_luma_feed(Storage) ->
 -spec get_luma_config(id() | data()) -> luma_config().
 get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
+
+
+-spec get_luma_generation(id() | data()) -> non_neg_integer().
+get_luma_generation(Storage) ->
+    storage_config:get_luma_generation(Storage).
 
 
 -spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
@@ -283,6 +289,7 @@ is_posix_compatible(StorageDataOrId) ->
 %%%===================================================================
 
 
+%% TODO VFS-12677 rm
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
     case storage_logic:set_qos_parameters(StorageId, QosParameters) of
@@ -292,16 +299,6 @@ set_qos_parameters(StorageId, QosParameters) ->
                 ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
             end, Spaces);
         Error -> Error
-    end.
-
-
--spec update_helper_config(id(), fun((helper_config:t()) -> {ok, helper_config:t()} | {error, term()})) ->
-    ok | {error, term()}.
-update_helper_config(StorageId, UpdateFun) ->
-    case storage_config:update_helper_config(StorageId, UpdateFun) of
-        ok -> on_helper_changed(StorageId);
-        {error, no_changes} -> ok;
-        {error, _} = Error -> Error
     end.
 
 
@@ -460,15 +457,6 @@ on_space_unsupported(SpaceId, StorageId) ->
     main_harvesting_stream:space_unsupported(SpaceId),
     files_monitoring_manager:notify_space_unsupported(SpaceId),
     dir_stats_service_state:clean(SpaceId).
-
-
-%% @private
--spec on_helper_changed(StorageId :: id()) -> ok.
-on_helper_changed(StorageId) ->
-    fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    % TODO VFS-11947 consider error handling here and error propagation / rollback
-    rtransfer_config:add_storage(StorageId),
-    helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
 %% @private
