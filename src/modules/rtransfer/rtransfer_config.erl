@@ -201,31 +201,33 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %% Adds storage to rtransfer.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(storage:id()) -> ok.
+-spec add_storage(storage:id()) -> ok | errors:error().
 add_storage(StorageId) ->
     HelperConfig = storage:get_helper_config(StorageId),
     AdminCtx = helper_config:get_admin_ctx(HelperConfig),
     {ok, HelperArgs} = helper_config:build_helper_nif_args(HelperConfig, AdminCtx),
     HelperName = helper_config:get_name(HelperConfig),
     AllNodes = consistent_hashing:get_all_nodes(),
-    {GatheredResults, BadNodes} = utils:rpc_multicall(AllNodes,
-                                  rtransfer_link, add_storage,
-                                  [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
-    BadNodes =/= [] andalso
-        ?error(?autoformat_with_msg("Failed to call some nodes to add storage to rtransfer",
-            [StorageId, BadNodes])),
-
-    case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
-        [] ->
-            ok;
-        _ErrorResults ->
-            ?error(?autoformat_with_msg("There were errors while adding storage to rtransfer",
-                [StorageId, AllNodes, GatheredResults]
+    case utils:rpc_multicall(
+        AllNodes, rtransfer_link, add_storage, [StorageId, HelperName, maps:to_list(HelperArgs)]
+    ) of
+        {GatheredResults, []} ->
+            case lists:filter(fun(R) -> R =/= ok end, GatheredResults) of
+                [] ->
+                    ok;
+                _ErrorResults ->
+                    ?report_internal_server_error(?autoformat_with_msg(
+                        "There were errors while adding storage to rtransfer",
+                        [StorageId, AllNodes, GatheredResults]
+                    ))
+            end;
+        {_, BadNodes} ->
+            ?report_internal_server_error(?autoformat_with_msg(
+                "Failed to call some nodes to add storage to rtransfer",
+                [StorageId, BadNodes]
             ))
-    end,
-
-    ok.
+    end.
 
 
 %%--------------------------------------------------------------------

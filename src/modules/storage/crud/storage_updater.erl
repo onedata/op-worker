@@ -261,10 +261,23 @@ update_in_op(StorageId, StorageConfig, HelperConfigChanged) ->
 %% @private
 -spec on_helper_changed(storage:id()) -> ok.
 on_helper_changed(StorageId) ->
-    fslogic_event_emitter:emit_helper_params_changed(StorageId),
-    % TODO VFS-12677 consider error handling here and error propagation / rollback
-    rtransfer_config:add_storage(StorageId),
+    emit_helper_params_changed_event(StorageId),
+    ?check(rtransfer_config:add_storage(StorageId)),
+
     helpers_reload:refresh_helpers_by_storage(StorageId).
+
+
+%% @private
+-spec emit_helper_params_changed_event(storage:id()) -> ok.
+emit_helper_params_changed_event(StorageId) ->
+    case fslogic_event_emitter:emit_helper_params_changed(StorageId) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?warning("Failed to emit helper changed event for storage '~ts' due to: ~p", [
+                StorageId, Reason
+            ])
+    end.
 
 
 %% @private
@@ -319,12 +332,12 @@ best_effort_clear_luma(StorageId, StorageConfig) ->
             value = StorageConfig
         })
     catch Class:Reason:Stacktrace ->
-        ?examine_exception(
+        ?warning(
             "Failed to clear LUMA DB for generation ~B of storage '~ts' - "
             "stale LUMA entries may remain in the database and require manual cleanup",
-            [LumaGeneration, StorageId],
-            Class, Reason, Stacktrace
-        )
+            [LumaGeneration, StorageId]
+        ),
+        ?examine_exception(Class, Reason, Stacktrace)
     end,
 
     ok.
@@ -367,10 +380,8 @@ run_saga_action(Name, Action) ->
     try
         Action()
     catch Class:Reason:Stacktrace ->
-        ?examine_exception(
-            "Storage update saga step '~ts' failed", [Name],
-            Class, Reason, Stacktrace
-        )
+        ?warning("Storage update saga step '~ts' failed", [Name]),
+        ?examine_exception(Class, Reason, Stacktrace)
     end.
 
 
@@ -383,10 +394,10 @@ run_compensations([{Name, Compensation} | Rest]) ->
     try
         Compensation()
     catch Class:Reason:Stacktrace ->
-        ?examine_exception(
+        ?warning(
             "Storage update saga - FAILED to compensate step; "
-            "manual intervention may be required to restore consistent state",
-            Class, Reason, Stacktrace
-        )
+            "manual intervention may be required to restore consistent state"
+        ),
+        ?examine_exception(Class, Reason, Stacktrace)
     end,
     run_compensations(Rest).
