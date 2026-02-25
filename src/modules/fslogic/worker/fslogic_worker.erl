@@ -871,12 +871,27 @@ restart_autocleaning_runs() ->
 %% @private
 -spec handle_periodic_storages_check() -> ok.
 handle_periodic_storages_check() ->
+    check_helpers(),
+
     PreviousUnhealthyStorages = worker_host:state_get(?MODULE, ?UNHEALTHY_STORAGES_KEY),
     case storage_monitoring:perform_regular_checks(PreviousUnhealthyStorages) of
         PreviousUnhealthyStorages ->
             ok;
         UnhealthyStoragesIds ->
             worker_host:state_put(?MODULE, ?UNHEALTHY_STORAGES_KEY, UnhealthyStoragesIds)
+    end.
+
+
+%% @private
+-spec check_helpers() -> ok.
+check_helpers() ->
+    try
+        ok = helpers:clean_helper_cache(),
+
+        {ok, Stats} = helpers:get_helper_cache_stats(),
+        ?info("Helpers statistics: ~tp", [Stats])
+    catch Class:Reason:Stacktrace ->
+        ?examine_exception("Periodic helpers check failed", Class, Reason, Stacktrace)
     end.
 
 
