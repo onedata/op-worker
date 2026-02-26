@@ -43,7 +43,7 @@
 -export([
     create_should_fail/1,
     create_and_open_should_fail/1,
-    mkdir_should_fail/1,
+    mkdir_should_succeed/1,
     read_should_succeed/1,
     write_should_fail/1,
     chmod_should_succeed_but_not_change_mode_on_storage/1,
@@ -90,7 +90,7 @@
 all() -> [
     create_should_fail,
     create_and_open_should_fail,
-    mkdir_should_fail,
+    mkdir_should_succeed,
     read_should_succeed,
     write_should_fail,
     chmod_should_succeed_but_not_change_mode_on_storage,
@@ -133,13 +133,13 @@ create_and_open_should_fail(Config) ->
     % it should be impossible to create file
     ?assertEqual({error, ?EROFS}, lfm_proxy:create_and_open(W1, SessId, ?PATH(FileName))).
 
-mkdir_should_fail(Config) ->
+mkdir_should_succeed(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(W1, Config),
     DirName = ?DIR_NAME,
 
     % it should be impossible to create file
-    ?assertEqual({error, ?EROFS}, lfm_proxy:mkdir(W1, SessId, ?PATH(DirName))).
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId, ?PATH(DirName))).
 
 read_should_succeed(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
