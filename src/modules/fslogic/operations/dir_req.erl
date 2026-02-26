@@ -168,19 +168,18 @@ list_recursively(UserCtx, FileCtx0, ListOpts, Attributes) ->
 -spec mkdir_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta:posix_permissions()) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
-    ParentFileCtx3 = file_ctx:assert_is_dir(ParentFileCtx2),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
+    ParentFileCtx2 = file_ctx:assert_is_dir(ParentFileCtx),
+    SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
     Owner = user_ctx:get_user_id(UserCtx),
-    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
-    {IsSyncEnabled, ParentFileCtx4} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx2),
+    {IsSyncEnabled, ParentFileCtx3} = file_ctx:is_synchronization_enabled(ParentFileCtx2),
     File = file_meta:new_doc(undefined, Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId, not IsSyncEnabled),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
         times_api:report_file_created(FileCtx),
-        times_api:touch(ParentFileCtx4, [?attr_mtime, ?attr_ctime]),
+        times_api:touch(ParentFileCtx3, [?attr_mtime, ?attr_ctime]),
 
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
