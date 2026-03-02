@@ -24,6 +24,8 @@
 -export([init_per_testcase/1, init_per_testcase/2, end_per_testcase/1, end_per_testcase/2]).
 
 -export([
+    luma_generation_namespace/1,
+
     % tests of mapping user to storage credentials
     map_root_to_storage_creds_returns_admin_creds/1,
     map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible/1,
@@ -50,6 +52,8 @@
 
 all() ->
     ?ALL([
+        luma_generation_namespace,
+
         % tests of mapping user to storage credentials
         map_root_to_storage_creds_returns_admin_creds,
         map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible,
@@ -78,6 +82,48 @@ all() ->
 -define(ERR_USERS, [<<"user", (integer_to_binary(I))/binary>> || I <- lists:seq(2, 10)]).
 
 %% @TODO VFS-12827 - implement tests for all helper types
+
+%%%===================================================================
+%%% Test functions - luma generations
+%%%===================================================================
+
+luma_generation_namespace(Config) ->
+    ?RUN(Config, [?LOCAL_FEED_LUMA_S3_STORAGE_CONFIG], fun luma_generation_namespace_base/2).
+
+luma_generation_namespace_base(Config, StorageLumaConfig) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Storage = #document{value = StorageConfig}  = maps:get(storage_record, StorageLumaConfig),
+    ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
+
+    MapFun = fun(Storage_) ->
+        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage_)
+    end,
+
+    % Already filled luma db for current luma generation should properly map
+    ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage)),
+
+    % But it is not available for local luma db on generation change
+    Storage2 = Storage#document{value = StorageConfig#storage_config{
+        luma_generation = StorageConfig#storage_config.luma_generation + 1
+    }},
+    ?assertMatch({error, not_found}, MapFun(Storage2)),
+
+    % Unless it is explicitly added
+    {ok, _} = rpc:call(Worker, luma_crud_api, storage_users_store, [Storage2, ?USER_ID, #{
+        <<"storageCredentials">> => ExpectedUserCreds
+    }]),
+    ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage2)),
+
+    % Which does not invalidate entries in other namespaces (they must be deleted separately)
+    ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage)),
+
+    % Clearing luma db clears entries only for specific generation
+    ok = rpc:call(Worker, luma_crud_api, clear_db, [Storage2]),
+    ?assertMatch({error, not_found}, MapFun(Storage2)),
+    ?assertMatch({ok, ExpectedUserCreds}, MapFun(Storage)),
+
+    ok.
+
 
 %%%===================================================================
 %%% Test functions - mapping user to storage credentials
