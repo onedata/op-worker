@@ -59,7 +59,7 @@
 %% Debug functions
 -export([
     list/1, list/2,
-    clear_all/2, clear_all/3
+    clear_all/1, clear_all/2, clear_all/3
 ]).
 
 
@@ -226,21 +226,25 @@ list(SpaceId, PaginationToken) ->
 
 
 % NOTE: this is best effort and is not guaranteed to work properly (mainly due to not having original parent uuid)
-clear_all(SpaceId, EmitEvents) ->
-    clear_all(SpaceId, EmitEvents, undefined).
+clear_all(SpaceId) ->
+    clear_all(SpaceId, emit_events).
 
-clear_all(SpaceId, EmitEvents, Token) ->
+clear_all(SpaceId, EventsMode) ->
+    clear_all(SpaceId, EventsMode, undefined).
+
+clear_all(SpaceId, EventsMode, Token) ->
+    EmitEventsFlag = EventsMode == emit_events,
     {List, NextToken} = case Token of
         undefined -> list(SpaceId);
         _ -> list(SpaceId, Token)
     end,
     lists:foreach(fun(FileCtx) ->
-        schedule_deletion_from_trash(FileCtx, user_ctx:new(?ROOT_SESS_ID), EmitEvents,
+        schedule_deletion_from_trash(FileCtx, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
             space_dir:uuid(SpaceId), extract_name(FileCtx))
     end, List),
     case file_listing:is_finished(NextToken) of
         true -> ok;
-        false -> clear_all(SpaceId, EmitEvents, NextToken)
+        false -> clear_all(SpaceId, EmitEventsFlag, NextToken)
     end.
 
 

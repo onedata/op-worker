@@ -326,7 +326,7 @@ upgrade_cluster(7) ->
     async_run_with_oz_connection_after_upgrade(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) ->
-            ?notice("Reinitializing stats for space `~ts` after upgrade", [SpaceId]),
+            ?notice("Reinitializing stats for space '~ts' after upgrade", [SpaceId]),
             dir_stats_service_state:reinitialize_stats_for_space(SpaceId)
         end, SpaceIds)
     end),
@@ -338,7 +338,7 @@ upgrade_cluster(8) ->
     async_run_with_oz_connection_after_upgrade(fun() ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) ->
-            ?notice("Clearin trash of a space `~ts` after upgrade", [SpaceId]),
+            ?notice("Clearing trash of a space '~ts' after upgrade", [SpaceId]),
             trash_dir:clear_all(SpaceId, false)
         end, SpaceIds)
     end),
