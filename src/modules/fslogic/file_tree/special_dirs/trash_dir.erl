@@ -213,9 +213,11 @@ exists(Uuid) ->
 %%% Debug helpers - functions to be used in debug, should not be used in production code
 %%%===================================================================
 
+-spec list(od_space:id()) -> {[file_ctx:ctx()], file_listing:pagination_token()}.
 list(SpaceId) ->
     list(SpaceId, file_listing:starting_opts_with_tune_for_cont_listing(false)).
 
+-spec list(od_space:id(), file_listing:options()) -> {[file_ctx:ctx()], file_listing:pagination_token()}.
 list(SpaceId, ListOpts) when is_map(ListOpts) ->
     {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
         file_ctx:new_by_guid(trash_dir:guid(SpaceId)), ListOpts),
@@ -226,12 +228,15 @@ list(SpaceId, PaginationToken) ->
 
 
 % NOTE: this is best effort and is not guaranteed to work properly (mainly due to not having original parent uuid)
+-spec clear_all(od_space:id()) -> ok.
 clear_all(SpaceId) ->
     clear_all(SpaceId, emit_events).
 
+-spec clear_all(od_space:id(), emit_events | no_events) -> ok.
 clear_all(SpaceId, EventsMode) ->
     clear_all(SpaceId, EventsMode, undefined).
 
+-spec clear_all(od_space:id(), emit_events | no_events, file_listing:pagination_token() | undefined) -> ok.
 clear_all(SpaceId, EventsMode, Token) ->
     EmitEventsFlag = EventsMode == emit_events,
     {List, NextToken} = case Token of
@@ -239,8 +244,10 @@ clear_all(SpaceId, EventsMode, Token) ->
         _ -> list(SpaceId, Token)
     end,
     lists:foreach(fun(FileCtx) ->
-        schedule_deletion_from_trash(FileCtx, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
-            space_dir:uuid(SpaceId), extract_name(FileCtx))
+        % Cache deleted file meta in file_ctx so traverse can start on deleted file.
+        {_, FileCtx1} = file_ctx:get_and_cache_file_doc_including_deleted(FileCtx),
+        schedule_deletion_from_trash(FileCtx1, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
+            space_dir:uuid(SpaceId), extract_name(FileCtx1))
     end, List),
     case file_listing:is_finished(NextToken) of
         true -> ok;
@@ -248,6 +255,7 @@ clear_all(SpaceId, EventsMode, Token) ->
     end.
 
 
+-spec extract_name(file_ctx:ctx()) -> binary(). 
 extract_name(FileCtx) ->
     {ExtendedName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     str_utils:join_binary(
