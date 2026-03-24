@@ -251,7 +251,7 @@ clear_all(SpaceId, EventsMode, Token) ->
     end, List),
     case file_listing:is_finished(NextToken) of
         true -> ok;
-        false -> clear_all(SpaceId, EmitEventsFlag, NextToken)
+        false -> clear_all(SpaceId, EventsMode, NextToken)
     end.
 
 
