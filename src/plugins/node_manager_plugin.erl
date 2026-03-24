@@ -339,7 +339,7 @@ upgrade_cluster(8) ->
         {ok, SpaceIds} = provider_logic:get_spaces(),
         lists:foreach(fun(SpaceId) ->
             ?notice("Clearing trash of a space '~ts' after upgrade", [SpaceId]),
-            trash_dir:clear_all(SpaceId, false)
+            trash_dir:clear_all(SpaceId, no_events)
         end, SpaceIds)
     end),
     {ok, 9}.
