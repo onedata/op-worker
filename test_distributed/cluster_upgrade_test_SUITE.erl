@@ -38,7 +38,8 @@
     upgrade_from_21_02_3_missing_dirs/1,
     upgrade_from_21_02_5_links_reconciliation_traverses/1,
     upgrade_from_21_02_8_upgrade_swift_storage/1,
-    upgrade_from_21_02_8_luma/1
+    upgrade_from_21_02_8_luma/1,
+    upgrade_from_25_0_trash/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -70,7 +71,8 @@ all() -> ?ALL([
     upgrade_from_21_02_3_missing_dirs,
     upgrade_from_21_02_5_links_reconciliation_traverses,
     upgrade_from_21_02_8_upgrade_swift_storage,
-    upgrade_from_21_02_8_luma
+    upgrade_from_21_02_8_luma,
+    upgrade_from_25_0_trash
 ]).
 
 %%%===================================================================
@@ -524,6 +526,24 @@ upgrade_from_21_02_8_luma(Config) ->
         {_, ChangedStorage} = luma_test_utils:change_admin_creds(Storage),
         ?assertEqual({ok, LumaStorageUser}, rpc:call(Worker, luma_storage_users, get_or_acquire, [ChangedStorage, UserId]))
     end, StoragesLocalLuma).
+
+
+upgrade_from_25_0_trash(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceGuid = space_dir:guid(?SPACE1_ID),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId1, SpaceGuid, <<"dir">>, ?DEFAULT_DIR_MODE),
+    {ok, _FileGuid} = lfm_proxy:create(Worker, SessId1, DirGuid, <<"file">>, ?DEFAULT_FILE_MODE),
+    rpc:call(Worker, trash_dir, move_to_trash, [file_ctx:new_by_guid(DirGuid), rpc:call(Worker, user_ctx, new, [?ROOT_SESS_ID])]),
+    
+    {L, _} = rpc:call(Worker, trash_dir, list, [?SPACE1_ID]),
+    ?assertEqual(1, length(L)),
+    
+    ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
+
+    {L1, _} = rpc:call(Worker, trash_dir, list, [?SPACE1_ID]),
+    ?assertEqual(0, length(L1)).
 
 %%%===================================================================
 %%% Helper functions
