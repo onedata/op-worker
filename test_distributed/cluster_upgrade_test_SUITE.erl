@@ -541,9 +541,11 @@ upgrade_from_25_0_trash(Config) ->
     ?assertEqual(1, length(L)),
     
     ?assertEqual({ok, 9}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [8])),
+    
+    % disable safe mode, so the waiting async upgrade process can start
+    ok = rpc:call(Worker, safe_mode, report_node_initialized, []),
 
-    {L1, _} = rpc:call(Worker, trash_dir, list, [?SPACE1_ID]),
-    ?assertEqual(0, length(L1)).
+    ?assertEqual(0, length(element(1, rpc:call(Worker, trash_dir, list, [?SPACE1_ID]))), 20).
 
 %%%===================================================================
 %%% Helper functions
@@ -657,6 +659,16 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(Case = upgrade_from_25_0_trash, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    test_utils:mock_new(Worker, provider_logic, [passthrough]),
+    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
+        {ok, [?SPACE1_ID]}
+    end),
+
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
@@ -675,6 +687,11 @@ end_per_testcase(Case = upgrade_from_21_02_3_missing_dirs, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case = upgrade_from_21_02_5_links_reconciliation_traverses, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [provider_logic]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case = upgrade_from_25_0_trash, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [provider_logic]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
