@@ -127,7 +127,7 @@ get(TargetProvider, SpaceId, TransferType, StatsType) ->
 -spec get_active_channels(SpaceId :: od_space:id()) ->
     {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
 get_active_channels(SpaceId) ->
-    case get(undefined, SpaceId, ?JOB_TRANSFERS_TYPE, ?MINUTE_PERIOD) of
+    case get(undefined, SpaceId, ?ALL_TRANSFERS_TYPE, ?MINUTE_PERIOD) of
         #space_transfer_stats_cache{active_channels = ActiveChannels} ->
             {ok, ActiveChannels};
         {error, _} = Error ->
@@ -155,13 +155,14 @@ get_active_channels(SpaceId) ->
 update(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
     Key = key(TargetProvider, SpaceId, TransferType, StatsType),
     Diff = fun(OldStats) ->
-        NewStats = case countdown_timer:is_expired(OldStats#space_transfer_stats_cache.expiration_timer) of
-            false -> OldStats;
-            true -> Stats
-        end,
-        {ok, NewStats}
+        case countdown_timer:is_expired(OldStats#space_transfer_stats_cache.expiration_timer) of
+            false ->
+                {error, no_change};
+            true ->
+                {ok, Stats}
+        end
     end,
-    ?extract_ok(datastore_model:update(?CTX, Key, Diff, Stats)).
+    ?extract_ok(?ok_if_no_change(datastore_model:update(?CTX, Key, Diff, Stats))).
 
 
 %%-------------------------------------------------------------------
@@ -297,8 +298,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
     NewRequestedStats = RequestedStats#space_transfer_stats_cache{
         last_update = TrimmedLastUpdate,
         stats_in = maps:filter(Pred, NewStatsIn),
-        stats_out = maps:filter(Pred, NewStatsOut),
-        active_channels = undefined
+        stats_out = maps:filter(Pred, NewStatsOut)
     },
 
     update(TargetProvider, SpaceId, TransferType, ?MINUTE_PERIOD, NewMinStats),
@@ -430,28 +430,37 @@ merge_stats(Stats1, Stats2) ->
     #space_transfer_stats_cache{
         last_update = LastUpdate,
         stats_in = StatsIn1,
-        stats_out = StatsOut1
+        stats_out = StatsOut1,
+        active_channels = ActiveChannels1
     } = Stats1,
     #space_transfer_stats_cache{
         expiration_timer = ExpirationTimer,
         last_update = LastUpdate,
         stats_in = StatsIn2,
-        stats_out = StatsOut2
+        stats_out = StatsOut2,
+        active_channels = ActiveChannels2
     } = Stats2,
-
+    
     MergeFun = fun(ProviderId, Hist1, Stats) ->
         case maps:find(ProviderId, Stats) of
             {ok, Hist2} -> Stats#{ProviderId => histogram:merge(Hist1, Hist2)};
             error -> Stats#{ProviderId => Hist1}
         end
     end,
+    
+    MergedActiveChannels = lists:foldl(fun(ProviderId, Acc) ->
+        Acc#{ProviderId => lists:usort(
+            maps:get(ProviderId, ActiveChannels1, []) ++
+            maps:get(ProviderId, ActiveChannels2, []))
+        }
+    end, #{}, lists:usort(maps:keys(ActiveChannels1) ++ maps:keys(ActiveChannels2))),
 
     #space_transfer_stats_cache{
         expiration_timer = ExpirationTimer,
         last_update = LastUpdate,
         stats_in = maps:fold(MergeFun, StatsIn1, StatsIn2),
         stats_out = maps:fold(MergeFun, StatsOut1, StatsOut2),
-        active_channels = undefined
+        active_channels = MergedActiveChannels
     }.
 
 

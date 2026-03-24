@@ -57,7 +57,7 @@ ensure_monitoring_tree_for_space(SpaceId) ->
     ChildSpec = space_files_monitoring_sup:spec(SpaceId),
 
     case supervisor:start_child(?ID, ChildSpec) of
-        {ok, Pid} = Result ->
+        {ok, Pid} = _Result ->
             Pid;
         {error, {already_started, Pid}} ->
             % Space supervisor already running with healthy main monitor
