@@ -180,9 +180,8 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx} = Job, TaskId) ->
 -spec flush_stats(od_space:id(), transfer_id(), #{od_provider:id() => non_neg_integer()}) ->
     ok | {error, term()}.
 flush_stats(SpaceId, TransferId, BytesPerProvider) ->
-    %% @TODO VFS-6819 - update stats in new qos category
     ok = space_transfer_stats:update_with_cache(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider
+        ?QOS_TRANSFERS_TYPE, SpaceId, BytesPerProvider
     ),
     case transfer_id_to_file_uuid(TransferId) of
         {ok, FileUuid} -> 

@@ -6,11 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Aggregates transfer statistics for on the fly transfers for various spaces.
+%%% Aggregates transfer statistics for transfers for various spaces.
 %%% This gen_server is started for every node and registered locally.
 %%% @end
 %%%--------------------------------------------------------------------
--module(transfer_onf_stats_aggregator).
+-module(transfer_stats_cache_aggregator).
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_server).
@@ -21,7 +21,7 @@
 %% API
 -export([
     start_link/0,
-    update_statistics/2,
+    update_statistics/3,
     spec/0
 ]).
 
@@ -33,14 +33,18 @@
 ]).
 
 -type stats() :: #{od_provider:id() => integer()}.
+-type transfer_type() :: space_transfer_stats:transfer_type().
 
 -record(state, {
     cached_stats = #{} :: #{od_space:id() => stats()},
     caching_timers = #{} :: #{od_space:id() => reference()}
 }).
 
--type state() :: #state{}.
+% State is kept independently for each supported transfer type.
+-type state() :: #{transfer_type() => #state{}}.
 
+
+-define(SUPPORTED_TRANSFER_TYPES, [?ON_THE_FLY_TRANSFERS_TYPE, ?QOS_TRANSFERS_TYPE]).
 
 %% How long transfer stats are aggregated before updating transfer document
 -define(STATS_AGGREGATION_TIME, application:get_env(
@@ -54,32 +58,16 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the aggregator for onf transfer stats.
-%% @end
-%%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
     gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Stops transfer_controller process and marks transfer as completed.
-%% @end
-%%-------------------------------------------------------------------
--spec update_statistics(od_space:id(), stats()) -> ok.
-update_statistics(SpaceId, BytesPerProvider) ->
-    gen_server2:cast(?MODULE, {update_stats, SpaceId, BytesPerProvider}).
+-spec update_statistics(transfer_type(), od_space:id(), stats()) -> ok.
+update_statistics(TransferType, SpaceId, BytesPerProvider) ->
+    gen_server2:cast(?MODULE, {update_stats, TransferType, SpaceId, BytesPerProvider}).
 
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns child spec for transfer_onf_stats_aggregator to attach it
-%% to supervision.
-%% @end
-%%-------------------------------------------------------------------
 -spec spec() -> supervisor:child_spec().
 spec() -> #{
     id => ?MODULE,
@@ -106,7 +94,7 @@ spec() -> #{
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(_Args) ->
-    {ok, #state{}}.
+    {ok, maps:from_list([{TransferType, #state{}} || TransferType <- ?SUPPORTED_TRANSFER_TYPES])}.
 
 
 %%--------------------------------------------------------------------
@@ -138,8 +126,10 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({update_stats, SpaceId, BytesPerProvider}, State) ->
-    {noreply, cache_stats(SpaceId, BytesPerProvider, State)};
+handle_cast({update_stats, TransferType, SpaceId, BytesPerProvider}, State) ->
+    {noreply, State#{
+        TransferType => cache_stats(SpaceId, BytesPerProvider, maps:get(TransferType, State))
+    }};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -156,7 +146,10 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
 handle_info({?FLUSH_STATS, SpaceId}, State) ->
-    {noreply, flush_stats(SpaceId, State)};
+    NewState = maps:map(fun(TransferType, StatePerType) ->
+        flush_stats(TransferType, SpaceId, StatePerType)
+    end, State),
+    {noreply, NewState};
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -174,7 +167,9 @@ handle_info(Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(_Reason, State) ->
-    flush_all_stats(State),
+    maps:map(fun(TransferType, StatePerType) ->
+        flush_all_stats(TransferType, StatePerType)
+    end, State),
     ok.
 
 
@@ -216,19 +211,13 @@ cache_stats(SpaceId, BytesPerProvider, #state{cached_stats = Stats} = State) ->
     set_caching_timer(SpaceId, State#state{cached_stats = NewStats}).
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Flushes aggregated so far on the fly transfer statistics for specified space.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_stats(od_space:id(), state()) -> state().
-flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
+-spec flush_stats(transfer_type(), od_space:id(), state()) -> state().
+flush_stats(TransferType, SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
     case maps:take(SpaceId, StatsPerSpace) of
         error ->
             cancel_caching_timer(SpaceId, State);
         {Stats, RestStatsPerSpace} ->
-            case space_transfer_stats:update(?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, Stats) of
+            case space_transfer_stats:update(TransferType, SpaceId, Stats) of
                 ok ->
                     ok;
                 {error, Error} ->
@@ -254,16 +243,10 @@ flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Flushes all stats, that is stats for every space aggregated so far.
-%% @end
-%%--------------------------------------------------------------------
--spec flush_all_stats(state()) -> state().
-flush_all_stats(#state{cached_stats = StatsPerSpace} = State) ->
+-spec flush_all_stats(transfer_type(), state()) -> state().
+flush_all_stats(TransferType, #state{cached_stats = StatsPerSpace} = State) ->
     lists:foldl(fun(SpaceId, Acc) ->
-        flush_stats(SpaceId, Acc)
+        flush_stats(TransferType, SpaceId, Acc)
     end, State, maps:keys(StatsPerSpace)).
 
 

@@ -32,6 +32,7 @@
 
 -type transfer_stats() :: #{od_provider:id() => #space_transfer_stats{}}.
 -type space_transfer_stats_cache() :: #space_transfer_stats_cache{}.
+-type transfer_type() :: space_transfer_stats:transfer_type().
 -type doc() :: datastore_doc:doc(space_transfer_stats_cache()).
 
 -export_type([space_transfer_stats_cache/0, doc/0]).
@@ -73,7 +74,7 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec save(TargetProvider :: od_provider:id() | undefined,
-    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id(), transfer_type(), StatsType :: binary(),
     Stats :: space_transfer_stats_cache()
 ) ->
     ok | {error, term()}.
@@ -91,7 +92,7 @@ save(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get(TargetProvider :: od_provider:id() | undefined,
-    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary()
+    SpaceId :: od_space:id(), transfer_type(), StatsType :: binary()
 ) ->
     space_transfer_stats_cache() | {error, term()}.
 get(TargetProvider, SpaceId, TransferType, StatsType) ->
@@ -148,7 +149,7 @@ get_active_channels(SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update(TargetProvider :: od_provider:id() | undefined,
-    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id(), transfer_type(), StatsType :: binary(),
     Stats :: space_transfer_stats_cache()
 ) ->
     ok | {error, term()}.
@@ -174,7 +175,7 @@ update(TargetProvider, SpaceId, TransferType, StatsType, Stats) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec delete(TargetProvider :: od_provider:id() | undefined,
-    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary()
+    SpaceId :: od_space:id(), transfer_type(), StatsType :: binary()
 ) ->
     ok | {error, term()}.
 delete(TargetProvider, SpaceId, TransferType, StatsType) ->
@@ -215,7 +216,7 @@ get_ctx() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_aggregated_stats(TargetProvider :: od_provider:id() | undefined,
-    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary(),
+    SpaceId :: od_space:id(), transfer_type(), StatsType :: binary(),
     TransferStatsMap :: #{binary() => transfer_stats()},
     CurrentMonotonicTime :: transfer_histograms:monotonic_timestamp()
 ) ->
@@ -223,13 +224,10 @@ get_ctx() ->
 prepare_aggregated_stats(TargetProvider, SpaceId, ?ALL_TRANSFERS_TYPE,
     StatsType, TransferStatsPerType, CurrentMonotonicTime
 ) ->
-    JobStats = prepare_aggregated_stats(TargetProvider, SpaceId,
-        ?JOB_TRANSFERS_TYPE, StatsType, TransferStatsPerType, CurrentMonotonicTime
-    ),
-    OnTheFlyStats = prepare_aggregated_stats(TargetProvider, SpaceId,
-        ?ON_THE_FLY_TRANSFERS_TYPE, StatsType, TransferStatsPerType, CurrentMonotonicTime
-    ),
-    AllStats = merge_stats(JobStats, OnTheFlyStats),
+    StatsList = [prepare_aggregated_stats(TargetProvider, SpaceId,
+        TransferType, StatsType, TransferStatsPerType, CurrentMonotonicTime
+    ) || TransferType <- ?TRANSFER_TYPES],
+    AllStats = merge_stats(StatsList),
     update(TargetProvider, SpaceId, ?ALL_TRANSFERS_TYPE, StatsType, AllStats),
     AllStats;
 
@@ -424,23 +422,9 @@ update_stats(TargetProvider, OldStats, StatsType,
     end.
 
 
--spec merge_stats(space_transfer_stats_cache(), space_transfer_stats_cache()) ->
+-spec merge_stats([space_transfer_stats_cache()]) ->
     space_transfer_stats_cache().
-merge_stats(Stats1, Stats2) ->
-    #space_transfer_stats_cache{
-        last_update = LastUpdate,
-        stats_in = StatsIn1,
-        stats_out = StatsOut1,
-        active_channels = ActiveChannels1
-    } = Stats1,
-    #space_transfer_stats_cache{
-        expiration_timer = ExpirationTimer,
-        last_update = LastUpdate,
-        stats_in = StatsIn2,
-        stats_out = StatsOut2,
-        active_channels = ActiveChannels2
-    } = Stats2,
-    
+merge_stats(StatsList) ->
     MergeFun = fun(ProviderId, Hist1, Stats) ->
         case maps:find(ProviderId, Stats) of
             {ok, Hist2} -> Stats#{ProviderId => histogram:merge(Hist1, Hist2)};
@@ -448,21 +432,38 @@ merge_stats(Stats1, Stats2) ->
         end
     end,
     
-    MergedActiveChannels = lists:foldl(fun(ProviderId, Acc) ->
-        Acc#{ProviderId => lists:usort(
-            maps:get(ProviderId, ActiveChannels1, []) ++
-            maps:get(ProviderId, ActiveChannels2, []))
+    lists:foldl(fun(Stats, AccStats) ->
+        #space_transfer_stats_cache{
+            expiration_timer = ExpirationTimer,
+            last_update = LastUpdate,
+            stats_in = StatsIn,
+            stats_out = StatsOut,
+            active_channels = ActiveChannels
+        } = Stats,
+        #space_transfer_stats_cache{
+            expiration_timer = ExpirationTimerAcc,
+            last_update = LastUpdateAcc,
+            stats_in = StatsInAcc,
+            stats_out = StatsOutAcc,
+            active_channels = ActiveChannelsAcc
+        } = AccStats,
+        
+        MergedActiveChannels = lists:foldl(fun(ProviderId, Acc) ->
+            Acc#{ProviderId => lists:usort(
+                maps:get(ProviderId, ActiveChannels, []) ++
+                maps:get(ProviderId, ActiveChannelsAcc, []))
+            }
+        end, #{}, lists:usort(maps:keys(ActiveChannels) ++ maps:keys(ActiveChannelsAcc))),
+
+        #space_transfer_stats_cache{
+            expiration_timer = max(ExpirationTimer, ExpirationTimerAcc),
+            last_update = max(LastUpdate, LastUpdateAcc),
+            stats_in = maps:fold(MergeFun, StatsIn, StatsInAcc),
+            stats_out = maps:fold(MergeFun, StatsOut, StatsOutAcc),
+            active_channels = MergedActiveChannels
         }
-    end, #{}, lists:usort(maps:keys(ActiveChannels1) ++ maps:keys(ActiveChannels2))),
-
-    #space_transfer_stats_cache{
-        expiration_timer = ExpirationTimer,
-        last_update = LastUpdate,
-        stats_in = maps:fold(MergeFun, StatsIn1, StatsIn2),
-        stats_out = maps:fold(MergeFun, StatsOut1, StatsOut2),
-        active_channels = MergedActiveChannels
-    }.
-
+    end, #space_transfer_stats_cache{}, StatsList).
+        
 
 -spec stats_type_to_expiration_timeout(binary()) -> time:millis().
 stats_type_to_expiration_timeout(?MINUTE_PERIOD) -> ?MINUTE_STAT_EXPIRATION;
@@ -498,7 +499,7 @@ merge_histograms(Hist1, LastUpdate1, Hist2, LastUpdate2, TimeWindow) ->
 
 
 -spec key(TargetProvider :: od_provider:id() | undefined,
-    SpaceId :: od_space:id(), TransferType :: binary(), StatsType :: binary()
+    SpaceId :: od_space:id(), transfer_type(), StatsType :: binary()
 ) ->
     binary().
 key(undefined, SpaceId, TransferType, StatsType) ->
@@ -515,12 +516,12 @@ key(TargetProvider, SpaceId, TransferType, StatsType) ->
 %% timestamp of latest update of any stats that are gathered.
 %% @end
 %%--------------------------------------------------------------------
--spec get_transfer_stats(RequestedTransferType :: binary(), od_space:id()) ->
+-spec get_transfer_stats(transfer_type(), od_space:id()) ->
     {#{binary() => transfer_stats()}, LatestUpdate :: transfer_histograms:timestamp()}.
 get_transfer_stats(RequestedTransferType, SpaceId) ->
     TransferTypesToGet = case RequestedTransferType of
         ?ALL_TRANSFERS_TYPE ->
-            [?JOB_TRANSFERS_TYPE, ?ON_THE_FLY_TRANSFERS_TYPE];
+            [?JOB_TRANSFERS_TYPE, ?ON_THE_FLY_TRANSFERS_TYPE, ?QOS_TRANSFERS_TYPE];
         _ ->
             [RequestedTransferType]
     end,
