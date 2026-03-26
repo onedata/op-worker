@@ -456,7 +456,7 @@ merge_stats(StatsList) ->
         end, #{}, lists:usort(maps:keys(ActiveChannels) ++ maps:keys(ActiveChannelsAcc))),
 
         #space_transfer_stats_cache{
-            expiration_timer = max(ExpirationTimer, ExpirationTimerAcc),
+            expiration_timer = min(ExpirationTimer, ExpirationTimerAcc),
             last_update = max(LastUpdate, LastUpdateAcc),
             stats_in = maps:fold(MergeFun, StatsIn, StatsInAcc),
             stats_out = maps:fold(MergeFun, StatsOut, StatsOutAcc),
