@@ -199,7 +199,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% cached stats will be flushed.
 %% @end
 %%--------------------------------------------------------------------
--spec cache_stats(od_space:id(), #{od_provider:id() => integer()}, state()) ->
+-spec cache_stats(od_space:id(), #{od_provider:id() => integer()}, #state{}) ->
     state().
 cache_stats(SpaceId, BytesPerProvider, #state{cached_stats = Stats} = State) ->
     SpaceStats = maps:get(SpaceId, Stats, #{}),
@@ -211,7 +211,7 @@ cache_stats(SpaceId, BytesPerProvider, #state{cached_stats = Stats} = State) ->
     set_caching_timer(SpaceId, State#state{cached_stats = NewStats}).
 
 
--spec flush_stats(transfer_type(), od_space:id(), state()) -> state().
+-spec flush_stats(transfer_type(), od_space:id(), #state{}) -> #state{}.
 flush_stats(TransferType, SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
     case maps:take(SpaceId, StatsPerSpace) of
         error ->
@@ -243,7 +243,7 @@ flush_stats(TransferType, SpaceId, #state{cached_stats = StatsPerSpace} = State)
     end.
 
 
--spec flush_all_stats(transfer_type(), state()) -> state().
+-spec flush_all_stats(transfer_type(), #state{}) -> #state{}.
 flush_all_stats(TransferType, #state{cached_stats = StatsPerSpace} = State) ->
     lists:foldl(fun(SpaceId, Acc) ->
         flush_stats(TransferType, SpaceId, Acc)
@@ -257,7 +257,7 @@ flush_all_stats(TransferType, #state{cached_stats = StatsPerSpace} = State) ->
 %% After timeout msg to flush them will be send.
 %% @end
 %%--------------------------------------------------------------------
--spec set_caching_timer(od_space:id(), state()) -> state().
+-spec set_caching_timer(od_space:id(), #state{}) -> #state{}.
 set_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
     TimerRef = case maps:get(SpaceId, Timers, undefined) of
         undefined ->
@@ -275,7 +275,7 @@ set_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
 %% Cancels caching timer for specified space.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_caching_timer(od_space:id(), state()) -> state().
+-spec cancel_caching_timer(od_space:id(), #state{}) -> state().
 cancel_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
     NewTimers = case maps:take(SpaceId, Timers) of
         {TimerRef, RestTimers} ->
