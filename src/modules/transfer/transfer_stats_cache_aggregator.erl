@@ -200,7 +200,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec cache_stats(od_space:id(), #{od_provider:id() => integer()}, #state{}) ->
-    state().
+    #state{}.
 cache_stats(SpaceId, BytesPerProvider, #state{cached_stats = Stats} = State) ->
     SpaceStats = maps:get(SpaceId, Stats, #{}),
     NewSpaceStats = maps:fold(fun(ProviderId, Bytes, Acc) ->
@@ -275,7 +275,7 @@ set_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
 %% Cancels caching timer for specified space.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_caching_timer(od_space:id(), #state{}) -> state().
+-spec cancel_caching_timer(od_space:id(), #state{}) -> #state{}.
 cancel_caching_timer(SpaceId, #state{caching_timers = Timers} = State) ->
     NewTimers = case maps:take(SpaceId, Timers) of
         {TimerRef, RestTimers} ->
