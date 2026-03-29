@@ -23,6 +23,7 @@
 -include("modules/datastore/qos.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
+-include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -179,8 +180,11 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx} = Job, TaskId) ->
 -spec flush_stats(od_space:id(), transfer_id(), #{od_provider:id() => non_neg_integer()}) ->
     ok | {error, term()}.
 flush_stats(SpaceId, TransferId, BytesPerProvider) ->
+    ok = space_transfer_stats:update_with_cache(
+        ?QOS_TRANSFERS_TYPE, SpaceId, BytesPerProvider
+    ),
     case transfer_id_to_file_uuid(TransferId) of
-        {ok, FileUuid} ->       
+        {ok, FileUuid} -> 
             QosEntries = get_file_local_qos_entries(SpaceId, FileUuid),
             BytesPerStorage = maps:fold(fun(ProviderId, Value, AccMap) ->
                 {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
