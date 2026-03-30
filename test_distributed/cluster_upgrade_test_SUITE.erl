@@ -660,20 +660,16 @@ init_per_testcase(Case = upgrade_from_21_02_8_luma, Config) ->
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = upgrade_from_25_0_trash, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    Config1 = initializer:setup_storage(Config),
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config1, "env_desc.json"), Config1),
 
-    test_utils:mock_new(Worker, provider_logic, [passthrough]),
-    test_utils:mock_expect(Worker, provider_logic, get_spaces, fun() ->
-        {ok, [?SPACE1_ID]}
-    end),
-
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    init_per_testcase(?DEFAULT_CASE(Case), Config1);
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
     test_utils:mock_expect(Worker, gs_channel_service, is_connected_and_initialized, fun() -> true end),
-    Config.
+    lfm_proxy:init(Config).
 
 
 end_per_testcase(Case = upgrade_from_21_02_2_tmp_dir, Config) ->
@@ -699,7 +695,7 @@ end_per_testcase(Case = upgrade_from_25_0_trash, Config) ->
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [storage_logic, gs_channel_service]),
-    ok.
+    lfm_proxy:teardown(Config).
 
 
 end_per_suite(_Config) ->

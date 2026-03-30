@@ -218,13 +218,10 @@ list(SpaceId) ->
     list(SpaceId, file_listing:starting_opts_with_tune_for_cont_listing(false)).
 
 -spec list(od_space:id(), file_listing:options()) -> {[file_ctx:ctx()], file_listing:pagination_token()}.
-list(SpaceId, ListOpts) when is_map(ListOpts) ->
+list(SpaceId, ListOpts) ->
     {Children, NextPaginationToken, _} = dir_req:list_children_ctxs(user_ctx:new(?ROOT_SESS_ID),
         file_ctx:new_by_guid(trash_dir:guid(SpaceId)), ListOpts),
-    {Children, NextPaginationToken};
-list(SpaceId, PaginationToken) ->
-    ListOpts = #{pagination_token => PaginationToken},
-    list(SpaceId, ListOpts).
+    {Children, NextPaginationToken}.
 
 
 % NOTE: this is best effort and is not guaranteed to work properly (mainly due to not having original parent uuid)
@@ -241,7 +238,7 @@ clear_all(SpaceId, EventsMode, Token) ->
     EmitEventsFlag = EventsMode == emit_events,
     {List, NextToken} = case Token of
         undefined -> list(SpaceId);
-        _ -> list(SpaceId, Token)
+        _ -> list(SpaceId, #{pagination_token => Token})
     end,
     lists:foreach(fun(FileCtx) ->
         % Cache deleted file meta in file_ctx so traverse can start on deleted file.
