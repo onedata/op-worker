@@ -61,7 +61,7 @@ all() ->
     ]).
 
 
--define(TRANSFER_TYPES, [<<"replication">>, <<"eviction">>, <<"migration">>]).
+-define(TEST_TRANSFER_TYPES, [<<"replication">>, <<"eviction">>, <<"migration">>]).
 -define(DATA_SOURCE_TYPES, [<<"file">>, <<"view">>]).
 
 % Parameters having below value were not assigned proper value in data_spec()
@@ -70,7 +70,7 @@ all() ->
 
 -define(TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES, [
     {<<"type">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"type">>)}},
-    {<<"type">>, <<"transfer">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"type">>, ?TRANSFER_TYPES)},
+    {<<"type">>, <<"transfer">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"type">>, ?TEST_TRANSFER_TYPES)},
     {<<"dataSourceType">>, 100, {gs, ?ERR_BAD_VALUE_STRING(<<"dataSourceType">>)}},
     {<<"dataSourceType">>, <<"data">>, ?ERR_BAD_VALUE_NOT_ALLOWED(<<"dataSourceType">>, ?DATA_SOURCE_TYPES)}
 ]).
