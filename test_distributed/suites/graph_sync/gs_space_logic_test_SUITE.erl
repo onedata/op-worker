@@ -318,8 +318,7 @@ convenience_functions_test(Config) ->
         {ok, ?SPACE_SHARES(?SPACE_1)},
         rpc:call(Node, space_logic, get_shares, [User1Sess, ?SPACE_1])
     ),
-    %% @TODO VFS-12760 fetching shares invalidates cache
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
 
     % Providers are within private scope
     ExpProviderIds = maps:keys(?SPACE_PROVIDERS_VALUE(?SPACE_1)),
