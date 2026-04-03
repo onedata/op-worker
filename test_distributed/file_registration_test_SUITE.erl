@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("rest_test_utils.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -31,8 +32,10 @@
 %% tests
 -export([
     register_file_test/1,
+    register_file_with_conflict_test/1,
     register_file_and_create_parents_test/1,
     update_registered_file_test/1,
+    update_registered_file_with_not_matching_destination_test/1,
     stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled/1,
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled/1,
     registration_should_fail_if_file_is_missing/1,
@@ -45,8 +48,10 @@
 
 -define(TEST_CASES, [
     register_file_test,
+    register_file_with_conflict_test,
     register_file_and_create_parents_test,
     update_registered_file_test,
+    update_registered_file_with_not_matching_destination_test,
     stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled,
     registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled,
     registration_should_fail_if_file_is_missing,
@@ -244,6 +249,50 @@ register_file_test(Config) ->
     % check whether file is visible on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
 
+register_file_with_conflict_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    FileName = ?FILE_NAME,
+    FilePath = ?PATH(FileName),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    % create remote file, so storage file is not created on registering provider
+    {ok, {ExistingFileGuid, Handle}} = lfm_proxy:create_and_open(W2, SessId2, FilePath),
+    lfm_proxy:write(W2, Handle, 0, ?TEST_DATA2),
+    lfm_proxy:close(W2, Handle),
+    ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, ?FILE_REF(ExistingFileGuid)), ?ATTEMPTS),
+
+    {ok, _, _, EncodedBody} = ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"mtime">> => global_clock:timestamp_seconds(),
+        <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => <<"664">>,
+        <<"xattrs">> => ?XATTRS,
+        <<"json">> => ?JSON1,
+        <<"rdf">> => ?ENCODED_RDF1
+    })),
+    
+    % registration should create a new file with import conflict suffix
+    RegisteredFileId = maps:get(<<"fileId">>, json_utils:decode(EncodedBody)),
+    ?assertNotEqual(ExistingFileGuid, RegisteredFileId),
+    
+    RegisteredPath = ?PATH(?IMPORTED_CONFLICTING_FILE_NAME(FileName, initializer:domain_to_provider_id(?GET_DOMAIN(W1)))),
+        
+    % check whether file has been properly registered
+    ?assertFile(W1, SessId, RegisteredPath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
+
+    % check whether file is visible on 2nd provider
+    ?assertFile(W2, SessId2, RegisteredPath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS).
+
 register_file_and_create_parents_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -347,6 +396,46 @@ update_registered_file_test(Config) ->
 
     % check whether file was updated on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA2, XATTRS3, ?JSON2, ?RDF2, ?ATTEMPTS).
+
+update_registered_file_with_not_matching_destination_test(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    FileName = ?FILE_NAME,
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    RegisteredFileName = str_utils:join_binary([FileName, <<"_registered">>]),
+    FilePath = ?PATH(RegisteredFileName),
+
+    RegisterAndCheckFun = fun(Data) ->
+        ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+            <<"spaceId">> => ?SPACE_ID,
+            <<"destinationPath">> => RegisteredFileName,
+            <<"storageFileId">> => StorageFileId,
+            <<"storageId">> => StorageId,
+            <<"mtime">> => global_clock:timestamp_seconds(),
+            <<"size">> => byte_size(Data),
+            <<"mode">> => <<"664">>,
+            <<"xattrs">> => ?XATTRS,
+            <<"json">> => ?JSON1,
+            <<"rdf">> => ?ENCODED_RDF1
+        })),
+
+        % check whether file has been properly registered
+        ?assertFile(W1, SessId, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1),
+
+        % check whether file is visible on 2nd provider
+        ?assertFile(W2, SessId2, FilePath, Data, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
+    end,
+    
+    RegisterAndCheckFun(?TEST_DATA),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA2),
+    RegisterAndCheckFun(?TEST_DATA2).
 
 stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
