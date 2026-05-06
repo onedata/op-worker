@@ -453,10 +453,10 @@ get_default_file_mode(_) ->
 
 -spec select_file_registration_timeout(helpers:helper()) -> timeout().
 select_file_registration_timeout(#helper{name = ?HTTP_HELPER_NAME, args = Args}) ->
-    case maps:get(<<"emulateRangeRead">>, Args, false) of
-        true ->
+    case maps:get(<<"emulateRangeRead">>, Args, <<"false">>) of
+        <<"true">> ->
             ?FILE_REGISTRATION_HTTP_EMULATED_RANGE_READ_TIMEOUT;
-        false ->
+        <<"false">> ->
             ?FILE_REGISTRATION_TIMEOUT
     end;
 select_file_registration_timeout(_) ->
