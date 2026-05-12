@@ -287,13 +287,16 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    HelperName = storage:get_helper_name(StorageId),
-    IsHttp = HelperName =:= ?HTTP_HELPER_NAME,
+    Helper = storage:get_helper(StorageId),
+    HelperName = helper:get_name(Helper),
+    HelperArgs = Helper#helper.args,
+    IsHttpWithoutEmulateRangeRead = HelperName =:= ?HTTP_HELPER_NAME
+        andalso not maps:get(<<"emulateRangeRead">>, HelperArgs, false),
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
-    case IsHttp orelse AutoDetect of
+    case IsHttpWithoutEmulateRangeRead orelse AutoDetect of
         true ->
-            % in case of the HTTP helper we don't allow overriding file attributes, as it
-            % requires the stat operation to be supported for correct range reads later on
+            % in case of the HTTP helper without range read emulation, we don't allow overriding
+            % file attributes because reads from servers without support for range read will fail
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
         false ->
