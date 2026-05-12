@@ -173,8 +173,9 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
         {ok, _} = Res ->
             Res;
         {error, not_found, _} ->
+            % This directory has been deleted, do not count it and continue.
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            ?debug(?autoformat_with_msg("Error not found during stats initialization", FileUuid)),
+            ?debug(?autoformat_with_msg("Directory deleted during stats initialization", FileUuid)),
             {ok, #{}};
         {error, Reason, Stacktrace} ->
             %% @TODO VFS-11151 - log to system audit log
