@@ -60,6 +60,8 @@
 -define(FILE_REGISTRATION_POOL, file_registration_pool).
 -define(FILE_REGISTRATION_POOL_SIZE, op_worker:get_env(file_registration_pool_size, 20)).
 -define(FILE_REGISTRATION_TIMEOUT, op_worker:get_env(file_registration_timeout, 30000)).
+-define(FILE_REGISTRATION_HTTP_EMULATED_RANGE_READ_TIMEOUT,
+        op_worker:get_env(file_registration_http_emulated_range_read_timeout, 300000)).
 
 %%%===================================================================
 %%% API functions
@@ -69,11 +71,12 @@
     {ok, fslogic_worker:file_guid()} | {error, term()}.
 register(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
     Args = [SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec],
+    Timeout = select_file_registration_timeout(storage:get_helper(StorageId)),
     Result = worker_pool:call(
         ?FILE_REGISTRATION_POOL,
         {?MODULE, register_internal, Args},
         wpool:default_strategy(),
-        ?FILE_REGISTRATION_TIMEOUT
+        Timeout
     ),
     case Result of
         {ok, OkResult} -> OkResult;
@@ -284,13 +287,16 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    HelperName = storage:get_helper_name(StorageId),
-    IsHttp = HelperName =:= ?HTTP_HELPER_NAME,
+    Helper = storage:get_helper(StorageId),
+    HelperName = helper:get_name(Helper),
+    HelperArgs = Helper#helper.args,
+    IsHttpWithoutEmulateRangeRead = HelperName =:= ?HTTP_HELPER_NAME
+        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
-    case IsHttp orelse AutoDetect of
+    case IsHttpWithoutEmulateRangeRead orelse AutoDetect of
         true ->
-            % in case of the HTTP helper we don't allow overriding file attributes, as it
-            % requires the stat operation to be supported for correct range reads later on
+            % in case of the HTTP helper without range read emulation, we don't allow overriding
+            % file attributes because reads from servers without support for range read will fail
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
         false ->
@@ -446,3 +452,15 @@ get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
     maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
 get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.
+
+
+-spec select_file_registration_timeout(helpers:helper()) -> timeout().
+select_file_registration_timeout(#helper{name = ?HTTP_HELPER_NAME, args = Args}) ->
+    case maps:get(<<"emulateRangeRead">>, Args, <<"false">>) of
+        <<"true">> ->
+            ?FILE_REGISTRATION_HTTP_EMULATED_RANGE_READ_TIMEOUT;
+        <<"false">> ->
+            ?FILE_REGISTRATION_TIMEOUT
+    end;
+select_file_registration_timeout(_) ->
+    ?FILE_REGISTRATION_TIMEOUT.
