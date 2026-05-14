@@ -291,7 +291,7 @@ maybe_verify_existence(StorageFileCtx, Spec) ->
     HelperName = helper:get_name(Helper),
     HelperArgs = Helper#helper.args,
     IsHttpWithoutEmulateRangeRead = HelperName =:= ?HTTP_HELPER_NAME
-        andalso not maps:get(<<"emulateRangeRead">>, HelperArgs, false),
+        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
     AutoDetect = maps:get(<<"autoDetectAttributes">>, Spec, true),
     case IsHttpWithoutEmulateRangeRead orelse AutoDetect of
         true ->

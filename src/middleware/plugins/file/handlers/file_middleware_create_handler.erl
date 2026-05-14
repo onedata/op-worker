@@ -241,7 +241,7 @@ validate(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     StorageType= helper:get_name(Helper),
     HelperArgs = Helper#helper.args,
     IsHttpWithoutEmulateRangeRead = StorageType =:= ?HTTP_HELPER_NAME
-        andalso not maps:get(<<"emulateRangeRead">>, HelperArgs, false),
+        andalso maps:get(<<"emulateRangeRead">>, HelperArgs, <<"false">>) =:= <<"false">>,
     case IsHttpWithoutEmulateRangeRead andalso AutoDetectAttributes == false of
         true ->
             % in case of the HTTP helper without range read emulation, we don't allow overriding
