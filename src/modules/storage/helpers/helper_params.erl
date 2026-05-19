@@ -253,7 +253,8 @@ expected_custom_helper_args(?HTTP_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>}, {optional, <<"verifyServerCertificate">>},
     {optional, <<"authorizationHeader">>}, {optional, <<"connectionPoolSize">>},
-    {optional, <<"maxRequestsPerSession">>},{optional, <<"fileMode">>}];
+    {optional, <<"maxRequestsPerSession">>}, {optional, <<"emulateRangeRead">>},
+    {optional, <<"maxEmulatedRangeReadFileSize">>}, {optional, <<"fileMode">>}];
 expected_custom_helper_args(?XROOTD_HELPER_NAME) -> [
     <<"url">>,
     {optional, <<"fileModeMask">>}, {optional, <<"dirModeMask">>}];
