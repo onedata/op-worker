@@ -54,6 +54,11 @@ translate_value(#gri{aspect = transfers}, TransfersForFile) ->
 translate_value(#gri{aspect = download_url}, URL) ->
     #{<<"fileUrl">> => URL};
 
+%% Already a well-formed map (`#{<<"state">> => ..., maybe <<"error">> => ...}`)
+%% shaped by `file_middleware_get_handler:get/2`. Pass-through.
+translate_value(#gri{aspect = download_status}, StatusMap) ->
+    StatusMap;
+
 translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
     ApiSamples;
 translate_value(#gri{aspect = api_samples, scope = private}, ApiSamples) ->

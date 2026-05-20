@@ -78,6 +78,10 @@ handle(<<"GET">>, Req) ->
             file_guids = FileGuids,
             follow_symlinks = FollowSymlinks
         }} ->
+            %% Reset streaming state so that browser retries on the same URL get a
+            %% fresh `pending`. Polling clients on the GUI side rely on this to
+            %% observe the new attempt's outcome.
+            file_download_code:reset_streaming_status(FileDownloadCode),
             handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req);
 
         {true, _} ->
@@ -164,39 +168,87 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
                 ArchiveId ->
                     archivisation_tree:get_filename_for_download(ArchiveId)
             end,
+            short_circuit_streaming_state(FileDownloadCode),
             file_content_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req
             );
         {[#file_attr{type = ?REGULAR_FILE_TYPE} = Attr], _} ->
+            {OnStarted, OnFinished} = build_streaming_callbacks(FileDownloadCode),
             file_content_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req
+                SessionId, Attr, OnStarted, OnFinished, Req
             );
         {[#file_attr{type = ?SYMLINK_TYPE, guid = Guid, name = SymlinkName}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+                    short_circuit_streaming_state(FileDownloadCode),
                     file_content_download_utils:download_tarball(
                         FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req
                     );
                 {ok, #file_attr{} = ResolvedAttr} ->
+                    {OnStarted, OnFinished} = build_streaming_callbacks(FileDownloadCode),
                     file_content_download_utils:download_single_file(
-                        SessionId, ResolvedAttr, SymlinkName,
-                        fun() -> file_download_code:remove(FileDownloadCode) end,
-                        Req
+                        SessionId, ResolvedAttr, SymlinkName, OnStarted, OnFinished, Req
                     );
                 {error, Errno} ->
                     http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req)
             end;
         {[#file_attr{type = ?SYMLINK_TYPE} = Attr], false} ->
+            {OnStarted, OnFinished} = build_streaming_callbacks(FileDownloadCode),
             file_content_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req
+                SessionId, Attr, OnStarted, OnFinished, Req
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             TarballName = <<"onedata-download-", Timestamp/binary, ".tar">>,
+            short_circuit_streaming_state(FileDownloadCode),
             file_content_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req
             )
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Builds streaming lifecycle callbacks for branches that stream a single
+%% regular file (directly or via symlink resolution).
+%% - on_started: HTTP response headers + first chunk hit the wire. GUI polling
+%%   sees `started` and stops polling -- the iframe is in control from here.
+%% - on_finished(ok): full content was streamed; clean up the code so future
+%%   polling requests return ?ERROR_NOT_FOUND, signaling completion.
+%% - on_finished({error, _}): error occurred BEFORE the first chunk reached
+%%   the wire (open failure, first-read failure, etc.). GUI polling sees
+%%   `failed` and can surface the translated error to the user, even though
+%%   the iframe response itself is invisible.
+%% @end
+%%--------------------------------------------------------------------
+-spec build_streaming_callbacks(file_download_code:code()) ->
+    {file_content_download_utils:on_started_callback(),
+     file_content_download_utils:on_finished_callback()}.
+build_streaming_callbacks(Code) ->
+    OnStarted = fun() -> file_download_code:mark_started(Code) end,
+    OnFinished = fun
+        (ok) -> file_download_code:remove(Code);
+        ({error, Error}) -> file_download_code:mark_failed(Code, Error)
+    end,
+    {OnStarted, OnFinished}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Tarball/multi/dir branches do not yet integrate with the streaming-state
+%% lifecycle (tarball's `bulk_download` flushes HTTP headers EAGERLY -- before
+%% any content read -- so reporting `failed` after the fact is meaningless).
+%% Mark such codes as `started` immediately at the GET handler so that GUI
+%% polling terminates without false positives; behaviour is identical to
+%% pre-tracking days.
+%% @end
+%%--------------------------------------------------------------------
+-spec short_circuit_streaming_state(file_download_code:code()) -> ok.
+short_circuit_streaming_state(Code) ->
+    file_download_code:mark_started(Code),
+    ok.
 
 
 %%--------------------------------------------------------------------

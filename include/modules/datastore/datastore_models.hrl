@@ -276,7 +276,8 @@
 
 -record(file_download_code, {
     expires :: time:seconds(),
-    download_args :: download_args:record()
+    download_args :: download_args:record(),
+    streaming_status = pending :: file_download_code:streaming_status()
 }).
 
 -record(offline_access_credentials, {

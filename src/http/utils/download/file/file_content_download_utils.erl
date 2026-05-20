@@ -19,13 +19,14 @@
 
 %% API
 -export([
-    download_single_file/3, download_single_file/4, download_single_file/5,
+    download_single_file/3, download_single_file/5, download_single_file/6,
     download_tarball/6
 ]).
 
--type on_success_callback() :: fun(() -> ok).
+-type on_started_callback() :: fun(() -> ok).
+-type on_finished_callback() :: fun((ok | {error, errors:error()}) -> ok).
 
--export_type([on_success_callback/0]).
+-export_type([on_started_callback/0, on_finished_callback/0]).
 
 %% When streaming a file download, if a helper process fails during reading, 
 %% we cannot simply send an error response, as HTTP does not allow it once 
@@ -48,30 +49,42 @@
 %%%===================================================================
 
 
+%% REST/CDMI entry point -- no streaming lifecycle tracking (callers see the HTTP
+%% status directly).
 -spec download_single_file(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
     cowboy_req:req().
 download_single_file(SessionId, FileAttrs, Req) ->
-    download_single_file(SessionId, FileAttrs, fun() -> ok end, Req).
+    NoopStarted = fun() -> ok end,
+    NoopFinished = fun(_) -> ok end,
+    download_single_file(SessionId, FileAttrs, FileAttrs#file_attr.name, NoopStarted, NoopFinished, Req).
 
 
--spec download_single_file(session:id(), lfm_attrs:file_attributes(), on_success_callback(), cowboy_req:req()) ->
+%% GUI entry point that reuses the file's own name.
+-spec download_single_file(
+    session:id(),
+    lfm_attrs:file_attributes(),
+    on_started_callback(),
+    on_finished_callback(),
+    cowboy_req:req()
+) ->
     cowboy_req:req().
-download_single_file(SessionId, FileAttrs, OnSuccessCallback, Req) ->
-    download_single_file(SessionId, FileAttrs, FileAttrs#file_attr.name, OnSuccessCallback, Req).
+download_single_file(SessionId, FileAttrs, OnStartedCallback, OnFinishedCallback, Req) ->
+    download_single_file(SessionId, FileAttrs, FileAttrs#file_attr.name, OnStartedCallback, OnFinishedCallback, Req).
 
 
 -spec download_single_file(
     session:id(),
     lfm_attrs:file_attributes(),
     file_meta:name(),
-    on_success_callback(),
+    on_started_callback(),
+    on_finished_callback(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, FileName, OnSuccessCallback, Req0) ->
-    download_single_regular_file(SessionId, FileAttr, FileName, OnSuccessCallback, Req0);
-download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, FileName, OnSuccessCallback, Req0) ->
-    download_single_symlink(SessionId, FileAttr, FileName, OnSuccessCallback, Req0).
+download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0) ->
+    download_single_regular_file(SessionId, FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0);
+download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0) ->
+    download_single_symlink(SessionId, FileAttr, FileName, OnStartedCallback, OnFinishedCallback, Req0).
 
 
 -spec download_tarball(
@@ -104,14 +117,15 @@ download_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSy
     session:id(),
     lfm_attrs:file_attributes(),
     file_meta:name(),
-    on_success_callback(),
+    on_started_callback(),
+    on_finished_callback(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
 download_single_regular_file(SessionId, #file_attr{
     guid = FileGuid,
     size = FileSize
-}, FileName, OnSuccessCallback, Req0) ->
+}, FileName, OnStartedCallback, OnFinishedCallback, Req0) ->
     case http_parser:parse_range_header(Req0, FileSize) of
         invalid ->
             cowboy_req:reply(
@@ -125,8 +139,8 @@ download_single_regular_file(SessionId, #file_attr{
                     try
                         Req1 = ensure_content_type_header_set(FileName, Req0),
                         Req2 = http_download_utils:set_content_disposition_header(Req1, FileName),
-                        {Boundary, Req3} = stream_file_internal(Ranges, FileHandle, FileSize, Req2),
-                        execute_on_success_callback(FileGuid, OnSuccessCallback),
+                        {Boundary, Req3} = stream_file_internal(Ranges, FileHandle, FileSize, OnStartedCallback, Req2),
+                        ?catch_exceptions(OnFinishedCallback(ok)),
                         file_content_streamer:close_stream(Boundary, Req3),
                         Req3
                     catch Class:Reason:Stacktrace ->
@@ -136,12 +150,15 @@ download_single_regular_file(SessionId, #file_attr{
                             [FileGuid, UserId],
                             Class, Reason, Stacktrace
                         ),
+                        ?catch_exceptions(OnFinishedCallback(Error)),
                         http_req:send_error(Error, Req0)
                     after
                         lfm:monitored_release(FileHandle)
                     end;
                 {error, Errno} ->
-                    http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req0)
+                    Error = ?ERR_POSIX(?err_ctx(), Errno),
+                    ?catch_exceptions(OnFinishedCallback(Error)),
+                    http_req:send_error(Error, Req0)
             end
     end.
 
@@ -151,11 +168,12 @@ download_single_regular_file(SessionId, #file_attr{
     session:id(),
     lfm_attrs:file_attributes(),
     file_meta:name(),
-    on_success_callback(),
+    on_started_callback(),
+    on_finished_callback(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnSuccessCallback, Req0) ->
+download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnStartedCallback, OnFinishedCallback, Req0) ->
     case lfm:read_symlink(SessionId, ?FILE_REF(Guid, false)) of
         {ok, LinkPath} ->
             Req1 = http_download_utils:set_content_disposition_header(Req0, FileName),
@@ -165,11 +183,15 @@ download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnSuccessC
                 Req1
             ),
             file_content_streamer:send_data_chunk(LinkPath, Req2),
-            execute_on_success_callback(Guid, OnSuccessCallback),
+            %% The single chunk has been sent at this point -- treat it as `started`.
+            ?catch_exceptions(OnStartedCallback()),
+            ?catch_exceptions(OnFinishedCallback(ok)),
             file_content_streamer:close_stream(undefined, Req2),
             Req2;
         {error, Errno} ->
-            http_req:send_error(?ERR_POSIX(?err_ctx(), Errno), Req0)
+            Error = ?ERR_POSIX(?err_ctx(), Errno),
+            ?catch_exceptions(OnFinishedCallback(Error)),
+            http_req:send_error(Error, Req0)
     end.
 
 
@@ -181,34 +203,36 @@ build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
 
 %% @private
 -spec stream_file_internal(undefined | [http_parser:bytes_range()], lfm:handle(), file_meta:size(),
-    cowboy_req:req()) -> {binary(), cowboy_req:req()}.
-stream_file_internal(undefined, FileHandle, FileSize, Req) ->
-    stream_whole_file(FileHandle, FileSize, Req);
-stream_file_internal([OneRange], FileHandle, FileSize, Req) ->
-    stream_one_ranged_body(OneRange, FileHandle, FileSize, Req);
-stream_file_internal(Ranges, FileHandle, FileSize, Req) ->
-    stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req).
+    on_started_callback(), cowboy_req:req()) -> {binary(), cowboy_req:req()}.
+stream_file_internal(undefined, FileHandle, FileSize, OnStartedCallback, Req) ->
+    stream_whole_file(FileHandle, FileSize, OnStartedCallback, Req);
+stream_file_internal([OneRange], FileHandle, FileSize, OnStartedCallback, Req) ->
+    stream_one_ranged_body(OneRange, FileHandle, FileSize, OnStartedCallback, Req);
+stream_file_internal(Ranges, FileHandle, FileSize, OnStartedCallback, Req) ->
+    stream_multipart_ranged_body(Ranges, FileHandle, FileSize, OnStartedCallback, Req).
 
 
 %% @private
--spec stream_whole_file(lfm:handle(), file_meta:size(), cowboy_req:req()) ->
+-spec stream_whole_file(lfm:handle(), file_meta:size(), on_started_callback(), cowboy_req:req()) ->
     {undefined, cowboy_req:req()}.
-stream_whole_file(FileHandle, FileSize, Req0) ->
+stream_whole_file(FileHandle, FileSize, OnStartedCallback, Req0) ->
     SendState0 = #initial_stream_state{
         status = ?HTTP_200_OK,
         headers = #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
         req = Req0
     },
     StreamingCtx0 = file_content_streamer:build_ctx(FileHandle, FileSize),
-    StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun()),
+    StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun(OnStartedCallback)),
     SendState1 = file_content_streamer:stream_bytes_range(StreamingCtx1, {0, FileSize - 1}, SendState0),
-    {undefined, ensure_stream_initiated(SendState1)}.
+    {undefined, ensure_stream_initiated(SendState1, OnStartedCallback)}.
 
 
 %% @private
--spec stream_one_ranged_body(http_parser:bytes_range(), lfm:handle(), file_meta:size(), cowboy_req:req()) ->
+-spec stream_one_ranged_body(
+    http_parser:bytes_range(), lfm:handle(), file_meta:size(), on_started_callback(), cowboy_req:req()
+) ->
     {undefined, cowboy_req:req()}.
-stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req0) ->
+stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, OnStartedCallback, Req0) ->
     SendState0 = #initial_stream_state{
         status = ?HTTP_206_PARTIAL_CONTENT,
         headers = #{
@@ -218,15 +242,17 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req
         req = Req0
     },
     StreamingCtx0 = file_content_streamer:build_ctx(FileHandle, FileSize),
-    StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun()),
+    StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun(OnStartedCallback)),
     SendState1 = file_content_streamer:stream_bytes_range(StreamingCtx1, Range, SendState0),
-    {undefined, ensure_stream_initiated(SendState1)}.
+    {undefined, ensure_stream_initiated(SendState1, OnStartedCallback)}.
 
 
 %% @private
--spec stream_multipart_ranged_body([http_parser:bytes_range()], lfm:handle(), file_meta:size(),
-    cowboy_req:req()) -> {binary(), cowboy_req:req()}.
-stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
+-spec stream_multipart_ranged_body(
+    [http_parser:bytes_range()], lfm:handle(), file_meta:size(), on_started_callback(), cowboy_req:req()
+) ->
+    {binary(), cowboy_req:req()}.
+stream_multipart_ranged_body(Ranges, FileHandle, FileSize, OnStartedCallback, Req0) ->
     Boundary = cow_multipart:boundary(),
     ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
     BuildNextPartHead = fun(Range) ->
@@ -237,7 +263,7 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
     end,
 
     StreamingCtx0 = file_content_streamer:build_ctx(FileHandle, FileSize),
-    StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun()),
+    StreamingCtx1 = file_content_streamer:set_send_fun(StreamingCtx0, build_streaming_send_fun(OnStartedCallback)),
 
     FinalSendState = lists:foldl(fun
         (FirstRange, undefined) ->
@@ -252,7 +278,7 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
             file_content_streamer:stream_bytes_range(StreamingCtx1, NextRange, ReqAcc1)
     end, undefined, Ranges),
 
-    {Boundary, ensure_stream_initiated(FinalSendState)}.
+    {Boundary, ensure_stream_initiated(FinalSendState, OnStartedCallback)}.
 
 
 %% @private
@@ -312,19 +338,11 @@ ensure_content_type_header_set(FileName, Req) ->
 
 
 %% @private
--spec execute_on_success_callback(fslogic_worker:file_guid(), on_success_callback()) -> ok.
-execute_on_success_callback(Guid, OnSuccessCallback) ->
-    try
-        ok = OnSuccessCallback()
-    catch Type:Reason ->
-        ?warning("Failed to execute file download successfully finished callback for file (~tp) "
-                 "due to ~tp:~tp", [Guid, Type, Reason])
-    end.
-
-
-%% @private
--spec build_streaming_send_fun() -> file_content_streamer:send_fun().
-build_streaming_send_fun() ->
+%% The `OnStartedCallback` is invoked exactly once -- after the first chunk has
+%% been handed to cowboy. This is the moment HTTP response headers are committed
+%% to the wire (`init_stream` is called by the first branch).
+-spec build_streaming_send_fun(on_started_callback()) -> file_content_streamer:send_fun().
+build_streaming_send_fun(OnStartedCallback) ->
     fun
         (DataChunk, SendState = #initial_stream_state{}, MaxReadBlocksCount, SendRetryDelay) ->
             Req = init_stream(SendState),
@@ -332,9 +350,11 @@ build_streaming_send_fun() ->
                 undefined -> DataChunk;
                 InitialData -> [InitialData, DataChunk]
             end,
-            http_download_utils:send_data_chunk(
+            Result = http_download_utils:send_data_chunk(
                 Data, Req, MaxReadBlocksCount, SendRetryDelay
-            );
+            ),
+            ?catch_exceptions(OnStartedCallback()),
+            Result;
         (DataChunk, Req, MaxReadBlocksCount, SendRetryDelay) ->
             http_download_utils:send_data_chunk(
                 DataChunk, Req, MaxReadBlocksCount, SendRetryDelay
@@ -345,10 +365,12 @@ build_streaming_send_fun() ->
 %% NOTE: handle edge case when stream have been not initiated by send_fun (see 'build_streaming_send_fun')
 %% (e.g. streaming empty file)
 %% @private
--spec ensure_stream_initiated(initial_stream_state() | cowboy_req:req()) -> cowboy_req:req().
-ensure_stream_initiated(SendState = #initial_stream_state{}) ->
+-spec ensure_stream_initiated(initial_stream_state() | cowboy_req:req(), on_started_callback()) ->
+    cowboy_req:req().
+ensure_stream_initiated(SendState = #initial_stream_state{}, OnStartedCallback) ->
+    ?catch_exceptions(OnStartedCallback()),
     init_stream(SendState);
-ensure_stream_initiated(Req) ->
+ensure_stream_initiated(Req, _OnStartedCallback) ->
     Req.
 
 
