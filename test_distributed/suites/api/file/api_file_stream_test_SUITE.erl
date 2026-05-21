@@ -583,14 +583,23 @@ maybe_inject_guids(_MemRef, Data, _TestMode) ->
 
 
 %% @private
+-spec get_streaming_status(node(), binary()) ->
+    {ok, file_download_code:streaming_status()} | {error, term()}.
+get_streaming_status(DownloadNode, DownloadCode) ->
+    rpc:call(DownloadNode, file_download_code, get_streaming_status, [DownloadCode]).
+
+
+%% @private
 -spec build_get_download_url_validate_gs_call_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_get_download_url_validate_gs_call_fun(MemRef) ->
     fun(#api_test_ctx{node = DownloadNode, client = Client}, Result) ->
-        [#object{guid = Guid} | _] = FileTreeObject = api_test_memory:get(MemRef, file_tree_object),
+        [#object{guid = Guid, type = FileType} | _] = FileTreeObject = api_test_memory:get(MemRef, file_tree_object),
+        IsSingleRegFileDownload = length(FileTreeObject) == 1 andalso FileType == ?REGULAR_FILE_TYPE,
 
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
         [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
+        ?assertEqual({ok, pending}, get_streaming_status(DownloadNode, DownloadCode)),
 
         DownloadFunction = case api_test_memory:get(MemRef, download_type, simulate_failures) of
             simulate_failures -> fun download_file_using_download_code_with_resumes/3;
@@ -603,10 +612,14 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 case Client of
                     % user4 does not have access to files, so list of files to download passed 
                     % to file_content_download_utils is empty, hence it cannot be blocked for specific guid
-                    ?USER(User4Id) -> ok;
+                    ?USER(User4Id) ->
+                        ok;
                     _ ->
                         block_file_streaming(DownloadNode, Guid),
                         ?assertEqual(?ERR_POSIX(?EAGAIN), DownloadFunction(MemRef, DownloadNode, FileDownloadUrl)),
+                        IsSingleRegFileDownload andalso ?assertMatch(
+                            {ok, {failed, _}}, get_streaming_status(DownloadNode, DownloadCode)
+                        ),
                         unblock_file_streaming(DownloadNode, Guid),
                         ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory))
                 end,
@@ -1646,29 +1659,33 @@ init_per_suite(Config) ->
             lists:foreach(fun(OpNode) ->
                 test_node_starter:load_modules([OpNode], [?MODULE]),
                 ok = test_utils:mock_new(OpNode, file_content_download_utils),
-                ErrorFun = fun(FileAttrs, Req) ->
+                ErrorFun = fun(FileAttrs) ->
                     ShouldBlock = lists:any(fun(#file_attr{guid = Guid}) ->
                         {Uuid, _, _} = file_id:unpack_share_guid(Guid),
                         node_cache:get({block_file, Uuid}, false)
                     end, utils:ensure_list(FileAttrs)),
                     case ShouldBlock of
-                        true -> http_req:send_error(?ERR_POSIX(?EAGAIN), Req);
+                        true -> ?ERR_POSIX(?EAGAIN);
                         false -> passthrough
                     end
                 end,
                 ok = test_utils:mock_expect(OpNode, file_content_download_utils, download_single_file,
                     fun(SessionId, FileAttrs, OnStarted, OnFinished, Req) ->
-                        case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([SessionId, FileAttrs, OnStarted, OnFinished, Req]);
-                            Res -> Res
+                        case ErrorFun(FileAttrs) of
+                            passthrough ->
+                                meck:passthrough([SessionId, FileAttrs, OnStarted, OnFinished, Req]);
+                            Error ->
+                                OnFinished(Error),
+                                http_req:send_error(Error, Req)
                         end
                     end),
                 ok = test_utils:mock_expect(OpNode, file_content_download_utils, download_tarball,
                     fun(Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req) ->
-                        case ErrorFun(FileAttrs, Req) of
+                        case ErrorFun(FileAttrs) of
                             passthrough ->
                                 meck:passthrough([Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req]);
-                            Res -> Res
+                            Error ->
+                                http_req:send_error(Error, Req)
                         end
                     end)
             end, ProviderNodes),

@@ -229,7 +229,7 @@ build_streaming_callbacks(Code) ->
     OnStarted = fun() -> file_download_code:mark_started(Code) end,
     OnFinished = fun
         (ok) -> file_download_code:remove(Code);
-        ({error, Error}) -> file_download_code:mark_failed(Code, Error)
+        ({error, _} = Error) -> file_download_code:mark_failed(Code, Error)
     end,
     {OnStarted, OnFinished}.
 
