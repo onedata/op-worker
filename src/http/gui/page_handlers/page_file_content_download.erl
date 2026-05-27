@@ -40,7 +40,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_file_download_url(session:id(), [fslogic_worker:file_guid()], boolean()) ->
-    {ok, binary()} | errors:error().
+    {ok, {binary(), binary()}} | errors:error().
 gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
@@ -55,7 +55,7 @@ gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
             Hostname, ?GUI_FILE_CONTENT_DOWNLOAD_PATH, Code
         ]),
 
-        {ok, URL}
+        {ok, {Code, URL}}
     catch
         throw:?ERR_POSIX(Errno) when Errno == ?EACCES; Errno == ?EPERM ->
             ?ERR_FORBIDDEN(?err_ctx());
@@ -168,7 +168,6 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
                 ArchiveId ->
                     archivisation_tree:get_filename_for_download(ArchiveId)
             end,
-            short_circuit_streaming_state(FileDownloadCode),
             file_content_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req
             );
@@ -180,7 +179,6 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
         {[#file_attr{type = ?SYMLINK_TYPE, guid = Guid, name = SymlinkName}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-                    short_circuit_streaming_state(FileDownloadCode),
                     file_content_download_utils:download_tarball(
                         FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req
                     );
@@ -200,7 +198,6 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Ini
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             TarballName = <<"onedata-download-", Timestamp/binary, ".tar">>,
-            short_circuit_streaming_state(FileDownloadCode),
             file_content_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req
             )
@@ -232,23 +229,6 @@ build_streaming_callbacks(Code) ->
         ({error, _} = Error) -> file_download_code:mark_failed(Code, Error)
     end,
     {OnStarted, OnFinished}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Tarball/multi/dir branches do not yet integrate with the streaming-state
-%% lifecycle (tarball's `bulk_download` flushes HTTP headers EAGERLY -- before
-%% any content read -- so reporting `failed` after the fact is meaningless).
-%% Mark such codes as `started` immediately at the GET handler so that GUI
-%% polling terminates without false positives; behaviour is identical to
-%% pre-tracking days.
-%% @end
-%%--------------------------------------------------------------------
--spec short_circuit_streaming_state(file_download_code:code()) -> ok.
-short_circuit_streaming_state(Code) ->
-    file_download_code:mark_started(Code),
-    ok.
 
 
 %%--------------------------------------------------------------------

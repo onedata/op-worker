@@ -298,6 +298,7 @@ stream_whole_tarball(_BulkDownloadId, _SessionId, [], _TarballName, _FollowSymli
 stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0) ->
     Req1 = http_download_utils:set_content_disposition_header(Req0, TarballName),
     Req2 = file_content_streamer:init_stream(?HTTP_200_OK, Req1),
+    file_download_code:mark_started(BulkDownloadId),
     ok = bulk_download:run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, Req2),
     file_content_streamer:close_stream(undefined, Req2),
     Req2.
@@ -315,6 +316,7 @@ stream_partial_tarball(BulkDownloadId, TarballName, [{RangeBegin, unknown}], Req
         true ->
             Req1 = http_download_utils:set_content_disposition_header(Req0, TarballName),
             Req2 = file_content_streamer:init_stream(?HTTP_206_PARTIAL_CONTENT, Req1),
+            file_download_code:mark_started(BulkDownloadId),
             ok = bulk_download:continue(BulkDownloadId, RangeBegin, Req2),
             file_content_streamer:close_stream(undefined, Req2),
             Req2;
