@@ -308,7 +308,7 @@ process_request(#op_req{
             file_content_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{}} ->
             case page_file_content_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
-                {ok, Url} ->
+                {ok, {_, Url}} ->
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
                 {error, _} = Error ->
                     http_req:send_error(Error, Req)
