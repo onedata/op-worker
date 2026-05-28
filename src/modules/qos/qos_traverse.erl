@@ -364,8 +364,14 @@ report_file_synchronized_for_entries(QosEntries, FileCtx) ->
 -spec report_file_failed_for_entries([qos_entry:id()], file_ctx:ctx(), {error, term()}) -> ok.
 report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
     ok = qos_status:report_file_transfer_failure(FileCtx, QosEntries),
+    FinalError = case errors:is_known_error(Error) of
+        true -> 
+            Error;
+        false -> 
+            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), lists:flatten(io_lib:format("~tp", [Error])))
+    end,
     report_to_audit_log(
-        QosEntries, FileCtx, [Error], fun qos_entry_audit_log:report_file_synchronization_failed/4).
+        QosEntries, FileCtx, [FinalError], fun qos_entry_audit_log:report_file_synchronization_failed/4).
 
 
 %% @private
