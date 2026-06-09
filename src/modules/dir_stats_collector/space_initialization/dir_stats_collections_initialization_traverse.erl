@@ -68,7 +68,7 @@ run(SpaceId, Incarnation) ->
     catch
         _:{badmatch, {error, not_found}} ->
             % Space dir is not found - traverse is not needed
-            dir_stats_service_state:report_collections_initialization_finished(SpaceId);
+            dir_stats_service_state:report_collections_initialization_finished(SpaceId, Incarnation);
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Error starting stats initialization traverse for space ~tp (incarnation ~tp): ~tp:~tp",
                 [SpaceId, Incarnation, Error, Reason], Stacktrace),
@@ -142,7 +142,9 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    dir_stats_service_state:report_collections_initialization_finished(get_space_id(TaskId)).
+    [IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
+    Incarnation = binary_to_integer(IncarnationBinary),
+    dir_stats_service_state:report_collections_initialization_finished(SpaceId, Incarnation).
 
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.
@@ -161,12 +163,6 @@ gen_task_id(SpaceId, Incarnation) ->
     <<(integer_to_binary(Incarnation))/binary, ?TASK_ID_SEPARATOR, SpaceId/binary>>.
 
 
--spec get_space_id(tree_traverse:id()) -> file_id:space_id().
-get_space_id(TaskId) ->
-    [_IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
-    SpaceId.
-
-
 -spec do_tree_traverse_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobExtendedArgs) ->
@@ -177,11 +173,13 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
         {ok, _} = Res ->
             Res;
         {error, Reason, Stacktrace} ->
+            #{task_id := TaskId} = MasterJobExtendedArgs,
             %% @TODO VFS-11151 - log to system audit log
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ?error_exception(?autoformat_with_msg("Error when listing directory during stats initialization:",
                 FileUuid), error, Reason, Stacktrace),
             ok = dir_stats_collector:update_stats_of_dir(
                 file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1}),
+            dir_stats_service_state:report_initialization_error(TaskId),
             {ok, #{}}
     end.

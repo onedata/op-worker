@@ -67,14 +67,15 @@
 -export([
     handle_space_support_parameters_change/2,
     enable/1, disable/1,
-    report_collections_initialization_finished/1, report_collectors_stopped/1,
+    report_collections_initialization_finished/2, report_collectors_stopped/1,
+    report_initialization_error/1,
     enable_for_new_support/2
 ]).
 %% API - reinitialization
 -export([reinitialize_stats_for_space/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -114,6 +115,7 @@
 
 -define(MAX_HISTORY_SIZE, 50).
 -define(RESTART_HOOK_ID(SpaceId), <<"DIR_STATS_COLLECTOR_HOOK_", SpaceId/binary>>).
+-define(DIR_STATS_INITIALIZATION_MAX_RETRIES, op_worker:get_env(dir_stats_initialization_max_retries, 3)).
 
 %%%===================================================================
 %%% API - getters
@@ -256,7 +258,8 @@ handle_space_support_parameters_change(_SpaceId, _SpaceSupportParameters) ->
 enable(SpaceId) ->
     NewRecord = #dir_stats_service_state{
         status = initializing,
-        incarnation = 1
+        incarnation = 1,
+        initialization_retry_count = 0
     },
     Diff = fun
         (#dir_stats_service_state{status = enabled}) ->
@@ -267,7 +270,8 @@ enable(SpaceId) ->
         } = State) ->
             {ok, State#dir_stats_service_state{
                 status = initializing,
-                incarnation = PrevIncarnation + 1
+                incarnation = PrevIncarnation + 1,
+                initialization_retry_count = 0
             }};
         (#dir_stats_service_state{
             status = stopping,
@@ -347,22 +351,29 @@ disable(SpaceId) ->
     end.
 
 
--spec report_collections_initialization_finished(od_space:id()) -> ok.
-report_collections_initialization_finished(SpaceId) ->
+-spec report_collections_initialization_finished(od_space:id(), non_neg_integer()) -> ok.
+report_collections_initialization_finished(SpaceId, Incarnation) ->
     Diff = fun
         (#dir_stats_service_state{
             status = initializing,
+            incarnation = StateIncarnation,
             pending_status_transition = disable
-        } = State) ->
+        } = State) when StateIncarnation =:= Incarnation ->
             {ok, State#dir_stats_service_state{
                 status = stopping,
                 pending_status_transition = undefined
             }};
-        (#dir_stats_service_state{status = initializing} = State) ->
+        (#dir_stats_service_state{
+            status = initializing,
+            incarnation = StateIncarnation
+        } = State) when StateIncarnation =:= Incarnation ->
             {ok, State#dir_stats_service_state{
                 status = enabled,
                 pending_status_transition = undefined
             }};
+        (#dir_stats_service_state{status = initializing}) ->
+            % Stale callback from a cancelled traverse (incarnation does not match), ignore
+            {error, stale_incarnation};
         (#dir_stats_service_state{status = Status}) ->
             {error, {wrong_status, Status}}
     end,
@@ -372,10 +383,47 @@ report_collections_initialization_finished(SpaceId) ->
             report_status_change_to_oz(SpaceId, enabled);
         {ok, #document{value = #dir_stats_service_state{status = stopping}}} ->
             dir_stats_collector:stop_collecting(SpaceId);
+        {error, stale_incarnation} ->
+            ok;
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~tp enabling finished when space has status ~tp", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
             ?warning("Reporting space ~tp enabling finished when space has no dir stats service state document", [SpaceId])
+    end.
+
+
+-spec report_initialization_error(tree_traverse:id()) -> ok.
+report_initialization_error(TaskId) ->
+    [IncarnationBinary, SpaceId] = binary:split(TaskId, <<"#">>),
+    Incarnation = binary_to_integer(IncarnationBinary),
+    Diff = fun
+        (#dir_stats_service_state{
+            status = initializing,
+            incarnation = StateIncarnation,
+            initialization_retry_count = RetryCount
+        } = State) when StateIncarnation =:= Incarnation andalso RetryCount < ?DIR_STATS_INITIALIZATION_MAX_RETRIES ->
+            {ok, State#dir_stats_service_state{
+                incarnation = StateIncarnation + 1,
+                initialization_retry_count = RetryCount + 1
+            }};
+        (#dir_stats_service_state{}) ->
+            % Stale callback from a cancelled traverse (incarnation does not match), ignore
+            {error, no_action_needed}
+    end,
+    case update(SpaceId, Diff) of
+        {ok, #document{value = #dir_stats_service_state{
+            status = initializing,
+            incarnation = NewIncarnation
+        }}} ->
+            dir_stats_collections_initialization_traverse:cancel(SpaceId, Incarnation),
+            case run_initialization_traverse(SpaceId, NewIncarnation) of
+                ok -> ok;
+                Error -> ?warning("Failed to start initialization traverse for space ~tp: ~tp", [SpaceId, Error])
+            end;
+        {error, no_action_needed} ->
+            ok;
+        ?ERROR_NOT_FOUND ->
+            ok
     end.
 
 
@@ -390,6 +438,7 @@ report_collectors_stopped(SpaceId) ->
             {ok, State#dir_stats_service_state{
                 status = initializing,
                 incarnation = Incarnation + 1,
+                initialization_retry_count = 0,
                 pending_status_transition = undefined
             }};
         (#dir_stats_service_state{status = stopping} = State) ->
@@ -464,7 +513,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
@@ -474,7 +523,27 @@ get_record_struct(1) ->
         {incarnation, integer},
         {pending_status_transition, atom},
         {collecting_status_change_timestamps, [{atom, integer}]}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {status, atom},
+        {incarnation, integer},
+        {initialization_retry_count, integer},
+        {pending_status_transition, atom},
+        {collecting_status_change_timestamps, [{atom, integer}]}
     ]}.
+
+
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {dir_stats_service_state, Status, Incarnation, PendingStatusTransition, Timestamps}) ->
+    {2, #dir_stats_service_state{
+        status = Status,
+        incarnation = Incarnation,
+        initialization_retry_count = 0,
+        pending_status_transition = PendingStatusTransition,
+        status_change_timestamps = Timestamps
+    }}.
 
 
 %%%===================================================================
