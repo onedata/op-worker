@@ -392,22 +392,31 @@ report_collections_initialization_finished(SpaceId, Incarnation) ->
     end.
 
 
--spec report_initialization_error(tree_traverse:id()) -> ok.
+-spec report_initialization_error(tree_traverse:id()) ->
+    retry_scheduled | retries_exhausted | no_action.
 report_initialization_error(TaskId) ->
     [IncarnationBinary, SpaceId] = binary:split(TaskId, <<"#">>),
     Incarnation = binary_to_integer(IncarnationBinary),
+    MaxRetries = ?DIR_STATS_INITIALIZATION_MAX_RETRIES,
     Diff = fun
         (#dir_stats_service_state{
             status = initializing,
             incarnation = StateIncarnation,
             initialization_retry_count = RetryCount
-        } = State) when StateIncarnation =:= Incarnation andalso RetryCount < ?DIR_STATS_INITIALIZATION_MAX_RETRIES ->
+        } = State) when StateIncarnation =:= Incarnation andalso RetryCount < MaxRetries ->
             {ok, State#dir_stats_service_state{
                 incarnation = StateIncarnation + 1,
                 initialization_retry_count = RetryCount + 1
             }};
+        (#dir_stats_service_state{
+            status = initializing,
+            incarnation = StateIncarnation
+        }) when StateIncarnation =:= Incarnation ->
+            % Incarnation matches but no retries left - initialization has permanently failed
+            {error, retries_exhausted};
         (#dir_stats_service_state{}) ->
-            % Stale callback from a cancelled traverse (incarnation does not match), ignore
+            % Stale callback from a cancelled traverse (incarnation does not match) or status is
+            % no longer initializing - ignore
             {error, no_action_needed}
     end,
     case update(SpaceId, Diff) of
@@ -419,11 +428,14 @@ report_initialization_error(TaskId) ->
             case run_initialization_traverse(SpaceId, NewIncarnation) of
                 ok -> ok;
                 Error -> ?warning("Failed to start initialization traverse for space ~tp: ~tp", [SpaceId, Error])
-            end;
+            end,
+            retry_scheduled;
+        {error, retries_exhausted} ->
+            retries_exhausted;
         {error, no_action_needed} ->
-            ok;
+            no_action;
         ?ERROR_NOT_FOUND ->
-            ok
+            no_action
     end.
 
 

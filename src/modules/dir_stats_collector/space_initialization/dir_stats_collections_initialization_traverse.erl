@@ -178,8 +178,14 @@ do_tree_traverse_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobE
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ?error_exception(?autoformat_with_msg("Error when listing directory during stats initialization:",
                 FileUuid), error, Reason, Stacktrace),
-            ok = dir_stats_collector:update_stats_of_dir(
-                file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1}),
-            dir_stats_service_state:report_initialization_error(TaskId),
+            case dir_stats_service_state:report_initialization_error(TaskId) of
+                retries_exhausted ->
+                    % Record the error only once initialization has permanently failed for this
+                    % dir, so the count is not accumulated across retried attempts.
+                    ok = dir_stats_collector:report_dir_initialization_error(
+                        file_ctx:get_logical_guid_const(FileCtx), dir_size_stats, #{?DIR_ERROR_COUNT => 1});
+                _ ->
+                    ok
+            end,
             {ok, #{}}
     end.
