@@ -367,8 +367,11 @@ report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
     FinalError = case errors:is_known_error(Error) of
         true -> 
             Error;
-        false -> 
-            ?ERR_INTERNAL_SERVER_ERROR(?err_ctx(), lists:flatten(io_lib:format("~tp", [Error])))
+        false ->
+            ?report_internal_server_error(?autoformat_with_msg(
+                "Unexpected error during QoS traverse",
+                [Error]
+            ))
     end,
     report_to_audit_log(
         QosEntries, FileCtx, [FinalError], fun qos_entry_audit_log:report_file_synchronization_failed/4).
