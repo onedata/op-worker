@@ -303,7 +303,6 @@ tree_deletion_traverse_listing_error_base(ErrorType) ->
 dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
     #object{guid = RootDirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE_PLACEHOLDER, #dir_spec{}, krakow),
     SpaceId = file_id:guid_to_space_id(RootDirGuid),
-    SpaceDirGuid = space_dir:guid(SpaceId),
     KrakowNode = oct_background:get_random_provider_node(krakow),
     
     ok = opw_test_rpc:call(krakow, dir_stats_collections_initialization_traverse, run,
@@ -312,7 +311,7 @@ dir_stats_collections_initialization_traverse_listing_error_base(ErrorType) ->
     case ErrorType of
         unexpected ->
             test_utils:mock_assert_num_calls_sum(KrakowNode,
-                dir_stats_collector, update_stats_of_dir, [SpaceDirGuid, dir_size_stats, #{?DIR_ERROR_COUNT => 1}], 1),
+                dir_stats_service_state, report_initialization_error, 1, 1),
             test_utils:mock_assert_num_calls_sum(KrakowNode,
                 dir_stats_collections_initialization_traverse, task_finished, 2, 1, ?ATTEMPTS);
         known ->
@@ -370,7 +369,8 @@ init_per_suite(Config) ->
                 {provider_token_ttl_sec, 24 * 60 * 60},
                 {qos_retry_failed_files_interval_seconds, 2},
                 {qos_listing_errors_repeat_timeout_sec, 10},
-                {dir_stats_collecting_status_for_new_spaces, disabled}
+                {dir_stats_collecting_status_for_new_spaces, disabled},
+                {dir_stats_initialization_max_retries, 0}
             ]}],
             posthook = fun(NewConfig) ->
                 dir_stats_test_utils:disable_stats_counting(NewConfig),
@@ -483,7 +483,7 @@ tree_deletion_traverse_init_per_testcase(Config) ->
 dir_stats_collections_initialization_traverse_init_per_testcase(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, dir_stats_collections_initialization_traverse, [passthrough]),
-    test_utils:mock_new(Workers, dir_stats_collector, [passthrough]),
+    test_utils:mock_new(Workers, dir_stats_service_state, [passthrough]),
     % mock file_ctx:is_space_dir_const so no additional jobs for archive and trash dirs are created
     test_utils:mock_new(Workers, file_ctx, [passthrough]),
     test_utils:mock_expect(Workers, file_ctx, is_space_dir_const, fun(_) -> false end),
