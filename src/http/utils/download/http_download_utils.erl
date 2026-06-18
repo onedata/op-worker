@@ -21,7 +21,7 @@
 %% API
 -export([
     allow_onezone_as_frame_ancestor/1,
-    set_content_disposition_header/2,
+    set_file_download_headers/2,
 
     send_data_chunk/4
 ]).
@@ -37,19 +37,18 @@ allow_onezone_as_frame_ancestor(Req) ->
     http_cors:allow_frame_ancestors(oneprovider:get_oz_url(), Req).
 
 
--spec set_content_disposition_header(cowboy_req:req(), file_meta:name()) ->
+-spec set_file_download_headers(cowboy_req:req(), file_meta:name()) ->
     cowboy_req:req().
-set_content_disposition_header(Req, FileName) ->
-    NormalizedFileName = normalize_filename(FileName),
-    %% @todo VFS-2073 - check if needed
-    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
-    cowboy_req:set_resp_header(
-        ?HDR_CONTENT_DISPOSITION,
-        <<"attachment; filename=\"", NormalizedFileName/binary, "\"">>,
-        %% @todo VFS-2073 - check if needed
-        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-        Req
-    ).
+set_file_download_headers(Req, FileName) ->
+    MimeType = case cow_mimetypes:all(FileName) of
+        {Type, SubType, _Params} -> <<Type/binary, "/", SubType/binary>>;
+        undefined -> <<"application/octet-stream">>
+    end,
+    RFC5987Encoded = rfc5987:encode(FileName),
+    cowboy_req:set_resp_headers(#{
+        ?HDR_CONTENT_TYPE => MimeType,
+        ?HDR_CONTENT_DISPOSITION => <<"attachment; filename*=UTF-8''", RFC5987Encoded/binary>>
+    }, Req).
 
 
 %%--------------------------------------------------------------------
@@ -84,18 +83,4 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxSentBlocksCount, RetryDelay) -
                 Data, Req, MaxSentBlocksCount,
                 min(2 * RetryDelay, ?MAX_HTTP_SEND_RETRY_DELAY)
             )
-    end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec normalize_filename(file_meta:name()) -> file_meta:name().
-normalize_filename(FileName) ->
-    case re:run(FileName, <<"^ *$">>, [{capture, none}]) of
-        match -> <<"_">>;
-        nomatch -> FileName
     end.
