@@ -40,13 +40,10 @@ allow_onezone_as_frame_ancestor(Req) ->
 -spec set_file_download_headers(cowboy_req:req(), file_meta:name()) ->
     cowboy_req:req().
 set_file_download_headers(Req, FileName) ->
-    MimeType = case cow_mimetypes:all(FileName) of
-        {Type, SubType, _Params} -> <<Type/binary, "/", SubType/binary>>;
-        undefined -> <<"application/octet-stream">>
-    end,
-    RFC5987Encoded = rfc5987:encode(FileName),
+    {Type, SubType, _Params} = cow_mimetypes:all(FileName),
+    RFC5987Encoded = rfc5987:encode_filename(FileName),
     cowboy_req:set_resp_headers(#{
-        ?HDR_CONTENT_TYPE => MimeType,
+        ?HDR_CONTENT_TYPE => <<Type/binary, "/", SubType/binary>>,
         ?HDR_CONTENT_DISPOSITION => <<"attachment; filename*=UTF-8''", RFC5987Encoded/binary>>
     }, Req).
 
