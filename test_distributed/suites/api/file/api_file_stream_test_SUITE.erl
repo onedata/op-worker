@@ -1558,9 +1558,10 @@ check_symlink(_MemRef, CurrentPath, #object{name = Filename, symlink_value = Sym
 -spec check_content_disposition_header(api_test_memory:mem_ref(), http_client:headers()) ->
     ok.
 check_content_disposition_header(MemRef, Headers) ->
-    ExpectedDownloadedFileName = api_test_memory:get(MemRef, expected_downloaded_file_name),
     ?assert(maps:is_key(?HDR_CONTENT_DISPOSITION, Headers)),
-    ExpHeader = <<"attachment; filename=\"", ExpectedDownloadedFileName/binary, "\"">>,
+    ExpectedDownloadedFileName = api_test_memory:get(MemRef, expected_downloaded_file_name),
+    RFC5987Encoded = rfc5987:encode_filename(ExpectedDownloadedFileName),
+    ExpHeader = <<"attachment; filename*=UTF-8''", RFC5987Encoded/binary>>,
     ?assertEqual(ExpHeader, maps:get(?HDR_CONTENT_DISPOSITION, Headers)).
 
 

@@ -64,14 +64,14 @@
 %%--------------------------------------------------------------------
 -spec get_binary(cowboy_req:req(), cdmi_handler:cdmi_req()) ->
     {stop, cowboy_req:req(), cdmi_handler:cdmi_req()}.
-get_binary(Req, #cdmi_req{
+get_binary(Req0, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = FileAttrs = #file_attr{guid = FileGuid}
 } = CdmiReq) ->
     % prepare response
+    Req1 = file_content_download_utils:download_single_file(SessionId, FileAttrs, Req0),
     MimeType = cdmi_metadata:get_mimetype(SessionId, ?FILE_REF(FileGuid)),
-    Req1 = cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, MimeType, Req),
-    Req2 = file_content_download_utils:download_single_file(SessionId, FileAttrs, Req1),
+    Req2 = cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, MimeType, Req1),
     {stop, Req2, CdmiReq}.
 
 

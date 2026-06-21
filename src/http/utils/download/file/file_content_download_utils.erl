@@ -137,12 +137,11 @@ download_single_regular_file(SessionId, #file_attr{
             case lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), read) of
                 {ok, FileHandle} ->
                     try
-                        Req1 = ensure_content_type_header_set(FileName, Req0),
-                        Req2 = http_download_utils:set_content_disposition_header(Req1, FileName),
-                        {Boundary, Req3} = stream_file_internal(Ranges, FileHandle, FileSize, OnStartedCallback, Req2),
+                        Req1 = http_download_utils:set_file_download_headers(Req0, FileName),
+                        {Boundary, Req2} = stream_file_internal(Ranges, FileHandle, FileSize, OnStartedCallback, Req1),
                         ?catch_exceptions(OnFinishedCallback(ok)),
-                        file_content_streamer:close_stream(Boundary, Req3),
-                        Req3
+                        file_content_streamer:close_stream(Boundary, Req2),
+                        Req2
                     catch Class:Reason:Stacktrace ->
                         {ok, UserId} = session:get_user_id(SessionId),
                         Error = ?examine_exception(
@@ -176,7 +175,7 @@ download_single_regular_file(SessionId, #file_attr{
 download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnStartedCallback, OnFinishedCallback, Req0) ->
     case lfm:read_symlink(SessionId, ?FILE_REF(Guid, false)) of
         {ok, LinkPath} ->
-            Req1 = http_download_utils:set_content_disposition_header(Req0, FileName),
+            Req1 = http_download_utils:set_file_download_headers(Req0, FileName),
             Req2 = file_content_streamer:init_stream(
                 ?HTTP_200_OK,
                 #{?HDR_CONTENT_LENGTH => integer_to_binary(byte_size(LinkPath))},
@@ -296,7 +295,7 @@ stream_whole_tarball(_BulkDownloadId, _SessionId, [], _TarballName, _FollowSymli
     http_req:send_error(?ERR_BAD_VALUE_ID_NOT_FOUND(?err_ctx(), <<"code">>), Req0);
 
 stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0) ->
-    Req1 = http_download_utils:set_content_disposition_header(Req0, TarballName),
+    Req1 = http_download_utils:set_file_download_headers(Req0, TarballName),
     Req2 = file_content_streamer:init_stream(?HTTP_200_OK, Req1),
     file_download_code:mark_started(BulkDownloadId),
     ok = bulk_download:run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, Req2),
@@ -314,7 +313,7 @@ stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, Foll
 stream_partial_tarball(BulkDownloadId, TarballName, [{RangeBegin, unknown}], Req0) ->
     case bulk_download:is_offset_allowed(BulkDownloadId, RangeBegin) of
         true ->
-            Req1 = http_download_utils:set_content_disposition_header(Req0, TarballName),
+            Req1 = http_download_utils:set_file_download_headers(Req0, TarballName),
             Req2 = file_content_streamer:init_stream(?HTTP_206_PARTIAL_CONTENT, Req1),
             file_download_code:mark_started(BulkDownloadId),
             ok = bulk_download:continue(BulkDownloadId, RangeBegin, Req2),
@@ -325,18 +324,6 @@ stream_partial_tarball(BulkDownloadId, TarballName, [{RangeBegin, unknown}], Req
     end;
 stream_partial_tarball(_BulkDownloadId, _TarballName, _InvalidRange, Req0) ->
     cowboy_req:stream_reply(?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE => <<"bytes */*">>}, Req0).
-
-
-%% @private
--spec ensure_content_type_header_set(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
-ensure_content_type_header_set(FileName, Req) ->
-    case cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req, undefined) of
-        undefined ->
-            {Type, Subtype, _} = cow_mimetypes:all(FileName),
-            cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, [Type, "/", Subtype], Req);
-        _ ->
-            Req
-    end.
 
 
 %% @private
