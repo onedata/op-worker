@@ -137,7 +137,8 @@ stages:
         - file_lifecycle
         - file_links_reconciliation_traverse
         - file_popularity
-        - file_registration
+        - file_registration_http
+        - file_registration_s3
         - fslogic_req
         - glusterfs_helper
         - gs_atm_inventory_logic
@@ -1093,12 +1094,19 @@ file_popularity:
     - <<: *ct_logs
       name: ct_logs_file_popularity.tar.gz
 
-file_registration:
-  <<: *ct-job
-  key: FILREG
+file_registration_http:
+  <<: *ct-onenv-job
+  key: FILREGHTTP
   artifacts:
     - <<: *ct_logs
-      name: ct_logs_file_registration.tar.gz
+      name: ct_logs_file_registration_http.tar.gz
+
+file_registration_s3:
+  <<: *ct-onenv-job
+  key: FILREGS3
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_file_registration_s3.tar.gz
 
 fslogic_req:
   <<: *ct-job
@@ -1987,7 +1995,8 @@ Coverage report:
     - artifact: ct_logs_file_lifecycle.tar.gz
     - artifact: ct_logs_file_links_reconciliation_traverse.tar.gz
     - artifact: ct_logs_file_popularity.tar.gz
-    - artifact: ct_logs_file_registration.tar.gz
+    - artifact: ct_logs_file_registration_http.tar.gz
+    - artifact: ct_logs_file_registration_s3.tar.gz
     - artifact: ct_logs_fslogic_req.tar.gz
     - artifact: ct_logs_glusterfs_helper.tar.gz
     - artifact: ct_logs_gs_atm_inventory_logic.tar.gz

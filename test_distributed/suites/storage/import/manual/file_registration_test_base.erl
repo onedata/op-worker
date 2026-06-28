@@ -15,10 +15,10 @@
 %%% is also verified. A fresh space with dedicated storages is set up per testcase.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_registration_oct_test_base).
+-module(file_registration_test_base).
 -author("Bartosz Walkowicz").
 
--include("file_registration_oct_test.hrl").
+-include("file_registration_test.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -139,7 +139,6 @@ register_file_with_conflict_test(SuiteCtx = #file_registration_test_suite_ctx{
     % is then synced to the registering provider, which still resolves the import
     % conflict using its own provider id in the suffix.
     {CreationNode, CreationSessId} = case StorageType of
-        % TODO always create on remote??
         http -> {OtherNode, OtherSessId};
         _ -> {RegNode, RegSessId}
     end,

@@ -9,8 +9,8 @@
 %%% Macros and test data used in file registration tests (POST data/register).
 %%% @end
 %%%-------------------------------------------------------------------
--ifndef(FILE_REGISTRATION_OCT_TEST_HRL).
--define(FILE_REGISTRATION_OCT_TEST_HRL, 1).
+-ifndef(FILE_REGISTRATION_TEST_HRL).
+-define(FILE_REGISTRATION_TEST_HRL, 1).
 
 
 -include("space_setup_utils.hrl").

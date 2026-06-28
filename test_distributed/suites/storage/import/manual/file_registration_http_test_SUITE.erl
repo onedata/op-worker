@@ -7,15 +7,17 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module tests the file registration mechanism (POST data/register)
-%%% with the registering provider backed by an imported S3 storage (the other
-%%% provider uses a regular POSIX storage). The actual test logic lives in
-%%% {@link file_registration_oct_test_base}.
+%%% with the registering provider backed by an imported, read-only HTTP storage
+%%% (the other provider uses a regular POSIX storage). The files to register are
+%%% served by a test HTTP server running on the registering provider node (see
+%%% {@link http_storage_test_server}). The actual test logic lives in
+%%% {@link file_registration_test_base}.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_registration_s3_oct_test_SUITE).
+-module(file_registration_http_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("file_registration_oct_test.hrl").
+-include("file_registration_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 %% export for ct
@@ -59,12 +61,12 @@ all() -> [
 ].
 
 -define(SUITE_CTX, #file_registration_test_suite_ctx{
-    registering_storage_type = s3,
+    registering_storage_type = http,
     registering_provider_selector = krakow,
     other_provider_selector = paris,
-    test_user_selector = space_owner
+    test_user_selector = user1
 }).
--define(run_test(), file_registration_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
+-define(run_test(), file_registration_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
 
 %%%==================================================================
@@ -91,16 +93,15 @@ register_many_nested_files_test(_Config) -> ?run_test().
 % SetUp and TearDown functions
 %===================================================================
 
-
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, file_registration_oct_test_base, storage_file_setup_utils],
+    ModulesToLoad = [?MODULE, file_registration_test_base, http_storage_test_server],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "2op_s3",
+        onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
             {dbsync_changes_broadcast_interval, timer:seconds(1)}
         ]}],
         posthook = fun(NewConfig) ->
-            file_registration_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+            file_registration_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
             NewConfig
         end
     }).
@@ -111,8 +112,8 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    file_registration_oct_test_base:init_per_testcase(Config).
+    file_registration_test_base:init_per_testcase(Config).
 
 
 end_per_testcase(Case, Config) ->
-    file_registration_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
+    file_registration_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
