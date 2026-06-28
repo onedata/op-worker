@@ -23,9 +23,9 @@
 
 %% API
 -export([create_file/4, create_file/5]).
--export([write_file/5]).
+-export([write_file/5, delete_file/4]).
 %% on-node routines (executed on op_worker via rpc)
--export([create_file_on_storage/3, write_to_storage_file/4]).
+-export([create_file_on_storage/3, write_to_storage_file/4, delete_file_on_storage/3]).
 
 
 %%%===================================================================
@@ -59,6 +59,14 @@ write_file(ProviderSelector, StorageId, StorageFileId, Offset, Content) ->
     ).
 
 
+-spec delete_file(oct_background:node_selector(), storage:id(), helpers:file_id(), non_neg_integer()) ->
+    ok.
+delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize) ->
+    ok = opw_test_rpc:call(
+        ProviderSelector, ?MODULE, delete_file_on_storage, [StorageId, StorageFileId, CurrentSize]
+    ).
+
+
 %%%===================================================================
 %%% On-node routines
 %%%===================================================================
@@ -80,6 +88,13 @@ write_to_storage_file(StorageId, StorageFileId, Offset, Content) ->
     {ok, FileHandle} = helpers:open(HelperHandle, StorageFileId, write),
     {ok, _} = helpers:write(FileHandle, Offset, Content),
     ok = helpers:release(FileHandle).
+
+
+%% @doc Runs on the op_worker node.
+-spec delete_file_on_storage(storage:id(), helpers:file_id(), non_neg_integer()) -> ok.
+delete_file_on_storage(StorageId, StorageFileId, CurrentSize) ->
+    HelperHandle = get_helper_handle(StorageId),
+    ok = helpers:unlink(HelperHandle, StorageFileId, CurrentSize).
 
 
 %%%===================================================================

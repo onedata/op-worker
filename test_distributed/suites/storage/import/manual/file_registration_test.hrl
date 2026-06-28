@@ -103,13 +103,22 @@
     ?assertMatch({ok, #file_attr{name = __Name}}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), Attempts)
 ).
 
+%% The file is (re)opened on every attempt. A handle opened on a provider before
+%% the file_location carrying the source provider's data blocks has synced caches
+%% an empty location in its file_ctx, so the requested range reads back as zeros
+%% (a hole) and retrying the read on that same handle never recovers. Reopening on
+%% each attempt picks up the synced location - see the analogous read-verification
+%% loop in multi_provider_file_ops_test_base.
 -define(assertRead(Worker, SessId, FilePath, Offset, ExpectedData, Attempts), (
     fun(__Worker, __SessId, __FilePath, __Offset, __ExpectedData, __Attempts) ->
-        {ok, __H} = ?assertMatch({ok, _},
-            lfm_proxy:open(__Worker, __SessId, {path, __FilePath}, read), __Attempts),
-        ?assertEqual({ok, __ExpectedData},
-            lfm_proxy:read(__Worker, __H, __Offset, byte_size(__ExpectedData)), __Attempts),
-        ?assertEqual(ok, lfm_proxy:close(__Worker, __H))
+        ?assertEqual({ok, __ExpectedData}, begin
+            {ok, __H} = lfm_proxy:open(__Worker, __SessId, {path, __FilePath}, read),
+            try
+                lfm_proxy:read(__Worker, __H, __Offset, byte_size(__ExpectedData))
+            after
+                lfm_proxy:close(__Worker, __H)
+            end
+        end, __Attempts)
     end)(Worker, SessId, FilePath, Offset, ExpectedData, Attempts)
 ).
 

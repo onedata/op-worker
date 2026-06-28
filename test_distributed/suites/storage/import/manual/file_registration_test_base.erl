@@ -44,7 +44,13 @@
     interrupted_registration_test/1,
     interrupted_registration_nested_file_test/1,
     register_many_files_test/1,
-    register_many_nested_files_test/1
+    register_many_nested_files_test/1,
+    register_file_with_size_smaller_than_real_test/1,
+    register_file_with_size_larger_than_real_test/1,
+    registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled/1,
+    read_registered_file_after_source_removed_from_storage_test/1,
+    read_registered_file_after_source_modified_on_storage_test/1,
+    read_registered_file_when_storage_returns_error_test/1
 ]).
 
 -define(SUPPORT_SIZE, 1000000000).
@@ -693,6 +699,258 @@ register_many_nested_files_test(SuiteCtx = #file_registration_test_suite_ctx{tes
 
 
 %%%===================================================================
+%%% Edge case tests - declared size mismatch, storage drift and errors
+%%%===================================================================
+%%
+%% NOTE: with autoDetectAttributes = false the registration trusts the caller and
+%% does NOT consult the storage (no existence check, no size verification - see
+%% file_registration:maybe_verify_existence/2 and fill_in_missing_stat_fields/3).
+%% Any inconsistency between the declared metadata and the real storage content
+%% therefore surfaces only later, at read time.
+
+
+register_file_with_size_smaller_than_real_test(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId},
+        other_provider_ctx = #provider_ctx{node = OtherNode, session_id = OtherSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    DeclaredSize = byte_size(?TEST_DATA) - 3,
+    ExpectedData = binary:part(?TEST_DATA, 0, DeclaredSize),
+    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+
+    % a declared size smaller than the real file is accepted as is
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => DeclaredSize,
+        <<"autoDetectAttributes">> => false
+    })),
+
+    % the logical size is the declared one and a read returns only that prefix
+    ?assertMatch({ok, #file_attr{size = DeclaredSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+    ?assertRead(RegNode, RegSessId, FilePath, 0, ExpectedData, ?ATTEMPTS),
+
+    % the same (truncated) view is propagated to the other provider
+    ?assertMatch({ok, #file_attr{size = DeclaredSize}},
+        lfm_proxy:stat(OtherNode, OtherSessId, {path, FilePath}), ?ATTEMPTS),
+    ?assertRead(OtherNode, OtherSessId, FilePath, 0, ExpectedData, ?ATTEMPTS).
+
+
+register_file_with_size_larger_than_real_test(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    DeclaredSize = byte_size(?TEST_DATA) + 100,
+    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+
+    % a declared size larger than the real file is accepted without verification
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => DeclaredSize,
+        <<"autoDetectAttributes">> => false
+    })),
+
+    % the (inflated) declared size is what gets recorded ...
+    ?assertMatch({ok, #file_attr{size = DeclaredSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+    % ... while a read returns only the bytes actually present on the storage: even
+    % though DeclaredSize bytes are requested, op-worker performs a short read of the
+    % real content instead of zero-padding up to the (inflated) logical size.
+    {ok, Handle} = ?assertMatch({ok, _},
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read), ?ATTEMPTS),
+    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize)),
+    ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
+
+
+registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    DeclaredSize = 100,
+    % NOTE: the source file is deliberately NOT placed on the storage
+
+    % with autodetection disabled the existence of the file on storage is not
+    % verified, so the registration succeeds (contrast with
+    % registration_should_fail_if_file_is_missing, which relies on autodetection)
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => DeclaredSize,
+        <<"autoDetectAttributes">> => false
+    })),
+
+    % the file is registered (with the declared size) ...
+    ?assertMatch({ok, #file_attr{size = DeclaredSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+    % ... but its data is not actually available: the file is missing on the storage,
+    % which maps to ENOENT (HTTP 404 / S3 NoSuchKey), so a read fails.
+    {ok, Handle} = ?assertMatch({ok, _},
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize), ?ATTEMPTS),
+    ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
+
+
+read_registered_file_after_source_removed_from_storage_test(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    DataSize = byte_size(?TEST_DATA),
+    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+
+    % register normally (the file exists, attributes auto-detected)
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => DataSize
+    })),
+    ?assertMatch({ok, #file_attr{size = DataSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+
+    % remove the file from the underlying storage; the data is intentionally NOT read
+    % beforehand so that no local replica masks the removal. In MANUAL import mode
+    % there is no scan, so the logical metadata is not reconciled.
+    ok = remove_source_file(SourceBackend, StorageFileId, DataSize),
+
+    % stat still succeeds (metadata persists) ...
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+    % ... but reading now fails with ENOENT because the data is gone from the storage.
+    {ok, Handle} = ?assertMatch({ok, _},
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DataSize), ?ATTEMPTS),
+    ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
+
+
+read_registered_file_after_source_modified_on_storage_test(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    OriginalSize = byte_size(?TEST_DATA),
+    ShrunkData = binary:part(?TEST_DATA, 0, 2),
+    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+
+    % register normally - size is auto-detected as the original size
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => OriginalSize
+    })),
+    ?assertMatch({ok, #file_attr{size = OriginalSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+
+    % shrink the source on storage WITHOUT re-registering (no read beforehand, so no
+    % local replica). In MANUAL import mode the logical size is not reconciled.
+    ok = replace_source_file(SourceBackend, StorageFileId, OriginalSize, ShrunkData),
+
+    % the logical size still reflects the original registration ...
+    ?assertMatch({ok, #file_attr{size = OriginalSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+    % ... while a read up to the stale size returns only the (now smaller) actual
+    % storage content as a short read, instead of padding up to the original size.
+    {ok, Handle} = ?assertMatch({ok, _},
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read), ?ATTEMPTS),
+    ?assertEqual({ok, ShrunkData}, lfm_proxy:read(RegNode, Handle, 0, OriginalSize)),
+    ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
+
+
+read_registered_file_when_storage_returns_error_test(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+
+    % register normally
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => byte_size(?TEST_DATA)
+    })),
+
+    % make the storage return an error for the file's GET (without reading it first,
+    % so no local replica masks the failure). 403 is mapped to EPERM by the HTTP
+    % helper and - unlike e.g. 500/EIO - is not retried, so the failure is prompt.
+    ok = set_source_file_error(SourceBackend, StorageFileId, ?HTTP_403_FORBIDDEN),
+
+    % reading fails with EPERM (the error the HTTP 403 is mapped to).
+    {ok, Handle} = ?assertMatch({ok, _},
+        lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
+    ?assertEqual({error, ?EPERM}, lfm_proxy:read(RegNode, Handle, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
+    ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
+
+
+%%%===================================================================
 %%% SetUp and TearDown helpers (called by thin SUITE modules)
 %%%===================================================================
 
@@ -835,6 +1093,34 @@ update_source_file({s3, ProviderSelector, StorageId}, StorageFileId, Content) ->
     storage_file_setup_utils:write_file(ProviderSelector, StorageId, StorageFileId, 0, Content);
 update_source_file({http, ProviderSelector, Server}, StorageFileId, Content) ->
     http_storage_test_server:add_file(ProviderSelector, Server, StorageFileId, Content).
+
+
+%% @private
+-spec remove_source_file(source_backend(), helpers:file_id(), non_neg_integer()) -> ok.
+remove_source_file({s3, ProviderSelector, StorageId}, StorageFileId, CurrentSize) ->
+    storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize);
+remove_source_file({http, ProviderSelector, Server}, StorageFileId, _CurrentSize) ->
+    http_storage_test_server:remove_file(ProviderSelector, Server, StorageFileId).
+
+
+%% @private
+%% @doc Replaces the source file content, actually changing its size (unlike
+%% update_source_file/3 which only overwrites from offset 0 - for S3 that would
+%% leave trailing bytes, so the file is deleted and recreated instead).
+-spec replace_source_file(source_backend(), helpers:file_id(), non_neg_integer(), binary()) -> ok.
+replace_source_file({s3, ProviderSelector, StorageId}, StorageFileId, CurrentSize, NewContent) ->
+    ok = storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, CurrentSize),
+    storage_file_setup_utils:create_file(ProviderSelector, StorageId, StorageFileId, NewContent);
+replace_source_file({http, ProviderSelector, Server}, StorageFileId, _CurrentSize, NewContent) ->
+    http_storage_test_server:add_file(ProviderSelector, Server, StorageFileId, NewContent).
+
+
+%% @private
+%% @doc Makes the source storage return the given HTTP error for the file (HTTP
+%% backend only - used by read_registered_file_when_storage_returns_error_test).
+-spec set_source_file_error(source_backend(), helpers:file_id(), non_neg_integer()) -> ok.
+set_source_file_error({http, ProviderSelector, Server}, StorageFileId, StatusCode) ->
+    http_storage_test_server:set_file_error(ProviderSelector, Server, StorageFileId, StatusCode).
 
 
 %% @private

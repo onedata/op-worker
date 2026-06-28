@@ -447,11 +447,19 @@ get_default_file_mode(#helper{name = HelperName, args = Args})
     orelse HelperName =:= ?S3_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
 ->
-    maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE);
+    ensure_mode_int(maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE));
 get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
-    maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
+    ensure_mode_int(maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE));
 get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.
+
+
+%% @private
+-spec ensure_mode_int(integer() | binary()) -> file_meta:mode().
+ensure_mode_int(Int) when is_integer(Int) ->
+    Int;
+ensure_mode_int(Bin) when is_binary(Bin) ->
+    binary_to_integer(Bin, 8).
 
 
 -spec select_file_registration_timeout(helpers:helper()) -> timeout().
