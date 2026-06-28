@@ -28,6 +28,14 @@
     imported_storage = false :: boolean()
 }).
 
+-record(http_storage_params, {
+    endpoint :: binary(),
+    readonly = true :: boolean(),
+    imported_storage = true :: boolean(),
+    verify_server_certificate = false :: boolean(),
+    emulate_range_read = true :: boolean()
+}).
+
 -record(support_spec, {
     provider :: oct_background:entity_selector(),
     storage_spec = any ::
@@ -35,7 +43,10 @@
         space_setup_utils:s3_storage_params() |
         storage:id() |
         any, % uses randomly selected storage of given provider
-    size = 123454321 :: integer()
+    size = 123454321 :: integer(),
+    % optional storage import config applied during support, e.g.
+    % #{mode => <<"manual">>}; only honoured for imported storages
+    storage_import = #{} :: map()
 }).
 
 -record(space_spec, {
