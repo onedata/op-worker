@@ -42,7 +42,9 @@
     register_many_nested_files_test/1,
     register_file_with_size_smaller_than_real_test/1,
     register_file_with_size_larger_than_real_test/1,
-    registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled/1,
+    registration_should_succeed_if_file_is_missing_and_existence_verification_is_disabled/1,
+    registration_should_fail_if_file_is_missing_and_existence_verification_is_enabled/1,
+    registration_should_verify_existence_without_detecting_attributes/1,
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1
 ]).
@@ -63,7 +65,9 @@ all() -> [
     register_many_nested_files_test,
     register_file_with_size_smaller_than_real_test,
     register_file_with_size_larger_than_real_test,
-    registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled,
+    registration_should_succeed_if_file_is_missing_and_existence_verification_is_disabled,
+    registration_should_fail_if_file_is_missing_and_existence_verification_is_enabled,
+    registration_should_verify_existence_without_detecting_attributes,
     read_registered_file_after_source_removed_from_storage_test,
     read_registered_file_after_source_modified_on_storage_test
 ].
@@ -97,7 +101,9 @@ register_many_files_test(_Config) -> ?run_test().
 register_many_nested_files_test(_Config) -> ?run_test().
 register_file_with_size_smaller_than_real_test(_Config) -> ?run_test().
 register_file_with_size_larger_than_real_test(_Config) -> ?run_test().
-registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled(_Config) -> ?run_test().
+registration_should_succeed_if_file_is_missing_and_existence_verification_is_disabled(_Config) -> ?run_test().
+registration_should_fail_if_file_is_missing_and_existence_verification_is_enabled(_Config) -> ?run_test().
+registration_should_verify_existence_without_detecting_attributes(_Config) -> ?run_test().
 read_registered_file_after_source_removed_from_storage_test(_Config) -> ?run_test().
 read_registered_file_after_source_modified_on_storage_test(_Config) -> ?run_test().
 

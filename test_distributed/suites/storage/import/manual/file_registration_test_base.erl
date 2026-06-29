@@ -47,7 +47,9 @@
     register_many_nested_files_test/1,
     register_file_with_size_smaller_than_real_test/1,
     register_file_with_size_larger_than_real_test/1,
-    registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled/1,
+    registration_should_succeed_if_file_is_missing_and_existence_verification_is_disabled/1,
+    registration_should_fail_if_file_is_missing_and_existence_verification_is_enabled/1,
+    registration_should_verify_existence_without_detecting_attributes/1,
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1,
     read_registered_file_when_storage_returns_error_test/1
@@ -357,6 +359,9 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
     Timestamp = global_clock:timestamp_seconds(),
 
     ok = test_utils:mock_new(RegNode, [storage_driver], [passthrough]),
+    % verifyExistence is disabled alongside autoDetectAttributes: the existence
+    % check is implemented as storage_driver:exists, which performs a stat under the
+    % hood, so leaving it on would make the assertion below (no stat) fail
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
         <<"destinationPath">> => FileName,
@@ -372,7 +377,8 @@ stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_
         <<"xattrs">> => ?XATTRS,
         <<"json">> => ?JSON1,
         <<"rdf">> => ?ENCODED_RDF1,
-        <<"autoDetectAttributes">> => false
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => false
     })),
 
     test_utils:mock_assert_num_calls(RegNode, storage_driver, stat, ['_'], 0),
@@ -788,7 +794,7 @@ register_file_with_size_larger_than_real_test(
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
 
-registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attributes_is_disabled(
+registration_should_succeed_if_file_is_missing_and_existence_verification_is_disabled(
     SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
 ) ->
     #test_case_ctx{
@@ -804,16 +810,17 @@ registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attrib
     DeclaredSize = 100,
     % NOTE: the source file is deliberately NOT placed on the storage
 
-    % with autodetection disabled the existence of the file on storage is not
-    % verified, so the registration succeeds (contrast with
-    % registration_should_fail_if_file_is_missing, which relies on autodetection)
+    % with both attribute detection and existence verification disabled the storage
+    % is not consulted at all, so the registration of a missing file succeeds
+    % (contrast with registration_should_fail_if_file_is_missing_and_existence_verification_is_enabled)
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
         <<"spaceId">> => SpaceId,
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"size">> => DeclaredSize,
-        <<"autoDetectAttributes">> => false
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => false
     })),
 
     % the file is registered (with the declared size) ...
@@ -825,6 +832,71 @@ registration_should_succeed_if_file_is_missing_and_automatic_detection_of_attrib
         lfm_proxy:open(RegNode, RegSessId, {path, FilePath}, read)),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:read(RegNode, Handle, 0, DeclaredSize), ?ATTEMPTS),
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
+
+
+registration_should_fail_if_file_is_missing_and_existence_verification_is_enabled(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    % NOTE: the source file is deliberately NOT placed on the storage
+
+    % existence verification is independent of attribute detection and defaults to
+    % true, so even with autoDetectAttributes disabled (caller-provided attributes)
+    % registering a file that is missing on the storage fails with ENOENT
+    ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => 100,
+        <<"autoDetectAttributes">> => false
+    })),
+
+    % the file should not have been registered
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})).
+
+
+registration_should_verify_existence_without_detecting_attributes(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId}
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    DeclaredSize = byte_size(?TEST_DATA) - 3,
+    ok = place_source_file(SourceBackend, StorageFileId, ?TEST_DATA),
+
+    % with autoDetectAttributes disabled but verifyExistence enabled the file's
+    % presence is confirmed while its attributes are taken from the caller: the
+    % declared (smaller) size is recorded rather than the real size read from storage
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => DeclaredSize,
+        <<"autoDetectAttributes">> => false,
+        <<"verifyExistence">> => true
+    })),
+
+    ?assertMatch({ok, #file_attr{size = DeclaredSize}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})).
 
 
 read_registered_file_after_source_removed_from_storage_test(
