@@ -32,7 +32,9 @@
     import_file_with_content_test/1,
 
     import_file_in_directory_test/1,
-    import_many_subfiles_test/1
+    import_many_subfiles_test/1,
+    import_many_directories_test/1,
+    import_directory_without_read_permission_test/1
 ]).
 
 all() -> [
@@ -43,7 +45,9 @@ all() -> [
     import_empty_file_test,
     import_file_with_content_test,
     import_file_in_directory_test,
-    import_many_subfiles_test
+    import_many_subfiles_test,
+    import_many_directories_test,
+    import_directory_without_read_permission_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -89,6 +93,14 @@ import_file_in_directory_test(_Config) ->
 
 
 import_many_subfiles_test(_Config) ->
+    ?run_test().
+
+
+import_many_directories_test(_Config) ->
+    ?run_test().
+
+
+import_directory_without_read_permission_test(_Config) ->
     ?run_test().
 
 

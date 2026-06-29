@@ -43,7 +43,9 @@
     import_file_with_content_test/1,
 
     import_file_in_directory_test/1,
-    import_many_subfiles_test/1
+    import_many_subfiles_test/1,
+    import_many_directories_test/1,
+    import_directory_without_read_permission_test/1
 ]).
 
 -define(ATTEMPTS, 30).
@@ -295,6 +297,50 @@ import_many_subfiles_test(SuiteCtx) ->
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1,
         <<"createdMinHist">> => skip
+    }).
+
+
+%% Imports many empty directories at the space root (old:
+%% create_directory_import_many_test). POSIX-only - flat (object) storages cannot
+%% represent empty directories.
+import_many_directories_test(SuiteCtx) ->
+    DirsCount = 200,
+    FileTreeSpec = [#dir_spec{} || _ <- lists:seq(1, DirsCount)],
+    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => skip
+    }).
+
+
+%% Imports a single directory created on storage with no permissions (mode 8#000)
+%% (old: create_directory_import_without_read_permission_test). POSIX-only. Only the
+%% directory's existence is verified - listing its contents is not permitted, hence
+%% verify_imported_tree (which asserts the children set) is intentionally not used.
+import_directory_without_read_permission_test(SuiteCtx) ->
+    DirName = ?RAND_STR(),
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #dir_spec{name = DirName, mode = 8#000}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestDirPath, #{
+        type => ?DIRECTORY_TYPE
+    }),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestDirPath, #{
+        type => ?DIRECTORY_TYPE
+    }),
+
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
     }).
 
 
