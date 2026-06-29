@@ -1,0 +1,576 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2026 Onedata (onedata.org)
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Generic machinery for declarative storage import tests.
+%%%
+%%% NOTE: this module (together with storage_file_setup_utils) must be added to
+%%% ?LOAD_MODULES of any suite that uses it, as some routines are executed on the
+%%% op_worker node via rpc.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(storage_import_test_utils).
+-author("Bartosz Walkowicz").
+
+-include("storage_import_oct_test.hrl").
+-include("modules/fslogic/file_attr.hrl").
+
+%% API
+-export([
+    clean_up_after_previous_run/2,
+    init_testcase/3,
+    create_file_tree_on_storage/3,
+    await_initial_scan_finished/1,
+    await_scan_finished/2,
+    enable_continuous_scan/1, enable_continuous_scan/2,
+    disable_continuous_scan/1,
+    verify_imported_tree/1, verify_imported_tree/2,
+    assert_attrs/3,
+    assert_storage_import_monitoring_state/2
+]).
+
+-type suite_ctx() :: #storage_import_test_suite_ctx{}.
+-type case_ctx() :: #storage_import_test_case_ctx{}.
+-type file_tree_spec() ::
+    undefined
+    | onenv_file_test_utils:object_spec()
+    | [onenv_file_test_utils:object_spec()].
+
+-export_type([suite_ctx/0, case_ctx/0]).
+
+-define(ATTEMPTS, 30).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec clean_up_after_previous_run([atom()], suite_ctx()) -> ok.
+clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
+    lists_utils:pforeach(fun(SpaceId) ->
+        delete_space_with_supporting_storages(SpaceId, SuiteCtx)
+    end, filter_spaces_from_previous_run(AllTestCases)).
+
+
+-spec init_testcase(atom(), file_tree_spec(), suite_ctx()) -> case_ctx().
+init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_ctx{
+    storage_type = StorageType,
+    importing_provider_selector = ImportingProviderSelector,
+    non_importing_provider_selector = NonImportingProviderSelector,
+    space_owner_selector = SpaceOwnerSelector
+}) ->
+    ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
+    ConcreteFileTreeSpec = create_file_tree_on_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    OtherStorageId = create_storage(StorageType, NonImportingProviderSelector, false),
+
+    SpaceId = space_setup_utils:set_up_space(#space_spec{
+        name = TestCaseName,
+        owner = SpaceOwnerSelector,
+        users = [],
+        supports = [
+            #support_spec{
+                provider = ImportingProviderSelector,
+                storage_spec = ImportedStorageId,
+                size = 1000000000
+            },
+            #support_spec{
+                provider = NonImportingProviderSelector,
+                storage_spec = OtherStorageId,
+                size = 1000000000
+            }
+        ]
+    }),
+    SpaceNameBin = str_utils:to_binary(TestCaseName),
+
+    #storage_import_test_case_ctx{
+        suite_ctx = SuiteCtx,
+        imported_storage_id = ImportedStorageId,
+        other_storage_id = OtherStorageId,
+        space_id = SpaceId,
+        space_path = <<"/", SpaceNameBin/binary>>,
+        file_tree_spec = ConcreteFileTreeSpec,
+        importing_provider_ctx = build_provider_ctx(SpaceOwnerSelector, ImportingProviderSelector),
+        non_importing_provider_ctx = build_provider_ctx(SpaceOwnerSelector, NonImportingProviderSelector)
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates the declared file tree directly on the storage (bypassing the logical
+%% filesystem) so that it can later be imported. Returns the spec with all file
+%% names concretized (undefined names are replaced with random ones), so that the
+%% same structure can be used for verification.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_tree_on_storage(oct_background:entity_selector(), storage:id(), file_tree_spec()) ->
+    file_tree_spec().
+create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
+    undefined;
+create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
+    [create_file_tree_on_storage(ProviderSelector, StorageId, Spec) || Spec <- Specs];
+create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
+    create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
+
+
+-spec await_initial_scan_finished(case_ctx()) -> true.
+await_initial_scan_finished(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}) ->
+    ?assertEqual(
+        true,
+        catch(?rpc(ImportingProviderSelector, storage_import_monitoring:is_initial_scan_finished(SpaceId))),
+        ?ATTEMPTS
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the completion of the import scan number ScanNum (1 being the initial
+%% scan). Used in continuous-scan scenarios, where the storage is mutated between
+%% scans and each consecutive scan is awaited before asserting the new state.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_scan_finished(case_ctx(), non_neg_integer()) -> true.
+await_scan_finished(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}, ScanNum) ->
+    ?assertEqual(
+        true,
+        catch(?rpc(ImportingProviderSelector, storage_import_monitoring:is_scan_finished(SpaceId, ScanNum))),
+        ?ATTEMPTS
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Enables continuous (periodic) scanning for the space. After this call the
+%% import will keep rescanning the storage, picking up modifications/deletions
+%% according to the (optionally overridden) scan config. Intended to be paired
+%% with await_scan_finished/2 and disable_continuous_scan/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec enable_continuous_scan(case_ctx()) -> ok.
+enable_continuous_scan(CaseCtx) ->
+    enable_continuous_scan(CaseCtx, #{}).
+
+
+-spec enable_continuous_scan(case_ctx(), map()) -> ok.
+enable_continuous_scan(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}, ConfigOverrides) ->
+    Config = maps:merge(#{continuous_scan => true, scan_interval => 1}, ConfigOverrides),
+    ok = ?rpc(ImportingProviderSelector, storage_import:set_or_configure_auto_mode(SpaceId, Config)).
+
+
+-spec disable_continuous_scan(case_ctx()) -> ok.
+disable_continuous_scan(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}) ->
+    ok = ?rpc(
+        ImportingProviderSelector,
+        storage_import:set_or_configure_auto_mode(SpaceId, #{continuous_scan => false})
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Generically verifies that the declared file tree was imported into the logical
+%% filesystem - checked on both the importing and the non-importing provider.
+%% For each declared node it asserts its type, and additionally:
+%%  * for directories - that the set of its children matches the declaration,
+%%  * for regular files - that their content matches the declaration.
+%% NOTE: ownership (uid/gid/owner_id) is intentionally not verified here, as the
+%% expected values differ between providers and depend on the LUMA configuration;
+%% such assertions are left to the individual test cases.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_imported_tree(case_ctx()) -> ok.
+verify_imported_tree(CaseCtx = #storage_import_test_case_ctx{file_tree_spec = FileTreeSpec}) ->
+    verify_imported_tree(CaseCtx, FileTreeSpec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Like verify_imported_tree/1, but verifies against an explicitly provided
+%% expected file tree instead of the one declared at testcase init. Intended for
+%% continuous-scan scenarios, where the storage (and thus the expected imported
+%% tree) is mutated between scans.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_imported_tree(case_ctx(), file_tree_spec()) -> ok.
+verify_imported_tree(#storage_import_test_case_ctx{
+    space_path = SpacePath,
+    importing_provider_ctx = ImportingProviderCtx,
+    non_importing_provider_ctx = NonImportingProviderCtx
+}, ExpectedFileTreeSpec) ->
+    TopLevelSpecs = to_spec_list(ExpectedFileTreeSpec),
+    lists:foreach(fun(ProviderCtx) ->
+        assert_children(ProviderCtx, SpacePath, TopLevelSpecs),
+        lists:foreach(fun(Spec) ->
+            verify_node(ProviderCtx, SpacePath, Spec)
+        end, TopLevelSpecs)
+    end, [ImportingProviderCtx, NonImportingProviderCtx]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Provider-aware assertion of selected logical file attributes at the given path.
+%% ExpectedAttrs is a map of #file_attr{} field name => expected value; only the
+%% provided fields are checked. The expected values are supplied by the caller, as
+%% they are provider-specific and depend on the LUMA configuration (e.g. the same
+%% file has different uid/gid on the importing and the non-importing provider).
+%% Supported fields: owner_id, uid, gid, mode, type, size.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}) -> ok.
+assert_attrs(ProviderCtx, Path, ExpectedAttrs) ->
+    maps:foreach(fun(Field, ExpectedValue) ->
+        ?assertEqual(ExpectedValue, get_file_attr_field(ProviderCtx, Path, Field), ?ATTEMPTS)
+    end, ExpectedAttrs).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts the storage_import_monitoring counters for the space. The expected
+%% number of created files/dirs (and the corresponding histograms) is derived
+%% from the declared file tree; any field can be overridden via Overrides (e.g.
+%% to express failed/modified/deleted counters in non-trivial scenarios).
+%% Overrides keys are binaries, matching the storage_import_monitoring:describe/1 output.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_storage_import_monitoring_state(case_ctx(), #{binary() => integer()}) -> ok.
+assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    file_tree_spec = FileTreeSpec,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}, Overrides) ->
+    Created = count_nodes(FileTreeSpec),
+    Default = #{
+        <<"scans">> => 1,
+        <<"created">> => Created,
+        <<"modified">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"createdMinHist">> => Created,
+        <<"createdHourHist">> => Created,
+        <<"createdDayHist">> => Created,
+        <<"modifiedMinHist">> => 0,
+        <<"modifiedHourHist">> => 0,
+        <<"modifiedDayHist">> => 0,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
+    },
+    Expected = maps:merge(Default, Overrides),
+    assert_monitoring_state(ImportingProviderSelector, SpaceId, Expected, 1).
+
+
+%%%===================================================================
+%%% Internal functions - space/storage setup
+%%%===================================================================
+
+
+%% @private
+-spec filter_spaces_from_previous_run([atom()]) -> [od_space:id()].
+filter_spaces_from_previous_run(AllTestCases) ->
+    lists:filter(fun(SpaceId) ->
+        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
+        SpaceName = maps:get(<<"name">>, SpaceDetails),
+        lists:member(binary_to_atom(SpaceName), AllTestCases)
+    end, ozw_test_rpc:list_spaces()).
+
+
+%% @private
+-spec delete_space_with_supporting_storages(od_space:id(), suite_ctx()) -> ok.
+delete_space_with_supporting_storages(SpaceId, #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector,
+    non_importing_provider_selector = NonImportingProviderSelector
+}) ->
+    [StorageImportingProvider] = opw_test_rpc:get_space_local_storages(
+        ImportingProviderSelector, SpaceId
+    ),
+    [StorageNonImportingProvider] = opw_test_rpc:get_space_local_storages(
+        NonImportingProviderSelector, SpaceId
+    ),
+
+    ok = ozw_test_rpc:delete_space(SpaceId),
+
+    ok = delete_storage(ImportingProviderSelector, StorageImportingProvider),
+    ok = delete_storage(NonImportingProviderSelector, StorageNonImportingProvider).
+
+
+%% @private
+-spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
+delete_storage(NodeSelector, StorageId) ->
+    ?assertEqual(ok, opw_test_rpc:call(NodeSelector, storage, delete, [StorageId]), ?ATTEMPTS).
+
+
+%% @private
+-spec create_storage(posix | s3, oct_background:entity_selector(), boolean()) -> storage:id().
+create_storage(posix, ProviderSelector, IsImported) ->
+    space_setup_utils:create_storage(ProviderSelector, #posix_storage_params{
+        mount_point = <<"/mnt/st_", (generator:gen_name())/binary>>,
+        imported_storage = IsImported
+    });
+create_storage(s3, ProviderSelector, true) ->
+    space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
+        storage_path_type = <<"canonical">>,
+        imported_storage = true,
+        hostname = build_s3_hostname(ProviderSelector),
+        bucket_name = ?RAND_STR(15),
+        block_size = 0
+    });
+create_storage(s3, ProviderSelector, false) ->
+    space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
+        storage_path_type = <<"flat">>,
+        hostname = build_s3_hostname(ProviderSelector),
+        bucket_name = ?RAND_STR(15)
+    }).
+
+
+%% @private
+-spec build_s3_hostname(oct_background:entity_selector()) -> binary().
+build_s3_hostname(ProviderSelector) ->
+    <<
+        "volume-s3.dev-volume-s3-",
+        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
+        ".default:9000"
+    >>.
+
+
+%% @private
+-spec build_provider_ctx(oct_background:entity_selector(), oct_background:entity_selector()) ->
+    #provider_ctx{}.
+build_provider_ctx(SpaceOwnerSelector, ProviderSelector) ->
+    #provider_ctx{
+        selector = ProviderSelector,
+        node = oct_background:get_random_provider_node(ProviderSelector),
+        session_id = oct_background:get_user_session_id(SpaceOwnerSelector, ProviderSelector)
+    }.
+
+
+%%%===================================================================
+%%% Internal functions - file tree creation on storage
+%%%===================================================================
+
+
+%% @private
+-spec create_node_on_storage(
+    oct_background:entity_selector(), storage:id(), file_meta:path(), onenv_file_test_utils:object_spec()
+) ->
+    onenv_file_test_utils:object_spec().
+create_node_on_storage(ProviderSelector, StorageId, ParentPath, DirSpec = #dir_spec{}) ->
+    #dir_spec{name = Name, mode = Mode, uid = Uid, gid = Gid, children = Children} =
+        ConcreteDirSpec = ensure_name(DirSpec),
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    ok = storage_file_setup_utils:create_dir(ProviderSelector, StorageId, StorageFileId, Mode),
+    case Uid =/= undefined andalso Gid =/= undefined of
+        true -> ok = storage_file_setup_utils:chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid);
+        false -> ok
+    end,
+    ConcreteChildren = [
+        create_node_on_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
+        || ChildSpec <- Children
+    ],
+    ConcreteDirSpec#dir_spec{children = ConcreteChildren};
+
+create_node_on_storage(ProviderSelector, StorageId, ParentPath, FileSpec = #file_spec{}) ->
+    #file_spec{name = Name, mode = Mode, content = Content} = ConcreteFileSpec = ensure_name(FileSpec),
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    ok = storage_file_setup_utils:create_file(ProviderSelector, StorageId, StorageFileId, Content, Mode),
+    ConcreteFileSpec.
+
+
+%% @private
+-spec ensure_name(onenv_file_test_utils:object_spec()) -> onenv_file_test_utils:object_spec().
+ensure_name(DirSpec = #dir_spec{name = undefined}) ->
+    DirSpec#dir_spec{name = str_utils:rand_hex(20)};
+ensure_name(FileSpec = #file_spec{name = undefined}) ->
+    FileSpec#file_spec{name = str_utils:rand_hex(20)};
+ensure_name(Spec) ->
+    Spec.
+
+
+%%%===================================================================
+%%% Internal functions - imported tree verification
+%%%===================================================================
+
+
+%% @private
+-spec verify_node(#provider_ctx{}, file_meta:path(), onenv_file_test_utils:object_spec()) -> ok.
+verify_node(ProviderCtx, ParentPath, #dir_spec{name = Name, children = Children}) ->
+    Path = filepath_utils:join([ParentPath, Name]),
+    assert_node_type(ProviderCtx, Path, ?DIRECTORY_TYPE),
+    assert_children(ProviderCtx, Path, Children),
+    lists:foreach(fun(ChildSpec) ->
+        verify_node(ProviderCtx, Path, ChildSpec)
+    end, Children);
+verify_node(ProviderCtx, ParentPath, #file_spec{name = Name, content = Content}) ->
+    Path = filepath_utils:join([ParentPath, Name]),
+    assert_node_type(ProviderCtx, Path, ?REGULAR_FILE_TYPE),
+    assert_file_content(ProviderCtx, Path, Content).
+
+
+%% @private
+-spec get_file_attr_field(#provider_ctx{}, file_meta:path(), atom()) -> term().
+get_file_attr_field(#provider_ctx{node = Node, session_id = SessId}, Path, Field) ->
+    case lfm_proxy:stat(Node, SessId, {path, Path}) of
+        {ok, FileAttr} -> file_attr_field(Field, FileAttr);
+        {error, _} = Error -> Error
+    end.
+
+
+%% @private
+-spec file_attr_field(atom(), #file_attr{}) -> term().
+file_attr_field(owner_id, #file_attr{owner_id = Value}) -> Value;
+file_attr_field(uid, #file_attr{uid = Value}) -> Value;
+file_attr_field(gid, #file_attr{gid = Value}) -> Value;
+file_attr_field(mode, #file_attr{mode = Value}) -> Value;
+file_attr_field(type, #file_attr{type = Value}) -> Value;
+file_attr_field(size, #file_attr{size = Value}) -> Value.
+
+
+%% @private
+-spec assert_node_type(#provider_ctx{}, file_meta:path(), onedata_file:type()) -> ok.
+assert_node_type(#provider_ctx{node = Node, session_id = SessId}, Path, ExpectedType) ->
+    ?assertMatch(
+        {ok, #file_attr{type = ExpectedType}},
+        lfm_proxy:stat(Node, SessId, {path, Path}),
+        ?ATTEMPTS
+    ),
+    ok.
+
+
+%% @private
+-spec assert_children(#provider_ctx{}, file_meta:path(), [onenv_file_test_utils:object_spec()]) -> ok.
+assert_children(#provider_ctx{node = Node, session_id = SessId}, ParentPath, ChildrenSpecs) ->
+    ExpectedNames = lists:sort([spec_name(ChildSpec) || ChildSpec <- ChildrenSpecs]),
+    ?assertEqual(ExpectedNames, list_child_names(Node, SessId, ParentPath), ?ATTEMPTS),
+    ok.
+
+
+%% @private
+-spec list_child_names(oct_background:node(), session:id(), file_meta:path()) ->
+    [file_meta:name()] | {error, term()}.
+list_child_names(Node, SessId, ParentPath) ->
+    case lfm_proxy:get_children(Node, SessId, {path, ParentPath}, 0, 10000) of
+        {ok, Children} -> lists:sort([Name || {_Guid, Name} <- Children]);
+        {error, _} = Error -> Error
+    end.
+
+
+%% @private
+-spec assert_file_content(#provider_ctx{}, file_meta:path(), binary()) -> ok.
+assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Content) ->
+    {ok, Handle} = ?assertMatch(
+        {ok, _}, lfm_proxy:open(Node, SessId, {path, Path}, read), ?ATTEMPTS
+    ),
+    % read at least 1 byte, otherwise an empty file would not be checked at all
+    ReadSize = max(byte_size(Content), 1),
+    ?assertEqual({ok, Content}, lfm_proxy:check_size_and_read(Node, Handle, 0, ReadSize), ?ATTEMPTS),
+    ok = lfm_proxy:close(Node, Handle).
+
+
+%% @private
+-spec spec_name(onenv_file_test_utils:object_spec()) -> file_meta:name().
+spec_name(#dir_spec{name = Name}) -> Name;
+spec_name(#file_spec{name = Name}) -> Name.
+
+
+%% @private
+-spec to_spec_list(file_tree_spec()) -> [onenv_file_test_utils:object_spec()].
+to_spec_list(undefined) -> [];
+to_spec_list(Specs) when is_list(Specs) -> Specs;
+to_spec_list(Spec) -> [Spec].
+
+
+%% @private
+-spec count_nodes(file_tree_spec()) -> non_neg_integer().
+count_nodes(undefined) -> 0;
+count_nodes(Specs) when is_list(Specs) -> lists:sum([count_nodes(Spec) || Spec <- Specs]);
+count_nodes(#dir_spec{children = Children}) -> 1 + count_nodes(Children);
+count_nodes(#file_spec{}) -> 1.
+
+
+%%%===================================================================
+%%% Internal functions - monitoring state assertion
+%%%===================================================================
+
+
+%% @private
+-spec assert_monitoring_state(
+    oct_background:node_selector(), od_space:id(), #{binary() => integer()}, non_neg_integer()
+) ->
+    ok.
+assert_monitoring_state(NodeSelector, SpaceId, ExpectedSIM, Attempts) ->
+    SIM = ?rpc(NodeSelector, storage_import_monitoring:describe(SpaceId)),
+    try
+        assert_monitoring_fields(ExpectedSIM, flatten_storage_import_histograms(SIM))
+    catch
+        throw:{assertion_error, _} when Attempts > 0 ->
+            timer:sleep(timer:seconds(1)),
+            assert_monitoring_state(NodeSelector, SpaceId, ExpectedSIM, Attempts - 1);
+
+        throw:{assertion_error, {Key, ExpectedValue, Value}}:Stacktrace ->
+            {Format, Args} = build_storage_import_monitoring_description(SIM),
+            ct:pal(
+                "Assertion of field \"~tp\" in storage_import_monitoring for space ~tp failed.~n"
+                "    Expected: ~tp~n"
+                "    Value: ~tp~n"
+                ++ Format ++
+                    "~nStacktrace:~n~tp",
+                [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [Stacktrace]),
+            ct:fail("assertion failed")
+    end.
+
+
+%% @private
+assert_monitoring_fields(ExpectedSIM, SIM) ->
+    maps:foreach(fun(Key, ExpectedValue) ->
+        case maps:get(Key, SIM) of
+            ExpectedValue -> ok;
+            Value -> throw({assertion_error, {Key, ExpectedValue, Value}})
+        end
+    end, ExpectedSIM).
+
+
+%% @private
+flatten_storage_import_histograms(SIM) ->
+    SIM#{
+        % flatten beginnings of histograms for assertions
+        <<"createdMinHist">> => lists:sum(lists:sublist(maps:get(<<"createdMinHist">>, SIM), 2)),
+        <<"modifiedMinHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedMinHist">>, SIM), 2)),
+        <<"deletedMinHist">> => lists:sum(lists:sublist(maps:get(<<"deletedMinHist">>, SIM), 2)),
+        <<"queueLengthMinHist">> => hd(maps:get(<<"queueLengthMinHist">>, SIM)),
+
+        <<"createdHourHist">> => lists:sum(lists:sublist(maps:get(<<"createdHourHist">>, SIM), 3)),
+        <<"modifiedHourHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedHourHist">>, SIM), 3)),
+        <<"deletedHourHist">> => lists:sum(lists:sublist(maps:get(<<"deletedHourHist">>, SIM), 3)),
+        <<"queueLengthHourHist">> => hd(maps:get(<<"queueLengthHourHist">>, SIM)),
+
+        <<"createdDayHist">> => lists:sum(lists:sublist(maps:get(<<"createdDayHist">>, SIM), 1)),
+        <<"modifiedDayHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedDayHist">>, SIM), 1)),
+        <<"deletedDayHist">> => lists:sum(lists:sublist(maps:get(<<"deletedDayHist">>, SIM), 1)),
+        <<"queueLengthDayHist">> => hd(maps:get(<<"queueLengthDayHist">>, SIM))
+    }.
+
+
+%% @private
+build_storage_import_monitoring_description(SIM) ->
+    maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
+        {AccFormat ++ "    ~tp = ~tp~n", AccArgs ++ [Key, Value]}
+    end, {"~n#storage_import_monitoring fields values:~n", []}, SIM).
