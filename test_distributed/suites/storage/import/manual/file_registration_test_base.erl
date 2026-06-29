@@ -52,10 +52,20 @@
     registration_should_verify_existence_without_detecting_attributes/1,
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1,
-    read_registered_file_when_storage_returns_error_test/1
+    read_registered_file_when_storage_returns_error_test/1,
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1
 ]).
 
 -define(SUPPORT_SIZE, 1000000000).
+
+%% Size of the file used to verify replication across the rtransfer block boundary.
+%% It must exceed rtransfer_link's transfer block size (passed to the native link as
+%% single_fetch_max_size, 12 MB by default - see the {rtransfer_link, [{transfer,
+%% [{block_size, _}]}]} entry in app.config; note the {rtransfer_block_size, _} op_worker
+%% env is NOT used), so that during replication the source provider reads the storage in
+%% several sub-ranges (the later ones at a non-zero offset) rather than a single
+%% whole-file read.
+-define(LARGE_FILE_SIZE, 30 * 1024 * 1024).
 
 -record(provider_ctx, {
     selector :: oct_background:entity_selector(),
@@ -1022,6 +1032,70 @@ read_registered_file_when_storage_returns_error_test(
     ?assertEqual(ok, lfm_proxy:close(RegNode, Handle)).
 
 
+large_registered_file_should_be_correctly_replicated_to_other_provider_test(
+    SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}
+) ->
+    #test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        imported_storage_id = StorageId,
+        source_backend = SourceBackend,
+        registering_provider_ctx = #provider_ctx{node = RegNode, session_id = RegSessId},
+        other_provider_ctx = #provider_ctx{
+            selector = OtherProvider, node = OtherNode, session_id = OtherSessId
+        }
+    } = init_testcase(?FUNCTION_NAME, SuiteCtx),
+
+    FileName = ?FILE_NAME,
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    StorageFileId = filename:join(["/", FileName]),
+    Size = ?LARGE_FILE_SIZE,
+    Content = crypto:strong_rand_bytes(Size),
+    ExpectedHash = crypto:hash(sha256, Content),
+    ok = place_source_file(SourceBackend, StorageFileId, Content),
+
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+        <<"spaceId">> => SpaceId,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => Size
+    })),
+    ?assertMatch({ok, #file_attr{size = Size}},
+        lfm_proxy:stat(RegNode, RegSessId, {path, FilePath})),
+
+    % wait until the file metadata is synced to the other provider; a stat does not pull
+    % the data, so no on-the-fly replication masks the explicit transfer scheduled below
+    ?assertMatch({ok, #file_attr{size = Size}},
+        lfm_proxy:stat(OtherNode, OtherSessId, {path, FilePath}), ?ATTEMPTS),
+
+    % explicitly replicate the whole file to the other provider and wait for completion;
+    % as the file is larger than the rtransfer block size, the source reads it from the
+    % storage in several sub-ranges (see ?LARGE_FILE_SIZE)
+    OtherProviderId = oct_background:get_provider_id(OtherProvider),
+    {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(
+        RegNode, RegSessId, ?resolveFileRef(RegNode, RegSessId, FilePath), OtherProviderId
+    )),
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = completed,
+        files_replicated = 1,
+        bytes_replicated = Size
+    }}}, rpc:call(RegNode, transfer, get, [TransferId]), 5 * ?ATTEMPTS),
+
+    % the replica on the other provider (now served from its own local POSIX storage)
+    % must be byte-for-byte identical to the source - any sub-range read misassembled
+    % during replication (e.g. a non-range HTTP server returning the whole file for a
+    % request at a non-zero offset) would change the content hash
+    ?assertEqual(ExpectedHash, begin
+        {ok, Handle} = lfm_proxy:open(OtherNode, OtherSessId, {path, FilePath}, read),
+        try
+            crypto:hash(sha256, read_full_content(OtherNode, Handle, Size))
+        after
+            lfm_proxy:close(OtherNode, Handle)
+        end
+    end, ?ATTEMPTS).
+
+
 %%%===================================================================
 %%% SetUp and TearDown helpers (called by thin SUITE modules)
 %%%===================================================================
@@ -1041,7 +1115,7 @@ end_per_testcase(_Case, SuiteCtx = #file_registration_test_suite_ctx{
     Nodes = oct_background:get_provider_nodes(RegProvider),
     test_utils:mock_unload(Nodes, storage_driver),
     test_utils:mock_unload(Nodes, file_meta),
-    maybe_stop_http_servers(SuiteCtx),
+%%    maybe_stop_http_servers(SuiteCtx),
     lfm_proxy:teardown(Config).
 
 
@@ -1126,9 +1200,16 @@ create_registering_storage(s3, ProviderSelector) ->
     {StorageId, {s3, ProviderSelector, StorageId}};
 create_registering_storage(http, ProviderSelector) ->
     Server = http_storage_test_server:start(ProviderSelector),
+    ct:pal("~p", [Server]),
     StorageId = space_setup_utils:create_storage(ProviderSelector, #http_storage_params{
         endpoint = http_storage_test_server:endpoint(Server),
-        emulate_range_read = true
+        emulate_range_read = true,
+        % the test server does not support native range reads, so all reads (including the
+        % per-block reads during replication) rely on range-read emulation, which downloads
+        % the whole file. Set the eligibility limit comfortably above ?LARGE_FILE_SIZE so
+        % that the largest file used by the suite is still served (the storage default may
+        % be smaller and would otherwise make such files unreadable).
+        max_emulated_range_read_file_size = 2 * ?LARGE_FILE_SIZE
     }),
     {StorageId, {http, ProviderSelector, Server}}.
 
@@ -1206,6 +1287,26 @@ register_file(Node, UserSelector, Body) ->
     rest_test_utils:request(
         Node, <<"data/register">>, post, Headers, json_utils:encode(Body), [{recv_timeout, 30000}]
     ).
+
+
+%% @private
+%% @doc Reads exactly Size bytes of a (locally available) file, accumulating across the
+%% individual reads so that a short read at a block boundary does not truncate the result.
+-spec read_full_content(oct_background:node(), lfm:handle(), non_neg_integer()) -> binary().
+read_full_content(Node, Handle, Size) ->
+    read_full_content(Node, Handle, 0, Size, <<>>).
+
+%% @private
+-spec read_full_content(oct_background:node(), lfm:handle(), non_neg_integer(),
+    non_neg_integer(), binary()) -> binary().
+read_full_content(_Node, _Handle, Offset, Size, Acc) when Offset >= Size ->
+    Acc;
+read_full_content(Node, Handle, Offset, Size, Acc) ->
+    {ok, Chunk} = lfm_proxy:read(Node, Handle, Offset, Size - Offset),
+    case byte_size(Chunk) of
+        0 -> Acc;
+        ChunkSize -> read_full_content(Node, Handle, Offset + ChunkSize, Size, <<Acc/binary, Chunk/binary>>)
+    end.
 
 
 %% @private

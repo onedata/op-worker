@@ -33,7 +33,11 @@
     readonly = true :: boolean(),
     imported_storage = true :: boolean(),
     verify_server_certificate = false :: boolean(),
-    emulate_range_read = true :: boolean()
+    emulate_range_read = true :: boolean(),
+    % max file size (in bytes) eligible for emulated range reads; undefined leaves the
+    % storage default. Only relevant when emulate_range_read = true - files larger than
+    % this cannot be read from a server lacking native range read support.
+    max_emulated_range_read_file_size = undefined :: undefined | non_neg_integer()
 }).
 
 -record(support_spec, {

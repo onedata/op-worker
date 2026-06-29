@@ -75,18 +75,22 @@ create_storage(Provider, #http_storage_params{
     readonly = Readonly,
     imported_storage = Imported,
     verify_server_certificate = VerifyServerCertificate,
-    emulate_range_read = EmulateRangeRead
+    emulate_range_read = EmulateRangeRead,
+    max_emulated_range_read_file_size = MaxEmulatedRangeReadFileSize
 }) ->
-    panel_test_rpc:add_storage(Provider,
-        #{?RAND_STR() => #{
-            <<"type">> => <<"http">>,
-            <<"importedStorage">> => Imported,
-            <<"readonly">> => Readonly,
-            <<"endpoint">> => Endpoint,
-            <<"verifyServerCertificate">> => VerifyServerCertificate,
-            <<"emulateRangeRead">> => EmulateRangeRead
-        }}
-    ).
+    BaseArgs = #{
+        <<"type">> => <<"http">>,
+        <<"importedStorage">> => Imported,
+        <<"readonly">> => Readonly,
+        <<"endpoint">> => Endpoint,
+        <<"verifyServerCertificate">> => VerifyServerCertificate,
+        <<"emulateRangeRead">> => EmulateRangeRead
+    },
+    Args = case MaxEmulatedRangeReadFileSize of
+        undefined -> BaseArgs;
+        _ -> BaseArgs#{<<"maxEmulatedRangeReadFileSize">> => MaxEmulatedRangeReadFileSize}
+    end,
+    panel_test_rpc:add_storage(Provider, #{?RAND_STR() => Args}).
 
 
 -spec set_up_space(space_spec()) -> oct_background:entity_id().

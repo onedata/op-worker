@@ -49,7 +49,8 @@
     registration_should_verify_existence_without_detecting_attributes/1,
     read_registered_file_after_source_removed_from_storage_test/1,
     read_registered_file_after_source_modified_on_storage_test/1,
-    read_registered_file_when_storage_returns_error_test/1
+    read_registered_file_when_storage_returns_error_test/1,
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test/1
 ]).
 
 all() -> [
@@ -73,7 +74,8 @@ all() -> [
     registration_should_verify_existence_without_detecting_attributes,
     read_registered_file_after_source_removed_from_storage_test,
     read_registered_file_after_source_modified_on_storage_test,
-    read_registered_file_when_storage_returns_error_test
+    read_registered_file_when_storage_returns_error_test,
+    large_registered_file_should_be_correctly_replicated_to_other_provider_test
 ].
 
 -define(SUITE_CTX, #file_registration_test_suite_ctx{
@@ -111,6 +113,7 @@ registration_should_verify_existence_without_detecting_attributes(_Config) -> ?r
 read_registered_file_after_source_removed_from_storage_test(_Config) -> ?run_test().
 read_registered_file_after_source_modified_on_storage_test(_Config) -> ?run_test().
 read_registered_file_when_storage_returns_error_test(_Config) -> ?run_test().
+large_registered_file_should_be_correctly_replicated_to_other_provider_test(_Config) -> ?run_test().
 
 
 %===================================================================
