@@ -29,7 +29,10 @@
     import_directory_check_user_id_test/1,
 
     import_empty_file_test/1,
-    import_file_with_content_test/1
+    import_file_with_content_test/1,
+
+    import_file_in_directory_test/1,
+    import_many_subfiles_test/1
 ]).
 
 all() -> [
@@ -38,7 +41,9 @@ all() -> [
     import_directory_error_test,
     import_directory_check_user_id_test,
     import_empty_file_test,
-    import_file_with_content_test
+    import_file_with_content_test,
+    import_file_in_directory_test,
+    import_many_subfiles_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -76,6 +81,14 @@ import_empty_file_test(_Config) ->
 
 
 import_file_with_content_test(_Config) ->
+    ?run_test().
+
+
+import_file_in_directory_test(_Config) ->
+    ?run_test().
+
+
+import_many_subfiles_test(_Config) ->
     ?run_test().
 
 

@@ -40,7 +40,10 @@
     import_directory_check_user_id_test/1,
 
     import_empty_file_test/1,
-    import_file_with_content_test/1
+    import_file_with_content_test/1,
+
+    import_file_in_directory_test/1,
+    import_many_subfiles_test/1
 ]).
 
 -define(ATTEMPTS, 30).
@@ -253,6 +256,45 @@ import_file_with_content_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
+    }).
+
+
+%% Imports a single directory containing a single regular file (old:
+%% create_file_in_dir_import_test). The generic verification covers the whole
+%% nested structure (dir type + its children + file type + file content) on both
+%% the importing and the non-importing provider.
+import_file_in_directory_test(SuiteCtx) ->
+    FileTreeSpec = #dir_spec{children = [#file_spec{content = ?RAND_STR()}]},
+    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    %% created = 2 (the directory and the file), derived from the declared tree
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }).
+
+
+%% Imports many directories, each containing a single regular file (old:
+%% create_subfiles_import_many_test). Exercises the declarative tree builder and
+%% verification at scale; created is derived from the tree (2 per subdirectory).
+import_many_subfiles_test(SuiteCtx) ->
+    SubdirsCount = 200,
+    Content = ?RAND_STR(),
+    FileTreeSpec = [
+        #dir_spec{children = [#file_spec{content = Content}]}
+        || _ <- lists:seq(1, SubdirsCount)
+    ],
+    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    %% createdMinHist is skipped - by the time the (large) tree is verified and the
+    %% monitoring is read, the creations may have shifted out of the first minute
+    %% histogram buckets; the cumulative hour/day histograms still hold the count
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => skip
     }).
 
 

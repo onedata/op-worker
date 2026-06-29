@@ -43,6 +43,10 @@
 -export_type([suite_ctx/0, case_ctx/0]).
 
 -define(ATTEMPTS, 30).
+% Max number of concurrent processes used to verify the imported tree; bounds the
+% load on the providers while still parallelizing the (RPC-heavy, retry-prone)
+% per-node assertions - important for large trees (hundreds/thousands of nodes).
+-define(VERIFY_PARALLELISM, 20).
 
 
 %%%===================================================================
@@ -215,11 +219,16 @@ verify_imported_tree(#storage_import_test_case_ctx{
     non_importing_provider_ctx = NonImportingProviderCtx
 }, ExpectedFileTreeSpec) ->
     TopLevelSpecs = to_spec_list(ExpectedFileTreeSpec),
+    % flatten the whole tree (cheap, no RPC) into a list of {Path, Spec} so that
+    % per-node verification (which is RPC-heavy and may retry while data propagates
+    % to the non-importing provider) can be parallelized with bounded concurrency
+    AllNodes = flatten_nodes(SpacePath, TopLevelSpecs),
     lists:foreach(fun(ProviderCtx) ->
+        % the space root is not a declared node, so assert its children separately
         assert_children(ProviderCtx, SpacePath, TopLevelSpecs),
-        lists:foreach(fun(Spec) ->
-            verify_node(ProviderCtx, SpacePath, Spec)
-        end, TopLevelSpecs)
+        lists_utils:pforeach(fun({Path, Spec}) ->
+            verify_node(ProviderCtx, Path, Spec)
+        end, AllNodes, ?VERIFY_PARALLELISM)
     end, [ImportingProviderCtx, NonImportingProviderCtx]).
 
 
@@ -247,9 +256,13 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs) ->
 %% from the declared file tree; any field can be overridden via Overrides (e.g.
 %% to express failed/modified/deleted counters in non-trivial scenarios).
 %% Overrides keys are binaries, matching the storage_import_monitoring:describe/1 output.
+%% An override value of 'skip' excludes that field from the assertion entirely -
+%% useful for time-windowed histograms that may have shifted out of the asserted
+%% buckets by the time the monitoring is read (e.g. createdMinHist after importing
+%% and verifying a large tree).
 %% @end
 %%--------------------------------------------------------------------
--spec assert_storage_import_monitoring_state(case_ctx(), #{binary() => integer()}) -> ok.
+-spec assert_storage_import_monitoring_state(case_ctx(), #{binary() => integer() | skip}) -> ok.
 assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
     space_id = SpaceId,
     file_tree_spec = FileTreeSpec,
@@ -411,16 +424,36 @@ ensure_name(Spec) ->
 
 
 %% @private
+%% @doc
+%% Flattens the declared tree into a list of {AbsolutePath, Spec} for every node
+%% (directories and files alike). Pure, in-process - performs no RPC - so that the
+%% expensive per-node verification can then be run in parallel.
+%% @end
+-spec flatten_nodes(file_meta:path(), [onenv_file_test_utils:object_spec()]) ->
+    [{file_meta:path(), onenv_file_test_utils:object_spec()}].
+flatten_nodes(ParentPath, Specs) ->
+    lists:flatmap(fun(Spec) ->
+        Path = filepath_utils:join([ParentPath, spec_name(Spec)]),
+        Descendants = case Spec of
+            #dir_spec{children = Children} -> flatten_nodes(Path, Children);
+            #file_spec{} -> []
+        end,
+        [{Path, Spec} | Descendants]
+    end, Specs).
+
+
+%% @private
+%% @doc
+%% Verifies a single (already located by path) node - its type and, for files, its
+%% content; for directories, the set of its immediate children. Descent into the
+%% children is NOT done here - flatten_nodes/2 enumerates every node as a separate
+%% entry, so each is verified independently (and possibly in parallel).
+%% @end
 -spec verify_node(#provider_ctx{}, file_meta:path(), onenv_file_test_utils:object_spec()) -> ok.
-verify_node(ProviderCtx, ParentPath, #dir_spec{name = Name, children = Children}) ->
-    Path = filepath_utils:join([ParentPath, Name]),
+verify_node(ProviderCtx, Path, #dir_spec{children = Children}) ->
     assert_node_type(ProviderCtx, Path, ?DIRECTORY_TYPE),
-    assert_children(ProviderCtx, Path, Children),
-    lists:foreach(fun(ChildSpec) ->
-        verify_node(ProviderCtx, Path, ChildSpec)
-    end, Children);
-verify_node(ProviderCtx, ParentPath, #file_spec{name = Name, content = Content}) ->
-    Path = filepath_utils:join([ParentPath, Name]),
+    assert_children(ProviderCtx, Path, Children);
+verify_node(ProviderCtx, Path, #file_spec{content = Content}) ->
     assert_node_type(ProviderCtx, Path, ?REGULAR_FILE_TYPE),
     assert_file_content(ProviderCtx, Path, Content).
 
@@ -540,11 +573,14 @@ assert_monitoring_state(NodeSelector, SpaceId, ExpectedSIM, Attempts) ->
 
 %% @private
 assert_monitoring_fields(ExpectedSIM, SIM) ->
-    maps:foreach(fun(Key, ExpectedValue) ->
-        case maps:get(Key, SIM) of
-            ExpectedValue -> ok;
-            Value -> throw({assertion_error, {Key, ExpectedValue, Value}})
-        end
+    maps:foreach(fun
+        (_Key, skip) ->
+            ok;
+        (Key, ExpectedValue) ->
+            case maps:get(Key, SIM) of
+                ExpectedValue -> ok;
+                Value -> throw({assertion_error, {Key, ExpectedValue, Value}})
+            end
     end, ExpectedSIM).
 
 
