@@ -23,9 +23,10 @@
 -export([
     clean_up_after_previous_run/2,
     init_testcase/3,
+    gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
-    await_initial_scan_finished/1,
-    await_scan_finished/2,
+    await_initial_scan_finished/1, await_initial_scan_finished/2,
+    await_scan_finished/2, await_scan_finished/3,
     enable_continuous_scan/1, enable_continuous_scan/2,
     disable_continuous_scan/1,
     verify_imported_tree/1, verify_imported_tree/2,
@@ -107,6 +108,25 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Builds a declarative spec for a regular, nested directory tree from a branching
+%% list: the LAST element is the number of regular files at the leaf level, and
+%% each preceding element is the number of subdirectories at that level. All leaf
+%% files get the given content. E.g. gen_nested_tree_spec([13, 13, 13], C) yields
+%% 13 directories, each with 13 subdirectories, each with 13 files (2379 nodes).
+%% @end
+%%--------------------------------------------------------------------
+-spec gen_nested_tree_spec([pos_integer()], binary()) -> [onenv_file_test_utils:object_spec()].
+gen_nested_tree_spec([FilesCount], FileContent) ->
+    [#file_spec{content = FileContent} || _ <- lists:seq(1, FilesCount)];
+gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
+    [
+        #dir_spec{children = gen_nested_tree_spec(RestBranching, FileContent)}
+        || _ <- lists:seq(1, DirsCount)
+    ].
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Creates the declared file tree directly on the storage (bypassing the logical
 %% filesystem) so that it can later be imported. Returns the spec with all file
 %% names concretized (undefined names are replaced with random ones), so that the
@@ -123,15 +143,29 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
     create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Awaits the completion of the initial import scan, retrying for the default
+%% (?ATTEMPTS) number of seconds. For large imports (many files), where the scan
+%% may take much longer, use await_initial_scan_finished/2 with a higher Attempts
+%% (e.g. ?LARGE_IMPORT_SCAN_ATTEMPTS) - kept per-test so that small tests still
+%% fail fast if something goes wrong.
+%% @end
+%%--------------------------------------------------------------------
 -spec await_initial_scan_finished(case_ctx()) -> true.
+await_initial_scan_finished(CaseCtx) ->
+    await_initial_scan_finished(CaseCtx, ?ATTEMPTS).
+
+
+-spec await_initial_scan_finished(case_ctx(), non_neg_integer()) -> true.
 await_initial_scan_finished(#storage_import_test_case_ctx{
     space_id = SpaceId,
     importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
-}) ->
+}, Attempts) ->
     ?assertEqual(
         true,
         catch(?rpc(ImportingProviderSelector, storage_import_monitoring:is_initial_scan_finished(SpaceId))),
-        ?ATTEMPTS
+        Attempts
     ).
 
 
@@ -140,17 +174,23 @@ await_initial_scan_finished(#storage_import_test_case_ctx{
 %% Awaits the completion of the import scan number ScanNum (1 being the initial
 %% scan). Used in continuous-scan scenarios, where the storage is mutated between
 %% scans and each consecutive scan is awaited before asserting the new state.
+%% Use the /3 variant with a higher Attempts for large imports.
 %% @end
 %%--------------------------------------------------------------------
 -spec await_scan_finished(case_ctx(), non_neg_integer()) -> true.
+await_scan_finished(CaseCtx, ScanNum) ->
+    await_scan_finished(CaseCtx, ScanNum, ?ATTEMPTS).
+
+
+-spec await_scan_finished(case_ctx(), non_neg_integer(), non_neg_integer()) -> true.
 await_scan_finished(#storage_import_test_case_ctx{
     space_id = SpaceId,
     importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
-}, ScanNum) ->
+}, ScanNum, Attempts) ->
     ?assertEqual(
         true,
         catch(?rpc(ImportingProviderSelector, storage_import_monitoring:is_scan_finished(SpaceId, ScanNum))),
-        ?ATTEMPTS
+        Attempts
     ).
 
 

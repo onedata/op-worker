@@ -44,6 +44,7 @@
 
     import_file_in_directory_test/1,
     import_many_subfiles_test/1,
+    import_nested_directory_tree_test/1,
     import_many_directories_test/1,
     import_directory_without_read_permission_test/1
 ]).
@@ -288,7 +289,7 @@ import_many_subfiles_test(SuiteCtx) ->
         || _ <- lists:seq(1, SubdirsCount)
     ],
     TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     %% createdMinHist is skipped - by the time the (large) tree is verified and the
@@ -307,7 +308,7 @@ import_many_directories_test(SuiteCtx) ->
     DirsCount = 200,
     FileTreeSpec = [#dir_spec{} || _ <- lists:seq(1, DirsCount)],
     TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
@@ -341,6 +342,26 @@ import_directory_without_read_permission_test(SuiteCtx) ->
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
+    }).
+
+
+%% Imports a deep, branching directory tree with files at the leaves (old:
+%% create_subfiles_import_many2_test). [13, 13, 13] => 13 dirs x 13 subdirs x 13
+%% files = 2379 nodes. Exercises the declarative builder and the (parallel) tree
+%% verification at depth and scale; created (2379) is derived from the tree.
+import_nested_directory_tree_test(SuiteCtx) ->
+    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([13, 13, 13], ?RAND_STR()),
+    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    %% Min/Hour created histograms are skipped - importing and verifying ~2400 nodes
+    %% takes long enough that the creations age out of the finer-grained buckets by
+    %% the time the monitoring is read; the cumulative day histogram still holds them
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => skip,
+        <<"createdHourHist">> => skip
     }).
 
 
