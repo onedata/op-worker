@@ -36,6 +36,8 @@
     %% --- ownership (LUMA uid/gid) ---
     import_directory_check_user_id_test/1,
     import_file_check_user_id_test/1,
+    import_directory_check_user_id_error_test/1,
+    import_file_check_user_id_error_test/1,
 
     %% --- permissions ---
     import_directory_without_read_permission_test/1,
@@ -61,6 +63,8 @@ all() -> [
     %% --- ownership (LUMA uid/gid) ---
     import_directory_check_user_id_test,
     import_file_check_user_id_test,
+    import_directory_check_user_id_error_test,
+    import_file_check_user_id_error_test,
 
     %% --- permissions ---
     import_directory_without_read_permission_test,
@@ -129,6 +133,14 @@ import_directory_check_user_id_test(_Config) ->
 
 
 import_file_check_user_id_test(_Config) ->
+    ?run_test().
+
+
+import_directory_check_user_id_error_test(_Config) ->
+    ?run_test().
+
+
+import_file_check_user_id_error_test(_Config) ->
     ?run_test().
 
 

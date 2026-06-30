@@ -57,9 +57,7 @@
 %% tests
 -export([
     % tests of import
-    create_directory_import_check_user_id_error_test/1,
     create_delete_import_test/1,
-    create_file_import_check_user_id_error_test/1,
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
@@ -176,43 +174,6 @@
 %%%===================================================================
 
 
-create_directory_import_check_user_id_error_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dir on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
-    ok = sd_test_utils:chown(W1, SDHandle, ?TEST_UID, ?TEST_GID),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-    %% Check if dir was not imported
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 1,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
-
 create_delete_import_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
@@ -281,46 +242,6 @@ create_delete_import_test(Config) ->
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE), Attempts),
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
     ok.
-
-
-create_file_import_check_user_id_error_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    ok = sd_test_utils:chown(W1, SDHandle, ?TEST_UID, ?TEST_GID),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if file was imported on W1
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 1,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
 
 
 create_remote_file_import_conflict_test(Config) ->
@@ -6207,17 +6128,6 @@ end_per_suite(Config) ->
     initializer:unmock_auth_manager(Config),
     initializer:unmock_provider_ids(?config(op_worker_nodes, Config)).
 
-init_per_testcase(Case, Config)
-    when Case =:= create_directory_import_check_user_id_error_test
-    orelse Case =:= create_file_import_check_user_id_error_test ->
-
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(Workers, [luma]),
-    ok = test_utils:mock_expect(Workers, luma, map_uid_to_onedata_user, fun(_, _, _) ->
-        error(test_error)
-    end),
-    init_per_testcase(default, Config);
-
 init_per_testcase(force_stop_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
@@ -6427,14 +6337,6 @@ end_per_testcase(Case, Config)
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
-    end_per_testcase(default, Config);
-
-end_per_testcase(Case, Config)
-    when Case =:= create_directory_import_check_user_id_error_test
-    orelse Case =:= create_file_import_check_user_id_error_test ->
-
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [luma]),
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config)

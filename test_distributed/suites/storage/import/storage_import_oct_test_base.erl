@@ -47,6 +47,8 @@
     %% --- ownership (LUMA uid/gid) ---
     import_directory_check_user_id_test/1,
     import_file_check_user_id_test/1,
+    import_directory_check_user_id_error_test/1,
+    import_file_check_user_id_error_test/1,
 
     %% --- permissions ---
     import_directory_without_read_permission_test/1,
@@ -80,7 +82,9 @@ end_per_testcase(Case = import_directory_error_test, TestSuiteCtx, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 end_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= import_directory_check_user_id_test;
-    Case =:= import_file_check_user_id_test
+    Case =:= import_file_check_user_id_test;
+    Case =:= import_directory_check_user_id_error_test;
+    Case =:= import_file_check_user_id_error_test
 ->
     unmock_luma(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
@@ -351,6 +355,78 @@ import_file_check_user_id_test(SuiteCtx) ->
     }).
 
 
+%% A directory whose owner uid cannot be mapped to a Onedata user (LUMA returns an
+%% error) must not be imported - the scan reports it as failed (alongside the space
+%% root, which is processed normally and counted as unmodified).
+import_directory_check_user_id_error_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    mock_luma_error(ImportingProviderSelector),
+
+    DirName = ?RAND_STR(),
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% The directory must not have been imported - mapping its owner via LUMA failed
+    SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestDirPath}),
+        ?ATTEMPTS
+    ),
+
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"created">> => 0,
+        <<"failed">> => 1,
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0
+    }).
+
+
+%% Like import_directory_check_user_id_error_test/1 but for a regular file.
+import_file_check_user_id_error_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    mock_luma_error(ImportingProviderSelector),
+
+    FileName = ?RAND_STR(),
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME,
+        #file_spec{name = FileName, content = ?RAND_STR(), uid = ?TEST_UID, gid = ?TEST_GID},
+        SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% The file must not have been imported - mapping its owner via LUMA failed
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
+        ?ATTEMPTS
+    ),
+
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"created">> => 0,
+        <<"failed">> => 1,
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0
+    }).
+
+
 %% --- permissions ---
 
 
@@ -524,3 +600,15 @@ unmock_luma(#storage_import_test_suite_ctx{
 }) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_unload(Nodes, [luma]).
+
+
+%% @private
+%% Makes LUMA fail to map any storage uid to a Onedata user, so that importing a
+%% file/dir owned by that uid fails. Torn down via unmock_luma/1.
+-spec mock_luma_error(oct_background:node_selector()) -> ok.
+mock_luma_error(ProviderSelector) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, [luma]),
+    ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
+        error(test_error)
+    end).
