@@ -369,11 +369,12 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
 %%--------------------------------------------------------------------
 -spec assert_storage_import_monitoring_state(case_ctx(), #{binary() => integer() | skip}) -> ok.
 assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType},
     space_id = SpaceId,
     file_tree_spec = FileTreeSpec,
     importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
 }, Overrides) ->
-    Created = count_nodes(FileTreeSpec),
+    Created = count_imported_nodes(StorageType, FileTreeSpec),
     Default = #{
         <<"scans">> => 1,
         <<"created">> => Created,
@@ -662,8 +663,6 @@ to_spec_list(Spec) -> [Spec].
 
 
 %% @private
--spec count_nodes(file_tree_spec()) -> non_neg_integer().
-%% @private
 -spec assert_dir_stats(#provider_ctx{}, file_meta:path(), #dir_spec{}) -> ok.
 assert_dir_stats(#provider_ctx{selector = Selector, node = Node, session_id = SessId}, Path, DirSpec) ->
     {ok, #file_attr{guid = Guid}} = ?assertMatch(
@@ -716,12 +715,21 @@ aggregate_subtree_stats(Children) ->
     end, {0, 0, 0}, Children).
 
 
-count_nodes(undefined) -> 0;
-count_nodes(Specs) when is_list(Specs) -> lists:sum([count_nodes(Spec) || Spec <- Specs]);
-count_nodes(#dir_spec{children = Children}) -> 1 + count_nodes(Children);
-count_nodes(#file_spec{}) -> 1;
-% FIFOs are created on the storage but never imported, hence not counted as created
-count_nodes(#storage_fifo_spec{}) -> 0.
+%% @private
+%% Counts the storage entries that storage import reports as 'created' for the
+%% declared file tree. On POSIX storages every directory and regular file is a
+%% real storage entry, so both are counted. On object storages (S3) there are no
+%% directory entries - directories are emulated via object key prefixes and are
+%% never reported as created - so only the regular files (objects) are counted.
+%% FIFOs are created on the storage but never imported, hence not counted either.
+-spec count_imported_nodes(posix | s3, file_tree_spec()) -> non_neg_integer().
+count_imported_nodes(_StorageType, undefined) -> 0;
+count_imported_nodes(StorageType, Specs) when is_list(Specs) ->
+    lists:sum([count_imported_nodes(StorageType, Spec) || Spec <- Specs]);
+count_imported_nodes(posix, #dir_spec{children = Children}) -> 1 + count_imported_nodes(posix, Children);
+count_imported_nodes(s3, #dir_spec{children = Children}) -> count_imported_nodes(s3, Children);
+count_imported_nodes(_StorageType, #file_spec{}) -> 1;
+count_imported_nodes(_StorageType, #storage_fifo_spec{}) -> 0.
 
 
 %%%===================================================================
