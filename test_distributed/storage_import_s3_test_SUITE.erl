@@ -26,12 +26,7 @@
 %% tests
 -export([
     % tests of import
-    create_empty_file_import_test/1,
-    create_file_import_test/1,
     create_delete_import_test/1,
-    create_file_in_dir_import_test/1,
-    create_subfiles_import_many_test/1,
-    create_subfiles_import_many2_test/1,
     create_remote_file_import_conflict_test/1,
     create_remote_file_import_race_test/1,
     create_file_import_race_test/1,
@@ -81,12 +76,7 @@
 
 -define(TEST_CASES, [
     % tests of import
-    create_empty_file_import_test,
-    create_file_import_test,
     create_delete_import_test,
-    create_file_in_dir_import_test,
-    create_subfiles_import_many_test,
-    create_subfiles_import_many2_test,
     create_remote_file_import_conflict_test,
     create_remote_file_import_race_test,
     create_file_import_race_test,
@@ -140,23 +130,8 @@ all() -> ?ALL(?TEST_CASES).
 %%% Test functions
 %%%===================================================================
 
-create_empty_file_import_test(Config) ->
-    storage_import_test_base:create_empty_file_import_test(Config).
-
-create_file_import_test(Config) ->
-    storage_import_test_base:create_file_import_test(Config).
-
 create_delete_import_test(Config) ->
     storage_import_test_base:create_delete_import_test(Config).
-
-create_file_in_dir_import_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_import_test(Config).
-
-create_subfiles_import_many_test(Config) ->
-    storage_import_s3_test_base:create_subfiles_import_many_test(Config).
-
-create_subfiles_import_many2_test(Config) ->
-    storage_import_s3_test_base:create_subfiles_import_many2_test(Config).
 
 create_remote_file_import_conflict_test(Config) ->
     storage_import_test_base:create_remote_file_import_conflict_test(Config).

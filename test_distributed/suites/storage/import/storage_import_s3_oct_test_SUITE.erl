@@ -23,16 +23,17 @@
 
 %% tests
 -export([
+    %% --- structure ---
     import_empty_storage_test/1,
     import_empty_file_test/1,
     import_file_with_content_test/1,
-
     import_file_in_directory_test/1,
     import_many_subfiles_test/1,
     import_nested_directory_tree_test/1
 ]).
 
 all() -> [
+    %% --- structure ---
     import_empty_storage_test,
     import_empty_file_test,
     import_file_with_content_test,
@@ -67,6 +68,9 @@ all() -> [
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
+
+
+%% --- structure ---
 
 
 import_empty_storage_test(_Config) ->

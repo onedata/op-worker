@@ -23,33 +23,53 @@
 
 %% tests
 -export([
+    %% --- structure ---
     import_empty_storage_test/1,
     import_empty_directory_test/1,
-    import_directory_error_test/1,
-    import_directory_check_user_id_test/1,
-
     import_empty_file_test/1,
     import_file_with_content_test/1,
-
     import_file_in_directory_test/1,
     import_many_subfiles_test/1,
-    import_nested_directory_tree_test/1,
     import_many_directories_test/1,
-    import_directory_without_read_permission_test/1
+    import_nested_directory_tree_test/1,
+
+    %% --- ownership (LUMA uid/gid) ---
+    import_directory_check_user_id_test/1,
+    import_file_check_user_id_test/1,
+
+    %% --- permissions ---
+    import_directory_without_read_permission_test/1,
+
+    %% --- ignored entries ---
+    import_ignores_fifo_test/1,
+
+    %% --- failure ---
+    import_directory_error_test/1
 ]).
 
 all() -> [
+    %% --- structure ---
     import_empty_storage_test,
     import_empty_directory_test,
-    import_directory_error_test,
-    import_directory_check_user_id_test,
     import_empty_file_test,
     import_file_with_content_test,
     import_file_in_directory_test,
     import_many_subfiles_test,
-    import_nested_directory_tree_test,
     import_many_directories_test,
-    import_directory_without_read_permission_test
+    import_nested_directory_tree_test,
+
+    %% --- ownership (LUMA uid/gid) ---
+    import_directory_check_user_id_test,
+    import_file_check_user_id_test,
+
+    %% --- permissions ---
+    import_directory_without_read_permission_test,
+
+    %% --- ignored entries ---
+    import_ignores_fifo_test,
+
+    %% --- failure ---
+    import_directory_error_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -66,19 +86,14 @@ all() -> [
 %%%===================================================================
 
 
+%% --- structure ---
+
+
 import_empty_storage_test(_Config) ->
     ?run_test().
 
 
 import_empty_directory_test(_Config) ->
-    ?run_test().
-
-
-import_directory_error_test(_Config) ->
-    ?run_test().
-
-
-import_directory_check_user_id_test(_Config) ->
     ?run_test().
 
 
@@ -98,15 +113,43 @@ import_many_subfiles_test(_Config) ->
     ?run_test().
 
 
-import_nested_directory_tree_test(_Config) ->
-    ?run_test().
-
-
 import_many_directories_test(_Config) ->
     ?run_test().
 
 
+import_nested_directory_tree_test(_Config) ->
+    ?run_test().
+
+
+%% --- ownership (LUMA uid/gid) ---
+
+
+import_directory_check_user_id_test(_Config) ->
+    ?run_test().
+
+
+import_file_check_user_id_test(_Config) ->
+    ?run_test().
+
+
+%% --- permissions ---
+
+
 import_directory_without_read_permission_test(_Config) ->
+    ?run_test().
+
+
+%% --- ignored entries ---
+
+
+import_ignores_fifo_test(_Config) ->
+    ?run_test().
+
+
+%% --- failure ---
+
+
+import_directory_error_test(_Config) ->
     ?run_test().
 
 
