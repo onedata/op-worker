@@ -16,7 +16,7 @@
 %%% monitoring counters) is done generically by storage_import_test_utils.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_oct_test_base).
+-module(storage_import_initial_oct_test_base).
 -author("Katarzyna Such").
 
 -include("storage_import_oct_test.hrl").

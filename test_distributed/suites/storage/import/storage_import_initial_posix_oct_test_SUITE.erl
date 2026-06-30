@@ -9,7 +9,7 @@
 %%% This module tests storage import on POSIX storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_posix_oct_test_SUITE).
+-module(storage_import_initial_posix_oct_test_SUITE).
 -author("Katarzyna Such").
 
 -include("storage_import_oct_test.hrl").
@@ -90,7 +90,7 @@ all() -> [
     non_importing_provider_selector = paris,
     space_owner_selector = space_owner
 }).
--define(run_test(), storage_import_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
+-define(run_test(), storage_import_initial_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
 
 %%%==================================================================
@@ -192,7 +192,7 @@ import_directory_error_test(_Config) ->
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE, sd_test_utils, storage_file_setup_utils,
-        storage_import_test_utils, storage_import_oct_test_base
+        storage_import_test_utils, storage_import_initial_oct_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op",
@@ -204,7 +204,7 @@ init_per_suite(Config) ->
             {cache_to_disk_force_delay_ms, timer:seconds(2)}
         ]}],
         posthook = fun(NewConfig) ->
-            storage_import_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+            storage_import_initial_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
             NewConfig
         end
     }).
@@ -215,9 +215,9 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    storage_import_oct_test_base:init_per_testcase(Config).
+    storage_import_initial_oct_test_base:init_per_testcase(Config).
 
 
 end_per_testcase(Case, Config) ->
-    storage_import_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
+    storage_import_initial_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
 
