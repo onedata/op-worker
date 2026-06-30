@@ -27,6 +27,15 @@
 -define(LARGE_IMPORT_SCAN_ATTEMPTS, 300).
 
 
+%% Declares a FIFO (named pipe) to be created directly on the storage. A FIFO is a
+%% special (unsupported) file type that storage import must ignore - it is created
+%% on the storage but never imported into the logical filesystem. Used to test that
+%% such entries are skipped (see import_ignores_fifo_test). Kept local to the storage
+%% import tests, as FIFOs cannot be expressed via the generic onenv file specs.
+-record(storage_fifo_spec, {
+    name = undefined :: undefined | binary()
+}).
+
 -record(storage_import_test_suite_ctx, {
     storage_type :: posix | s3,
     importing_provider_selector :: oct_background:entity_selector(),

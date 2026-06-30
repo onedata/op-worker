@@ -36,10 +36,13 @@
 
 -type suite_ctx() :: #storage_import_test_suite_ctx{}.
 -type case_ctx() :: #storage_import_test_case_ctx{}.
+% A single node of a declared storage file tree: either a generic onenv file/dir
+% spec, or a storage-import-specific FIFO spec (created on storage but not imported).
+-type file_tree_node_spec() :: onenv_file_test_utils:object_spec() | #storage_fifo_spec{}.
 -type file_tree_spec() ::
     undefined
-    | onenv_file_test_utils:object_spec()
-    | [onenv_file_test_utils:object_spec()].
+    | file_tree_node_spec()
+    | [file_tree_node_spec()].
 
 -export_type([suite_ctx/0, case_ctx/0]).
 
@@ -138,6 +141,7 @@ gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
 create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
     undefined;
 create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
+    % TODO maybe lists_utils:pmap ??
     [create_file_tree_on_storage(ProviderSelector, StorageId, Spec) || Spec <- Specs];
 create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
     create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
@@ -423,18 +427,15 @@ build_provider_ctx(SpaceOwnerSelector, ProviderSelector) ->
 
 %% @private
 -spec create_node_on_storage(
-    oct_background:entity_selector(), storage:id(), file_meta:path(), onenv_file_test_utils:object_spec()
+    oct_background:entity_selector(), storage:id(), file_meta:path(), file_tree_node_spec()
 ) ->
-    onenv_file_test_utils:object_spec().
+    file_tree_node_spec().
 create_node_on_storage(ProviderSelector, StorageId, ParentPath, DirSpec = #dir_spec{}) ->
     #dir_spec{name = Name, mode = Mode, uid = Uid, gid = Gid, children = Children} =
         ConcreteDirSpec = ensure_name(DirSpec),
     StorageFileId = filepath_utils:join([ParentPath, Name]),
     ok = storage_file_setup_utils:create_dir(ProviderSelector, StorageId, StorageFileId, Mode),
-    case Uid =/= undefined andalso Gid =/= undefined of
-        true -> ok = storage_file_setup_utils:chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid);
-        false -> ok
-    end,
+    maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid),
     ConcreteChildren = [
         create_node_on_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
         || ChildSpec <- Children
@@ -442,18 +443,42 @@ create_node_on_storage(ProviderSelector, StorageId, ParentPath, DirSpec = #dir_s
     ConcreteDirSpec#dir_spec{children = ConcreteChildren};
 
 create_node_on_storage(ProviderSelector, StorageId, ParentPath, FileSpec = #file_spec{}) ->
-    #file_spec{name = Name, mode = Mode, content = Content} = ConcreteFileSpec = ensure_name(FileSpec),
+    #file_spec{name = Name, mode = Mode, content = Content, uid = Uid, gid = Gid} =
+        ConcreteFileSpec = ensure_name(FileSpec),
     StorageFileId = filepath_utils:join([ParentPath, Name]),
     ok = storage_file_setup_utils:create_file(ProviderSelector, StorageId, StorageFileId, Content, Mode),
-    ConcreteFileSpec.
+    maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid),
+    ConcreteFileSpec;
+
+create_node_on_storage(ProviderSelector, StorageId, ParentPath, FifoSpec = #storage_fifo_spec{}) ->
+    #storage_fifo_spec{name = Name} = ConcreteFifoSpec = ensure_name(FifoSpec),
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    ok = storage_file_setup_utils:create_fifo(ProviderSelector, StorageId, StorageFileId),
+    ConcreteFifoSpec.
 
 
 %% @private
--spec ensure_name(onenv_file_test_utils:object_spec()) -> onenv_file_test_utils:object_spec().
+-spec maybe_chown(
+    oct_background:entity_selector(), storage:id(), helpers:file_id(),
+    luma:uid() | undefined, luma:gid() | undefined
+) ->
+    ok.
+maybe_chown(_ProviderSelector, _StorageId, _StorageFileId, undefined, _Gid) ->
+    ok;
+maybe_chown(_ProviderSelector, _StorageId, _StorageFileId, _Uid, undefined) ->
+    ok;
+maybe_chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid) ->
+    ok = storage_file_setup_utils:chown(ProviderSelector, StorageId, StorageFileId, Uid, Gid).
+
+
+%% @private
+-spec ensure_name(file_tree_node_spec()) -> file_tree_node_spec().
 ensure_name(DirSpec = #dir_spec{name = undefined}) ->
     DirSpec#dir_spec{name = str_utils:rand_hex(20)};
 ensure_name(FileSpec = #file_spec{name = undefined}) ->
     FileSpec#file_spec{name = str_utils:rand_hex(20)};
+ensure_name(FifoSpec = #storage_fifo_spec{name = undefined}) ->
+    FifoSpec#storage_fifo_spec{name = str_utils:rand_hex(20)};
 ensure_name(Spec) ->
     Spec.
 
@@ -576,7 +601,9 @@ to_spec_list(Spec) -> [Spec].
 count_nodes(undefined) -> 0;
 count_nodes(Specs) when is_list(Specs) -> lists:sum([count_nodes(Spec) || Spec <- Specs]);
 count_nodes(#dir_spec{children = Children}) -> 1 + count_nodes(Children);
-count_nodes(#file_spec{}) -> 1.
+count_nodes(#file_spec{}) -> 1;
+% FIFOs are created on the storage but never imported, hence not counted as created
+count_nodes(#storage_fifo_spec{}) -> 0.
 
 
 %%%===================================================================

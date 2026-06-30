@@ -23,11 +23,13 @@
 
 %% API
 -export([create_file/4, create_file/5]).
+-export([create_fifo/3, create_fifo/4]).
 -export([create_dir/3, create_dir/4, chown/5]).
 -export([write_file/5, delete_file/4]).
 -export([chmod/4, truncate/5, rename/4, rmdir/3]).
 %% on-node routines (executed on op_worker via rpc)
 -export([create_file_on_storage/3, write_to_storage_file/4, delete_file_on_storage/3]).
+-export([create_fifo_on_storage/3]).
 -export([create_dir_on_storage/3, chown_on_storage/4]).
 -export([chmod_on_storage/3, truncate_on_storage/4, rename_on_storage/3, rmdir_on_storage/2]).
 
@@ -51,6 +53,21 @@ create_file(ProviderSelector, StorageId, StorageFileId, Content, Mode) ->
         ProviderSelector, ?MODULE, create_file_on_storage, [StorageId, StorageFileId, Mode]
     ),
     write_file(ProviderSelector, StorageId, StorageFileId, 0, Content).
+
+
+-spec create_fifo(oct_background:node_selector(), storage:id(), helpers:file_id()) -> ok.
+create_fifo(ProviderSelector, StorageId, StorageFileId) ->
+    create_fifo(ProviderSelector, StorageId, StorageFileId, ?DEFAULT_FILE_PERMS).
+
+
+-spec create_fifo(
+    oct_background:node_selector(), storage:id(), helpers:file_id(), file_meta:mode()
+) ->
+    ok.
+create_fifo(ProviderSelector, StorageId, StorageFileId, Mode) ->
+    ok = opw_test_rpc:call(
+        ProviderSelector, ?MODULE, create_fifo_on_storage, [StorageId, StorageFileId, Mode]
+    ).
 
 
 -spec create_dir(oct_background:node_selector(), storage:id(), helpers:file_id()) -> ok.
@@ -152,6 +169,13 @@ write_to_storage_file(StorageId, StorageFileId, Offset, Content) ->
 delete_file_on_storage(StorageId, StorageFileId, CurrentSize) ->
     HelperHandle = get_helper_handle(StorageId),
     ok = helpers:unlink(HelperHandle, StorageFileId, CurrentSize).
+
+
+%% @doc Runs on the op_worker node.
+-spec create_fifo_on_storage(storage:id(), helpers:file_id(), file_meta:mode()) -> ok.
+create_fifo_on_storage(StorageId, StorageFileId, Mode) ->
+    HelperHandle = get_helper_handle(StorageId),
+    ok = helpers:mknod(HelperHandle, StorageFileId, Mode, fifo).
 
 
 %% @doc Runs on the op_worker node.
