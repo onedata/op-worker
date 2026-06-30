@@ -25,8 +25,6 @@
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
-    import_nfs_acl_test/1,
-    import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_file_import_race_test/1,
     close_file_import_race_test/1,
     delete_file_reimport_race_test/1,
@@ -68,8 +66,6 @@
     create_remote_file_import_conflict_test,
     create_remote_dir_import_race_test,
     create_remote_file_import_race_test,
-    import_nfs_acl_test,
-    import_nfs_acl_with_disabled_luma_should_fail_test,
     create_file_import_race_test,
     close_file_import_race_test,
     delete_file_reimport_race_test,
@@ -122,12 +118,6 @@ create_remote_dir_import_race_test(Config) ->
 
 create_remote_file_import_race_test(Config) ->
     storage_import_test_base:create_remote_file_import_race_test(Config).
-
-import_nfs_acl_test(Config) ->
-    storage_import_test_base:import_nfs_acl_test(Config).
-
-import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
-    storage_import_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config).
 
 create_file_import_race_test(Config) ->
     storage_import_test_base:create_file_import_race_test(Config).

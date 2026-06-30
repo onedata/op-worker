@@ -61,8 +61,6 @@
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
-    import_nfs_acl_test/1,
-    import_nfs_acl_with_disabled_luma_should_fail_test/1,
     create_file_import_race_test/1,
     close_file_import_race_test/2,
     delete_file_reimport_race_test/2,
@@ -434,99 +432,6 @@ create_remote_file_import_race_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
-
-import_nfs_acl_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    %% User1 should be allowed to read acl
-    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
-    ?assertMatch(Value, ?ACL_JSON),
-
-    %% User1 should not be allowed to set acl
-    ?assertMatch({error, ?EACCES},
-        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, #xattr{})),
-
-    %% User1 should not be allowed to modify file attrs
-    ?assertMatch({error, ?EACCES},
-        lfm_proxy:truncate(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, 100)),
-
-    %% User2 should be allowed to read acl
-    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
-import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID, ?ATTEMPTS),
-
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 1,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
 
 create_file_import_race_test(Config) ->
     % in this test we check whether file is imported with IMPORTED suffix as conflicting file is created
@@ -6226,7 +6131,6 @@ init_per_testcase(chmod_file_update2_test, Config) ->
     init_per_testcase(default, Config2);
 
 init_per_testcase(Case, Config)
-    when Case =:= import_nfs_acl_test
     orelse Case =:= update_nfs_acl_test ->
 
     Workers = ?config(op_worker_nodes, Config),
@@ -6241,18 +6145,6 @@ init_per_testcase(Case, Config)
         {ok, ?GROUP2}
     end),
 
-    EncACL = storage_import_acl:encode(?ACL),
-    ok = test_utils:mock_expect(Workers, storage_driver, getxattr, fun
-        (Handle = #sd_handle{file = <<"/space1">>}, Ctx) ->
-            meck:passthrough([Handle, Ctx]);
-        (#sd_handle{}, _) ->
-            {ok, EncACL}
-    end),
-    init_per_testcase(default, Config);
-
-init_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(Workers, [storage_driver]),
     EncACL = storage_import_acl:encode(?ACL),
     ok = test_utils:mock_expect(Workers, storage_driver, getxattr, fun
         (Handle = #sd_handle{file = <<"/space1">>}, Ctx) ->
@@ -6340,16 +6232,10 @@ end_per_testcase(Case, Config)
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config)
-    when Case =:= import_nfs_acl_test
     orelse Case =:= update_nfs_acl_test ->
 
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [luma, storage_driver]),
-    end_per_testcase(default, Config);
-
-end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(default, Config);
 
 end_per_testcase(force_stop_test, Config) ->

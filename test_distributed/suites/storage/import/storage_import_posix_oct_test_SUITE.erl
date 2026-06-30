@@ -43,6 +43,7 @@
     import_directory_without_read_permission_test/1,
 
     %% --- acl ---
+    import_nfs_acl_test/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
 
     %% --- ignored entries ---
@@ -73,6 +74,7 @@ all() -> [
     import_directory_without_read_permission_test,
 
     %% --- acl ---
+    import_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
 
     %% --- ignored entries ---
@@ -86,7 +88,7 @@ all() -> [
     storage_type = posix,
     importing_provider_selector = krakow,
     non_importing_provider_selector = paris,
-    space_owner_selector = user1
+    space_owner_selector = space_owner
 }).
 -define(run_test(), storage_import_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
@@ -158,6 +160,10 @@ import_directory_without_read_permission_test(_Config) ->
 
 
 %% --- acl ---
+
+
+import_nfs_acl_test(_Config) ->
+    ?run_test().
 
 
 import_nfs_acl_with_disabled_luma_should_fail_test(_Config) ->
