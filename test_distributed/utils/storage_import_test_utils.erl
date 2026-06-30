@@ -18,6 +18,7 @@
 
 -include("storage_import_oct_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 
 %% API
 -export([
@@ -30,7 +31,8 @@
     enable_continuous_scan/1, enable_continuous_scan/2,
     disable_continuous_scan/1,
     verify_imported_tree/1, verify_imported_tree/2,
-    assert_attrs/3,
+    verify_dir_stats/1,
+    assert_attrs/3, assert_attrs/4,
     assert_storage_import_monitoring_state/2
 ]).
 
@@ -51,6 +53,11 @@
 % load on the providers while still parallelizing the (RPC-heavy, retry-prone)
 % per-node assertions - important for large trees (hundreds/thousands of nodes).
 -define(VERIFY_PARALLELISM, 20).
+% Max number of concurrent processes used to create the top-level tree nodes on the
+% storage. Only the top-level siblings are parallelized (each subtree is created
+% sequentially), so the total concurrency stays bounded by this value - parallelizing
+% every level would multiply across levels and overload the provider.
+-define(SETUP_PARALLELISM, 20).
 
 
 %%%===================================================================
@@ -141,8 +148,11 @@ gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
 create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
     undefined;
 create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
-    % TODO maybe lists_utils:pmap ??
-    [create_file_tree_on_storage(ProviderSelector, StorageId, Spec) || Spec <- Specs];
+    % Parallelize creation of the top-level siblings (each subtree is still created
+    % sequentially) to speed up setup of wide trees, keeping concurrency bounded
+    lists_utils:pmap(fun(Spec) ->
+        create_file_tree_on_storage(ProviderSelector, StorageId, Spec)
+    end, Specs, ?SETUP_PARALLELISM);
 create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
     create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
 
@@ -278,18 +288,69 @@ verify_imported_tree(#storage_import_test_case_ctx{
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Verifies directory size statistics (dir_size_stats / dir_stats_collector) for
+%% the space root and every directory declared in the imported tree, on both the
+%% importing and the non-importing provider. For each directory the expected
+%% counters - aggregated recursively over its whole subtree - are derived from the
+%% declared spec: number of regular files, number of directories and total
+%% logical/virtual byte size. For the space root the expectation is the aggregate
+%% over the whole declared tree (special dirs like trash are not counted by
+%% dir_size_stats). The storage-dependent physical size is intentionally not asserted.
+%%
+%% NOTE: relies on dir stats collecting being enabled for the space (the default in
+%% onenv environments). Call only after verify_imported_tree/1, so that the declared
+%% paths are guaranteed to exist on both providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_dir_stats(case_ctx()) -> ok.
+verify_dir_stats(#storage_import_test_case_ctx{
+    space_path = SpacePath,
+    file_tree_spec = FileTreeSpec,
+    importing_provider_ctx = ImportingProviderCtx,
+    non_importing_provider_ctx = NonImportingProviderCtx
+}) ->
+    TopLevelSpecs = to_spec_list(FileTreeSpec),
+    % the space root is not a declared node - assert it explicitly, with the
+    % expectation aggregated over the whole declared tree
+    SpaceRootSpec = #dir_spec{children = TopLevelSpecs},
+    %% TODO VFS-13529 remove debug logging before merge to develop
+    ct:pal("Asserting dir_size_stats for space root ~tp, expected (whole-tree) state:~n~tp", [
+        SpacePath, expected_dir_stats(SpaceRootSpec)
+    ]),
+    DirNodes = [{SpacePath, SpaceRootSpec} | [
+        {Path, Spec} || {Path, #dir_spec{} = Spec} <- flatten_nodes(SpacePath, TopLevelSpecs)
+    ]],
+    lists:foreach(fun(ProviderCtx) ->
+        lists_utils:pforeach(fun({Path, DirSpec}) ->
+            assert_dir_stats(ProviderCtx, Path, DirSpec)
+        end, DirNodes, ?VERIFY_PARALLELISM)
+    end, [ImportingProviderCtx, NonImportingProviderCtx]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Provider-aware assertion of selected logical file attributes at the given path.
 %% ExpectedAttrs is a map of #file_attr{} field name => expected value; only the
 %% provided fields are checked. The expected values are supplied by the caller, as
 %% they are provider-specific and depend on the LUMA configuration (e.g. the same
 %% file has different uid/gid on the importing and the non-importing provider).
 %% Supported fields: owner_id, uid, gid, mode, type, size.
+%%
+%% The /4 variant accepts a custom number of retry attempts - useful when the file
+%% is not awaited via verify_imported_tree first (which retries until the tree
+%% propagates), so the assertion itself must tolerate a longer dbsync propagation
+%% lag to the non-importing provider.
 %% @end
 %%--------------------------------------------------------------------
 -spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}) -> ok.
 assert_attrs(ProviderCtx, Path, ExpectedAttrs) ->
+    assert_attrs(ProviderCtx, Path, ExpectedAttrs, ?ATTEMPTS).
+
+
+-spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}, non_neg_integer()) -> ok.
+assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
     maps:foreach(fun(Field, ExpectedValue) ->
-        ?assertEqual(ExpectedValue, get_file_attr_field(ProviderCtx, Path, Field), ?ATTEMPTS)
+        ?assertEqual(ExpectedValue, get_file_attr_field(ProviderCtx, Path, Field), Attempts)
     end, ExpectedAttrs).
 
 
@@ -333,6 +394,10 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
         <<"queueLengthDayHist">> => 0
     },
     Expected = maps:merge(Default, Overrides),
+    %% TODO VFS-13529 remove debug logging before merge to develop
+    ct:pal("Asserting storage_import_monitoring for space ~tp, expected state:~n~tp", [
+        SpaceId, Expected
+    ]),
     assert_monitoring_state(ImportingProviderSelector, SpaceId, Expected, 1).
 
 
@@ -598,6 +663,59 @@ to_spec_list(Spec) -> [Spec].
 
 %% @private
 -spec count_nodes(file_tree_spec()) -> non_neg_integer().
+%% @private
+-spec assert_dir_stats(#provider_ctx{}, file_meta:path(), #dir_spec{}) -> ok.
+assert_dir_stats(#provider_ctx{selector = Selector, node = Node, session_id = SessId}, Path, DirSpec) ->
+    {ok, #file_attr{guid = Guid}} = ?assertMatch(
+        {ok, _}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS),
+    ExpectedStats = expected_dir_stats(DirSpec),
+    ?assertEqual(
+        ExpectedStats,
+        get_current_dir_stats(Selector, Guid, maps:keys(ExpectedStats)),
+        ?ATTEMPTS
+    ).
+
+
+%% @private
+-spec get_current_dir_stats(oct_background:entity_selector(), file_id:file_guid(), [binary()]) ->
+    #{binary() => integer()} | {error, term()}.
+get_current_dir_stats(Selector, Guid, StatNames) ->
+    case ?rpc(Selector, dir_size_stats:get_stats(Guid)) of
+        {ok, Stats} -> maps:with(StatNames, Stats);
+        {error, _} = Error -> Error
+    end.
+
+
+%% @private
+-spec expected_dir_stats(#dir_spec{}) -> #{binary() => integer()}.
+expected_dir_stats(#dir_spec{children = Children}) ->
+    {RegFileCount, DirCount, TotalSize} = aggregate_subtree_stats(Children),
+    #{
+        ?REG_FILE_AND_LINK_COUNT => RegFileCount,
+        ?DIR_COUNT => DirCount,
+        ?FILE_ERROR_COUNT => 0,
+        ?DIR_ERROR_COUNT => 0,
+        ?VIRTUAL_SIZE => TotalSize,
+        ?LOGICAL_SIZE => TotalSize
+    }.
+
+
+%% @private
+%% Aggregates a directory's children recursively into {reg_file_count, dir_count,
+%% total_byte_size} - the counters maintained by dir_size_stats for that directory
+%% (which cover the whole subtree but not the directory itself).
+-spec aggregate_subtree_stats([#dir_spec{} | #file_spec{}]) ->
+    {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
+aggregate_subtree_stats(Children) ->
+    lists:foldl(fun
+        (#dir_spec{children = GrandChildren}, {RegAcc, DirAcc, SizeAcc}) ->
+            {RegSub, DirSub, SizeSub} = aggregate_subtree_stats(GrandChildren),
+            {RegAcc + RegSub, DirAcc + 1 + DirSub, SizeAcc + SizeSub};
+        (#file_spec{content = Content}, {RegAcc, DirAcc, SizeAcc}) ->
+            {RegAcc + 1, DirAcc, SizeAcc + byte_size(Content)}
+    end, {0, 0, 0}, Children).
+
+
 count_nodes(undefined) -> 0;
 count_nodes(Specs) when is_list(Specs) -> lists:sum([count_nodes(Spec) || Spec <- Specs]);
 count_nodes(#dir_spec{children = Children}) -> 1 + count_nodes(Children);

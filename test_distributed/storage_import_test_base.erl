@@ -60,8 +60,6 @@
     create_directory_import_check_user_id_error_test/1,
     create_delete_import_test/1,
     create_file_import_check_user_id_error_test/1,
-    create_subfiles_import_many_test/1,
-    create_subfiles_import_many2_test/1,
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
@@ -324,89 +322,6 @@ create_file_import_check_user_id_error_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
-
-%% TODO VFS-13529 ported to oct (storage_import_oct_test_base:import_many_subfiles_test) - verify & remove
-create_subfiles_import_many_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dirs and files on storage
-    DirsNumber = 200,
-    lists_utils:pforeach(fun(N) ->
-        NBin = integer_to_binary(N),
-        DirPath = provider_storage_path(?SPACE_ID, NBin),
-        FilePath = filename:join([DirPath, integer_to_binary(N)]),
-        SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, DirPath, RDWRStorage),
-        ok = sd_test_utils:mkdir(W1, SDDirHandle, ?DEFAULT_DIR_PERMS),
-        SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, FilePath, RDWRStorage),
-        ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
-        {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA)
-    end, lists:seq(1, DirsNumber)),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID, 60),
-
-    parallel_assert(?MODULE, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 2 * DirsNumber,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdHourHist">> => 2 * DirsNumber,
-        <<"createdDayHist">> => 2 * DirsNumber,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
-
-%% TODO VFS-13529 ported to oct (storage_import_oct_test_base:import_nested_directory_tree_test) - verify & remove
-create_subfiles_import_many2_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dirs and files on storage
-    RootPath = provider_storage_path(?SPACE_ID, <<"">>),
-    DirStructure = [13, 13, 13],  % 2379 items in total (dirs and reg files)
-    RootSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
-
-    create_nested_directory_tree(W1, DirStructure, RootSDHandle),
-    enable_initial_scan(Config, ?SPACE_ID),
-    Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_PATH),
-
-    Timeout = 600,
-    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout),
-    assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 2379,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdDayHist">> => 2379,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 create_remote_file_import_conflict_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -6474,11 +6389,7 @@ init_per_testcase(changing_max_depth_test, Config) ->
     ],
     init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config)
-    when Case =:= create_subfiles_import_many_test
-    orelse Case =:= create_subfiles_import_many2_test
-    orelse Case =:= append_file_update_test ->
-
+init_per_testcase(Case, Config) when Case =:= append_file_update_test ->
     init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config));
 
 init_per_testcase(delete_many_subfiles_test, Config) ->
@@ -6580,9 +6491,7 @@ end_per_testcase(Case, Config)
     end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config)
-    when Case =:= create_subfiles_import_many_test
-    orelse Case =:= create_subfiles_import_many2_test
-    orelse Case =:= delete_many_subfiles_test
+    when Case =:= delete_many_subfiles_test
     orelse Case =:= append_file_update_test ->
 
     dir_stats_collector_test_base:teardown(Config, ?SPACE_ID, false),

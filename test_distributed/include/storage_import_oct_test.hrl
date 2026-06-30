@@ -26,6 +26,12 @@
 % default ?ATTEMPTS. Passed explicitly per-test so that small tests still fail fast.
 -define(LARGE_IMPORT_SCAN_ATTEMPTS, 300).
 
+% Attempts for asserting state on the non-importing provider when the file is NOT
+% awaited via verify_imported_tree first (which retries until the tree propagates).
+% Such an assertion must itself tolerate the dbsync propagation lag, which can
+% exceed the default ?ATTEMPTS on a loaded environment.
+-define(CROSS_PROVIDER_PROPAGATION_ATTEMPTS, 60).
+
 
 %% Declares a FIFO (named pipe) to be created directly on the storage. A FIFO is a
 %% special (unsupported) file type that storage import must ignore - it is created

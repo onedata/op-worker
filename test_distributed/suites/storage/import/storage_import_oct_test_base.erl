@@ -101,6 +101,7 @@ import_empty_storage_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
 
 
@@ -117,6 +118,7 @@ import_empty_directory_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
 
     %% Verify directory ownership (provider-specific, hence not covered by the generic verification)
     #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
@@ -160,6 +162,7 @@ import_empty_file_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
     }).
@@ -172,6 +175,7 @@ import_file_with_content_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
     }).
@@ -183,6 +187,7 @@ import_file_in_directory_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     %% created = 2 (the directory and the file), derived from the declared tree
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
@@ -200,6 +205,7 @@ import_many_subfiles_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     %% createdMinHist is skipped - by the time the (large) tree is verified and the
     %% monitoring is read, the creations may have shifted out of the first minute
     %% histogram buckets; the cumulative hour/day histograms still hold the count
@@ -216,6 +222,7 @@ import_many_directories_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1,
         <<"createdMinHist">> => skip
@@ -230,6 +237,7 @@ import_nested_directory_tree_test(SuiteCtx) ->
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
     %% Min/Hour created histograms are skipped - importing and verifying ~2400 nodes
     %% takes long enough that the creations age out of the finer-grained buckets by
     %% the time the monitoring is read; the cumulative day histogram still holds them
@@ -366,7 +374,12 @@ import_directory_without_read_permission_test(SuiteCtx) ->
         mode => 8#000
     },
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestDirPath, ExpAttrs),
-    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestDirPath, ExpAttrs),
+    %% This test skips verify_imported_tree (the 8#000 dir is not listable), so it
+    %% does not implicitly wait for the dir to propagate to the non-importing
+    %% provider - hence the longer attempts to tolerate the dbsync propagation lag.
+    storage_import_test_utils:assert_attrs(
+        NonImportingProviderCtx, SpaceTestDirPath, ExpAttrs, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+    ),
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
