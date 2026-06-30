@@ -23,7 +23,7 @@
 %% API
 -export([
     clean_up_after_previous_run/2,
-    init_testcase/3,
+    init_testcase/3, init_testcase/4,
     gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
     await_initial_scan_finished/1, await_initial_scan_finished/2,
@@ -73,12 +73,25 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
 
 
 -spec init_testcase(atom(), file_tree_spec(), suite_ctx()) -> case_ctx().
+init_testcase(TestCaseName, FileTreeSpec, SuiteCtx) ->
+    init_testcase(TestCaseName, FileTreeSpec, SuiteCtx, #{}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Like init_testcase/3 but additionally applies the given auto storage import
+%% config (e.g. #{sync_acl => true}) to the importing provider's support, so that
+%% the auto-triggered initial scan runs with non-default settings. An empty map
+%% keeps the onepanel defaults (equivalent to init_testcase/3).
+%% @end
+%%--------------------------------------------------------------------
+-spec init_testcase(atom(), file_tree_spec(), suite_ctx(), map()) -> case_ctx().
 init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_ctx{
     storage_type = StorageType,
     importing_provider_selector = ImportingProviderSelector,
     non_importing_provider_selector = NonImportingProviderSelector,
     space_owner_selector = SpaceOwnerSelector
-}) ->
+}, AutoImportConfig) ->
     ImportedStorageId = create_storage(StorageType, ImportingProviderSelector, true),
     ConcreteFileTreeSpec = create_file_tree_on_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
@@ -93,7 +106,8 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
             #support_spec{
                 provider = ImportingProviderSelector,
                 storage_spec = ImportedStorageId,
-                size = 1000000000
+                size = 1000000000,
+                storage_import = build_auto_storage_import_config(AutoImportConfig)
             },
             #support_spec{
                 provider = NonImportingProviderSelector,
@@ -405,6 +419,18 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
 %%%===================================================================
 %%% Internal functions - space/storage setup
 %%%===================================================================
+
+
+%% @private
+%% Builds the support-time storage import config map passed to onepanel. An empty
+%% auto config keeps the defaults (empty map -> auto mode, default settings); a
+%% non-empty one is wrapped so that e.g. #{sync_acl => true} reaches the importing
+%% scan via onepanel's auto_storage_import_config.
+-spec build_auto_storage_import_config(map()) -> map().
+build_auto_storage_import_config(AutoImportConfig) when map_size(AutoImportConfig) =:= 0 ->
+    #{};
+build_auto_storage_import_config(AutoImportConfig) ->
+    #{mode => <<"auto">>, auto_storage_import_config => AutoImportConfig}.
 
 
 %% @private

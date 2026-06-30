@@ -21,8 +21,10 @@
 
 -include("storage_import_oct_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 
 % API
@@ -53,6 +55,9 @@
     %% --- permissions ---
     import_directory_without_read_permission_test/1,
 
+    %% --- acl ---
+    import_nfs_acl_with_disabled_luma_should_fail_test/1,
+
     %% --- ignored entries ---
     import_ignores_fifo_test/1,
 
@@ -61,6 +66,28 @@
 ]).
 
 -define(ATTEMPTS, 30).
+
+%% A representative NFS4 ACL containing a named principal ("ala@nfsdomain.org") that
+%% requires LUMA mapping - used to test ACL import and its failure when the principal
+%% cannot be mapped to a Onedata user.
+-define(TEST_NFS4_ACL, [
+    #access_control_entity{
+        acetype = ?allow_mask, aceflags = ?no_flags_mask,
+        identifier = <<"OWNER@">>, acemask = ?read_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?deny_mask, aceflags = ?no_flags_mask,
+        identifier = <<"GROUP@">>, acemask = ?write_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?allow_mask, aceflags = ?no_flags_mask,
+        identifier = <<"EVERYONE@">>, acemask = ?read_acl_mask
+    },
+    #access_control_entity{
+        acetype = ?deny_mask, aceflags = ?no_flags_mask,
+        identifier = <<"ala@nfsdomain.org">>, acemask = ?write_attributes_mask
+    }
+]).
 
 
 %%%===================================================================
@@ -87,6 +114,9 @@ end_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= import_file_check_user_id_error_test
 ->
     unmock_luma(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+end_per_testcase(Case = import_nfs_acl_with_disabled_luma_should_fail_test, TestSuiteCtx, Config) ->
+    unmock_storage_driver(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
     lfm_proxy:teardown(Config).
@@ -462,6 +492,47 @@ import_directory_without_read_permission_test(SuiteCtx) ->
     }).
 
 
+%% --- acl ---
+
+
+%% An NFS4 ACL on storage references a named principal that LUMA cannot map to a
+%% Onedata user; with sync_acl enabled, importing the file fails and it is not
+%% imported (the space root, processed without an ACL, stays unmodified).
+import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+    EncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(?TEST_NFS4_ACL)),
+    mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = ?RAND_STR()}, SuiteCtx, #{sync_acl => true}
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% The file must not have been imported - mapping the ACL principal via LUMA failed
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
+        ?ATTEMPTS
+    ),
+
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"created">> => 0,
+        <<"failed">> => 1,
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0
+    }).
+
+
 %% --- ignored entries ---
 
 
@@ -612,3 +683,28 @@ mock_luma_error(ProviderSelector) ->
     ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
         error(test_error)
     end).
+
+
+%% @private
+%% Mocks the storage driver so that the given (already encoded) NFS4 ACL is reported
+%% as the xattr of the given storage file during the scan; all other files (including
+%% the space root) keep their real xattrs. Torn down via unmock_storage_driver/1.
+-spec mock_storage_file_acl(oct_background:node_selector(), helpers:file_id(), binary()) -> ok.
+mock_storage_file_acl(ProviderSelector, StorageFileId, EncodedAcl) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_driver),
+    ok = test_utils:mock_expect(Nodes, storage_driver, getxattr, fun
+        (#sd_handle{file = FileId}, _Name) when FileId =:= StorageFileId ->
+            {ok, EncodedAcl};
+        (Handle, Name) ->
+            meck:passthrough([Handle, Name])
+    end).
+
+
+%% @private
+-spec unmock_storage_driver(storage_import_test_utils:suite_ctx()) -> ok.
+unmock_storage_driver(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_driver).

@@ -42,6 +42,9 @@
     %% --- permissions ---
     import_directory_without_read_permission_test/1,
 
+    %% --- acl ---
+    import_nfs_acl_with_disabled_luma_should_fail_test/1,
+
     %% --- ignored entries ---
     import_ignores_fifo_test/1,
 
@@ -68,6 +71,9 @@ all() -> [
 
     %% --- permissions ---
     import_directory_without_read_permission_test,
+
+    %% --- acl ---
+    import_nfs_acl_with_disabled_luma_should_fail_test,
 
     %% --- ignored entries ---
     import_ignores_fifo_test,
@@ -148,6 +154,13 @@ import_file_check_user_id_error_test(_Config) ->
 
 
 import_directory_without_read_permission_test(_Config) ->
+    ?run_test().
+
+
+%% --- acl ---
+
+
+import_nfs_acl_with_disabled_luma_should_fail_test(_Config) ->
     ?run_test().
 
 
