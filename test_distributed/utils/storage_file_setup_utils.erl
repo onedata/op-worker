@@ -257,11 +257,18 @@ rename_on_storage(StorageId, SrcStorageFileId, DstStorageFileId) ->
     ok = helpers:rename(HelperHandle, SrcStorageFileId, DstStorageFileId).
 
 
-%% @doc Runs on the op_worker node.
+%% @doc Runs on the op_worker node. Object storages (e.g. S3) have no real
+%% directories to remove - a "directory" there is just an inferred prefix of
+%% object keys, with nothing for the helper to call - so their helper
+%% implementation returns {error, 'Function not implemented'} for this
+%% operation, which is treated as a (trivial) success here.
 -spec rmdir_on_storage(storage:id(), helpers:file_id()) -> ok.
 rmdir_on_storage(StorageId, StorageFileId) ->
     HelperHandle = get_helper_handle(StorageId),
-    ok = helpers:rmdir(HelperHandle, StorageFileId).
+    case helpers:rmdir(HelperHandle, StorageFileId) of
+        ok -> ok;
+        {error, 'Function not implemented'} -> ok
+    end.
 
 
 %% @doc Runs on the op_worker node.

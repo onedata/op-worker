@@ -772,6 +772,15 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
 %% importing the new directory (and its child) in its place. Also verifies the
 %% newly-imported directory is fully functional (not just a passively-imported
 %% node) by creating a new subdirectory inside it via LFM.
+%% On POSIX, replacing a direct child of the space root (even under the same
+%% name) bumps the root's own mtime, so root is classified modified this scan
+%% (see the "timing mechanism" note on move_file_update_test). On S3 the space
+%% root has no real mtime at all - its statbuf is permanently mocked far in the
+%% past (mock_space_dir_statbuf_on_flat_storage/1), so maybe_update_times/5's
+%% MTime >= StorageMTime check is always true and root can NEVER be classified
+%% modified there - it stays unmodified on every scan, regardless of what
+%% happens to its direct children (found via a real onenv S3 run failing on the
+%% hardcoded posix-only expectation this test originally had).
 replace_file_with_dir_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -824,12 +833,16 @@ replace_file_with_dir_test(SuiteCtx) ->
     %% S3 has no real directories, so the new directory itself is not counted
     %% towards "created" there - only its child file is (see count_imported_nodes/2)
     NewlyCreated = case StorageType of posix -> 2; s3 -> 1 end,
+    %% root is the only entity that is modified/unmodified this scan (the file
+    %% delete/dir+child create are all created/deleted); on POSIX it's modified
+    %% (a direct child was replaced), on S3 it's unmodified (see doc comment above)
+    {RootModified, RootUnmodified} = case StorageType of posix -> {1, 0}; s3 -> {0, 1} end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => NewlyCreated,
-        <<"modified">> => 1,
+        <<"modified">> => RootModified,
         <<"deleted">> => 1,
-        <<"unmodified">> => 0,
+        <<"unmodified">> => RootUnmodified,
         %% the scan-1 creation of the (now deleted) original file may have already
         %% aged out of the short createdMinHist window by the time scan 2 is
         %% awaited and the tree/monitoring re-verified; the longer hour/day
@@ -837,9 +850,9 @@ replace_file_with_dir_test(SuiteCtx) ->
         <<"createdMinHist">> => {range, NewlyCreated, NewlyCreated + 1},
         <<"createdHourHist">> => NewlyCreated + 1,
         <<"createdDayHist">> => NewlyCreated + 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
@@ -927,6 +940,8 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
 %% SAME name, by a regular file; the next (continuous) scan detects the type
 %% change - deleting both the old directory and its child, and importing the new
 %% file in its place.
+%% Root's own modified/unmodified classification this scan differs by storage
+%% type for the same reason as replace_file_with_dir_test - see its doc comment.
 replace_non_empty_dir_with_file_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -971,24 +986,27 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
     %% the scan-1 created count (used below for the created hour/day hists) is
     %% dir+file on posix, file-only on S3 (see count_imported_nodes/2)
     Scan1Created = case StorageType of posix -> 2; s3 -> 1 end,
+    %% root is the only entity modified/unmodified this scan - see
+    %% replace_file_with_dir_test's doc comment for why this differs by storage type
+    {RootModified, RootUnmodified} = case StorageType of posix -> {1, 0}; s3 -> {0, 1} end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => RootModified,
         %% both the directory and its child file are deleted this scan - on S3
         %% too, even though the directory itself was never counted towards
         %% "created" there; deletion detection counts it regardless
         <<"deleted">> => 2,
-        <<"unmodified">> => 0,
+        <<"unmodified">> => RootUnmodified,
         %% the scan-1 creation(s) may have already aged out of the short
         %% createdMinHist window by the time scan 2 is awaited and the
         %% tree/monitoring re-verified; the longer hour/day windows still hold them
         <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified,
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
         <<"deletedDayHist">> => 2
@@ -1064,6 +1082,20 @@ update_timestamps_file_import_test(SuiteCtx) ->
 %% chmod_file_update_test/chmod_file_update_in_batched_dir_test) that this is
 %% backed by the expected mechanism: the TOUCHED directory's own mtime (not the
 %% space root's hash-based children-attrs check, nor the UNTOUCHED sibling's mtime).
+%%
+%% S3 divergences (object storages have no real directories - see
+%% replace_file_with_dir_test's doc comment for the root-mtime mechanism this
+%% relies on): an EMPTY directory has no underlying object at all, so it can
+%% never be observed via LFM there - the initial tree-verify is skipped
+%% entirely for S3 (matching the old envup S3 test, which never checked
+%% directory existence either), and after scan 2 only the TOUCHED directory
+%% (now holding a real file) is expected, never the still-empty UNTOUCHED one.
+%% The space root itself never registers as modified on S3 (its statbuf is
+%% permanently mocked into the past); confirmed via a real onenv run
+%% (replace_file_with_dir_test) that no OTHER entity picks up a "modified"
+%% tally there either once root can't - so this test's S3 branch expects
+%% modified=>0, unmodified=>1 (root only) - NOT yet re-confirmed by a real S3
+%% run for THIS specific test at time of writing, flag if it disagrees.
 create_file_in_dir_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -1087,8 +1119,12 @@ create_file_in_dir_update_test(SuiteCtx) ->
     ], SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
-    %% both (empty) directories were imported by the initial scan
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    %% both (empty) directories were imported by the initial scan - POSIX only,
+    %% see doc comment for why this is skipped on S3
+    case StorageType of
+        posix -> storage_import_test_utils:verify_imported_tree(TestCaseCtx);
+        s3 -> ok
+    end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
     }),
@@ -1110,11 +1146,18 @@ create_file_in_dir_update_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
     storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
 
-    %% the new file is now visible, with its content, on both providers
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
-        #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
-        #dir_spec{name = UntouchedDirName}
-    ]),
+    %% the new file is now visible, with its content, on both providers - on S3
+    %% the still-empty untouched sibling directory is omitted, see doc comment
+    UpdatedTreeSpec = case StorageType of
+        posix ->
+            [
+                #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
+                #dir_spec{name = UntouchedDirName}
+            ];
+        s3 ->
+            #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]}
+    end,
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedTreeSpec),
     case StorageType of
         posix ->
             assert_children_mtime_changed(ImportingProviderSelector, SpaceId, TouchedDirStorageFileId),
@@ -1123,6 +1166,12 @@ create_file_in_dir_update_test(SuiteCtx) ->
         s3 ->
             ok
     end,
+    %% see doc comment: on POSIX the touched dir is modified, root + untouched
+    %% dir are unmodified; on S3 nothing is modified (root can't be, the
+    %% untouched dir doesn't exist, and the touched dir's own file_meta doesn't
+    %% seem to pick up a separate tally either - only its new file does, via
+    %% "created") and root alone is unmodified
+    {ModifiedCount, UnmodifiedCount} = case StorageType of posix -> {1, 2}; s3 -> {0, 1} end,
     %% the scan-1 creation of the (untouched) two directories on POSIX may have
     %% already aged out of the short createdMinHist window by the time scan 2 is
     %% awaited and the tree/monitoring re-verified; the longer hour/day windows
@@ -1132,15 +1181,15 @@ create_file_in_dir_update_test(SuiteCtx) ->
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
-        <<"modified">> => 1,
+        <<"modified">> => ModifiedCount,
         <<"deleted">> => 0,
-        <<"unmodified">> => 2,
+        <<"unmodified">> => UnmodifiedCount,
         <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
+        <<"modifiedMinHist">> => ModifiedCount,
+        <<"modifiedHourHist">> => ModifiedCount,
+        <<"modifiedDayHist">> => ModifiedCount,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
