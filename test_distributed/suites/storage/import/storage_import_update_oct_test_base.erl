@@ -45,7 +45,8 @@
     append_file_update_test/1,
     truncate_file_update_test/1,
     chmod_file_update_test/1,
-    move_file_update_test/1
+    move_file_update_test/1,
+    copy_file_update_test/1
 
     %% --- idempotency ---
 
@@ -273,17 +274,6 @@ move_file_update_test(SuiteCtx) ->
         <<"unmodified">> => 1
     }),
 
-    %% Unlike append/truncate/chmod, the space root's own modified-vs-unmodified
-    %% classification for this scan has no size/mode value to fall back on - a
-    %% directory's change detection (maybe_update_times/5 in storage_import_engine)
-    %% relies solely on comparing its previously-recorded mtime/ctime against the
-    %% current storage stat. Renaming a child does bump the root's mtime/ctime, but
-    %% if that happens within the same storage timestamp tick as scan 1's read, the
-    %% comparison could spuriously find them equal and misreport the root as
-    %% unmodified - so, unlike the other tests in this module, a real time gap here
-    %% is required for correctness, not just defensive caution.
-    timer:sleep(timer:seconds(2)),
-
     %% rename the file on the storage and let the next continuous scan detect it
     storage_file_setup_utils:rename(
         ImportingProviderSelector, ImportedStorageId, SrcStorageFileId, DstStorageFileId
@@ -320,6 +310,62 @@ move_file_update_test(SuiteCtx) ->
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
+    }).
+
+
+%% A file imported by the initial scan is copied to a different path on the
+%% storage; the next (continuous) scan detects the new path as created (the
+%% original is left untouched, hence unmodified), and both are reachable, with
+%% identical content, on both providers. POSIX-only, matching the old suite - not
+%% exercised on S3 there either.
+copy_file_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    SrcFileName = ?RAND_STR(),
+    DstFileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    DstStorageFileId = filepath_utils:join([<<"/">>, DstFileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = SrcFileName, content = Content}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan at its original path
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% create the copy directly on the storage (content is already known to the
+    %% test, so there is no need to go through a real host-level file copy)
+    storage_file_setup_utils:create_file(ImportingProviderSelector, ImportedStorageId, DstStorageFileId, Content),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% both the original and the copy are reachable, with identical content, on both providers
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #file_spec{name = SrcFileName, content = Content},
+        #file_spec{name = DstFileName, content = Content}
+    ]),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        %% the space root gained a new child, bumping its own mtime - see move_file_update_test
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        %% the original (untouched) file is counted unmodified this scan
+        <<"unmodified">> => 1,
+        %% the scan-1 creation of the original file may have already aged out of the
+        %% short createdMinHist window by the time scan 2 is awaited and the
+        %% tree/monitoring re-verified; the longer hour/day windows still hold it
+        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdHourHist">> => 2,
+        <<"createdDayHist">> => 2
     }).
 
 

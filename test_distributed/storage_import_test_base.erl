@@ -122,7 +122,6 @@
 
     append_file_not_changing_mtime_update_test/1,
     append_empty_file_update_test/1,
-    copy_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
@@ -3587,86 +3586,6 @@ append_empty_file_update_test(Config) ->
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
-
-copy_file_update_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    W1MountPoint = get_host_mount_point(Config, RDWRStorage),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    % we need W1MountPoint as cp is performed via file not storage_driver module
-    SrcFilePath = host_storage_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1),
-    DestFilePath = host_storage_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE2),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-
-    %% Copy file
-    file:copy(SrcFilePath, DestFilePath),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if copied file was imported
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle2),
-    {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle3).
 
 change_file_content_constant_size_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),

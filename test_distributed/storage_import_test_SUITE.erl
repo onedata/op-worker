@@ -34,7 +34,6 @@
 
     append_file_not_changing_mtime_update_test/1,
     append_empty_file_update_test/1,
-    copy_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
@@ -71,7 +70,6 @@
 
     append_file_not_changing_mtime_update_test,
     append_empty_file_update_test,
-    copy_file_update_test,
     change_file_content_constant_size_test,
     change_file_content_update_test,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
@@ -134,9 +132,6 @@ append_file_not_changing_mtime_update_test(Config) ->
 
 append_empty_file_update_test(Config) ->
     storage_import_test_base:append_empty_file_update_test(Config).
-
-copy_file_update_test(Config) ->
-    storage_import_test_base:copy_file_update_test(Config).
 
 change_file_content_constant_size_test(Config) ->
     storage_import_test_base:change_file_content_constant_size_test(Config).
