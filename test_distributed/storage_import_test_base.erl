@@ -120,7 +120,6 @@
     symlink_is_ignored_by_initial_scan/1,
     symlink_is_ignored_by_continuous_scan/2,
 
-    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
     change_file_type3_test/1,
@@ -3401,110 +3400,6 @@ symlink_is_ignored_by_continuous_scan(Config, StorageType) ->
     % check whether symlink was not deleted
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, SymlinkPath}), ?ATTEMPTS).
 
-change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    W1MountPoint = get_host_mount_point(Config, RDWRStorage),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    HostStorageTestFilePath = host_storage_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-
-    %% Check if file is visible on 2nd provider
-    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle2),
-
-    Uuid = file_id:guid_to_uuid(Guid),
-
-    %% modify file content and change mtime to time of last stat by sync
-    Uuid = file_id:guid_to_uuid(Guid),
-    StorageFileId = to_storage_file_id(StorageTestFilePath, W1MountPoint),
-    StatTime = get_last_stat_timestamp(W1, StorageFileId, ?SPACE_ID),
-    %pretend that there were 2 modifications at the same time and that the second
-    %was after storage import performed stat on the file
-    ok = rpc:call(W1, storage_sync_info, create_or_update,
-        [StorageTestFilePath, ?SPACE_ID, fun(SSI) -> {ok, SSI#storage_sync_info{last_stat = StatTime}} end]),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, ?CHANGED_BYTE_OFFSET, ?CHANGED_BYTE),
-    change_time(HostStorageTestFilePath, StatTime),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    %% Check if file was updated
-    DataSize = byte_size(?TEST_DATA),
-    ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
-        lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle3),
-
-    ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
-        lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle4),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
 change_file_type_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting file and creating directory with the same name on storage
@@ -4563,12 +4458,6 @@ time_warp_during_scan_test(Config) ->
 %%% Util functions
 %%%===================================================================
 
-to_storage_file_id(Path, MountPoint) ->
-    PathSplit = binary:split(Path, <<"/">>, [global]),
-    MountPointSplit = binary:split(MountPoint, <<"/">>, [global]),
-    StorageFileIdSplit = PathSplit -- MountPointSplit,
-    filename:join(["/" | StorageFileIdSplit]).
-
 create_init_file(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SpaceDir = provider_storage_path(?SPACE_ID, <<"">>),
@@ -4819,10 +4708,6 @@ host_storage_path(MountPath, _SpaceId, File) ->
 touch(Node, FilePath) ->
     ok = rpc:call(Node, file, write_file_info, [FilePath, #file_info{}]).
 
-change_time(FilePath, Mtime) ->
-    file:write_file_info(FilePath,
-        #file_info{mtime = Mtime}, [{time, posix}]).
-
 change_time(FilePath, Atime, Mtime) ->
     ok = file:write_file_info(FilePath,
         #file_info{atime = Atime, mtime = Mtime}, [{time, posix}]).
@@ -4951,11 +4836,6 @@ assertNoScanInProgress(Worker, SpaceId, Attempts) ->
         _:_ ->
             error
     end, Attempts).
-
-get_last_stat_timestamp(Worker, FilePath, SpaceId) ->
-    {ok, #document{value = #storage_sync_info{last_stat = StatTime}}} =
-        rpc:call(Worker, storage_sync_info, get, [FilePath, SpaceId]),
-    StatTime.
 
 assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
     SSM = monitoring_describe(Worker, SpaceId),

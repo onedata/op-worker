@@ -33,7 +33,8 @@
     move_file_update_test/1,
     copy_file_update_test/1,
     change_file_content_constant_size_test/1,
-    change_file_content_update_test/1
+    change_file_content_update_test/1,
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1
 ]).
 
 all() -> [
@@ -47,7 +48,8 @@ all() -> [
     move_file_update_test,
     copy_file_update_test,
     change_file_content_constant_size_test,
-    change_file_content_update_test
+    change_file_content_update_test,
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -77,6 +79,7 @@ move_file_update_test(_Config) -> ?run_test().
 copy_file_update_test(_Config) -> ?run_test().
 change_file_content_constant_size_test(_Config) -> ?run_test().
 change_file_content_update_test(_Config) -> ?run_test().
+change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(_Config) -> ?run_test().
 
 
 %%===================================================================

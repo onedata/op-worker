@@ -51,7 +51,8 @@
     move_file_update_test/1,
     copy_file_update_test/1,
     change_file_content_constant_size_test/1,
-    change_file_content_update_test/1
+    change_file_content_update_test/1,
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1
 
     %% --- idempotency ---
 
@@ -671,6 +672,75 @@ change_file_content_update_test(SuiteCtx) ->
     storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
 
     %% the new content is now readable on both providers
+    UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
+%% A file's content is overwritten on the storage at (deliberately forced to be)
+%% the EXACT same timestamp as storage_import's own last recorded stat of that
+%% file - exercising the boundary of the "already handled" fast-path shortcut in
+%% storage_import_engine:maybe_update_file_location/4, which requires the stored
+%% last_stat to be STRICTLY greater than the storage mtime to skip re-checking a
+%% file (if it used >= instead of >, this test would incorrectly skip the real
+%% content change constructed here). Same-size content change (like
+%% change_file_content_constant_size_test above), so the fast-path is the only
+%% thing standing between this test and a false "unmodified". POSIX-only -
+%% forcing the storage mtime relies on storage_file_setup_utils:set_mtime/4.
+change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    ChangedContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_id = SpaceId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan with its initial content
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% force storage_sync_info's own last_stat bookkeeping (which may have moved
+    %% on since the initial scan) back to its scan-1 value, overwrite the file's
+    %% content, then force the storage file's own mtime to that SAME value - so
+    %% that last_stat and the storage mtime end up EQUAL, not last_stat > mtime
+    LastStatTime = ?rpc(ImportingProviderSelector, begin
+        {ok, #document{value = #storage_sync_info{last_stat = LastStat}}} =
+            storage_sync_info:get(StorageFileId, SpaceId),
+        LastStat
+    end),
+    ok = ?rpc(ImportingProviderSelector, storage_sync_info:create_or_update(
+        StorageFileId, SpaceId, fun(SSI) -> {ok, SSI#storage_sync_info{last_stat = LastStatTime}} end
+    )),
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
+    ),
+    storage_file_setup_utils:set_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, LastStatTime
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the change is still detected, despite last_stat and the (forced) new mtime
+    %% being EQUAL - the fast-path shortcut requires last_stat to be STRICTLY
+    %% greater than mtime to skip a file, so equality must not skip it
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
