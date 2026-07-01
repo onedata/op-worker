@@ -57,7 +57,6 @@
     symlink_is_ignored_by_continuous_scan/1,
 
     append_empty_file_update_test/1,
-    truncate_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_type_test/1,
@@ -106,7 +105,6 @@
     symlink_is_ignored_by_continuous_scan,
 
     append_empty_file_update_test,
-    truncate_file_update_test,
     change_file_content_constant_size_test,
     change_file_content_update_test,
     change_file_type_test,
@@ -216,9 +214,6 @@ symlink_is_ignored_by_continuous_scan(Config) ->
 
 append_empty_file_update_test(Config) ->
     storage_import_test_base:append_empty_file_update_test(Config).
-
-truncate_file_update_test(Config) ->
-    storage_import_test_base:truncate_file_update_test(Config).
 
 change_file_content_constant_size_test(Config) ->
     storage_import_test_base:change_file_content_constant_size_test(Config).

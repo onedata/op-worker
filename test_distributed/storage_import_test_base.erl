@@ -124,11 +124,9 @@
     append_empty_file_update_test/1,
     copy_file_update_test/1,
     move_file_update_test/1,
-    truncate_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
-    chmod_file_update_test/1,
     chmod_file_update2_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
@@ -3752,101 +3750,6 @@ move_file_update_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     lfm_proxy:close(W1, Handle2).
 
-truncate_file_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was imported
-    {ok, #file_attr{guid = G}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-
-    %% Check if file is visible on 2nd provider and replicate it
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle2),
-
-    timer:sleep(timer:seconds(2)), %ensure that modify time is different from read time
-
-    %% Truncate file
-    {ok, SDHandle2} = sd_test_utils:open(W1, SDHandle, write),
-    sd_test_utils:truncate(W1, SDHandle2, 1, ?TEST_DATA_SIZE),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    %% Check if file was truncated
-    {ok, #file_attr{guid = G}} = ?assertMatch({ok, #file_attr{size = 1}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, <<"t">>},
-        lfm_proxy:read(W1, Handle3, 0, 100), ?ATTEMPTS),
-    lfm_proxy:close(W1, Handle3),
-
-    ?assertMatch({ok, #file_attr{size = 1}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, <<"t">>},
-        lfm_proxy:read(W2, Handle4, 0, 100), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle4),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
 change_file_content_constant_size_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4129,102 +4032,6 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config)
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
-chmod_file_update_test(Config) ->
-    [W1, W2] = ?config(op_worker_nodes, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    StorageTestFileinDirPath1 = provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
-
-    NewMode = 8#600,
-    %% Create dirs on storage
-    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, DirSDHandle, ?DEFAULT_DIR_PERMS),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if file was imported
-    {ok, #file_attr{guid = TestDirGuid1}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{mode = ?DEFAULT_FILE_PERMS}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-
-    %% Replicate file to second provider
-    {ok, #file_attr{guid = TestDirGuid1}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{mode = ?DEFAULT_FILE_PERMS}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle2),
-
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 2,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 2,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    test_utils:mock_new(W1, storage_import_hash, [passthrough]),
-
-    timer:sleep(timer:seconds(2)), %ensure that modify time is different from read time
-    %% Change file permissions
-    sd_test_utils:chmod(W1, SDHandle, NewMode),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    %% Check if file permissions were changed
-    ?assertMatch({ok, #file_attr{mode = NewMode}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    History = rpc:call(W1, meck, history, [storage_import_hash]),
-    assert_num_results_gte(History, ?assertHashChangedFun(StorageTestDirPath, ?SPACE_ID, true), 1),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 2,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0,

@@ -24,12 +24,14 @@
 %% tests
 -export([
     %% --- modifications ---
-    append_file_update_test/1
+    append_file_update_test/1,
+    truncate_file_update_test/1
 ]).
 
 all() -> [
     %% --- modifications ---
-    append_file_update_test
+    append_file_update_test,
+    truncate_file_update_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -51,8 +53,8 @@ all() -> [
 %% --- modifications ---
 
 
-append_file_update_test(_Config) ->
-    ?run_test().
+append_file_update_test(_Config) -> ?run_test().
+truncate_file_update_test(_Config) -> ?run_test().
 
 
 %%===================================================================

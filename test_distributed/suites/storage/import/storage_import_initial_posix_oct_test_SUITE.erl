@@ -101,87 +101,48 @@ all() -> [
 %% --- structure ---
 
 
-import_empty_storage_test(_Config) ->
-    ?run_test().
-
-
-import_empty_directory_test(_Config) ->
-    ?run_test().
-
-
-import_empty_file_test(_Config) ->
-    ?run_test().
-
-
-import_file_with_content_test(_Config) ->
-    ?run_test().
-
-
-import_file_in_directory_test(_Config) ->
-    ?run_test().
-
-
-import_many_subfiles_test(_Config) ->
-    ?run_test().
-
-
-import_many_directories_test(_Config) ->
-    ?run_test().
-
-
-import_nested_directory_tree_test(_Config) ->
-    ?run_test().
+import_empty_storage_test(_Config) -> ?run_test().
+import_empty_directory_test(_Config) -> ?run_test().
+import_empty_file_test(_Config) -> ?run_test().
+import_file_with_content_test(_Config) -> ?run_test().
+import_file_in_directory_test(_Config) -> ?run_test().
+import_many_subfiles_test(_Config) -> ?run_test().
+import_many_directories_test(_Config) -> ?run_test().
+import_nested_directory_tree_test(_Config) -> ?run_test().
 
 
 %% --- ownership (LUMA uid/gid) ---
 
 
-import_directory_check_user_id_test(_Config) ->
-    ?run_test().
-
-
-import_file_check_user_id_test(_Config) ->
-    ?run_test().
-
-
-import_directory_check_user_id_error_test(_Config) ->
-    ?run_test().
-
-
-import_file_check_user_id_error_test(_Config) ->
-    ?run_test().
+import_directory_check_user_id_test(_Config) -> ?run_test().
+import_file_check_user_id_test(_Config) -> ?run_test().
+import_directory_check_user_id_error_test(_Config) -> ?run_test().
+import_file_check_user_id_error_test(_Config) -> ?run_test().
 
 
 %% --- permissions ---
 
 
-import_directory_without_read_permission_test(_Config) ->
-    ?run_test().
+import_directory_without_read_permission_test(_Config) -> ?run_test().
 
 
 %% --- acl ---
 
 
-import_nfs_acl_test(_Config) ->
-    ?run_test().
-
-
-import_nfs_acl_with_disabled_luma_should_fail_test(_Config) ->
-    ?run_test().
+import_nfs_acl_test(_Config) -> ?run_test().
+import_nfs_acl_with_disabled_luma_should_fail_test(_Config) -> ?run_test().
 
 
 %% --- ignored entries ---
 
 
-import_ignores_fifo_test(_Config) ->
-    ?run_test().
+import_ignores_fifo_test(_Config) -> ?run_test().
 
 
 %% --- failure ---
 
 
-import_directory_error_test(_Config) ->
-    ?run_test().
+import_directory_error_test(_Config) -> ?run_test().
 
 
 %===================================================================

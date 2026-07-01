@@ -36,11 +36,9 @@
     append_empty_file_update_test/1,
     copy_file_update_test/1,
     move_file_update_test/1,
-    truncate_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
-    chmod_file_update_test/1,
     chmod_file_update2_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
@@ -76,11 +74,9 @@
     append_empty_file_update_test,
     copy_file_update_test,
     move_file_update_test,
-    truncate_file_update_test,
     change_file_content_constant_size_test,
     change_file_content_update_test,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
-    chmod_file_update_test,
     chmod_file_update2_test,
     change_file_type_test,
     change_file_type2_test,
@@ -147,9 +143,6 @@ copy_file_update_test(Config) ->
 move_file_update_test(Config) ->
     storage_import_test_base:move_file_update_test(Config).
 
-truncate_file_update_test(Config) ->
-    storage_import_test_base:truncate_file_update_test(Config).
-
 change_file_content_constant_size_test(Config) ->
     storage_import_test_base:change_file_content_constant_size_test(Config).
 
@@ -158,9 +151,6 @@ change_file_content_update_test(Config) ->
 
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
     storage_import_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config).
-
-chmod_file_update_test(Config) ->
-    storage_import_test_base:chmod_file_update_test(Config).
 
 chmod_file_update2_test(Config) ->
     storage_import_test_base:chmod_file_update2_test(Config).

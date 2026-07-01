@@ -61,28 +61,12 @@ all() -> [
 %% --- structure ---
 
 
-import_empty_storage_test(_Config) ->
-    ?run_test().
-
-
-import_empty_file_test(_Config) ->
-    ?run_test().
-
-
-import_file_with_content_test(_Config) ->
-    ?run_test().
-
-
-import_file_in_directory_test(_Config) ->
-    ?run_test().
-
-
-import_many_subfiles_test(_Config) ->
-    ?run_test().
-
-
-import_nested_directory_tree_test(_Config) ->
-    ?run_test().
+import_empty_storage_test(_Config) -> ?run_test().
+import_empty_file_test(_Config) -> ?run_test().
+import_file_with_content_test(_Config) -> ?run_test().
+import_file_in_directory_test(_Config) -> ?run_test().
+import_many_subfiles_test(_Config) -> ?run_test().
+import_nested_directory_tree_test(_Config) -> ?run_test().
 
 
 %===================================================================

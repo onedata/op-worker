@@ -42,7 +42,9 @@
 %% tests
 -export([
     %% --- modifications ---
-    append_file_update_test/1
+    append_file_update_test/1,
+    truncate_file_update_test/1,
+    chmod_file_update_test/1
 
     %% --- idempotency ---
 
@@ -73,6 +75,10 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
 init_per_testcase(Config) ->
     lfm_proxy:init(Config).
 
+
+end_per_testcase(Case = chmod_file_update_test, TestSuiteCtx, Config) ->
+    unmock_storage_import_hash(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
     lfm_proxy:teardown(Config).
@@ -136,6 +142,110 @@ append_file_update_test(SuiteCtx) ->
     }).
 
 
+%% A file imported by the initial scan is truncated on the storage; the next
+%% (continuous) scan detects the change and the truncated content is reflected
+%% through the logical filesystem on both providers.
+truncate_file_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    TruncatedSize = 1,
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan with its initial content
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% truncate the file on the storage and let the next continuous scan detect it
+    storage_file_setup_utils:truncate(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId,
+        TruncatedSize, byte_size(InitialContent)
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the truncated content is now readable on both providers
+    TruncatedFileSpec = #file_spec{
+        name = FileName, content = binary:part(InitialContent, 0, TruncatedSize)
+    },
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, TruncatedFileSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
+%% A file imported by the initial scan has its mode changed on the storage; the
+%% next (continuous) scan detects the change and the new mode is reflected through
+%% the logical filesystem on both providers. POSIX-only - object storages (S3) have
+%% no notion of a per-object POSIX mode.
+%% Also asserts (via a passthrough mock, torn down in end_per_testcase) that the
+%% mutation was actually detected via storage_import_hash - i.e. that the scan's
+%% hash-based change-detection optimization did not just skip the space root
+%% directory that holds the file.
+chmod_file_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    mock_storage_import_hash(ImportingProviderSelector),
+
+    FileName = ?RAND_STR(),
+    NewMode = 8#600,
+    RootStorageFileId = <<"/">>,
+    StorageFileId = filepath_utils:join([RootStorageFileId, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_id = SpaceId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% change the file's mode on the storage and let the next continuous scan detect it
+    storage_file_setup_utils:chmod(ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new mode is now visible on both providers
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
+    assert_children_hash_changed(ImportingProviderSelector, SpaceId, RootStorageFileId),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
 %% --- idempotency ---
 
 
@@ -152,3 +262,50 @@ append_file_update_test(SuiteCtx) ->
 
 
 %% --- not reimported ---
+
+
+%%%===================================================================
+%%% Internal functions - test case specific mocks
+%%%===================================================================
+
+
+%% @private
+%% Mocks storage_import_hash with a passthrough, so that its calls are recorded
+%% (via meck history) without altering its behaviour - used to assert that a
+%% storage mutation was actually detected via the scan's hash-based
+%% change-detection optimization, rather than the directory being skipped.
+%% Torn down via unmock_storage_import_hash/1.
+-spec mock_storage_import_hash(oct_background:entity_selector()) -> ok.
+mock_storage_import_hash(ProviderSelector) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_import_hash, [passthrough]).
+
+
+%% @private
+-spec unmock_storage_import_hash(storage_import_test_utils:suite_ctx()) -> ok.
+unmock_storage_import_hash(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_import_hash).
+
+
+%% @private
+%% Asserts that storage_import_hash reported (at least once) that the children
+%% attrs hash of the directory at DirStorageFileId changed. Requires the module
+%% to have been mocked (with a passthrough) via mock_storage_import_hash/1.
+-spec assert_children_hash_changed(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
+    ok.
+assert_children_hash_changed(ProviderSelector, SpaceId, DirStorageFileId) ->
+    Id = ?rpc(ProviderSelector, storage_sync_info:id(DirStorageFileId, SpaceId)),
+    History = ?rpc(ProviderSelector, meck:history(storage_import_hash)),
+    Matches = lists:foldl(fun
+        ({_, {storage_import_hash, children_attrs_hash_has_changed, Args}, true}, Acc) ->
+            case lists:nth(4, Args) of
+                #document{key = Id} -> Acc + 1;
+                _ -> Acc
+            end;
+        (_, Acc) ->
+            Acc
+    end, 0, History),
+    ?assert(Matches >= 1).
