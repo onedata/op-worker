@@ -20,6 +20,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("kernel/include/file.hrl").
 
 %% API
 -export([create_file/4, create_file/5]).
@@ -27,11 +28,13 @@
 -export([create_dir/3, create_dir/4, chown/5]).
 -export([write_file/5, delete_file/4]).
 -export([chmod/4, truncate/5, rename/4, rmdir/3]).
+-export([get_mtime/3, set_mtime/4]).
 %% on-node routines (executed on op_worker via rpc)
 -export([create_file_on_storage/3, write_to_storage_file/4, delete_file_on_storage/3]).
 -export([create_fifo_on_storage/3]).
 -export([create_dir_on_storage/3, chown_on_storage/4]).
 -export([chmod_on_storage/3, truncate_on_storage/4, rename_on_storage/3, rmdir_on_storage/2]).
+-export([get_mtime_on_storage/2, set_mtime_on_storage/3]).
 
 
 %%%===================================================================
@@ -141,6 +144,29 @@ rmdir(ProviderSelector, StorageId, StorageFileId) ->
     ).
 
 
+-spec get_mtime(oct_background:node_selector(), storage:id(), helpers:file_id()) -> non_neg_integer().
+get_mtime(ProviderSelector, StorageId, StorageFileId) ->
+    opw_test_rpc:call(
+        ProviderSelector, ?MODULE, get_mtime_on_storage, [StorageId, StorageFileId]
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overwrites a file's mtime directly on the host filesystem, bypassing the
+%% storage helper (whose API has no "set times" operation) - only meaningful
+%% for POSIX-compatible storages, which are locally mounted on the op_worker
+%% node. Used to simulate a storage backend where a write does not bump mtime
+%% at the resolution the scan relies on.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_mtime(oct_background:node_selector(), storage:id(), helpers:file_id(), non_neg_integer()) -> ok.
+set_mtime(ProviderSelector, StorageId, StorageFileId, Mtime) ->
+    ok = opw_test_rpc:call(
+        ProviderSelector, ?MODULE, set_mtime_on_storage, [StorageId, StorageFileId, Mtime]
+    ).
+
+
 %%%===================================================================
 %%% On-node routines
 %%%===================================================================
@@ -220,9 +246,39 @@ rmdir_on_storage(StorageId, StorageFileId) ->
     ok = helpers:rmdir(HelperHandle, StorageFileId).
 
 
+%% @doc Runs on the op_worker node.
+-spec get_mtime_on_storage(storage:id(), helpers:file_id()) -> non_neg_integer().
+get_mtime_on_storage(StorageId, StorageFileId) ->
+    HelperHandle = get_helper_handle(StorageId),
+    {ok, #statbuf{st_mtime = Mtime}} = helpers:getattr(HelperHandle, StorageFileId),
+    Mtime.
+
+
+%% @doc Runs on the op_worker node. POSIX-only - relies on the storage being
+%% locally mounted on this node, unlike every other routine in this module
+%% (which goes through the storage helper and therefore works uniformly
+%% across storage types).
+-spec set_mtime_on_storage(storage:id(), helpers:file_id(), non_neg_integer()) -> ok.
+set_mtime_on_storage(StorageId, StorageFileId, Mtime) ->
+    ok = file:write_file_info(
+        local_path(StorageId, StorageFileId), #file_info{mtime = Mtime}, [{time, posix}]
+    ).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+%% StorageFileId is absolute (leading "/"), so it must be concatenated
+%% (not filename:join/1-ed, which would treat it as an absolute path on its
+%% own and discard the mount point).
+-spec local_path(storage:id(), helpers:file_id()) -> file:filename_all().
+local_path(StorageId, StorageFileId) ->
+    Helper = storage:get_helper(StorageId),
+    MountPoint = maps:get(<<"mountPoint">>, helper:get_args(Helper)),
+    <<MountPoint/binary, StorageFileId/binary>>.
 
 
 %% @private

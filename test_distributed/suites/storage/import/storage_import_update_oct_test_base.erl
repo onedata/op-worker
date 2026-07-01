@@ -43,6 +43,8 @@
 -export([
     %% --- modifications ---
     append_file_update_test/1,
+    append_file_not_changing_mtime_update_test/1,
+    append_empty_file_update_test/1,
     truncate_file_update_test/1,
     chmod_file_update_test/1,
     chmod_file_update_in_batched_dir_test/1,
@@ -154,6 +156,108 @@ append_file_update_test(SuiteCtx) ->
     },
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
+%% Like append_file_update_test, but the file's mtime is forced back to its
+%% pre-append value right after the storage-level write (simulating a storage
+%% backend that does not reliably bump mtime on writes at the resolution the
+%% scan relies on) - the appended bytes must still be detected and imported,
+%% since size/mtime are an OR in the modification check (see the OR condition
+%% for regular files documented in storage_import_engine:maybe_update_file_location/4).
+append_file_not_changing_mtime_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    AppendedContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan with its initial content
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% append to the file, then force its mtime back to the pre-append value
+    OldMtime = storage_file_setup_utils:get_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId
+    ),
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId,
+        byte_size(InitialContent), AppendedContent
+    ),
+    storage_file_setup_utils:set_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, OldMtime
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the appended content is now readable on both providers, despite the
+    %% unchanged mtime
+    UpdatedFileSpec = #file_spec{
+        name = FileName, content = <<InitialContent/binary, AppendedContent/binary>>
+    },
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
+%% Like append_file_update_test, but the file is empty (0 bytes) at the time of
+%% the initial scan, and only gains content on the continuous scan.
+append_empty_file_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    AppendedContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = <<>>}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the empty file was imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% write to the (previously empty) file on the storage and let the next
+    %% continuous scan detect it
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, AppendedContent
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the appended content is now readable on both providers
+    UpdatedFileSpec = #file_spec{name = FileName, content = AppendedContent},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
