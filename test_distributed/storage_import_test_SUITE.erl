@@ -33,7 +33,6 @@
     delete_opened_file_reimport_race_test/1,
 
     change_file_type4_test/1,
-    update_timestamps_file_import_test/1,
     should_not_detect_timestamp_update_test/1,
     update_nfs_acl_test/1,
     recreate_file_deleted_by_sync_test/1,
@@ -60,7 +59,6 @@
     delete_opened_file_reimport_race_test,
 
     change_file_type4_test,
-    update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
     update_nfs_acl_test,
     recreate_file_deleted_by_sync_test,
@@ -111,9 +109,6 @@ delete_opened_file_reimport_race_test(Config) ->
 
 change_file_type4_test(Config) ->
     storage_import_test_base:change_file_type4_test(Config).
-
-update_timestamps_file_import_test(Config) ->
-    storage_import_test_base:update_timestamps_file_import_test(Config).
 
 should_not_detect_timestamp_update_test(Config) ->
     storage_import_test_base:should_not_detect_timestamp_update_test(Config).

@@ -410,7 +410,7 @@ verify_dir_stats(#storage_import_test_case_ctx{
 %% provided fields are checked. The expected values are supplied by the caller, as
 %% they are provider-specific and depend on the LUMA configuration (e.g. the same
 %% file has different uid/gid on the importing and the non-importing provider).
-%% Supported fields: owner_id, uid, gid, mode, type, size.
+%% Supported fields: owner_id, uid, gid, mode, type, size, atime, mtime.
 %%
 %% The /4 variant accepts a custom number of retry attempts - useful when the file
 %% is not awaited via verify_imported_tree first (which retries until the tree
@@ -699,7 +699,9 @@ file_attr_field(uid, #file_attr{uid = Value}) -> Value;
 file_attr_field(gid, #file_attr{gid = Value}) -> Value;
 file_attr_field(mode, #file_attr{mode = Value}) -> Value;
 file_attr_field(type, #file_attr{type = Value}) -> Value;
-file_attr_field(size, #file_attr{size = Value}) -> Value.
+file_attr_field(size, #file_attr{size = Value}) -> Value;
+file_attr_field(atime, #file_attr{atime = Value}) -> Value;
+file_attr_field(mtime, #file_attr{mtime = Value}) -> Value.
 
 
 %% @private

@@ -55,7 +55,8 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
-    replace_non_empty_dir_with_file_test/1
+    replace_non_empty_dir_with_file_test/1,
+    update_timestamps_file_import_test/1
 
     %% --- idempotency ---
 
@@ -760,7 +761,9 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
 %% A file imported by the initial scan is deleted on the storage and replaced,
 %% under the SAME name, by a directory holding one child file; the next
 %% (continuous) scan detects the type change - deleting the old file entry and
-%% importing the new directory (and its child) in its place.
+%% importing the new directory (and its child) in its place. Also verifies the
+%% newly-imported directory is fully functional (not just a passively-imported
+%% node) by creating a new subdirectory inside it via LFM.
 replace_file_with_dir_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -774,7 +777,14 @@ replace_file_with_dir_test(SuiteCtx) ->
     ChildStorageFileId = filepath_utils:join([StorageFileId, ChildFileName]),
 
     TestCaseCtx = #storage_import_test_case_ctx{
-        imported_storage_id = ImportedStorageId
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode, session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = #provider_ctx{
+            node = NonImportingProviderNode, session_id = NonImportingProviderSessionId
+        }
     } = storage_import_test_utils:init_testcase(
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
@@ -825,7 +835,25 @@ replace_file_with_dir_test(SuiteCtx) ->
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
-    }).
+    }),
+
+    %% the newly-imported directory is fully functional, not just a passively
+    %% imported node - a new subdirectory can be created inside it via LFM (on
+    %% the non-importing provider) and is visible on the importing provider too
+    NewSubDirName = ?RAND_STR(),
+    SpaceTestDirPath = filepath_utils:join([SpacePath, FileName]),
+    {ok, #file_attr{guid = ReplacedDirGuid}} = ?assertMatch(
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}},
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceTestDirPath})
+    ),
+    {ok, NewSubDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        NonImportingProviderNode, NonImportingProviderSessionId, ReplacedDirGuid, NewSubDirName, ?DEFAULT_DIR_MODE
+    )),
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(NewSubDirGuid)),
+        ?ATTEMPTS
+    ).
 
 
 %% An empty directory imported by the initial scan is deleted on the storage and
@@ -956,6 +984,62 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
         <<"deletedMinHist">> => 2,
         <<"deletedHourHist">> => 2,
         <<"deletedDayHist">> => 2
+    }).
+
+
+%% A file imported by the initial scan has BOTH its atime and mtime forced, on
+%% the storage, to an identical far-future timestamp (content/size unchanged);
+%% the next (continuous) scan detects the modification via the mtime clause of
+%% storage_import_engine:maybe_update_file_location/4's OR condition and
+%% propagates BOTH new timestamps onto the file's own attrs, on both providers -
+%% proving atime is synced too, not just mtime. The forced timestamp is so far in
+%% the future (relative to the real one it replaces) that no explicit delay is
+%% needed for the change to be detected, unlike change_file_content_constant_size_test.
+update_timestamps_file_import_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    NewTimestamp = 9999999999,
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = Content}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% force both the file's atime and mtime on the storage to the same far-future
+    %% timestamp, then let the next continuous scan detect and propagate it
+    storage_file_setup_utils:set_atime_and_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewTimestamp, NewTimestamp
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new timestamps are now reflected in the file's own attrs, on both providers
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    ExpectedTimes = #{atime => NewTimestamp, mtime => NewTimestamp},
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
     }).
 
 

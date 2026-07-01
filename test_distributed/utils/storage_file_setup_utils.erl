@@ -28,13 +28,13 @@
 -export([create_dir/3, create_dir/4, chown/5]).
 -export([write_file/5, delete_file/4]).
 -export([chmod/4, truncate/5, rename/4, rmdir/3]).
--export([get_mtime/3, set_mtime/4]).
+-export([get_mtime/3, set_mtime/4, set_atime_and_mtime/5]).
 %% on-node routines (executed on op_worker via rpc)
 -export([create_file_on_storage/3, write_to_storage_file/4, delete_file_on_storage/3]).
 -export([create_fifo_on_storage/3]).
 -export([create_dir_on_storage/3, chown_on_storage/4]).
 -export([chmod_on_storage/3, truncate_on_storage/4, rename_on_storage/3, rmdir_on_storage/2]).
--export([get_mtime_on_storage/2, set_mtime_on_storage/3]).
+-export([get_mtime_on_storage/2, set_mtime_on_storage/3, set_atime_and_mtime_on_storage/4]).
 
 
 %%%===================================================================
@@ -167,6 +167,24 @@ set_mtime(ProviderSelector, StorageId, StorageFileId, Mtime) ->
     ).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Like set_mtime/4, but also overwrites atime (set_mtime/4 leaves atime
+%% untouched - file:write_file_info/3 only changes fields that are not
+%% 'undefined' in the given #file_info{}). POSIX-only, for the same reason.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_atime_and_mtime(
+    oct_background:node_selector(), storage:id(), helpers:file_id(),
+    non_neg_integer(), non_neg_integer()
+) ->
+    ok.
+set_atime_and_mtime(ProviderSelector, StorageId, StorageFileId, Atime, Mtime) ->
+    ok = opw_test_rpc:call(
+        ProviderSelector, ?MODULE, set_atime_and_mtime_on_storage, [StorageId, StorageFileId, Atime, Mtime]
+    ).
+
+
 %%%===================================================================
 %%% On-node routines
 %%%===================================================================
@@ -262,6 +280,15 @@ get_mtime_on_storage(StorageId, StorageFileId) ->
 set_mtime_on_storage(StorageId, StorageFileId, Mtime) ->
     ok = file:write_file_info(
         local_path(StorageId, StorageFileId), #file_info{mtime = Mtime}, [{time, posix}]
+    ).
+
+
+%% @doc Runs on the op_worker node. POSIX-only, see set_mtime_on_storage/3.
+-spec set_atime_and_mtime_on_storage(storage:id(), helpers:file_id(), non_neg_integer(), non_neg_integer()) ->
+    ok.
+set_atime_and_mtime_on_storage(StorageId, StorageFileId, Atime, Mtime) ->
+    ok = file:write_file_info(
+        local_path(StorageId, StorageFileId), #file_info{atime = Atime, mtime = Mtime}, [{time, posix}]
     ).
 
 
