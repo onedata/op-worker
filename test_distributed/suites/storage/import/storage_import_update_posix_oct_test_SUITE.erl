@@ -26,14 +26,16 @@
     %% --- modifications ---
     append_file_update_test/1,
     truncate_file_update_test/1,
-    chmod_file_update_test/1
+    chmod_file_update_test/1,
+    move_file_update_test/1
 ]).
 
 all() -> [
     %% --- modifications ---
     append_file_update_test,
     truncate_file_update_test,
-    chmod_file_update_test
+    chmod_file_update_test,
+    move_file_update_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -56,6 +58,7 @@ all() -> [
 append_file_update_test(_Config) -> ?run_test().
 truncate_file_update_test(_Config) -> ?run_test().
 chmod_file_update_test(_Config) -> ?run_test().
+move_file_update_test(_Config) -> ?run_test().
 
 
 %%===================================================================

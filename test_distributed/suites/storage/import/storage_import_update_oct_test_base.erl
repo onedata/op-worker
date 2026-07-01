@@ -44,7 +44,8 @@
     %% --- modifications ---
     append_file_update_test/1,
     truncate_file_update_test/1,
-    chmod_file_update_test/1
+    chmod_file_update_test/1,
+    move_file_update_test/1
 
     %% --- idempotency ---
 
@@ -243,6 +244,82 @@ chmod_file_update_test(SuiteCtx) ->
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"unmodified">> => 1
+    }).
+
+
+%% A file imported by the initial scan is renamed (moved) to a different path on
+%% the storage; the next (continuous) scan detects the old path as deleted and the
+%% new path as newly created, and the file becomes reachable at the new path (and
+%% ?ENOENT at the old one) on both providers. POSIX-only, matching the old suite -
+%% not exercised on S3 there either.
+move_file_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    SrcFileName = ?RAND_STR(),
+    DstFileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    SrcStorageFileId = filepath_utils:join([<<"/">>, SrcFileName]),
+    DstStorageFileId = filepath_utils:join([<<"/">>, DstFileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = SrcFileName, content = Content}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan at its original path
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% Unlike append/truncate/chmod, the space root's own modified-vs-unmodified
+    %% classification for this scan has no size/mode value to fall back on - a
+    %% directory's change detection (maybe_update_times/5 in storage_import_engine)
+    %% relies solely on comparing its previously-recorded mtime/ctime against the
+    %% current storage stat. Renaming a child does bump the root's mtime/ctime, but
+    %% if that happens within the same storage timestamp tick as scan 1's read, the
+    %% comparison could spuriously find them equal and misreport the root as
+    %% unmodified - so, unlike the other tests in this module, a real time gap here
+    %% is required for correctness, not just defensive caution.
+    timer:sleep(timer:seconds(2)),
+
+    %% rename the file on the storage and let the next continuous scan detect it
+    storage_file_setup_utils:rename(
+        ImportingProviderSelector, ImportedStorageId, SrcStorageFileId, DstStorageFileId
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the file is now reachable (with its original content) at the new path - and,
+    %% implicitly, gone from the old one - on both providers, since verify_imported_tree
+    %% asserts the exact set of the space root's children
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{
+        name = DstFileName, content = Content
+    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"deleted">> => 1,
+        %% unlike append/truncate/chmod (which only touch an existing child's own
+        %% attrs), adding/removing a directory entry changes the space root's own
+        %% mtime - so, unlike those tests, the root itself is reported as modified
+        %% (not unmodified) on this scan
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 0,
+        %% the scan-1 creation of the (now renamed-away) source file may have already
+        %% aged out of the short createdMinHist window by the time scan 2 is awaited
+        %% and the tree/monitoring re-verified; the longer hour/day windows still hold it
+        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdHourHist">> => 2,
+        <<"createdDayHist">> => 2,
+        <<"deletedMinHist">> => 1,
+        <<"deletedHourHist">> => 1,
+        <<"deletedDayHist">> => 1
     }).
 
 

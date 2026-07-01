@@ -440,10 +440,16 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
 %% An override value of 'skip' excludes that field from the assertion entirely -
 %% useful for time-windowed histograms that may have shifted out of the asserted
 %% buckets by the time the monitoring is read (e.g. createdMinHist after importing
-%% and verifying a large tree).
+%% and verifying a large tree). An override value of {range, Min, Max} asserts that
+%% the field falls within [Min, Max] (inclusive) - useful for the same kind of
+%% time-windowed histograms when a wider bound is known and still worth asserting,
+%% rather than skipping the field entirely.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_storage_import_monitoring_state(case_ctx(), #{binary() => integer() | skip}) -> ok.
+-spec assert_storage_import_monitoring_state(
+    case_ctx(), #{binary() => integer() | skip | {range, integer(), integer()}}
+) ->
+    ok.
 assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
     suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType},
     space_id = SpaceId,
@@ -857,6 +863,12 @@ assert_monitoring_fields(ExpectedSIM, SIM) ->
     maps:foreach(fun
         (_Key, skip) ->
             ok;
+        (Key, {range, Min, Max}) ->
+            Value = maps:get(Key, SIM),
+            case Value >= Min andalso Value =< Max of
+                true -> ok;
+                false -> throw({assertion_error, {Key, {range, Min, Max}, Value}})
+            end;
         (Key, ExpectedValue) ->
             case maps:get(Key, SIM) of
                 ExpectedValue -> ok;
