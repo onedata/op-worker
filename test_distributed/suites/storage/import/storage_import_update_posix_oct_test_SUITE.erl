@@ -27,6 +27,7 @@
     append_file_update_test/1,
     truncate_file_update_test/1,
     chmod_file_update_test/1,
+    chmod_file_update_in_batched_dir_test/1,
     move_file_update_test/1,
     copy_file_update_test/1
 ]).
@@ -36,6 +37,7 @@ all() -> [
     append_file_update_test,
     truncate_file_update_test,
     chmod_file_update_test,
+    chmod_file_update_in_batched_dir_test,
     move_file_update_test,
     copy_file_update_test
 ].
@@ -60,6 +62,7 @@ all() -> [
 append_file_update_test(_Config) -> ?run_test().
 truncate_file_update_test(_Config) -> ?run_test().
 chmod_file_update_test(_Config) -> ?run_test().
+chmod_file_update_in_batched_dir_test(_Config) -> ?run_test().
 move_file_update_test(_Config) -> ?run_test().
 copy_file_update_test(_Config) -> ?run_test().
 
@@ -94,8 +97,8 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    storage_import_update_oct_test_base:init_per_testcase(Config).
+init_per_testcase(Case, Config) ->
+    storage_import_update_oct_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).
 
 
 end_per_testcase(Case, Config) ->

@@ -37,7 +37,6 @@
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
-    chmod_file_update2_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
     change_file_type3_test/1,
@@ -73,7 +72,6 @@
     change_file_content_constant_size_test,
     change_file_content_update_test,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
-    chmod_file_update2_test,
     change_file_type_test,
     change_file_type2_test,
     change_file_type3_test,
@@ -141,9 +139,6 @@ change_file_content_update_test(Config) ->
 
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
     storage_import_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config).
-
-chmod_file_update2_test(Config) ->
-    storage_import_test_base:chmod_file_update2_test(Config).
 
 change_file_type_test(Config) ->
     storage_import_test_base:change_file_type_test(Config).

@@ -125,7 +125,6 @@
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
-    chmod_file_update2_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
     change_file_type3_test/1,
@@ -3877,104 +3876,6 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config)
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
-chmod_file_update2_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-
-    Files = lists:map(fun(TestFile) ->
-        filename:join([?TEST_DIR, TestFile])
-    end, [?TEST_FILE1, ?TEST_FILE2, ?TEST_FILE3]),
-
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    StorageTestDirPath2 = provider_storage_path(?SPACE_ID, ?TEST_DIR2),
-
-    [StTestFile1 | _] = StorageFiles = to_storage_files(Files, ?SPACE_ID),
-    NewMode = 8#600,
-
-    %% Create files on storage
-    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, DirSDHandle, ?DEFAULT_DIR_PERMS),
-    DirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, DirSDHandle2, ?DEFAULT_DIR_PERMS),
-    lists:foreach(fun(StorageTestFilePath) ->
-        SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-        ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-        {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA)
-    end, StorageFiles),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    %% Check if files were imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    lists:foreach(fun(SpaceFile) ->
-        ?assertMatch({ok, #file_attr{mode = ?DEFAULT_FILE_PERMS}},
-            lfm_proxy:stat(W1, SessId, {path, SpaceFile}), ?ATTEMPTS),
-        {ok, Handle1} = ?assertMatch({ok, _},
-            lfm_proxy:open(W1, SessId, {path, SpaceFile}, read)),
-        ?assertMatch({ok, ?TEST_DATA},
-            lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-        lfm_proxy:close(W1, Handle1)
-    end, [?SPACE_TEST_FILE_IN_DIR_PATH, ?SPACE_TEST_FILE_IN_DIR_PATH2, ?SPACE_TEST_FILE_IN_DIR_PATH3]),
-
-    test_utils:mock_new(W1, storage_import_hash, [passthrough]),
-    test_utils:mock_new(W1, storage_sync_traverse, [passthrough]),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 5,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 2,
-        <<"createdMinHist">> => 5,
-        <<"createdHourHist">> => 5,
-        <<"createdDayHist">> => 5,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Change file permissions
-    timer:sleep(timer:seconds(2)),
-    SDFileHandle1 = sd_test_utils:new_handle(W1, ?SPACE_ID, StTestFile1, RDWRStorage),
-    sd_test_utils:chmod(W1, SDFileHandle1, NewMode),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    %% Check if file permissions were changed
-    ?assertMatch({ok, #file_attr{mode = NewMode}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    History = rpc:call(W1, meck, history, [storage_import_hash]),
-    History2 = rpc:call(W1, meck, history, [storage_sync_traverse]),
-    test_utils:mock_unload(W1, storage_import_hash),
-
-    assert_num_results_gte(History, ?assertHashChangedFun(StorageTestDirPath, ?SPACE_ID, true), 1),
-    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, true), 0),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 5,
-        <<"createdHourHist">> => 5,
-        <<"createdDayHist">> => 5,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
 change_file_type_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting file and creating directory with the same name on storage
@@ -5309,9 +5210,6 @@ assert_num_results(History, AssertionFun, ExpectedResultsNum) ->
     end, 0, History),
     ?assertEqual(ExpectedResultsNum, ResultsNum).
 
-to_storage_files(Files, SpaceId) ->
-    [provider_storage_path(SpaceId, F) || F <- Files].
-
 parallel_assert(M, F, A, List, Attempts) ->
     lists:foreach(fun(N) ->
         spawn_link(M, F, [N, self() | A])
@@ -5675,13 +5573,6 @@ init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     ],
     init_per_testcase(default, Config2);
 
-init_per_testcase(chmod_file_update2_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
-    test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 2),
-    Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
-    init_per_testcase(default, Config2);
-
 init_per_testcase(update_nfs_acl_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, [storage_driver, luma]),
@@ -5768,8 +5659,7 @@ init_per_testcase(_Case, Config) ->
     Config3.
 
 end_per_testcase(Case, Config)
-    when Case =:= chmod_file_update2_test
-    orelse Case =:= create_file_in_dir_exceed_batch_update_test
+    when Case =:= create_file_in_dir_exceed_batch_update_test
     orelse Case =:= create_list_race_test ->
 
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),

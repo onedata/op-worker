@@ -35,7 +35,7 @@
 % API
 -export([
     clean_up_after_previous_run/2,
-    init_per_testcase/1,
+    init_per_testcase/3,
     end_per_testcase/3
 ]).
 
@@ -45,6 +45,7 @@
     append_file_update_test/1,
     truncate_file_update_test/1,
     chmod_file_update_test/1,
+    chmod_file_update_in_batched_dir_test/1,
     move_file_update_test/1,
     copy_file_update_test/1
 
@@ -74,12 +75,32 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
     storage_import_test_utils:clean_up_after_previous_run(AllTestCases, SuiteCtx).
 
 
-init_per_testcase(Config) ->
+init_per_testcase(Case = chmod_file_update_in_batched_dir_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector
+}, Config) ->
+    [Node | _] = Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
+    {ok, OldDirBatchSize} = test_utils:get_env(Node, op_worker, storage_import_dir_batch_size),
+    %% a low batch size forces the scan of the test dir's children to span multiple batches
+    ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, 2),
+    Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
+    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config2);
+
+init_per_testcase(_Case, _TestSuiteCtx, Config) ->
     lfm_proxy:init(Config).
 
 
 end_per_testcase(Case = chmod_file_update_test, TestSuiteCtx, Config) ->
     unmock_storage_import_hash(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case = chmod_file_update_in_batched_dir_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector
+}, Config) ->
+    unmock_storage_import_hash(TestSuiteCtx),
+    unmock_storage_sync_traverse(TestSuiteCtx),
+    Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
+    OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
+    ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -245,6 +266,78 @@ chmod_file_update_test(SuiteCtx) ->
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"unmodified">> => 1
+    }).
+
+
+%% Like chmod_file_update_test, but the changed file sits inside a subdirectory
+%% whose 3 children are scanned in more than one batch (storage_import_dir_batch_size
+%% is temporarily lowered to 2) - exercising the hash-based children-attrs change
+%% detection (see chmod_file_update_test's doc above) one level down from the space
+%% root, across a directory scanned in multiple batches. Also asserts (via a
+%% passthrough mock on storage_sync_traverse, also torn down in end_per_testcase)
+%% that the modification is picked up in spite of, not because of, the parent
+%% directory's own mtime - a child's chmod alone does not bump it. POSIX-only,
+%% matching the old suite.
+chmod_file_update_in_batched_dir_test(SuiteCtx) ->
+    %% storage_import_dir_batch_size is temporarily lowered to 2 in init_per_testcase
+    %% (and restored in end_per_testcase), so that the scan of TestDirName's 3
+    %% children spans multiple batches
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    mock_storage_import_hash(ImportingProviderSelector),
+    mock_storage_sync_traverse(ImportingProviderSelector),
+
+    TestDirName = ?RAND_STR(),
+    File1Name = ?RAND_STR(),
+    NewMode = 8#600,
+    TestDirStorageFileId = filepath_utils:join([<<"/">>, TestDirName]),
+    File1StorageFileId = filepath_utils:join([TestDirStorageFileId, File1Name]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_id = SpaceId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, [
+        #dir_spec{name = TestDirName, children = [
+            #file_spec{name = File1Name, content = ?RAND_STR()},
+            #file_spec{name = ?RAND_STR(), content = ?RAND_STR()},
+            #file_spec{name = ?RAND_STR(), content = ?RAND_STR()}
+        ]},
+        #dir_spec{name = ?RAND_STR()}
+    ], SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% both directories (with, respectively, their 3 files and no children) were imported
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% change one of TestDirName's 3 files' mode on the storage and let the next
+    %% continuous scan detect it
+    storage_file_setup_utils:chmod(ImportingProviderSelector, ImportedStorageId, File1StorageFileId, NewMode),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new mode is now visible on both providers
+    SpaceTestFilePath = filepath_utils:join([SpacePath, TestDirName, File1Name]),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
+    %% the change was detected via the hash-based children-attrs check on TestDirName...
+    assert_children_hash_changed(ImportingProviderSelector, SpaceId, TestDirStorageFileId),
+    %% ...and NOT via TestDirName's own mtime, which a child's chmod alone does not bump
+    assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, TestDirStorageFileId),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        %% space root, TestDirName, TestDir2Name and the 2 untouched files
+        <<"unmodified">> => 5
     }).
 
 
@@ -432,3 +525,49 @@ assert_children_hash_changed(ProviderSelector, SpaceId, DirStorageFileId) ->
             Acc
     end, 0, History),
     ?assert(Matches >= 1).
+
+
+%% @private
+%% Mocks storage_sync_traverse with a passthrough, so that its calls are recorded
+%% (via meck history) without altering its behaviour - used to assert that a
+%% directory's own mtime-based change-detection shortcut did NOT report a change,
+%% i.e. that a detected modification came from the hash-based children-attrs check
+%% instead (see assert_children_hash_changed/3). Torn down via
+%% unmock_storage_sync_traverse/1.
+-spec mock_storage_sync_traverse(oct_background:entity_selector()) -> ok.
+mock_storage_sync_traverse(ProviderSelector) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_sync_traverse, [passthrough]).
+
+
+%% @private
+-spec unmock_storage_sync_traverse(storage_import_test_utils:suite_ctx()) -> ok.
+unmock_storage_sync_traverse(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_sync_traverse).
+
+
+%% @private
+%% Asserts that storage_sync_traverse never reported that the directory at
+%% DirStorageFileId's own mtime had changed - i.e. that a modification of one of
+%% its children was picked up despite the directory's own mtime-based shortcut
+%% saying "unchanged" (a child's chmod alone does not bump its parent's mtime).
+%% Requires the module to have been mocked (with a passthrough) via
+%% mock_storage_sync_traverse/1.
+-spec assert_children_mtime_unchanged(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
+    ok.
+assert_children_mtime_unchanged(ProviderSelector, SpaceId, DirStorageFileId) ->
+    Id = ?rpc(ProviderSelector, storage_sync_info:id(DirStorageFileId, SpaceId)),
+    History = ?rpc(ProviderSelector, meck:history(storage_sync_traverse)),
+    Matches = lists:foldl(fun
+        ({_, {storage_sync_traverse, has_mtime_changed, [Doc | _]}, true}, Acc) ->
+            case Doc of
+                #document{key = Id} -> Acc + 1;
+                _ -> Acc
+            end;
+        (_, Acc) ->
+            Acc
+    end, 0, History),
+    ?assertEqual(0, Matches).
