@@ -34,7 +34,10 @@
     copy_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
-    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
+    replace_file_with_dir_test/1,
+    replace_empty_dir_with_file_test/1,
+    replace_non_empty_dir_with_file_test/1
 ]).
 
 all() -> [
@@ -49,7 +52,10 @@ all() -> [
     copy_file_update_test,
     change_file_content_constant_size_test,
     change_file_content_update_test,
-    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
+    replace_file_with_dir_test,
+    replace_empty_dir_with_file_test,
+    replace_non_empty_dir_with_file_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -80,6 +86,9 @@ copy_file_update_test(_Config) -> ?run_test().
 change_file_content_constant_size_test(_Config) -> ?run_test().
 change_file_content_update_test(_Config) -> ?run_test().
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(_Config) -> ?run_test().
+replace_file_with_dir_test(_Config) -> ?run_test().
+replace_empty_dir_with_file_test(_Config) -> ?run_test().
+replace_non_empty_dir_with_file_test(_Config) -> ?run_test().
 
 
 %%===================================================================

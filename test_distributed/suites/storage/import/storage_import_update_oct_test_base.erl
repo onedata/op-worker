@@ -52,7 +52,10 @@
     copy_file_update_test/1,
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
-    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1
+    change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
+    replace_file_with_dir_test/1,
+    replace_empty_dir_with_file_test/1,
+    replace_non_empty_dir_with_file_test/1
 
     %% --- idempotency ---
 
@@ -751,6 +754,208 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"unmodified">> => 1
+    }).
+
+
+%% A file imported by the initial scan is deleted on the storage and replaced,
+%% under the SAME name, by a directory holding one child file; the next
+%% (continuous) scan detects the type change - deleting the old file entry and
+%% importing the new directory (and its child) in its place.
+replace_file_with_dir_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    ChildFileName = ?RAND_STR(),
+    ChildContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+    ChildStorageFileId = filepath_utils:join([StorageFileId, ChildFileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% delete the file and create a directory (holding one child file) at the
+    %% same path on the storage, then let the next continuous scan detect it
+    storage_file_setup_utils:delete_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, byte_size(InitialContent)
+    ),
+    storage_file_setup_utils:create_dir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, ChildContent
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the path now resolves to a directory with the new child file, on both providers
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, #dir_spec{name = FileName, children = [
+        #file_spec{name = ChildFileName, content = ChildContent}
+    ]}),
+    %% S3 has no real directories, so the new directory itself is not counted
+    %% towards "created" there - only its child file is (see count_imported_nodes/2)
+    NewlyCreated = case StorageType of posix -> 2; s3 -> 1 end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => NewlyCreated,
+        <<"modified">> => 1,
+        <<"deleted">> => 1,
+        <<"unmodified">> => 0,
+        %% the scan-1 creation of the (now deleted) original file may have already
+        %% aged out of the short createdMinHist window by the time scan 2 is
+        %% awaited and the tree/monitoring re-verified; the longer hour/day
+        %% windows still hold it
+        <<"createdMinHist">> => {range, NewlyCreated, NewlyCreated + 1},
+        <<"createdHourHist">> => NewlyCreated + 1,
+        <<"createdDayHist">> => NewlyCreated + 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"deletedMinHist">> => 1,
+        <<"deletedHourHist">> => 1,
+        <<"deletedDayHist">> => 1
+    }).
+
+
+%% An empty directory imported by the initial scan is deleted on the storage and
+%% replaced, under the SAME name, by a regular file; the next (continuous) scan
+%% detects the type change - deleting the old (empty) directory entry and
+%% importing the new file in its place. POSIX-only - object storages (S3) cannot
+%% hold empty directories.
+replace_empty_dir_with_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    DirName = ?RAND_STR(),
+    NewContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, DirName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #dir_spec{name = DirName}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the empty directory was imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% delete the (empty) directory and create a regular file at the same path on
+    %% the storage, then let the next continuous scan detect it
+    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the path now resolves to a regular file with the new content, on both providers
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => 1,
+        <<"deleted">> => 1,
+        <<"unmodified">> => 0,
+        %% the scan-1 creation of the (now deleted) empty directory may have
+        %% already aged out of the short createdMinHist window by the time scan 2
+        %% is awaited and the tree/monitoring re-verified; the longer hour/day
+        %% windows still hold it
+        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdHourHist">> => 2,
+        <<"createdDayHist">> => 2,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"deletedMinHist">> => 1,
+        <<"deletedHourHist">> => 1,
+        <<"deletedDayHist">> => 1
+    }).
+
+
+%% A non-empty directory (holding one child file) imported by the initial scan
+%% has its child, then itself, deleted on the storage and replaced, under the
+%% SAME name, by a regular file; the next (continuous) scan detects the type
+%% change - deleting both the old directory and its child, and importing the new
+%% file in its place.
+replace_non_empty_dir_with_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    ChildFileName = ?RAND_STR(),
+    ChildContent = ?RAND_STR(),
+    NewContent = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, DirName]),
+    ChildStorageFileId = filepath_utils:join([StorageFileId, ChildFileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, #dir_spec{
+        name = DirName, children = [#file_spec{name = ChildFileName, content = ChildContent}]
+    }, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the directory (with its child file) was imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% delete the child file, then the (now empty) directory, and create a
+    %% regular file at the same path on the storage; let the next continuous
+    %% scan detect it
+    storage_file_setup_utils:delete_file(
+        ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, byte_size(ChildContent)
+    ),
+    storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the path now resolves to a regular file with the new content, on both providers
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
+    %% the scan-1 created count (used below for the created hour/day hists) is
+    %% dir+file on posix, file-only on S3 (see count_imported_nodes/2)
+    Scan1Created = case StorageType of posix -> 2; s3 -> 1 end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => 1,
+        %% both the directory and its child file are deleted this scan - on S3
+        %% too, even though the directory itself was never counted towards
+        %% "created" there; deletion detection counts it regardless
+        <<"deleted">> => 2,
+        <<"unmodified">> => 0,
+        %% the scan-1 creation(s) may have already aged out of the short
+        %% createdMinHist window by the time scan 2 is awaited and the
+        %% tree/monitoring re-verified; the longer hour/day windows still hold them
+        <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
+        <<"createdHourHist">> => 1 + Scan1Created,
+        <<"createdDayHist">> => 1 + Scan1Created,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"deletedMinHist">> => 2,
+        <<"deletedHourHist">> => 2,
+        <<"deletedDayHist">> => 2
     }).
 
 

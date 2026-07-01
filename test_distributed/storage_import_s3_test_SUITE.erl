@@ -56,8 +56,6 @@
     symlink_is_ignored_by_initial_scan/1,
     symlink_is_ignored_by_continuous_scan/1,
 
-    change_file_type_test/1,
-    change_file_type3_test/1,
     change_file_type4_test/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
@@ -101,8 +99,6 @@
     symlink_is_ignored_by_initial_scan,
     symlink_is_ignored_by_continuous_scan,
 
-    change_file_type_test,
-    change_file_type3_test,
     change_file_type4_test,
     recreate_file_deleted_by_sync_test,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider,
@@ -205,12 +201,6 @@ symlink_is_ignored_by_initial_scan(Config) ->
 symlink_is_ignored_by_continuous_scan(Config) ->
     storage_import_test_base:symlink_is_ignored_by_continuous_scan(Config, ?S3_HELPER_NAME).
 
-
-change_file_type_test(Config) ->
-    storage_import_s3_test_base:change_file_type_test(Config).
-
-change_file_type3_test(Config) ->
-    storage_import_s3_test_base:change_file_type3_test(Config).
 
 change_file_type4_test(Config) ->
     storage_import_test_base:change_file_type4_test(Config).

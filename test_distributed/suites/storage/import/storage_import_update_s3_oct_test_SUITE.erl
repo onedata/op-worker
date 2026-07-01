@@ -28,7 +28,9 @@
     append_empty_file_update_test/1,
     truncate_file_update_test/1,
     change_file_content_constant_size_test/1,
-    change_file_content_update_test/1
+    change_file_content_update_test/1,
+    replace_file_with_dir_test/1,
+    replace_non_empty_dir_with_file_test/1
 ]).
 
 all() -> [
@@ -37,7 +39,9 @@ all() -> [
     append_empty_file_update_test,
     truncate_file_update_test,
     change_file_content_constant_size_test,
-    change_file_content_update_test
+    change_file_content_update_test,
+    replace_file_with_dir_test,
+    replace_non_empty_dir_with_file_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -64,6 +68,8 @@ append_empty_file_update_test(_Config) -> ?run_test().
 truncate_file_update_test(_Config) -> ?run_test().
 change_file_content_constant_size_test(_Config) -> ?run_test().
 change_file_content_update_test(_Config) -> ?run_test().
+replace_file_with_dir_test(_Config) -> ?run_test().
+replace_non_empty_dir_with_file_test(_Config) -> ?run_test().
 
 
 %%===================================================================

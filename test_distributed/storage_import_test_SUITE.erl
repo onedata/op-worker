@@ -32,9 +32,6 @@
     remote_delete_file_reimport_race2_test/1,
     delete_opened_file_reimport_race_test/1,
 
-    change_file_type_test/1,
-    change_file_type2_test/1,
-    change_file_type3_test/1,
     change_file_type4_test/1,
     update_timestamps_file_import_test/1,
     should_not_detect_timestamp_update_test/1,
@@ -62,9 +59,6 @@
     remote_delete_file_reimport_race2_test,
     delete_opened_file_reimport_race_test,
 
-    change_file_type_test,
-    change_file_type2_test,
-    change_file_type3_test,
     change_file_type4_test,
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
@@ -114,15 +108,6 @@ remote_delete_file_reimport_race2_test(Config) ->
 
 delete_opened_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
-
-change_file_type_test(Config) ->
-    storage_import_test_base:change_file_type_test(Config).
-
-change_file_type2_test(Config) ->
-    storage_import_test_base:change_file_type2_test(Config).
-
-change_file_type3_test(Config) ->
-    storage_import_test_base:change_file_type3_test(Config).
 
 change_file_type4_test(Config) ->
     storage_import_test_base:change_file_type4_test(Config).
