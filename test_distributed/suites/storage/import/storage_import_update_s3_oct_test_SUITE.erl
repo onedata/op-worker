@@ -1,16 +1,16 @@
 %%%--------------------------------------------------------------------
-%%% @author Katarzyna Such
-%%% @copyright (C) 2024 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module tests storage import on S3 storage.
+%%% This module tests storage import continuous (update) scans on S3 storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_import_initial_s3_oct_test_SUITE).
--author("Katarzyna Such").
+-module(storage_import_update_s3_oct_test_SUITE).
+-author("Bartosz Walkowicz").
 
 -include("storage_import_oct_test.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -23,23 +23,13 @@
 
 %% tests
 -export([
-    %% --- structure ---
-    import_empty_storage_test/1,
-    import_empty_file_test/1,
-    import_file_with_content_test/1,
-    import_file_in_directory_test/1,
-    import_many_subfiles_test/1,
-    import_nested_directory_tree_test/1
+    %% --- modifications ---
+    append_file_update_test/1
 ]).
 
 all() -> [
-    %% --- structure ---
-    import_empty_storage_test,
-    import_empty_file_test,
-    import_file_with_content_test,
-    import_file_in_directory_test,
-    import_many_subfiles_test,
-    import_nested_directory_tree_test
+    %% --- modifications ---
+    append_file_update_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -50,7 +40,7 @@ all() -> [
     non_importing_provider_selector = paris,
     space_owner_selector = space_owner
 }).
--define(run_test(), storage_import_initial_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
+-define(run_test(), storage_import_update_oct_test_base:?FUNCTION_NAME(?SUITE_CTX)).
 
 
 %%%==================================================================
@@ -58,41 +48,21 @@ all() -> [
 %%%===================================================================
 
 
-%% --- structure ---
+%% --- modifications ---
 
 
-import_empty_storage_test(_Config) ->
+append_file_update_test(_Config) ->
     ?run_test().
 
 
-import_empty_file_test(_Config) ->
-    ?run_test().
-
-
-import_file_with_content_test(_Config) ->
-    ?run_test().
-
-
-import_file_in_directory_test(_Config) ->
-    ?run_test().
-
-
-import_many_subfiles_test(_Config) ->
-    ?run_test().
-
-
-import_nested_directory_tree_test(_Config) ->
-    ?run_test().
-
-
-%===================================================================
+%%===================================================================
 % SetUp and TearDown functions
 %===================================================================
 
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE, sd_test_utils, storage_file_setup_utils,
-        storage_import_test_utils, storage_import_initial_oct_test_base
+        storage_import_test_utils, storage_import_update_oct_test_base
     ],
     opt:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "2op_s3",
@@ -103,7 +73,7 @@ init_per_suite(Config) ->
             {cache_to_disk_force_delay_ms, timer:seconds(2)}
         ]}],
         posthook = fun(NewConfig) ->
-            storage_import_initial_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+            storage_import_update_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
             storage_import_test_utils:mock_space_dir_statbuf_on_flat_storage(?IMPORTING_PROVIDER_SELECTOR),
             NewConfig
         end
@@ -116,8 +86,8 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    storage_import_initial_oct_test_base:init_per_testcase(Config).
+    storage_import_update_oct_test_base:init_per_testcase(Config).
 
 
 end_per_testcase(Case, Config) ->
-    storage_import_initial_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
+    storage_import_update_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).

@@ -23,6 +23,7 @@
 %% API
 -export([
     clean_up_after_previous_run/2,
+    mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     init_testcase/3, init_testcase/4,
     gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
@@ -31,7 +32,7 @@
     enable_continuous_scan/1, enable_continuous_scan/2,
     disable_continuous_scan/1,
     verify_imported_tree/1, verify_imported_tree/2,
-    verify_dir_stats/1,
+    verify_dir_stats/1, verify_dir_stats/2,
     assert_attrs/3, assert_attrs/4,
     assert_storage_import_monitoring_state/2
 ]).
@@ -58,6 +59,18 @@
 % sequentially), so the total concurrency stays bounded by this value - parallelizing
 % every level would multiply across levels and overload the provider.
 -define(SETUP_PARALLELISM, 20).
+
+% Statbuf the space root dir is mocked with on flat (object) storages - see
+% mock_space_dir_statbuf_on_flat_storage/1.
+-define(MOCK_SPACE_DIR_STATBUF, #statbuf{
+    st_uid = ?ROOT_UID,
+    st_gid = ?ROOT_GID,
+    st_mode = ?DEFAULT_DIR_PERMS bor 8#40000,
+    st_mtime = 1,
+    st_atime = 1,
+    st_ctime = 1,
+    st_size = 0
+}).
 
 
 %%%===================================================================
@@ -257,6 +270,43 @@ disable_continuous_scan(#storage_import_test_case_ctx{
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Mocks the space root dir statbuf on a flat (object) storage so that storage
+%% import tests run deterministically.
+%%
+%% Flat storages (object storages with no concept of directories - see
+%% flat_storage_iterator.erl) emulate the space root dir, and its time stats are
+%% always set to the current time. This may cause storage import tests to flake,
+%% as the space root dir is sometimes reported as modified (if the scan started
+%% later than the times doc was created) or unmodified (if it started in the same
+%% second). Mocking its time stats to the past makes the outcome deterministic.
+%% Intended to be set up once per suite (in the env posthook) and torn down in
+%% end_per_suite via unmock_space_dir_statbuf_on_flat_storage/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_space_dir_statbuf_on_flat_storage(oct_background:entity_selector()) -> ok.
+mock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
+    Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_file_ctx),
+    ok = test_utils:mock_expect(Nodes, storage_file_ctx, new_with_stat,
+        fun
+            (StorageFileId = <<"/">>, SpaceId, StorageId, _Stat) ->
+                storage_file_ctx:new_with_stat(
+                    StorageFileId, <<>>, SpaceId, StorageId, ?MOCK_SPACE_DIR_STATBUF
+                );
+            (StorageFileId, SpaceId, StorageId, Stat) ->
+                meck:passthrough([StorageFileId, SpaceId, StorageId, Stat])
+        end
+    ).
+
+
+-spec unmock_space_dir_statbuf_on_flat_storage(oct_background:entity_selector()) -> ok.
+unmock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
+    Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_file_ctx).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Generically verifies that the declared file tree was imported into the logical
 %% filesystem - checked on both the importing and the non-importing provider.
 %% For each declared node it asserts its type, and additionally:
@@ -317,13 +367,25 @@ verify_imported_tree(#storage_import_test_case_ctx{
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_dir_stats(case_ctx()) -> ok.
+verify_dir_stats(CaseCtx = #storage_import_test_case_ctx{file_tree_spec = FileTreeSpec}) ->
+    verify_dir_stats(CaseCtx, FileTreeSpec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Like verify_dir_stats/1, but verifies against an explicitly provided expected
+%% file tree instead of the one declared at testcase init. Intended for
+%% continuous-scan scenarios, where the storage (and thus the expected dir stats)
+%% is mutated between scans.
+%% @end
+%%--------------------------------------------------------------------
+-spec verify_dir_stats(case_ctx(), file_tree_spec()) -> ok.
 verify_dir_stats(#storage_import_test_case_ctx{
     space_path = SpacePath,
-    file_tree_spec = FileTreeSpec,
     importing_provider_ctx = ImportingProviderCtx,
     non_importing_provider_ctx = NonImportingProviderCtx
-}) ->
-    TopLevelSpecs = to_spec_list(FileTreeSpec),
+}, ExpectedFileTreeSpec) ->
+    TopLevelSpecs = to_spec_list(ExpectedFileTreeSpec),
     % the space root is not a declared node - assert it explicitly, with the
     % expectation aggregated over the whole declared tree
     SpaceRootSpec = #dir_spec{children = TopLevelSpecs},

@@ -120,7 +120,6 @@
     symlink_is_ignored_by_initial_scan/1,
     symlink_is_ignored_by_continuous_scan/2,
 
-    append_file_update_test/1,
     append_file_not_changing_mtime_update_test/1,
     append_empty_file_update_test/1,
     copy_file_update_test/1,
@@ -3411,96 +3410,6 @@ symlink_is_ignored_by_continuous_scan(Config, StorageType) ->
     % check whether symlink was not deleted
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, SymlinkPath}), ?ATTEMPTS).
 
-append_file_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-
-    %% Check if file is visible on 2nd provider
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle2),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Append to file
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    %% Check if appended bytes were imported on worker1
-    {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    AppendedData = <<(?TEST_DATA)/binary, (?TEST_DATA2)/binary>>,
-    ?assertMatch({ok, AppendedData},
-        lfm_proxy:read(W1, Handle3, 0, byte_size(AppendedData))),
-    lfm_proxy:close(W1, Handle3),
-
-    {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, AppendedData},
-        lfm_proxy:read(W2, Handle4, 0, byte_size(AppendedData)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle4),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
-
 append_file_not_changing_mtime_update_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -6130,9 +6039,7 @@ init_per_testcase(chmod_file_update2_test, Config) ->
     Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config)
-    orelse Case =:= update_nfs_acl_test ->
-
+init_per_testcase(update_nfs_acl_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, [storage_driver, luma]),
     ok = test_utils:mock_expect(Workers, luma, map_uid_to_onedata_user, fun(_, _, _) ->
@@ -6191,9 +6098,6 @@ init_per_testcase(changing_max_depth_test, Config) ->
     ],
     init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config) when Case =:= append_file_update_test ->
-    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config));
-
 init_per_testcase(delete_many_subfiles_test, Config) ->
     Config2 = [
         {update_config, #{
@@ -6231,9 +6135,7 @@ end_per_testcase(Case, Config)
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
-end_per_testcase(Case, Config)
-    orelse Case =:= update_nfs_acl_test ->
-
+end_per_testcase(update_nfs_acl_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [luma, storage_driver]),
     end_per_testcase(default, Config);
@@ -6278,10 +6180,7 @@ end_per_testcase(Case, Config)
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 
-end_per_testcase(Case, Config)
-    when Case =:= delete_many_subfiles_test
-    orelse Case =:= append_file_update_test ->
-
+end_per_testcase(delete_many_subfiles_test, Config) ->
     dir_stats_collector_test_base:teardown(Config, ?SPACE_ID, false),
     end_per_testcase(default, Config);
 

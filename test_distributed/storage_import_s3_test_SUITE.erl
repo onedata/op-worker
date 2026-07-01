@@ -56,7 +56,6 @@
     symlink_is_ignored_by_initial_scan/1,
     symlink_is_ignored_by_continuous_scan/1,
 
-    append_file_update_test/1,
     append_empty_file_update_test/1,
     truncate_file_update_test/1,
     change_file_content_constant_size_test/1,
@@ -106,7 +105,6 @@
     symlink_is_ignored_by_initial_scan,
     symlink_is_ignored_by_continuous_scan,
 
-    append_file_update_test,
     append_empty_file_update_test,
     truncate_file_update_test,
     change_file_content_constant_size_test,
@@ -215,9 +213,6 @@ symlink_is_ignored_by_initial_scan(Config) ->
 symlink_is_ignored_by_continuous_scan(Config) ->
     storage_import_test_base:symlink_is_ignored_by_continuous_scan(Config, ?S3_HELPER_NAME).
 
-
-append_file_update_test(Config) ->
-    storage_import_test_base:append_file_update_test(Config).
 
 append_empty_file_update_test(Config) ->
     storage_import_test_base:append_empty_file_update_test(Config).
