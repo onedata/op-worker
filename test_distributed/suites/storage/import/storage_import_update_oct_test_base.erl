@@ -56,7 +56,8 @@
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
-    update_timestamps_file_import_test/1
+    update_timestamps_file_import_test/1,
+    create_file_in_dir_update_test/1
 
     %% --- idempotency ---
 
@@ -110,6 +111,13 @@ end_per_testcase(Case = chmod_file_update_in_batched_dir_test, TestSuiteCtx = #s
     Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case = create_file_in_dir_update_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+    storage_type = posix
+}, Config) ->
+    unmock_storage_import_hash(TestSuiteCtx),
+    unmock_storage_sync_traverse(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -1043,6 +1051,102 @@ update_timestamps_file_import_test(SuiteCtx) ->
     }).
 
 
+%% A new file is created (on the storage) inside one of two sibling directories
+%% imported (both empty) by the initial scan; the next (continuous) scan detects
+%% it, on both POSIX and S3. The new file is nested one level under the space
+%% root (not a direct child of it), so - per the "timing mechanism" established
+%% for move_file_update_test - the root's own mtime is untouched by this scan and
+%% it stays classified unmodified; only the TOUCHED directory (which gained a
+%% direct child) flips to modified, while the UNTOUCHED sibling stays unmodified
+%% too. On POSIX only (matching the old envup test's actual coverage - the old S3
+%% test never had this extra check), also verifies via passthrough mocks on
+%% storage_import_hash/storage_sync_traverse (same mechanism as
+%% chmod_file_update_test/chmod_file_update_in_batched_dir_test) that this is
+%% backed by the expected mechanism: the TOUCHED directory's own mtime (not the
+%% space root's hash-based children-attrs check, nor the UNTOUCHED sibling's mtime).
+create_file_in_dir_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    TouchedDirName = ?RAND_STR(),
+    UntouchedDirName = ?RAND_STR(),
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    RootStorageFileId = <<"/">>,
+    TouchedDirStorageFileId = filepath_utils:join([RootStorageFileId, TouchedDirName]),
+    UntouchedDirStorageFileId = filepath_utils:join([RootStorageFileId, UntouchedDirName]),
+    FileStorageFileId = filepath_utils:join([TouchedDirStorageFileId, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_id = SpaceId
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, [
+        #dir_spec{name = TouchedDirName},
+        #dir_spec{name = UntouchedDirName}
+    ], SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% both (empty) directories were imported by the initial scan
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    case StorageType of
+        posix ->
+            mock_storage_import_hash(ImportingProviderSelector),
+            mock_storage_sync_traverse(ImportingProviderSelector);
+        s3 ->
+            ok
+    end,
+
+    %% create a new file inside the first directory (the second stays untouched)
+    %% and let the next continuous scan detect it
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new file is now visible, with its content, on both providers
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
+        #dir_spec{name = UntouchedDirName}
+    ]),
+    case StorageType of
+        posix ->
+            assert_children_mtime_changed(ImportingProviderSelector, SpaceId, TouchedDirStorageFileId),
+            assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, RootStorageFileId),
+            assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId);
+        s3 ->
+            ok
+    end,
+    %% the scan-1 creation of the (untouched) two directories on POSIX may have
+    %% already aged out of the short createdMinHist window by the time scan 2 is
+    %% awaited and the tree/monitoring re-verified; the longer hour/day windows
+    %% still hold them. On S3, directories don't count towards "created" at all
+    %% (see count_imported_nodes/2), so scan 1 contributed 0
+    Scan1Created = case StorageType of posix -> 2; s3 -> 0 end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => 1,
+        <<"deleted">> => 0,
+        <<"unmodified">> => 2,
+        <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
+        <<"createdHourHist">> => 1 + Scan1Created,
+        <<"createdDayHist">> => 1 + Scan1Created,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }).
+
+
 %% --- idempotency ---
 
 
@@ -1094,9 +1198,26 @@ unmock_storage_import_hash(#storage_import_test_suite_ctx{
 -spec assert_children_hash_changed(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
     ok.
 assert_children_hash_changed(ProviderSelector, SpaceId, DirStorageFileId) ->
+    ?assert(count_children_hash_changed_results(ProviderSelector, SpaceId, DirStorageFileId) >= 1).
+
+
+%% @private
+%% Asserts that storage_import_hash never reported that the children attrs hash
+%% of the directory at DirStorageFileId changed. Requires the module to have been
+%% mocked (with a passthrough) via mock_storage_import_hash/1.
+-spec assert_children_hash_unchanged(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
+    ok.
+assert_children_hash_unchanged(ProviderSelector, SpaceId, DirStorageFileId) ->
+    ?assertEqual(0, count_children_hash_changed_results(ProviderSelector, SpaceId, DirStorageFileId)).
+
+
+%% @private
+-spec count_children_hash_changed_results(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
+    non_neg_integer().
+count_children_hash_changed_results(ProviderSelector, SpaceId, DirStorageFileId) ->
     Id = ?rpc(ProviderSelector, storage_sync_info:id(DirStorageFileId, SpaceId)),
     History = ?rpc(ProviderSelector, meck:history(storage_import_hash)),
-    Matches = lists:foldl(fun
+    lists:foldl(fun
         ({_, {storage_import_hash, children_attrs_hash_has_changed, Args}, true}, Acc) ->
             case lists:nth(4, Args) of
                 #document{key = Id} -> Acc + 1;
@@ -1104,8 +1225,7 @@ assert_children_hash_changed(ProviderSelector, SpaceId, DirStorageFileId) ->
             end;
         (_, Acc) ->
             Acc
-    end, 0, History),
-    ?assert(Matches >= 1).
+    end, 0, History).
 
 
 %% @private
@@ -1140,9 +1260,28 @@ unmock_storage_sync_traverse(#storage_import_test_suite_ctx{
 -spec assert_children_mtime_unchanged(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
     ok.
 assert_children_mtime_unchanged(ProviderSelector, SpaceId, DirStorageFileId) ->
+    ?assertEqual(0, count_children_mtime_changed_results(ProviderSelector, SpaceId, DirStorageFileId)).
+
+
+%% @private
+%% Asserts that storage_sync_traverse reported (at least once) that the
+%% directory at DirStorageFileId's own mtime had changed - i.e. that a
+%% modification of one of its children was picked up via the directory's own
+%% mtime (adding/removing a direct child bumps it). Requires the module to have
+%% been mocked (with a passthrough) via mock_storage_sync_traverse/1.
+-spec assert_children_mtime_changed(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
+    ok.
+assert_children_mtime_changed(ProviderSelector, SpaceId, DirStorageFileId) ->
+    ?assert(count_children_mtime_changed_results(ProviderSelector, SpaceId, DirStorageFileId) >= 1).
+
+
+%% @private
+-spec count_children_mtime_changed_results(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
+    non_neg_integer().
+count_children_mtime_changed_results(ProviderSelector, SpaceId, DirStorageFileId) ->
     Id = ?rpc(ProviderSelector, storage_sync_info:id(DirStorageFileId, SpaceId)),
     History = ?rpc(ProviderSelector, meck:history(storage_sync_traverse)),
-    Matches = lists:foldl(fun
+    lists:foldl(fun
         ({_, {storage_sync_traverse, has_mtime_changed, [Doc | _]}, true}, Acc) ->
             case Doc of
                 #document{key = Id} -> Acc + 1;
@@ -1150,5 +1289,4 @@ assert_children_mtime_unchanged(ProviderSelector, SpaceId, DirStorageFileId) ->
             end;
         (_, Acc) ->
             Acc
-    end, 0, History),
-    ?assertEqual(0, Matches).
+    end, 0, History).

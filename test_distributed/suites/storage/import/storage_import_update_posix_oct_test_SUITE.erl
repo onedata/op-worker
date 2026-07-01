@@ -38,7 +38,8 @@
     replace_file_with_dir_test/1,
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
-    update_timestamps_file_import_test/1
+    update_timestamps_file_import_test/1,
+    create_file_in_dir_update_test/1
 ]).
 
 all() -> [
@@ -57,7 +58,8 @@ all() -> [
     replace_file_with_dir_test,
     replace_empty_dir_with_file_test,
     replace_non_empty_dir_with_file_test,
-    update_timestamps_file_import_test
+    update_timestamps_file_import_test,
+    create_file_in_dir_update_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -92,6 +94,7 @@ replace_file_with_dir_test(_Config) -> ?run_test().
 replace_empty_dir_with_file_test(_Config) -> ?run_test().
 replace_non_empty_dir_with_file_test(_Config) -> ?run_test().
 update_timestamps_file_import_test(_Config) -> ?run_test().
+create_file_in_dir_update_test(_Config) -> ?run_test().
 
 
 %%===================================================================
