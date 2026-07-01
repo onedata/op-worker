@@ -56,8 +56,6 @@
     symlink_is_ignored_by_initial_scan/1,
     symlink_is_ignored_by_continuous_scan/1,
 
-    change_file_content_constant_size_test/1,
-    change_file_content_update_test/1,
     change_file_type_test/1,
     change_file_type3_test/1,
     change_file_type4_test/1,
@@ -103,8 +101,6 @@
     symlink_is_ignored_by_initial_scan,
     symlink_is_ignored_by_continuous_scan,
 
-    change_file_content_constant_size_test,
-    change_file_content_update_test,
     change_file_type_test,
     change_file_type3_test,
     change_file_type4_test,
@@ -209,12 +205,6 @@ symlink_is_ignored_by_initial_scan(Config) ->
 symlink_is_ignored_by_continuous_scan(Config) ->
     storage_import_test_base:symlink_is_ignored_by_continuous_scan(Config, ?S3_HELPER_NAME).
 
-
-change_file_content_constant_size_test(Config) ->
-    storage_import_test_base:change_file_content_constant_size_test(Config).
-
-change_file_content_update_test(Config) ->
-    storage_import_test_base:change_file_content_update_test(Config).
 
 change_file_type_test(Config) ->
     storage_import_s3_test_base:change_file_type_test(Config).

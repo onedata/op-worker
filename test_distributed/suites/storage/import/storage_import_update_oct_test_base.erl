@@ -49,7 +49,9 @@
     chmod_file_update_test/1,
     chmod_file_update_in_batched_dir_test/1,
     move_file_update_test/1,
-    copy_file_update_test/1
+    copy_file_update_test/1,
+    change_file_content_constant_size_test/1,
+    change_file_content_update_test/1
 
     %% --- idempotency ---
 
@@ -415,7 +417,18 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
     %% both directories (with, respectively, their 3 files and no children) were imported
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
+        %% space root (1) + 1 extra confirmatory-batch pass each for root and
+        %% TestDirName - with dir_batch_size=2, a directory whose last real
+        %% listing batch returns EXACTLY dir_batch_size children (root: 2
+        %% children; TestDirName: first batch of 2, out of 3) is ambiguous
+        %% ("maybe more?"), so one more (here: empty/undersized) batch is
+        %% scheduled to confirm end-of-listing - and each such batch re-runs
+        %% the directory's OWN modified/unmodified check from scratch (see
+        %% tree_storage_iterator:get_children_and_next_batch_job/1: a next
+        %% batch job is only omitted when a read returns FEWER than
+        %% dir_batch_size children). TestDir2Name (0 children, 0 < 2) needs no
+        %% confirmatory batch, so contributes none.
+        <<"unmodified">> => 3
     }),
 
     %% change one of TestDirName's 3 files' mode on the storage and let the next
@@ -440,8 +453,14 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
-        %% space root, TestDirName, TestDir2Name and the 2 untouched files
-        <<"unmodified">> => 5
+        %% same batch-continuation artifact as the initial scan above: root and
+        %% TestDirName are each re-checked twice (2 confirmatory-batch passes,
+        %% both unmodified - the tree's shape under them hasn't changed, only
+        %% File1's mode), TestDir2Name once; the 2 untouched files (one
+        %% individually re-stat'd alongside File1 in its own hash-changed
+        %% batch, one bulk-marked via the other, hash-unchanged batch)
+        %% contribute 1 each => 2+2+1+1+1 = 7
+        <<"unmodified">> => 7
     }).
 
 
@@ -563,6 +582,105 @@ copy_file_update_test(SuiteCtx) ->
         <<"createdMinHist">> => {range, 1, 2},
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2
+    }).
+
+
+%% A file imported by the initial scan has its content overwritten on the storage
+%% WITHOUT changing its size (a fixed-length random string is swapped for another);
+%% the next (continuous) scan detects the change and the new content is reflected
+%% through the logical filesystem on both providers. Unlike append/truncate/chmod,
+%% a same-size content change has no size/mode signal to fall back on - detection
+%% relies entirely on the file's mtime having advanced (see the OR condition in
+%% storage_import_engine:maybe_update_file_location/4), so - unlike those tests -
+%% an explicit delay before the write is required here.
+change_file_content_constant_size_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(16),
+    ChangedContent = ?RAND_STR(16),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan with its initial content
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% overwrite the file's content (same size) on the storage and let the next
+    %% continuous scan detect it
+    timer:sleep(timer:seconds(2)),
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new content is now readable on both providers
+    UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
+%% Like change_file_content_constant_size_test, but the new content is a
+%% different length than the original - the modification check's size clause
+%% detects it regardless of mtime resolution, so (like append/truncate/chmod, and
+%% unlike change_file_content_constant_size_test above) no explicit delay is needed.
+change_file_content_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(16),
+    ChangedContent = ?RAND_STR(32),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was imported by the initial scan with its initial content
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% overwrite the file's content (different size) on the storage and let the
+    %% next continuous scan detect it
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
+    ),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new content is now readable on both providers
+    UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"unmodified">> => 1
     }).
 
 

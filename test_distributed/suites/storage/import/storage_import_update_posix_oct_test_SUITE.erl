@@ -31,7 +31,9 @@
     chmod_file_update_test/1,
     chmod_file_update_in_batched_dir_test/1,
     move_file_update_test/1,
-    copy_file_update_test/1
+    copy_file_update_test/1,
+    change_file_content_constant_size_test/1,
+    change_file_content_update_test/1
 ]).
 
 all() -> [
@@ -43,7 +45,9 @@ all() -> [
     chmod_file_update_test,
     chmod_file_update_in_batched_dir_test,
     move_file_update_test,
-    copy_file_update_test
+    copy_file_update_test,
+    change_file_content_constant_size_test,
+    change_file_content_update_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -71,6 +75,8 @@ chmod_file_update_test(_Config) -> ?run_test().
 chmod_file_update_in_batched_dir_test(_Config) -> ?run_test().
 move_file_update_test(_Config) -> ?run_test().
 copy_file_update_test(_Config) -> ?run_test().
+change_file_content_constant_size_test(_Config) -> ?run_test().
+change_file_content_update_test(_Config) -> ?run_test().
 
 
 %%===================================================================

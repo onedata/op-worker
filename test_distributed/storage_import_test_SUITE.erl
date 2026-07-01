@@ -32,8 +32,6 @@
     remote_delete_file_reimport_race2_test/1,
     delete_opened_file_reimport_race_test/1,
 
-    change_file_content_constant_size_test/1,
-    change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
@@ -65,8 +63,6 @@
     remote_delete_file_reimport_race2_test,
     delete_opened_file_reimport_race_test,
 
-    change_file_content_constant_size_test,
-    change_file_content_update_test,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     change_file_type_test,
     change_file_type2_test,
@@ -120,12 +116,6 @@ remote_delete_file_reimport_race2_test(Config) ->
 
 delete_opened_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
-
-change_file_content_constant_size_test(Config) ->
-    storage_import_test_base:change_file_content_constant_size_test(Config).
-
-change_file_content_update_test(Config) ->
-    storage_import_test_base:change_file_content_update_test(Config).
 
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
     storage_import_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config).
