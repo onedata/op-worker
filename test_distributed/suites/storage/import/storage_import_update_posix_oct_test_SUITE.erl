@@ -49,7 +49,12 @@
 
     %% --- retry ---
     update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1
+    update_syncs_files_after_previous_update_failed_test/1,
+
+    %% --- config ---
+    changing_max_depth_test/1,
+    force_start_test/1,
+    force_stop_test/1
 ]).
 
 all() -> [
@@ -79,7 +84,12 @@ all() -> [
 
     %% --- retry ---
     update_syncs_files_after_import_failed_test,
-    update_syncs_files_after_previous_update_failed_test
+    update_syncs_files_after_previous_update_failed_test,
+
+    %% --- config ---
+    changing_max_depth_test,
+    force_start_test,
+    force_stop_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -131,6 +141,14 @@ should_not_detect_timestamp_update_test(_Config) -> ?run_test().
 
 update_syncs_files_after_import_failed_test(_Config) -> ?run_test().
 update_syncs_files_after_previous_update_failed_test(_Config) -> ?run_test().
+
+
+%% --- config ---
+
+
+changing_max_depth_test(_Config) -> ?run_test().
+force_start_test(_Config) -> ?run_test().
+force_stop_test(_Config) -> ?run_test().
 
 
 %%===================================================================

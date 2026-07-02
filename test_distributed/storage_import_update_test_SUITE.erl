@@ -29,9 +29,6 @@
     sync_should_update_replicated_file_with_suffix_on_storage/1,
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
-    changing_max_depth_test/1,
-    force_start_test/1,
-    force_stop_test/1,
     file_with_data_protection_should_not_be_updated_test/1,
     file_with_data_and_metadata_protection_should_not_be_updated_test/1,
     file_with_data_protection_should_not_be_deleted_test/1,
@@ -57,9 +54,6 @@
     sync_should_update_replicated_file_with_suffix_on_storage,
     create_delete_import2_test,
     create_subfiles_and_delete_before_import_is_finished_test,
-    changing_max_depth_test,
-    force_start_test,
-    force_stop_test,
     file_with_data_protection_should_not_be_updated_test,
     file_with_data_and_metadata_protection_should_not_be_updated_test,
     file_with_data_protection_should_not_be_deleted_test,
@@ -106,15 +100,6 @@ create_delete_import2_test(Config) ->
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     storage_import_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config).
-
-changing_max_depth_test(Config) ->
-    storage_import_test_base:changing_max_depth_test(Config).
-
-force_start_test(Config) ->
-    storage_import_test_base:force_start_test(Config).
-
-force_stop_test(Config) ->
-    storage_import_test_base:force_stop_test(Config).
 
 file_with_data_protection_should_not_be_updated_test(Config) ->
     storage_import_test_base:file_with_data_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).

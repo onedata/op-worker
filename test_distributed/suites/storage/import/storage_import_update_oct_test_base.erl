@@ -119,11 +119,14 @@
 
     %% --- retry ---
     update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1
+    update_syncs_files_after_previous_update_failed_test/1,
 
     %% --- suffixes ---
 
     %% --- config ---
+    changing_max_depth_test/1,
+    force_start_test/1,
+    force_stop_test/1
 
     %% --- protection ---
 
@@ -147,6 +150,18 @@ init_per_testcase(Case, TestSuiteCtx = #storage_import_test_suite_ctx{
     %% a low batch size forces the scan of the relevant directory's children to
     %% span multiple batches
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, 2),
+    Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
+    init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config2);
+
+init_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector
+}, Config) ->
+    [Node | _] = Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
+    {ok, OldDirBatchSize} = test_utils:get_env(Node, op_worker, storage_import_dir_batch_size),
+    %% a batch size of 1 splits the scan of the test's large tree into the
+    %% maximum number of separate traverse jobs, so that aborting the scan
+    %% mid-flight reliably leaves a substantial part of the tree unprocessed
+    ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, 1),
     Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config2);
 
@@ -193,7 +208,16 @@ end_per_testcase(Case, TestSuiteCtx, Config) when
     %% on the happy path the mock is already torn down inline (the retrying
     %% scan must import for real) and this is a no-op; it matters only when
     %% the test fails before reaching the inline teardown
-    storage_import_test_utils:unmock_import_file_error(TestSuiteCtx),
+    storage_import_test_utils:unmock_storage_import_engine(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector
+}, Config) ->
+    storage_import_test_utils:unmock_storage_import_engine(TestSuiteCtx),
+    Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
+    OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
+    ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -1318,7 +1342,7 @@ update_syncs_files_after_import_failed_test(SuiteCtx) ->
     storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx),
 
     %% with the failure gone, the next scan imports the file
-    storage_import_test_utils:unmock_import_file_error(SuiteCtx),
+    storage_import_test_utils:unmock_storage_import_engine(SuiteCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
@@ -1384,7 +1408,7 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
     }),
 
     %% with the failure gone, the next scan imports the file
-    storage_import_test_utils:unmock_import_file_error(SuiteCtx),
+    storage_import_test_utils:unmock_storage_import_engine(SuiteCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
 
     storage_import_test_utils:verify_imported_tree(
@@ -1409,6 +1433,225 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
 
 
 %% --- config ---
+
+
+%% A 3-level tree exists on the storage from the start, while the scans'
+%% max_depth is raised scan by scan (1 -> 2 -> 3): each scan must import
+%% exactly one more level, leaving the deeper entries untouched. Raising
+%% max_depth makes the next scan re-process listings that were previously cut
+%% short at the depth limit: the children-attrs batch hash covers only the
+%% children within max_depth (see storage_traverse:process_children_batch/2),
+%% so a raised limit changes the hash and forces individual processing of the
+%% newly-eligible children; a directory that WAS at the limit has no children
+%% hash/mtime recorded at all (the Depth =:= MaxDepth branch of
+%% storage_sync_traverse's batch-finish callback), so it is re-traversed
+%% unconditionally. Both storage types share this mechanism - on a flat
+%% storage entry depths are computed from the objects' key structure (there is
+%% just no per-directory traversal, so only the space root's listing is ever
+%% cut/re-processed).
+changing_max_depth_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    Content = ?RAND_STR(),
+    [Dir1Name, Dir2Name, File1Name, File2Name, File3Name] = [?RAND_STR() || _ <- lists:seq(1, 5)],
+    File1Spec = #file_spec{name = File1Name, content = Content},
+    File2Spec = #file_spec{name = File2Name, content = Content},
+    File3Spec = #file_spec{name = File3Name, content = Content},
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = SessionId
+        }
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME,
+        [
+            %% /dir1/dir2/file3, /dir1/file2, /file1 - one file per depth level
+            #dir_spec{name = Dir1Name, children = [
+                #dir_spec{name = Dir2Name, children = [File3Spec]},
+                File2Spec
+            ]},
+            File1Spec
+        ],
+        SuiteCtx,
+        #{max_depth => 1}
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% only the depth-1 entries were imported (on posix that includes dir1,
+    %% imported empty; dirs don't count towards "created" on s3 - module doc)
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #dir_spec{name = Dir1Name}, File1Spec
+    ]),
+    Dir2Path = filepath_utils:join([SpacePath, Dir1Name, Dir2Name]),
+    File2Path = filepath_utils:join([SpacePath, Dir1Name, File2Name]),
+    File3Path = filepath_utils:join([SpacePath, Dir1Name, Dir2Name, File3Name]),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(ImportingProviderNode, SessionId, {path, Dir2Path})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(ImportingProviderNode, SessionId, {path, File2Path})),
+
+    {Scan1Created, Scan2Created, Scan3Created, Scan2Unmodified, Scan3Unmodified} =
+        case StorageType of
+            %% per scan: {dir1, file1} / {dir2, file2} / {file3};
+            %% unmodified = root + everything imported by the previous scans
+            posix -> {2, 2, 1, 3, 5};
+            %% per scan: {file1} / {file2} / {file3}; unmodified = root (frozen,
+            %% single batch pass - at most 3 file objects) + the earlier files
+            s3 -> {1, 1, 1, 2, 3}
+        end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"created">> => Scan1Created,
+        <<"createdMinHist">> => Scan1Created,
+        <<"createdHourHist">> => Scan1Created,
+        <<"createdDayHist">> => Scan1Created
+    }),
+
+    %% scan 2, max_depth raised to 2 - the next level gets imported
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{max_depth => 2}),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
+        #dir_spec{name = Dir1Name, children = [#dir_spec{name = Dir2Name}, File2Spec]},
+        File1Spec
+    ]),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(ImportingProviderNode, SessionId, {path, File3Path})),
+
+    CreatedByScans12 = Scan1Created + Scan2Created,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => Scan2Created,
+        <<"unmodified">> => Scan2Unmodified,
+        %% scan-1's creations may have aged out of the Min window by now
+        <<"createdMinHist">> => {range, Scan2Created, CreatedByScans12},
+        <<"createdHourHist">> => CreatedByScans12,
+        <<"createdDayHist">> => CreatedByScans12
+    }),
+
+    %% scan 3, max_depth raised to 3 - the whole declared tree is now in
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3, #{max_depth => 3}),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    CreatedByScans123 = CreatedByScans12 + Scan3Created,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => Scan3Created,
+        <<"unmodified">> => Scan3Unmodified,
+        <<"createdMinHist">> => {range, Scan3Created, CreatedByScans123},
+        <<"createdHourHist">> => CreatedByScans123,
+        <<"createdDayHist">> => CreatedByScans123
+    }).
+
+
+%% With continuous scanning disabled, a single scan is forced (via
+%% storage_import:start_auto_scan/1) after a file appears on the initially
+%% empty storage: the forced scan must run and import the file.
+force_start_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
+    ),
+    storage_import_test_utils:force_start_auto_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = Content}
+    ),
+    %% creating the file bumped the root's mtime, so the root is classified
+    %% modified on posix (never on s3 - module doc)
+    {RootModified, RootUnmodified} = case StorageType of
+        posix -> {1, 0};
+        s3 -> {0, 1}
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        <<"createdMinHist">> => 1,
+        <<"createdHourHist">> => 1,
+        <<"createdDayHist">> => 1,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified
+    }).
+
+
+%% The initial scan of a large tree (1110 nodes, traversed with
+%% storage_import_dir_batch_size = 1 - see init_per_testcase) is aborted via
+%% storage_import:stop_auto_scan/1 as soon as the first file import is
+%% observed (through a passthrough mock signalling this process): the scan
+%% must promptly finish with only a part of the tree processed and no
+%% failures; the next (continuous) scan must then import the remainder.
+force_stop_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    %% [10, 10, 10] => 10 dirs x 10 subdirs x 10 files = 1110 nodes
+    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([10, 10, 10], ?RAND_STR()),
+
+    %% set up before init_testcase, as the initial scan auto-runs on space setup
+    mock_import_file_started_notification(SuiteCtx, self()),
+    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
+
+    ?assertReceivedMatch(import_file_started, timer:seconds(?LARGE_IMPORT_SCAN_ATTEMPTS)),
+    storage_import_test_utils:force_stop_auto_scan(TestCaseCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
+
+    %% an aborted scan's processed-entries tally is unpredictable (except that
+    %% nothing may fail or be deleted - the defaults below) but must fall well
+    %% short of a completed scan's; the bounds are inherited from the legacy
+    %% suites and are conservative - with batch size 1 even the
+    %% confirmatory-pass inflation (module doc) puts a completed scan's sum
+    %% far above them
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"created">> => skip,
+        <<"unmodified">> => skip,
+        <<"createdMinHist">> => skip,
+        <<"createdHourHist">> => skip,
+        <<"createdDayHist">> => skip,
+        <<"queueLengthMinHist">> => skip,
+        <<"queueLengthHourHist">> => skip,
+        <<"queueLengthDayHist">> => skip
+    }),
+    #{
+        <<"created">> := Scan1Created,
+        <<"modified">> := Scan1Modified,
+        <<"unmodified">> := Scan1Unmodified
+    } = storage_import_test_utils:get_storage_import_monitoring_state(TestCaseCtx),
+    MaxProcessedByAbortedScan = case StorageType of
+        posix -> 1111;
+        s3 -> 999
+    end,
+    ?assert(Scan1Created + Scan1Modified + Scan1Unmodified =< MaxProcessedByAbortedScan),
+
+    %% the next scan imports the rest of the tree
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{}, ?LARGE_IMPORT_SCAN_ATTEMPTS),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    TotalCreated = case StorageType of
+        posix -> 1110;
+        %% dirs don't count towards "created" on s3 (module doc)
+        s3 -> 1000
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => skip,
+        <<"unmodified">> => skip,
+        <<"createdMinHist">> => skip,
+        <<"createdHourHist">> => skip,
+        %% cumulative over both scans: the whole tree, imported exactly once
+        <<"createdDayHist">> => TotalCreated
+    }).
 
 
 %% --- protection ---
@@ -1448,6 +1691,27 @@ assert_monitoring_state_after_single_file_modification(TestCaseCtx) ->
 %%%===================================================================
 %%% Internal functions - test case specific mocks
 %%%===================================================================
+
+
+%% @private
+%% Mocks (with a passthrough) the import engine so that every file import
+%% signals the given process - lets a test react (e.g. abort the scan) the
+%% moment importing actually starts. Torn down via
+%% storage_import_test_utils:unmock_storage_import_engine/1.
+-spec mock_import_file_started_notification(
+    storage_import_test_utils:suite_ctx(), pid()
+) -> ok.
+mock_import_file_started_notification(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, NotifyPid) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_import_engine, [passthrough]),
+    ok = test_utils:mock_expect(Nodes, storage_import_engine, import_file_unsafe,
+        fun(StorageFileCtx, Info) ->
+            NotifyPid ! import_file_started,
+            meck:passthrough([StorageFileCtx, Info])
+        end
+    ).
 
 
 %% @private

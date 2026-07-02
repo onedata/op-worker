@@ -101,7 +101,7 @@ init_per_testcase(_Case, _TestSuiteCtx, Config) ->
 
 
 end_per_testcase(Case = import_directory_error_test, TestSuiteCtx, Config) ->
-    storage_import_test_utils:unmock_import_file_error(TestSuiteCtx),
+    storage_import_test_utils:unmock_storage_import_engine(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(Case, TestSuiteCtx, Config) when

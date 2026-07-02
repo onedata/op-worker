@@ -44,16 +44,18 @@
 -export([
     await_initial_scan_finished/1, await_initial_scan_finished/2,
     await_scan_finished/2, await_scan_finished/3,
-    run_continuous_scan/2, run_continuous_scan/3,
+    run_continuous_scan/2, run_continuous_scan/3, run_continuous_scan/4,
     enable_continuous_scan/1, enable_continuous_scan/2,
-    disable_continuous_scan/1
+    disable_continuous_scan/1,
+    force_start_auto_scan/1, force_stop_auto_scan/1
 ]).
 %% API - verification/assertions
 -export([
     verify_imported_tree/1, verify_imported_tree/2,
     verify_dir_stats/1, verify_dir_stats/2,
     assert_attrs/3, assert_attrs/4,
-    assert_storage_import_monitoring_state/2
+    assert_storage_import_monitoring_state/2,
+    get_storage_import_monitoring_state/1
 ]).
 %% API - ACL import machinery (mocks + expectations)
 -export([
@@ -61,9 +63,9 @@
     mock_luma_acl_user/2, unmock_luma/1,
     get_cdmi_acl/3, expected_imported_acl_json/3
 ]).
-%% API - import failure machinery (mock + expectations)
+%% API - import engine mock machinery (mocks + expectations)
 -export([
-    mock_import_file_error/2, unmock_import_file_error/1,
+    mock_import_file_error/2, unmock_storage_import_engine/1,
     assert_monitoring_state_after_failed_import/1
 ]).
 
@@ -289,10 +291,17 @@ run_continuous_scan(CaseCtx, ScanNum) ->
 %%--------------------------------------------------------------------
 -spec run_continuous_scan(case_ctx(), non_neg_integer(), map()) -> ok.
 run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides) ->
+    run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, ?ATTEMPTS).
+
+
+%% Like run_continuous_scan/3, but with an explicit attempts budget for awaiting
+%% the scan's completion - use for scans over large trees.
+-spec run_continuous_scan(case_ctx(), non_neg_integer(), map(), non_neg_integer()) -> ok.
+run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, AwaitAttempts) ->
     enable_continuous_scan(CaseCtx, ConfigOverrides),
     await_scan_started(CaseCtx, ScanNum),
     disable_continuous_scan(CaseCtx),
-    await_scan_finished(CaseCtx, ScanNum),
+    await_scan_finished(CaseCtx, ScanNum, AwaitAttempts),
     ok.
 
 
@@ -327,6 +336,39 @@ disable_continuous_scan(#storage_import_test_case_ctx{
         ImportingProviderSelector,
         storage_import:set_or_configure_auto_mode(SpaceId, #{continuous_scan => false})
     ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Forces an immediate, single scan, without enabling continuous scanning (no
+%% follow-up scans will run). Await its completion with await_scan_finished/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_start_auto_scan(case_ctx()) -> ok.
+force_start_auto_scan(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}) ->
+    ok = ?rpc(ImportingProviderSelector, storage_import:start_auto_scan(SpaceId)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Aborts the currently running scan - the scan is finished immediately, with
+%% the not-yet-processed entries left untouched (a later scan may pick them
+%% up). Tolerates the scan being already finished (a no-op then), as stopping
+%% is inherently racy with the scan's own completion.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_stop_auto_scan(case_ctx()) -> ok.
+force_stop_auto_scan(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}) ->
+    case ?rpc(ImportingProviderSelector, storage_import:stop_auto_scan(SpaceId)) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -563,6 +605,25 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns the current storage_import_monitoring counters for the space, with
+%% the histograms flattened to their window sums - the same shape (and keys) as
+%% the expectations of assert_storage_import_monitoring_state/2. For scenarios
+%% asserting a relation between counters (e.g. a bound on their sum) rather
+%% than exact values.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_import_monitoring_state(case_ctx()) -> #{binary() => term()}.
+get_storage_import_monitoring_state(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}) ->
+    flatten_storage_import_histograms(
+        ?rpc(ImportingProviderSelector, storage_import_monitoring:describe(SpaceId))
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Mocks the storage driver so that the given (already encoded) NFS4 ACL is
 %% reported as the xattr of the given storage file during a scan; all other
 %% files (including the space root) keep their real xattrs. Torn down via
@@ -667,7 +728,7 @@ ace_mask_hex(Mask) ->
 %% @doc
 %% Mocks a failure of importing the given file/dir: the import engine raises
 %% for it, while all other entries import normally. Torn down via
-%% unmock_import_file_error/1.
+%% unmock_storage_import_engine/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_import_file_error(suite_ctx(), binary()) -> ok.
@@ -686,10 +747,12 @@ mock_import_file_error(#storage_import_test_suite_ctx{
     ).
 
 
+%% Tears down any storage_import_engine mock (regardless of which of the mocks
+%% above installed it).
 %% NOTE: tolerates the mock being already torn down (a no-op then), so it can be
 %% called both inline in a test's flow and defensively in end_per_testcase.
--spec unmock_import_file_error(suite_ctx()) -> ok.
-unmock_import_file_error(#storage_import_test_suite_ctx{
+-spec unmock_storage_import_engine(suite_ctx()) -> ok.
+unmock_storage_import_engine(#storage_import_test_suite_ctx{
     importing_provider_selector = ProviderSelector
 }) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
