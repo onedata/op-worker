@@ -123,7 +123,7 @@ init_per_suite(Config) ->
             {cache_to_disk_force_delay_ms, timer:seconds(2)}
         ]}],
         posthook = fun(NewConfig) ->
-            storage_import_update_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+            storage_import_test_utils:clean_up_after_previous_run(all(), ?SUITE_CTX),
             NewConfig
         end
     }).

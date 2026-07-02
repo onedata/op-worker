@@ -8,6 +8,15 @@
 %%% @doc
 %%% Generic machinery for declarative storage import tests.
 %%%
+%%% A test declares the file tree to be created directly on the imported
+%%% storage (#dir_spec{}/#file_spec{} records); init_testcase/3,4 concretizes
+%%% and creates it, then sets up a space whose support by the imported storage
+%%% auto-triggers the initial scan. The helpers below await scans, verify the
+%%% imported logical tree on both providers and assert the scan's monitoring
+%%% counters against expectations derived from the declared tree. Continuous
+%%% (update) scan tests additionally mutate the storage in between (via
+%%% storage_file_setup_utils) and rerun a scan via run_continuous_scan/2,3.
+%%%
 %%% NOTE: this module (together with storage_file_setup_utils) must be added to
 %%% ?LOAD_MODULES of any suite that uses it, as some routines are executed on the
 %%% op_worker node via rpc.
@@ -23,24 +32,34 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
-%% API
+%% API - suite/testcase setup
 -export([
     clean_up_after_previous_run/2,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     init_testcase/3, init_testcase/4,
     gen_nested_tree_spec/2,
-    create_file_tree_on_storage/3,
+    create_file_tree_on_storage/3
+]).
+%% API - scan control
+-export([
     await_initial_scan_finished/1, await_initial_scan_finished/2,
     await_scan_finished/2, await_scan_finished/3,
+    run_continuous_scan/2, run_continuous_scan/3,
     enable_continuous_scan/1, enable_continuous_scan/2,
-    disable_continuous_scan/1,
+    disable_continuous_scan/1
+]).
+%% API - verification/assertions
+-export([
     verify_imported_tree/1, verify_imported_tree/2,
     verify_dir_stats/1, verify_dir_stats/2,
     assert_attrs/3, assert_attrs/4,
-    assert_storage_import_monitoring_state/2,
+    assert_storage_import_monitoring_state/2
+]).
+%% API - ACL import machinery (mocks + expectations)
+-export([
     mock_storage_file_acl/3, unmock_storage_driver/1,
     mock_luma_acl_user/2, unmock_luma/1,
-    get_cdmi_acl/3, ace_json/4
+    get_cdmi_acl/3, expected_imported_acl_json/3
 ]).
 
 -type suite_ctx() :: #storage_import_test_suite_ctx{}.
@@ -55,7 +74,6 @@
 
 -export_type([suite_ctx/0, case_ctx/0]).
 
--define(ATTEMPTS, 30).
 % Max number of concurrent processes used to verify the imported tree; bounds the
 % load on the providers while still parallelizing the (RPC-heavy, retry-prone)
 % per-node assertions - important for large trees (hundreds/thousands of nodes).
@@ -241,6 +259,38 @@ await_scan_finished(#storage_import_test_case_ctx{
     ).
 
 
+-spec run_continuous_scan(case_ctx(), non_neg_integer()) -> ok.
+run_continuous_scan(CaseCtx, ScanNum) ->
+    run_continuous_scan(CaseCtx, ScanNum, #{}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs a single continuous scan cycle: enables continuous scanning (with the
+%% given scan config overrides, if any), awaits the completion of the scan
+%% number ScanNum and disables further scanning. This is the standard
+%% mutate-then-rescan step of update tests; use the enable/await/disable
+%% primitives directly when a scenario needs finer control (e.g. several
+%% consecutive scans, or acting while a scan is in progress).
+%%
+%% NOTE: scanning is disabled as soon as scan ScanNum STARTS, not after it
+%% finishes - the periodic scheduler starts the next scan as soon as
+%% scan_interval elapses since the last scan's stop, so disabling only once the
+%% finish is noticed (with awaits polling at a similar granularity) races with
+%% it, and a sneaked-in scan ScanNum+1 would reset the per-scan monitoring
+%% counters before the test asserts them. Disabling mid-scan is safe: a running
+%% scan uses the scan config snapshot taken at its start.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_continuous_scan(case_ctx(), non_neg_integer(), map()) -> ok.
+run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides) ->
+    enable_continuous_scan(CaseCtx, ConfigOverrides),
+    await_scan_started(CaseCtx, ScanNum),
+    disable_continuous_scan(CaseCtx),
+    await_scan_finished(CaseCtx, ScanNum),
+    ok.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Enables continuous (periodic) scanning for the space. After this call the
@@ -285,6 +335,9 @@ disable_continuous_scan(#storage_import_test_case_ctx{
 %% as the space root dir is sometimes reported as modified (if the scan started
 %% later than the times doc was created) or unmodified (if it started in the same
 %% second). Mocking its time stats to the past makes the outcome deterministic.
+%% Side effect: with the statbuf frozen in the past, the space root can never be
+%% classified "modified" on ANY scan (its logical mtime always compares >= the
+%% frozen storage mtime) - update tests must account for this on flat storages.
 %% Intended to be set up once per suite (in the env posthook) and torn down in
 %% end_per_suite via unmock_space_dir_statbuf_on_flat_storage/1.
 %% @end
@@ -443,18 +496,25 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asserts the storage_import_monitoring counters for the space. The expected
-%% number of created files/dirs (and the corresponding histograms) is derived
-%% from the declared file tree; any field can be overridden via Overrides (e.g.
-%% to express failed/modified/deleted counters in non-trivial scenarios).
-%% Overrides keys are binaries, matching the storage_import_monitoring:describe/1 output.
-%% An override value of 'skip' excludes that field from the assertion entirely -
-%% useful for time-windowed histograms that may have shifted out of the asserted
-%% buckets by the time the monitoring is read (e.g. createdMinHist after importing
-%% and verifying a large tree). An override value of {range, Min, Max} asserts that
-%% the field falls within [Min, Max] (inclusive) - useful for the same kind of
-%% time-windowed histograms when a wider bound is known and still worth asserting,
-%% rather than skipping the field entirely.
+%% Asserts the storage_import_monitoring counters for the space. Overrides keys
+%% are binaries, matching the storage_import_monitoring:describe/1 output.
+%%
+%% The defaults describe a successful initial scan of the declared file tree:
+%% the number of created files/dirs (and the corresponding histograms) is
+%% derived from the tree, and the space root itself is expected to be counted
+%% as the single "unmodified" entry (it always exists before the scan). Any
+%% field can be overridden via Overrides (e.g. scans/modified/deleted for
+%% continuous-scan scenarios).
+%%
+%% NOTE: the counters (created/modified/deleted/unmodified/failed) are per-scan
+%% (reset at each scan's start), while the *Hist histograms are cumulative and
+%% time-windowed - so when asserting after scan N, the histograms still include
+%% the contributions of scans 1..N-1, but those may have already shifted out of
+%% the short (Min, sometimes even Hour) windows by the time the monitoring is
+%% read. Hence two special override values:
+%%  * 'skip' - excludes the field from the assertion entirely;
+%%  * {range, Min, Max} - asserts the field falls within [Min, Max] (inclusive);
+%%    preferred over 'skip' when a (looser) bound is known.
 %% @end
 %%--------------------------------------------------------------------
 -spec assert_storage_import_monitoring_state(
@@ -473,6 +533,7 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
         <<"created">> => Created,
         <<"modified">> => 0,
         <<"deleted">> => 0,
+        <<"unmodified">> => 1,
         <<"failed">> => 0,
         <<"createdMinHist">> => Created,
         <<"createdHourHist">> => Created,
@@ -503,8 +564,10 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
 %% unmock_storage_driver/1.
 %% @end
 %%--------------------------------------------------------------------
--spec mock_storage_file_acl(oct_background:node_selector(), helpers:file_id(), binary()) -> ok.
-mock_storage_file_acl(ProviderSelector, StorageFileId, EncodedAcl) ->
+-spec mock_storage_file_acl(suite_ctx(), helpers:file_id(), binary()) -> ok.
+mock_storage_file_acl(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, StorageFileId, EncodedAcl) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_new(Nodes, storage_driver),
     ok = test_utils:mock_expect(Nodes, storage_driver, getxattr, fun
@@ -530,8 +593,10 @@ unmock_storage_driver(#storage_import_test_suite_ctx{
 %% that user. Torn down via unmock_luma/1.
 %% @end
 %%--------------------------------------------------------------------
--spec mock_luma_acl_user(oct_background:node_selector(), od_user:id()) -> ok.
-mock_luma_acl_user(ProviderSelector, UserId) ->
+-spec mock_luma_acl_user(suite_ctx(), od_user:id()) -> ok.
+mock_luma_acl_user(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, UserId) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_new(Nodes, [luma]),
     ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
@@ -558,20 +623,78 @@ get_cdmi_acl(Node, SessId, Path) ->
     end.
 
 
--spec ace_json(non_neg_integer(), non_neg_integer(), binary(), non_neg_integer()) -> json_utils:json_map().
-ace_json(AceType, AceFlags, Identifier, AceMask) ->
-    #{
-        <<"acetype">> => ace_mask_hex(AceType),
-        <<"aceflags">> => ace_mask_hex(AceFlags),
-        <<"identifier">> => Identifier,
-        <<"acemask">> => ace_mask_hex(AceMask)
-    }.
+%%--------------------------------------------------------------------
+%% @doc
+%% Builds the expected cdmi_acl xattr JSON for an NFS4 ACL imported with
+%% sync_acl enabled: the special principals (OWNER@/GROUP@/EVERYONE@) are kept
+%% verbatim, while a named principal is rendered as "<full_name>#<user_id>" of
+%% the Onedata user it was mapped to (via LUMA - see mock_luma_acl_user/2).
+%% @end
+%%--------------------------------------------------------------------
+-spec expected_imported_acl_json(
+    [#access_control_entity{}], od_user:full_name(), od_user:id()
+) ->
+    json_utils:json_term().
+expected_imported_acl_json(Acl, MappedUserFullName, MappedUserId) ->
+    lists:map(fun(#access_control_entity{
+        acetype = AceType, aceflags = AceFlags, identifier = Identifier, acemask = AceMask
+    }) ->
+        ImportedIdentifier = case binary:last(Identifier) of
+            $@ -> Identifier;
+            _ -> <<MappedUserFullName/binary, "#", MappedUserId/binary>>
+        end,
+        #{
+            <<"acetype">> => ace_mask_hex(AceType),
+            <<"aceflags">> => ace_mask_hex(AceFlags),
+            <<"identifier">> => ImportedIdentifier,
+            <<"acemask">> => ace_mask_hex(AceMask)
+        }
+    end, Acl).
 
 
 %% @private
 -spec ace_mask_hex(non_neg_integer()) -> binary().
 ace_mask_hex(Mask) ->
     <<"0x", (integer_to_binary(Mask, 16))/binary>>.
+
+
+%%%===================================================================
+%%% Internal functions - scan control
+%%%===================================================================
+
+
+%% @private
+%% Polls much more often than the usual 1s of the await/assert macros: if the
+%% scan turns out so quick that it is only ever observed already finished,
+%% disable_continuous_scan (called right after this await) must still land
+%% within scan_interval (1s) of the scan's stop - before the scheduler tick
+%% that would otherwise start the next scan.
+-spec await_scan_started(case_ctx(), non_neg_integer()) -> true.
+await_scan_started(#storage_import_test_case_ctx{
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}, ScanNum) ->
+    ?assertEqual(
+        true,
+        catch(?rpc(ImportingProviderSelector, is_scan_started(SpaceId, ScanNum))),
+        10 * ?ATTEMPTS,
+        100
+    ).
+
+
+%% @private
+%% NOTE: evaluated on the op_worker node (via ?rpc).
+-spec is_scan_started(od_space:id(), non_neg_integer()) -> boolean().
+is_scan_started(SpaceId, ScanNum) ->
+    case storage_import_monitoring:get(SpaceId) of
+        {ok, SIMDoc} ->
+            storage_import_monitoring:is_scan_finished(SIMDoc, ScanNum) orelse (
+                storage_import_monitoring:is_scan_finished(SIMDoc, ScanNum - 1) andalso
+                    storage_import_monitoring:is_scan_in_progress(SIMDoc)
+            );
+        {error, not_found} ->
+            false
+    end.
 
 
 %%%===================================================================

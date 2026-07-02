@@ -6,14 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module contains base test functions for testing storage import.
+%%% This module contains base test functions for testing the initial storage
+%%% import scan.
 %%%
 %%% The tests are declarative: each test declares the file tree to be created on
 %%% the storage (via #dir_spec{}/#file_spec{} records), enables import by setting
 %%% up a space supported by an imported storage and, once the scan finishes,
 %%% declares the expected outcome. The heavy lifting (creating the tree on the
 %%% storage, verifying the imported logical tree on both providers, asserting the
-%%% monitoring counters) is done generically by storage_import_test_utils.
+%%% monitoring counters) is done generically by storage_import_test_utils - see
+%%% its module doc for an overview of the machinery.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_initial_oct_test_base).
@@ -30,8 +32,7 @@
 
 % API
 -export([
-    clean_up_after_previous_run/2,
-    init_per_testcase/1,
+    init_per_testcase/3,
     end_per_testcase/3
 ]).
 
@@ -67,8 +68,6 @@
     import_directory_error_test/1
 ]).
 
--define(ATTEMPTS, 30).
-
 %% A representative NFS4 ACL containing a named principal ("ala@nfsdomain.org") that
 %% requires LUMA mapping - used to test ACL import and its failure when the principal
 %% cannot be mapped to a Onedata user.
@@ -97,12 +96,7 @@
 %%%===================================================================
 
 
--spec clean_up_after_previous_run([atom()], storage_import_test_utils:suite_ctx()) -> ok.
-clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
-    storage_import_test_utils:clean_up_after_previous_run(AllTestCases, SuiteCtx).
-
-
-init_per_testcase(Config) ->
+init_per_testcase(_Case, _TestSuiteCtx, Config) ->
     lfm_proxy:init(Config).
 
 
@@ -141,14 +135,74 @@ end_per_testcase(_Case, _TestSuiteCtx, Config) ->
 
 
 import_empty_storage_test(SuiteCtx) ->
-    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
+    import_file_tree_test_base(SuiteCtx, ?FUNCTION_NAME, undefined, #{}).
 
 
+import_empty_file_test(SuiteCtx) ->
+    import_file_tree_test_base(SuiteCtx, ?FUNCTION_NAME, #file_spec{name = ?RAND_STR()}, #{}).
+
+
+import_file_with_content_test(SuiteCtx) ->
+    import_file_tree_test_base(
+        SuiteCtx, ?FUNCTION_NAME, #file_spec{name = ?RAND_STR(), content = ?RAND_STR()}, #{}
+    ).
+
+
+import_file_in_directory_test(SuiteCtx) ->
+    import_file_tree_test_base(
+        SuiteCtx, ?FUNCTION_NAME, #dir_spec{children = [#file_spec{content = ?RAND_STR()}]}, #{}
+    ).
+
+
+import_many_subfiles_test(SuiteCtx) ->
+    Content = ?RAND_STR(),
+    FileTreeSpec = [
+        #dir_spec{children = [#file_spec{content = Content}]}
+        || _ <- lists:seq(1, 200)
+    ],
+    %% importing/verifying a large tree may outlast the Min (or, for even larger
+    %% trees, Hour) histogram windows - see assert_storage_import_monitoring_state/2
+    import_file_tree_test_base(SuiteCtx, ?FUNCTION_NAME, FileTreeSpec, #{
+        await_attempts => ?LARGE_IMPORT_SCAN_ATTEMPTS,
+        monitoring_overrides => #{<<"createdMinHist">> => skip}
+    }).
+
+
+import_many_directories_test(SuiteCtx) ->
+    FileTreeSpec = [#dir_spec{} || _ <- lists:seq(1, 200)],
+    import_file_tree_test_base(SuiteCtx, ?FUNCTION_NAME, FileTreeSpec, #{
+        await_attempts => ?LARGE_IMPORT_SCAN_ATTEMPTS,
+        monitoring_overrides => #{<<"createdMinHist">> => skip}
+    }).
+
+
+import_nested_directory_tree_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    %% [13, 13, 13] => 13 dirs x 13 subdirs x 13 files = 2379 nodes
+    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([13, 13, 13], ?RAND_STR()),
+    import_file_tree_test_base(SuiteCtx, ?FUNCTION_NAME, FileTreeSpec, #{
+        await_attempts => ?LARGE_IMPORT_SCAN_ATTEMPTS,
+        monitoring_overrides => #{
+            <<"createdMinHist">> => skip,
+            <<"createdHourHist">> => skip,
+            %% on s3 the space is imported as a single flat listing of all 2197
+            %% file objects, read in batches of storage_import_dir_batch_size
+            %% (default 1000) - the space root dir gets ceil(2197/1000) = 3
+            %% batch passes, each counted towards "unmodified" (on posix the
+            %% root has only 13 direct children => a single pass)
+            <<"unmodified">> => case StorageType of
+                posix -> 1;
+                s3 -> 3
+            end
+        }
+    }).
+
+
+%% Beyond the shared tree verification, also verifies the imported directory's
+%% ownership: with no LUMA mappings configured, the importing provider reports
+%% the imported storage's mountpoint uid (and gid 0), while on the non-importing
+%% provider (where the directory has no imported-storage counterpart) both uid
+%% and gid default to that provider's own storage mountpoint ownership.
 import_empty_directory_test(SuiteCtx) ->
     DirName = ?RAND_STR(),
     TestCaseCtx = #storage_import_test_case_ctx{
@@ -164,25 +218,17 @@ import_empty_directory_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx),
 
-    %% Verify directory ownership (provider-specific, hence not covered by the generic verification)
     #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
     #provider_ctx{node = NonImportingProviderNode} = NonImportingProviderCtx,
-    SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
-    StorageSDHandleImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        ImportingProviderNode, SpaceId, ImportedStorageId
+    {MountUidImportingProvider, _} = get_storage_mountpoint_owner(
+        ImportingProviderNode, ImportingProviderNode, SpaceId, ImportedStorageId
     ),
-    StorageSDHandleNonImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        ImportingProviderNode, SpaceId, OtherStorageId
+    {MountUidNonImportingProvider, MountGidNonImportingProvider} = get_storage_mountpoint_owner(
+        ImportingProviderNode, NonImportingProviderNode, SpaceId, OtherStorageId
     ),
-    {ok, #statbuf{st_uid = MountUidImportingProvider}} = sd_test_utils:stat(
-        ImportingProviderNode, StorageSDHandleImportingProvider
-    ),
-    {ok, #statbuf{
-        st_uid = MountUidNonImportingProvider,
-        st_gid = MountGidNonImportingProvider
-    }} = sd_test_utils:stat(NonImportingProviderNode, StorageSDHandleNonImportingProvider),
 
     SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
+    SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestDirPath, #{
         owner_id => SpaceOwnerId,
         uid => MountUidImportingProvider,
@@ -194,102 +240,7 @@ import_empty_directory_test(SuiteCtx) ->
         gid => MountGidNonImportingProvider
     }),
 
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
-
-
-import_empty_file_test(SuiteCtx) ->
-    TestCaseCtx = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME, #file_spec{name = ?RAND_STR()}, SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
-
-
-import_file_with_content_test(SuiteCtx) ->
-    TestCaseCtx = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME, #file_spec{name = ?RAND_STR(), content = ?RAND_STR()}, SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
-
-
-import_file_in_directory_test(SuiteCtx) ->
-    FileTreeSpec = #dir_spec{children = [#file_spec{content = ?RAND_STR()}]},
-    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    %% created = 2 (the directory and the file), derived from the declared tree
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
-
-
-import_many_subfiles_test(SuiteCtx) ->
-    SubdirsCount = 200,
-    Content = ?RAND_STR(),
-    FileTreeSpec = [
-        #dir_spec{children = [#file_spec{content = Content}]}
-        || _ <- lists:seq(1, SubdirsCount)
-    ],
-    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    %% createdMinHist is skipped - by the time the (large) tree is verified and the
-    %% monitoring is read, the creations may have shifted out of the first minute
-    %% histogram buckets; the cumulative hour/day histograms still hold the count
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => skip
-    }).
-
-
-import_many_directories_test(SuiteCtx) ->
-    DirsCount = 200,
-    FileTreeSpec = [#dir_spec{} || _ <- lists:seq(1, DirsCount)],
-    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => skip
-    }).
-
-
-%% Imports a deep, branching directory tree with files at the leaves:
-%% [13, 13, 13] => 13 dirs x 13 subdirs x 13 files = 2379 nodes.
-import_nested_directory_tree_test(SuiteCtx) ->
-    FileTreeSpec = storage_import_test_utils:gen_nested_tree_spec([13, 13, 13], ?RAND_STR()),
-    TestCaseCtx = storage_import_test_utils:init_testcase(?FUNCTION_NAME, FileTreeSpec, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    %% Min/Hour created histograms are skipped - importing and verifying ~2400 nodes
-    %% takes long enough that the creations age out of the finer-grained buckets by
-    %% the time the monitoring is read; the cumulative day histogram still holds them
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => skip,
-        <<"createdHourHist">> => skip
-    }).
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
 
 
 %% --- ownership (LUMA uid/gid) ---
@@ -297,174 +248,34 @@ import_nested_directory_tree_test(SuiteCtx) ->
 
 import_directory_check_user_id_test(SuiteCtx) ->
     DirName = ?RAND_STR(),
-    #storage_import_test_suite_ctx{
-        importing_provider_selector = ImportingProviderSelector,
-        space_owner_selector = SpaceOwnerSelector
-    } = SuiteCtx,
-    mock_uid_and_gid(ImportingProviderSelector, SpaceOwnerSelector),
-
-    TestCaseCtx = #storage_import_test_case_ctx{
-        other_storage_id = OtherStorageId,
-        space_id = SpaceId,
-        space_path = SpacePath,
-        importing_provider_ctx = ImportingProviderCtx,
-        non_importing_provider_ctx = NonImportingProviderCtx
-    } = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME, #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}, SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-
-    %% Verify directory ownership (mapped via mocked LUMA, provider-specific)
-    #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
-    #provider_ctx{node = NonImportingProviderNode} = NonImportingProviderCtx,
-    SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
-    SpaceOwnerId = oct_background:to_entity_id(SpaceOwnerSelector),
-    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestDirPath, #{
-        owner_id => SpaceOwnerId,
-        uid => ?TEST_UID,
-        gid => ?TEST_GID
-    }),
-
-    GeneratedUid = ?rpc(NonImportingProviderNode, luma_auto_feed:generate_uid(SpaceOwnerId)),
-    StorageSDHandleNonImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        ImportingProviderNode, SpaceId, OtherStorageId
-    ),
-    {ok, #statbuf{st_gid = Gid2}} = sd_test_utils:stat(NonImportingProviderNode, StorageSDHandleNonImportingProvider),
-    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestDirPath, #{
-        owner_id => SpaceOwnerId,
-        uid => GeneratedUid,
-        gid => Gid2
-    }),
-
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
+    import_check_user_id_test_base(
+        SuiteCtx, ?FUNCTION_NAME, DirName,
+        #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}
+    ).
 
 
 import_file_check_user_id_test(SuiteCtx) ->
-    #storage_import_test_suite_ctx{
-        importing_provider_selector = ImportingProviderSelector,
-        space_owner_selector = SpaceOwnerSelector
-    } = SuiteCtx,
-    mock_uid_and_gid(ImportingProviderSelector, SpaceOwnerSelector),
-
     FileName = ?RAND_STR(),
-    TestCaseCtx = #storage_import_test_case_ctx{
-        other_storage_id = OtherStorageId,
-        space_id = SpaceId,
-        space_path = SpacePath,
-        importing_provider_ctx = ImportingProviderCtx,
-        non_importing_provider_ctx = NonImportingProviderCtx
-    } = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME,
-        #file_spec{name = FileName, content = ?RAND_STR(), uid = ?TEST_UID, gid = ?TEST_GID},
-        SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-
-    %% Verify file ownership (mapped via mocked LUMA, provider-specific)
-    #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
-    #provider_ctx{node = NonImportingProviderNode} = NonImportingProviderCtx,
-    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
-    SpaceOwnerId = oct_background:to_entity_id(SpaceOwnerSelector),
-    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, #{
-        owner_id => SpaceOwnerId,
-        uid => ?TEST_UID,
-        gid => ?TEST_GID
-    }),
-
-    GeneratedUid = ?rpc(NonImportingProviderNode, luma_auto_feed:generate_uid(SpaceOwnerId)),
-    StorageSDHandleNonImportingProvider = sd_test_utils:get_storage_mountpoint_handle(
-        ImportingProviderNode, SpaceId, OtherStorageId
-    ),
-    {ok, #statbuf{st_gid = Gid2}} = sd_test_utils:stat(
-        NonImportingProviderNode, StorageSDHandleNonImportingProvider
-    ),
-    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{
-        owner_id => SpaceOwnerId,
-        uid => GeneratedUid,
-        gid => Gid2
-    }),
-
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
+    import_check_user_id_test_base(
+        SuiteCtx, ?FUNCTION_NAME, FileName,
+        #file_spec{name = FileName, content = ?RAND_STR(), uid = ?TEST_UID, gid = ?TEST_GID}
+    ).
 
 
-%% A directory whose owner uid cannot be mapped to a Onedata user (LUMA returns an
-%% error) must not be imported - the scan reports it as failed (alongside the space
-%% root, which is processed normally and counted as unmodified).
 import_directory_check_user_id_error_test(SuiteCtx) ->
-    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    mock_luma_error(ImportingProviderSelector),
-
     DirName = ?RAND_STR(),
-    TestCaseCtx = #storage_import_test_case_ctx{
-        space_path = SpacePath,
-        importing_provider_ctx = #provider_ctx{
-            node = ImportingProviderNode,
-            session_id = ImportingProviderSessionId
-        }
-    } = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME, #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}, SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% The directory must not have been imported - mapping its owner via LUMA failed
-    SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestDirPath}),
-        ?ATTEMPTS
-    ),
-
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"created">> => 0,
-        <<"failed">> => 1,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0
-    }).
+    import_check_user_id_error_test_base(
+        SuiteCtx, ?FUNCTION_NAME, DirName,
+        #dir_spec{name = DirName, uid = ?TEST_UID, gid = ?TEST_GID}
+    ).
 
 
-%% Like import_directory_check_user_id_error_test/1 but for a regular file.
 import_file_check_user_id_error_test(SuiteCtx) ->
-    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    mock_luma_error(ImportingProviderSelector),
-
     FileName = ?RAND_STR(),
-    TestCaseCtx = #storage_import_test_case_ctx{
-        space_path = SpacePath,
-        importing_provider_ctx = #provider_ctx{
-            node = ImportingProviderNode,
-            session_id = ImportingProviderSessionId
-        }
-    } = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME,
-        #file_spec{name = FileName, content = ?RAND_STR(), uid = ?TEST_UID, gid = ?TEST_GID},
-        SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% The file must not have been imported - mapping its owner via LUMA failed
-    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
-        ?ATTEMPTS
-    ),
-
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"created">> => 0,
-        <<"failed">> => 1,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0
-    }).
+    import_check_user_id_error_test_base(
+        SuiteCtx, ?FUNCTION_NAME, FileName,
+        #file_spec{name = FileName, content = ?RAND_STR(), uid = ?TEST_UID, gid = ?TEST_GID}
+    ).
 
 
 %% --- permissions ---
@@ -490,16 +301,13 @@ import_directory_without_read_permission_test(SuiteCtx) ->
         mode => 8#000
     },
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestDirPath, ExpAttrs),
-    %% This test skips verify_imported_tree (the 8#000 dir is not listable), so it
-    %% does not implicitly wait for the dir to propagate to the non-importing
-    %% provider - hence the longer attempts to tolerate the dbsync propagation lag.
+    %% with verify_imported_tree skipped, nothing has awaited the dir's propagation
+    %% to the non-importing provider yet - use attempts tolerating the dbsync lag
     storage_import_test_utils:assert_attrs(
         NonImportingProviderCtx, SpaceTestDirPath, ExpAttrs, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
     ),
 
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
 
 
 %% --- acl ---
@@ -511,7 +319,7 @@ import_directory_without_read_permission_test(SuiteCtx) ->
 %% space owner, who may bypass ACL checks) are used so the deny entries take effect.
 import_nfs_acl_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    %% user1/user2 are regular members of the test space (from the 2op scenario)
+    %% user1/user2 are regular users of the 2op scenario, not yet members of the space
     User1Selector = user1,
     User2Selector = user2,
     User1Id = oct_background:get_user_id(User1Selector),
@@ -519,9 +327,9 @@ import_nfs_acl_test(SuiteCtx) ->
     FileName = ?RAND_STR(),
     StorageFileId = filepath_utils:join([<<"/">>, FileName]),
     EncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(?TEST_NFS4_ACL)),
-    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
-    %% the file owner uid and the ACL's named principal both map to the user1
-    storage_import_test_utils:mock_luma_acl_user(ImportingProviderSelector, User1Id),
+    storage_import_test_utils:mock_storage_file_acl(SuiteCtx, StorageFileId, EncodedAcl),
+    %% the file owner uid and the ACL's named principal both map to user1
+    storage_import_test_utils:mock_luma_acl_user(SuiteCtx, User1Id),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_id = SpaceId,
@@ -544,8 +352,8 @@ import_nfs_acl_test(SuiteCtx) ->
         lfm_proxy:stat(ImportingProviderNode, User1SessId, {path, SpaceTestFilePath}), ?ATTEMPTS),
 
     %% the owner may read the imported ACL (the named principal resolves to it) ...
-    ExpectedAclJson = expected_imported_acl_json(
-        oct_background:get_user_fullname(User1Selector), User1Id
+    ExpectedAclJson = storage_import_test_utils:expected_imported_acl_json(
+        ?TEST_NFS4_ACL, oct_background:get_user_fullname(User1Selector), User1Id
     ),
     ?assertEqual({ok, ExpectedAclJson},
         storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
@@ -560,20 +368,17 @@ import_nfs_acl_test(SuiteCtx) ->
     ?assertEqual({ok, ExpectedAclJson},
         storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
 
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }).
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
 
 
 %% An NFS4 ACL on storage references a named principal that LUMA cannot map to a
-%% Onedata user; with sync_acl enabled, importing the file fails and it is not
-%% imported (the space root, processed without an ACL, stays unmodified).
+%% Onedata user; with sync_acl enabled, importing the file fails and it is not imported.
 import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
     StorageFileId = filepath_utils:join([<<"/">>, FileName]),
     EncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(?TEST_NFS4_ACL)),
-    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
+    storage_import_test_utils:mock_storage_file_acl(SuiteCtx, StorageFileId, EncodedAcl),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_path = SpacePath,
@@ -586,28 +391,19 @@ import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
-    %% The file must not have been imported - mapping the ACL principal via LUMA failed
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
         ?ATTEMPTS
     ),
-
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"created">> => 0,
-        <<"failed">> => 1,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0
-    }).
+    assert_monitoring_state_after_failed_import(TestCaseCtx).
 
 
 %% --- ignored entries ---
 
 
 %% A FIFO (named pipe) is an unsupported file type that storage import must skip:
-%% it is created on the storage but never imported into the logical filesystem
+%% it is created on the storage but never imported into the logical filesystem.
 %% The scan still processes it (counted as unmodified, alongside the space root),
 %% but it does not appear in the space.
 import_ignores_fifo_test(SuiteCtx) ->
@@ -621,7 +417,7 @@ import_ignores_fifo_test(SuiteCtx) ->
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
-    %% The fifo must not have been imported into the logical filesystem on either provider
+    %% the fifo must not have been imported into the logical filesystem on either provider
     FifoPath = filepath_utils:join([SpacePath, FifoName]),
     lists:foreach(fun(#provider_ctx{node = Node, session_id = SessId}) ->
         ?assertEqual({ok, []},
@@ -639,10 +435,12 @@ import_ignores_fifo_test(SuiteCtx) ->
 %% --- failure ---
 
 
+%% Importing the declared directory fails (via a mock raising an error from the
+%% import engine); the directory must not appear in the space, while remaining
+%% intact on the storage.
 import_directory_error_test(SuiteCtx) ->
     DirName = ?RAND_STR(),
-    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    mock_import_file_error(ImportingProviderSelector, DirName),
+    mock_import_file_error(SuiteCtx, DirName),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
@@ -660,7 +458,7 @@ import_directory_error_test(SuiteCtx) ->
 
     SpaceTestDirPath = filepath_utils:join([SpacePath, DirName]),
 
-    %% Check that the dir was not imported ...
+    %% the dir was not imported ...
     ?assertMatch({ok, []},
         lfm_proxy:get_children(ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 1),
         ?ATTEMPTS
@@ -681,14 +479,142 @@ import_directory_error_test(SuiteCtx) ->
     ?assertMatch({ok, [DirName]},
         sd_test_utils:ls(ImportingProviderNode, StorageSDHandleImportingProvider, 0, 1)),
 
+    assert_monitoring_state_after_failed_import(TestCaseCtx).
+
+
+%%%===================================================================
+%%% Internal functions - shared test bodies
+%%%===================================================================
+
+
+%% @private
+%% Shared body for the structure tests: imports the declared tree and runs the
+%% full generic verification (imported tree + dir stats + monitoring counters).
+%% Opts:
+%%   await_attempts - for trees big enough that the scan may outlast ?ATTEMPTS;
+%%   monitoring_overrides - assert_storage_import_monitoring_state/2 overrides.
+-spec import_file_tree_test_base(storage_import_test_utils:suite_ctx(), atom(), term(), map()) ->
+    ok.
+import_file_tree_test_base(SuiteCtx, CaseName, FileTreeSpec, Opts) ->
+    TestCaseCtx = storage_import_test_utils:init_testcase(CaseName, FileTreeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(
+        TestCaseCtx, maps:get(await_attempts, Opts, ?ATTEMPTS)
+    ),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:verify_dir_stats(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(
+        TestCaseCtx, maps:get(monitoring_overrides, Opts, #{})
+    ).
+
+
+%% @private
+%% Shared body for the ownership tests: the declared node is owned on the storage
+%% by ?TEST_UID/?TEST_GID and (mocked) LUMA maps that owner to the space owner
+%% with the same display credentials - so the importing provider reports them
+%% verbatim. On the non-importing provider the node has no imported-storage
+%% counterpart, so its uid falls back to the LUMA auto-feed generated one and its
+%% gid to that provider's storage mountpoint gid.
+-spec import_check_user_id_test_base(
+    storage_import_test_utils:suite_ctx(), atom(), binary(), term()
+) ->
+    ok.
+import_check_user_id_test_base(SuiteCtx, CaseName, NodeName, NodeSpec) ->
+    #storage_import_test_suite_ctx{space_owner_selector = SpaceOwnerSelector} = SuiteCtx,
+    mock_uid_and_gid(SuiteCtx),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        other_storage_id = OtherStorageId,
+        space_id = SpaceId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(CaseName, NodeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+
+    SpaceTestNodePath = filepath_utils:join([SpacePath, NodeName]),
+    SpaceOwnerId = oct_background:to_entity_id(SpaceOwnerSelector),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestNodePath, #{
+        owner_id => SpaceOwnerId,
+        uid => ?TEST_UID,
+        gid => ?TEST_GID
+    }),
+
+    #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
+    #provider_ctx{node = NonImportingProviderNode} = NonImportingProviderCtx,
+    GeneratedUid = ?rpc(NonImportingProviderNode, luma_auto_feed:generate_uid(SpaceOwnerId)),
+    {_, MountGidNonImportingProvider} = get_storage_mountpoint_owner(
+        ImportingProviderNode, NonImportingProviderNode, SpaceId, OtherStorageId
+    ),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestNodePath, #{
+        owner_id => SpaceOwnerId,
+        uid => GeneratedUid,
+        gid => MountGidNonImportingProvider
+    }),
+
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}).
+
+
+%% @private
+%% Shared body for the ownership-error tests: LUMA fails to map the declared
+%% node's storage owner uid to any Onedata user, so the node must not be
+%% imported and the scan reports one failure.
+-spec import_check_user_id_error_test_base(
+    storage_import_test_utils:suite_ctx(), atom(), binary(), term()
+) ->
+    ok.
+import_check_user_id_error_test_base(SuiteCtx, CaseName, NodeName, NodeSpec) ->
+    mock_luma_error(SuiteCtx),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(CaseName, NodeSpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    SpaceTestNodePath = filepath_utils:join([SpacePath, NodeName]),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestNodePath}),
+        ?ATTEMPTS
+    ),
+    assert_monitoring_state_after_failed_import(TestCaseCtx).
+
+
+%%%===================================================================
+%%% Internal functions - shared assertions
+%%%===================================================================
+
+
+%% @private
+%% Monitoring expectation for an initial scan that failed to import the single
+%% declared node: nothing created, one failure (the space root itself is still
+%% processed normally, keeping the default unmodified count).
+-spec assert_monitoring_state_after_failed_import(storage_import_test_utils:case_ctx()) -> ok.
+assert_monitoring_state_after_failed_import(TestCaseCtx) ->
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"created">> => 0,
         <<"failed">> => 1,
-        <<"unmodified">> => 1,
         <<"createdMinHist">> => 0,
         <<"createdHourHist">> => 0,
         <<"createdDayHist">> => 0
     }).
+
+
+%% @private
+%% Stats the storage mountpoint (the sd handle is built on HandleNode, the stat
+%% itself runs on StatNode) and returns its {Uid, Gid} - the ownership that
+%% files with no LUMA-mapped/storage-derived owner default to.
+-spec get_storage_mountpoint_owner(node(), node(), od_space:id(), storage:id()) ->
+    {non_neg_integer(), non_neg_integer()}.
+get_storage_mountpoint_owner(HandleNode, StatNode, SpaceId, StorageId) ->
+    SDHandle = sd_test_utils:get_storage_mountpoint_handle(HandleNode, SpaceId, StorageId),
+    {ok, #statbuf{st_uid = Uid, st_gid = Gid}} = sd_test_utils:stat(StatNode, SDHandle),
+    {Uid, Gid}.
 
 
 %%%===================================================================
@@ -697,8 +623,12 @@ import_directory_error_test(SuiteCtx) ->
 
 
 %% @private
--spec mock_import_file_error(oct_background:node_selector(), binary()) -> ok.
-mock_import_file_error(ProviderSelector, ErroneousFile) ->
+%% Mocks a failure of importing the given file/dir: the import engine raises for
+%% it, while all other entries import normally. Torn down via unmock_import_file_error/1.
+-spec mock_import_file_error(storage_import_test_utils:suite_ctx(), binary()) -> ok.
+mock_import_file_error(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, ErroneousFile) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_new(Nodes, storage_import_engine),
     ok = test_utils:mock_expect(Nodes, storage_import_engine, import_file_unsafe,
@@ -721,8 +651,13 @@ unmock_import_file_error(#storage_import_test_suite_ctx{
 
 
 %% @private
--spec mock_uid_and_gid(oct_background:node_selector(), oct_background:entity_selector()) -> ok.
-mock_uid_and_gid(ProviderSelector, SpaceOwnerSelector) ->
+%% Mocks LUMA so that any storage uid maps to the space owner, displayed with
+%% the ?TEST_UID/?TEST_GID credentials. Torn down via storage_import_test_utils:unmock_luma/1.
+-spec mock_uid_and_gid(storage_import_test_utils:suite_ctx()) -> ok.
+mock_uid_and_gid(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector,
+    space_owner_selector = SpaceOwnerSelector
+}) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     SpaceOwnerUserId = oct_background:to_entity_id(SpaceOwnerSelector),
     ok = test_utils:mock_new(Nodes, [luma]),
@@ -736,28 +671,13 @@ mock_uid_and_gid(ProviderSelector, SpaceOwnerSelector) ->
 
 %% @private
 %% Makes LUMA fail to map any storage uid to a Onedata user, so that importing a
-%% file/dir owned by that uid fails. Torn down via unmock_luma/1.
--spec mock_luma_error(oct_background:node_selector()) -> ok.
-mock_luma_error(ProviderSelector) ->
+%% file/dir owned by that uid fails. Torn down via storage_import_test_utils:unmock_luma/1.
+-spec mock_luma_error(storage_import_test_utils:suite_ctx()) -> ok.
+mock_luma_error(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_new(Nodes, [luma]),
     ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
         error(test_error)
     end).
-
-
-%% @private
-%% Builds the expected cdmi_acl JSON for ?TEST_NFS4_ACL after import: the special
-%% principals (OWNER@/GROUP@/EVERYONE@) are kept verbatim, while the named principal
-%% is rendered as "<full_name>#<user_id>" of the user it was mapped to.
--spec expected_imported_acl_json(od_user:full_name(), od_user:id()) -> json_utils:json_term().
-expected_imported_acl_json(PrincipalFullName, PrincipalUserId) ->
-    [
-        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"OWNER@">>, ?read_acl_mask),
-        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask, <<"GROUP@">>, ?write_acl_mask),
-        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask),
-        storage_import_test_utils:ace_json(
-            ?deny_mask, ?no_flags_mask,
-            <<PrincipalFullName/binary, "#", PrincipalUserId/binary>>, ?write_attributes_mask
-        )
-    ].

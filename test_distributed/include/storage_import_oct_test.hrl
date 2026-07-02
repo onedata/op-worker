@@ -21,6 +21,10 @@
 -define(TEST_UID, 2000).
 -define(TEST_GID, 2000).
 
+% Default attempts (the assertion macros poll every 1s, so Attempts ~ seconds)
+% for eventually-consistent assertions (scan completion, dbsync propagation).
+-define(ATTEMPTS, 30).
+
 % Generous attempts (the await macro polls every 1s) for awaiting a scan over a
 % large tree (hundreds/thousands of files), which may take much longer than the
 % default ?ATTEMPTS. Passed explicitly per-test so that small tests still fail fast.

@@ -15,30 +15,62 @@
 %%% idempotency (unchanged entries are not reprocessed), retrying after a failed
 %%% scan, conflict/suffix resolution for recreated files, scan configuration
 %%% (max_depth, force start/stop, batch handling) and protection flags. The
-%%% generic machinery (creating and mutating the tree on the storage, enabling
-%%% and awaiting scans, verifying the imported tree, asserting the monitoring
-%%% counters) lives in storage_import_test_utils.
+%%% generic machinery lives in storage_import_test_utils (see its module doc).
 %%%
-%%% Object storages (e.g. S3, see flat_storage_iterator.erl) diverge from POSIX
-%%% in ways that recur across many tests below, so they are documented once
-%%% here rather than repeated at every call site:
+%%% How scans classify entries - general facts relied on throughout, documented
+%%% once here rather than repeated at every assertion (the counters themselves
+%%% are asserted via assert_storage_import_monitoring_state/2 - see its doc for
+%%% the per-scan counter vs cumulative time-windowed histogram distinction):
+%%%  * on scan 1 every declared entry is counted "created" and the space root
+%%%    is the single "unmodified" entry (the assertion helper's default);
+%%%  * a directory's own modified/unmodified verdict is driven solely by its
+%%%    own mtime/ctime, which only a change to its DIRECT children set
+%%%    (add/remove/rename/replace) bumps - a child's content/attrs change does
+%%%    not; in particular, the space root flips to "modified" exactly when a
+%%%    direct child of the root is added/removed (never on S3, see below);
+%%%  * a regular file is "modified" when its size OR mtime changed (see
+%%%    storage_import_engine:maybe_update_file_location/4) - size/mode changes
+%%%    are detected regardless of mtime resolution, while a same-size
+%%%    content-only change relies on the mtime having visibly advanced;
+%%%  * whether a directory's children get individually reprocessed is decided
+%%%    separately, per listing batch, via a hash of the children's attrs (see
+%%%    storage_import_hash) - but children of an unchanged batch, though
+%%%    bulk-skipped, still count towards "unmodified" all the same;
+%%%  * (POSIX) a directory listing that returns EXACTLY
+%%%    storage_import_dir_batch_size entries schedules one extra
+%%%    disambiguating batch to confirm end-of-listing (see
+%%%    tree_storage_iterator:get_children_and_next_batch_job/1), and every
+%%%    such extra pass re-runs the directory's OWN verdict, adding one more
+%%%    "unmodified" - relevant only for tests that lower the batch size below
+%%%    their trees' child counts.
+%%%
+%%% Object storages (e.g. S3, see flat_storage_iterator.erl) diverge from
+%%% POSIX in ways that recur across many tests below:
 %%%  * they have no real directories - an empty one has no underlying storage
-%%%    object at all, so it can never be created/observed via LFM (handled
-%%%    transparently by storage_import_test_utils:verify_imported_tree/2, which
-%%%    strips such directories from the expected tree on S3) or counted towards
-%%%    "created" (see storage_import_test_utils:count_imported_nodes/2);
-%%%  * the space root's own storage statbuf is permanently mocked into the past
-%%%    for scan-1 timing determinism (mock_space_dir_statbuf_on_flat_storage/1),
-%%%    so it can never be classified "modified" on any scan;
-%%%  * there is no real per-directory traversal at all - the whole space is a
-%%%    single traversal entity (flat_storage_iterator:should_generate_master_job/1
-%%%    always returns false), with only regular files counted as its children
-%%%    for batching, and the underlying listing API reports a definitive
-%%%    end-of-listing marker on the very page that exhausts it (unlike POSIX's
-%%%    tree_storage_iterator, whose ambiguous "read returned exactly
-%%%    batch_size" heuristic needs one extra confirmatory batch to disambiguate).
+%%%    object at all, so it can never be imported/observed via LFM (handled
+%%%    transparently by storage_import_test_utils:verify_imported_tree/2,
+%%%    which strips such directories from the expected tree on S3), and
+%%%    directories never count towards "created" (only regular files do);
+%%%    deletion counting, however, includes directories on S3 too;
+%%%  * the space root's own storage statbuf is permanently mocked into the
+%%%    past for scan-1 timing determinism (see
+%%%    mock_space_dir_statbuf_on_flat_storage/1), so the root can never be
+%%%    classified "modified" on any scan;
+%%%  * there is no per-directory traversal at all - the whole space is a
+%%%    single flat traversal entity, with only regular files counted as its
+%%%    children for batching, and the listing API reports a definitive
+%%%    end-of-listing marker on the very page that exhausts it (no POSIX-style
+%%%    extra disambiguating batch);
+%%%  * consequently (frozen root mtime + no recursion to fall back on),
+%%%    running a continuous scan with detect_modifications => false would
+%%%    discard ALL of the root's batch slave jobs outright - INCLUDING
+%%%    brand-new files, which would then simply never be imported (on POSIX
+%%%    the same shortcut is harmless: a subdirectory's own master job catches
+%%%    what its parent's shortcut skipped). S3 update tests must therefore
+%%%    keep modification detection enabled (see
+%%%    create_file_in_dir_exceed_batch_update_test).
 %%% Tests below note only what is specific to their own scenario; assume these
-%%% general facts hold on S3 unless stated otherwise.
+%%% general facts hold unless stated otherwise.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_update_oct_test_base).
@@ -55,7 +87,6 @@
 
 % API
 -export([
-    clean_up_after_previous_run/2,
     init_per_testcase/3,
     end_per_testcase/3
 ]).
@@ -95,17 +126,10 @@
     %% --- not reimported ---
 ]).
 
--define(ATTEMPTS, 30).
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec clean_up_after_previous_run([atom()], storage_import_test_utils:suite_ctx()) -> ok.
-clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
-    storage_import_test_utils:clean_up_after_previous_run(AllTestCases, SuiteCtx).
 
 
 init_per_testcase(Case, TestSuiteCtx = #storage_import_test_suite_ctx{
@@ -186,46 +210,30 @@ append_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan with its initial content
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% append to the file on the storage and let the next continuous scan detect it
     storage_file_setup_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         byte_size(InitialContent), AppendedContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the appended content is now readable on both providers
     UpdatedFileSpec = #file_spec{
         name = FileName, content = <<InitialContent/binary, AppendedContent/binary>>
     },
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx, UpdatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% Like append_file_update_test, but the file's mtime is forced back to its
 %% pre-append value right after the storage-level write (simulating a storage
 %% backend that does not reliably bump mtime on writes at the resolution the
-%% scan relies on) - the appended bytes must still be detected and imported,
-%% since size/mtime are an OR in the modification check (see the OR condition
-%% for regular files documented in storage_import_engine:maybe_update_file_location/4).
+%% scan relies on) - the appended bytes must still be detected and imported via
+%% the size clause of the modification check (module doc). POSIX-only - forcing
+%% the storage mtime relies on storage_file_setup_utils:set_mtime/4.
 append_file_not_changing_mtime_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -239,14 +247,9 @@ append_file_not_changing_mtime_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan with its initial content
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% append to the file, then force its mtime back to the pre-append value
     OldMtime = storage_file_setup_utils:get_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId
     ),
@@ -257,29 +260,18 @@ append_file_not_changing_mtime_update_test(SuiteCtx) ->
     storage_file_setup_utils:set_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, OldMtime
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the appended content is now readable on both providers, despite the
-    %% unchanged mtime
     UpdatedFileSpec = #file_spec{
         name = FileName, content = <<InitialContent/binary, AppendedContent/binary>>
     },
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% Like append_file_update_test, but the file is empty (0 bytes) at the time of
-%% the initial scan, and only gains content on the continuous scan.
+%% the initial scan, and only gains content on the continuous scan - exercising
+%% the 0-byte-file code path specifically.
 append_empty_file_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -292,34 +284,17 @@ append_empty_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = <<>>}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the empty file was imported by the initial scan
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% write to the (previously empty) file on the storage and let the next
-    %% continuous scan detect it
     storage_file_setup_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, AppendedContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the appended content is now readable on both providers
     UpdatedFileSpec = #file_spec{name = FileName, content = AppendedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% A file imported by the initial scan is truncated on the storage; the next
@@ -338,36 +313,20 @@ truncate_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan with its initial content
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% truncate the file on the storage and let the next continuous scan detect it
     storage_file_setup_utils:truncate(
         ImportingProviderSelector, ImportedStorageId, StorageFileId,
         TruncatedSize, byte_size(InitialContent)
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the truncated content is now readable on both providers
     TruncatedFileSpec = #file_spec{
         name = FileName, content = binary:part(InitialContent, 0, TruncatedSize)
     },
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, TruncatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% A file imported by the initial scan has its mode changed on the storage; the
@@ -380,7 +339,7 @@ truncate_file_update_test(SuiteCtx) ->
 %% directory that holds the file.
 chmod_file_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    mock_storage_import_hash(ImportingProviderSelector),
+    mock_storage_import_hash(SuiteCtx),
 
     FileName = ?RAND_STR(),
     NewMode = 8#600,
@@ -397,51 +356,31 @@ chmod_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% change the file's mode on the storage and let the next continuous scan detect it
     storage_file_setup_utils:chmod(ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the new mode is now visible on both providers
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
     assert_children_hash_changed(ImportingProviderSelector, SpaceId, RootStorageFileId),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% Like chmod_file_update_test, but the changed file sits inside a subdirectory
 %% whose 3 children are scanned in more than one batch (storage_import_dir_batch_size
-%% is temporarily lowered to 2) - exercising the hash-based children-attrs change
-%% detection (see chmod_file_update_test's doc above) one level down from the space
-%% root, across a directory scanned in multiple batches. Also asserts (via a
-%% passthrough mock on storage_sync_traverse, also torn down in end_per_testcase)
-%% that the modification is picked up in spite of, not because of, the parent
-%% directory's own mtime - a child's chmod alone does not bump it. POSIX-only,
-%% matching the old suite.
+%% is temporarily lowered to 2 in init_per_testcase and restored in
+%% end_per_testcase) - exercising the hash-based children-attrs change detection
+%% one level down from the space root, across a directory scanned in multiple
+%% batches. Also asserts (via a passthrough mock on storage_sync_traverse) that
+%% the modification is picked up in spite of, not because of, the parent
+%% directory's own mtime - a child's chmod alone does not bump it. POSIX-only.
 chmod_file_update_in_batched_dir_test(SuiteCtx) ->
-    %% storage_import_dir_batch_size is temporarily lowered to 2 in init_per_testcase
-    %% (and restored in end_per_testcase), so that the scan of TestDirName's 3
-    %% children spans multiple batches
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    mock_storage_import_hash(ImportingProviderSelector),
-    mock_storage_sync_traverse(ImportingProviderSelector),
+    mock_storage_import_hash(SuiteCtx),
+    mock_storage_sync_traverse(SuiteCtx),
 
     TestDirName = ?RAND_STR(),
     File1Name = ?RAND_STR(),
@@ -465,31 +404,18 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
     ], SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
-    %% both directories (with, respectively, their 3 files and no children) were imported
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        %% space root (1) + 1 extra confirmatory-batch pass each for root and
-        %% TestDirName - with dir_batch_size=2, a directory whose last real
-        %% listing batch returns EXACTLY dir_batch_size children (root: 2
-        %% children; TestDirName: first batch of 2, out of 3) is ambiguous
-        %% ("maybe more?"), so one more (here: empty/undersized) batch is
-        %% scheduled to confirm end-of-listing - and each such batch re-runs
-        %% the directory's OWN modified/unmodified check from scratch (see
-        %% tree_storage_iterator:get_children_and_next_batch_job/1: a next
-        %% batch job is only omitted when a read returns FEWER than
-        %% dir_batch_size children). TestDir2Name (0 children, 0 < 2) needs no
-        %% confirmatory batch, so contributes none.
+        %% root's own verdict (1) + 1 extra disambiguating-batch pass each for
+        %% root (exactly 2 children) and TestDirName (first batch exactly 2 of
+        %% 3 children) - see the module doc's batch-size note; the empty
+        %% sibling dir (0 children) needs none
         <<"unmodified">> => 3
     }),
 
-    %% change one of TestDirName's 3 files' mode on the storage and let the next
-    %% continuous scan detect it
     storage_file_setup_utils:chmod(ImportingProviderSelector, ImportedStorageId, File1StorageFileId, NewMode),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the new mode is now visible on both providers
     SpaceTestFilePath = filepath_utils:join([SpacePath, TestDirName, File1Name]),
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, #{mode => NewMode}),
@@ -504,13 +430,9 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
-        %% same batch-continuation artifact as the initial scan above: root and
-        %% TestDirName are each re-checked twice (2 confirmatory-batch passes,
-        %% both unmodified - the tree's shape under them hasn't changed, only
-        %% File1's mode), TestDir2Name once; the 2 untouched files (one
-        %% individually re-stat'd alongside File1 in its own hash-changed
-        %% batch, one bulk-marked via the other, hash-unchanged batch)
-        %% contribute 1 each => 2+2+1+1+1 = 7
+        %% same extra-batch-pass arithmetic as scan 1: root and TestDirName
+        %% re-checked twice each, the empty sibling once, plus the 2 untouched
+        %% files once each => 2+2+1+1+1 = 7
         <<"unmodified">> => 7
     }).
 
@@ -518,8 +440,7 @@ chmod_file_update_in_batched_dir_test(SuiteCtx) ->
 %% A file imported by the initial scan is renamed (moved) to a different path on
 %% the storage; the next (continuous) scan detects the old path as deleted and the
 %% new path as newly created, and the file becomes reachable at the new path (and
-%% ?ENOENT at the old one) on both providers. POSIX-only, matching the old suite -
-%% not exercised on S3 there either.
+%% only there) on both providers. POSIX-only.
 move_file_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     SrcFileName = ?RAND_STR(),
@@ -534,23 +455,16 @@ move_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = SrcFileName, content = Content}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan at its original path
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% rename the file on the storage and let the next continuous scan detect it
     storage_file_setup_utils:rename(
         ImportingProviderSelector, ImportedStorageId, SrcStorageFileId, DstStorageFileId
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the file is now reachable (with its original content) at the new path - and,
-    %% implicitly, gone from the old one - on both providers, since verify_imported_tree
+    %% the file is now reachable (with its original content) at the new path -
+    %% and, implicitly, gone from the old one, since verify_imported_tree
     %% asserts the exact set of the space root's children
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{
         name = DstFileName, content = Content
@@ -559,18 +473,14 @@ move_file_update_test(SuiteCtx) ->
         <<"scans">> => 2,
         <<"created">> => 1,
         <<"deleted">> => 1,
-        %% unlike append/truncate/chmod (which only touch an existing child's own
-        %% attrs), adding/removing a directory entry changes the space root's own
-        %% mtime - so, unlike those tests, the root itself is reported as modified
-        %% (not unmodified) on this scan
+        %% the root's direct children set changed => the root itself is
+        %% modified this scan (module doc), leaving nothing to count as unmodified
         <<"modified">> => 1,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"unmodified">> => 0,
-        %% the scan-1 creation of the (now renamed-away) source file may have already
-        %% aged out of the short createdMinHist window by the time scan 2 is awaited
-        %% and the tree/monitoring re-verified; the longer hour/day windows still hold it
+        %% scan-1's creation may have aged out of the Min window by now
         <<"createdMinHist">> => {range, 1, 2},
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
@@ -583,8 +493,7 @@ move_file_update_test(SuiteCtx) ->
 %% A file imported by the initial scan is copied to a different path on the
 %% storage; the next (continuous) scan detects the new path as created (the
 %% original is left untouched, hence unmodified), and both are reachable, with
-%% identical content, on both providers. POSIX-only, matching the old suite - not
-%% exercised on S3 there either.
+%% identical content, on both providers. POSIX-only.
 copy_file_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     SrcFileName = ?RAND_STR(),
@@ -598,21 +507,14 @@ copy_file_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = SrcFileName, content = Content}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan at its original path
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% create the copy directly on the storage (content is already known to the
-    %% test, so there is no need to go through a real host-level file copy)
+    %% the "copy" is created directly on the storage - a byte-identical file at
+    %% a new path is indistinguishable from a host-level copy for the scan
     storage_file_setup_utils:create_file(ImportingProviderSelector, ImportedStorageId, DstStorageFileId, Content),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% both the original and the copy are reachable, with identical content, on both providers
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, [
         #file_spec{name = SrcFileName, content = Content},
         #file_spec{name = DstFileName, content = Content}
@@ -620,16 +522,14 @@ copy_file_update_test(SuiteCtx) ->
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
-        %% the space root gained a new child, bumping its own mtime - see move_file_update_test
+        %% the root gained a new direct child => the root itself is modified
+        %% this scan (module doc); the untouched original counts as unmodified
         <<"modified">> => 1,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
-        %% the original (untouched) file is counted unmodified this scan
         <<"unmodified">> => 1,
-        %% the scan-1 creation of the original file may have already aged out of the
-        %% short createdMinHist window by the time scan 2 is awaited and the
-        %% tree/monitoring re-verified; the longer hour/day windows still hold it
+        %% scan-1's creation may have aged out of the Min window by now
         <<"createdMinHist">> => {range, 1, 2},
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2
@@ -641,9 +541,8 @@ copy_file_update_test(SuiteCtx) ->
 %% the next (continuous) scan detects the change and the new content is reflected
 %% through the logical filesystem on both providers. Unlike append/truncate/chmod,
 %% a same-size content change has no size/mode signal to fall back on - detection
-%% relies entirely on the file's mtime having advanced (see the OR condition in
-%% storage_import_engine:maybe_update_file_location/4), so - unlike those tests -
-%% an explicit delay before the write is required here.
+%% relies entirely on the file's mtime having advanced (module doc), so an
+%% explicit delay before the write is required here.
 change_file_content_constant_size_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -657,41 +556,26 @@ change_file_content_constant_size_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan with its initial content
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% overwrite the file's content (same size) on the storage and let the next
-    %% continuous scan detect it
+    %% load-bearing - lets the mtime tick visibly past the initial scan's stat
+    %% (see the doc comment above); do not remove
     timer:sleep(timer:seconds(2)),
     storage_file_setup_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the new content is now readable on both providers
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% Like change_file_content_constant_size_test, but the new content is a
 %% different length than the original - the modification check's size clause
-%% detects it regardless of mtime resolution, so (like append/truncate/chmod, and
-%% unlike change_file_content_constant_size_test above) no explicit delay is needed.
+%% detects it regardless of mtime resolution, so (like append/truncate/chmod)
+%% no explicit delay is needed.
 change_file_content_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -705,34 +589,17 @@ change_file_content_update_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan with its initial content
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% overwrite the file's content (different size) on the storage and let the
-    %% next continuous scan detect it
     storage_file_setup_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the new content is now readable on both providers
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% A file's content is overwritten on the storage at (deliberately forced to be)
@@ -740,9 +607,8 @@ change_file_content_update_test(SuiteCtx) ->
 %% file - exercising the boundary of the "already handled" fast-path shortcut in
 %% storage_import_engine:maybe_update_file_location/4, which requires the stored
 %% last_stat to be STRICTLY greater than the storage mtime to skip re-checking a
-%% file (if it used >= instead of >, this test would incorrectly skip the real
-%% content change constructed here). Same-size content change (like
-%% change_file_content_constant_size_test above), so the fast-path is the only
+%% file (if it used >= instead of >, this test's real content change would be
+%% incorrectly skipped). The change is same-size, so the fast-path is the only
 %% thing standing between this test and a false "unmodified". POSIX-only -
 %% forcing the storage mtime relies on storage_file_setup_utils:set_mtime/4.
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCtx) ->
@@ -759,17 +625,12 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan with its initial content
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% force storage_sync_info's own last_stat bookkeeping (which may have moved
-    %% on since the initial scan) back to its scan-1 value, overwrite the file's
-    %% content, then force the storage file's own mtime to that SAME value - so
-    %% that last_stat and the storage mtime end up EQUAL, not last_stat > mtime
+    %% overwrite the content, then force the file's storage mtime to be EQUAL
+    %% (not smaller) to storage_sync_info's recorded last_stat - the exact
+    %% boundary of the fast-path guard described in the doc above
     LastStatTime = ?rpc(ImportingProviderSelector, begin
         {ok, #document{value = #storage_sync_info{last_stat = LastStat}}} =
             storage_sync_info:get(StorageFileId, SpaceId),
@@ -784,24 +645,11 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
     storage_file_setup_utils:set_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, LastStatTime
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the change is still detected, despite last_stat and the (forced) new mtime
-    %% being EQUAL - the fast-path shortcut requires last_stat to be STRICTLY
-    %% greater than mtime to skip a file, so equality must not skip it
     UpdatedFileSpec = #file_spec{name = FileName, content = ChangedContent},
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedFileSpec),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% A file imported by the initial scan is deleted on the storage and replaced,
@@ -810,12 +658,6 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
 %% importing the new directory (and its child) in its place. Also verifies the
 %% newly-imported directory is fully functional (not just a passively-imported
 %% node) by creating a new subdirectory inside it via LFM.
-%% On POSIX, replacing a direct child of the space root (even under the same
-%% name) bumps the root's own mtime, so root is classified modified this scan
-%% (see the "timing mechanism" note on move_file_update_test). On S3, root can
-%% never be classified modified at all (see module doc) - found via a real
-%% onenv S3 run failing on the hardcoded posix-only expectation this test
-%% originally had.
 replace_file_with_dir_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -841,15 +683,9 @@ replace_file_with_dir_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% delete the file and create a directory (holding one child file) at the
-    %% same path on the storage, then let the next continuous scan detect it
     storage_file_setup_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, byte_size(InitialContent)
     ),
@@ -857,20 +693,16 @@ replace_file_with_dir_test(SuiteCtx) ->
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, ChildContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% the path now resolves to a directory with the new child file, on both providers
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #dir_spec{name = FileName, children = [
         #file_spec{name = ChildFileName, content = ChildContent}
     ]}),
-    %% S3 has no real directories, so the new directory itself is not counted
-    %% towards "created" there - only its child file is (see count_imported_nodes/2)
+    %% the new directory counts towards "created" only on POSIX (module doc)
     NewlyCreated = case StorageType of posix -> 2; s3 -> 1 end,
-    %% root is the only entity that is modified/unmodified this scan (the file
-    %% delete/dir+child create are all created/deleted); on POSIX it's modified
-    %% (a direct child was replaced), on S3 it's unmodified (see doc comment above)
+    %% the root's direct children set changed => root is modified... except on
+    %% S3, where it never can be (module doc) and stays unmodified instead
     {RootModified, RootUnmodified} = case StorageType of posix -> {1, 0}; s3 -> {0, 1} end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
@@ -878,10 +710,7 @@ replace_file_with_dir_test(SuiteCtx) ->
         <<"modified">> => RootModified,
         <<"deleted">> => 1,
         <<"unmodified">> => RootUnmodified,
-        %% the scan-1 creation of the (now deleted) original file may have already
-        %% aged out of the short createdMinHist window by the time scan 2 is
-        %% awaited and the tree/monitoring re-verified; the longer hour/day
-        %% windows still hold it
+        %% scan-1's creation may have aged out of the Min window by now
         <<"createdMinHist">> => {range, NewlyCreated, NewlyCreated + 1},
         <<"createdHourHist">> => NewlyCreated + 1,
         <<"createdDayHist">> => NewlyCreated + 1,
@@ -929,35 +758,25 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
         ?FUNCTION_NAME, #dir_spec{name = DirName}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the empty directory was imported by the initial scan
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% delete the (empty) directory and create a regular file at the same path on
-    %% the storage, then let the next continuous scan detect it
     storage_file_setup_utils:rmdir(ImportingProviderSelector, ImportedStorageId, StorageFileId),
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% the path now resolves to a regular file with the new content, on both providers
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
+        %% the root's direct children set changed => root is modified (module doc)
         <<"modified">> => 1,
         <<"deleted">> => 1,
         <<"unmodified">> => 0,
-        %% the scan-1 creation of the (now deleted) empty directory may have
-        %% already aged out of the short createdMinHist window by the time scan 2
-        %% is awaited and the tree/monitoring re-verified; the longer hour/day
-        %% windows still hold it
+        %% scan-1's creation may have aged out of the Min window by now
         <<"createdMinHist">> => {range, 1, 2},
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
@@ -975,9 +794,6 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
 %% SAME name, by a regular file; the next (continuous) scan detects the type
 %% change - deleting both the old directory and its child, and importing the new
 %% file in its place.
-%% Root's own modified/unmodified classification this scan differs by storage
-%% type for the same reason as replace_file_with_dir_test - it can never be
-%% classified modified on S3 (see module doc).
 replace_non_empty_dir_with_file_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -996,16 +812,9 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
         name = DirName, children = [#file_spec{name = ChildFileName, content = ChildContent}]
     }, SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the directory (with its child file) was imported by the initial scan
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% delete the child file, then the (now empty) directory, and create a
-    %% regular file at the same path on the storage; let the next continuous
-    %% scan detect it
     storage_file_setup_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId, ChildStorageFileId, byte_size(ChildContent)
     ),
@@ -1013,30 +822,24 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewContent
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% the path now resolves to a regular file with the new content, on both providers
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, #file_spec{name = DirName, content = NewContent}),
-    %% the scan-1 created count (used below for the created hour/day hists) is
-    %% dir+file on posix, file-only on S3 (see count_imported_nodes/2)
+    %% scan-1's created count differs by storage type (dirs don't count on S3, module doc)
     Scan1Created = case StorageType of posix -> 2; s3 -> 1 end,
-    %% root is the only entity modified/unmodified this scan - see
-    %% replace_file_with_dir_test's doc comment for why this differs by storage type
+    %% the root's direct children set changed => root is modified, except on S3
+    %% where it never can be (module doc)
     {RootModified, RootUnmodified} = case StorageType of posix -> {1, 0}; s3 -> {0, 1} end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 1,
         <<"modified">> => RootModified,
-        %% both the directory and its child file are deleted this scan - on S3
-        %% too, even though the directory itself was never counted towards
-        %% "created" there; deletion detection counts it regardless
+        %% both the directory and its child count towards "deleted" - unlike
+        %% creation, deletion counting includes directories on S3 too (module doc)
         <<"deleted">> => 2,
         <<"unmodified">> => RootUnmodified,
-        %% the scan-1 creation(s) may have already aged out of the short
-        %% createdMinHist window by the time scan 2 is awaited and the
-        %% tree/monitoring re-verified; the longer hour/day windows still hold them
+        %% scan-1's creation(s) may have aged out of the Min window by now
         <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
@@ -1052,11 +855,12 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
 %% A file imported by the initial scan has BOTH its atime and mtime forced, on
 %% the storage, to an identical far-future timestamp (content/size unchanged);
 %% the next (continuous) scan detects the modification via the mtime clause of
-%% storage_import_engine:maybe_update_file_location/4's OR condition and
-%% propagates BOTH new timestamps onto the file's own attrs, on both providers -
-%% proving atime is synced too, not just mtime. The forced timestamp is so far in
-%% the future (relative to the real one it replaces) that no explicit delay is
-%% needed for the change to be detected, unlike change_file_content_constant_size_test.
+%% the modification check (module doc) and propagates BOTH new timestamps onto
+%% the file's own attrs, on both providers - proving atime is synced too, not
+%% just mtime. The forced timestamp is so far in the future that no explicit
+%% delay is needed for the change to be detected (unlike
+%% change_file_content_constant_size_test). POSIX-only - forcing storage
+%% timestamps relies on storage_file_setup_utils:set_atime_and_mtime/5.
 update_timestamps_file_import_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -1073,56 +877,31 @@ update_timestamps_file_import_test(SuiteCtx) ->
         ?FUNCTION_NAME, #file_spec{name = FileName, content = Content}, SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% the file was imported by the initial scan
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% force both the file's atime and mtime on the storage to the same far-future
-    %% timestamp, then let the next continuous scan detect and propagate it
     storage_file_setup_utils:set_atime_and_mtime(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, NewTimestamp, NewTimestamp
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the new timestamps are now reflected in the file's own attrs, on both providers
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
     ExpectedTimes = #{atime => NewTimestamp, mtime => NewTimestamp},
     storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
     storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceTestFilePath, ExpectedTimes),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"unmodified">> => 1
-    }).
+    assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
 %% A new file is created (on the storage) inside one of two sibling directories
 %% imported (both empty) by the initial scan; the next (continuous) scan detects
-%% it, on both POSIX and S3. The new file is nested one level under the space
-%% root (not a direct child of it), so - per the "timing mechanism" established
-%% for move_file_update_test - the root's own mtime is untouched by this scan and
-%% it stays classified unmodified; only the TOUCHED directory (which gained a
-%% direct child) flips to modified, while the UNTOUCHED sibling stays unmodified
-%% too. On POSIX only (matching the old envup test's actual coverage - the old S3
-%% test never had this extra check), also verifies via passthrough mocks on
-%% storage_import_hash/storage_sync_traverse (same mechanism as
-%% chmod_file_update_test/chmod_file_update_in_batched_dir_test) that this is
-%% backed by the expected mechanism: the TOUCHED directory's own mtime (not the
-%% space root's hash-based children-attrs check, nor the UNTOUCHED sibling's mtime).
-%%
-%% On S3 (see module doc for the general facts this relies on), root can never
-%% register as modified either way, and nothing else picks up a "modified" tally
-%% in its place (confirmed via a real onenv run of replace_file_with_dir_test) -
-%% so this test's S3 branch expects modified=>0, unmodified=>1 (root only).
+%% it. The new file is nested one level below the space root, so the root's own
+%% children set (and hence its mtime) is untouched: only the TOUCHED directory
+%% flips to modified, while the root and the UNTOUCHED sibling stay unmodified
+%% (module doc). On POSIX this is additionally proven at the mechanism level via
+%% passthrough mocks: the touched directory's own mtime changed, while the
+%% root's children-attrs hash and the untouched sibling's mtime did not.
+%% On S3 the (empty) directories are unobservable and nothing can be classified
+%% modified at all (module doc) - the root is the single unmodified entry.
 create_file_in_dir_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -1145,33 +924,20 @@ create_file_in_dir_update_test(SuiteCtx) ->
         #dir_spec{name = UntouchedDirName}
     ], SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% both (empty) directories were imported by the initial scan - on S3 they
-    %% are automatically excluded from this check (see verify_imported_tree/2
-    %% and the module doc)
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% POSIX-only, matching the old envup test's own coverage (no S3 equivalent there either)
+    %% white-box mechanism checks, POSIX-only
     ?IF_POSIX(StorageType, begin
-        mock_storage_import_hash(ImportingProviderSelector),
-        mock_storage_sync_traverse(ImportingProviderSelector)
+        mock_storage_import_hash(SuiteCtx),
+        mock_storage_sync_traverse(SuiteCtx)
     end),
 
-    %% create a new file inside the first directory (the second stays untouched)
-    %% and let the next continuous scan detect it
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
     ),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
-    %% the new file is now visible, with its content, on both providers - the
-    %% still-empty untouched sibling directory is automatically excluded from
-    %% this check on S3 (see verify_imported_tree/2 and the module doc)
     UpdatedTreeSpec = [
         #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
         #dir_spec{name = UntouchedDirName}
@@ -1182,17 +948,10 @@ create_file_in_dir_update_test(SuiteCtx) ->
         assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, RootStorageFileId),
         assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId)
     end),
-    %% see doc comment: on POSIX the touched dir is modified, root + untouched
-    %% dir are unmodified; on S3 nothing is modified (root can't be, the
-    %% untouched dir doesn't exist, and the touched dir's own file_meta doesn't
-    %% seem to pick up a separate tally either - only its new file does, via
-    %% "created") and root alone is unmodified
+    %% see the test doc: POSIX - touched dir modified, root + untouched sibling
+    %% unmodified; S3 - nothing modified, root alone unmodified
     {ModifiedCount, UnmodifiedCount} = case StorageType of posix -> {1, 2}; s3 -> {0, 1} end,
-    %% the scan-1 creation of the (untouched) two directories on POSIX may have
-    %% already aged out of the short createdMinHist window by the time scan 2 is
-    %% awaited and the tree/monitoring re-verified; the longer hour/day windows
-    %% still hold them. On S3, directories don't count towards "created" at all
-    %% (see count_imported_nodes/2), so scan 1 contributed 0
+    %% scan-1's created count feeding the cumulative hists (dirs don't count on S3)
     Scan1Created = case StorageType of posix -> 2; s3 -> 0 end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
@@ -1200,6 +959,7 @@ create_file_in_dir_update_test(SuiteCtx) ->
         <<"modified">> => ModifiedCount,
         <<"deleted">> => 0,
         <<"unmodified">> => UnmodifiedCount,
+        %% scan-1's creations may have aged out of the Min window by now
         <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
@@ -1214,38 +974,19 @@ create_file_in_dir_update_test(SuiteCtx) ->
 
 %% Like create_file_in_dir_update_test, but the space root itself has more
 %% direct children (2 dirs + 4 files = 6) than storage_import_dir_batch_size
-%% (temporarily lowered to 2, like chmod_file_update_in_batched_dir_test) - so
-%% it's the ROOT's own scan-1 baseline classification that spans multiple
-%% batches this time, not a subdirectory's one level down. On POSIX, the
-%% continuous (scan 2) mutation runs with both detect_modifications and
-%% detect_deletions disabled, matching the old envup test - see the comment
-%% above enable_continuous_scan/2 below for what that changes.
-%%
-%% S3 divergence: detect_modifications=false is NOT used for S3's scan 2 (a
-%% real onenv run confirmed this the hard way - the new nested file was simply
-%% never created). Root's MTimeHasChanged is always false on S3 (module doc),
-%% so detect_modifications=false always takes do_update_master_job/2's
-%% {false, _, false} shortcut into traverse_only_directories/2, which discards
-%% that batch's slave_jobs outright (bulk-counting them as unmodified WITHOUT
-%% running them) and falls back to recursing into subdirectories for anything
-%% it skipped - a fallback that does not exist on S3 (no per-directory
-%% traversal at all, module doc). On POSIX this shortcut is harmless (a real,
-%% still-observable subdirectory catches what the parent's shortcut skipped),
-%% which is exactly why old envup's S3 coverage of this flag combination never
-%% caught it - without the mock, flat_storage_iterator:get_virtual_directory_ctx/3
-%% stamps the (synthetic) root with the CURRENT wall-clock time on every single
-%% read, so on real, unmocked storage its mtime differs on every scan and this
-%% shortcut is never taken in the first place; mock_space_dir_statbuf_on_flat_storage/1
-%% intercepts exactly this call to freeze it, which is what creates the gap here.
-%% So S3's scan 2 below uses the default (enabled) detection config instead -
-%% still exercising the same batch-exceeding math via the ordinary code path,
-%% just not the disabled-detection angle old envup's S3 test also covered.
-%%
-%% POSIX-confirmed passing 2026-07-02; S3 fix above not yet re-run at time of writing.
+%% (temporarily lowered to 2 in init_per_testcase) - so it's the ROOT's own
+%% scan-1 baseline that spans multiple listing batches this time, not a
+%% subdirectory's one level down.
+%% On POSIX, scan 2 additionally runs with detect_modifications and
+%% detect_deletions disabled - proving the new file is still discovered and
+%% imported (the flags only suppress the modified/deleted classification of
+%% already-known entries, see storage_import_engine:maybe_update_file/4, which
+%% is why the white-box mock asserts below still see the underlying detection
+%% fire). On S3, scan 2 keeps the default (enabled) detection config -
+%% disabling modification detection there would prevent the new file from ever
+%% being imported at all (module doc) - so S3 covers only the batch-exceeding
+%% aspect of this test.
 create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
-    %% storage_import_dir_batch_size is temporarily lowered to 2 in
-    %% init_per_testcase (and restored in end_per_testcase), so that the scan of
-    %% the space root's 6 children spans multiple batches
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
         storage_type = StorageType
@@ -1269,64 +1010,34 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         | OtherFileSpecs
     ], SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-
-    %% both (empty) directories and the 4 plain files were imported by the
-    %% initial scan - on S3 the empty directories are automatically excluded
-    %% from this check (see verify_imported_tree/2 and the module doc)
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    %% root's own real (offset 0) verdict plus every "confirmatory" batch beyond
-    %% it unconditionally counts as an extra unmodified, regardless of whether
-    %% the directory being re-visited was itself newly created this scan (see
-    %% do_slave_job_on_directory/1's `offset = 0` guard in
-    %% storage_sync_traverse.erl). On POSIX, 6 children/batch_size 2 means reads
-    %% at offsets 0,2,4,6 (sizes 2,2,2,0) => 4 total batches. On S3 only the 4
-    %% real files count as root's children for batching (see module doc) =>
-    %% ceil(4/2) = 2 total batches (no POSIX-style extra pass for landing on an
-    %% exact multiple - see module doc)
+    %% root's own verdict is re-run once per listing batch (module doc). POSIX:
+    %% 6 children / batch size 2 => reads at offsets 0,2,4,6 (sizes 2,2,2,0) =
+    %% 4 passes. S3: only the 4 files count as root's children and there is no
+    %% extra disambiguating batch => ceil(4/2) = 2 passes
     Scan1Unmodified = case StorageType of posix -> 4; s3 -> 2 end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => Scan1Unmodified
     }),
 
-    %% POSIX-only, matching the old envup test's own coverage (no S3 equivalent
-    %% there either) - passthrough mocks so that the mutation below can be
-    %% proven to still be detected under the hood despite detect_modifications
-    %% suppressing it from the monitoring counters (see below)
+    %% white-box mechanism checks, POSIX-only: prove the mutation is still
+    %% detected under the hood even though detect_modifications=false (below)
+    %% suppresses it from the monitoring counters
     ?IF_POSIX(StorageType, begin
-        mock_storage_import_hash(ImportingProviderSelector),
-        mock_storage_sync_traverse(ImportingProviderSelector)
+        mock_storage_import_hash(SuiteCtx),
+        mock_storage_sync_traverse(SuiteCtx)
     end),
 
-    %% create a new file inside the first directory (the second stays untouched)
-    %% and let the next continuous scan detect it
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
     ),
-    %% on POSIX, both modification and deletion detection are disabled for this
-    %% scan, matching the old envup test - storage_import_engine:maybe_update_file/4
-    %% then returns ?FILE_UNMODIFIED unconditionally for every already-known
-    %% entity's own classification, regardless of what actually changed on
-    %% storage. The touched directory's mtime DOES genuinely change (a direct
-    %% child was added), but this no longer surfaces as "modified" below - the
-    %% mock asserts further down still prove the underlying detection fires
-    %% despite the suppression. On S3 the default (enabled) config is used
-    %% instead - see the doc comment above for why disabling detection there
-    %% would prevent the new file from ever being imported at all
-    case StorageType of
-        posix ->
-            storage_import_test_utils:enable_continuous_scan(TestCaseCtx, #{
-                detect_deletions => false,
-                detect_modifications => false
-            });
-        s3 ->
-            storage_import_test_utils:enable_continuous_scan(TestCaseCtx)
+    ScanConfigOverrides = case StorageType of
+        posix -> #{detect_deletions => false, detect_modifications => false};
+        %% detection must stay enabled on S3 - see the test doc
+        s3 -> #{}
     end,
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, ScanConfigOverrides),
 
-    %% the new file is now visible, with its content, on both providers - the
-    %% still-empty untouched sibling directory is automatically excluded from
-    %% this check on S3 (see verify_imported_tree/2 and the module doc)
     UpdatedTreeSpec = [
         #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
         #dir_spec{name = UntouchedDirName}
@@ -1338,21 +1049,16 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId),
         assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId)
     end),
-    %% root can never be modified on S3 (module doc) and detect_modifications is
-    %% disabled on POSIX (see above), so nothing is ever "modified" either way -
-    %% only the new nested file is "created". On POSIX every already-known
-    %% entity is forced unmodified: root (4, same batch count as scan 1 - its
-    %% direct children are unchanged) + touched dir (1) + untouched dir (1) + 4
-    %% untouched files (4) = 10. On S3 root now has 5 children (the new file
-    %% joins the same flat listing, see module doc) => ceil(5/2) = 3 total
-    %% batches; there is no separate "touched dir" entity to tally, but the 4
-    %% untouched files still each count towards unmodified regardless of
-    %% whether they end up individually re-checked or bulk-marked as part of an
-    %% unchanged batch (see the "Batch-hash mechanism" established for
-    %% chmod_file_update_in_batched_dir_test) => 3 + 4 = 7
+    %% nothing counts as "modified" this scan either way: POSIX suppresses the
+    %% classification via detect_modifications=false, on S3 the root never can
+    %% be modified and nothing else picks up a tally (module doc).
+    %% POSIX unmodified (every already-known entry forced unmodified): root's 4
+    %% batch passes (children count unchanged) + touched dir + untouched dir +
+    %% 4 untouched files = 10. S3: the new file joins root's flat listing (5
+    %% children => 3 passes) + the 4 untouched files (counted unmodified whether
+    %% individually re-checked or bulk-marked, module doc) = 7
     Scan2Unmodified = case StorageType of posix -> 10; s3 -> 7 end,
-    %% number of nodes counted towards "created" on scan 1 (dirs don't count on
-    %% S3, see module doc), feeding the cumulative hour/day hists
+    %% scan-1's created count feeding the cumulative hists (dirs don't count on S3)
     Scan1Created = case StorageType of posix -> 6; s3 -> 4 end,
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
@@ -1360,9 +1066,7 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"unmodified">> => Scan2Unmodified,
-        %% the scan-1 creations may have already aged out of the short
-        %% createdMinHist window by the time scan 2 is awaited and the
-        %% tree/monitoring re-verified; the longer hour/day windows still hold them
+        %% scan-1's creations may have aged out of the Min window by now
         <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
@@ -1375,36 +1079,24 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
     }).
 
 
-%% A file imported by the initial scan (with sync_acl enabled) has its on-storage
-%% NFS4 ACL changed; the next (continuous) scan detects the change and re-applies
-%% the new ACL, changing enforcement accordingly - not just a cosmetically
-%% re-read xattr. Reuses the mocking machinery
-%% storage_import_initial_oct_test_base:import_nfs_acl_test built for exactly
-%% this shape (mock_storage_file_acl/3, mock_luma_acl_user/2, both promoted to
-%% storage_import_test_utils for this reuse) - see there for why sync_acl needs
-%% both LUMA (to map the ACL's named principal to a Onedata user) and a
-%% storage_driver mock (real POSIX test storages don't actually carry NFS4 ACLs,
-%% only the mocked getxattr response does).
-%%
-%% Old envup's own version updated to a GROUP-based ACL (via
-%% luma:map_acl_group_to_onedata_group, mapped to a group the second user was a
-%% member of) to prove the change took effect. Dropped here in favor of a
-%% structurally equivalent USER-based swap - this repo's oct test suites have no
-%% existing machinery for creating groups/group membership (nothing else in
-%% test_distributed uses it), and building it was judged out of scope for this
-%% port. Instead: the initial ACL grants EVERYONE@ read_acl and denies the named
-%% principal (mapped to user1, who is also the file's owner) write_attributes;
-%% the updated ACL instead grants ONLY that same named principal read_acl and
-%% denies EVERYONE@ - an order-dependent NFS4 ACL evaluation flip (user1 matches
-%% the first, specific entry; user2 falls through to the second, general deny)
-%% that still proves the update is detected and re-enforced, just with the
-%% roles of "who keeps read access" reversed compared to old envup's version.
+%% A file imported by the initial scan (with sync_acl enabled) has its
+%% on-storage NFS4 ACL changed; the next (continuous) scan detects the change
+%% and re-applies the new ACL, changing its enforcement accordingly - not just
+%% re-reading an xattr. Uses the same ACL/LUMA mocking approach as
+%% storage_import_initial_oct_test_base:import_nfs_acl_test (see there).
+%% The proof of re-enforcement is an order-dependent NFS4 ACL evaluation flip:
+%% the initial ACL grants EVERYONE@ read_acl and denies the named principal
+%% (mapped to user1, also the file owner) write_attributes; the updated ACL
+%% instead grants ONLY that named principal read_acl and denies EVERYONE@ - so
+%% user1 (matching the first, specific entry) keeps ACL read access, while
+%% user2 falls through to the general deny and loses it. POSIX-only.
 update_nfs_acl_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
-    %% user1/user2 are regular members of the test space (from the 2op scenario)
+    %% user1/user2 are regular users of the 2op scenario, not yet members of the space
     User1Selector = user1,
     User2Selector = user2,
     User1Id = oct_background:get_user_id(User1Selector),
+    User1FullName = oct_background:get_user_fullname(User1Selector),
     %% the file owner uid and both ACLs' named principal all map to user1
     User1PrincipalId = <<"ala@nfsdomain.org">>,
 
@@ -1440,13 +1132,13 @@ update_nfs_acl_test(SuiteCtx) ->
         }
     ],
     InitialEncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(InitialAcl)),
-    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, InitialEncodedAcl),
-    storage_import_test_utils:mock_luma_acl_user(ImportingProviderSelector, User1Id),
+    storage_import_test_utils:mock_storage_file_acl(SuiteCtx, StorageFileId, InitialEncodedAcl),
+    storage_import_test_utils:mock_luma_acl_user(SuiteCtx, User1Id),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_id = SpaceId,
         space_path = SpacePath,
-        importing_provider_ctx = ImportingProviderCtx
+        importing_provider_ctx = #provider_ctx{node = ImportingProviderNode}
     } = storage_import_test_utils:init_testcase(
         ?FUNCTION_NAME, #file_spec{name = FileName, content = Content}, SuiteCtx, #{sync_acl => true}
     ),
@@ -1456,75 +1148,52 @@ update_nfs_acl_test(SuiteCtx) ->
     ozw_test_rpc:add_user_to_space(SpaceId, oct_background:get_user_id(User2Selector)),
 
     SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
-    #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
     User1SessId = oct_background:get_user_session_id(User1Selector, ImportingProviderSelector),
     User2SessId = oct_background:get_user_session_id(User2Selector, ImportingProviderSelector),
 
-    %% the file was imported (root's own baseline classification is unmodified,
-    %% not modified - see the module doc "swap convention" caveat referenced
-    %% throughout this file) with the initial ACL applied
+    %% the file was imported with the initial ACL applied - readable by both
+    %% users (read_acl granted to EVERYONE@)
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    InitialAclJson = [
-        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"OWNER@">>, ?read_acl_mask),
-        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask, <<"GROUP@">>, ?write_acl_mask),
-        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask),
-        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask,
-            <<(oct_background:get_user_fullname(User1Selector))/binary, "#", User1Id/binary>>,
-            ?write_attributes_mask)
-    ],
+    InitialAclJson = storage_import_test_utils:expected_imported_acl_json(
+        InitialAcl, User1FullName, User1Id
+    ),
     ?assertEqual({ok, InitialAclJson},
         storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
     ?assertEqual({ok, InitialAclJson},
         storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"unmodified">> => 1
-    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% change the storage's (mocked) ACL and let the next continuous scan detect it
+    %% change the storage's (mocked) ACL and let the next continuous scan re-apply it
     UpdatedEncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(UpdatedAcl)),
-    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, UpdatedEncodedAcl),
-    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
-    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
-    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:mock_storage_file_acl(SuiteCtx, StorageFileId, UpdatedEncodedAcl),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% the roles have flipped: user1 (the named principal in the new ACL's first,
-    %% specific entry) can still read the acl, but user2 now falls through to the
-    %% general EVERYONE@ deny and is rejected
-    UpdatedAclJson = [
-        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask,
-            <<(oct_background:get_user_fullname(User1Selector))/binary, "#", User1Id/binary>>,
-            ?read_acl_mask),
-        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask)
-    ],
+    %% specific entry) can still read the ACL, while user2 now falls through to
+    %% the general EVERYONE@ deny and is rejected
+    UpdatedAclJson = storage_import_test_utils:expected_imported_acl_json(
+        UpdatedAcl, User1FullName, User1Id
+    ),
     ?assertEqual({ok, UpdatedAclJson},
         storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
     ?assertMatch({error, ?EACCES},
         storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
 
-    %% the ACL change is detected via the normal hash-based change-detection path
-    %% (sync_acl folds the NFS4 ACL into the per-file attrs hash, see
-    %% storage_import_hash:count_file_attrs_hash/2) - so the file itself is
-    %% "modified" this scan, same as any other single-file attribute change;
-    %% root's own children are unaffected (same file, same name, only its ACL
-    %% changed) so it stays unmodified, like scan 1
+    %% with sync_acl enabled the ACL is folded into the per-file attrs hash (see
+    %% storage_import_hash:count_file_attrs_hash/2), so the ACL change surfaces
+    %% as an ordinary single-file modification; the root's children are
+    %% untouched, so it stays unmodified
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
         <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"unmodified">> => 1,
-        %% the scan-1 creation may have already aged out of the short
-        %% createdMinHist window by the time scan 2 is awaited and the
-        %% monitoring re-verified; the longer hour/day windows still hold it
-        <<"createdMinHist">> => {range, 0, 1},
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
+        %% scan-1's creation may have aged out of the Min window by now
+        <<"createdMinHist">> => {range, 0, 1},
+        <<"createdHourHist">> => 1,
+        <<"createdDayHist">> => 1
     }).
 
 
@@ -1547,18 +1216,47 @@ update_nfs_acl_test(SuiteCtx) ->
 
 
 %%%===================================================================
+%%% Internal functions - shared assertions
+%%%===================================================================
+
+
+%% @private
+%% Monitoring expectation for the most common modifications-group outcome:
+%% scan 2 detected exactly one modified (already-imported) file, nothing was
+%% created or deleted, and the space root stays unmodified (the default).
+%% The created*Hist histograms keep their defaults, i.e. scan-1's creation of
+%% the single declared file is expected to still be within the Min window -
+%% fine for these single-file tests, which reach this assertion within seconds
+%% of the initial scan.
+-spec assert_monitoring_state_after_single_file_modification(
+    storage_import_test_utils:case_ctx()
+) ->
+    ok.
+assert_monitoring_state_after_single_file_modification(TestCaseCtx) ->
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1
+    }).
+
+
+%%%===================================================================
 %%% Internal functions - test case specific mocks
 %%%===================================================================
 
 
 %% @private
 %% Mocks storage_import_hash with a passthrough, so that its calls are recorded
-%% (via meck history) without altering its behaviour - used to assert that a
-%% storage mutation was actually detected via the scan's hash-based
-%% change-detection optimization, rather than the directory being skipped.
-%% Torn down via unmock_storage_import_hash/1.
--spec mock_storage_import_hash(oct_background:entity_selector()) -> ok.
-mock_storage_import_hash(ProviderSelector) ->
+%% (via meck history) without altering its behaviour - used to assert whether a
+%% storage mutation was (or was not) detected via the scan's hash-based
+%% children-attrs check. Torn down via unmock_storage_import_hash/1.
+-spec mock_storage_import_hash(storage_import_test_utils:suite_ctx()) -> ok.
+mock_storage_import_hash(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_new(Nodes, storage_import_hash, [passthrough]).
 
@@ -1611,13 +1309,14 @@ count_children_hash_changed_results(ProviderSelector, SpaceId, DirStorageFileId)
 
 %% @private
 %% Mocks storage_sync_traverse with a passthrough, so that its calls are recorded
-%% (via meck history) without altering its behaviour - used to assert that a
-%% directory's own mtime-based change-detection shortcut did NOT report a change,
-%% i.e. that a detected modification came from the hash-based children-attrs check
-%% instead (see assert_children_hash_changed/3). Torn down via
-%% unmock_storage_sync_traverse/1.
--spec mock_storage_sync_traverse(oct_background:entity_selector()) -> ok.
-mock_storage_sync_traverse(ProviderSelector) ->
+%% (via meck history) without altering its behaviour - used to assert whether a
+%% directory's own mtime-based change detection did (or did not) report a change
+%% (complementing assert_children_hash_changed/3 in pinpointing which mechanism
+%% picked a mutation up). Torn down via unmock_storage_sync_traverse/1.
+-spec mock_storage_sync_traverse(storage_import_test_utils:suite_ctx()) -> ok.
+mock_storage_sync_traverse(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_new(Nodes, storage_sync_traverse, [passthrough]).
 
@@ -1632,12 +1331,9 @@ unmock_storage_sync_traverse(#storage_import_test_suite_ctx{
 
 
 %% @private
-%% Asserts that storage_sync_traverse never reported that the directory at
-%% DirStorageFileId's own mtime had changed - i.e. that a modification of one of
-%% its children was picked up despite the directory's own mtime-based shortcut
-%% saying "unchanged" (a child's chmod alone does not bump its parent's mtime).
-%% Requires the module to have been mocked (with a passthrough) via
-%% mock_storage_sync_traverse/1.
+%% Asserts that storage_sync_traverse never reported that the mtime of the
+%% directory at DirStorageFileId changed. Requires the module to have been
+%% mocked (with a passthrough) via mock_storage_sync_traverse/1.
 -spec assert_children_mtime_unchanged(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
     ok.
 assert_children_mtime_unchanged(ProviderSelector, SpaceId, DirStorageFileId) ->
@@ -1645,11 +1341,10 @@ assert_children_mtime_unchanged(ProviderSelector, SpaceId, DirStorageFileId) ->
 
 
 %% @private
-%% Asserts that storage_sync_traverse reported (at least once) that the
-%% directory at DirStorageFileId's own mtime had changed - i.e. that a
-%% modification of one of its children was picked up via the directory's own
-%% mtime (adding/removing a direct child bumps it). Requires the module to have
-%% been mocked (with a passthrough) via mock_storage_sync_traverse/1.
+%% Asserts that storage_sync_traverse reported (at least once) that the mtime of
+%% the directory at DirStorageFileId changed (adding/removing a direct child
+%% bumps it). Requires the module to have been mocked (with a passthrough) via
+%% mock_storage_sync_traverse/1.
 -spec assert_children_mtime_changed(oct_background:entity_selector(), od_space:id(), helpers:file_id()) ->
     ok.
 assert_children_mtime_changed(ProviderSelector, SpaceId, DirStorageFileId) ->

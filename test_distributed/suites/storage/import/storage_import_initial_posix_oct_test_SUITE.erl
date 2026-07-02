@@ -165,7 +165,7 @@ init_per_suite(Config) ->
             {cache_to_disk_force_delay_ms, timer:seconds(2)}
         ]}],
         posthook = fun(NewConfig) ->
-            storage_import_initial_oct_test_base:clean_up_after_previous_run(all(), ?SUITE_CTX),
+            storage_import_test_utils:clean_up_after_previous_run(all(), ?SUITE_CTX),
             NewConfig
         end
     }).
@@ -175,8 +175,8 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    storage_import_initial_oct_test_base:init_per_testcase(Config).
+init_per_testcase(Case, Config) ->
+    storage_import_initial_oct_test_base:init_per_testcase(Case, ?SUITE_CTX, Config).
 
 
 end_per_testcase(Case, Config) ->
