@@ -332,11 +332,16 @@ verify_imported_tree(CaseCtx = #storage_import_test_case_ctx{file_tree_spec = Fi
 %%--------------------------------------------------------------------
 -spec verify_imported_tree(case_ctx(), file_tree_spec()) -> ok.
 verify_imported_tree(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType},
     space_path = SpacePath,
     importing_provider_ctx = ImportingProviderCtx,
     non_importing_provider_ctx = NonImportingProviderCtx
 }, ExpectedFileTreeSpec) ->
-    TopLevelSpecs = to_spec_list(ExpectedFileTreeSpec),
+    % on a flat/object storage (e.g. S3) a directory with no real content
+    % anywhere in its subtree has no underlying storage object at all, and so is
+    % unobservable via LFM - see the module doc of flat_storage_iterator.erl -
+    % strip such directories so that callers do not need to special-case S3
+    TopLevelSpecs = filter_out_unobservable_dirs(StorageType, to_spec_list(ExpectedFileTreeSpec)),
     % flatten the whole tree (cheap, no RPC) into a list of {Path, Spec} so that
     % per-node verification (which is RPC-heavy and may retry while data propagates
     % to the non-importing provider) can be parallelized with bounded concurrency
@@ -756,6 +761,30 @@ spec_name(#file_spec{name = Name}) -> Name.
 to_spec_list(undefined) -> [];
 to_spec_list(Specs) when is_list(Specs) -> Specs;
 to_spec_list(Spec) -> [Spec].
+
+
+%% @private
+%% @doc
+%% Recursively strips directories that end up with no children at all (after
+%% this same filtering is applied to their own children) - on a flat/object
+%% storage, such a directory has no underlying storage object anywhere in its
+%% subtree, and so can never be imported/observed. No-op on POSIX, where real
+%% (possibly empty) directories are always observable.
+%% @end
+-spec filter_out_unobservable_dirs(posix | s3, [onenv_file_test_utils:object_spec()]) ->
+    [onenv_file_test_utils:object_spec()].
+filter_out_unobservable_dirs(posix, Specs) ->
+    Specs;
+filter_out_unobservable_dirs(s3, Specs) ->
+    lists:filtermap(fun
+        (DirSpec = #dir_spec{children = Children}) ->
+            case filter_out_unobservable_dirs(s3, Children) of
+                [] -> false;
+                FilteredChildren -> {true, DirSpec#dir_spec{children = FilteredChildren}}
+            end;
+        (FileSpec = #file_spec{}) ->
+            {true, FileSpec}
+    end, Specs).
 
 
 %% @private

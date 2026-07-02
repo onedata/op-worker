@@ -37,7 +37,6 @@
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
     changing_max_depth_test/1,
-    create_file_in_dir_exceed_batch_update_test/1,
     force_start_test/1,
     force_stop_test/1,
     file_with_data_protection_should_not_be_updated_test/1,
@@ -63,7 +62,6 @@
     create_delete_import2_test,
     create_subfiles_and_delete_before_import_is_finished_test,
     changing_max_depth_test,
-    create_file_in_dir_exceed_batch_update_test,
     force_start_test,
     force_stop_test,
     file_with_data_protection_should_not_be_updated_test,
@@ -117,9 +115,6 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 
 changing_max_depth_test(Config) ->
     storage_import_s3_test_base:changing_max_depth_test(Config).
-
-create_file_in_dir_exceed_batch_update_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_exceed_batch_update_test(Config).
 
 force_start_test(Config) ->
     storage_import_test_base:force_start_test(Config).

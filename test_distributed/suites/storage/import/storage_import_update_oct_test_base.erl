@@ -18,6 +18,27 @@
 %%% generic machinery (creating and mutating the tree on the storage, enabling
 %%% and awaiting scans, verifying the imported tree, asserting the monitoring
 %%% counters) lives in storage_import_test_utils.
+%%%
+%%% Object storages (e.g. S3, see flat_storage_iterator.erl) diverge from POSIX
+%%% in ways that recur across many tests below, so they are documented once
+%%% here rather than repeated at every call site:
+%%%  * they have no real directories - an empty one has no underlying storage
+%%%    object at all, so it can never be created/observed via LFM (handled
+%%%    transparently by storage_import_test_utils:verify_imported_tree/2, which
+%%%    strips such directories from the expected tree on S3) or counted towards
+%%%    "created" (see storage_import_test_utils:count_imported_nodes/2);
+%%%  * the space root's own storage statbuf is permanently mocked into the past
+%%%    for scan-1 timing determinism (mock_space_dir_statbuf_on_flat_storage/1),
+%%%    so it can never be classified "modified" on any scan;
+%%%  * there is no real per-directory traversal at all - the whole space is a
+%%%    single traversal entity (flat_storage_iterator:should_generate_master_job/1
+%%%    always returns false), with only regular files counted as its children
+%%%    for batching, and the underlying listing API reports a definitive
+%%%    end-of-listing marker on the very page that exhausts it (unlike POSIX's
+%%%    tree_storage_iterator, whose ambiguous "read returned exactly
+%%%    batch_size" heuristic needs one extra confirmatory batch to disambiguate).
+%%% Tests below note only what is specific to their own scenario; assume these
+%%% general facts hold on S3 unless stated otherwise.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_update_oct_test_base).
@@ -57,7 +78,8 @@
     replace_empty_dir_with_file_test/1,
     replace_non_empty_dir_with_file_test/1,
     update_timestamps_file_import_test/1,
-    create_file_in_dir_update_test/1
+    create_file_in_dir_update_test/1,
+    create_file_in_dir_exceed_batch_update_test/1
 
     %% --- idempotency ---
 
@@ -85,12 +107,16 @@ clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
     storage_import_test_utils:clean_up_after_previous_run(AllTestCases, SuiteCtx).
 
 
-init_per_testcase(Case = chmod_file_update_in_batched_dir_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+init_per_testcase(Case, TestSuiteCtx = #storage_import_test_suite_ctx{
     importing_provider_selector = ImportingProviderSelector
-}, Config) ->
+}, Config) when
+    Case =:= chmod_file_update_in_batched_dir_test;
+    Case =:= create_file_in_dir_exceed_batch_update_test
+->
     [Node | _] = Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
     {ok, OldDirBatchSize} = test_utils:get_env(Node, op_worker, storage_import_dir_batch_size),
-    %% a low batch size forces the scan of the test dir's children to span multiple batches
+    %% a low batch size forces the scan of the relevant directory's children to
+    %% span multiple batches
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, 2),
     Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
     init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config2);
@@ -103,11 +129,17 @@ end_per_testcase(Case = chmod_file_update_test, TestSuiteCtx, Config) ->
     unmock_storage_import_hash(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
-end_per_testcase(Case = chmod_file_update_in_batched_dir_test, TestSuiteCtx = #storage_import_test_suite_ctx{
+end_per_testcase(Case, TestSuiteCtx = #storage_import_test_suite_ctx{
+    storage_type = StorageType,
     importing_provider_selector = ImportingProviderSelector
-}, Config) ->
-    unmock_storage_import_hash(TestSuiteCtx),
-    unmock_storage_sync_traverse(TestSuiteCtx),
+}, Config) when
+    Case =:= chmod_file_update_in_batched_dir_test;
+    Case =:= create_file_in_dir_exceed_batch_update_test
+->
+    ?IF_POSIX(StorageType, begin
+        unmock_storage_import_hash(TestSuiteCtx),
+        unmock_storage_sync_traverse(TestSuiteCtx)
+    end),
     Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
@@ -774,13 +806,10 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
 %% node) by creating a new subdirectory inside it via LFM.
 %% On POSIX, replacing a direct child of the space root (even under the same
 %% name) bumps the root's own mtime, so root is classified modified this scan
-%% (see the "timing mechanism" note on move_file_update_test). On S3 the space
-%% root has no real mtime at all - its statbuf is permanently mocked far in the
-%% past (mock_space_dir_statbuf_on_flat_storage/1), so maybe_update_times/5's
-%% MTime >= StorageMTime check is always true and root can NEVER be classified
-%% modified there - it stays unmodified on every scan, regardless of what
-%% happens to its direct children (found via a real onenv S3 run failing on the
-%% hardcoded posix-only expectation this test originally had).
+%% (see the "timing mechanism" note on move_file_update_test). On S3, root can
+%% never be classified modified at all (see module doc) - found via a real
+%% onenv S3 run failing on the hardcoded posix-only expectation this test
+%% originally had.
 replace_file_with_dir_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -941,7 +970,8 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
 %% change - deleting both the old directory and its child, and importing the new
 %% file in its place.
 %% Root's own modified/unmodified classification this scan differs by storage
-%% type for the same reason as replace_file_with_dir_test - see its doc comment.
+%% type for the same reason as replace_file_with_dir_test - it can never be
+%% classified modified on S3 (see module doc).
 replace_non_empty_dir_with_file_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -1083,19 +1113,10 @@ update_timestamps_file_import_test(SuiteCtx) ->
 %% backed by the expected mechanism: the TOUCHED directory's own mtime (not the
 %% space root's hash-based children-attrs check, nor the UNTOUCHED sibling's mtime).
 %%
-%% S3 divergences (object storages have no real directories - see
-%% replace_file_with_dir_test's doc comment for the root-mtime mechanism this
-%% relies on): an EMPTY directory has no underlying object at all, so it can
-%% never be observed via LFM there - the initial tree-verify is skipped
-%% entirely for S3 (matching the old envup S3 test, which never checked
-%% directory existence either), and after scan 2 only the TOUCHED directory
-%% (now holding a real file) is expected, never the still-empty UNTOUCHED one.
-%% The space root itself never registers as modified on S3 (its statbuf is
-%% permanently mocked into the past); confirmed via a real onenv run
-%% (replace_file_with_dir_test) that no OTHER entity picks up a "modified"
-%% tally there either once root can't - so this test's S3 branch expects
-%% modified=>0, unmodified=>1 (root only) - NOT yet re-confirmed by a real S3
-%% run for THIS specific test at time of writing, flag if it disagrees.
+%% On S3 (see module doc for the general facts this relies on), root can never
+%% register as modified either way, and nothing else picks up a "modified" tally
+%% in its place (confirmed via a real onenv run of replace_file_with_dir_test) -
+%% so this test's S3 branch expects modified=>0, unmodified=>1 (root only).
 create_file_in_dir_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{
         importing_provider_selector = ImportingProviderSelector,
@@ -1119,23 +1140,19 @@ create_file_in_dir_update_test(SuiteCtx) ->
     ], SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
-    %% both (empty) directories were imported by the initial scan - POSIX only,
-    %% see doc comment for why this is skipped on S3
-    case StorageType of
-        posix -> storage_import_test_utils:verify_imported_tree(TestCaseCtx);
-        s3 -> ok
-    end,
+    %% both (empty) directories were imported by the initial scan - on S3 they
+    %% are automatically excluded from this check (see verify_imported_tree/2
+    %% and the module doc)
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
     }),
 
-    case StorageType of
-        posix ->
-            mock_storage_import_hash(ImportingProviderSelector),
-            mock_storage_sync_traverse(ImportingProviderSelector);
-        s3 ->
-            ok
-    end,
+    %% POSIX-only, matching the old envup test's own coverage (no S3 equivalent there either)
+    ?IF_POSIX(StorageType, begin
+        mock_storage_import_hash(ImportingProviderSelector),
+        mock_storage_sync_traverse(ImportingProviderSelector)
+    end),
 
     %% create a new file inside the first directory (the second stays untouched)
     %% and let the next continuous scan detect it
@@ -1146,26 +1163,19 @@ create_file_in_dir_update_test(SuiteCtx) ->
     storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
     storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
 
-    %% the new file is now visible, with its content, on both providers - on S3
-    %% the still-empty untouched sibling directory is omitted, see doc comment
-    UpdatedTreeSpec = case StorageType of
-        posix ->
-            [
-                #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
-                #dir_spec{name = UntouchedDirName}
-            ];
-        s3 ->
-            #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]}
-    end,
+    %% the new file is now visible, with its content, on both providers - the
+    %% still-empty untouched sibling directory is automatically excluded from
+    %% this check on S3 (see verify_imported_tree/2 and the module doc)
+    UpdatedTreeSpec = [
+        #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
+        #dir_spec{name = UntouchedDirName}
+    ],
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedTreeSpec),
-    case StorageType of
-        posix ->
-            assert_children_mtime_changed(ImportingProviderSelector, SpaceId, TouchedDirStorageFileId),
-            assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, RootStorageFileId),
-            assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId);
-        s3 ->
-            ok
-    end,
+    ?IF_POSIX(StorageType, begin
+        assert_children_mtime_changed(ImportingProviderSelector, SpaceId, TouchedDirStorageFileId),
+        assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, RootStorageFileId),
+        assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId)
+    end),
     %% see doc comment: on POSIX the touched dir is modified, root + untouched
     %% dir are unmodified; on S3 nothing is modified (root can't be, the
     %% untouched dir doesn't exist, and the touched dir's own file_meta doesn't
@@ -1190,6 +1200,169 @@ create_file_in_dir_update_test(SuiteCtx) ->
         <<"modifiedMinHist">> => ModifiedCount,
         <<"modifiedHourHist">> => ModifiedCount,
         <<"modifiedDayHist">> => ModifiedCount,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }).
+
+
+%% Like create_file_in_dir_update_test, but the space root itself has more
+%% direct children (2 dirs + 4 files = 6) than storage_import_dir_batch_size
+%% (temporarily lowered to 2, like chmod_file_update_in_batched_dir_test) - so
+%% it's the ROOT's own scan-1 baseline classification that spans multiple
+%% batches this time, not a subdirectory's one level down. On POSIX, the
+%% continuous (scan 2) mutation runs with both detect_modifications and
+%% detect_deletions disabled, matching the old envup test - see the comment
+%% above enable_continuous_scan/2 below for what that changes.
+%%
+%% S3 divergence: detect_modifications=false is NOT used for S3's scan 2 (a
+%% real onenv run confirmed this the hard way - the new nested file was simply
+%% never created). Root's MTimeHasChanged is always false on S3 (module doc),
+%% so detect_modifications=false always takes do_update_master_job/2's
+%% {false, _, false} shortcut into traverse_only_directories/2, which discards
+%% that batch's slave_jobs outright (bulk-counting them as unmodified WITHOUT
+%% running them) and falls back to recursing into subdirectories for anything
+%% it skipped - a fallback that does not exist on S3 (no per-directory
+%% traversal at all, module doc). On POSIX this shortcut is harmless (a real,
+%% still-observable subdirectory catches what the parent's shortcut skipped),
+%% which is exactly why old envup's S3 coverage of this flag combination never
+%% caught it - without the mock, flat_storage_iterator:get_virtual_directory_ctx/3
+%% stamps the (synthetic) root with the CURRENT wall-clock time on every single
+%% read, so on real, unmocked storage its mtime differs on every scan and this
+%% shortcut is never taken in the first place; mock_space_dir_statbuf_on_flat_storage/1
+%% intercepts exactly this call to freeze it, which is what creates the gap here.
+%% So S3's scan 2 below uses the default (enabled) detection config instead -
+%% still exercising the same batch-exceeding math via the ordinary code path,
+%% just not the disabled-detection angle old envup's S3 test also covered.
+%%
+%% POSIX-confirmed passing 2026-07-02; S3 fix above not yet re-run at time of writing.
+create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
+    %% storage_import_dir_batch_size is temporarily lowered to 2 in
+    %% init_per_testcase (and restored in end_per_testcase), so that the scan of
+    %% the space root's 6 children spans multiple batches
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    TouchedDirName = ?RAND_STR(),
+    UntouchedDirName = ?RAND_STR(),
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    OtherFileSpecs = [#file_spec{name = ?RAND_STR(), content = ?RAND_STR()} || _ <- lists:seq(1, 4)],
+    RootStorageFileId = <<"/">>,
+    TouchedDirStorageFileId = filepath_utils:join([RootStorageFileId, TouchedDirName]),
+    UntouchedDirStorageFileId = filepath_utils:join([RootStorageFileId, UntouchedDirName]),
+    FileStorageFileId = filepath_utils:join([TouchedDirStorageFileId, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_id = SpaceId
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, [
+        #dir_spec{name = TouchedDirName},
+        #dir_spec{name = UntouchedDirName}
+        | OtherFileSpecs
+    ], SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% both (empty) directories and the 4 plain files were imported by the
+    %% initial scan - on S3 the empty directories are automatically excluded
+    %% from this check (see verify_imported_tree/2 and the module doc)
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    %% root's own real (offset 0) verdict plus every "confirmatory" batch beyond
+    %% it unconditionally counts as an extra unmodified, regardless of whether
+    %% the directory being re-visited was itself newly created this scan (see
+    %% do_slave_job_on_directory/1's `offset = 0` guard in
+    %% storage_sync_traverse.erl). On POSIX, 6 children/batch_size 2 means reads
+    %% at offsets 0,2,4,6 (sizes 2,2,2,0) => 4 total batches. On S3 only the 4
+    %% real files count as root's children for batching (see module doc) =>
+    %% ceil(4/2) = 2 total batches (no POSIX-style extra pass for landing on an
+    %% exact multiple - see module doc)
+    Scan1Unmodified = case StorageType of posix -> 4; s3 -> 2 end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => Scan1Unmodified
+    }),
+
+    %% POSIX-only, matching the old envup test's own coverage (no S3 equivalent
+    %% there either) - passthrough mocks so that the mutation below can be
+    %% proven to still be detected under the hood despite detect_modifications
+    %% suppressing it from the monitoring counters (see below)
+    ?IF_POSIX(StorageType, begin
+        mock_storage_import_hash(ImportingProviderSelector),
+        mock_storage_sync_traverse(ImportingProviderSelector)
+    end),
+
+    %% create a new file inside the first directory (the second stays untouched)
+    %% and let the next continuous scan detect it
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
+    ),
+    %% on POSIX, both modification and deletion detection are disabled for this
+    %% scan, matching the old envup test - storage_import_engine:maybe_update_file/4
+    %% then returns ?FILE_UNMODIFIED unconditionally for every already-known
+    %% entity's own classification, regardless of what actually changed on
+    %% storage. The touched directory's mtime DOES genuinely change (a direct
+    %% child was added), but this no longer surfaces as "modified" below - the
+    %% mock asserts further down still prove the underlying detection fires
+    %% despite the suppression. On S3 the default (enabled) config is used
+    %% instead - see the doc comment above for why disabling detection there
+    %% would prevent the new file from ever being imported at all
+    case StorageType of
+        posix ->
+            storage_import_test_utils:enable_continuous_scan(TestCaseCtx, #{
+                detect_deletions => false,
+                detect_modifications => false
+            });
+        s3 ->
+            storage_import_test_utils:enable_continuous_scan(TestCaseCtx)
+    end,
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the new file is now visible, with its content, on both providers - the
+    %% still-empty untouched sibling directory is automatically excluded from
+    %% this check on S3 (see verify_imported_tree/2 and the module doc)
+    UpdatedTreeSpec = [
+        #dir_spec{name = TouchedDirName, children = [#file_spec{name = FileName, content = Content}]},
+        #dir_spec{name = UntouchedDirName}
+        | OtherFileSpecs
+    ],
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, UpdatedTreeSpec),
+    ?IF_POSIX(StorageType, begin
+        assert_children_mtime_changed(ImportingProviderSelector, SpaceId, TouchedDirStorageFileId),
+        assert_children_hash_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId),
+        assert_children_mtime_unchanged(ImportingProviderSelector, SpaceId, UntouchedDirStorageFileId)
+    end),
+    %% root can never be modified on S3 (module doc) and detect_modifications is
+    %% disabled on POSIX (see above), so nothing is ever "modified" either way -
+    %% only the new nested file is "created". On POSIX every already-known
+    %% entity is forced unmodified: root (4, same batch count as scan 1 - its
+    %% direct children are unchanged) + touched dir (1) + untouched dir (1) + 4
+    %% untouched files (4) = 10. On S3 root now has 5 children (the new file
+    %% joins the same flat listing, see module doc) => ceil(5/2) = 3 total
+    %% batches; there is no separate "touched dir" entity to tally, but the 4
+    %% untouched files still each count towards unmodified regardless of
+    %% whether they end up individually re-checked or bulk-marked as part of an
+    %% unchanged batch (see the "Batch-hash mechanism" established for
+    %% chmod_file_update_in_batched_dir_test) => 3 + 4 = 7
+    Scan2Unmodified = case StorageType of posix -> 10; s3 -> 7 end,
+    %% number of nodes counted towards "created" on scan 1 (dirs don't count on
+    %% S3, see module doc), feeding the cumulative hour/day hists
+    Scan1Created = case StorageType of posix -> 6; s3 -> 4 end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => 0,
+        <<"deleted">> => 0,
+        <<"unmodified">> => Scan2Unmodified,
+        %% the scan-1 creations may have already aged out of the short
+        %% createdMinHist window by the time scan 2 is awaited and the
+        %% tree/monitoring re-verified; the longer hour/day windows still hold them
+        <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
+        <<"createdHourHist">> => 1 + Scan1Created,
+        <<"createdDayHist">> => 1 + Scan1Created,
+        <<"modifiedMinHist">> => 0,
+        <<"modifiedHourHist">> => 0,
+        <<"modifiedDayHist">> => 0,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0

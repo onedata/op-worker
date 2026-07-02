@@ -32,6 +32,13 @@
 % exceed the default ?ATTEMPTS on a loaded environment.
 -define(CROSS_PROVIDER_PROPAGATION_ATTEMPTS, 60).
 
+% Evaluates Expr only when StorageType is posix, no-op otherwise. Shorthand for
+% the "do X on POSIX, nothing on S3" branches that recur throughout the storage
+% import test suites (see their module docs for why POSIX and object storages
+% diverge so often here). For a multi-statement Expr, wrap it in begin...end at
+% the call site.
+-define(IF_POSIX(StorageType, Expr), StorageType =:= posix andalso (Expr)).
+
 
 %% Declares a FIFO (named pipe) to be created directly on the storage. A FIFO is a
 %% special (unsupported) file type that storage import must ignore - it is created

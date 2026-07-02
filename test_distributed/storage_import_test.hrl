@@ -76,32 +76,6 @@
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId),
     ?assertMonitoring(Worker, ExpectedSSM, SpaceId, 1)).
 
--define(assertHashChangedFun(StorageFileId, SpaceId, ExpectedResult0),
-    fun
-        ({_, {storage_import_hash, children_attrs_hash_has_changed, Args}, ExpectedResult0}) ->
-            Id = storage_sync_info:id(StorageFileId, SpaceId),
-            case lists:nth(4, Args) of
-                #document{key = Id} -> 1;
-                _ -> 0
-            end;
-        (_) ->
-            0
-    end
-).
-
--define(assertMtimeChangedFun(StorageFileId, SpaceId, ExpectedResult0),
-    fun
-        ({_, {storage_sync_traverse, has_mtime_changed, Args}, ExpectedResult0}) ->
-            Id = storage_sync_info:id(StorageFileId, SpaceId),
-            case hd(Args) of
-                #document{key = Id} -> 1;
-                _ -> 0
-            end;
-        (_) ->
-            0
-    end
-).
-
 -define(ACL, [
     #access_control_entity{
         acetype = ?allow_mask,

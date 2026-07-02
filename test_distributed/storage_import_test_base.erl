@@ -82,7 +82,6 @@
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
     changing_max_depth_test/1,
-    create_file_in_dir_exceed_batch_update_test/1,
     force_start_test/1,
     force_stop_test/1,
     file_with_data_protection_should_not_be_updated_test/2,
@@ -1786,137 +1785,6 @@ changing_max_depth_test(Config) ->
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
-
-create_file_in_dir_exceed_batch_update_test(Config) ->
-    % in this test storage_import_dir_batch_size is set in init_per_testcase to 2
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    StorageTestDirPath2 = provider_storage_path(?SPACE_ID, ?TEST_DIR2),
-    StorageTestFilePath1 = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    StorageTestFilePath2 = provider_storage_path(?SPACE_ID, ?TEST_FILE2),
-    StorageTestFilePath3 = provider_storage_path(?SPACE_ID, ?TEST_FILE3),
-    StorageTestFilePath4 = provider_storage_path(?SPACE_ID, ?TEST_FILE4),
-    StorageTestFileinDirPath1 = provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
-
-    DirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    DirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
-    FileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath1, RDWRStorage),
-    FileSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath2, RDWRStorage),
-    FileSDHandle3 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath3, RDWRStorage),
-    FileSDHandle4 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath4, RDWRStorage),
-    FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-
-    %% Create dirs on storage
-    ok = sd_test_utils:mkdir(W1, DirSDHandle, 8#777),
-    ok = sd_test_utils:mkdir(W1, DirSDHandle2, 8#777),
-
-    %% Create files on storage
-    ok = sd_test_utils:create_file(W1, FileSDHandle, ?DEFAULT_FILE_PERMS),
-    ok = sd_test_utils:create_file(W1, FileSDHandle2, ?DEFAULT_FILE_PERMS),
-    ok = sd_test_utils:create_file(W1, FileSDHandle3, ?DEFAULT_FILE_PERMS),
-    ok = sd_test_utils:create_file(W1, FileSDHandle4, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, FileSDHandle, 0, ?TEST_DATA),
-    {ok, _} = sd_test_utils:write_file(W1, FileSDHandle2, 0, ?TEST_DATA),
-    {ok, _} = sd_test_utils:write_file(W1, FileSDHandle3, 0, ?TEST_DATA),
-    {ok, _} = sd_test_utils:write_file(W1, FileSDHandle4, 0, ?TEST_DATA),
-    timer:sleep(timer:seconds(1)),
-
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    %% Check if files were imported on W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2})),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH3})),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH4})),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 6,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 3,
-        <<"createdMinHist">> => 6,
-        <<"createdHourHist">> => 6,
-        <<"createdDayHist">> => 6,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    timer:sleep(timer:seconds(1)),
-    test_utils:mock_new(W1, storage_import_hash, [passthrough]),
-    test_utils:mock_new(W1, storage_sync_traverse, [passthrough]),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 1,
-        <<"modified">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 10,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 7,
-        <<"createdDayHist">> => 7,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if files were imported on W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-
-    History = rpc:call(W1, meck, history, [storage_import_hash]),
-    History2 = rpc:call(W1, meck, history, [storage_sync_traverse]),
-
-    {ok, Handle5} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle5),
-
-    assert_num_results(History, ?assertHashChangedFun(StorageTestDirPath2, ?SPACE_ID, true), 0),
-    assert_num_results(History2, ?assertMtimeChangedFun(StorageTestDirPath2, ?SPACE_ID, true), 0),
-    assert_num_results_gte(History2, ?assertMtimeChangedFun(StorageTestDirPath, ?SPACE_ID, true), 1),
-
-    %% Check if file was imported on W2
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
 force_start_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -4248,18 +4116,6 @@ change_time(FilePath, Atime, Mtime) ->
     ok = file:write_file_info(FilePath,
         #file_info{atime = Atime, mtime = Mtime}, [{time, posix}]).
 
-assert_num_results_gte(History, AssertionFun, ExpectedResultsNum) ->
-    ResultsNum = lists:foldl(fun(E, AccIn) ->
-        AccIn + AssertionFun(E)
-    end, 0, History),
-    ?assert(ExpectedResultsNum =< ResultsNum).
-
-assert_num_results(History, AssertionFun, ExpectedResultsNum) ->
-    ResultsNum = lists:foldl(fun(E, AccIn) ->
-        AccIn + AssertionFun(E)
-    end, 0, History),
-    ?assertEqual(ExpectedResultsNum, ResultsNum).
-
 parallel_assert(M, F, A, List, Attempts) ->
     lists:foreach(fun(N) ->
         spawn_link(M, F, [N, self() | A])
@@ -4605,19 +4461,6 @@ init_per_testcase(Case, Config)
     ],
     init_per_testcase(default, Config2);
 
-init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
-    test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 2),
-    Config2 = [
-        {update_config, #{
-            detect_deletions => false,
-            detect_modifications => false}},
-        {old_storage_import_dir_batch_size, OldDirBatchSize}
-        | Config
-    ],
-    init_per_testcase(default, Config2);
-
 init_per_testcase(update_nfs_acl_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, [storage_driver, luma]),
@@ -4704,8 +4547,7 @@ init_per_testcase(_Case, Config) ->
     Config3.
 
 end_per_testcase(Case, Config)
-    when Case =:= create_file_in_dir_exceed_batch_update_test
-    orelse Case =:= create_list_race_test ->
+    when Case =:= create_list_race_test ->
 
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
