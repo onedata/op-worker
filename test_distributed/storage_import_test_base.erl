@@ -78,7 +78,6 @@
     sync_should_update_replicated_file_with_suffix_on_storage/2,
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage/2,
     sync_should_not_import_replicated_file_with_suffix_on_storage/2,
-    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/1,
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
     changing_max_depth_test/1,
@@ -119,7 +118,6 @@
     symlink_is_ignored_by_continuous_scan/2,
 
     change_file_type4_test/1,
-    should_not_detect_timestamp_update_test/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -1472,64 +1470,6 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config, StorageType) -
         lfm_proxy:open(W2, SessId2, ?FILE_REF(G2), read)),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W2, H5, 0, 100), ?ATTEMPTS).
-
-sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    %% Create file on storage
-    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 2,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
 
 create_delete_import2_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -3236,68 +3176,6 @@ change_file_type4_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     ok = lfm_proxy:close(W2, Handle4).
 
-should_not_detect_timestamp_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    W1MountPoint = get_host_mount_point(Config, RDWRStorage),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = host_storage_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1),
-    %% Create file on storage
-    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID, ?ATTEMPTS),
-
-    %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Change file permissions
-    change_time(StorageTestFilePath, 1, 1),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertScanFinished(W1, ?SPACE_ID, 2, ?ATTEMPTS),
-    disable_continuous_scan(Config),
-
-    %% Check if timestamps hasn't changed
-    ?assertNotMatch({ok, #file_attr{atime = 1, mtime = 1}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
 recreate_file_deleted_by_sync_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -3988,21 +3866,6 @@ get_mount_point(Storage) ->
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
-get_host_mount_point(Config, Storage) ->
-    % works only on POSIX storages!!!
-    MountPoint = get_mount_point(Storage),
-    get_storage_path(Config, MountPoint).
-
-get_storage_path(Config, MountPath) when is_list(MountPath) ->
-    get_storage_path(Config, list_to_atom(MountPath));
-get_storage_path(Config, MountPath) when is_binary(MountPath) ->
-    get_storage_path(Config, binary_to_atom(MountPath, latin1));
-get_storage_path(Config, MountPath) when is_atom(MountPath) ->
-    atom_to_binary(?config(host_path,
-        ?config(MountPath,
-            ?config(posix,
-                ?config(storages, Config)))), latin1).
-
 provider_storage_path(SpaceId, File) ->
     provider_storage_path(SpaceId, File, true).
 
@@ -4016,10 +3879,6 @@ host_storage_path(MountPath, _SpaceId, File) ->
 
 touch(Node, FilePath) ->
     ok = rpc:call(Node, file, write_file_info, [FilePath, #file_info{}]).
-
-change_time(FilePath, Atime, Mtime) ->
-    ok = file:write_file_info(FilePath,
-        #file_info{atime = Atime, mtime = Mtime}, [{time, posix}]).
 
 parallel_assert(M, F, A, List, Attempts) ->
     lists:foreach(fun(N) ->
@@ -4300,14 +4159,6 @@ init_per_testcase(force_stop_test, Config) ->
             detect_modifications => false}},
         {old_storage_import_dir_batch_size, OldDirBatchSize}
         | Config
-    ],
-    init_per_testcase(default, Config2);
-
-init_per_testcase(should_not_detect_timestamp_update_test, Config) ->
-    Config2 = [
-        {update_config, #{
-            detect_deletions => false,
-            detect_modifications => false}} | Config
     ],
     init_per_testcase(default, Config2);
 

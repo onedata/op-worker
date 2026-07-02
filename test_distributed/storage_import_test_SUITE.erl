@@ -33,7 +33,6 @@
     delete_opened_file_reimport_race_test/1,
 
     change_file_type4_test/1,
-    should_not_detect_timestamp_update_test/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -58,7 +57,6 @@
     delete_opened_file_reimport_race_test,
 
     change_file_type4_test,
-    should_not_detect_timestamp_update_test,
     recreate_file_deleted_by_sync_test,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider,
     sync_should_not_delete_dir_created_in_remote_provider,
@@ -107,9 +105,6 @@ delete_opened_file_reimport_race_test(Config) ->
 
 change_file_type4_test(Config) ->
     storage_import_test_base:change_file_type4_test(Config).
-
-should_not_detect_timestamp_update_test(Config) ->
-    storage_import_test_base:should_not_detect_timestamp_update_test(Config).
 
 recreate_file_deleted_by_sync_test(Config) ->
     storage_import_test_base:recreate_file_deleted_by_sync_test(Config).

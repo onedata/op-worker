@@ -32,7 +32,10 @@
     replace_file_with_dir_test/1,
     replace_non_empty_dir_with_file_test/1,
     create_file_in_dir_update_test/1,
-    create_file_in_dir_exceed_batch_update_test/1
+    create_file_in_dir_exceed_batch_update_test/1,
+
+    %% --- idempotency ---
+    should_not_process_file_with_unchanged_attrs_hash_test/1
 ]).
 
 all() -> [
@@ -45,7 +48,10 @@ all() -> [
     replace_file_with_dir_test,
     replace_non_empty_dir_with_file_test,
     create_file_in_dir_update_test,
-    create_file_in_dir_exceed_batch_update_test
+    create_file_in_dir_exceed_batch_update_test,
+
+    %% --- idempotency ---
+    should_not_process_file_with_unchanged_attrs_hash_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -76,6 +82,12 @@ replace_file_with_dir_test(_Config) -> ?run_test().
 replace_non_empty_dir_with_file_test(_Config) -> ?run_test().
 create_file_in_dir_update_test(_Config) -> ?run_test().
 create_file_in_dir_exceed_batch_update_test(_Config) -> ?run_test().
+
+
+%% --- idempotency ---
+
+
+should_not_process_file_with_unchanged_attrs_hash_test(_Config) -> ?run_test().
 
 
 %%===================================================================

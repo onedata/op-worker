@@ -111,9 +111,11 @@
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
-    update_nfs_acl_test/1
+    update_nfs_acl_test/1,
 
     %% --- idempotency ---
+    should_not_process_file_with_unchanged_attrs_hash_test/1,
+    should_not_detect_timestamp_update_test/1
 
     %% --- retry ---
 
@@ -1198,6 +1200,82 @@ update_nfs_acl_test(SuiteCtx) ->
 
 
 %% --- idempotency ---
+
+
+%% A file imported by the initial scan is left completely untouched; the next
+%% (continuous) scan must not process it again: the children-attrs hash of the
+%% root's listing batch is unchanged, so the file is bulk-skipped and merely
+%% counted "unmodified" alongside the root (module doc) - nothing is created,
+%% modified or deleted, on either storage type.
+%% (Renamed from old envup's
+%% sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed.)
+should_not_process_file_with_unchanged_attrs_hash_test(SuiteCtx) ->
+    TestCaseCtx = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = ?RAND_STR(), content = ?RAND_STR()}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    %% deliberately no storage mutation - rescan the untouched storage
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"unmodified">> => 2
+    }).
+
+
+%% A file imported by the initial scan has its atime and mtime forced (on the
+%% storage) back to epoch 1 while the continuous scan runs with BOTH detection
+%% flags disabled (matching the old envup config): the scan must NOT propagate
+%% the new timestamps onto the logical file, and every entry is forced
+%% "unmodified" without any attrs comparison (module doc). Note that with the
+%% DEFAULT config this mutation would be picked up: forcing the timestamps also
+%% bumps the file's storage ctime to "now" (ctime cannot be set explicitly),
+%% which the times check of the modification detection compares too - cf.
+%% update_timestamps_file_import_test, where a (future-)timestamps-only change
+%% is detected and synced. POSIX-only - forcing storage timestamps relies on
+%% storage_file_setup_utils:set_atime_and_mtime/5 (old envup had no S3 variant
+%% either).
+should_not_detect_timestamp_update_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = ?RAND_STR()}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    storage_file_setup_utils:set_atime_and_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, 1, 1
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2, #{
+        detect_deletions => false,
+        detect_modifications => false
+    }),
+
+    %% the logical timestamps must not have been overwritten with the forced ones
+    #provider_ctx{node = ImportingProviderNode, session_id = SessionId} = ImportingProviderCtx,
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    ?assertNotMatch(
+        {ok, #file_attr{atime = 1, mtime = 1}},
+        lfm_proxy:stat(ImportingProviderNode, SessionId, {path, SpaceTestFilePath})
+    ),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"unmodified">> => 2
+    }).
 
 
 %% --- retry ---
