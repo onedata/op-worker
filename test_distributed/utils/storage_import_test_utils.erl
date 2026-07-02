@@ -18,7 +18,10 @@
 
 -include("storage_import_oct_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
+-include("modules/datastore/datastore_models.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 
 %% API
 -export([
@@ -34,7 +37,10 @@
     verify_imported_tree/1, verify_imported_tree/2,
     verify_dir_stats/1, verify_dir_stats/2,
     assert_attrs/3, assert_attrs/4,
-    assert_storage_import_monitoring_state/2
+    assert_storage_import_monitoring_state/2,
+    mock_storage_file_acl/3, unmock_storage_driver/1,
+    mock_luma_acl_user/2, unmock_luma/1,
+    get_cdmi_acl/3, ace_json/4
 ]).
 
 -type suite_ctx() :: #storage_import_test_suite_ctx{}.
@@ -487,6 +493,85 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
         SpaceId, Expected
     ]),
     assert_monitoring_state(ImportingProviderSelector, SpaceId, Expected, 1).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks the storage driver so that the given (already encoded) NFS4 ACL is
+%% reported as the xattr of the given storage file during a scan; all other
+%% files (including the space root) keep their real xattrs. Torn down via
+%% unmock_storage_driver/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_storage_file_acl(oct_background:node_selector(), helpers:file_id(), binary()) -> ok.
+mock_storage_file_acl(ProviderSelector, StorageFileId, EncodedAcl) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_driver),
+    ok = test_utils:mock_expect(Nodes, storage_driver, getxattr, fun
+        (#sd_handle{file = FileId}, _Name) when FileId =:= StorageFileId ->
+            {ok, EncodedAcl};
+        (Handle, Name) ->
+            meck:passthrough([Handle, Name])
+    end).
+
+
+-spec unmock_storage_driver(suite_ctx()) -> ok.
+unmock_storage_driver(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_driver).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks LUMA so that both the file owner uid and any named ACL principal map
+%% to the given Onedata user, letting an imported/synced NFS ACL be applied to
+%% that user. Torn down via unmock_luma/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_luma_acl_user(oct_background:node_selector(), od_user:id()) -> ok.
+mock_luma_acl_user(ProviderSelector, UserId) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, [luma]),
+    ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
+        {ok, UserId}
+    end),
+    ok = test_utils:mock_expect(Nodes, luma, map_acl_user_to_onedata_user, fun(_, _) ->
+        {ok, UserId}
+    end).
+
+
+-spec unmock_luma(suite_ctx()) -> ok.
+unmock_luma(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, [luma]).
+
+
+-spec get_cdmi_acl(node(), session:id(), file_meta:path()) -> {ok, json_utils:json_term()} | {error, term()}.
+get_cdmi_acl(Node, SessId, Path) ->
+    case lfm_proxy:get_xattr(Node, SessId, {path, Path}, <<"cdmi_acl">>) of
+        {ok, #xattr{value = Value}} -> {ok, Value};
+        {error, _} = Error -> Error
+    end.
+
+
+-spec ace_json(non_neg_integer(), non_neg_integer(), binary(), non_neg_integer()) -> json_utils:json_map().
+ace_json(AceType, AceFlags, Identifier, AceMask) ->
+    #{
+        <<"acetype">> => ace_mask_hex(AceType),
+        <<"aceflags">> => ace_mask_hex(AceFlags),
+        <<"identifier">> => Identifier,
+        <<"acemask">> => ace_mask_hex(AceMask)
+    }.
+
+
+%% @private
+-spec ace_mask_hex(non_neg_integer()) -> binary().
+ace_mask_hex(Mask) ->
+    <<"0x", (integer_to_binary(Mask, 16))/binary>>.
 
 
 %%%===================================================================

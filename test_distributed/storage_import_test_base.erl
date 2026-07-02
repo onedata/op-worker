@@ -120,7 +120,6 @@
 
     change_file_type4_test/1,
     should_not_detect_timestamp_update_test/1,
-    update_nfs_acl_test/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -3299,100 +3298,6 @@ should_not_detect_timestamp_update_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID).
 
-update_nfs_acl_test(Config) ->
-    Workers = [W1, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID, ?ATTEMPTS),
-
-    %% Check if file was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    %% User1 should be allowed to read acl
-    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
-    ?assertMatch(Value, ?ACL_JSON),
-
-    %% User1 should not be allowed to set acl
-    ?assertMatch({error, ?EACCES},
-        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, #xattr{})),
-
-    %% User2 should be allowed to read acl
-    {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
-
-    %% User2 should not be allowed to set acl
-    ?assertMatch({error, ?EACCES},
-        lfm_proxy:set_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, #xattr{})),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    EncACL = storage_import_acl:encode(?ACL2),
-    ok = test_utils:mock_expect(Workers, storage_driver, getxattr, fun
-        (Handle = #sd_handle{file = <<"/">>}, Name) ->
-            meck:passthrough([Handle, Name]);
-        (Handle = #sd_handle{file = <<"/space1">>}, Name) ->
-            meck:passthrough([Handle, Name]);
-        (#sd_handle{}, _) ->
-            {ok, EncACL}
-    end),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertScanFinished(W1, ?SPACE_ID, 2, ?ATTEMPTS),
-    disable_continuous_scan(Config),
-
-    %% User1 should not be allowed to read acl
-    ?assertMatch({error, ?EACCES},
-        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>), ?ATTEMPTS),
-
-    %% User2 should be allowed to read acl
-    {ok, #xattr{value = Value2}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
-    ?assertMatch(Value2, ?ACL2_JSON),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
 recreate_file_deleted_by_sync_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4461,28 +4366,6 @@ init_per_testcase(Case, Config)
     ],
     init_per_testcase(default, Config2);
 
-init_per_testcase(update_nfs_acl_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(Workers, [storage_driver, luma]),
-    ok = test_utils:mock_expect(Workers, luma, map_uid_to_onedata_user, fun(_, _, _) ->
-        {ok, ?USER1}
-    end),
-    ok = test_utils:mock_expect(Workers, luma, map_acl_user_to_onedata_user, fun(_, _) ->
-        {ok, ?USER1}
-    end),
-    ok = test_utils:mock_expect(Workers, luma, map_acl_group_to_onedata_group, fun(_, _) ->
-        {ok, ?GROUP2}
-    end),
-
-    EncACL = storage_import_acl:encode(?ACL),
-    ok = test_utils:mock_expect(Workers, storage_driver, getxattr, fun
-        (Handle = #sd_handle{file = <<"/space1">>}, Ctx) ->
-            meck:passthrough([Handle, Ctx]);
-        (#sd_handle{}, _) ->
-            {ok, EncACL}
-    end),
-    init_per_testcase(default, Config);
-
 init_per_testcase(create_list_race_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
@@ -4553,11 +4436,6 @@ end_per_testcase(Case, Config)
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
-    end_per_testcase(default, Config);
-
-end_per_testcase(update_nfs_acl_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(Workers, [luma, storage_driver]),
     end_per_testcase(default, Config);
 
 end_per_testcase(force_stop_test, Config) ->

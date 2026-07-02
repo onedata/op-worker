@@ -79,7 +79,8 @@
     replace_non_empty_dir_with_file_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_update_test/1,
-    create_file_in_dir_exceed_batch_update_test/1
+    create_file_in_dir_exceed_batch_update_test/1,
+    update_nfs_acl_test/1
 
     %% --- idempotency ---
 
@@ -150,6 +151,11 @@ end_per_testcase(Case = create_file_in_dir_update_test, TestSuiteCtx = #storage_
 }, Config) ->
     unmock_storage_import_hash(TestSuiteCtx),
     unmock_storage_sync_traverse(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case = update_nfs_acl_test, TestSuiteCtx, Config) ->
+    storage_import_test_utils:unmock_storage_driver(TestSuiteCtx),
+    storage_import_test_utils:unmock_luma(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -1363,6 +1369,159 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         <<"modifiedMinHist">> => 0,
         <<"modifiedHourHist">> => 0,
         <<"modifiedDayHist">> => 0,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }).
+
+
+%% A file imported by the initial scan (with sync_acl enabled) has its on-storage
+%% NFS4 ACL changed; the next (continuous) scan detects the change and re-applies
+%% the new ACL, changing enforcement accordingly - not just a cosmetically
+%% re-read xattr. Reuses the mocking machinery
+%% storage_import_initial_oct_test_base:import_nfs_acl_test built for exactly
+%% this shape (mock_storage_file_acl/3, mock_luma_acl_user/2, both promoted to
+%% storage_import_test_utils for this reuse) - see there for why sync_acl needs
+%% both LUMA (to map the ACL's named principal to a Onedata user) and a
+%% storage_driver mock (real POSIX test storages don't actually carry NFS4 ACLs,
+%% only the mocked getxattr response does).
+%%
+%% Old envup's own version updated to a GROUP-based ACL (via
+%% luma:map_acl_group_to_onedata_group, mapped to a group the second user was a
+%% member of) to prove the change took effect. Dropped here in favor of a
+%% structurally equivalent USER-based swap - this repo's oct test suites have no
+%% existing machinery for creating groups/group membership (nothing else in
+%% test_distributed uses it), and building it was judged out of scope for this
+%% port. Instead: the initial ACL grants EVERYONE@ read_acl and denies the named
+%% principal (mapped to user1, who is also the file's owner) write_attributes;
+%% the updated ACL instead grants ONLY that same named principal read_acl and
+%% denies EVERYONE@ - an order-dependent NFS4 ACL evaluation flip (user1 matches
+%% the first, specific entry; user2 falls through to the second, general deny)
+%% that still proves the update is detected and re-enforced, just with the
+%% roles of "who keeps read access" reversed compared to old envup's version.
+update_nfs_acl_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
+    %% user1/user2 are regular members of the test space (from the 2op scenario)
+    User1Selector = user1,
+    User2Selector = user2,
+    User1Id = oct_background:get_user_id(User1Selector),
+    %% the file owner uid and both ACLs' named principal all map to user1
+    User1PrincipalId = <<"ala@nfsdomain.org">>,
+
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+    InitialAcl = [
+        #access_control_entity{
+            acetype = ?allow_mask, aceflags = ?no_flags_mask,
+            identifier = <<"OWNER@">>, acemask = ?read_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?deny_mask, aceflags = ?no_flags_mask,
+            identifier = <<"GROUP@">>, acemask = ?write_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?allow_mask, aceflags = ?no_flags_mask,
+            identifier = <<"EVERYONE@">>, acemask = ?read_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?deny_mask, aceflags = ?no_flags_mask,
+            identifier = User1PrincipalId, acemask = ?write_attributes_mask
+        }
+    ],
+    UpdatedAcl = [
+        #access_control_entity{
+            acetype = ?allow_mask, aceflags = ?no_flags_mask,
+            identifier = User1PrincipalId, acemask = ?read_acl_mask
+        },
+        #access_control_entity{
+            acetype = ?deny_mask, aceflags = ?no_flags_mask,
+            identifier = <<"EVERYONE@">>, acemask = ?read_acl_mask
+        }
+    ],
+    InitialEncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(InitialAcl)),
+    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, InitialEncodedAcl),
+    storage_import_test_utils:mock_luma_acl_user(ImportingProviderSelector, User1Id),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_id = SpaceId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = Content}, SuiteCtx, #{sync_acl => true}
+    ),
+    %% the imported file is owned by user1; make user1 and user2 space members so
+    %% they can access it (membership propagates via dbsync, hence the retries below)
+    ozw_test_rpc:add_user_to_space(SpaceId, User1Id),
+    ozw_test_rpc:add_user_to_space(SpaceId, oct_background:get_user_id(User2Selector)),
+
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    #provider_ctx{node = ImportingProviderNode} = ImportingProviderCtx,
+    User1SessId = oct_background:get_user_session_id(User1Selector, ImportingProviderSelector),
+    User2SessId = oct_background:get_user_session_id(User2Selector, ImportingProviderSelector),
+
+    %% the file was imported (root's own baseline classification is unmodified,
+    %% not modified - see the module doc "swap convention" caveat referenced
+    %% throughout this file) with the initial ACL applied
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    InitialAclJson = [
+        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"OWNER@">>, ?read_acl_mask),
+        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask, <<"GROUP@">>, ?write_acl_mask),
+        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask),
+        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask,
+            <<(oct_background:get_user_fullname(User1Selector))/binary, "#", User1Id/binary>>,
+            ?write_attributes_mask)
+    ],
+    ?assertEqual({ok, InitialAclJson},
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+    ?assertEqual({ok, InitialAclJson},
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"unmodified">> => 1
+    }),
+
+    %% change the storage's (mocked) ACL and let the next continuous scan detect it
+    UpdatedEncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(UpdatedAcl)),
+    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, UpdatedEncodedAcl),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+    storage_import_test_utils:await_scan_finished(TestCaseCtx, 2),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the roles have flipped: user1 (the named principal in the new ACL's first,
+    %% specific entry) can still read the acl, but user2 now falls through to the
+    %% general EVERYONE@ deny and is rejected
+    UpdatedAclJson = [
+        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask,
+            <<(oct_background:get_user_fullname(User1Selector))/binary, "#", User1Id/binary>>,
+            ?read_acl_mask),
+        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask)
+    ],
+    ?assertEqual({ok, UpdatedAclJson},
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+    ?assertMatch({error, ?EACCES},
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+
+    %% the ACL change is detected via the normal hash-based change-detection path
+    %% (sync_acl folds the NFS4 ACL into the per-file attrs hash, see
+    %% storage_import_hash:count_file_attrs_hash/2) - so the file itself is
+    %% "modified" this scan, same as any other single-file attribute change;
+    %% root's own children are unaffected (same file, same name, only its ACL
+    %% changed) so it stays unmodified, like scan 1
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"deleted">> => 0,
+        <<"unmodified">> => 1,
+        %% the scan-1 creation may have already aged out of the short
+        %% createdMinHist window by the time scan 2 is awaited and the
+        %% monitoring re-verified; the longer hour/day windows still hold it
+        <<"createdMinHist">> => {range, 0, 1},
+        <<"createdHourHist">> => 1,
+        <<"createdDayHist">> => 1,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0

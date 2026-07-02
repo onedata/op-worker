@@ -116,16 +116,16 @@ end_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= import_directory_check_user_id_error_test;
     Case =:= import_file_check_user_id_error_test
 ->
-    unmock_luma(TestSuiteCtx),
+    storage_import_test_utils:unmock_luma(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(Case = import_nfs_acl_test, TestSuiteCtx, Config) ->
-    unmock_storage_driver(TestSuiteCtx),
-    unmock_luma(TestSuiteCtx),
+    storage_import_test_utils:unmock_storage_driver(TestSuiteCtx),
+    storage_import_test_utils:unmock_luma(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(Case = import_nfs_acl_with_disabled_luma_should_fail_test, TestSuiteCtx, Config) ->
-    unmock_storage_driver(TestSuiteCtx),
+    storage_import_test_utils:unmock_storage_driver(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -519,9 +519,9 @@ import_nfs_acl_test(SuiteCtx) ->
     FileName = ?RAND_STR(),
     StorageFileId = filepath_utils:join([<<"/">>, FileName]),
     EncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(?TEST_NFS4_ACL)),
-    mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
+    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
     %% the file owner uid and the ACL's named principal both map to the user1
-    mock_luma_acl_user(ImportingProviderSelector, User1Id),
+    storage_import_test_utils:mock_luma_acl_user(ImportingProviderSelector, User1Id),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_id = SpaceId,
@@ -548,7 +548,7 @@ import_nfs_acl_test(SuiteCtx) ->
         oct_background:get_user_fullname(User1Selector), User1Id
     ),
     ?assertEqual({ok, ExpectedAclJson},
-        get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User1SessId, SpaceTestFilePath), ?ATTEMPTS),
 
     %% ... but may neither set the ACL nor modify the file's attributes (ACL denies it)
     ?assertMatch({error, ?EACCES},
@@ -558,7 +558,7 @@ import_nfs_acl_test(SuiteCtx) ->
 
     %% the second (non-owner) user may also read the ACL (read_acl granted to EVERYONE@)
     ?assertEqual({ok, ExpectedAclJson},
-        get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
+        storage_import_test_utils:get_cdmi_acl(ImportingProviderNode, User2SessId, SpaceTestFilePath), ?ATTEMPTS),
 
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 1
@@ -573,7 +573,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
     FileName = ?RAND_STR(),
     StorageFileId = filepath_utils:join([<<"/">>, FileName]),
     EncodedAcl = ?rpc(ImportingProviderSelector, storage_import_acl:encode(?TEST_NFS4_ACL)),
-    mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
+    storage_import_test_utils:mock_storage_file_acl(ImportingProviderSelector, StorageFileId, EncodedAcl),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         space_path = SpacePath,
@@ -735,15 +735,6 @@ mock_uid_and_gid(ProviderSelector, SpaceOwnerSelector) ->
 
 
 %% @private
--spec unmock_luma(storage_import_test_utils:suite_ctx()) -> ok.
-unmock_luma(#storage_import_test_suite_ctx{
-    importing_provider_selector = ProviderSelector
-}) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_unload(Nodes, [luma]).
-
-
-%% @private
 %% Makes LUMA fail to map any storage uid to a Onedata user, so that importing a
 %% file/dir owned by that uid fails. Torn down via unmock_luma/1.
 -spec mock_luma_error(oct_background:node_selector()) -> ok.
@@ -756,84 +747,17 @@ mock_luma_error(ProviderSelector) ->
 
 
 %% @private
-%% Mocks the storage driver so that the given (already encoded) NFS4 ACL is reported
-%% as the xattr of the given storage file during the scan; all other files (including
-%% the space root) keep their real xattrs. Torn down via unmock_storage_driver/1.
--spec mock_storage_file_acl(oct_background:node_selector(), helpers:file_id(), binary()) -> ok.
-mock_storage_file_acl(ProviderSelector, StorageFileId, EncodedAcl) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_new(Nodes, storage_driver),
-    ok = test_utils:mock_expect(Nodes, storage_driver, getxattr, fun
-        (#sd_handle{file = FileId}, _Name) when FileId =:= StorageFileId ->
-            {ok, EncodedAcl};
-        (Handle, Name) ->
-            meck:passthrough([Handle, Name])
-    end).
-
-
-%% @private
--spec unmock_storage_driver(storage_import_test_utils:suite_ctx()) -> ok.
-unmock_storage_driver(#storage_import_test_suite_ctx{
-    importing_provider_selector = ProviderSelector
-}) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_unload(Nodes, storage_driver).
-
-
-%% @private
-%% Mocks LUMA so that both the file owner uid and the named ACL principal map to
-%% the given Onedata user, letting the imported NFS ACL be applied to that user.
-%% Torn down via unmock_luma/1.
--spec mock_luma_acl_user(oct_background:node_selector(), od_user:id()) -> ok.
-mock_luma_acl_user(ProviderSelector, UserId) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_new(Nodes, [luma]),
-    ok = test_utils:mock_expect(Nodes, luma, map_uid_to_onedata_user, fun(_, _, _) ->
-        {ok, UserId}
-    end),
-    ok = test_utils:mock_expect(Nodes, luma, map_acl_user_to_onedata_user, fun(_, _) ->
-        {ok, UserId}
-    end).
-
-
-%% @private
--spec get_cdmi_acl(node(), session:id(), file_meta:path()) -> {ok, json_utils:json_term()} | {error, term()}.
-get_cdmi_acl(Node, SessId, Path) ->
-    case lfm_proxy:get_xattr(Node, SessId, {path, Path}, <<"cdmi_acl">>) of
-        {ok, #xattr{value = Value}} -> {ok, Value};
-        {error, _} = Error -> Error
-    end.
-
-
-%% @private
 %% Builds the expected cdmi_acl JSON for ?TEST_NFS4_ACL after import: the special
 %% principals (OWNER@/GROUP@/EVERYONE@) are kept verbatim, while the named principal
 %% is rendered as "<full_name>#<user_id>" of the user it was mapped to.
 -spec expected_imported_acl_json(od_user:full_name(), od_user:id()) -> json_utils:json_term().
 expected_imported_acl_json(PrincipalFullName, PrincipalUserId) ->
     [
-        ace_json(?allow_mask, ?no_flags_mask, <<"OWNER@">>, ?read_acl_mask),
-        ace_json(?deny_mask, ?no_flags_mask, <<"GROUP@">>, ?write_acl_mask),
-        ace_json(?allow_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask),
-        ace_json(
+        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"OWNER@">>, ?read_acl_mask),
+        storage_import_test_utils:ace_json(?deny_mask, ?no_flags_mask, <<"GROUP@">>, ?write_acl_mask),
+        storage_import_test_utils:ace_json(?allow_mask, ?no_flags_mask, <<"EVERYONE@">>, ?read_acl_mask),
+        storage_import_test_utils:ace_json(
             ?deny_mask, ?no_flags_mask,
             <<PrincipalFullName/binary, "#", PrincipalUserId/binary>>, ?write_attributes_mask
         )
     ].
-
-
-%% @private
--spec ace_json(non_neg_integer(), non_neg_integer(), binary(), non_neg_integer()) -> json_utils:json_map().
-ace_json(AceType, AceFlags, Identifier, AceMask) ->
-    #{
-        <<"acetype">> => ace_mask_hex(AceType),
-        <<"aceflags">> => ace_mask_hex(AceFlags),
-        <<"identifier">> => Identifier,
-        <<"acemask">> => ace_mask_hex(AceMask)
-    }.
-
-
-%% @private
--spec ace_mask_hex(non_neg_integer()) -> binary().
-ace_mask_hex(Mask) ->
-    <<"0x", (integer_to_binary(Mask, 16))/binary>>.

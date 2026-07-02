@@ -34,7 +34,6 @@
 
     change_file_type4_test/1,
     should_not_detect_timestamp_update_test/1,
-    update_nfs_acl_test/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -60,7 +59,6 @@
 
     change_file_type4_test,
     should_not_detect_timestamp_update_test,
-    update_nfs_acl_test,
     recreate_file_deleted_by_sync_test,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider,
     sync_should_not_delete_dir_created_in_remote_provider,
@@ -112,9 +110,6 @@ change_file_type4_test(Config) ->
 
 should_not_detect_timestamp_update_test(Config) ->
     storage_import_test_base:should_not_detect_timestamp_update_test(Config).
-
-update_nfs_acl_test(Config) ->
-    storage_import_test_base:update_nfs_acl_test(Config).
 
 recreate_file_deleted_by_sync_test(Config) ->
     storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
