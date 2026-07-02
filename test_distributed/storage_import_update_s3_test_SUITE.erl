@@ -25,8 +25,6 @@
 
 %% tests
 -export([
-    update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1,
     sync_should_not_reimport_deleted_but_still_opened_file/1,
     sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage/1,
     sync_should_not_import_recreated_file_with_suffix_on_storage/1,
@@ -49,8 +47,6 @@
 ]).
 
 -define(TEST_CASES, [
-    update_syncs_files_after_import_failed_test,
-    update_syncs_files_after_previous_update_failed_test,
     sync_should_not_reimport_deleted_but_still_opened_file,
     sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage,
     sync_should_not_import_recreated_file_with_suffix_on_storage,
@@ -77,12 +73,6 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-update_syncs_files_after_import_failed_test(Config) ->
-    storage_import_s3_test_base:update_syncs_files_after_import_failed_test(Config).
-
-update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_import_s3_test_base:update_syncs_files_after_previous_update_failed_test(Config).
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
     storage_import_s3_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).

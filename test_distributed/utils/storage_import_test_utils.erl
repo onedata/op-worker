@@ -61,6 +61,11 @@
     mock_luma_acl_user/2, unmock_luma/1,
     get_cdmi_acl/3, expected_imported_acl_json/3
 ]).
+%% API - import failure machinery (mock + expectations)
+-export([
+    mock_import_file_error/2, unmock_import_file_error/1,
+    assert_monitoring_state_after_failed_import/1
+]).
 
 -type suite_ctx() :: #storage_import_test_suite_ctx{}.
 -type case_ctx() :: #storage_import_test_case_ctx{}.
@@ -656,6 +661,58 @@ expected_imported_acl_json(Acl, MappedUserFullName, MappedUserId) ->
 -spec ace_mask_hex(non_neg_integer()) -> binary().
 ace_mask_hex(Mask) ->
     <<"0x", (integer_to_binary(Mask, 16))/binary>>.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks a failure of importing the given file/dir: the import engine raises
+%% for it, while all other entries import normally. Torn down via
+%% unmock_import_file_error/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_import_file_error(suite_ctx(), binary()) -> ok.
+mock_import_file_error(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, ErroneousFile) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, storage_import_engine),
+    ok = test_utils:mock_expect(Nodes, storage_import_engine, import_file_unsafe,
+        fun(StorageFileCtx, Info) ->
+            case storage_file_ctx:get_file_name_const(StorageFileCtx) of
+                ErroneousFile -> throw(test_error);
+                _ -> meck:passthrough([StorageFileCtx, Info])
+            end
+        end
+    ).
+
+
+%% NOTE: tolerates the mock being already torn down (a no-op then), so it can be
+%% called both inline in a test's flow and defensively in end_per_testcase.
+-spec unmock_import_file_error(suite_ctx()) -> ok.
+unmock_import_file_error(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, storage_import_engine).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts the monitoring state of a scan whose only processed entry failed to
+%% import: nothing was created (overriding the expectations derived from the
+%% declared tree), the failure is counted and the space root is (as always) the
+%% single unmodified entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_monitoring_state_after_failed_import(case_ctx()) -> ok.
+assert_monitoring_state_after_failed_import(TestCaseCtx) ->
+    assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"created">> => 0,
+        <<"failed">> => 1,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0
+    }).
 
 
 %%%===================================================================

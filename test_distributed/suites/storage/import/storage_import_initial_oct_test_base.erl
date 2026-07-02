@@ -101,7 +101,7 @@ init_per_testcase(_Case, _TestSuiteCtx, Config) ->
 
 
 end_per_testcase(Case = import_directory_error_test, TestSuiteCtx, Config) ->
-    unmock_import_file_error(TestSuiteCtx),
+    storage_import_test_utils:unmock_import_file_error(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(Case, TestSuiteCtx, Config) when
@@ -396,7 +396,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
         ?ATTEMPTS
     ),
-    assert_monitoring_state_after_failed_import(TestCaseCtx).
+    storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx).
 
 
 %% --- ignored entries ---
@@ -440,7 +440,7 @@ import_ignores_fifo_test(SuiteCtx) ->
 %% intact on the storage.
 import_directory_error_test(SuiteCtx) ->
     DirName = ?RAND_STR(),
-    mock_import_file_error(SuiteCtx, DirName),
+    storage_import_test_utils:mock_import_file_error(SuiteCtx, DirName),
 
     TestCaseCtx = #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
@@ -479,7 +479,7 @@ import_directory_error_test(SuiteCtx) ->
     ?assertMatch({ok, [DirName]},
         sd_test_utils:ls(ImportingProviderNode, StorageSDHandleImportingProvider, 0, 1)),
 
-    assert_monitoring_state_after_failed_import(TestCaseCtx).
+    storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx).
 
 
 %%%===================================================================
@@ -582,27 +582,12 @@ import_check_user_id_error_test_base(SuiteCtx, CaseName, NodeName, NodeSpec) ->
         lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestNodePath}),
         ?ATTEMPTS
     ),
-    assert_monitoring_state_after_failed_import(TestCaseCtx).
+    storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx).
 
 
 %%%===================================================================
 %%% Internal functions - shared assertions
 %%%===================================================================
-
-
-%% @private
-%% Monitoring expectation for an initial scan that failed to import the single
-%% declared node: nothing created, one failure (the space root itself is still
-%% processed normally, keeping the default unmodified count).
--spec assert_monitoring_state_after_failed_import(storage_import_test_utils:case_ctx()) -> ok.
-assert_monitoring_state_after_failed_import(TestCaseCtx) ->
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"created">> => 0,
-        <<"failed">> => 1,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0
-    }).
 
 
 %% @private
@@ -620,34 +605,6 @@ get_storage_mountpoint_owner(HandleNode, StatNode, SpaceId, StorageId) ->
 %%%===================================================================
 %%% Internal functions - test case specific mocks
 %%%===================================================================
-
-
-%% @private
-%% Mocks a failure of importing the given file/dir: the import engine raises for
-%% it, while all other entries import normally. Torn down via unmock_import_file_error/1.
--spec mock_import_file_error(storage_import_test_utils:suite_ctx(), binary()) -> ok.
-mock_import_file_error(#storage_import_test_suite_ctx{
-    importing_provider_selector = ProviderSelector
-}, ErroneousFile) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_new(Nodes, storage_import_engine),
-    ok = test_utils:mock_expect(Nodes, storage_import_engine, import_file_unsafe,
-        fun(StorageFileCtx, Info) ->
-            case storage_file_ctx:get_file_name_const(StorageFileCtx) of
-                ErroneousFile -> throw(test_error);
-                _ -> meck:passthrough([StorageFileCtx, Info])
-            end
-        end
-    ).
-
-
-%% @private
--spec unmock_import_file_error(storage_import_test_utils:suite_ctx()) -> ok.
-unmock_import_file_error(#storage_import_test_suite_ctx{
-    importing_provider_selector = ProviderSelector
-}) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_unload(Nodes, storage_import_engine).
 
 
 %% @private

@@ -45,7 +45,11 @@
 
     %% --- idempotency ---
     should_not_process_file_with_unchanged_attrs_hash_test/1,
-    should_not_detect_timestamp_update_test/1
+    should_not_detect_timestamp_update_test/1,
+
+    %% --- retry ---
+    update_syncs_files_after_import_failed_test/1,
+    update_syncs_files_after_previous_update_failed_test/1
 ]).
 
 all() -> [
@@ -71,7 +75,11 @@ all() -> [
 
     %% --- idempotency ---
     should_not_process_file_with_unchanged_attrs_hash_test,
-    should_not_detect_timestamp_update_test
+    should_not_detect_timestamp_update_test,
+
+    %% --- retry ---
+    update_syncs_files_after_import_failed_test,
+    update_syncs_files_after_previous_update_failed_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -116,6 +124,13 @@ update_nfs_acl_test(_Config) -> ?run_test().
 
 should_not_process_file_with_unchanged_attrs_hash_test(_Config) -> ?run_test().
 should_not_detect_timestamp_update_test(_Config) -> ?run_test().
+
+
+%% --- retry ---
+
+
+update_syncs_files_after_import_failed_test(_Config) -> ?run_test().
+update_syncs_files_after_previous_update_failed_test(_Config) -> ?run_test().
 
 
 %%===================================================================

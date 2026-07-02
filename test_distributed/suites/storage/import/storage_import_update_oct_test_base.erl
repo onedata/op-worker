@@ -115,9 +115,11 @@
 
     %% --- idempotency ---
     should_not_process_file_with_unchanged_attrs_hash_test/1,
-    should_not_detect_timestamp_update_test/1
+    should_not_detect_timestamp_update_test/1,
 
     %% --- retry ---
+    update_syncs_files_after_import_failed_test/1,
+    update_syncs_files_after_previous_update_failed_test/1
 
     %% --- suffixes ---
 
@@ -182,6 +184,16 @@ end_per_testcase(Case = create_file_in_dir_update_test, TestSuiteCtx = #storage_
 end_per_testcase(Case = update_nfs_acl_test, TestSuiteCtx, Config) ->
     storage_import_test_utils:unmock_storage_driver(TestSuiteCtx),
     storage_import_test_utils:unmock_luma(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case, TestSuiteCtx, Config) when
+    Case =:= update_syncs_files_after_import_failed_test;
+    Case =:= update_syncs_files_after_previous_update_failed_test
+->
+    %% on the happy path the mock is already torn down inline (the retrying
+    %% scan must import for real) and this is a no-op; it matters only when
+    %% the test fails before reaching the inline teardown
+    storage_import_test_utils:unmock_import_file_error(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -1207,8 +1219,6 @@ update_nfs_acl_test(SuiteCtx) ->
 %% root's listing batch is unchanged, so the file is bulk-skipped and merely
 %% counted "unmodified" alongside the root (module doc) - nothing is created,
 %% modified or deleted, on either storage type.
-%% (Renamed from old envup's
-%% sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed.)
 should_not_process_file_with_unchanged_attrs_hash_test(SuiteCtx) ->
     TestCaseCtx = storage_import_test_utils:init_testcase(
         ?FUNCTION_NAME, #file_spec{name = ?RAND_STR(), content = ?RAND_STR()}, SuiteCtx
@@ -1230,16 +1240,15 @@ should_not_process_file_with_unchanged_attrs_hash_test(SuiteCtx) ->
 
 %% A file imported by the initial scan has its atime and mtime forced (on the
 %% storage) back to epoch 1 while the continuous scan runs with BOTH detection
-%% flags disabled (matching the old envup config): the scan must NOT propagate
-%% the new timestamps onto the logical file, and every entry is forced
+%% flags disabled: the scan must NOT propagate the new timestamps onto the
+%% logical file, and every entry is forced
 %% "unmodified" without any attrs comparison (module doc). Note that with the
 %% DEFAULT config this mutation would be picked up: forcing the timestamps also
 %% bumps the file's storage ctime to "now" (ctime cannot be set explicitly),
 %% which the times check of the modification detection compares too - cf.
 %% update_timestamps_file_import_test, where a (future-)timestamps-only change
 %% is detected and synced. POSIX-only - forcing storage timestamps relies on
-%% storage_file_setup_utils:set_atime_and_mtime/5 (old envup had no S3 variant
-%% either).
+%% storage_file_setup_utils:set_atime_and_mtime/5.
 should_not_detect_timestamp_update_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -1279,6 +1288,121 @@ should_not_detect_timestamp_update_test(SuiteCtx) ->
 
 
 %% --- retry ---
+
+
+%% Importing the declared file fails on the initial scan (via a mock raising
+%% from the import engine - counted "failed") and the file does not appear in
+%% the space; once the failure is gone (mock removed), the next (continuous)
+%% scan retries and imports it successfully.
+update_syncs_files_after_import_failed_test(SuiteCtx) ->
+    FileName = ?RAND_STR(),
+    storage_import_test_utils:mock_import_file_error(SuiteCtx, FileName),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(
+        ?FUNCTION_NAME, #file_spec{name = FileName, content = ?RAND_STR()}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+
+    %% the file was not imported
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
+        ?ATTEMPTS
+    ),
+    storage_import_test_utils:assert_monitoring_state_after_failed_import(TestCaseCtx),
+
+    %% with the failure gone, the next scan imports the file
+    storage_import_test_utils:unmock_import_file_error(SuiteCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"unmodified">> => 1
+    }).
+
+
+%% Like update_syncs_files_after_import_failed_test, but the failure hits a
+%% continuous scan: the initial scan imports an empty storage, then a file is
+%% created on the storage and its import fails on scan 2 (counted "failed", the
+%% file stays absent from the space); with the failure gone, scan 3 retries and
+%% imports it successfully.
+update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        storage_type = StorageType
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    %% create the file on the storage, with its import mocked to fail
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
+    ),
+    storage_import_test_utils:mock_import_file_error(SuiteCtx, FileName),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the file was not imported; creating it bumped the root's mtime, so the
+    %% root is classified modified on posix (never on s3 - module doc)
+    SpaceTestFilePath = filepath_utils:join([SpacePath, FileName]),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceTestFilePath}),
+        ?ATTEMPTS
+    ),
+    {RootModified, RootUnmodified} = case StorageType of
+        posix -> {1, 0};
+        s3 -> {0, 1}
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"failed">> => 1,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified
+    }),
+
+    %% with the failure gone, the next scan imports the file
+    storage_import_test_utils:unmock_import_file_error(SuiteCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = Content}
+    ),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 1,
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => 1,
+        <<"createdHourHist">> => 1,
+        <<"createdDayHist">> => 1,
+        %% scan-2's root modification (posix only) is still within the hour/day
+        %% histogram windows, but may have aged out of the min window by now
+        <<"modifiedMinHist">> => {range, 0, RootModified},
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified
+    }).
 
 
 %% --- suffixes ---
