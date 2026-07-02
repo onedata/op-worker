@@ -84,6 +84,10 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
+%% Attempts (polled every 1s) for awaiting a file replication transfer - slowed
+%% down deliberately in should_not_sync_file_during_replication_test.
+-define(TRANSFER_ATTEMPTS, 120).
+
 
 % API
 -export([
@@ -126,11 +130,17 @@
     %% --- config ---
     changing_max_depth_test/1,
     force_start_test/1,
-    force_stop_test/1
+    force_stop_test/1,
 
     %% --- protection ---
 
     %% --- not reimported ---
+    should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
+    should_not_delete_dir_created_in_remote_provider_test/1,
+    should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test/1,
+    should_not_sync_file_during_replication_test/1
 ]).
 
 
@@ -218,6 +228,17 @@ end_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_sui
     Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     ok = test_utils:set_env(Nodes, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case, TestSuiteCtx, Config) when
+    Case =:= should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test;
+    Case =:= should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test
+->
+    unmock_storage_helper(TestSuiteCtx),
+    end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
+
+end_per_testcase(Case = should_not_sync_file_during_replication_test, TestSuiteCtx, Config) ->
+    unmock_rtransfer(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -1559,6 +1580,12 @@ force_start_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
+    %% load-bearing - the root's mtime (stat'ed by scan 1 moments ago) has
+    %% second resolution, so without this delay creating the file may leave
+    %% the mtime visibly unchanged and the root would not be classified
+    %% modified by scan 2 (the file itself would still be imported, via the
+    %% children-attrs hash path); do not remove
+    timer:sleep(timer:seconds(2)),
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
     ),
@@ -1660,9 +1687,462 @@ force_stop_test(SuiteCtx) ->
 %% --- not reimported ---
 
 
+%% An entry imported by the initial scan is deleted via LFM, but its removal
+%% from the imported storage fails, leaving the storage entry behind - the next
+%% scan must not reimport it (see should_not_reimport_leftover_entry_test_base).
+%% This variant: a directory, deleted from the NON-importing provider, with the
+%% helper's rmdir mocked to fail. POSIX-only - object storages have no real
+%% directories to leave behind (and no rmdir to fail).
+should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test(SuiteCtx) ->
+    should_not_reimport_leftover_entry_test_base(?FUNCTION_NAME, SuiteCtx, directory).
+
+
+%% Like the directory variant above, but for a regular file, deleted from the
+%% IMPORTING provider, with the helper's unlink mocked to fail - together the
+%% two variants cover both entry types and both deletion origins.
+should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test(SuiteCtx) ->
+    should_not_reimport_leftover_entry_test_base(?FUNCTION_NAME, SuiteCtx, file).
+
+
+%% @private
+%% Shared body of the should_not_reimport_*_that_was_not_successfully_deleted
+%% tests. An entry imported by the initial scan is deleted via LFM, but its
+%% removal from the imported storage fails (mocked helper error) and the
+%% storage entry is left behind: the next scan must recognize the leftover as
+%% an unsuccessfully deleted entry (counted "unmodified") and must NOT reimport
+%% it. A trigger file is created on the storage so that the scan re-examines
+%% the root's children individually (see create_trigger_file_on_storage/1)
+%% instead of bulk-skipping the otherwise-unchanged batch, which would make the
+%% test vacuous.
+-spec should_not_reimport_leftover_entry_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), directory | file
+) ->
+    ok.
+should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    EntryName = ?RAND_STR(),
+    EntrySpec = case EntryType of
+        directory -> #dir_spec{name = EntryName};
+        file -> #file_spec{name = EntryName, content = ?RAND_STR()}
+    end,
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = #provider_ctx{
+            node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(TestCaseName, EntrySpec, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    %% the LFM deletion succeeds logically, but the (mocked) removal from the
+    %% imported storage fails and the storage entry is left behind
+    SpaceEntryPath = filepath_utils:join([SpacePath, EntryName]),
+    case EntryType of
+        directory ->
+            mock_storage_helper_error(SuiteCtx, rmdir, ?ENOTEMPTY),
+            ?assertEqual(ok, lfm_proxy:rm_recursive(
+                NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceEntryPath}
+            ));
+        file ->
+            mock_storage_helper_error(SuiteCtx, unlink, ?EBUSY),
+            %% the storage-side unlink failure propagates to the LFM caller,
+            %% but the logical deletion nevertheless goes through (awaited below)
+            ?assertEqual({error, ?EBUSY}, lfm_proxy:unlink(
+                ImportingProviderNode, ImportingProviderSessionId, {path, SpaceEntryPath}
+            ))
+    end,
+    %% the deletion may originate on the non-importing provider (directory
+    %% variant), so awaiting it on the importing provider must tolerate the
+    %% cross-provider propagation lag
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceEntryPath}),
+        ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+    ),
+    EntryStorageFileId = filepath_utils:join([<<"/">>, EntryName]),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, EntryStorageFileId
+    )),
+
+    TriggerFileName = create_trigger_file_on_storage(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the leftover entry was not reimported - only the trigger file is in
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceEntryPath})
+    ),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceEntryPath}),
+        ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+    ),
+    ?assertMatch(
+        {ok, [{_, TriggerFileName}]},
+        lfm_proxy:get_children(
+            ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+        )
+    ),
+    %% adding the trigger file bumped the root's mtime - the root is classified
+    %% modified on posix (never on s3 - module doc); the leftover entry counts
+    %% towards "unmodified"
+    {Scan2Modified, Scan2Unmodified} = case StorageType of
+        posix -> {1, 1};
+        s3 -> {0, 2}
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => Scan2Modified,
+        <<"unmodified">> => Scan2Unmodified,
+        %% scan-1's creation of the declared entry may have aged out of the Min window
+        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdHourHist">> => 2,
+        <<"createdDayHist">> => 2,
+        <<"modifiedMinHist">> => Scan2Modified,
+        <<"modifiedHourHist">> => Scan2Modified,
+        <<"modifiedDayHist">> => Scan2Modified
+    }).
+
+
+%% A file created (with content) in the space via the non-importing provider is
+%% never replicated - it has no counterpart on the imported storage; the scan
+%% must neither delete nor import it (see
+%% should_not_delete_remote_entries_test_base).
+should_not_delete_not_replicated_file_created_in_remote_provider_test(SuiteCtx) ->
+    should_not_delete_remote_entries_test_base(
+        ?FUNCTION_NAME, SuiteCtx, #file_spec{content = ?RAND_STR()}
+    ).
+
+
+%% Like the file variant above, but for a directory: created via the
+%% non-importing provider, it exists on both providers only logically (a
+%% directory gets no storage counterpart until a file is written into it).
+should_not_delete_dir_created_in_remote_provider_test(SuiteCtx) ->
+    should_not_delete_remote_entries_test_base(?FUNCTION_NAME, SuiteCtx, #dir_spec{}).
+
+
+%% Like the file variant above, but with the remote file nested in a
+%% remotely-created directory - neither the directory nor the file has a
+%% counterpart on the imported storage, and the scan must touch neither.
+should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(SuiteCtx) ->
+    should_not_delete_remote_entries_test_base(?FUNCTION_NAME, SuiteCtx, #dir_spec{
+        children = [#file_spec{content = ?RAND_STR()}]
+    }).
+
+
+%% @private
+%% Shared body of the should_not_delete_*_created_in_remote_provider tests.
+%% A file tree created in the space via the non-importing provider has no
+%% counterpart on the imported storage (see
+%% create_file_tree_via_remote_provider/2). A scan - forced to do real work by
+%% a trigger file created on the storage - must not mistake the missing storage
+%% entries for deletions: every entry must stay in the space on both providers
+%% (files with their content intact) and must not materialize on the imported
+%% storage.
+-spec should_not_delete_remote_entries_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), onenv_file_test_utils:object_spec()
+) ->
+    ok.
+should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTreeSpec) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+
+    TestCaseCtx = storage_import_test_utils:init_testcase(TestCaseName, undefined, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    RemoteEntries = create_file_tree_via_remote_provider(TestCaseCtx, RemoteFileTreeSpec),
+
+    create_trigger_file_on_storage(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    assert_remote_entries_not_affected_by_scan(TestCaseCtx, RemoteEntries),
+    assert_monitoring_state_after_trigger_file_import(TestCaseCtx, StorageType).
+
+
+%% While a file (created via the non-importing provider) is being replicated
+%% to the importing provider, its storage file already exists - partially
+%% written by rtransfer, which is artificially slowed down by a mock - while
+%% continuous scans run every second: the scans must recognize the storage
+%% file as a replication target in progress and must not sync it. After the
+%% transfer completes, both providers must hold the full, valid replica.
+should_not_sync_file_during_replication_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector,
+        non_importing_provider_selector = NonImportingProviderSelector
+    } = SuiteCtx,
+    Content = ?RAND_STR(100),
+    ContentSize = byte_size(Content),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = NonImportingProviderCtx = #provider_ctx{
+            node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
+        }
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    #object{guid = FileGuid} = create_file_tree_via_remote_provider(
+        TestCaseCtx, #file_spec{content = Content}
+    ),
+
+    ImportingProviderId = oct_background:get_provider_id(ImportingProviderSelector),
+    NonImportingProviderId = oct_background:get_provider_id(NonImportingProviderSelector),
+    assert_file_distribution(ImportingProviderCtx, [
+        #{
+            <<"blocks">> => [],
+            <<"providerId">> => ImportingProviderId,
+            <<"totalBlocksSize">> => 0
+        },
+        #{
+            <<"blocks">> => [[0, ContentSize]],
+            <<"providerId">> => NonImportingProviderId,
+            <<"totalBlocksSize">> => ContentSize
+        }
+    ], FileGuid),
+    %% TODO VFS-9498 - not needed once file replication uses fetched file
+    %% location instead of the dbsynced knowledge awaited here
+    ?assertMatch(
+        {ok, [[0, ContentSize]]},
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(
+            ImportingProviderNode, FileGuid, NonImportingProviderId
+        ),
+        ?ATTEMPTS
+    ),
+
+    %% slow rtransfer down so that the partially-replicated storage file is
+    %% exposed to several scan cycles
+    mock_rtransfer_open_delay(SuiteCtx, 10),
+    storage_import_test_utils:enable_continuous_scan(TestCaseCtx),
+
+    {ok, TransferId} = opt_transfers:schedule_file_replication(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), ImportingProviderId
+    ),
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = completed}}},
+        ?rpc(ImportingProviderSelector, transfer:get(TransferId)),
+        ?TRANSFER_ATTEMPTS
+    ),
+    storage_import_test_utils:disable_continuous_scan(TestCaseCtx),
+
+    %% the scans must not have invalidated any replica blocks
+    FullDistribution = [
+        #{
+            <<"blocks">> => [[0, ContentSize]],
+            <<"providerId">> => ImportingProviderId,
+            <<"totalBlocksSize">> => ContentSize
+        },
+        #{
+            <<"blocks">> => [[0, ContentSize]],
+            <<"providerId">> => NonImportingProviderId,
+            <<"totalBlocksSize">> => ContentSize
+        }
+    ],
+    assert_file_distribution(ImportingProviderCtx, FullDistribution, FileGuid),
+    assert_file_distribution(NonImportingProviderCtx, FullDistribution, FileGuid),
+    ?assertMatch(
+        {ok, #file_attr{size = ContentSize}},
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(FileGuid))
+    ).
+
+
+%%%===================================================================
+%%% Internal functions - shared test steps
+%%%===================================================================
+
+
+%% @private
+%% @doc
+%% Creates the given file tree in the space via the NON-importing (remote)
+%% provider - purely logically, so nothing materializes on the imported storage
+%% (a remotely-created file's data stays remote until replicated; a directory
+%% gets no storage counterpart until a file is written into it on the importing
+%% provider). Awaits the metadata propagation to the importing provider and
+%% returns the created tree with all names concretized.
+%% @end
+-spec create_file_tree_via_remote_provider(
+    storage_import_test_utils:case_ctx(), onenv_file_test_utils:object_spec()
+) ->
+    onenv_file_test_utils:object().
+create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{
+        non_importing_provider_selector = NonImportingProviderSelector,
+        space_owner_selector = SpaceOwnerSelector
+    },
+    space_id = SpaceId,
+    space_path = SpacePath,
+    importing_provider_ctx = #provider_ctx{
+        node = ImportingProviderNode,
+        session_id = ImportingProviderSessionId
+    }
+}, FileTreeSpec) ->
+    Object = onenv_file_test_utils:create_file_tree(
+        oct_background:get_user_id(SpaceOwnerSelector),
+        space_dir:guid(SpaceId),
+        NonImportingProviderSelector,
+        FileTreeSpec
+    ),
+    lists:foreach(fun({PathSegments, _}) ->
+        ?assertMatch(
+            {ok, #file_attr{}},
+            lfm_proxy:stat(
+                ImportingProviderNode, ImportingProviderSessionId,
+                {path, filepath_utils:join([SpacePath | PathSegments])}
+            ),
+            ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+        )
+    end, flatten_objects(Object)),
+    Object.
+
+
+%% @private
+%% Flattens a created file tree into a list of every node (the declared root
+%% included) tagged with its path segments relative to the tree's parent.
+-spec flatten_objects(onenv_file_test_utils:object()) ->
+    [{[file_meta:name()], onenv_file_test_utils:object()}].
+flatten_objects(Object = #object{name = Name, children = Children}) ->
+    [{[Name], Object} | [
+        {[Name | DescendantSegments], Descendant}
+        || Child <- utils:ensure_defined(Children, []),
+           {DescendantSegments, Descendant} <- flatten_objects(Child)
+    ]].
+
+
+%% @private
+%% @doc
+%% Creates a small file directly on the imported storage so that the next scan
+%% has real work to do: the new file changes the space root's children-attrs
+%% batch hash (and, on POSIX, the root's mtime), forcing the scan to re-examine
+%% the root's children individually instead of bulk-skipping the
+%% otherwise-unchanged batch - without it, several tests in this module would
+%% pass vacuously. Returns the (random) name of the created file.
+%% @end
+-spec create_trigger_file_on_storage(storage_import_test_utils:case_ctx()) ->
+    binary().
+create_trigger_file_on_storage(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    },
+    imported_storage_id = ImportedStorageId
+}) ->
+    TriggerFileName = ?RAND_STR(),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId,
+        filepath_utils:join([<<"/">>, TriggerFileName]), ?RAND_STR()
+    ),
+    TriggerFileName.
+
+
 %%%===================================================================
 %%% Internal functions - shared assertions
 %%%===================================================================
+
+
+%% @private
+%% Asserts, for every entry of a remotely-created file tree (see
+%% create_file_tree_via_remote_provider/2), that the scan neither imported it
+%% onto the storage nor deleted it from the space: the entry still has no
+%% storage counterpart, is still reachable on both providers, and a file's
+%% content - read via the non-importing provider, where its data lives - is
+%% intact.
+-spec assert_remote_entries_not_affected_by_scan(
+    storage_import_test_utils:case_ctx(), onenv_file_test_utils:object()
+) ->
+    ok.
+assert_remote_entries_not_affected_by_scan(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    },
+    imported_storage_id = ImportedStorageId,
+    space_path = SpacePath,
+    importing_provider_ctx = #provider_ctx{
+        node = ImportingProviderNode,
+        session_id = ImportingProviderSessionId
+    },
+    non_importing_provider_ctx = NonImportingProviderCtx = #provider_ctx{
+        node = NonImportingProviderNode,
+        session_id = NonImportingProviderSessionId
+    }
+}, RemoteEntries) ->
+    lists:foreach(fun({PathSegments, #object{type = Type, content = Content}}) ->
+        %% the entry must not have materialized on the imported storage...
+        ?assertMatch({error, ?ENOENT}, storage_file_setup_utils:stat(
+            ImportingProviderSelector, ImportedStorageId,
+            filepath_utils:join([<<"/">> | PathSegments])
+        )),
+        %% ...and must stay in the space on both providers
+        SpaceEntryPath = filepath_utils:join([SpacePath | PathSegments]),
+        ?assertMatch({ok, #file_attr{}},
+            lfm_proxy:stat(ImportingProviderNode, ImportingProviderSessionId, {path, SpaceEntryPath})
+        ),
+        case Type of
+            ?REGULAR_FILE_TYPE ->
+                storage_import_test_utils:assert_file_content(
+                    NonImportingProviderCtx, SpaceEntryPath, Content
+                );
+            ?DIRECTORY_TYPE ->
+                ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(
+                    NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceEntryPath}
+                ))
+        end
+    end, flatten_objects(RemoteEntries)).
+
+
+%% @private
+%% Monitoring expectation shared by the should_not_delete_* tests: the second
+%% scan imported exactly the trigger file (whose creation bumped the root's
+%% mtime - the root is classified modified on posix, never on s3, see module
+%% doc), and the remotely-created entries, having no storage counterparts, left
+%% no trace in the counters - in particular nothing was deleted.
+-spec assert_monitoring_state_after_trigger_file_import(
+    storage_import_test_utils:case_ctx(), posix | s3
+) ->
+    ok.
+assert_monitoring_state_after_trigger_file_import(TestCaseCtx, StorageType) ->
+    {RootModified, RootUnmodified} = case StorageType of
+        posix -> {1, 0};
+        s3 -> {0, 1}
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        <<"createdMinHist">> => 1,
+        <<"createdHourHist">> => 1,
+        <<"createdDayHist">> => 1,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified
+    }).
+
+
+%% @private
+%% Asserts the file's replica distribution as seen by the given provider.
+-spec assert_file_distribution(#provider_ctx{}, [map()], file_id:file_guid()) -> ok.
+assert_file_distribution(#provider_ctx{node = Node, session_id = SessionId}, ExpectedDistribution, FileGuid) ->
+    ?assertEqual(
+        lists:sort(ExpectedDistribution),
+        case opt_file_metadata:get_distribution_deprecated(Node, SessionId, ?FILE_REF(FileGuid)) of
+            {ok, FileBlocks} -> lists:sort(FileBlocks);
+            Error -> Error
+        end,
+        ?ATTEMPTS
+    ),
+    ok.
 
 
 %% @private
@@ -1691,6 +2171,60 @@ assert_monitoring_state_after_single_file_modification(TestCaseCtx) ->
 %%%===================================================================
 %%% Internal functions - test case specific mocks
 %%%===================================================================
+
+
+%% @private
+%% Mocks the given storage helper operation to fail with the given POSIX error
+%% (all other operations pass through). Torn down via unmock_storage_helper/1.
+-spec mock_storage_helper_error(storage_import_test_utils:suite_ctx(), rmdir | unlink, atom()) ->
+    ok.
+mock_storage_helper_error(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, Operation, Error) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, helpers),
+    MockFun = case Operation of
+        rmdir -> fun(_HelperHandle, _FileId) -> {error, Error} end;
+        unlink -> fun(_HelperHandle, _FileId, _CurrentSize) -> {error, Error} end
+    end,
+    ok = test_utils:mock_expect(Nodes, helpers, Operation, MockFun).
+
+
+%% @private
+-spec unmock_storage_helper(storage_import_test_utils:suite_ctx()) -> ok.
+unmock_storage_helper(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, helpers).
+
+
+%% @private
+%% Mocks (with a passthrough) rtransfer so that opening a file for an incoming
+%% transfer takes at least the given delay - keeps the partially-replicated
+%% storage file around long enough for several scan cycles to see it. Torn
+%% down via unmock_rtransfer/1.
+-spec mock_rtransfer_open_delay(storage_import_test_utils:suite_ctx(), non_neg_integer()) ->
+    ok.
+mock_rtransfer_open_delay(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}, DelaySeconds) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, rtransfer_config),
+    ok = test_utils:mock_expect(Nodes, rtransfer_config, open, fun(Guid, Flag) ->
+        Result = meck:passthrough([Guid, Flag]),
+        timer:sleep(timer:seconds(DelaySeconds)),
+        Result
+    end).
+
+
+%% @private
+-spec unmock_rtransfer(storage_import_test_utils:suite_ctx()) -> ok.
+unmock_rtransfer(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, rtransfer_config).
 
 
 %% @private

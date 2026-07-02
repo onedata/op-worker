@@ -54,6 +54,7 @@
     verify_imported_tree/1, verify_imported_tree/2,
     verify_dir_stats/1, verify_dir_stats/2,
     assert_attrs/3, assert_attrs/4,
+    assert_file_content/3,
     assert_storage_import_monitoring_state/2,
     get_storage_import_monitoring_state/1
 ]).
@@ -539,6 +540,25 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
     maps:foreach(fun(Field, ExpectedValue) ->
         ?assertEqual(ExpectedValue, get_file_attr_field(ProviderCtx, Path, Field), Attempts)
     end, ExpectedAttrs).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts that the regular file at the given path holds exactly the given
+%% content, as seen by the given provider. NOTE: reading via LFM fetches the
+%% file's data - on a provider not yet holding a replica this triggers an
+%% actual replication.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_file_content(#provider_ctx{}, file_meta:path(), binary()) -> ok.
+assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Content) ->
+    {ok, Handle} = ?assertMatch(
+        {ok, _}, lfm_proxy:open(Node, SessId, {path, Path}, read), ?ATTEMPTS
+    ),
+    % read at least 1 byte, otherwise an empty file would not be checked at all
+    ReadSize = max(byte_size(Content), 1),
+    ?assertEqual({ok, Content}, lfm_proxy:check_size_and_read(Node, Handle, 0, ReadSize), ?ATTEMPTS),
+    ok = lfm_proxy:close(Node, Handle).
 
 
 %%--------------------------------------------------------------------
@@ -1064,18 +1084,6 @@ list_child_names(Node, SessId, ParentPath) ->
         {ok, Children} -> lists:sort([Name || {_Guid, Name} <- Children]);
         {error, _} = Error -> Error
     end.
-
-
-%% @private
--spec assert_file_content(#provider_ctx{}, file_meta:path(), binary()) -> ok.
-assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Content) ->
-    {ok, Handle} = ?assertMatch(
-        {ok, _}, lfm_proxy:open(Node, SessId, {path, Path}, read), ?ATTEMPTS
-    ),
-    % read at least 1 byte, otherwise an empty file would not be checked at all
-    ReadSize = max(byte_size(Content), 1),
-    ?assertEqual({ok, Content}, lfm_proxy:check_size_and_read(Node, Handle, 0, ReadSize), ?ATTEMPTS),
-    ok = lfm_proxy:close(Node, Handle).
 
 
 %% @private

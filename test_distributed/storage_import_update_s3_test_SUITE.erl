@@ -26,7 +26,6 @@
 %% tests
 -export([
     sync_should_not_reimport_deleted_but_still_opened_file/1,
-    sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage/1,
     sync_should_not_import_recreated_file_with_suffix_on_storage/1,
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage/1,
     sync_should_not_import_replicated_file_with_suffix_on_storage/1,
@@ -45,7 +44,6 @@
 
 -define(TEST_CASES, [
     sync_should_not_reimport_deleted_but_still_opened_file,
-    sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage,
     sync_should_not_import_recreated_file_with_suffix_on_storage,
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage,
     sync_should_not_import_replicated_file_with_suffix_on_storage,
@@ -70,9 +68,6 @@ all() -> ?ALL(?TEST_CASES).
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
     storage_import_s3_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).
-
-sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config) ->
-    storage_import_test_base:sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config, ?S3_HELPER_NAME).
 
 sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
     storage_import_test_base:sync_should_not_import_recreated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).

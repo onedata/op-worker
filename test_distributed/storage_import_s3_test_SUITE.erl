@@ -58,10 +58,6 @@
 
     change_file_type4_test/1,
     recreate_file_deleted_by_sync_test/1,
-    sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
-    sync_should_not_delete_dir_created_in_remote_provider/1,
-    sync_should_not_delete_not_replicated_files_created_in_remote_provider2/1,
-    should_not_sync_file_during_replication/1,
     sync_should_not_invalidate_file_after_replication/1,
     time_warp_between_scans_test/1,
     time_warp_during_scan_test/1
@@ -101,10 +97,6 @@
 
     change_file_type4_test,
     recreate_file_deleted_by_sync_test,
-    sync_should_not_delete_not_replicated_file_created_in_remote_provider,
-    sync_should_not_delete_dir_created_in_remote_provider,
-    sync_should_not_delete_not_replicated_files_created_in_remote_provider2,
-    should_not_sync_file_during_replication,
     sync_should_not_invalidate_file_after_replication,
     time_warp_between_scans_test,
     time_warp_during_scan_test
@@ -207,19 +199,6 @@ change_file_type4_test(Config) ->
 
 recreate_file_deleted_by_sync_test(Config) ->
     storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
-
-sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config) ->
-    storage_import_test_base:sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config).
-
-sync_should_not_delete_dir_created_in_remote_provider(Config) ->
-    storage_import_test_base:sync_should_not_delete_dir_created_in_remote_provider(Config).
-
-sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
-    storage_import_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config).
-
-should_not_sync_file_during_replication(Config) ->
-    % file size limit that can be created via lfm on s3
-    storage_import_test_base:should_not_sync_file_during_replication(Config).
 
 sync_should_not_invalidate_file_after_replication(Config) ->
     storage_import_test_base:sync_should_not_invalidate_file_after_replication(Config).

@@ -28,13 +28,13 @@
 -export([create_dir/3, create_dir/4, chown/5]).
 -export([write_file/5, delete_file/4]).
 -export([chmod/4, truncate/5, rename/4, rmdir/3]).
--export([get_mtime/3, set_mtime/4, set_atime_and_mtime/5]).
+-export([stat/3, get_mtime/3, set_mtime/4, set_atime_and_mtime/5]).
 %% on-node routines (executed on op_worker via rpc)
 -export([create_file_on_storage/3, write_to_storage_file/4, delete_file_on_storage/3]).
 -export([create_fifo_on_storage/3]).
 -export([create_dir_on_storage/3, chown_on_storage/4]).
 -export([chmod_on_storage/3, truncate_on_storage/4, rename_on_storage/3, rmdir_on_storage/2]).
--export([get_mtime_on_storage/2, set_mtime_on_storage/3, set_atime_and_mtime_on_storage/4]).
+-export([stat_on_storage/2, get_mtime_on_storage/2, set_mtime_on_storage/3, set_atime_and_mtime_on_storage/4]).
 
 
 %%%===================================================================
@@ -141,6 +141,16 @@ rename(ProviderSelector, StorageId, SrcStorageFileId, DstStorageFileId) ->
 rmdir(ProviderSelector, StorageId, StorageFileId) ->
     ok = opw_test_rpc:call(
         ProviderSelector, ?MODULE, rmdir_on_storage, [StorageId, StorageFileId]
+    ).
+
+
+%% Stats the entry directly on the storage - e.g. to assert whether it exists
+%% there at all ({error, ?ENOENT} when not).
+-spec stat(oct_background:node_selector(), storage:id(), helpers:file_id()) ->
+    {ok, helpers:stat()} | {error, term()}.
+stat(ProviderSelector, StorageId, StorageFileId) ->
+    opw_test_rpc:call(
+        ProviderSelector, ?MODULE, stat_on_storage, [StorageId, StorageFileId]
     ).
 
 
@@ -269,6 +279,14 @@ rmdir_on_storage(StorageId, StorageFileId) ->
         ok -> ok;
         {error, 'Function not implemented'} -> ok
     end.
+
+
+%% @doc Runs on the op_worker node.
+-spec stat_on_storage(storage:id(), helpers:file_id()) ->
+    {ok, helpers:stat()} | {error, term()}.
+stat_on_storage(StorageId, StorageFileId) ->
+    HelperHandle = get_helper_handle(StorageId),
+    helpers:getattr(HelperHandle, StorageFileId).
 
 
 %% @doc Runs on the op_worker node.

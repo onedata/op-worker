@@ -54,7 +54,15 @@
     %% --- config ---
     changing_max_depth_test/1,
     force_start_test/1,
-    force_stop_test/1
+    force_stop_test/1,
+
+    %% --- not reimported ---
+    should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
+    should_not_delete_dir_created_in_remote_provider_test/1,
+    should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test/1,
+    should_not_sync_file_during_replication_test/1
 ]).
 
 all() -> [
@@ -89,7 +97,15 @@ all() -> [
     %% --- config ---
     changing_max_depth_test,
     force_start_test,
-    force_stop_test
+    force_stop_test,
+
+    %% --- not reimported ---
+    should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test,
+    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test,
+    should_not_delete_not_replicated_file_created_in_remote_provider_test,
+    should_not_delete_dir_created_in_remote_provider_test,
+    should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test,
+    should_not_sync_file_during_replication_test
 ].
 
 -define(SUITE_CTX, #storage_import_test_suite_ctx{
@@ -149,6 +165,17 @@ update_syncs_files_after_previous_update_failed_test(_Config) -> ?run_test().
 changing_max_depth_test(_Config) -> ?run_test().
 force_start_test(_Config) -> ?run_test().
 force_stop_test(_Config) -> ?run_test().
+
+
+%% --- not reimported ---
+
+
+should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test(_Config) -> ?run_test().
+should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test(_Config) -> ?run_test().
+should_not_delete_not_replicated_file_created_in_remote_provider_test(_Config) -> ?run_test().
+should_not_delete_dir_created_in_remote_provider_test(_Config) -> ?run_test().
+should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(_Config) -> ?run_test().
+should_not_sync_file_during_replication_test(_Config) -> ?run_test().
 
 
 %%===================================================================
