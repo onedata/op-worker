@@ -227,6 +227,8 @@ stages:
         - storage_import_update_s3_oct
         - storage_import_links_posix_oct
         - storage_import_links_s3_oct
+        - storage_import_delete_posix_oct
+        - storage_import_delete_s3_oct
         - storage_import_s3
         - storage_import_update
         - storage_import_update_s3
@@ -1746,6 +1748,20 @@ storage_import_links_s3_oct:
     - <<: *ct_logs
       name: ct_logs_storage_import_links_s3_oct.tar.gz
 
+storage_import_delete_posix_oct:
+  <<: *ct-onenv-job
+  key: STORIMDPOCT
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_delete_posix_oct.tar.gz
+
+storage_import_delete_s3_oct:
+  <<: *ct-onenv-job
+  key: STORIMDS3OCT
+  artifacts:
+    - <<: *ct_logs
+      name: ct_logs_storage_import_delete_s3_oct.tar.gz
+
 storage_import_s3:
   <<: *ct-job
   key: STORIMPS3
@@ -2117,6 +2133,8 @@ Coverage report:
     - artifact: ct_logs_storage_import_update_s3_oct.tar.gz
     - artifact: ct_logs_storage_import_links_posix_oct.tar.gz
     - artifact: ct_logs_storage_import_links_s3_oct.tar.gz
+    - artifact: ct_logs_storage_import_delete_posix_oct.tar.gz
+    - artifact: ct_logs_storage_import_delete_s3_oct.tar.gz
     - artifact: ct_logs_storage_import_s3.tar.gz
     - artifact: ct_logs_storage_import_update.tar.gz
     - artifact: ct_logs_storage_import_update_s3.tar.gz

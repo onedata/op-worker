@@ -88,13 +88,8 @@
     dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
 
-    delete_empty_directory_update_test/1,
-    delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
     delete_and_update_files_simultaneously_update_test/1,
-    delete_file_update_test/1,
-    delete_file_in_dir_update_test/1,
-    delete_many_subfiles_test/1,
     create_delete_race_test/2,
     create_list_race_test/1,
     symlink_is_ignored_by_initial_scan/1,
@@ -1557,104 +1552,6 @@ dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, P
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})).
 
 
-delete_empty_directory_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    %% Create dir on storage
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
-    enable_initial_scan(Config, ?SPACE_ID),
-    %% Check if dir was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    %% Delete dir on storage
-    enable_continuous_scans(Config, ?SPACE_ID),
-    ok = sd_test_utils:rmdir(W1, SDHandle),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 0,
-        <<"deleted">> => 1,
-        <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if dir was deleted in space
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
-
-delete_non_empty_directory_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    StorageTestFileinDirPath1 = provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dir on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
-    FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath1, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    %% Check if dir was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    {ok, Handle5} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle5),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    %% Delete dir on storage
-    ok = sd_test_utils:recursive_rm(W1, SDHandle),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 0,
-        <<"deleted">> => 2,
-        <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 2,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 2,
-        <<"deletedHourHist">> => 2,
-        <<"deletedDayHist">> => 2,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if dir was deleted in space
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
-
 sync_works_properly_after_delete_test(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -1881,238 +1778,6 @@ delete_and_update_files_simultaneously_update_test(Config) ->
     ?assertMatch({ok, #file_attr{mode = NewMode}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), ?ATTEMPTS).
 
-delete_file_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    %% Check if file was imported
-    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle1} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-
-    FileUuid = file_id:guid_to_uuid(FileGuid),
-    Xattr = #xattr{name = <<"xattr_name">>, value = <<"xattr_value">>},
-    ok = lfm_proxy:set_xattr(W1, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), Xattr),
-
-    %% Delete file on storage
-    ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 0,
-        <<"deleted">> => 1,
-        <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was deleted from the space
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
-
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"xattr_name">>)),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, ?FILE_REF(FileGuid), <<"xattr_name">>)),
-    ?assertMatch({error, not_found}, rpc:call(W1, custom_metadata, get, [FileUuid])).
-
-delete_file_in_dir_update_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE2)),
-    timer:sleep(timer:seconds(1)),
-
-    %% Create dir on storage
-    SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDDirHandle, ?DEFAULT_DIR_PERMS),
-
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if dir was imported on W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, [{_, ?TEST_DIR}]},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
-
-    %% Create file on storage
-    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDFileHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was imported on W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle1),
-    ?assertMatch({ok, [{_, ?TEST_FILE2}]},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
-
-    % Delete file in the directory from storage
-    ok = sd_test_utils:unlink(W1, SDFileHandle, ?TEST_DATA_SIZE),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertScanFinished(W1, ?SPACE_ID, 3),
-    disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 3,
-        <<"deleted">> => 1,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Check if file was deleted from the space
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), ?ATTEMPTS),
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS).
-
-
-delete_many_subfiles_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dirs and files on storage
-    RootPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, RootPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, 8#777),
-    DirStructure = [10, 10, 10],
-    create_nested_directory_tree(W1, DirStructure, SDHandle),
-    enable_initial_scan(Config, ?SPACE_ID),
-    Files = generate_nested_directory_tree_file_paths(DirStructure, ?SPACE_TEST_DIR_PATH),
-
-    Timeout = 600,
-    parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout),
-    assertInitialScanFinished(W1, ?SPACE_ID, Timeout),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1111,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdHourHist">> => 1111,
-        <<"createdDayHist">> => 1111,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    SpaceDirGuid = get_space_guid(),
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceDirGuid),
-
-    ok = sd_test_utils:recursive_rm(W1, SDHandle),
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertScanFinished(W1, ?SPACE_ID, 2, Timeout),
-    parallel_assert(?MODULE, verify_file_deleted, [W1, SessId, Timeout], [?SPACE_TEST_DIR_PATH | Files], Timeout),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"modified">> => 0,
-        <<"deleted">> => 1111,
-        <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdDayHist">> => 1111,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedHourHist">> => 1111,
-        <<"deletedDayHist">> => 1111,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceDirGuid).
 
 create_delete_race_test(Config, StorageType) ->
     % this tests checks whether storage import works properly in case of create-delete race
@@ -3107,9 +2772,6 @@ await_syncing_process() ->
 release_syncing_process(SyncingProcess) ->
     SyncingProcess ! continue.
 
-get_space_guid() ->
-    space_dir:guid(?SPACE_ID).
-
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -3137,11 +2799,7 @@ end_per_suite(Config) ->
     initializer:unmock_provider_ids(?config(op_worker_nodes, Config)).
 
 init_per_testcase(Case, Config)
-    when Case =:= delete_empty_directory_update_test
-    orelse Case =:= delete_non_empty_directory_update_test
-    orelse Case =:= delete_file_update_test
-    orelse Case =:= symlink_is_ignored_by_initial_scan
-    orelse Case =:= delete_file_in_dir_update_test
+    when Case =:= symlink_is_ignored_by_initial_scan
     orelse Case =:= create_subfiles_and_delete_before_import_is_finished_test ->
 
     Config2 = [
@@ -3190,14 +2848,6 @@ init_per_testcase(create_list_race_test, Config) ->
         | Config
     ],
     init_per_testcase(default, Config2);
-
-init_per_testcase(delete_many_subfiles_test, Config) ->
-    Config2 = [
-        {update_config, #{
-            detect_deletions => true,
-            detect_modifications => false}} | Config
-    ],
-    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
 
 init_per_testcase(Case, Config)
     when Case =:= remote_delete_file_reimport_race_test;
@@ -3253,10 +2903,6 @@ end_per_testcase(Case, Config)
     orelse Case =:= time_warp_during_scan_test
     ->
     time_test_utils:unfreeze_time(Config),
-    end_per_testcase(default, Config);
-
-end_per_testcase(delete_many_subfiles_test, Config) ->
-    dir_stats_collector_test_base:teardown(Config, ?SPACE_ID, false),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->

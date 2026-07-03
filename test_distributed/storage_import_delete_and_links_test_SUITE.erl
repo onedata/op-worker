@@ -20,26 +20,16 @@
 
 %% tests
 -export([
-    delete_empty_directory_update_test/1,
-    delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
     delete_and_update_files_simultaneously_update_test/1,
-    delete_file_update_test/1,
-    delete_file_in_dir_update_test/1,
-    delete_many_subfiles_test/1,
     create_delete_race_test/1,
     create_list_race_test/1,
     symlink_is_ignored_by_initial_scan/1
 ]).
 
 -define(TEST_CASES, [
-    delete_empty_directory_update_test,
-    delete_non_empty_directory_update_test,
     sync_works_properly_after_delete_test,
     delete_and_update_files_simultaneously_update_test,
-    delete_file_update_test,
-    delete_file_in_dir_update_test,
-    delete_many_subfiles_test,
     create_delete_race_test,
     create_list_race_test,
     symlink_is_ignored_by_initial_scan
@@ -51,26 +41,11 @@ all() -> ?ALL(?TEST_CASES).
 %%% Test functions
 %%%===================================================================
 
-delete_empty_directory_update_test(Config) ->
-    storage_import_test_base:delete_empty_directory_update_test(Config).
-
-delete_non_empty_directory_update_test(Config) ->
-    storage_import_test_base:delete_non_empty_directory_update_test(Config).
-
 sync_works_properly_after_delete_test(Config) ->
     storage_import_test_base:sync_works_properly_after_delete_test(Config).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
     storage_import_test_base:delete_and_update_files_simultaneously_update_test(Config).
-
-delete_file_update_test(Config) ->
-    storage_import_test_base:delete_file_update_test(Config).
-
-delete_file_in_dir_update_test(Config) ->
-    storage_import_test_base:delete_file_in_dir_update_test(Config).
-
-delete_many_subfiles_test(Config) ->
-    storage_import_test_base:delete_many_subfiles_test(Config).
 
 create_delete_race_test(Config) ->
     storage_import_test_base:create_delete_race_test(Config, ?POSIX_HELPER_NAME).

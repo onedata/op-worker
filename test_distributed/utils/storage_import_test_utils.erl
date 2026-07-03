@@ -38,7 +38,8 @@
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     init_testcase/3, init_testcase/4,
     gen_nested_tree_spec/2,
-    create_file_tree_on_storage/3
+    create_file_tree_on_storage/3,
+    delete_file_tree_from_storage/3
 ]).
 %% API - scan control
 -export([
@@ -214,6 +215,32 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Spe
     end, Specs, ?SETUP_PARALLELISM);
 create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
     create_node_on_storage(ProviderSelector, StorageId, <<"/">>, Spec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes a declared file tree directly from the storage (bypassing the logical
+%% filesystem) - the inverse of create_file_tree_on_storage/3, used by continuous
+%% (update) scan tests to simulate whole (sub)trees disappearing from the storage.
+%% Regular files are unlinked (their size taken from the declared content) and
+%% directories are removed bottom-up; on object storages (e.g. S3) there is no
+%% real directory to remove, so the rmdir is a harmless no-op there (see
+%% storage_file_setup_utils:rmdir_on_storage/2). The spec must be concretized
+%% (all names filled in) - pass the file_tree_spec stored in the case ctx.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_file_tree_from_storage(oct_background:entity_selector(), storage:id(), file_tree_spec()) ->
+    ok.
+delete_file_tree_from_storage(_ProviderSelector, _StorageId, undefined) ->
+    ok;
+delete_file_tree_from_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
+    % Parallelize deletion of the top-level siblings (each subtree is still deleted
+    % sequentially) to speed up teardown of wide trees, keeping concurrency bounded
+    lists_utils:pforeach(fun(Spec) ->
+        delete_file_tree_from_storage(ProviderSelector, StorageId, Spec)
+    end, Specs, ?SETUP_PARALLELISM);
+delete_file_tree_from_storage(ProviderSelector, StorageId, Spec) ->
+    delete_node_from_storage(ProviderSelector, StorageId, <<"/">>, Spec).
 
 
 %%--------------------------------------------------------------------
@@ -968,6 +995,27 @@ create_node_on_storage(ProviderSelector, StorageId, ParentPath, FifoSpec = #stor
     StorageFileId = filepath_utils:join([ParentPath, Name]),
     ok = storage_file_setup_utils:create_fifo(ProviderSelector, StorageId, StorageFileId),
     ConcreteFifoSpec.
+
+
+%% @private
+-spec delete_node_from_storage(
+    oct_background:entity_selector(), storage:id(), file_meta:path(), file_tree_node_spec()
+) ->
+    ok.
+delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #dir_spec{name = Name, children = Children}) ->
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    % delete all children first (required on POSIX, where a non-empty directory
+    % cannot be removed), then the now-empty directory itself
+    lists:foreach(fun(ChildSpec) ->
+        delete_node_from_storage(ProviderSelector, StorageId, StorageFileId, ChildSpec)
+    end, Children),
+    storage_file_setup_utils:rmdir(ProviderSelector, StorageId, StorageFileId);
+delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #file_spec{name = Name, content = Content}) ->
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, byte_size(Content));
+delete_node_from_storage(ProviderSelector, StorageId, ParentPath, #storage_fifo_spec{name = Name}) ->
+    StorageFileId = filepath_utils:join([ParentPath, Name]),
+    storage_file_setup_utils:delete_file(ProviderSelector, StorageId, StorageFileId, 0).
 
 
 %% @private
