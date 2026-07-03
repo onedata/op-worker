@@ -1,0 +1,379 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2026 Onedata (onedata.org)
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module contains base test functions for testing how storage import
+%%% interacts with links (hardlinks and symlinks) living in the space.
+%%%
+%%% Note that both hardlinks and symlinks here are LOGICAL Onedata objects
+%%% (created via lfm_proxy:make_link/make_symlink), NOT storage-level links -
+%%% they exist only in the logical filesystem, with no counterpart on the
+%%% imported storage. These tests assert that continuous (and initial) scans
+%%% treat them correctly:
+%%%  * a regular file that also has a logical hardlink must not be spuriously
+%%%    deleted (nor re-imported) by a scan just because one of its references
+%%%    was removed via LFM; the full matrix of {file, hardlink} x {kept,
+%%%    deleted_while_open, deleted} is exercised (see hardlink_scan_test_base/4);
+%%%  * a logical symlink is invisible on the storage, so a scan must never
+%%%    mistake it for a deleted entry and remove it.
+%%%
+%%% Every removal here goes through LFM (never through the storage), so the scan
+%%% must report NO deletions of its own (deleted => 0) in all cases. To keep the
+%%% scan from bulk-skipping the otherwise-unchanged space root (which would make
+%%% the assertions vacuous), each scenario first drops a trigger file directly on
+%%% the storage - the storage-agnostic replacement for the legacy tests'
+%%% POSIX-only "touch the space dir" nudge (see the monitoring-counter notes in
+%%% storage_import_update_oct_test_base for how the trigger file is classified).
+%%% The same set of cases is meaningful on both POSIX and object (S3) storages;
+%%% the thin per-storage suites are storage_import_links_{posix,s3}_oct_test_SUITE.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(storage_import_links_oct_test_base).
+-author("Bartosz Walkowicz").
+
+-include("storage_import_oct_test.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/posix/errno.hrl").
+
+% API
+-export([
+    init_per_testcase/3,
+    end_per_testcase/3
+]).
+
+%% tests
+-export([
+    %% --- hardlinks (file x hardlink matrix) ---
+    hardlink_file_kept_link_kept_test/1,
+    hardlink_file_kept_link_deleted_while_open_test/1,
+    hardlink_file_kept_link_deleted_test/1,
+    hardlink_file_deleted_while_open_link_kept_test/1,
+    hardlink_file_deleted_while_open_link_deleted_while_open_test/1,
+    hardlink_file_deleted_while_open_link_deleted_test/1,
+    hardlink_file_deleted_link_kept_test/1,
+    hardlink_file_deleted_link_deleted_while_open_test/1,
+    hardlink_file_deleted_link_deleted_test/1,
+
+    %% --- symlinks ---
+    symlink_is_ignored_by_initial_scan_test/1,
+    symlink_is_ignored_by_continuous_scan_test/1
+]).
+
+%% Whether (and how) a reference is removed via LFM before the scan under test runs:
+%%  * kept               - reference is left in place (must survive the scan);
+%%  * deleted_while_open  - reference is unlinked while an open handle is held;
+%%  * deleted            - reference is unlinked with no open handle.
+%% A reference survives the scenario exactly when its mode is 'kept'.
+-type deletion_mode() :: kept | deleted_while_open | deleted.
+
+
+%%%===================================================================
+%%% SetUp and TearDown
+%%%===================================================================
+
+
+init_per_testcase(_Case, _SuiteCtx, Config) ->
+    lfm_proxy:init(Config).
+
+
+end_per_testcase(_Case, _SuiteCtx, Config) ->
+    lfm_proxy:teardown(Config).
+
+
+%%%===================================================================
+%%% Hardlink tests
+%%%===================================================================
+
+
+hardlink_file_kept_link_kept_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, kept, kept).
+
+hardlink_file_kept_link_deleted_while_open_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, kept, deleted_while_open).
+
+hardlink_file_kept_link_deleted_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, kept, deleted).
+
+hardlink_file_deleted_while_open_link_kept_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted_while_open, kept).
+
+hardlink_file_deleted_while_open_link_deleted_while_open_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted_while_open, deleted_while_open).
+
+hardlink_file_deleted_while_open_link_deleted_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted_while_open, deleted).
+
+hardlink_file_deleted_link_kept_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted, kept).
+
+hardlink_file_deleted_link_deleted_while_open_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted, deleted_while_open).
+
+hardlink_file_deleted_link_deleted_test(SuiteCtx) ->
+    hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted, deleted).
+
+
+%% @private
+%% @doc
+%% Imports a regular file (scan 1), creates a logical hardlink to it, then
+%% removes the file and/or the hardlink via LFM according to the given modes and
+%% runs a continuous scan (scan 2). Whichever references were kept must remain
+%% intact; whichever were removed must be gone - and, crucially, the scan itself
+%% must neither delete nor re-import anything (it only picks up the trigger
+%% file), no matter which references were removed, since every removal went
+%% through LFM rather than through the storage.
+%% @end
+-spec hardlink_scan_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), deletion_mode(), deletion_mode()
+) ->
+    ok.
+hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeletionMode) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    FileName = ?RAND_STR(),
+    HardlinkName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
+    } = storage_import_test_utils:init_testcase(
+        TestCaseName, #file_spec{name = FileName, content = Content}, SuiteCtx
+    ),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    FilePath = filepath_utils:join([SpacePath, FileName]),
+    HardlinkPath = filepath_utils:join([SpacePath, HardlinkName]),
+
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch(
+        {ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, FilePath})
+    ),
+    {ok, #file_attr{guid = HardlinkGuid}} = lfm_proxy:make_link(Node, SessId, HardlinkPath, FileGuid),
+
+    %% open both references up front - required for the deleted_while_open modes,
+    %% harmless otherwise (closed again below unless kept open on purpose)
+    {ok, FileHandle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read),
+    {ok, HardlinkHandle} = lfm_proxy:open(Node, SessId, ?FILE_REF(HardlinkGuid), read),
+    ?assertEqual({ok, Content}, lfm_proxy:read(Node, HardlinkHandle, 0, byte_size(Content))),
+
+    close_if_applicable(Node, FileHandle, FileDeletionMode),
+    close_if_applicable(Node, HardlinkHandle, HardlinkDeletionMode),
+    unlink_if_applicable(Node, SessId, ?FILE_REF(FileGuid), FileDeletionMode),
+    unlink_if_applicable(Node, SessId, ?FILE_REF(HardlinkGuid), HardlinkDeletionMode),
+
+    wait_out_mtime_granularity(),
+    create_trigger_file_on_storage(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    assert_reference_survival(Node, SessId, FilePath, FileDeletionMode),
+    assert_reference_survival(Node, SessId, HardlinkPath, HardlinkDeletionMode),
+    assert_hardlink_scan_monitoring_state(TestCaseCtx, StorageType, FileDeletionMode, HardlinkDeletionMode).
+
+
+%%%===================================================================
+%%% Symlink tests
+%%%===================================================================
+
+
+symlink_is_ignored_by_initial_scan_test(_SuiteCtx) ->
+    %% TODO VFS-13529 - blocked on a helper we do not have yet. The legacy test
+    %% creates the symlink and only THEN runs the very first scan, asserting that
+    %% the initial import does not delete a logical symlink that has no storage
+    %% counterpart. In the oct framework storage_import_test_utils:init_testcase/3
+    %% auto-triggers scan 1 as soon as the space support is set up, so the symlink
+    %% (which needs the space to exist first) cannot be created before scan 1.
+    %% Agreed approach: add a util that sets the space up with the initial scan
+    %% deferred, then create the symlink and force scan 1 - to be implemented as a
+    %% separate task; this body is pending that util.
+    error(not_yet_implemented).
+
+
+symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    SymlinkName = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
+    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
+    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+
+    SymlinkPath = filepath_utils:join([SpacePath, SymlinkName]),
+    {ok, _} = lfm_proxy:make_symlink(Node, SessId, SymlinkPath, <<"dummy symlink value">>),
+
+    wait_out_mtime_granularity(),
+    create_trigger_file_on_storage(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the logical symlink has no storage counterpart, yet the scan must not
+    %% mistake it for a deleted entry and remove it
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, SymlinkPath}), ?ATTEMPTS),
+    assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec close_if_applicable(oct_background:node(), lfm:handle(), deletion_mode()) -> ok.
+close_if_applicable(_Node, _Handle, deleted_while_open) ->
+    ok;
+close_if_applicable(Node, Handle, _) ->
+    ok = lfm_proxy:close(Node, Handle).
+
+
+%% @private
+-spec unlink_if_applicable(
+    oct_background:node(), session:id(), lfm:file_key(), deletion_mode()
+) ->
+    ok.
+unlink_if_applicable(_Node, _SessId, _FileKey, kept) ->
+    ok;
+unlink_if_applicable(Node, SessId, FileKey, _) ->
+    ok = lfm_proxy:unlink(Node, SessId, FileKey).
+
+
+%% @private
+%% A reference survives the scenario exactly when its own deletion mode is 'kept'
+%% (both deleted_while_open and deleted remove it from the namespace - the former
+%% via deferred deletion, so it is already ENOENT even with the handle still open).
+-spec assert_reference_survival(
+    oct_background:node(), session:id(), file_meta:path(), deletion_mode()
+) ->
+    ok.
+assert_reference_survival(Node, SessId, Path, kept) ->
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS);
+assert_reference_survival(Node, SessId, Path, _Deleted) ->
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, SessId, {path, Path}), ?ATTEMPTS).
+
+
+%% @private
+%% @doc
+%% Creates a small file directly on the imported storage so that the next scan
+%% has real work to do (bumping the space root's children-attrs batch hash and,
+%% on POSIX, its mtime), instead of bulk-skipping the otherwise-unchanged root -
+%% without it these tests would pass vacuously. Mirrors the identically-named
+%% helper in storage_import_update_oct_test_base.
+%% TODO VFS-13529 consider hoisting this shared helper into storage_import_test_utils.
+%% @end
+-spec create_trigger_file_on_storage(storage_import_test_utils:case_ctx()) -> ok.
+create_trigger_file_on_storage(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector},
+    imported_storage_id = ImportedStorageId
+}) ->
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId,
+        filepath_utils:join([<<"/">>, ?RAND_STR()]), ?RAND_STR()
+    ),
+    ok.
+
+
+%% @private
+%% @doc
+%% Full monitoring state after the continuous scan of a hardlink scenario:
+%%  * created => 1 - only the trigger file is imported; the LFM-side removals are
+%%    never re-imported. created*Hist is 2 (original file @scan 1 + trigger
+%%    @scan 2, both within this fast test's histogram window);
+%%  * deleted => 0 (default) - the crux of these tests: every removal went
+%%    through LFM, so the scan itself deletes nothing;
+%%  * the space root: the trigger file bumps its mtime, so it is classified
+%%    "modified" - and wait_out_mtime_granularity/0 (called before the trigger)
+%%    makes this deterministic on POSIX (without it the root mtime and scan 1's
+%%    snapshot can land in the same 1-second tick, and whether they do flips the
+%%    verdict between runs). On S3 the root statbuf is frozen
+%%    (mock_space_dir_statbuf_on_flat_storage), so it stays "unmodified" instead;
+%%  * the original file adds one "unmodified" on scan 2 when its shared storage
+%%    object is still LISTED by scan 2 - and this is where POSIX and S3 diverge:
+%%     - S3 (flat) keeps the object key until the last open handle closes, so a
+%%       deleted_while_open reference keeps it listed; it is gone only when both
+%%       references were hard-deleted;
+%%     - POSIX (block) moves a deferred-deleted file out of the scanned path, so
+%%       the object is listed only while at least one reference is kept.
+%% @end
+-spec assert_hardlink_scan_monitoring_state(
+    storage_import_test_utils:case_ctx(), posix | s3, deletion_mode(), deletion_mode()
+) ->
+    ok.
+assert_hardlink_scan_monitoring_state(TestCaseCtx, StorageType, FileDeletionMode, HardlinkDeletionMode) ->
+    OriginalFileStillListed = case StorageType of
+        posix -> FileDeletionMode =:= kept orelse HardlinkDeletionMode =:= kept;
+        s3 -> not (FileDeletionMode =:= deleted andalso HardlinkDeletionMode =:= deleted)
+    end,
+    OriginalFileUnmodified = bool_to_count(OriginalFileStillListed),
+    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified + OriginalFileUnmodified,
+        <<"createdMinHist">> => 2,
+        <<"createdHourHist">> => 2,
+        <<"createdDayHist">> => 2,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified
+    }).
+
+
+%% @private
+%% @doc
+%% Full monitoring state after the continuous scan of a symlink scenario. The
+%% imported storage held nothing but the trigger file (the symlink is a purely
+%% logical entry with no storage counterpart), so scan 2 imports exactly the
+%% trigger (created => 1, created*Hist => 1) and deletes nothing. The only other
+%% entry is the space root, classified per storage type (see root_scan_verdict/1
+%% and assert_hardlink_scan_monitoring_state).
+%% @end
+-spec assert_symlink_scan_monitoring_state(storage_import_test_utils:case_ctx(), posix | s3) -> ok.
+assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType) ->
+    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 1,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        <<"createdMinHist">> => 1,
+        <<"createdHourHist">> => 1,
+        <<"createdDayHist">> => 1,
+        <<"modifiedMinHist">> => RootModified,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified
+    }).
+
+
+%% @private
+%% The space root's own {Modified, Unmodified} verdict on scan 2: on POSIX the
+%% trigger file bumps its mtime (made deterministic by wait_out_mtime_granularity/0)
+%% so it counts as modified; on S3 its statbuf is frozen, so it stays unmodified.
+-spec root_scan_verdict(posix | s3) -> {0 | 1, 0 | 1}.
+root_scan_verdict(posix) -> {1, 0};
+root_scan_verdict(s3) -> {0, 1}.
+
+
+%% @private
+-spec bool_to_count(boolean()) -> 0 | 1.
+bool_to_count(true) -> 1;
+bool_to_count(false) -> 0.
+
+
+%% @private
+%% @doc
+%% Sleeps just over the 1-second storage mtime granularity so that a storage
+%% change made right after (the trigger file) is guaranteed to land in a strictly
+%% later mtime tick than scan 1's snapshot of the space root. Without this the two
+%% can fall in the same second, making the root's "modified" verdict flip between
+%% runs (observed on POSIX); on S3 the root statbuf is frozen so this only guards
+%% the POSIX path, but it is applied unconditionally for simplicity.
+%% @end
+-spec wait_out_mtime_granularity() -> ok.
+wait_out_mtime_granularity() ->
+    timer:sleep(timer:seconds(1)).
