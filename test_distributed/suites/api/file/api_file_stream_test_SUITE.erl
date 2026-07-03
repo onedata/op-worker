@@ -44,7 +44,8 @@
     rest_download_dir_test/1,
     rest_download_dir_at_path_test/1,
 
-    sync_first_file_block_test/1
+    sync_first_file_block_test/1,
+    bulk_download_dir_retry_teardown_test/1
 ]).
 
 % Exported for performance tests
@@ -70,7 +71,8 @@ groups() -> [
         rest_download_dir_at_path_test
     ]},
     {sequential_tests, [], [
-        sync_first_file_block_test
+        sync_first_file_block_test,
+        bulk_download_dir_retry_teardown_test
     ]}
 ].
 
@@ -1353,6 +1355,51 @@ sync_first_file_block_test(_Config) ->
     test_utils:mock_assert_num_calls(ParisNode, rtransfer_config, fetch, 6, FileBlocks).
 
 
+bulk_download_dir_retry_teardown_test(_Config) ->
+    DownloadNode = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(user3, krakow),
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    Pool = rpc:call(DownloadNode, bulk_download_traverse, get_pool_name, []),
+
+    DirSpec = #dir_spec{mode = 8#705, children = [#file_spec{content = ?RAND_CONTENT()}]},
+    DirObjects = [#object{guid = DirGuid1} | _] =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, SpaceId, [DirSpec, DirSpec, DirSpec], krakow),
+    DirGuids = [Guid || #object{guid = Guid} <- DirObjects],
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, file_tree_object, DirObjects),
+    api_test_memory:set(MemRef, scope, private),
+    api_test_memory:set(MemRef, follow_symlinks, true),
+
+    {ok, {_Code1, Url1}} = ?assertMatch({ok, {_, _}}, rpc:call(DownloadNode, page_file_content_download,
+        gen_file_download_url, [SessionId, DirGuids, true])),
+    {ok, Bytes} = ?assertMatch({ok, _},
+        download_file_using_download_code(MemRef, DownloadNode, Url1)),
+    lists:foreach(fun(DirObject) -> check_tarball(MemRef, Bytes, DirObject) end, DirObjects),
+
+    % assert multiple per-attempt traverse ids were really used: one start/5 per top-level directory
+    NumTraverseStarts = rpc:call(DownloadNode, meck, num_calls,
+        [bulk_download_traverse, start, ['_', '_', '_', '_', '_']]),
+    ?assert(NumTraverseStarts >= 3),
+
+    ?assertMatch({ok, [], _},
+        rpc:call(DownloadNode, traverse_task_list, list, [Pool, ongoing]), ?ATTEMPTS),
+    ?assertMatch(
+        {ok, #document{value = #traverse_tasks_scheduler{ongoing_tasks = 0}}},
+        rpc:call(DownloadNode, datastore_model, get, [#{model => traverse_tasks_scheduler}, Pool]),
+        ?ATTEMPTS
+    ),
+
+    % follow-up download still starts and completes (limit = 1 slot is free)
+    {ok, {_Code2, Url2}} = ?assertMatch({ok, {_, _}}, rpc:call(DownloadNode, page_file_content_download,
+        gen_file_download_url, [SessionId, [DirGuid1], true])),
+    {ok, Bytes2} = ?assertMatch({ok, _},
+        download_file_using_download_code(MemRef, DownloadNode, Url2)),
+    api_test_memory:set(MemRef, file_tree_object, [hd(DirObjects)]),
+    check_tarball(MemRef, Bytes2, hd(DirObjects)).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1724,12 +1771,21 @@ init_per_testcase(sync_first_file_block_test = Case, Config) ->
         ok = test_utils:mock_new(OpNode, rtransfer_config, [passthrough])
     end, ProviderNodes),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(bulk_download_dir_retry_teardown_test = Case, Config) ->
+    ProviderNodes = oct_background:get_all_providers_nodes(),
+    lists:foreach(fun(OpNode) ->
+        ok = test_utils:mock_new(OpNode, bulk_download_traverse, [passthrough])
+    end, ProviderNodes),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 40}),
     Config.
 
 end_per_testcase(sync_first_file_block_test = Case, Config) ->
     ok = test_utils:mock_unload(oct_background:get_all_providers_nodes(), rtransfer_config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(bulk_download_dir_retry_teardown_test = Case, Config) ->
+    ok = test_utils:mock_unload(oct_background:get_all_providers_nodes(), bulk_download_traverse),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, _Config) ->
     ok.

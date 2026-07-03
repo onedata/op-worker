@@ -23,7 +23,7 @@
 -define(MSG_CHECK_OFFSET(__NewConn, __Offset), {check_offset, __NewConn, __Offset}).
 -define(MSG_DONE, done).
 -define(MSG_ERROR, error).
--define(MSG_ABORT, abort).
+-define(MSG_ABORT(__From), {abort, __From}).
 
 -define(LOOP_TIMEOUT, timer:seconds(5)).
 

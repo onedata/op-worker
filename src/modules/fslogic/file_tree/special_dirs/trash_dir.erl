@@ -242,9 +242,15 @@ clear_all(SpaceId, EventsMode, Token) ->
     end,
     lists:foreach(fun(FileCtx) ->
         % Cache deleted file meta in file_ctx so traverse can start on deleted file.
-        {_, FileCtx1} = file_ctx:get_and_cache_file_doc_including_deleted(FileCtx),
-        schedule_deletion_from_trash(FileCtx1, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
-            space_dir:uuid(SpaceId), extract_name(FileCtx1))
+        case file_ctx:get_and_cache_file_doc_including_deleted(FileCtx) of
+            {error, ?ERROR_NOT_FOUND} -> 
+                ok;
+            {error, _} = Error -> 
+                ?error(?autoformat(Error));
+            {_, FileCtx1} ->
+                schedule_deletion_from_trash(FileCtx1, user_ctx:new(?ROOT_SESS_ID), EmitEventsFlag,
+                    space_dir:uuid(SpaceId), extract_name(FileCtx1))
+        end
     end, List),
     case file_listing:is_finished(NextToken) of
         true -> ok;
