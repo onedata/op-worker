@@ -186,7 +186,7 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
 
 
 symlink_is_ignored_by_initial_scan_test(_SuiteCtx) ->
-    %% TODO VFS-13529 - blocked on a helper we do not have yet. The legacy test
+    %% TODO VFS-13687 - blocked on a helper we do not have yet. The legacy test
     %% creates the symlink and only THEN runs the very first scan, asserting that
     %% the initial import does not delete a logical symlink that has no storage
     %% counterpart. In the oct framework storage_import_test_utils:init_testcase/3

@@ -1174,7 +1174,6 @@ create_registering_storage(s3, ProviderSelector) ->
     {StorageId, {s3, ProviderSelector, StorageId}};
 create_registering_storage(http, ProviderSelector) ->
     Server = http_storage_test_server:start(ProviderSelector),
-    ct:pal("~p", [Server]),
     StorageId = space_setup_utils:create_storage(ProviderSelector, #http_storage_params{
         endpoint = http_storage_test_server:endpoint(Server),
         emulate_range_read = true,

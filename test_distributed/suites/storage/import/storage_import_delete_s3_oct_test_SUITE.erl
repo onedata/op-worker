@@ -40,7 +40,7 @@ all() -> [
     file_deletion_purges_metadata_test,
     nested_file_deletion_test,
     bulk_deletion_test
-    %% TODO VFS-13529 port the remaining group-A delete tests, then add here:
+    %% TODO VFS-13687 port the remaining delete tests, then add here:
     %% import_continues_after_deletion_test,
     %% simultaneous_deletion_and_modification_test
 ].

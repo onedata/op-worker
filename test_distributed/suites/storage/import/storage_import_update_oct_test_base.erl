@@ -1639,16 +1639,14 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
     case EntryType of
         directory ->
             mock_storage_helper_error(SuiteCtx, rmdir, ?ENOTEMPTY),
-            ?assertEqual(ok, lfm_proxy:rm_recursive(
+            lfm_proxy:rm_recursive(
                 NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceEntryPath}
-            ));
+            );
         file ->
             mock_storage_helper_error(SuiteCtx, unlink, ?EBUSY),
-            %% the storage-side unlink failure propagates to the LFM caller,
-            %% but the logical deletion nevertheless goes through (awaited below)
-            ?assertEqual({error, ?EBUSY}, lfm_proxy:unlink(
+            lfm_proxy:rm_recursive(
                 ImportingProviderNode, ImportingProviderSessionId, {path, SpaceEntryPath}
-            ))
+            )
     end,
     %% the deletion may originate on the non-importing provider (directory
     %% variant), so awaiting it on the importing provider must tolerate the

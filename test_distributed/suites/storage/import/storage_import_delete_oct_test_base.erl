@@ -184,12 +184,12 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     }).
 
 
-%% TODO VFS-13529 port from storage_import_test_base:sync_works_properly_after_delete_test/1
+%% TODO VFS-13687 port from storage_import_test_base:sync_works_properly_after_delete_test/1
 import_continues_after_deletion_test(_SuiteCtx) ->
     error(not_yet_implemented).
 
 
-%% TODO VFS-13529 port from storage_import_test_base:delete_and_update_files_simultaneously_update_test/1
+%% TODO VFS-13687 port from storage_import_test_base:delete_and_update_files_simultaneously_update_test/1
 simultaneous_deletion_and_modification_test(_SuiteCtx) ->
     error(not_yet_implemented).
 
