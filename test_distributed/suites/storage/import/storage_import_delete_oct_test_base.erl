@@ -43,9 +43,9 @@
 %%%    last descendant object is deleted (there is nothing to rmdir), yet storage
 %%%    import still deletes the emulated logical directory, so it is counted in
 %%%    "deleted" just like on POSIX.
-%%% root_scan_verdict/1 captures this {Modified, Unmodified} split. See also the
-%%% "mtime granularity and root-verdict races" section of
-%%% storage_import_test_utils for the residual races behind these verdicts.
+%%% storage_import_test_utils:root_scan_verdict/1 captures this {Modified,
+%%% Unmodified} split. See also the "mtime granularity and root-verdict races"
+%%% section of storage_import_test_utils for the residual races behind these verdicts.
 %%%
 %%% The same set of cases is meaningful on both POSIX and object (S3) storages,
 %%% except empty_directory_deletion_test, which is POSIX-only (an empty directory
@@ -112,12 +112,9 @@ empty_directory_deletion_test(SuiteCtx) ->
     TestCaseCtx = #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
         file_tree_spec = FileTreeSpec
-    } = storage_import_test_utils:init_testcase(
+    } = storage_import_test_utils:setup_and_verify_initial_import(
         ?FUNCTION_NAME, #dir_spec{children = []}, SuiteCtx
     ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% delete the (empty) directory directly on the storage
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
@@ -129,7 +126,7 @@ empty_directory_deletion_test(SuiteCtx) ->
     %% the directory is now gone from the space (on both providers)
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
 
-    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -137,15 +134,9 @@ empty_directory_deletion_test(SuiteCtx) ->
         <<"modified">> => RootModified,
         <<"unmodified">> => RootUnmodified,
         %% scan 1 created the single (empty) directory
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => RootModified,
-        <<"modifiedHourHist">> => RootModified,
-        <<"modifiedDayHist">> => RootModified,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        created_hist => 1,
+        modified_hist => RootModified,
+        deleted_hist => 1
     }).
 
 
@@ -161,12 +152,9 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     TestCaseCtx = #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
         file_tree_spec = FileTreeSpec
-    } = storage_import_test_utils:init_testcase(
+    } = storage_import_test_utils:setup_and_verify_initial_import(
         ?FUNCTION_NAME, #dir_spec{children = [#file_spec{content = ?RAND_STR()}]}, SuiteCtx
     ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% delete the whole (non-empty) directory directly on the storage - its child
     %% file, then the directory itself (a no-op rmdir on S3, where the directory is
@@ -181,8 +169,8 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
 
     %% scan 1 created the directory + its file on POSIX, only the file (object) on S3
-    Scan1Created = scan1_created_count(StorageType, 2),
-    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
+    Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -190,15 +178,9 @@ non_empty_directory_deletion_test(SuiteCtx) ->
         <<"deleted">> => 2,
         <<"modified">> => RootModified,
         <<"unmodified">> => RootUnmodified,
-        <<"createdMinHist">> => Scan1Created,
-        <<"createdHourHist">> => Scan1Created,
-        <<"createdDayHist">> => Scan1Created,
-        <<"modifiedMinHist">> => RootModified,
-        <<"modifiedHourHist">> => RootModified,
-        <<"modifiedDayHist">> => RootModified,
-        <<"deletedMinHist">> => 2,
-        <<"deletedHourHist">> => 2,
-        <<"deletedDayHist">> => 2
+        created_hist => Scan1Created,
+        modified_hist => RootModified,
+        deleted_hist => 2
     }).
 
 
@@ -227,12 +209,9 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
         space_path = SpacePath,
         file_tree_spec = #file_spec{name = FileName} = FileTreeSpec,
         importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
-    } = storage_import_test_utils:init_testcase(
+    } = storage_import_test_utils:setup_and_verify_initial_import(
         ?FUNCTION_NAME, #file_spec{content = ?RAND_STR()}, SuiteCtx
     ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% attach an xattr (and thus a custom_metadata document) to the imported file
     FilePath = filepath_utils:join([SpacePath, FileName]),
@@ -259,7 +238,7 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
     ?assertMatch({error, not_found},
         ?rpc(ImportingProviderSelector, custom_metadata:get(FileUuid)), ?ATTEMPTS),
 
-    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
@@ -267,15 +246,9 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
         <<"modified">> => RootModified,
         <<"unmodified">> => RootUnmodified,
         %% scan 1 created the single file (a file counts as created on both storages)
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => RootModified,
-        <<"modifiedHourHist">> => RootModified,
-        <<"modifiedDayHist">> => RootModified,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        created_hist => 1,
+        modified_hist => RootModified,
+        deleted_hist => 1
     }).
 
 
@@ -296,14 +269,11 @@ nested_file_deletion_test(SuiteCtx) ->
     TestCaseCtx = #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
         file_tree_spec = #dir_spec{name = DirName, children = [DeletedFileSpec, KeptFileSpec]}
-    } = storage_import_test_utils:init_testcase(
+    } = storage_import_test_utils:setup_and_verify_initial_import(
         ?FUNCTION_NAME,
         #dir_spec{children = [#file_spec{content = ?RAND_STR()}, #file_spec{content = ?RAND_STR()}]},
         SuiteCtx
     ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% delete just one of the directory's two files directly on the storage
     #file_spec{name = DeletedFileName, content = DeletedContent} = DeletedFileSpec,
@@ -320,7 +290,7 @@ nested_file_deletion_test(SuiteCtx) ->
     ),
 
     %% scan 1 created the directory + its 2 files on POSIX, only the 2 files on S3
-    Scan1Created = scan1_created_count(StorageType, 3),
+    Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
     %% POSIX: the parent directory is modified (its child was removed); S3: the
     %% emulated directory is not tracked, so nothing is classified as modified
     DirModified = case StorageType of posix -> 1; s3 -> 0 end,
@@ -331,15 +301,9 @@ nested_file_deletion_test(SuiteCtx) ->
         <<"modified">> => DirModified,
         %% the space root and the surviving sibling file are both unmodified
         <<"unmodified">> => 2,
-        <<"createdMinHist">> => Scan1Created,
-        <<"createdHourHist">> => Scan1Created,
-        <<"createdDayHist">> => Scan1Created,
-        <<"modifiedMinHist">> => DirModified,
-        <<"modifiedHourHist">> => DirModified,
-        <<"modifiedDayHist">> => DirModified,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1
+        created_hist => Scan1Created,
+        modified_hist => DirModified,
+        deleted_hist => 1
     }).
 
 
@@ -354,23 +318,22 @@ bulk_deletion_test(SuiteCtx) ->
     } = SuiteCtx,
 
     %% 1 wrapping dir + 5 + 25 subdirectories (31 dirs) holding 250 files
-    TestCaseCtx = #storage_import_test_case_ctx{
-        imported_storage_id = ImportedStorageId,
-        file_tree_spec = FileTreeSpec
-    } = storage_import_test_utils:init_testcase(
-        ?FUNCTION_NAME,
-        #dir_spec{children = storage_import_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())},
-        SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     %% the default derives 'created' from the declared tree (281 entries on POSIX,
     %% only the 250 files on S3); at this scale scan 1 can outlast the 60 s Min
     %% histogram span, so its early creations may age out of even the whole (fully
-    %% summed) Min histogram before it is read
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"createdMinHist">> => skip
-    }),
+    %% summed) Min histogram before it is read - hence createdMinHist => skip
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        file_tree_spec = FileTreeSpec
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME,
+        #dir_spec{children = storage_import_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())},
+        SuiteCtx,
+        #{
+            scan_attempts => ?LARGE_IMPORT_SCAN_ATTEMPTS,
+            monitoring_overrides => #{<<"createdMinHist">> => skip}
+        }
+    ),
 
     %% delete the whole tree directly on the storage
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
@@ -383,51 +346,22 @@ bulk_deletion_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
-    %% all 281 logical entries (250 files + 31 dirs) are deleted, on both storages
-    Scan1Created = case StorageType of posix -> 281; s3 -> 250 end,
-    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
+    %% all 281 logical entries (250 files + 31 dirs) are deleted, on both storages;
+    %% scan 1 created only the 250 files on S3 (its emulated dirs are not storage entries)
+    Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
+    Deleted = storage_import_test_utils:expected_deleted_count(TestCaseCtx),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
-        <<"deleted">> => 281,
+        <<"deleted">> => Deleted,
         <<"modified">> => RootModified,
         <<"unmodified">> => RootUnmodified,
+        %% at this scale the early created/deleted events may age out of the 60 s
+        %% Min histogram span, so only Hour/Day are asserted (Min => skip vent)
+        created_hist => Scan1Created,
         <<"createdMinHist">> => skip,
-        <<"createdHourHist">> => Scan1Created,
-        <<"createdDayHist">> => Scan1Created,
-        <<"modifiedMinHist">> => RootModified,
-        <<"modifiedHourHist">> => RootModified,
-        <<"modifiedDayHist">> => RootModified,
-        %% likewise the deletions may age out of the 60 s Min histogram span
-        <<"deletedMinHist">> => skip,
-        <<"deletedHourHist">> => 281,
-        <<"deletedDayHist">> => 281
+        modified_hist => RootModified,
+        deleted_hist => Deleted,
+        <<"deletedMinHist">> => skip
     }).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
-%% The space root's own {Modified, Unmodified} verdict on the continuous
-%% (deletion-detecting) scan: on POSIX removing a direct child bumps the root's
-%% mtime (made deterministic by storage_import_test_utils:ensure_mtime_progression/1)
-%% so it counts as modified; on S3 its statbuf is mocked to lie in the past, so
-%% it stays unmodified even after the mocked-mtime advance (see the mock's doc
-%% in storage_import_test_utils).
--spec root_scan_verdict(posix | s3) -> {0 | 1, 0 | 1}.
-root_scan_verdict(posix) -> {1, 0};
-root_scan_verdict(s3) -> {0, 1}.
-
-
-%% @private
-%% The number of storage entries reported as "created" by the initial scan of a
-%% tree that holds PosixCount real entries (directories + files). On S3 the
-%% directories are not real storage entries and are never reported as created, so
-%% only the regular files count - here always PosixCount - 1 (a single directory
-%% wrapping its files); tests with a different shape pass the value explicitly.
--spec scan1_created_count(posix | s3, non_neg_integer()) -> non_neg_integer().
-scan1_created_count(posix, PosixCount) -> PosixCount;
-scan1_created_count(s3, PosixCount) -> PosixCount - 1.  % TODO can infer from file tree spec

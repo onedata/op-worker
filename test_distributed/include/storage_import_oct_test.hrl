@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2024 ACK CYFRONET AGH
+%%% @copyright (C) 2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end

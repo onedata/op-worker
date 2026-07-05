@@ -147,13 +147,9 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
     TestCaseCtx = #storage_import_test_case_ctx{
         space_path = SpacePath,
         importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
-    } = storage_import_test_utils:init_testcase(
-        TestCaseName, #file_spec{name = FileName, content = Content}, SuiteCtx
-    ),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(
-        TestCaseCtx, initial_scan_monitoring_overrides(StorageType)
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #file_spec{name = FileName, content = Content}, SuiteCtx,
+        #{monitoring_overrides => initial_scan_monitoring_overrides(StorageType)}
     ),
 
     FilePath = filepath_utils:join([SpacePath, FileName]),
@@ -176,7 +172,7 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
     unlink_if_applicable(Node, SessId, ?FILE_REF(HardlinkGuid), HardlinkDeletionMode),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    create_trigger_file_on_storage(TestCaseCtx),
+    storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     assert_reference_survival(Node, SessId, FilePath, FileDeletionMode),
@@ -219,7 +215,7 @@ symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
     {ok, _} = lfm_proxy:make_symlink(Node, SessId, SymlinkPath, <<"dummy symlink value">>),
 
     storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
-    create_trigger_file_on_storage(TestCaseCtx),
+    storage_import_test_utils:create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
     %% the logical symlink has no storage counterpart, yet the scan must not
@@ -268,27 +264,6 @@ assert_reference_survival(Node, SessId, Path, _Deleted) ->
 
 %% @private
 %% @doc
-%% Creates a small file directly on the imported storage so that the next scan
-%% has real work to do (bumping the space root's children-attrs batch hash and,
-%% on POSIX, its mtime), instead of bulk-skipping the otherwise-unchanged root -
-%% without it these tests would pass vacuously. Mirrors the identically-named
-%% helper in storage_import_update_oct_test_base.
-%% TODO VFS-13529 consider hoisting this shared helper into storage_import_test_utils.
-%% @end
--spec create_trigger_file_on_storage(storage_import_test_utils:case_ctx()) -> ok.
-create_trigger_file_on_storage(#storage_import_test_case_ctx{
-    suite_ctx = #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector},
-    imported_storage_id = ImportedStorageId
-}) ->
-    storage_file_setup_utils:create_file(
-        ImportingProviderSelector, ImportedStorageId,
-        filepath_utils:join([<<"/">>, ?RAND_STR()]), ?RAND_STR()
-    ),
-    ok.
-
-
-%% @private
-%% @doc
 %% Full monitoring state after the continuous scan of a hardlink scenario:
 %%  * created => 1 - only the trigger file is imported; the LFM-side removals are
 %%    never re-imported. created*Hist is 2 (original file @scan 1 + trigger
@@ -324,9 +299,7 @@ assert_hardlink_scan_monitoring_state(TestCaseCtx, StorageType, FileDeletionMode
         #{
             <<"scans">> => 2,
             <<"created">> => 1,
-            <<"createdMinHist">> => 2,
-            <<"createdHourHist">> => 2,
-            <<"createdDayHist">> => 2
+            created_hist => 2
         },
         root_verdict_overrides(StorageType, OriginalFileUnmodified)
     )).
@@ -347,9 +320,7 @@ assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType) ->
         #{
             <<"scans">> => 2,
             <<"created">> => 1,
-            <<"createdMinHist">> => 1,
-            <<"createdHourHist">> => 1,
-            <<"createdDayHist">> => 1
+            created_hist => 1
         },
         root_verdict_overrides(StorageType, 0)
     )).
@@ -370,20 +341,16 @@ assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType) ->
 %% everything is asserted exactly.
 %% @end
 -spec root_verdict_overrides(posix | s3, non_neg_integer()) ->
-    #{binary() => integer() | {range, integer(), integer()}}.
+    #{binary() | atom() => integer() | {range, integer(), integer()}}.
 root_verdict_overrides(posix, ExtraUnmodified) -> #{
     <<"modified">> => {range, 0, 1},
     <<"unmodified">> => {range, ExtraUnmodified, ExtraUnmodified + 1},
-    <<"modifiedMinHist">> => {range, 0, 2},
-    <<"modifiedHourHist">> => {range, 0, 2},
-    <<"modifiedDayHist">> => {range, 0, 2}
+    modified_hist => {range, 0, 2}
 };
 root_verdict_overrides(s3, ExtraUnmodified) -> #{
     <<"modified">> => 0,
     <<"unmodified">> => 1 + ExtraUnmodified,
-    <<"modifiedMinHist">> => 0,
-    <<"modifiedHourHist">> => 0,
-    <<"modifiedDayHist">> => 0
+    modified_hist => 0
 }.
 
 
@@ -394,13 +361,11 @@ root_verdict_overrides(s3, ExtraUnmodified) -> #{
 %% the default "unmodified". On S3 the mocked root statbuf makes the default
 %% exact.
 -spec initial_scan_monitoring_overrides(posix | s3) ->
-    #{binary() => integer() | {range, integer(), integer()}}.
+    #{binary() | atom() => integer() | {range, integer(), integer()}}.
 initial_scan_monitoring_overrides(posix) -> #{
     <<"modified">> => {range, 0, 1},
     <<"unmodified">> => {range, 0, 1},
-    <<"modifiedMinHist">> => {range, 0, 1},
-    <<"modifiedHourHist">> => {range, 0, 1},
-    <<"modifiedDayHist">> => {range, 0, 1}
+    modified_hist => {range, 0, 1}
 };
 initial_scan_monitoring_overrides(s3) -> #{}.
 

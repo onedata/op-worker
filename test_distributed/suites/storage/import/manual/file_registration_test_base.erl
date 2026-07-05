@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2026 ACK CYFRONET AGH
+%%% @copyright (C) 2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -622,37 +622,27 @@ register_many_files_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_
         str_utils:format_bin("/~ts_~tp", [BaseFileName, I])
     end, lists:seq(1, LogicalFilesCount)),
 
-    TestMaster = self(),
-
-    LogicalFilePaths = lists:map(fun(DestinationPath) ->
+    % register (in parallel) and verify each logical file; a failed registration or
+    % verification propagates the real assertion error immediately (pforeach re-raises)
+    lists_utils:pforeach(fun(DestinationPath) ->
         LogicalFilePath = filepath_utils:join([SpacePath, DestinationPath]),
-        spawn(fun() ->
-            ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
-                <<"spaceId">> => SpaceId,
-                <<"destinationPath">> => DestinationPath,
-                <<"storageFileId">> => StorageFileId,
-                <<"storageId">> => StorageId,
-                <<"mtime">> => global_clock:timestamp_seconds(),
-                <<"size">> => byte_size(?TEST_DATA),
-                <<"mode">> => <<"664">>,
-                <<"xattrs">> => ?XATTRS,
-                <<"json">> => ?JSON1,
-                <<"rdf">> => ?ENCODED_RDF1
-            })),
-            TestMaster ! {file_registered, LogicalFilePath}
-        end),
-        LogicalFilePath
-    end, DestinationPaths),
-
-    ?assertEqual({message_queue_len, LogicalFilesCount}, process_info(TestMaster, message_queue_len), ?ATTEMPTS),
-
-    verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
+        ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+            <<"spaceId">> => SpaceId,
+            <<"destinationPath">> => DestinationPath,
+            <<"storageFileId">> => StorageFileId,
+            <<"storageId">> => StorageId,
+            <<"mtime">> => global_clock:timestamp_seconds(),
+            <<"size">> => byte_size(?TEST_DATA),
+            <<"mode">> => <<"664">>,
+            <<"xattrs">> => ?XATTRS,
+            <<"json">> => ?JSON1,
+            <<"rdf">> => ?ENCODED_RDF1
+        })),
         % check whether file has been properly registered
         ?assertFile(RegNode, RegSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
-
         % check whether file is visible on the other provider
         ?assertFile(OtherNode, OtherSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:seconds(60)).
+    end, DestinationPaths).
 
 
 register_many_nested_files_test(SuiteCtx = #file_registration_test_suite_ctx{test_user_selector = User}) ->
@@ -681,37 +671,27 @@ register_many_nested_files_test(SuiteCtx = #file_registration_test_suite_ctx{tes
         filename:join(["/", ParentPath, FileName])
     end, lists:seq(1, LogicalFilesCount)),
 
-    TestMaster = self(),
-
-    LogicalFilePaths = lists:map(fun(DestinationPath) ->
+    % register (in parallel) and verify each logical file; a failed registration or
+    % verification propagates the real assertion error immediately (pforeach re-raises)
+    lists_utils:pforeach(fun(DestinationPath) ->
         LogicalFilePath = filepath_utils:join([SpacePath, DestinationPath]),
-        spawn(fun() ->
-            ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
-                <<"spaceId">> => SpaceId,
-                <<"destinationPath">> => DestinationPath,
-                <<"storageFileId">> => StorageFileId,
-                <<"storageId">> => StorageId,
-                <<"mtime">> => global_clock:timestamp_seconds(),
-                <<"size">> => byte_size(?TEST_DATA),
-                <<"mode">> => <<"664">>,
-                <<"xattrs">> => ?XATTRS,
-                <<"json">> => ?JSON1,
-                <<"rdf">> => ?ENCODED_RDF1
-            })),
-            TestMaster ! {file_registered, LogicalFilePath}
-        end),
-        LogicalFilePath
-    end, DestinationPaths),
-
-    ?assertEqual({message_queue_len, LogicalFilesCount}, process_info(TestMaster, message_queue_len), ?ATTEMPTS),
-
-    verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
+        ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(RegNode, User, #{
+            <<"spaceId">> => SpaceId,
+            <<"destinationPath">> => DestinationPath,
+            <<"storageFileId">> => StorageFileId,
+            <<"storageId">> => StorageId,
+            <<"mtime">> => global_clock:timestamp_seconds(),
+            <<"size">> => byte_size(?TEST_DATA),
+            <<"mode">> => <<"664">>,
+            <<"xattrs">> => ?XATTRS,
+            <<"json">> => ?JSON1,
+            <<"rdf">> => ?ENCODED_RDF1
+        })),
         % check whether file has been properly registered
         ?assertFile(RegNode, RegSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
-
         % check whether file is visible on the other provider
         ?assertFile(OtherNode, OtherSessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:seconds(60)).
+    end, DestinationPaths).
 
 
 %%%===================================================================
@@ -1190,13 +1170,7 @@ build_provider_ctx(User, ProviderSelector) ->
 -spec create_registering_storage(s3 | http, oct_background:entity_selector()) ->
     {storage:id(), source_backend()}.
 create_registering_storage(s3, ProviderSelector) ->
-    StorageId = space_setup_utils:create_storage(ProviderSelector, #s3_storage_params{
-        storage_path_type = <<"canonical">>,
-        imported_storage = true,
-        hostname = build_s3_hostname(ProviderSelector),
-        bucket_name = ?RAND_STR(15),
-        block_size = 0
-    }),
+    StorageId = storage_import_test_utils:create_storage(s3, ProviderSelector, true),
     {StorageId, {s3, ProviderSelector, StorageId}};
 create_registering_storage(http, ProviderSelector) ->
     Server = http_storage_test_server:start(ProviderSelector),
@@ -1220,16 +1194,6 @@ create_posix_storage(ProviderSelector) ->
     space_setup_utils:create_storage(ProviderSelector, #posix_storage_params{
         mount_point = <<"/mnt/st_", (?RAND_STR())/binary>>
     }).
-
-
-%% @private
--spec build_s3_hostname(oct_background:entity_selector()) -> binary().
-build_s3_hostname(ProviderSelector) ->
-    <<
-        "volume-s3.dev-volume-s3-",
-        (atom_to_binary(oct_background:to_entity_placeholder(ProviderSelector)))/binary,
-        ".default:9000"
-    >>.
 
 
 %% @private
@@ -1337,71 +1301,14 @@ wait_until_saving_file_meta_is_frozen() ->
     receive saving_file_meta_frozen -> ok end.
 
 
-%% @private
-verification_loop([], _VerifyFun, _TimeoutMillis) ->
-    ok;
-verification_loop(FilePaths, _VerifyFun, TimeoutMillis) when TimeoutMillis < 0 ->
-    ct:pal(
-        "Verification loop timeout.~n"
-        "Unverified files: ~tp", [FilePaths]
-    ),
-    ct:fail(verification_loop_timeout);
-verification_loop(FilePaths, VerifyFun, TimeoutMillis) when TimeoutMillis >= 0 ->
-    Start = global_clock:timestamp_millis(),
-    receive
-        {file_registered, FilePath} ->
-            End = global_clock:timestamp_millis(),
-            VerifyFun(FilePath),
-            verification_loop(FilePaths -- [FilePath], VerifyFun, TimeoutMillis - (End - Start))
-    after
-        TimeoutMillis ->
-            ct:pal(
-                "Verification loop timeout.~n"
-                "Unverified files: ~tp", [FilePaths]
-            ),
-            ct:fail(verification_loop_timeout)
-    end.
-
-
 %%%===================================================================
 %%% Clean up functions
 %%%===================================================================
 
 
 -spec clean_up_after_previous_run([atom()], #file_registration_test_suite_ctx{}) -> ok.
-clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
-    lists_utils:pforeach(fun(SpaceId) ->
-        delete_space_with_supporting_storages(SpaceId, SuiteCtx)
-    end, filter_spaces_from_previous_run(AllTestCases)).
-
-
-%% @private
--spec filter_spaces_from_previous_run([atom()]) -> [od_space:id()].
-filter_spaces_from_previous_run(AllTestCases) ->
-    lists:filter(fun(SpaceId) ->
-        SpaceDetails = ozw_test_rpc:get_space_protected_data(?ROOT, SpaceId),
-        SpaceName = maps:get(<<"name">>, SpaceDetails),
-        lists:member(binary_to_atom(SpaceName), AllTestCases)
-    end, ozw_test_rpc:list_spaces()).
-
-
-%% @private
--spec delete_space_with_supporting_storages(od_space:id(), #file_registration_test_suite_ctx{}) ->
-    ok.
-delete_space_with_supporting_storages(SpaceId, #file_registration_test_suite_ctx{
+clean_up_after_previous_run(AllTestCases, #file_registration_test_suite_ctx{
     registering_provider_selector = RegProvider,
     other_provider_selector = OtherProvider
 }) ->
-    [RegStorage] = opw_test_rpc:get_space_local_storages(RegProvider, SpaceId),
-    [OtherStorage] = opw_test_rpc:get_space_local_storages(OtherProvider, SpaceId),
-
-    ok = ozw_test_rpc:delete_space(SpaceId),
-
-    ok = delete_storage(RegProvider, RegStorage),
-    ok = delete_storage(OtherProvider, OtherStorage).
-
-
-%% @private
--spec delete_storage(oct_background:node_selector(), storage:id()) -> ok.
-delete_storage(NodeSelector, StorageId) ->
-    ?assertEqual(ok, opw_test_rpc:call(NodeSelector, storage, delete, [StorageId]), ?ATTEMPTS).
+    storage_import_test_utils:clean_up_after_previous_run(AllTestCases, RegProvider, OtherProvider).

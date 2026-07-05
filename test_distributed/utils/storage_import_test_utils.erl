@@ -67,10 +67,13 @@
 
 %% API - suite/testcase setup
 -export([
-    clean_up_after_previous_run/2,
+    clean_up_after_previous_run/2, clean_up_after_previous_run/3,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
+    create_storage/3,
     advance_mocked_space_dir_mtime/3, ensure_mtime_progression/1,
+    create_trigger_file_on_storage/1,
     init_testcase/3, init_testcase/4,
+    setup_and_verify_initial_import/3, setup_and_verify_initial_import/4,
     gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
     delete_file_tree_from_storage/3
@@ -91,7 +94,9 @@
     assert_attrs/3, assert_attrs/4,
     assert_file_content/3,
     assert_storage_import_monitoring_state/2,
-    get_storage_import_monitoring_state/1
+    get_storage_import_monitoring_state/1,
+    expected_created_count/1, expected_deleted_count/1,
+    root_scan_verdict/1
 ]).
 %% API - ACL import machinery (mocks + expectations)
 -export([
@@ -151,9 +156,29 @@
 
 
 -spec clean_up_after_previous_run([atom()], suite_ctx()) -> ok.
-clean_up_after_previous_run(AllTestCases, SuiteCtx) ->
+clean_up_after_previous_run(AllTestCases, #storage_import_test_suite_ctx{
+    importing_provider_selector = ImportingProviderSelector,
+    non_importing_provider_selector = NonImportingProviderSelector
+}) ->
+    clean_up_after_previous_run(AllTestCases, ImportingProviderSelector, NonImportingProviderSelector).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes every space left over by a previous run of one of the given test
+%% cases (matched by the space name) together with its supporting storages on
+%% the two given providers. The selector-based entry shared with other storage
+%% test suites (e.g. file_registration_test_base), which carry a different suite
+%% ctx but the same two-supporting-providers cleanup need.
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_up_after_previous_run(
+    [atom()], oct_background:entity_selector(), oct_background:entity_selector()
+) ->
+    ok.
+clean_up_after_previous_run(AllTestCases, ProviderSelector1, ProviderSelector2) ->
     lists_utils:pforeach(fun(SpaceId) ->
-        delete_space_with_supporting_storages(SpaceId, SuiteCtx)
+        delete_space_with_supporting_storages(SpaceId, ProviderSelector1, ProviderSelector2)
     end, filter_spaces_from_previous_run(AllTestCases)).
 
 
@@ -213,6 +238,43 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
         importing_provider_ctx = build_provider_ctx(SpaceOwnerSelector, ImportingProviderSelector),
         non_importing_provider_ctx = build_provider_ctx(SpaceOwnerSelector, NonImportingProviderSelector)
     }.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Runs the canonical initial-import preamble shared by virtually every storage
+%% import test: create the declared tree on the storage and set up the space
+%% (init_testcase/4), await the auto-triggered initial scan, verify the imported
+%% logical tree on both providers, and assert the initial scan's monitoring
+%% counters. Returns the test case context for the body to destructure and drive
+%% the continuous-scan phase.
+%%
+%% Opts (all optional):
+%%  * auto_import_config := map() - non-default auto import config for the
+%%    support (e.g. #{sync_acl => true}); default #{} (onepanel defaults);
+%%  * scan_attempts := non_neg_integer() - attempts awaiting the initial scan;
+%%    default ?ATTEMPTS, pass ?LARGE_IMPORT_SCAN_ATTEMPTS for large trees;
+%%  * verify_dir_stats := boolean() - additionally assert the space's dir_size
+%%    stats after import; default false;
+%%  * monitoring_overrides := map() - overrides for
+%%    assert_storage_import_monitoring_state/2; default #{} (pristine initial scan).
+%% @end
+%%--------------------------------------------------------------------
+-spec setup_and_verify_initial_import(atom(), file_tree_spec(), suite_ctx()) -> case_ctx().
+setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx) ->
+    setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx, #{}).
+
+
+-spec setup_and_verify_initial_import(atom(), file_tree_spec(), suite_ctx(), map()) -> case_ctx().
+setup_and_verify_initial_import(CaseName, FileTreeSpec, SuiteCtx, Opts) ->
+    TestCaseCtx = init_testcase(
+        CaseName, FileTreeSpec, SuiteCtx, maps:get(auto_import_config, Opts, #{})
+    ),
+    await_initial_scan_finished(TestCaseCtx, maps:get(scan_attempts, Opts, ?ATTEMPTS)),
+    verify_imported_tree(TestCaseCtx),
+    maps:get(verify_dir_stats, Opts, false) andalso verify_dir_stats(TestCaseCtx),
+    assert_storage_import_monitoring_state(TestCaseCtx, maps:get(monitoring_overrides, Opts, #{})),
+    TestCaseCtx.
 
 
 %%--------------------------------------------------------------------
@@ -539,6 +601,30 @@ ensure_mtime_progression(#storage_import_test_case_ctx{
     advance_mocked_space_dir_mtime(ImportingProviderSelector, SpaceId, 1).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a small file directly on the imported storage so that the next scan
+%% has real work to do: the new file changes the space root's children-attrs
+%% batch hash (and, on POSIX, the root's mtime), forcing the scan to re-examine
+%% the root's children individually instead of bulk-skipping the
+%% otherwise-unchanged batch - without it, tests whose only storage change went
+%% through LFM (links) or targeted entries other than the root's direct children
+%% would pass vacuously. Returns the (random) name of the created file.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_trigger_file_on_storage(case_ctx()) -> binary().
+create_trigger_file_on_storage(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector},
+    imported_storage_id = ImportedStorageId
+}) ->
+    TriggerFileName = ?RAND_STR(),
+    storage_file_setup_utils:create_file(
+        ImportingProviderSelector, ImportedStorageId,
+        filepath_utils:join([<<"/">>, TriggerFileName]), ?RAND_STR()
+    ),
+    TriggerFileName.
+
+
 -spec unmock_space_dir_statbuf_on_flat_storage(oct_background:entity_selector()) -> ok.
 unmock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
     Nodes = oct_background:get_provider_nodes(ImportingProviderSelector),
@@ -670,9 +756,15 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs) ->
 
 -spec assert_attrs(#provider_ctx{}, file_meta:path(), #{atom() => term()}, non_neg_integer()) -> ok.
 assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
-    maps:foreach(fun(Field, ExpectedValue) ->
-        ?assertEqual(ExpectedValue, get_file_attr_field(ProviderCtx, Path, Field), Attempts)
-    end, ExpectedAttrs).
+    %% stat once per attempt and compare all requested fields against that single
+    %% snapshot - avoids a stat RPC (and a full retry budget) per field, and
+    %% surfaces every mismatching field at once on failure
+    ?assertEqual(
+        ExpectedAttrs,
+        get_file_attr_fields(ProviderCtx, Path, maps:keys(ExpectedAttrs)),
+        Attempts
+    ),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -719,10 +811,21 @@ assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Conte
 %%    histograms in long-running tests);
 %%  * {range, Min, Max} - asserts the field falls within [Min, Max] (inclusive);
 %%    preferred over 'skip' when a (looser) bound is known.
+%%
+%% The three resolutions of a histogram (Min/Hour/Day) are expected to be equal
+%% here (the whole window is summed), so each triple can be set at once via a
+%% snake_case atom SUGAR key expanded to all three binary keys:
+%%  * created_hist  => V  ==  <<"createdMinHist">>/<<"createdHourHist">>/<<"createdDayHist">> => V
+%%  * modified_hist => V  ==  the three <<"modified*Hist">> keys
+%%  * deleted_hist  => V  ==  the three <<"deleted*Hist">> keys
+%% The atom form visually flags "expands to three fields"; an explicit binary key
+%% for a single resolution present in the SAME map still wins over the sugar (the
+%% vent for a lone <<"createdMinHist">> => skip / {range,...} in long scans).
 %% @end
 %%--------------------------------------------------------------------
 -spec assert_storage_import_monitoring_state(
-    case_ctx(), #{binary() => integer() | skip | {range, integer(), integer()}}
+    case_ctx(),
+    #{binary() | atom() => integer() | skip | {range, integer(), integer()}}
 ) ->
     ok.
 assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
@@ -730,7 +833,8 @@ assert_storage_import_monitoring_state(#storage_import_test_case_ctx{
     space_id = SpaceId,
     file_tree_spec = FileTreeSpec,
     importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
-}, Overrides) ->
+}, Overrides0) ->
+    Overrides = expand_histogram_sugar(Overrides0),
     Created = count_imported_nodes(StorageType, FileTreeSpec),
     Default = #{
         <<"scans">> => 1,
@@ -777,6 +881,63 @@ get_storage_import_monitoring_state(#storage_import_test_case_ctx{
     flatten_storage_import_histograms(
         ?rpc(ImportingProviderSelector, storage_import_monitoring:describe(SpaceId))
     ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% The number of entries the initial scan reports as "created" for this test
+%% case's declared file tree - i.e. the storage entries the scan actually
+%% observes. On POSIX that is every directory and regular file; on S3 (flat
+%% storage) directories are emulated by object key prefixes and are never
+%% reported as created, so only the regular files count. Derived from the
+%% declared tree so that reshaping it never requires recomputing magic numbers.
+%% @end
+%%--------------------------------------------------------------------
+-spec expected_created_count(case_ctx()) -> non_neg_integer().
+expected_created_count(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = StorageType},
+    file_tree_spec = FileTreeSpec
+}) ->
+    count_imported_nodes(StorageType, FileTreeSpec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% The number of LOGICAL entries (directories + files) this test case's declared
+%% file tree represents - i.e. how many space entries a full deletion of the
+%% whole tree removes, and thus reports as "deleted", on ANY storage. Unlike
+%% expected_created_count/1 this always counts directories: even on flat (S3)
+%% storage, where a directory has no storage object of its own, storage import
+%% still removes the emulated logical directory once its last descendant object
+%% disappears. Hence the count is taken with the posix semantics regardless of
+%% the actual storage type.
+%% @end
+%%--------------------------------------------------------------------
+-spec expected_deleted_count(case_ctx()) -> non_neg_integer().
+expected_deleted_count(#storage_import_test_case_ctx{file_tree_spec = FileTreeSpec}) ->
+    count_imported_nodes(posix, FileTreeSpec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% The SPACE ROOT's own {Modified, Unmodified} verdict on a continuous scan that
+%% mutates the root's set of direct children (a top-level create/delete, or the
+%% trigger file). On POSIX such a mutation bumps the root's storage mtime, so the
+%% scan classifies the root "modified" ({1, 0}); tests relying on this must call
+%% ensure_mtime_progression/1 first to win the 1-second-granularity race
+%% deterministically. On S3 (flat storage) the root statbuf is mocked to lie in
+%% the past (mock_space_dir_statbuf_on_flat_storage/1), so the root can never be
+%% "modified" and stays "unmodified" ({0, 1}). See the "Mtime granularity and
+%% root-verdict races" section above for the residual races behind these verdicts.
+%%
+%% This is the EXACT verdict, for tests whose subject IS the root classification.
+%% Tests where the root's verdict is merely incidental assert it with tolerance
+%% instead - see root_verdict_overrides/2 in storage_import_links_oct_test_base.
+%% @end
+%%--------------------------------------------------------------------
+-spec root_scan_verdict(posix | s3) -> {0 | 1, 0 | 1}.
+root_scan_verdict(posix) -> {1, 0};
+root_scan_verdict(s3) -> {0, 1}.
 
 
 %%--------------------------------------------------------------------
@@ -1002,22 +1163,18 @@ filter_spaces_from_previous_run(AllTestCases) ->
 
 
 %% @private
--spec delete_space_with_supporting_storages(od_space:id(), suite_ctx()) -> ok.
-delete_space_with_supporting_storages(SpaceId, #storage_import_test_suite_ctx{
-    importing_provider_selector = ImportingProviderSelector,
-    non_importing_provider_selector = NonImportingProviderSelector
-}) ->
-    [StorageImportingProvider] = opw_test_rpc:get_space_local_storages(
-        ImportingProviderSelector, SpaceId
-    ),
-    [StorageNonImportingProvider] = opw_test_rpc:get_space_local_storages(
-        NonImportingProviderSelector, SpaceId
-    ),
+-spec delete_space_with_supporting_storages(
+    od_space:id(), oct_background:entity_selector(), oct_background:entity_selector()
+) ->
+    ok.
+delete_space_with_supporting_storages(SpaceId, ProviderSelector1, ProviderSelector2) ->
+    [Storage1] = opw_test_rpc:get_space_local_storages(ProviderSelector1, SpaceId),
+    [Storage2] = opw_test_rpc:get_space_local_storages(ProviderSelector2, SpaceId),
 
     ok = ozw_test_rpc:delete_space(SpaceId),
 
-    ok = delete_storage(ImportingProviderSelector, StorageImportingProvider),
-    ok = delete_storage(NonImportingProviderSelector, StorageNonImportingProvider).
+    ok = delete_storage(ProviderSelector1, Storage1),
+    ok = delete_storage(ProviderSelector2, Storage2).
 
 
 %% @private
@@ -1195,11 +1352,14 @@ verify_node(ProviderCtx, Path, #file_spec{content = Content}) ->
 
 
 %% @private
--spec get_file_attr_field(#provider_ctx{}, file_meta:path(), atom()) -> term().
-get_file_attr_field(#provider_ctx{node = Node, session_id = SessId}, Path, Field) ->
+-spec get_file_attr_fields(#provider_ctx{}, file_meta:path(), [atom()]) ->
+    #{atom() => term()} | {error, term()}.
+get_file_attr_fields(#provider_ctx{node = Node, session_id = SessId}, Path, Fields) ->
     case lfm_proxy:stat(Node, SessId, {path, Path}) of
-        {ok, FileAttr} -> file_attr_field(Field, FileAttr);
-        {error, _} = Error -> Error
+        {ok, FileAttr} ->
+            maps:from_list([{Field, file_attr_field(Field, FileAttr)} || Field <- Fields]);
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -1354,6 +1514,40 @@ count_imported_nodes(_StorageType, #storage_fifo_spec{}) -> 0.
 %%%===================================================================
 %%% Internal functions - monitoring state assertion
 %%%===================================================================
+
+
+%% @private
+%% Expands the snake_case histogram sugar keys (created_hist/modified_hist/
+%% deleted_hist) in an overrides map into their three per-resolution binary keys
+%% (<<"XMinHist">>/<<"XHourHist">>/<<"XDayHist">>), each set to the sugar value.
+%% An explicit binary key for a single resolution present in the same map wins
+%% over the sugar expansion (see assert_storage_import_monitoring_state/2 doc).
+-spec expand_histogram_sugar(map()) -> map().
+expand_histogram_sugar(Overrides) ->
+    SugarKeys = #{
+        created_hist => <<"created">>,
+        modified_hist => <<"modified">>,
+        deleted_hist => <<"deleted">>
+    },
+    Expanded = maps:fold(fun(SugarKey, CounterName, Acc) ->
+        case maps:find(SugarKey, Overrides) of
+            {ok, Value} -> add_hist_resolutions(CounterName, Value, Acc);
+            error -> Acc
+        end
+    end, #{}, SugarKeys),
+    % explicit binary keys (e.g. a lone <<"createdMinHist">> => skip) win over sugar
+    ExplicitOverrides = maps:without(maps:keys(SugarKeys), Overrides),
+    maps:merge(Expanded, ExplicitOverrides).
+
+
+%% @private
+-spec add_hist_resolutions(binary(), term(), map()) -> map().
+add_hist_resolutions(CounterName, Value, Acc) ->
+    Acc#{
+        <<CounterName/binary, "MinHist">> => Value,
+        <<CounterName/binary, "HourHist">> => Value,
+        <<CounterName/binary, "DayHist">> => Value
+    }.
 
 
 %% @private

@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Katarzyna Such
-%%% @copyright (C) 2024 ACK CYFRONET AGH
+%%% @copyright (C) 2026 Onedata (onedata.org)
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -181,4 +181,3 @@ init_per_testcase(Case, Config) ->
 
 end_per_testcase(Case, Config) ->
     storage_import_initial_oct_test_base:end_per_testcase(Case, ?SUITE_CTX, Config).
-
