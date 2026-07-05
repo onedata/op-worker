@@ -53,9 +53,13 @@
 %%%    directories never count towards "created" (only regular files do);
 %%%    deletion counting, however, includes directories on S3 too;
 %%%  * the space root's own storage statbuf is permanently mocked into the
-%%%    past for scan-1 timing determinism (see
+%%%    past for scan timing determinism (see
 %%%    mock_space_dir_statbuf_on_flat_storage/1), so the root can never be
-%%%    classified "modified" on any scan;
+%%%    classified "modified" on any scan; the mocked mtime can be advanced
+%%%    (still staying in the past) to open the deletion-detection gate when a
+%%%    test needs it - see storage_import_test_utils:ensure_mtime_progression/1
+%%%    and the "mtime granularity and root-verdict races" section of
+%%%    storage_import_test_utils;
 %%%  * there is no per-directory traversal at all - the whole space is a
 %%%    single flat traversal entity, with only regular files counted as its
 %%%    children for batching, and the listing API reports a definitive
@@ -517,6 +521,10 @@ move_file_update_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
+    %% removing the source is a deletion, detected only if the root's mtime has
+    %% advanced since scan 1 - force it into a strictly later tick (see
+    %% storage_import_test_utils:ensure_mtime_progression/1)
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_file_setup_utils:rename(
         ImportingProviderSelector, ImportedStorageId, SrcStorageFileId, DstStorageFileId
     ),
@@ -539,8 +547,7 @@ move_file_update_test(SuiteCtx) ->
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"unmodified">> => 0,
-        %% scan-1's creation may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"deletedMinHist">> => 1,
@@ -570,7 +577,10 @@ copy_file_update_test(SuiteCtx) ->
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% the "copy" is created directly on the storage - a byte-identical file at
-    %% a new path is indistinguishable from a host-level copy for the scan
+    %% a new path is indistinguishable from a host-level copy for the scan; force
+    %% the new child into a strictly later mtime tick so the root is
+    %% deterministically classified modified (see ensure_mtime_progression/1)
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_file_setup_utils:create_file(ImportingProviderSelector, ImportedStorageId, DstStorageFileId, Content),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -588,8 +598,7 @@ copy_file_update_test(SuiteCtx) ->
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
         <<"unmodified">> => 1,
-        %% scan-1's creation may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2
     }).
@@ -769,8 +778,7 @@ replace_file_with_dir_test(SuiteCtx) ->
         <<"modified">> => RootModified,
         <<"deleted">> => 1,
         <<"unmodified">> => RootUnmodified,
-        %% scan-1's creation may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, NewlyCreated, NewlyCreated + 1},
+        <<"createdMinHist">> => NewlyCreated + 1,
         <<"createdHourHist">> => NewlyCreated + 1,
         <<"createdDayHist">> => NewlyCreated + 1,
         <<"modifiedMinHist">> => RootModified,
@@ -835,8 +843,7 @@ replace_empty_dir_with_file_test(SuiteCtx) ->
         <<"modified">> => 1,
         <<"deleted">> => 1,
         <<"unmodified">> => 0,
-        %% scan-1's creation may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"modifiedMinHist">> => 1,
@@ -898,8 +905,7 @@ replace_non_empty_dir_with_file_test(SuiteCtx) ->
         %% creation, deletion counting includes directories on S3 too (module doc)
         <<"deleted">> => 2,
         <<"unmodified">> => RootUnmodified,
-        %% scan-1's creation(s) may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
+        <<"createdMinHist">> => 1 + Scan1Created,
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
         <<"modifiedMinHist">> => RootModified,
@@ -992,6 +998,11 @@ create_file_in_dir_update_test(SuiteCtx) ->
         mock_storage_sync_traverse(SuiteCtx)
     end),
 
+    %% POSIX-only: TouchedDirName is a real directory whose own mtime must
+    %% visibly advance for the added child to register as a children-set change;
+    %% force it into a strictly later tick (on s3 the child is caught by the
+    %% children-attrs hash regardless - see ensure_mtime_progression/1)
+    ?IF_POSIX(StorageType, storage_import_test_utils:ensure_mtime_progression(TestCaseCtx)),
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
     ),
@@ -1018,8 +1029,7 @@ create_file_in_dir_update_test(SuiteCtx) ->
         <<"modified">> => ModifiedCount,
         <<"deleted">> => 0,
         <<"unmodified">> => UnmodifiedCount,
-        %% scan-1's creations may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
+        <<"createdMinHist">> => 1 + Scan1Created,
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
         <<"modifiedMinHist">> => ModifiedCount,
@@ -1087,6 +1097,13 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         mock_storage_sync_traverse(SuiteCtx)
     end),
 
+    %% POSIX-only and load-bearing here: scan 2 runs with detect_modifications
+    %% => false (below), so the children-attrs hash is NOT consulted and the new
+    %% child is discovered only if TouchedDirName's own mtime has visibly changed
+    %% (the {MTimeUnchanged, _, DetectModifications=false} branch of
+    %% storage_sync_traverse:do_update_master_job/2 otherwise skips it) - force
+    %% the mtime forward; on s3 detection stays enabled, so the hash catches it
+    ?IF_POSIX(StorageType, storage_import_test_utils:ensure_mtime_progression(TestCaseCtx)),
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, FileStorageFileId, Content
     ),
@@ -1125,8 +1142,7 @@ create_file_in_dir_exceed_batch_update_test(SuiteCtx) ->
         <<"modified">> => 0,
         <<"deleted">> => 0,
         <<"unmodified">> => Scan2Unmodified,
-        %% scan-1's creations may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 1, 1 + Scan1Created},
+        <<"createdMinHist">> => 1 + Scan1Created,
         <<"createdHourHist">> => 1 + Scan1Created,
         <<"createdDayHist">> => 1 + Scan1Created,
         <<"modifiedMinHist">> => 0,
@@ -1249,8 +1265,7 @@ update_nfs_acl_test(SuiteCtx) ->
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
-        %% scan-1's creation may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, 0, 1},
+        <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1
     }).
@@ -1400,7 +1415,10 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
-    %% create the file on the storage, with its import mocked to fail
+    %% create the file on the storage, with its import mocked to fail; force the
+    %% new child into a strictly later mtime tick so scan 2 deterministically
+    %% classifies the root modified on posix (see ensure_mtime_progression/1)
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_file_setup_utils:create_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, Content
     ),
@@ -1442,9 +1460,8 @@ update_syncs_files_after_previous_update_failed_test(SuiteCtx) ->
         <<"createdMinHist">> => 1,
         <<"createdHourHist">> => 1,
         <<"createdDayHist">> => 1,
-        %% scan-2's root modification (posix only) is still within the hour/day
-        %% histogram windows, but may have aged out of the min window by now
-        <<"modifiedMinHist">> => {range, 0, RootModified},
+        %% scan-2's root modification (posix only)
+        <<"modifiedMinHist">> => RootModified,
         <<"modifiedHourHist">> => RootModified,
         <<"modifiedDayHist">> => RootModified
     }).
@@ -1540,8 +1557,7 @@ changing_max_depth_test(SuiteCtx) ->
         <<"scans">> => 2,
         <<"created">> => Scan2Created,
         <<"unmodified">> => Scan2Unmodified,
-        %% scan-1's creations may have aged out of the Min window by now
-        <<"createdMinHist">> => {range, Scan2Created, CreatedByScans12},
+        <<"createdMinHist">> => CreatedByScans12,
         <<"createdHourHist">> => CreatedByScans12,
         <<"createdDayHist">> => CreatedByScans12
     }),
@@ -1555,7 +1571,7 @@ changing_max_depth_test(SuiteCtx) ->
         <<"scans">> => 3,
         <<"created">> => Scan3Created,
         <<"unmodified">> => Scan3Unmodified,
-        <<"createdMinHist">> => {range, Scan3Created, CreatedByScans123},
+        <<"createdMinHist">> => CreatedByScans123,
         <<"createdHourHist">> => CreatedByScans123,
         <<"createdDayHist">> => CreatedByScans123
     }).
@@ -1774,6 +1790,11 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
         ImportingProviderSelector, ImportedStorageId, EntryStorageFileId
     )),
 
+    %% make the trigger file land in a strictly later mtime tick than scan 1's
+    %% root stat, so scan 2 deterministically re-examines the root's children
+    %% (and, on s3, runs deletion detection at all - the mocked root mtime is
+    %% advanced) rather than bulk-skipping the otherwise-unchanged batch
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     TriggerFileName = create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -1803,8 +1824,7 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
         <<"created">> => 1,
         <<"modified">> => Scan2Modified,
         <<"unmodified">> => Scan2Unmodified,
-        %% scan-1's creation of the declared entry may have aged out of the Min window
-        <<"createdMinHist">> => {range, 1, 2},
+        <<"createdMinHist">> => 2,
         <<"createdHourHist">> => 2,
         <<"createdDayHist">> => 2,
         <<"modifiedMinHist">> => Scan2Modified,
@@ -1861,6 +1881,13 @@ should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTre
 
     RemoteEntries = create_file_tree_via_remote_provider(TestCaseCtx, RemoteFileTreeSpec),
 
+    %% load-bearing - the remote entries have NO storage counterpart, so the only
+    %% way the scan could (wrongly) delete them is via deletion detection, which
+    %% is gated on the root's mtime having changed since the previous scan. This
+    %% call opens that gate (on s3 by advancing the mocked root mtime); without it
+    %% deletion detection would never run on the flat storage and the assertion
+    %% below would be vacuous. See storage_import_test_utils:ensure_mtime_progression/1.
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 

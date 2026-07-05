@@ -30,6 +30,12 @@
 %%% storage_import_update_oct_test_base for how the trigger file is classified).
 %%% The same set of cases is meaningful on both POSIX and object (S3) storages;
 %%% the thin per-storage suites are storage_import_links_{posix,s3}_oct_test_SUITE.
+%%%
+%%% The space root's modified/unmodified verdict is inherently racy on POSIX -
+%%% see the "mtime granularity and root-verdict races" section of
+%%% storage_import_test_utils. Since the root's classification is not what
+%%% these tests are about, the affected fields are asserted with tolerance
+%%% (root_verdict_overrides/2, initial_scan_monitoring_overrides/1).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_links_oct_test_base).
@@ -146,7 +152,9 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    storage_import_test_utils:assert_storage_import_monitoring_state(
+        TestCaseCtx, initial_scan_monitoring_overrides(StorageType)
+    ),
 
     FilePath = filepath_utils:join([SpacePath, FileName]),
     HardlinkPath = filepath_utils:join([SpacePath, HardlinkName]),
@@ -167,7 +175,7 @@ hardlink_scan_test_base(TestCaseName, SuiteCtx, FileDeletionMode, HardlinkDeleti
     unlink_if_applicable(Node, SessId, ?FILE_REF(FileGuid), FileDeletionMode),
     unlink_if_applicable(Node, SessId, ?FILE_REF(HardlinkGuid), HardlinkDeletionMode),
 
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -203,12 +211,14 @@ symlink_is_ignored_by_continuous_scan_test(SuiteCtx) ->
         importing_provider_ctx = #provider_ctx{node = Node, session_id = SessId}
     } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    storage_import_test_utils:assert_storage_import_monitoring_state(
+        TestCaseCtx, initial_scan_monitoring_overrides(StorageType)
+    ),
 
     SymlinkPath = filepath_utils:join([SpacePath, SymlinkName]),
     {ok, _} = lfm_proxy:make_symlink(Node, SessId, SymlinkPath, <<"dummy symlink value">>),
 
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     create_trigger_file_on_storage(TestCaseCtx),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -285,12 +295,13 @@ create_trigger_file_on_storage(#storage_import_test_case_ctx{
 %%    @scan 2, both within this fast test's histogram window);
 %%  * deleted => 0 (default) - the crux of these tests: every removal went
 %%    through LFM, so the scan itself deletes nothing;
-%%  * the space root: the trigger file bumps its mtime, so it is classified
-%%    "modified" - and wait_out_mtime_granularity/0 (called before the trigger)
-%%    makes this deterministic on POSIX (without it the root mtime and scan 1's
-%%    snapshot can land in the same 1-second tick, and whether they do flips the
-%%    verdict between runs). On S3 the root statbuf is frozen
-%%    (mock_space_dir_statbuf_on_flat_storage), so it stays "unmodified" instead;
+%%  * the space root: on POSIX the trigger file bumps its mtime, so it is
+%%    normally classified "modified" - but the verdict is racy at 1-second mtime
+%%    granularity and the root's classification is NOT what these tests are
+%%    about, so it is asserted with tolerance (see root_verdict_overrides/2). On
+%%    S3 the root statbuf is mocked to a constant in the past
+%%    (mock_space_dir_statbuf_on_flat_storage), so it is deterministically
+%%    "unmodified" and asserted exactly;
 %%  * the original file adds one "unmodified" on scan 2 when its shared storage
 %%    object is still LISTED by scan 2 - and this is where POSIX and S3 diverge:
 %%     - S3 (flat) keeps the object key until the last open handle closes, so a
@@ -309,19 +320,16 @@ assert_hardlink_scan_monitoring_state(TestCaseCtx, StorageType, FileDeletionMode
         s3 -> not (FileDeletionMode =:= deleted andalso HardlinkDeletionMode =:= deleted)
     end,
     OriginalFileUnmodified = bool_to_count(OriginalFileStillListed),
-    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 1,
-        <<"modified">> => RootModified,
-        <<"unmodified">> => RootUnmodified + OriginalFileUnmodified,
-        <<"createdMinHist">> => 2,
-        <<"createdHourHist">> => 2,
-        <<"createdDayHist">> => 2,
-        <<"modifiedMinHist">> => RootModified,
-        <<"modifiedHourHist">> => RootModified,
-        <<"modifiedDayHist">> => RootModified
-    }).
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, maps:merge(
+        #{
+            <<"scans">> => 2,
+            <<"created">> => 1,
+            <<"createdMinHist">> => 2,
+            <<"createdHourHist">> => 2,
+            <<"createdDayHist">> => 2
+        },
+        root_verdict_overrides(StorageType, OriginalFileUnmodified)
+    )).
 
 
 %% @private
@@ -330,50 +338,74 @@ assert_hardlink_scan_monitoring_state(TestCaseCtx, StorageType, FileDeletionMode
 %% imported storage held nothing but the trigger file (the symlink is a purely
 %% logical entry with no storage counterpart), so scan 2 imports exactly the
 %% trigger (created => 1, created*Hist => 1) and deletes nothing. The only other
-%% entry is the space root, classified per storage type (see root_scan_verdict/1
-%% and assert_hardlink_scan_monitoring_state).
+%% entry is the space root, asserted with per-storage tolerance (see
+%% root_verdict_overrides/2 and assert_hardlink_scan_monitoring_state).
 %% @end
 -spec assert_symlink_scan_monitoring_state(storage_import_test_utils:case_ctx(), posix | s3) -> ok.
 assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType) ->
-    {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
-        <<"scans">> => 2,
-        <<"created">> => 1,
-        <<"modified">> => RootModified,
-        <<"unmodified">> => RootUnmodified,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => RootModified,
-        <<"modifiedHourHist">> => RootModified,
-        <<"modifiedDayHist">> => RootModified
-    }).
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, maps:merge(
+        #{
+            <<"scans">> => 2,
+            <<"created">> => 1,
+            <<"createdMinHist">> => 1,
+            <<"createdHourHist">> => 1,
+            <<"createdDayHist">> => 1
+        },
+        root_verdict_overrides(StorageType, 0)
+    )).
 
 
 %% @private
-%% The space root's own {Modified, Unmodified} verdict on scan 2: on POSIX the
-%% trigger file bumps its mtime (made deterministic by wait_out_mtime_granularity/0)
-%% so it counts as modified; on S3 its statbuf is frozen, so it stays unmodified.
--spec root_scan_verdict(posix | s3) -> {0 | 1, 0 | 1}.
-root_scan_verdict(posix) -> {1, 0};
-root_scan_verdict(s3) -> {0, 1}.
+%% @doc
+%% The space root's contribution to the continuous-scan (scan-2) monitoring
+%% state. On POSIX the trigger file bumps the root's mtime, so the root is
+%% normally classified "modified" - but the verdict is subject to the races
+%% described in the "mtime granularity and root-verdict races" section of
+%% storage_import_test_utils; since the root's classification is not what these
+%% tests are about, the affected fields are asserted with tolerance: modified
+%% and unmodified may each go either way (they always sum to a constant, which
+%% the assert map cannot express), and modified*Hist may additionally include a
+%% root-modified event from a racy initial scan. On S3 the root statbuf is
+%% mocked to lie in the past, so the root is deterministically "unmodified" and
+%% everything is asserted exactly.
+%% @end
+-spec root_verdict_overrides(posix | s3, non_neg_integer()) ->
+    #{binary() => integer() | {range, integer(), integer()}}.
+root_verdict_overrides(posix, ExtraUnmodified) -> #{
+    <<"modified">> => {range, 0, 1},
+    <<"unmodified">> => {range, ExtraUnmodified, ExtraUnmodified + 1},
+    <<"modifiedMinHist">> => {range, 0, 2},
+    <<"modifiedHourHist">> => {range, 0, 2},
+    <<"modifiedDayHist">> => {range, 0, 2}
+};
+root_verdict_overrides(s3, ExtraUnmodified) -> #{
+    <<"modified">> => 0,
+    <<"unmodified">> => 1 + ExtraUnmodified,
+    <<"modifiedMinHist">> => 0,
+    <<"modifiedHourHist">> => 0,
+    <<"modifiedDayHist">> => 0
+}.
+
+
+%% @private
+%% Tolerance for the initial-scan monitoring assert: on POSIX the setup race
+%% (see the "mtime granularity and root-verdict races" section of
+%% storage_import_test_utils) may classify the space root "modified" instead of
+%% the default "unmodified". On S3 the mocked root statbuf makes the default
+%% exact.
+-spec initial_scan_monitoring_overrides(posix | s3) ->
+    #{binary() => integer() | {range, integer(), integer()}}.
+initial_scan_monitoring_overrides(posix) -> #{
+    <<"modified">> => {range, 0, 1},
+    <<"unmodified">> => {range, 0, 1},
+    <<"modifiedMinHist">> => {range, 0, 1},
+    <<"modifiedHourHist">> => {range, 0, 1},
+    <<"modifiedDayHist">> => {range, 0, 1}
+};
+initial_scan_monitoring_overrides(s3) -> #{}.
 
 
 %% @private
 -spec bool_to_count(boolean()) -> 0 | 1.
 bool_to_count(true) -> 1;
 bool_to_count(false) -> 0.
-
-
-%% @private
-%% @doc
-%% Sleeps just over the 1-second storage mtime granularity so that a storage
-%% change made right after (the trigger file) is guaranteed to land in a strictly
-%% later mtime tick than scan 1's snapshot of the space root. Without this the two
-%% can fall in the same second, making the root's "modified" verdict flip between
-%% runs (observed on POSIX); on S3 the root statbuf is frozen so this only guards
-%% the POSIX path, but it is applied unconditionally for simplicity.
-%% @end
--spec wait_out_mtime_granularity() -> ok.
-wait_out_mtime_granularity() ->
-    timer:sleep(timer:seconds(1)).

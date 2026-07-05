@@ -15,7 +15,9 @@
 %%% declares the expected outcome. The heavy lifting (creating the tree on the
 %%% storage, verifying the imported logical tree on both providers, asserting the
 %%% monitoring counters) is done generically by storage_import_test_utils - see
-%%% its module doc for an overview of the machinery.
+%%% its module doc for an overview of the machinery (including the "mtime
+%%% granularity and root-verdict races" section, which explains why the space
+%%% root's verdict on scan 1 can - rarely - flip to "modified" on POSIX).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_initial_oct_test_base).

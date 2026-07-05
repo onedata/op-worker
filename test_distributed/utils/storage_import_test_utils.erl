@@ -20,6 +20,39 @@
 %%% NOTE: this module (together with storage_file_setup_utils) must be added to
 %%% ?LOAD_MODULES of any suite that uses it, as some routines are executed on the
 %%% op_worker node via rpc.
+%%%
+%%% == Mtime granularity and root-verdict races ==
+%%% (canonical explanation - suite bases link here instead of re-explaining)
+%%%
+%%% Storage mtimes tick with 1-second granularity and the scan's verdict for a
+%%% DIRECTORY - in practice the space root - hinges on mtime comparisons at that
+%%% granularity: a dir counts as "modified" when its storage mtime is strictly
+%%% newer than its logical mtime (storage_import_engine:maybe_update_times/5),
+%%% and deletion detection for it is gated on the storage mtime differing from
+%%% the one recorded by the previous scan (the mtime gate in
+%%% storage_sync_traverse:do_update_master_job/2). Two inherent races follow on
+%%% POSIX (both observed in practice, at a-few-per-mille rates):
+%%%  * the SETUP race (affects scan 1): the storage file tree is created after
+%%%    the space dir's logical creation; if the two land in different seconds,
+%%%    the initial scan classifies the space root "modified" (storage mtime >
+%%%    logical mtime) instead of the usual "unmodified". It happens inside
+%%%    init_testcase, so no test-body code can prevent it;
+%%%  * the CONTINUOUS-SCAN race (affects scans >= 2): even when
+%%%    ensure_mtime_progression/1 is called before mutating the storage, the
+%%%    root's LOGICAL mtime may be stamped asynchronously (parent-time updates
+%%%    from LFM operations are applied in the background, with timestamps of
+%%%    their own) into the same second as the storage mutation - flipping the
+%%%    root's verdict from "modified" back to "unmodified".
+%%% On flat (object) storages neither race exists as long as the suite installs
+%%% mock_space_dir_statbuf_on_flat_storage/1: the mocked root mtime lies far in
+%%% the past (root deterministically "unmodified") and is advanced explicitly
+%%% when a scan must notice storage changes (ensure_mtime_progression/1).
+%%%
+%%% Policy: tests whose SUBJECT is the classification itself assert the root
+%%% verdict exactly (accepting the residual per-mille flake); tests where the
+%%% root's verdict is incidental assert the affected fields with {range, ...}
+%%% tolerances instead - see root_verdict_overrides/2 in
+%%% storage_import_links_oct_test_base for the canonical example.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_test_utils).
@@ -36,6 +69,7 @@
 -export([
     clean_up_after_previous_run/2,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
+    advance_mocked_space_dir_mtime/3, ensure_mtime_progression/1,
     init_testcase/3, init_testcase/4,
     gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
@@ -94,7 +128,12 @@
 -define(SETUP_PARALLELISM, 20).
 
 % Statbuf the space root dir is mocked with on flat (object) storages - see
-% mock_space_dir_statbuf_on_flat_storage/1.
+% mock_space_dir_statbuf_on_flat_storage/1. The mtime lies far in the past on
+% purpose and can be moved forward per-space via the node_cache key below - see
+% advance_mocked_space_dir_mtime/3.
+-define(MOCKED_SPACE_DIR_MTIME_SHIFT_KEY(__SpaceId),
+    {mocked_space_dir_mtime_shift, __SpaceId}
+).
 -define(MOCK_SPACE_DIR_STATBUF, #statbuf{
     st_uid = ?ROOT_UID,
     st_gid = ?ROOT_GID,
@@ -409,10 +448,23 @@ force_stop_auto_scan(#storage_import_test_case_ctx{
 %% always set to the current time. This may cause storage import tests to flake,
 %% as the space root dir is sometimes reported as modified (if the scan started
 %% later than the times doc was created) or unmodified (if it started in the same
-%% second). Mocking its time stats to the past makes the outcome deterministic.
-%% Side effect: with the statbuf frozen in the past, the space root can never be
-%% classified "modified" on ANY scan (its logical mtime always compares >= the
-%% frozen storage mtime) - update tests must account for this on flat storages.
+%% second). Mocking its time stats to a constant past value makes the outcome
+%% deterministic.
+%%
+%% Side effects (both follow from the mocked mtime lying far in the past):
+%%  * the space root can never be classified "modified" on ANY scan (updating
+%%    the logical times requires the storage mtime to be strictly newer - see
+%%    storage_import_engine:maybe_update_times/5) - update tests must account
+%%    for this on flat storages;
+%%  * a continuous scan schedules deletion detection only for directories whose
+%%    mtime CHANGED since the previous scan (the mtime gate in
+%%    storage_sync_traverse:do_update_master_job/2) - with the mtime pinned,
+%%    deletions would never be detected on the flat storage (the space root is
+%%    its only master job). Tests relying on deletion detection must advance the
+%%    mocked mtime before running the scan - see advance_mocked_space_dir_mtime/3
+%%    and its storage-agnostic wrapper ensure_mtime_progression/1. The advance
+%%    keeps the mtime in the past, so the first side effect still holds.
+%%
 %% Intended to be set up once per suite (in the env posthook) and torn down in
 %% end_per_suite via unmock_space_dir_statbuf_on_flat_storage/1.
 %% @end
@@ -424,13 +476,67 @@ mock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
     ok = test_utils:mock_expect(Nodes, storage_file_ctx, new_with_stat,
         fun
             (StorageFileId = <<"/">>, SpaceId, StorageId, _Stat) ->
+                BaseStatbuf = #statbuf{st_mtime = BaseMtime} = ?MOCK_SPACE_DIR_STATBUF,
+                MtimeShift = node_cache:get(?MOCKED_SPACE_DIR_MTIME_SHIFT_KEY(SpaceId), 0),
                 storage_file_ctx:new_with_stat(
-                    StorageFileId, <<>>, SpaceId, StorageId, ?MOCK_SPACE_DIR_STATBUF
+                    StorageFileId, <<>>, SpaceId, StorageId,
+                    BaseStatbuf#statbuf{st_mtime = BaseMtime + MtimeShift}
                 );
             (StorageFileId, SpaceId, StorageId, Stat) ->
                 meck:passthrough([StorageFileId, SpaceId, StorageId, Stat])
         end
     ).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Moves the mocked flat-storage space root dir mtime (see
+%% mock_space_dir_statbuf_on_flat_storage/1) forward by the given number of
+%% seconds. The next scan then sees the root mtime as changed, which opens the
+%% deletion-detection gate; the mtime still lies far in the past, so the root
+%% keeps being classified "unmodified" (see the mock's doc).
+%% @end
+%%--------------------------------------------------------------------
+-spec advance_mocked_space_dir_mtime(
+    oct_background:entity_selector(), od_space:id(), time:seconds()
+) ->
+    ok.
+advance_mocked_space_dir_mtime(ImportingProviderSelector, SpaceId, Seconds) ->
+    Key = ?MOCKED_SPACE_DIR_MTIME_SHIFT_KEY(SpaceId),
+    lists:foreach(fun(Node) ->
+        CurrentShift = ?rpc(Node, node_cache:get(Key, 0)),
+        ok = ?rpc(Node, node_cache:put(Key, CurrentShift + Seconds))
+    end, oct_background:get_provider_nodes(ImportingProviderSelector)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Guarantees that storage changes made after this call are perceived by the
+%% next scan in a strictly later storage-mtime tick than anything recorded by
+%% the previous scan. Both the dir-modified classification and the
+%% deletion-detection gate compare mtimes recorded with 1-second granularity,
+%% so without this call a mutation landing in the same second as the previous
+%% scan's stat may go unnoticed (see the "mtime granularity and root-verdict
+%% races" section of the module doc).
+%%  * on posix (block) storages mtimes are real - sleep out the granularity;
+%%  * on flat (object) storages the space root statbuf is mocked to a constant
+%%    (see mock_space_dir_statbuf_on_flat_storage/1) and real time plays no
+%%    role - the mocked mtime is advanced explicitly instead.
+%% Call it in every test that mutates the imported storage between scans, right
+%% before the mutation.
+%% @end
+%%--------------------------------------------------------------------
+-spec ensure_mtime_progression(case_ctx()) -> ok.
+ensure_mtime_progression(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = posix}
+}) ->
+    timer:sleep(timer:seconds(1));
+ensure_mtime_progression(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{storage_type = s3},
+    space_id = SpaceId,
+    importing_provider_ctx = #provider_ctx{selector = ImportingProviderSelector}
+}) ->
+    advance_mocked_space_dir_mtime(ImportingProviderSelector, SpaceId, 1).
 
 
 -spec unmock_space_dir_statbuf_on_flat_storage(oct_background:entity_selector()) -> ok.
@@ -601,12 +707,16 @@ assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Conte
 %% continuous-scan scenarios).
 %%
 %% NOTE: the counters (created/modified/deleted/unmodified/failed) are per-scan
-%% (reset at each scan's start), while the *Hist histograms are cumulative and
-%% time-windowed - so when asserting after scan N, the histograms still include
-%% the contributions of scans 1..N-1, but those may have already shifted out of
-%% the short (Min, sometimes even Hour) windows by the time the monitoring is
-%% read. Hence two special override values:
-%%  * 'skip' - excludes the field from the assertion entirely;
+%% (reset at each scan's start), while the *Hist histograms are cumulative - the
+%% whole histogram is summed for the assertion (see
+%% flatten_storage_import_histograms/1), so after scan N a histogram equals the
+%% total over scans 1..N and is expected to be the same at every resolution
+%% (Min/Hour/Day). One caveat: a histogram only spans slot_width * 12 back from
+%% its last update - for *MinHist that is a mere 60 s, so in tests where scans
+%% run long (bulk scenarios) the early events may age out of even the whole
+%% MinHist. Hence two special override values:
+%%  * 'skip' - excludes the field from the assertion entirely (use for the Min
+%%    histograms in long-running tests);
 %%  * {range, Min, Max} - asserts the field falls within [Min, Max] (inclusive);
 %%    preferred over 'skip' when a (looser) bound is known.
 %% @end
@@ -1293,22 +1403,35 @@ assert_monitoring_fields(ExpectedSIM, SIM) ->
 
 
 %% @private
+%% @doc
+%% Prepares the raw histograms returned by storage_import_monitoring:describe/1
+%% for assertions:
+%%  * the event-counter histograms (created/modified/deleted) are flattened by
+%%    summing ALL their windows - each oct test runs in a fresh space (fresh
+%%    monitoring doc), so the whole-histogram sum equals exactly the number of
+%%    events since the test began, at every resolution alike. NOTE: a histogram
+%%    only spans slot_width * 12 back from its last update (60 s for *MinHist) -
+%%    events older than that fall off whole histogram when a later event shifts
+%%    it; long-running tests must 'skip' the Min histograms (see the doc of
+%%    assert_storage_import_monitoring_state/2).
+%%  * the queueLength histograms are gauges, not counters - only the current
+%%    (head) window is meaningful, so it is taken as-is.
+%% @end
 flatten_storage_import_histograms(SIM) ->
     SIM#{
-        % flatten beginnings of histograms for assertions
-        <<"createdMinHist">> => lists:sum(lists:sublist(maps:get(<<"createdMinHist">>, SIM), 2)),
-        <<"modifiedMinHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedMinHist">>, SIM), 2)),
-        <<"deletedMinHist">> => lists:sum(lists:sublist(maps:get(<<"deletedMinHist">>, SIM), 2)),
+        <<"createdMinHist">> => lists:sum(maps:get(<<"createdMinHist">>, SIM)),
+        <<"modifiedMinHist">> => lists:sum(maps:get(<<"modifiedMinHist">>, SIM)),
+        <<"deletedMinHist">> => lists:sum(maps:get(<<"deletedMinHist">>, SIM)),
         <<"queueLengthMinHist">> => hd(maps:get(<<"queueLengthMinHist">>, SIM)),
 
-        <<"createdHourHist">> => lists:sum(lists:sublist(maps:get(<<"createdHourHist">>, SIM), 3)),
-        <<"modifiedHourHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedHourHist">>, SIM), 3)),
-        <<"deletedHourHist">> => lists:sum(lists:sublist(maps:get(<<"deletedHourHist">>, SIM), 3)),
+        <<"createdHourHist">> => lists:sum(maps:get(<<"createdHourHist">>, SIM)),
+        <<"modifiedHourHist">> => lists:sum(maps:get(<<"modifiedHourHist">>, SIM)),
+        <<"deletedHourHist">> => lists:sum(maps:get(<<"deletedHourHist">>, SIM)),
         <<"queueLengthHourHist">> => hd(maps:get(<<"queueLengthHourHist">>, SIM)),
 
-        <<"createdDayHist">> => lists:sum(lists:sublist(maps:get(<<"createdDayHist">>, SIM), 1)),
-        <<"modifiedDayHist">> => lists:sum(lists:sublist(maps:get(<<"modifiedDayHist">>, SIM), 1)),
-        <<"deletedDayHist">> => lists:sum(lists:sublist(maps:get(<<"deletedDayHist">>, SIM), 1)),
+        <<"createdDayHist">> => lists:sum(maps:get(<<"createdDayHist">>, SIM)),
+        <<"modifiedDayHist">> => lists:sum(maps:get(<<"modifiedDayHist">>, SIM)),
+        <<"deletedDayHist">> => lists:sum(maps:get(<<"deletedDayHist">>, SIM)),
         <<"queueLengthDayHist">> => hd(maps:get(<<"queueLengthDayHist">>, SIM))
     }.
 

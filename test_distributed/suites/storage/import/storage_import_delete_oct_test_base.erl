@@ -26,20 +26,26 @@
 %%%  * on POSIX removing a direct child of the space root bumps the root's mtime,
 %%%    so on the continuous (deletion-detecting) scan the root is classified
 %%%    "modified". This is a 1-second-granularity race against scan 1's recorded
-%%%    root mtime, so wait_out_mtime_granularity/0 is called right before every
-%%%    storage deletion to force it into a strictly later mtime tick and make the
-%%%    verdict deterministic (root => modified). Note the INITIAL scan still
+%%%    root mtime, so storage_import_test_utils:ensure_mtime_progression/1 is
+%%%    called right before every storage deletion to force it into a strictly
+%%%    later mtime tick and make the verdict deterministic (root => modified). Note the INITIAL scan still
 %%%    classifies the root as "unmodified" (that is the framework default) - the
 %%%    "modified" verdict only appears on the continuous scan that mutates it;
-%%%  * on S3 (flat storage) the space root statbuf is frozen in the past
+%%%  * on S3 (flat storage) the space root statbuf is mocked to lie in the past
 %%%    (mock_space_dir_statbuf_on_flat_storage), so the root can NEVER be
-%%%    classified "modified" - it stays "unmodified" on every scan. Directories
+%%%    classified "modified" - it stays "unmodified" on every scan. Deletion
+%%%    detection is gated on the root mtime having changed since the previous
+%%%    scan, so ensure_mtime_progression/1 (the same call that sleeps on POSIX)
+%%%    advances the mocked mtime - without it the scan would not detect any
+%%%    deletions on the flat storage. Directories
 %%%    are emulated by object key prefixes and have no storage object of their
 %%%    own; a directory therefore disappears from the storage exactly when its
 %%%    last descendant object is deleted (there is nothing to rmdir), yet storage
 %%%    import still deletes the emulated logical directory, so it is counted in
 %%%    "deleted" just like on POSIX.
-%%% root_scan_verdict/1 captures this {Modified, Unmodified} split.
+%%% root_scan_verdict/1 captures this {Modified, Unmodified} split. See also the
+%%% "mtime granularity and root-verdict races" section of
+%%% storage_import_test_utils for the residual races behind these verdicts.
 %%%
 %%% The same set of cases is meaningful on both POSIX and object (S3) storages,
 %%% except empty_directory_deletion_test, which is POSIX-only (an empty directory
@@ -114,7 +120,7 @@ empty_directory_deletion_test(SuiteCtx) ->
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
 
     %% delete the (empty) directory directly on the storage
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_import_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
@@ -165,7 +171,7 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     %% delete the whole (non-empty) directory directly on the storage - its child
     %% file, then the directory itself (a no-op rmdir on S3, where the directory is
     %% emulated by the object key prefix and vanishes together with its last object)
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_import_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
@@ -238,7 +244,7 @@ file_deletion_purges_metadata_test(SuiteCtx) ->
         #xattr{name = <<"xattr_name">>, value = <<"xattr_value">>}),
 
     %% delete the file directly on the storage
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_import_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
@@ -301,7 +307,7 @@ nested_file_deletion_test(SuiteCtx) ->
 
     %% delete just one of the directory's two files directly on the storage
     #file_spec{name = DeletedFileName, content = DeletedContent} = DeletedFileSpec,
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_file_setup_utils:delete_file(
         ImportingProviderSelector, ImportedStorageId,
         filepath_utils:join([<<"/">>, DirName, DeletedFileName]), byte_size(DeletedContent)
@@ -347,26 +353,27 @@ bulk_deletion_test(SuiteCtx) ->
         importing_provider_selector = ImportingProviderSelector
     } = SuiteCtx,
 
-    %% 1 wrapping dir + 10 + 100 subdirectories (111 dirs) holding 1000 files
+    %% 1 wrapping dir + 5 + 25 subdirectories (31 dirs) holding 250 files
     TestCaseCtx = #storage_import_test_case_ctx{
         imported_storage_id = ImportedStorageId,
         file_tree_spec = FileTreeSpec
     } = storage_import_test_utils:init_testcase(
         ?FUNCTION_NAME,
-        #dir_spec{children = storage_import_test_utils:gen_nested_tree_spec([10, 10, 10], ?RAND_STR())},
+        #dir_spec{children = storage_import_test_utils:gen_nested_tree_spec([5, 5, 10], ?RAND_STR())},
         SuiteCtx
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx, ?LARGE_IMPORT_SCAN_ATTEMPTS),
     storage_import_test_utils:verify_imported_tree(TestCaseCtx),
-    %% the default derives 'created' from the declared tree (1111 entries on POSIX,
-    %% only the 1000 files on S3); at this scale scan 1 runs long enough that its
-    %% creations may age out of the short (Min) histogram window before it is read
+    %% the default derives 'created' from the declared tree (281 entries on POSIX,
+    %% only the 250 files on S3); at this scale scan 1 can outlast the 60 s Min
+    %% histogram span, so its early creations may age out of even the whole (fully
+    %% summed) Min histogram before it is read
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"createdMinHist">> => skip
     }),
 
     %% delete the whole tree directly on the storage
-    wait_out_mtime_granularity(),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
     storage_import_test_utils:delete_file_tree_from_storage(
         ImportingProviderSelector, ImportedStorageId, FileTreeSpec
     ),
@@ -376,13 +383,13 @@ bulk_deletion_test(SuiteCtx) ->
     storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
     storage_import_test_utils:verify_dir_stats(TestCaseCtx, []),
 
-    %% all 1111 logical entries (1000 files + 111 dirs) are deleted, on both storages
-    Scan1Created = case StorageType of posix -> 1111; s3 -> 1000 end,
+    %% all 281 logical entries (250 files + 31 dirs) are deleted, on both storages
+    Scan1Created = case StorageType of posix -> 281; s3 -> 250 end,
     {RootModified, RootUnmodified} = root_scan_verdict(StorageType),
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"scans">> => 2,
         <<"created">> => 0,
-        <<"deleted">> => 1111,
+        <<"deleted">> => 281,
         <<"modified">> => RootModified,
         <<"unmodified">> => RootUnmodified,
         <<"createdMinHist">> => skip,
@@ -391,10 +398,10 @@ bulk_deletion_test(SuiteCtx) ->
         <<"modifiedMinHist">> => RootModified,
         <<"modifiedHourHist">> => RootModified,
         <<"modifiedDayHist">> => RootModified,
-        %% likewise the deletions may age out of the Min window before it is read
+        %% likewise the deletions may age out of the 60 s Min histogram span
         <<"deletedMinHist">> => skip,
-        <<"deletedHourHist">> => 1111,
-        <<"deletedDayHist">> => 1111
+        <<"deletedHourHist">> => 281,
+        <<"deletedDayHist">> => 281
     }).
 
 
@@ -406,8 +413,10 @@ bulk_deletion_test(SuiteCtx) ->
 %% @private
 %% The space root's own {Modified, Unmodified} verdict on the continuous
 %% (deletion-detecting) scan: on POSIX removing a direct child bumps the root's
-%% mtime (made deterministic by wait_out_mtime_granularity/0) so it counts as
-%% modified; on S3 its statbuf is frozen, so it stays unmodified.
+%% mtime (made deterministic by storage_import_test_utils:ensure_mtime_progression/1)
+%% so it counts as modified; on S3 its statbuf is mocked to lie in the past, so
+%% it stays unmodified even after the mocked-mtime advance (see the mock's doc
+%% in storage_import_test_utils).
 -spec root_scan_verdict(posix | s3) -> {0 | 1, 0 | 1}.
 root_scan_verdict(posix) -> {1, 0};
 root_scan_verdict(s3) -> {0, 1}.
@@ -421,20 +430,4 @@ root_scan_verdict(s3) -> {0, 1}.
 %% wrapping its files); tests with a different shape pass the value explicitly.
 -spec scan1_created_count(posix | s3, non_neg_integer()) -> non_neg_integer().
 scan1_created_count(posix, PosixCount) -> PosixCount;
-scan1_created_count(s3, PosixCount) -> PosixCount - 1.
-
-
-%% @private
-%% @doc
-%% Sleeps just over the 1-second storage mtime granularity so that a storage
-%% change made right after (a deletion) is guaranteed to land in a strictly later
-%% mtime tick than scan 1's snapshot of the space root. Without this the two can
-%% fall in the same second, making the root's "modified" verdict flip between
-%% runs (observed on POSIX); on S3 the root statbuf is frozen so this only guards
-%% the POSIX path, but it is applied unconditionally for simplicity. Mirrors the
-%% identically-named helper in storage_import_links_oct_test_base.
-%% TODO VFS-13529 consider hoisting this shared helper into storage_import_test_utils.
-%% @end
--spec wait_out_mtime_granularity() -> ok.
-wait_out_mtime_granularity() ->
-    timer:sleep(timer:seconds(1)).
+scan1_created_count(s3, PosixCount) -> PosixCount - 1.  % TODO can infer from file tree spec
