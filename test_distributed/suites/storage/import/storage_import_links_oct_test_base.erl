@@ -24,17 +24,11 @@
 %%% Every removal here goes through LFM (never through the storage), so the scan
 %%% must report NO deletions of its own (deleted => 0) in all cases. To keep the
 %%% scan from bulk-skipping the otherwise-unchanged space root (which would make
-%%% the assertions vacuous), each scenario first drops a trigger file directly on
-%%% the storage - the storage-agnostic replacement for the legacy tests'
-%%% POSIX-only "touch the space dir" nudge (see the monitoring-counter notes in
-%%% storage_import_update_oct_test_base for how the trigger file is classified).
-%%% The same set of cases is meaningful on both POSIX and object (S3) storages;
-%%% the thin per-storage suites are storage_import_links_{posix,s3}_oct_test_SUITE.
-%%%
-%%% The space root's modified/unmodified verdict is inherently racy on POSIX -
-%%% see the "mtime granularity and root-verdict races" section of
-%%% storage_import_test_utils. Since the root's classification is not what
-%%% these tests are about, the affected fields are asserted with tolerance
+%%% the assertions vacuous), each scenario first drops a trigger file directly
+%%% on the storage (see storage_import_test_utils:create_trigger_file_on_storage/1).
+%%% Since the root's classification is not what these tests are about, its
+%%% inherently racy verdict (see the "Mtime granularity and root-verdict races"
+%%% section of storage_import_test_utils) is asserted with tolerance
 %%% (root_verdict_overrides/2, initial_scan_monitoring_overrides/1).
 %%% @end
 %%%-------------------------------------------------------------------
@@ -124,16 +118,6 @@ hardlink_file_deleted_link_deleted_test(SuiteCtx) ->
     hardlink_scan_test_base(?FUNCTION_NAME, SuiteCtx, deleted, deleted).
 
 
-%% @private
-%% @doc
-%% Imports a regular file (scan 1), creates a logical hardlink to it, then
-%% removes the file and/or the hardlink via LFM according to the given modes and
-%% runs a continuous scan (scan 2). Whichever references were kept must remain
-%% intact; whichever were removed must be gone - and, crucially, the scan itself
-%% must neither delete nor re-import anything (it only picks up the trigger
-%% file), no matter which references were removed, since every removal went
-%% through LFM rather than through the storage.
-%% @end
 -spec hardlink_scan_test_base(
     atom(), storage_import_test_utils:suite_ctx(), deletion_mode(), deletion_mode()
 ) ->
@@ -270,13 +254,8 @@ assert_reference_survival(Node, SessId, Path, _Deleted) ->
 %%    @scan 2, both within this fast test's histogram window);
 %%  * deleted => 0 (default) - the crux of these tests: every removal went
 %%    through LFM, so the scan itself deletes nothing;
-%%  * the space root: on POSIX the trigger file bumps its mtime, so it is
-%%    normally classified "modified" - but the verdict is racy at 1-second mtime
-%%    granularity and the root's classification is NOT what these tests are
-%%    about, so it is asserted with tolerance (see root_verdict_overrides/2). On
-%%    S3 the root statbuf is mocked to a constant in the past
-%%    (mock_space_dir_statbuf_on_flat_storage), so it is deterministically
-%%    "unmodified" and asserted exactly;
+%%  * the space root: asserted with per-storage tolerance - see
+%%    root_verdict_overrides/2;
 %%  * the original file adds one "unmodified" on scan 2 when its shared storage
 %%    object is still LISTED by scan 2 - and this is where POSIX and S3 diverge:
 %%     - S3 (flat) keeps the object key until the last open handle closes, so a
@@ -331,7 +310,7 @@ assert_symlink_scan_monitoring_state(TestCaseCtx, StorageType) ->
 %% The space root's contribution to the continuous-scan (scan-2) monitoring
 %% state. On POSIX the trigger file bumps the root's mtime, so the root is
 %% normally classified "modified" - but the verdict is subject to the races
-%% described in the "mtime granularity and root-verdict races" section of
+%% described in the "Mtime granularity and root-verdict races" section of
 %% storage_import_test_utils; since the root's classification is not what these
 %% tests are about, the affected fields are asserted with tolerance: modified
 %% and unmodified may each go either way (they always sum to a constant, which
@@ -356,7 +335,7 @@ root_verdict_overrides(s3, ExtraUnmodified) -> #{
 
 %% @private
 %% Tolerance for the initial-scan monitoring assert: on POSIX the setup race
-%% (see the "mtime granularity and root-verdict races" section of
+%% (see the "Mtime granularity and root-verdict races" section of
 %% storage_import_test_utils) may classify the space root "modified" instead of
 %% the default "unmodified". On S3 the mocked root statbuf makes the default
 %% exact.

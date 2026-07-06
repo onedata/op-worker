@@ -8,9 +8,7 @@
 %%% @doc
 %%% This module tests how storage import detects and propagates deletions made
 %%% directly on S3 storage; see storage_import_delete_oct_test_base for the shared
-%%% bodies. empty_directory_deletion_test is intentionally omitted - an empty
-%%% directory has no storage object on a flat/object storage, so it can neither be
-%%% imported nor deleted there.
+%%% bodies.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_delete_s3_oct_test_SUITE).

@@ -8,16 +8,6 @@
 %%% @doc
 %%% This module contains base test functions for testing the initial storage
 %%% import scan.
-%%%
-%%% The tests are declarative: each test declares the file tree to be created on
-%%% the storage (via #dir_spec{}/#file_spec{} records), enables import by setting
-%%% up a space supported by an imported storage and, once the scan finishes,
-%%% declares the expected outcome. The heavy lifting (creating the tree on the
-%%% storage, verifying the imported logical tree on both providers, asserting the
-%%% monitoring counters) is done generically by storage_import_test_utils - see
-%%% its module doc for an overview of the machinery (including the "mtime
-%%% granularity and root-verdict races" section, which explains why the space
-%%% root's verdict on scan 1 can - rarely - flip to "modified" on POSIX).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_initial_oct_test_base).
@@ -404,10 +394,9 @@ import_nfs_acl_with_disabled_luma_should_fail_test(SuiteCtx) ->
 %% --- ignored entries ---
 
 
-%% A FIFO (named pipe) is an unsupported file type that storage import must skip:
-%% it is created on the storage but never imported into the logical filesystem.
-%% The scan still processes it (counted as unmodified, alongside the space root),
-%% but it does not appear in the space.
+%% A FIFO (named pipe) is an unsupported file type that storage import must
+%% skip: the scan still processes it (counting it "unmodified"), but it must
+%% never appear in the logical filesystem.
 import_ignores_fifo_test(SuiteCtx) ->
     FifoName = ?RAND_STR(),
     TestCaseCtx = #storage_import_test_case_ctx{
@@ -419,7 +408,6 @@ import_ignores_fifo_test(SuiteCtx) ->
     ),
     storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
 
-    %% the fifo must not have been imported into the logical filesystem on either provider
     FifoPath = filepath_utils:join([SpacePath, FifoName]),
     lists:foreach(fun(#provider_ctx{node = Node, session_id = SessId}) ->
         ?assertEqual({ok, []},
@@ -428,7 +416,7 @@ import_ignores_fifo_test(SuiteCtx) ->
             lfm_proxy:stat(Node, SessId, {path, FifoPath}), ?ATTEMPTS)
     end, [ImportingProviderCtx, NonImportingProviderCtx]),
 
-    %% the space root and the (skipped) fifo are both counted as unmodified
+    %% unmodified: the space root + the (processed but skipped) fifo
     storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
         <<"unmodified">> => 2
     }).

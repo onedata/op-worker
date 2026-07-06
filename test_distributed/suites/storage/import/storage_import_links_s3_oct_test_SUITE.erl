@@ -8,8 +8,7 @@
 %%% @doc
 %%% This module tests how storage import treats logical links (hardlinks and
 %%% symlinks) in the space on S3 storage. As the links are logical (not
-%%% storage-level) objects, the whole set is meaningful on object storage too;
-%%% see storage_import_links_oct_test_base for the shared bodies.
+%%% storage-level) objects, the whole set is meaningful on object storage too.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_links_s3_oct_test_SUITE).

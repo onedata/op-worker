@@ -32,23 +32,17 @@
 
 % Attempts for asserting state on the non-importing provider when the file is NOT
 % awaited via verify_imported_tree first (which retries until the tree propagates).
-% Such an assertion must itself tolerate the dbsync propagation lag, which can
-% exceed the default ?ATTEMPTS on a loaded environment.
 -define(CROSS_PROVIDER_PROPAGATION_ATTEMPTS, 60).
 
-% Evaluates Expr only when StorageType is posix, no-op otherwise. Shorthand for
-% the "do X on POSIX, nothing on S3" branches that recur throughout the storage
-% import test suites (see their module docs for why POSIX and object storages
-% diverge so often here). For a multi-statement Expr, wrap it in begin...end at
-% the call site.
+% Evaluates Expr only when StorageType is posix, no-op otherwise (see the "Flat (object)
+% storage divergences" section of storage_import_test_utils for why the two diverge so often).
+% For a multi-statement Expr, wrap it in begin...end at the call site.
 -define(IF_POSIX(StorageType, Expr), StorageType =:= posix andalso (Expr)).
 
 
 %% Declares a FIFO (named pipe) to be created directly on the storage. A FIFO is a
 %% special (unsupported) file type that storage import must ignore - it is created
-%% on the storage but never imported into the logical filesystem. Used to test that
-%% such entries are skipped (see import_ignores_fifo_test). Kept local to the storage
-%% import tests, as FIFOs cannot be expressed via the generic onenv file specs.
+%% on the storage but never imported into the logical filesystem.
 -record(storage_fifo_spec, {
     name = undefined :: undefined | binary()
 }).

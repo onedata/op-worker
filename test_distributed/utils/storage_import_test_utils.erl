@@ -8,21 +8,92 @@
 %%% @doc
 %%% Generic machinery for declarative storage import tests.
 %%%
+%%% == Framework overview ==
+%%%
 %%% A test declares the file tree to be created directly on the imported
 %%% storage (#dir_spec{}/#file_spec{} records); init_testcase/3,4 concretizes
 %%% and creates it, then sets up a space whose support by the imported storage
 %%% auto-triggers the initial scan. The helpers below await scans, verify the
 %%% imported logical tree on both providers and assert the scan's monitoring
 %%% counters against expectations derived from the declared tree. Continuous
-%%% (update) scan tests additionally mutate the storage in between (via
+%%% scan tests additionally mutate the storage in between (via
 %%% storage_file_setup_utils) and rerun a scan via run_continuous_scan/2,3.
 %%%
 %%% NOTE: this module (together with storage_file_setup_utils) must be added to
 %%% ?LOAD_MODULES of any suite that uses it, as some routines are executed on the
 %%% op_worker node via rpc.
 %%%
+%%% The sections below are the CANONICAL description of the scan behaviour the
+%%% storage import suites rely on - suite/test docs reference these sections by
+%%% name instead of re-explaining them. NOTE: this knowledge ultimately belongs
+%%% with the import engine itself (storage_import_engine, storage_sync_traverse,
+%%% flat_storage_iterator); should it get documented there, these sections
+%%% should shrink to the test-relevant consequences.
+%%%
+%%% == Scan classification and counters ==
+%%%
+%%% How scans classify entries and tally the monitoring counters (asserted via
+%%% assert_storage_import_monitoring_state/2 - see its doc for the per-scan
+%%% counter vs cumulative time-windowed histogram distinction):
+%%%  * on scan 1 every declared entry is counted "created" and the space root
+%%%    is the single "unmodified" entry (the assertion helper's default);
+%%%  * a directory's own modified/unmodified verdict is driven solely by its
+%%%    own mtime/ctime, which only a change to its DIRECT children set
+%%%    (add/remove/rename/replace) bumps - a child's content/attrs change does
+%%%    not; in particular, the space root flips to "modified" exactly when a
+%%%    direct child of the root is added/removed (never on flat storages -
+%%%    see the next section);
+%%%  * a regular file is "modified" when its size OR mtime changed (see
+%%%    storage_import_engine:maybe_update_file_location/4) - size/mode changes
+%%%    are detected regardless of mtime resolution, while a same-size
+%%%    content-only change relies on the mtime having visibly advanced;
+%%%  * whether a directory's children get individually reprocessed is decided
+%%%    separately, per listing batch, via a hash of the children's attrs (see
+%%%    storage_import_hash) - but children of an unchanged batch, though
+%%%    bulk-skipped, still count towards "unmodified" all the same;
+%%%  * (POSIX) a directory listing that returns EXACTLY
+%%%    storage_import_dir_batch_size entries schedules one extra
+%%%    disambiguating batch to confirm end-of-listing (see
+%%%    tree_storage_iterator:get_children_and_next_batch_job/1), and every
+%%%    such extra pass re-runs the directory's OWN verdict, adding one more
+%%%    "unmodified" - relevant only for tests that lower the batch size below
+%%%    their trees' child counts.
+%%%
+%%% == Flat (object) storage divergences ==
+%%%
+%%% Flat storages (object storages with no concept of directories, e.g. S3 -
+%%% see flat_storage_iterator.erl) diverge from POSIX in ways that recur across
+%%% the storage import suites:
+%%%  * there are no real directories - an empty one has no underlying storage
+%%%    object at all, so it can never be imported/observed via LFM (handled
+%%%    transparently by verify_imported_tree/2, which strips such directories
+%%%    from the expected tree), and directories never count towards "created"
+%%%    (only regular files do). Deletion is different: a directory vanishes
+%%%    from the storage exactly when its last descendant object is deleted
+%%%    (there is nothing to rmdir), yet storage import still deletes the
+%%%    emulated logical directory and counts it "deleted" just like on POSIX;
+%%%  * the space root's own storage statbuf is permanently mocked into the
+%%%    past for scan timing determinism (see
+%%%    mock_space_dir_statbuf_on_flat_storage/1), so the root can never be
+%%%    classified "modified" on any scan; the mocked mtime can be advanced
+%%%    (still staying in the past) to open the deletion-detection gate when a
+%%%    test needs it - see ensure_mtime_progression/1;
+%%%  * there is no per-directory traversal at all - the whole space is a
+%%%    single flat traversal entity, with only regular files counted as its
+%%%    children for batching, and the listing API reports a definitive
+%%%    end-of-listing marker on the very page that exhausts it (no POSIX-style
+%%%    extra disambiguating batch);
+%%%  * consequently (frozen root mtime + no recursion to fall back on),
+%%%    running a continuous scan with detect_modifications => false would
+%%%    discard ALL of the root's batch slave jobs outright - INCLUDING
+%%%    brand-new files, which would then simply never be imported (on POSIX
+%%%    the same shortcut is harmless: a subdirectory's own master job catches
+%%%    what its parent's shortcut skipped). Continuous-scan tests must
+%%%    therefore keep modification detection enabled on flat storages (see
+%%%    create_file_in_dir_exceed_batch_update_test in
+%%%    storage_import_update_oct_test_base).
+%%%
 %%% == Mtime granularity and root-verdict races ==
-%%% (canonical explanation - suite bases link here instead of re-explaining)
 %%%
 %%% Storage mtimes tick with 1-second granularity and the scan's verdict for a
 %%% DIRECTORY - in practice the space root - hinges on mtime comparisons at that
@@ -44,9 +115,7 @@
 %%%    their own) into the same second as the storage mutation - flipping the
 %%%    root's verdict from "modified" back to "unmodified".
 %%% On flat (object) storages neither race exists as long as the suite installs
-%%% mock_space_dir_statbuf_on_flat_storage/1: the mocked root mtime lies far in
-%%% the past (root deterministically "unmodified") and is advanced explicitly
-%%% when a scan must notice storage changes (ensure_mtime_progression/1).
+%%% mock_space_dir_statbuf_on_flat_storage/1 (see the previous section).
 %%%
 %%% Policy: tests whose SUBJECT is the classification itself assert the root
 %%% verdict exactly (accepting the residual per-mille flake); tests where the
@@ -70,8 +139,7 @@
     clean_up_after_previous_run/2, clean_up_after_previous_run/3,
     mock_space_dir_statbuf_on_flat_storage/1, unmock_space_dir_statbuf_on_flat_storage/1,
     create_storage/3,
-    advance_mocked_space_dir_mtime/3, ensure_mtime_progression/1,
-    create_trigger_file_on_storage/1,
+    advance_mocked_space_dir_mtime/3,
     init_testcase/3, init_testcase/4,
     setup_and_verify_initial_import/3, setup_and_verify_initial_import/4,
     gen_nested_tree_spec/2,
@@ -80,6 +148,8 @@
 ]).
 %% API - scan control
 -export([
+    ensure_mtime_progression/1,
+    create_trigger_file_on_storage/1,
     await_initial_scan_finished/1, await_initial_scan_finished/2,
     await_scan_finished/2, await_scan_finished/3,
     run_continuous_scan/2, run_continuous_scan/3, run_continuous_scan/4,
@@ -126,10 +196,10 @@
 % load on the providers while still parallelizing the (RPC-heavy, retry-prone)
 % per-node assertions - important for large trees (hundreds/thousands of nodes).
 -define(VERIFY_PARALLELISM, 20).
-% Max number of concurrent processes used to create the top-level tree nodes on the
-% storage. Only the top-level siblings are parallelized (each subtree is created
-% sequentially), so the total concurrency stays bounded by this value - parallelizing
-% every level would multiply across levels and overload the provider.
+% Max number of concurrent processes used to create/delete the top-level tree nodes
+% on the storage. Only the top-level siblings are parallelized (each subtree is
+% processed sequentially), so the total concurrency stays bounded by this value -
+% parallelizing every level would multiply across levels and overload the provider.
 -define(SETUP_PARALLELISM, 20).
 
 % Statbuf the space root dir is mocked with on flat (object) storages - see
@@ -167,9 +237,9 @@ clean_up_after_previous_run(AllTestCases, #storage_import_test_suite_ctx{
 %% @doc
 %% Deletes every space left over by a previous run of one of the given test
 %% cases (matched by the space name) together with its supporting storages on
-%% the two given providers. The selector-based entry shared with other storage
-%% test suites (e.g. file_registration_test_base), which carry a different suite
-%% ctx but the same two-supporting-providers cleanup need.
+%% the two given providers. This selector-based variant is shared with other
+%% storage test suites (e.g. file_registration_test_base) that carry a different
+%% suite ctx but have the same two-supporting-providers cleanup need.
 %% @end
 %%--------------------------------------------------------------------
 -spec clean_up_after_previous_run(
@@ -243,11 +313,10 @@ init_testcase(TestCaseName, FileTreeSpec, SuiteCtx = #storage_import_test_suite_
 %%--------------------------------------------------------------------
 %% @doc
 %% Runs the canonical initial-import preamble shared by virtually every storage
-%% import test: create the declared tree on the storage and set up the space
-%% (init_testcase/4), await the auto-triggered initial scan, verify the imported
-%% logical tree on both providers, and assert the initial scan's monitoring
-%% counters. Returns the test case context for the body to destructure and drive
-%% the continuous-scan phase.
+%% import test - from init_testcase/4 through asserting the initial scan's
+%% monitoring counters (see the framework overview in the module doc). Returns
+%% the test case context for the body to destructure and drive the
+%% continuous-scan phase.
 %%
 %% Opts (all optional):
 %%  * auto_import_config := map() - non-default auto import config for the
@@ -309,8 +378,6 @@ gen_nested_tree_spec([DirsCount | RestBranching], FileContent) ->
 create_file_tree_on_storage(_ProviderSelector, _StorageId, undefined) ->
     undefined;
 create_file_tree_on_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
-    % Parallelize creation of the top-level siblings (each subtree is still created
-    % sequentially) to speed up setup of wide trees, keeping concurrency bounded
     lists_utils:pmap(fun(Spec) ->
         create_file_tree_on_storage(ProviderSelector, StorageId, Spec)
     end, Specs, ?SETUP_PARALLELISM);
@@ -324,9 +391,8 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
 %% filesystem) - the inverse of create_file_tree_on_storage/3, used by continuous
 %% (update) scan tests to simulate whole (sub)trees disappearing from the storage.
 %% Regular files are unlinked (their size taken from the declared content) and
-%% directories are removed bottom-up; on object storages (e.g. S3) there is no
-%% real directory to remove, so the rmdir is a harmless no-op there (see
-%% storage_file_setup_utils:rmdir_on_storage/2). The spec must be concretized
+%% directories are removed bottom-up (the rmdir is a no-op on object storages -
+%% see storage_file_setup_utils:rmdir_on_storage/2). The spec must be concretized
 %% (all names filled in) - pass the file_tree_spec stored in the case ctx.
 %% @end
 %%--------------------------------------------------------------------
@@ -335,8 +401,6 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
 delete_file_tree_from_storage(_ProviderSelector, _StorageId, undefined) ->
     ok;
 delete_file_tree_from_storage(ProviderSelector, StorageId, Specs) when is_list(Specs) ->
-    % Parallelize deletion of the top-level siblings (each subtree is still deleted
-    % sequentially) to speed up teardown of wide trees, keeping concurrency bounded
     lists_utils:pforeach(fun(Spec) ->
         delete_file_tree_from_storage(ProviderSelector, StorageId, Spec)
     end, Specs, ?SETUP_PARALLELISM);
@@ -373,9 +437,7 @@ await_initial_scan_finished(#storage_import_test_case_ctx{
 %%--------------------------------------------------------------------
 %% @doc
 %% Awaits the completion of the import scan number ScanNum (1 being the initial
-%% scan). Used in continuous-scan scenarios, where the storage is mutated between
-%% scans and each consecutive scan is awaited before asserting the new state.
-%% Use the /3 variant with a higher Attempts for large imports.
+%% scan). Use the /3 variant with a higher Attempts for large imports.
 %% @end
 %%--------------------------------------------------------------------
 -spec await_scan_finished(case_ctx(), non_neg_integer()) -> true.
@@ -436,10 +498,9 @@ run_continuous_scan(CaseCtx, ScanNum, ConfigOverrides, AwaitAttempts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Enables continuous (periodic) scanning for the space. After this call the
-%% import will keep rescanning the storage, picking up modifications/deletions
-%% according to the (optionally overridden) scan config. Intended to be paired
-%% with await_scan_finished/2 and disable_continuous_scan/1.
+%% Enables continuous (periodic) scanning for the space, optionally with scan
+%% config overrides. Intended to be paired with await_scan_finished/2 and
+%% disable_continuous_scan/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec enable_continuous_scan(case_ctx()) -> ok.
@@ -513,19 +574,10 @@ force_stop_auto_scan(#storage_import_test_case_ctx{
 %% second). Mocking its time stats to a constant past value makes the outcome
 %% deterministic.
 %%
-%% Side effects (both follow from the mocked mtime lying far in the past):
-%%  * the space root can never be classified "modified" on ANY scan (updating
-%%    the logical times requires the storage mtime to be strictly newer - see
-%%    storage_import_engine:maybe_update_times/5) - update tests must account
-%%    for this on flat storages;
-%%  * a continuous scan schedules deletion detection only for directories whose
-%%    mtime CHANGED since the previous scan (the mtime gate in
-%%    storage_sync_traverse:do_update_master_job/2) - with the mtime pinned,
-%%    deletions would never be detected on the flat storage (the space root is
-%%    its only master job). Tests relying on deletion detection must advance the
-%%    mocked mtime before running the scan - see advance_mocked_space_dir_mtime/3
-%%    and its storage-agnostic wrapper ensure_mtime_progression/1. The advance
-%%    keeps the mtime in the past, so the first side effect still holds.
+%% For the behavioural consequences (the root can never be classified "modified";
+%% deletion detection requires advancing the mocked mtime first - see
+%% advance_mocked_space_dir_mtime/3) see the "Flat (object) storage divergences"
+%% section of the module doc.
 %%
 %% Intended to be set up once per suite (in the env posthook) and torn down in
 %% end_per_suite via unmock_space_dir_statbuf_on_flat_storage/1.
@@ -556,7 +608,8 @@ mock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
 %% mock_space_dir_statbuf_on_flat_storage/1) forward by the given number of
 %% seconds. The next scan then sees the root mtime as changed, which opens the
 %% deletion-detection gate; the mtime still lies far in the past, so the root
-%% keeps being classified "unmodified" (see the mock's doc).
+%% keeps being classified "unmodified" (see the "Flat (object) storage
+%% divergences" section of the module doc).
 %% @end
 %%--------------------------------------------------------------------
 -spec advance_mocked_space_dir_mtime(
@@ -638,6 +691,9 @@ unmock_space_dir_statbuf_on_flat_storage(ImportingProviderSelector) ->
 %% For each declared node it asserts its type, and additionally:
 %%  * for directories - that the set of its children matches the declaration,
 %%  * for regular files - that their content matches the declaration.
+%% The space root's children set is asserted as well, so the verification is
+%% EXACT: an entry absent from the declaration must be absent from the space
+%% (in particular, verifying against [] asserts an empty space).
 %% NOTE: ownership (uid/gid/owner_id) is intentionally not verified here, as the
 %% expected values differ between providers and depend on the LUMA configuration;
 %% such assertions are left to the individual test cases.
@@ -663,10 +719,8 @@ verify_imported_tree(#storage_import_test_case_ctx{
     importing_provider_ctx = ImportingProviderCtx,
     non_importing_provider_ctx = NonImportingProviderCtx
 }, ExpectedFileTreeSpec) ->
-    % on a flat/object storage (e.g. S3) a directory with no real content
-    % anywhere in its subtree has no underlying storage object at all, and so is
-    % unobservable via LFM - see the module doc of flat_storage_iterator.erl -
-    % strip such directories so that callers do not need to special-case S3
+    % strip directories unobservable on flat/object storage (see
+    % filter_out_unobservable_dirs/2) so that callers do not need to special-case S3
     TopLevelSpecs = filter_out_unobservable_dirs(StorageType, to_spec_list(ExpectedFileTreeSpec)),
     % flatten the whole tree (cheap, no RPC) into a list of {Path, Spec} so that
     % per-node verification (which is RPC-heavy and may retry while data propagates
@@ -886,11 +940,10 @@ get_storage_import_monitoring_state(#storage_import_test_case_ctx{
 %%--------------------------------------------------------------------
 %% @doc
 %% The number of entries the initial scan reports as "created" for this test
-%% case's declared file tree - i.e. the storage entries the scan actually
-%% observes. On POSIX that is every directory and regular file; on S3 (flat
-%% storage) directories are emulated by object key prefixes and are never
-%% reported as created, so only the regular files count. Derived from the
-%% declared tree so that reshaping it never requires recomputing magic numbers.
+%% case's declared file tree: every directory and regular file on POSIX, only
+%% the regular files on flat (S3) storage - see the "Flat (object) storage
+%% divergences" section of the module doc. Derived from the declared tree so
+%% that reshaping it never requires recomputing magic numbers.
 %% @end
 %%--------------------------------------------------------------------
 -spec expected_created_count(case_ctx()) -> non_neg_integer().
@@ -906,11 +959,10 @@ expected_created_count(#storage_import_test_case_ctx{
 %% The number of LOGICAL entries (directories + files) this test case's declared
 %% file tree represents - i.e. how many space entries a full deletion of the
 %% whole tree removes, and thus reports as "deleted", on ANY storage. Unlike
-%% expected_created_count/1 this always counts directories: even on flat (S3)
-%% storage, where a directory has no storage object of its own, storage import
-%% still removes the emulated logical directory once its last descendant object
-%% disappears. Hence the count is taken with the posix semantics regardless of
-%% the actual storage type.
+%% expected_created_count/1 this always counts directories - even on flat (S3)
+%% storage the emulated logical directories get deleted and counted (see the
+%% "Flat (object) storage divergences" section of the module doc) - hence the
+%% count is taken with the posix semantics regardless of the actual storage type.
 %% @end
 %%--------------------------------------------------------------------
 -spec expected_deleted_count(case_ctx()) -> non_neg_integer().
@@ -922,17 +974,12 @@ expected_deleted_count(#storage_import_test_case_ctx{file_tree_spec = FileTreeSp
 %% @doc
 %% The SPACE ROOT's own {Modified, Unmodified} verdict on a continuous scan that
 %% mutates the root's set of direct children (a top-level create/delete, or the
-%% trigger file). On POSIX such a mutation bumps the root's storage mtime, so the
-%% scan classifies the root "modified" ({1, 0}); tests relying on this must call
-%% ensure_mtime_progression/1 first to win the 1-second-granularity race
-%% deterministically. On S3 (flat storage) the root statbuf is mocked to lie in
-%% the past (mock_space_dir_statbuf_on_flat_storage/1), so the root can never be
-%% "modified" and stays "unmodified" ({0, 1}). See the "Mtime granularity and
-%% root-verdict races" section above for the residual races behind these verdicts.
-%%
-%% This is the EXACT verdict, for tests whose subject IS the root classification.
-%% Tests where the root's verdict is merely incidental assert it with tolerance
-%% instead - see root_verdict_overrides/2 in storage_import_links_oct_test_base.
+%% trigger file): {1, 0} on POSIX (the mutation bumps the root's storage mtime;
+%% call ensure_mtime_progression/1 before mutating to make this deterministic),
+%% {0, 1} on flat storages (the mocked root statbuf can never look modified) -
+%% see the "Flat (object) storage divergences" and "Mtime granularity and
+%% root-verdict races" sections of the module doc (including the policy on when
+%% to assert this exact verdict vs a tolerance).
 %% @end
 %%--------------------------------------------------------------------
 -spec root_scan_verdict(posix | s3) -> {0 | 1, 0 | 1}.
@@ -1420,10 +1467,10 @@ to_spec_list(Spec) -> [Spec].
 %% @private
 %% @doc
 %% Recursively strips directories that end up with no children at all (after
-%% this same filtering is applied to their own children) - on a flat/object
-%% storage, such a directory has no underlying storage object anywhere in its
-%% subtree, and so can never be imported/observed. No-op on POSIX, where real
-%% (possibly empty) directories are always observable.
+%% this same filtering is applied to their own children) - such directories are
+%% unobservable on a flat/object storage (see the "Flat (object) storage
+%% divergences" section of the module doc). No-op on POSIX, where real (possibly
+%% empty) directories are always observable.
 %% @end
 -spec filter_out_unobservable_dirs(posix | s3, [onenv_file_test_utils:object_spec()]) ->
     [onenv_file_test_utils:object_spec()].
@@ -1495,12 +1542,9 @@ aggregate_subtree_stats(Children) ->
 
 
 %% @private
-%% Counts the storage entries that storage import reports as 'created' for the
-%% declared file tree. On POSIX storages every directory and regular file is a
-%% real storage entry, so both are counted. On object storages (S3) there are no
-%% directory entries - directories are emulated via object key prefixes and are
-%% never reported as created - so only the regular files (objects) are counted.
-%% FIFOs are created on the storage but never imported, hence not counted either.
+%% Counts the storage entries that storage import reports as "created" for the
+%% declared file tree - see expected_created_count/1. FIFOs are created on the
+%% storage but never imported, hence never counted.
 -spec count_imported_nodes(posix | s3, file_tree_spec()) -> non_neg_integer().
 count_imported_nodes(_StorageType, undefined) -> 0;
 count_imported_nodes(StorageType, Specs) when is_list(Specs) ->
@@ -1517,11 +1561,9 @@ count_imported_nodes(_StorageType, #storage_fifo_spec{}) -> 0.
 
 
 %% @private
-%% Expands the snake_case histogram sugar keys (created_hist/modified_hist/
-%% deleted_hist) in an overrides map into their three per-resolution binary keys
-%% (<<"XMinHist">>/<<"XHourHist">>/<<"XDayHist">>), each set to the sugar value.
-%% An explicit binary key for a single resolution present in the same map wins
-%% over the sugar expansion (see assert_storage_import_monitoring_state/2 doc).
+%% Expands the snake_case histogram sugar keys of an overrides map into their
+%% three per-resolution binary keys - see the doc of
+%% assert_storage_import_monitoring_state/2.
 -spec expand_histogram_sugar(map()) -> map().
 expand_histogram_sugar(Overrides) ->
     SugarKeys = #{
@@ -1603,11 +1645,8 @@ assert_monitoring_fields(ExpectedSIM, SIM) ->
 %%  * the event-counter histograms (created/modified/deleted) are flattened by
 %%    summing ALL their windows - each oct test runs in a fresh space (fresh
 %%    monitoring doc), so the whole-histogram sum equals exactly the number of
-%%    events since the test began, at every resolution alike. NOTE: a histogram
-%%    only spans slot_width * 12 back from its last update (60 s for *MinHist) -
-%%    events older than that fall off whole histogram when a later event shifts
-%%    it; long-running tests must 'skip' the Min histograms (see the doc of
-%%    assert_storage_import_monitoring_state/2).
+%%    events since the test began, at every resolution alike (modulo histogram
+%%    aging - see the doc of assert_storage_import_monitoring_state/2);
 %%  * the queueLength histograms are gauges, not counters - only the current
 %%    (head) window is meaningful, so it is taken as-is.
 %% @end
