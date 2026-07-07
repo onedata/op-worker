@@ -23,7 +23,8 @@
     allow_onezone_as_frame_ancestor/1,
     set_file_download_headers/2,
 
-    send_data_chunk/4
+    send_data_chunk/4,
+    ascii_filename_fallback/1
 ]).
 
 
@@ -50,9 +51,10 @@ set_file_download_headers(Req0, FileName) ->
     end,
 
     RFC5987Encoded = rfc5987:encode_filename(FileName),
+    AsciiFallback = ascii_filename_fallback(FileName),
     cowboy_req:set_resp_header(
         ?HDR_CONTENT_DISPOSITION,
-        <<"attachment; filename*=UTF-8''", RFC5987Encoded/binary>>,
+        [<<"attachment; filename=\"">>, AsciiFallback, <<"\"; filename*=UTF-8''">>, RFC5987Encoded],
         Req1
     ).
 
@@ -90,3 +92,20 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxSentBlocksCount, RetryDelay) -
                 min(2 * RetryDelay, ?MAX_HTTP_SEND_RETRY_DELAY)
             )
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Produces a safe ASCII fallback for the legacy filename= parameter.
+%% Replaces non-ASCII and quoted-string special chars with '_'.
+%% @end
+%%--------------------------------------------------------------------
+-spec ascii_filename_fallback(binary()) -> binary().
+ascii_filename_fallback(FileName) ->
+    << <<(ascii_fallback_byte(B))>> || <<B>> <= FileName >>.
+
+
+%% @private
+-spec ascii_fallback_byte(byte()) -> byte().
+ascii_fallback_byte(B) when B >= 32, B < 127, B =/= $", B =/= $\\ -> B;
+ascii_fallback_byte(_) -> $_.
