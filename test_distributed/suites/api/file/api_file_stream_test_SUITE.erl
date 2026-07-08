@@ -1561,7 +1561,8 @@ check_content_disposition_header(MemRef, Headers) ->
     ?assert(maps:is_key(?HDR_CONTENT_DISPOSITION, Headers)),
     ExpectedDownloadedFileName = api_test_memory:get(MemRef, expected_downloaded_file_name),
     RFC5987Encoded = rfc5987:encode_filename(ExpectedDownloadedFileName),
-    ExpHeader = <<"attachment; filename*=UTF-8''", RFC5987Encoded/binary>>,
+    AsciiFallback = http_download_utils:ascii_filename_fallback(ExpectedDownloadedFileName),
+    ExpHeader = <<"attachment; filename=\"", AsciiFallback/binary, "\"; filename*=UTF-8''", RFC5987Encoded/binary>>,
     ?assertEqual(ExpHeader, maps:get(?HDR_CONTENT_DISPOSITION, Headers)).
 
 
