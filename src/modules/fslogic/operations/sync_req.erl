@@ -54,6 +54,12 @@
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
     case file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {#document{deleted = true}, _FileCtx2} ->
+            % The file's local location was deleted concurrently (delete race during
+            % transfer/read - possibly a deletion propagated from a remote provider).
+            % Surface as not_found so callers handle it gracefully instead of crashing on
+            % an unmatched location document. 
+            throw({error, not_found});
         {#document{value = #file_location{size = 0} = FL}, FileCtx2} ->
             LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
             FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
