@@ -51,6 +51,12 @@
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
 
+    %% --- suffixes ---
+    should_not_import_recreated_file_with_suffix_on_storage_test/1,
+    should_update_blocks_of_recreated_file_with_suffix_on_storage_test/1,
+    should_not_import_replicated_file_with_suffix_on_storage_test/1,
+    should_update_replicated_file_with_suffix_on_storage_test/1,
+
     %% --- config ---
     changing_max_depth_test/1,
     force_start_test/1,
@@ -93,6 +99,12 @@ all() -> [
     %% --- retry ---
     update_syncs_files_after_import_failed_test,
     update_syncs_files_after_previous_update_failed_test,
+
+    %% --- suffixes ---
+    should_not_import_recreated_file_with_suffix_on_storage_test,
+    should_update_blocks_of_recreated_file_with_suffix_on_storage_test,
+    should_not_import_replicated_file_with_suffix_on_storage_test,
+    should_update_replicated_file_with_suffix_on_storage_test,
 
     %% --- config ---
     changing_max_depth_test,
@@ -158,6 +170,15 @@ should_not_detect_timestamp_update_test(_Config) -> ?run_test().
 
 update_syncs_files_after_import_failed_test(_Config) -> ?run_test().
 update_syncs_files_after_previous_update_failed_test(_Config) -> ?run_test().
+
+
+%% --- suffixes ---
+
+
+should_not_import_recreated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+should_update_blocks_of_recreated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+should_not_import_replicated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
+should_update_replicated_file_with_suffix_on_storage_test(_Config) -> ?run_test().
 
 
 %% --- config ---
