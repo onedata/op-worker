@@ -121,7 +121,7 @@
 %%% verdict exactly (accepting the residual per-mille flake); tests where the
 %%% root's verdict is incidental assert the affected fields with {range, ...}
 %%% tolerances instead - see root_verdict_overrides/2 in
-%%% storage_import_links_oct_test_base for the canonical example.
+%%% storage_import_fs_links_oct_test_base for the canonical example.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_import_test_utils).

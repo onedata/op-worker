@@ -27,7 +27,6 @@
 -export([
     non_empty_directory_deletion_test/1,
     import_continues_after_deletion_test/1,
-    simultaneous_deletion_and_modification_test/1,
     file_deletion_purges_metadata_test/1,
     nested_file_deletion_test/1,
     bulk_deletion_test/1
@@ -37,10 +36,8 @@ all() -> [
     non_empty_directory_deletion_test,
     file_deletion_purges_metadata_test,
     nested_file_deletion_test,
-    bulk_deletion_test
-    %% TODO VFS-13687 port the remaining delete tests, then add here:
-    %% import_continues_after_deletion_test,
-    %% simultaneous_deletion_and_modification_test
+    bulk_deletion_test,
+    import_continues_after_deletion_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -61,7 +58,6 @@ all() -> [
 
 non_empty_directory_deletion_test(_Config) -> ?run_test().
 import_continues_after_deletion_test(_Config) -> ?run_test().
-simultaneous_deletion_and_modification_test(_Config) -> ?run_test().
 file_deletion_purges_metadata_test(_Config) -> ?run_test().
 nested_file_deletion_test(_Config) -> ?run_test().
 bulk_deletion_test(_Config) -> ?run_test().

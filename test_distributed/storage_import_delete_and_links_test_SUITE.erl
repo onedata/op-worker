@@ -20,16 +20,12 @@
 
 %% tests
 -export([
-    sync_works_properly_after_delete_test/1,
-    delete_and_update_files_simultaneously_update_test/1,
     create_delete_race_test/1,
     create_list_race_test/1,
     symlink_is_ignored_by_initial_scan/1
 ]).
 
 -define(TEST_CASES, [
-    sync_works_properly_after_delete_test,
-    delete_and_update_files_simultaneously_update_test,
     create_delete_race_test,
     create_list_race_test,
     symlink_is_ignored_by_initial_scan
@@ -40,12 +36,6 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-sync_works_properly_after_delete_test(Config) ->
-    storage_import_test_base:sync_works_properly_after_delete_test(Config).
-
-delete_and_update_files_simultaneously_update_test(Config) ->
-    storage_import_test_base:delete_and_update_files_simultaneously_update_test(Config).
 
 create_delete_race_test(Config) ->
     storage_import_test_base:create_delete_race_test(Config, ?POSIX_HELPER_NAME).

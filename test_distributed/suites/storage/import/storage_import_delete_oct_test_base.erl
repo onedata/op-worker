@@ -137,14 +137,138 @@ non_empty_directory_deletion_test(SuiteCtx) ->
     }).
 
 
-%% TODO VFS-13687 port from storage_import_test_base:sync_works_properly_after_delete_test/1
-import_continues_after_deletion_test(_SuiteCtx) ->
-    error(not_yet_implemented).
+%% After an entry is deleted from the storage and the deletion has been
+%% propagated, storage import must keep working normally - a subsequently created
+%% entry is imported by the next scan just as it would have been without the
+%% preceding deletion. Exercises three scans over the space root's direct child:
+%% import a directory (holding a file), delete the whole directory, then create a
+%% brand new directory (holding a file) - each change detected by its own scan.
+import_continues_after_deletion_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        file_tree_spec = FileTreeSpec
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, #dir_spec{children = [#file_spec{content = ?RAND_STR()}]}, SuiteCtx
+    ),
+
+    %% scan 1 created the directory + its file on POSIX, only the file on S3; a
+    %% full deletion removes both logical entries on either storage type
+    Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
+    Deleted = storage_import_test_utils:expected_deleted_count(TestCaseCtx),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+
+    %% scan 2: the whole imported directory disappears from the storage
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => Deleted,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        created_hist => Scan1Created,
+        modified_hist => RootModified,
+        deleted_hist => Deleted
+    }),
+
+    %% scan 3: a brand new directory (holding a file), of the same shape as the
+    %% initial one, is created on the storage and must be imported normally
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    NewFileTreeSpec = storage_import_test_utils:create_file_tree_on_storage(
+        ImportingProviderSelector, ImportedStorageId,
+        #dir_spec{children = [#file_spec{content = ?RAND_STR()}]}
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, NewFileTreeSpec),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        %% the new tree has the same shape as the initial one
+        <<"created">> => Scan1Created,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        %% histograms are cumulative over scans 1..3; over this longer, three-scan
+        %% run the earlier scans' events may age out of the 60 s Min window, so the
+        %% Min histograms are bounded with a range while Hour/Day are asserted exactly
+        <<"createdHourHist">> => 2 * Scan1Created,
+        <<"createdDayHist">> => 2 * Scan1Created,
+        <<"createdMinHist">> => {range, Scan1Created, 2 * Scan1Created},
+        <<"modifiedHourHist">> => 2 * RootModified,
+        <<"modifiedDayHist">> => 2 * RootModified,
+        <<"modifiedMinHist">> => {range, RootModified, 2 * RootModified},
+        <<"deletedHourHist">> => Deleted,
+        <<"deletedDayHist">> => Deleted,
+        <<"deletedMinHist">> => {range, 0, Deleted}
+    }).
 
 
-%% TODO VFS-13687 port from storage_import_test_base:delete_and_update_files_simultaneously_update_test/1
-simultaneous_deletion_and_modification_test(_SuiteCtx) ->
-    error(not_yet_implemented).
+%% A file deleted from the storage and a sibling file modified on the storage
+%% (here via chmod) between two scans must both be picked up by the SAME next
+%% scan - the deletion reported as "deleted" and the modification as "modified",
+%% in a single pass. POSIX-only: chmod is a no-op on object storages (see
+%% keyValueAdapter::chmod, which persists nothing), so the modification half of
+%% the scenario cannot be exercised on S3 (the deletion half alone is already
+%% covered there by nested_file_deletion_test).
+simultaneous_deletion_and_modification_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    NewMode = 8#600,
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = #dir_spec{name = DirName, children = [DeletedFileSpec, ModifiedFileSpec]},
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME,
+        #dir_spec{children = [#file_spec{content = ?RAND_STR()}, #file_spec{content = ?RAND_STR()}]},
+        SuiteCtx
+    ),
+    #file_spec{name = DeletedFileName, content = DeletedContent} = DeletedFileSpec,
+    #file_spec{name = ModifiedFileName} = ModifiedFileSpec,
+
+    %% delete one file and chmod its sibling, both directly on the storage
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_file_setup_utils:delete_file(
+        ImportingProviderSelector, ImportedStorageId,
+        filepath_utils:join([<<"/">>, DirName, DeletedFileName]), byte_size(DeletedContent)
+    ),
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId,
+        filepath_utils:join([<<"/">>, DirName, ModifiedFileName]), NewMode
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #dir_spec{name = DirName, children = [ModifiedFileSpec]}
+    ),
+    ModifiedFilePath = filepath_utils:join([SpacePath, DirName, ModifiedFileName]),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, ModifiedFilePath, #{mode => NewMode}),
+
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 1,
+        %% the parent directory (a child was removed, bumping its mtime) and the
+        %% chmod'd file; the space root's own direct children are unchanged
+        <<"modified">> => 2,
+        <<"unmodified">> => 1,
+        created_hist => storage_import_test_utils:expected_created_count(TestCaseCtx),
+        modified_hist => 2,
+        deleted_hist => 1
+    }).
 
 
 file_deletion_purges_metadata_test(SuiteCtx) ->
