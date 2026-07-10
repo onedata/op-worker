@@ -62,6 +62,20 @@
     force_start_test/1,
     force_stop_test/1,
 
+    %% --- protection ---
+    file_with_data_protection_should_not_be_updated_test/1,
+    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    file_with_data_protection_should_not_be_deleted_test/1,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
     should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
@@ -110,6 +124,20 @@ all() -> [
     changing_max_depth_test,
     force_start_test,
     force_stop_test,
+
+    %% --- protection ---
+    file_with_data_protection_should_not_be_updated_test,
+    file_with_data_and_metadata_protection_should_not_be_updated_test,
+    file_with_data_protection_should_not_be_deleted_test,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test,
+    empty_dir_with_data_protection_should_not_be_updated_test,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test,
+    empty_dir_with_data_protection_should_not_be_deleted_test,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test,
 
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test,
@@ -187,6 +215,23 @@ should_update_replicated_file_with_suffix_on_storage_test(_Config) -> ?run_test(
 changing_max_depth_test(_Config) -> ?run_test().
 force_start_test(_Config) -> ?run_test().
 force_stop_test(_Config) -> ?run_test().
+
+
+%% --- protection ---
+
+
+file_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+file_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+file_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+file_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+empty_dir_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+empty_dir_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
 
 
 %% --- not reimported ---

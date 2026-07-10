@@ -52,6 +52,14 @@
     force_start_test/1,
     force_stop_test/1,
 
+    %% --- protection ---
+    file_with_data_protection_should_not_be_updated_test/1,
+    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    file_with_data_protection_should_not_be_deleted_test/1,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+
     %% --- not reimported ---
     should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
     should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
@@ -89,6 +97,17 @@ all() -> [
     changing_max_depth_test,
     force_start_test,
     force_stop_test,
+
+    %% --- protection ---
+    %% NOTE: the empty_dir_* variants are POSIX-only (an empty directory has no
+    %% storage object on S3) and so are the dir_and_its_child_*_updated variants
+    %% (see the doc of their test base for the flat-storage re-application gap)
+    file_with_data_protection_should_not_be_updated_test,
+    file_with_data_and_metadata_protection_should_not_be_updated_test,
+    file_with_data_protection_should_not_be_deleted_test,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test,
 
     %% --- not reimported ---
     %% TODO VFS-13687 - debug failing test
@@ -157,6 +176,17 @@ should_update_replicated_file_with_suffix_on_storage_test(_Config) -> ?run_test(
 changing_max_depth_test(_Config) -> ?run_test().
 force_start_test(_Config) -> ?run_test().
 force_stop_test(_Config) -> ?run_test().
+
+
+%% --- protection ---
+
+
+file_with_data_protection_should_not_be_updated_test(_Config) -> ?run_test().
+file_with_data_and_metadata_protection_should_not_be_updated_test(_Config) -> ?run_test().
+file_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+file_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_protection_should_not_be_deleted_test(_Config) -> ?run_test().
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(_Config) -> ?run_test().
 
 
 %% --- not reimported ---

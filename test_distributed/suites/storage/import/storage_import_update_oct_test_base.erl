@@ -92,7 +92,18 @@
     force_stop_test/1,
 
     %% --- protection ---
-    %% TODO VFS-13687 port the *_protection_should_not_be_* tests from storage_import_test_base
+    file_with_data_protection_should_not_be_updated_test/1,
+    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    file_with_data_protection_should_not_be_deleted_test/1,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
 
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
@@ -565,15 +576,21 @@ change_file_content_update_test(SuiteCtx) ->
     assert_monitoring_state_after_single_file_modification(TestCaseCtx).
 
 
-%% A file's content is overwritten on the storage at (deliberately forced to be)
-%% the EXACT same timestamp as storage_import's own last recorded stat of that
-%% file - exercising the boundary of the "already handled" fast-path shortcut in
-%% storage_import_engine:maybe_update_file_location/4, which requires the stored
-%% last_stat to be STRICTLY greater than the storage mtime to skip re-checking a
-%% file (if it used >= instead of >, this test's real content change would be
-%% incorrectly skipped). The change is same-size, so the fast-path is the only
-%% thing standing between this test and a false "unmodified". POSIX-only
-%% (relies on forcing the storage mtime).
+%% A file's content is overwritten on the storage with a same-size change while
+%% its storage_sync_info is forced into the EXACT boundary of the "already
+%% handled" fast-path shortcut in
+%% storage_import_engine:maybe_update_file_location/4: the recorded mtime and
+%% last_stat are both set equal to the file's storage mtime. That shortcut skips
+%% re-checking a file only when the recorded last_stat is STRICTLY greater than
+%% the storage mtime, so sitting exactly on the boundary the scan must NOT skip
+%% and must still detect the real content change (were the guard '>=' instead of
+%% '>', the change would be wrongly skipped and the content assertion below would
+%% fail). The change is same-size, so this shortcut is the only thing standing
+%% between the test and a false "unmodified". The boundary value is chosen
+%% strictly above the file's logical mtime, so that - once the shortcut is
+%% (correctly) not taken - the same-size change is still detectable, its storage
+%% mtime being newer than the logical one. POSIX-only (relies on forcing the
+%% storage mtime).
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCtx) ->
     #storage_import_test_suite_ctx{importing_provider_selector = ImportingProviderSelector} = SuiteCtx,
     FileName = ?RAND_STR(),
@@ -588,22 +605,24 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(SuiteCt
         ?FUNCTION_NAME, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
     ),
 
-    %% overwrite the content, then force the file's storage mtime to be EQUAL
-    %% (not smaller) to storage_sync_info's recorded last_stat - the exact
-    %% boundary of the fast-path guard described in the doc above
-    LastStatTime = ?rpc(ImportingProviderSelector, begin
-        {ok, #document{value = #storage_sync_info{last_stat = LastStat}}} =
-            storage_sync_info:get(StorageFileId, SpaceId),
-        LastStat
-    end),
+    %% read the file's storage mtime (equal to its logical mtime right after
+    %% import) and derive a boundary timestamp strictly above it (see the doc
+    %% above): the same-size overwrite stays detectable via mtime, while forcing
+    %% the recorded mtime AND last_stat to that same value lands scan 2 exactly
+    %% on the fast-path guard
+    FileMtime = storage_file_setup_utils:get_mtime(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId
+    ),
+    BoundaryTime = FileMtime + 1,
     ok = ?rpc(ImportingProviderSelector, storage_sync_info:create_or_update(
-        StorageFileId, SpaceId, fun(SSI) -> {ok, SSI#storage_sync_info{last_stat = LastStatTime}} end
+        StorageFileId, SpaceId,
+        fun(SSI) -> {ok, SSI#storage_sync_info{mtime = BoundaryTime, last_stat = BoundaryTime}} end
     )),
     storage_file_setup_utils:write_file(
         ImportingProviderSelector, ImportedStorageId, StorageFileId, 0, ChangedContent
     ),
     storage_file_setup_utils:set_mtime(
-        ImportingProviderSelector, ImportedStorageId, StorageFileId, LastStatTime
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, BoundaryTime
     ),
     storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
 
@@ -1614,7 +1633,583 @@ force_stop_test(SuiteCtx) ->
 
 
 %% --- protection ---
-%% TODO VFS-13687 port the *_protection_should_not_be_* tests from storage_import_test_base
+%%
+%% Entries under a dataset with protection flags set must be left alone by
+%% continuous scans: neither a storage-side modification (content/mode) nor a
+%% storage-side deletion may be reflected in the space while the flags are set.
+%% Each scenario runs 3 scans: initial import, mutation under protection (scan
+%% 2 must detect but suppress the change) and a re-scan after unsetting the
+%% flags (scan 3 must finally apply it). Scan 3 re-detects the change with NO
+%% further storage mutation: on suppressing a protected change the scan marks
+%% the parent's storage_sync_info (any_protected_child_changed), which withholds
+%% committing the parent's children-attrs hashes and mtime
+%% (storage_sync_info:mark_processed_batch/8) - so the next scan sees the same
+%% storage-vs-space difference again.
+%%
+%% Counter-wise the suppression shows up as follows (all worked out from
+%% storage_sync_traverse:do_update_master_job/2,
+%% storage_import_engine:maybe_update_attrs/4 and
+%% storage_import_deletion:maybe_delete_file_and_update_counters/3):
+%%  * a suppressed file modification counts as "unmodified";
+%%  * a protected DIRECTORY is not counted at all (its master job returns
+%%    before the counter update) and jobs for its children are never scheduled;
+%%  * a protected entry found missing from the storage by deletion detection is
+%%    skipped without touching the created/modified/unmodified/deleted counters.
+
+
+file_with_data_protection_should_not_be_updated_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+file_with_data_and_metadata_protection_should_not_be_updated_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected file is appended to and (on POSIX) chmod-ed directly on the
+%% storage - scan 2 must suppress both, scan 3 (after the flags are unset) must
+%% apply them in full. The chmod half is POSIX-only: object storages hold no
+%% per-object POSIX mode (the helper's chmod is a no-op there), so on S3 only
+%% the appended content/size is exercised.
+-spec file_with_protection_flags_should_not_be_updated_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+file_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    AppendedContent = ?RAND_STR(),
+    NewMode = 8#777,
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #file_spec{name = FileName, content = InitialContent}, SuiteCtx
+    ),
+
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceFilePath, ProtectionFlags
+    ),
+
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId,
+        byte_size(InitialContent), AppendedContent
+    ),
+    ?IF_POSIX(StorageType, storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode
+    )),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the change must not have been applied
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath,
+        with_posix_mode(StorageType, ?DEFAULT_FILE_PERMS, #{size => byte_size(InitialContent)})
+    ),
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx, SpaceFilePath, InitialContent
+    ),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        %% the space root + the file (a suppressed modification counts as "unmodified")
+        <<"unmodified">> => 2
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    UpdatedContent = <<InitialContent/binary, AppendedContent/binary>>,
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #file_spec{name = FileName, content = UpdatedContent}
+    ),
+    %% with the flags unset, the append is applied on both storages; the chmod is
+    %% POSIX-only (a no-op on object storage), so its effect is asserted there only
+    ExpectedAttrs = with_posix_mode(
+        StorageType, NewMode, #{size => byte_size(UpdatedContent)}
+    ),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath, ExpectedAttrs),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceFilePath, ExpectedAttrs),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"unmodified">> => 1,
+        modified_hist => 1,
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+file_with_data_protection_should_not_be_deleted_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+file_with_data_and_metadata_protection_should_not_be_deleted_test(SuiteCtx) ->
+    file_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected file is removed directly from the storage - scan 2 must not
+%% delete it from the space (its metadata stays intact, although reading the
+%% data genuinely fails, as it is already gone from the storage); scan 3 (after
+%% the flags are unset) must finally delete it.
+-spec file_with_protection_flags_should_not_be_deleted_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+file_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = FileTreeSpec,
+        importing_provider_ctx = ImportingProviderCtx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #file_spec{name = FileName, content = Content}, SuiteCtx
+    ),
+
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceFilePath, ProtectionFlags
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the file must have stayed in the space with its metadata intact...
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath,
+        with_posix_mode(StorageType, ?DEFAULT_FILE_PERMS, #{size => byte_size(Content)})
+    ),
+    %% ...but its data is genuinely gone from the storage: opening the file
+    %% still succeeds (its metadata is intact and the storage file is not
+    %% touched until the data is actually accessed - lazily on object storages,
+    %% and via direct IO on POSIX), yet reading its data fails, as the backing
+    %% storage file has been removed
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpaceFilePath}, read
+    )),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:read(
+        ImportingProviderNode, Handle, 0, byte_size(Content)
+    )),
+    ok = lfm_proxy:close(ImportingProviderNode, Handle),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        modified_hist => RootModified
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"deleted">> => 1,
+        <<"unmodified">> => 1,
+        deleted_hist => 1,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified,
+        <<"modifiedMinHist">> => {range, 0, RootModified},
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+empty_dir_with_data_protection_should_not_be_updated_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected empty directory is chmod-ed directly on the storage - scan 2
+%% must suppress the change, scan 3 (after the flags are unset) must apply it.
+%% A directory's mode change is (re)detected by comparing its own storage attrs
+%% against the logical ones on every scan (every visited directory gets its own
+%% master job), independently of the children-hash/mtime machinery. POSIX-only
+%% (an empty directory has no storage object on S3, nor a mode to change).
+-spec empty_dir_with_protection_flags_should_not_be_updated_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+empty_dir_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    NewMode = 8#777,
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageDirId, NewMode
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the change must not have been applied
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
+        mode => ?DEFAULT_DIR_PERMS
+    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        %% the space root only - a protected directory is not counted at all
+        <<"unmodified">> => 1
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
+    storage_import_test_utils:assert_attrs(NonImportingProviderCtx, SpaceDirPath, #{mode => NewMode}),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"unmodified">> => 1,
+        modified_hist => 1,
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+empty_dir_with_data_protection_should_not_be_deleted_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(SuiteCtx) ->
+    empty_dir_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected empty directory is removed directly from the storage - scan 2
+%% must not delete it from the space, scan 3 (after the flags are unset) must.
+%% POSIX-only (an empty directory has no storage object on S3 to remove).
+-spec empty_dir_with_protection_flags_should_not_be_deleted_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+empty_dir_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = FileTreeSpec,
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the directory must have stayed in the space
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
+        mode => ?DEFAULT_DIR_PERMS
+    }),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        %% the removal of the root's direct child bumps the root's mtime
+        <<"modified">> => 1,
+        <<"unmodified">> => 0,
+        modified_hist => 1
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"deleted">> => 1,
+        <<"unmodified">> => 1,
+        deleted_hist => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"modifiedMinHist">> => {range, 0, 1},
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 1}
+    }).
+
+
+dir_and_its_child_with_data_protection_should_not_be_updated_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A directory holding a file is protected (the file inherits the flags via the
+%% effective dataset), then both are mutated directly on the storage (the dir is
+%% chmod-ed; the file is appended to and chmod-ed). Scan 2 must suppress all of
+%% it - having detected the dir's own change, it does not even schedule jobs for
+%% the protected dir's children, so the file's mutation stays invisible; scan 3
+%% (after the flags are unset) must apply everything.
+%%
+%% POSIX-only: on a flat (object) storage the re-application half breaks down
+%% for entries nested under a directory - the suppressed-change marker lands on
+%% the storage_sync_info of the file's direct parent (a virtual directory whose
+%% document no flat-storage scan ever consults), while the space root's
+%% children-attrs hash - the only change-detection input on a flat storage -
+%% gets committed by the suppressing scan, so a later scan bulk-skips the file
+%% and the suppressed change is never applied.
+-spec dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+dir_and_its_child_with_protection_flags_should_not_be_updated_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    FileName = ?RAND_STR(),
+    InitialContent = ?RAND_STR(),
+    AppendedContent = ?RAND_STR(),
+    NewMode = 8#777,
+    StorageDirId = filepath_utils:join([<<"/">>, DirName]),
+    StorageFileId = filepath_utils:join([StorageDirId, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = ImportingProviderCtx,
+        non_importing_provider_ctx = NonImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = InitialContent}
+        ]}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    SpaceFilePath = filepath_utils:join([SpaceDirPath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_file_setup_utils:write_file(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId,
+        byte_size(InitialContent), AppendedContent
+    ),
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageDirId, NewMode
+    ),
+    storage_file_setup_utils:chmod(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId, NewMode
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% neither the dir nor the file must have been modified
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath, #{
+        mode => ?DEFAULT_DIR_PERMS
+    }),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath, #{
+        size => byte_size(InitialContent), mode => ?DEFAULT_FILE_PERMS
+    }),
+    storage_import_test_utils:assert_file_content(
+        ImportingProviderCtx, SpaceFilePath, InitialContent
+    ),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        %% the space root only - the protected directory is not counted at all
+        %% and its child never even gets a job
+        <<"unmodified">> => 1
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    UpdatedContent = <<InitialContent/binary, AppendedContent/binary>>,
+    storage_import_test_utils:verify_imported_tree(
+        TestCaseCtx, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = UpdatedContent}
+        ]}
+    ),
+    lists:foreach(fun(ProviderCtx) ->
+        storage_import_test_utils:assert_attrs(ProviderCtx, SpaceDirPath, #{mode => NewMode}),
+        storage_import_test_utils:assert_attrs(ProviderCtx, SpaceFilePath, #{
+            size => byte_size(UpdatedContent), mode => NewMode
+        })
+    end, [ImportingProviderCtx, NonImportingProviderCtx]),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        %% the dir + the file
+        <<"modified">> => 2,
+        <<"unmodified">> => 1,
+        modified_hist => 2,
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, 2}
+    }).
+
+
+dir_and_its_child_with_data_protection_should_not_be_deleted_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?DATA_PROTECTION
+    ).
+
+
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(SuiteCtx) ->
+    dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(
+        ?FUNCTION_NAME, SuiteCtx, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)
+    ).
+
+
+%% @private
+%% A protected directory holding a file is removed (whole) directly from the
+%% storage - scan 2 must not delete it from the space (deletion detection skips
+%% the protected dir without ever descending to the child), scan 3 (after the
+%% flags are unset) must delete the whole subtree.
+-spec dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(
+    atom(), storage_import_test_utils:suite_ctx(), data_access_control:bitmask()
+) ->
+    ok.
+dir_and_its_child_with_protection_flags_should_not_be_deleted_test_base(TestCaseName, SuiteCtx, ProtectionFlags) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    DirName = ?RAND_STR(),
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        file_tree_spec = FileTreeSpec,
+        importing_provider_ctx = ImportingProviderCtx
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, #dir_spec{name = DirName, children = [
+            #file_spec{name = FileName, content = Content}
+        ]}, SuiteCtx
+    ),
+
+    SpaceDirPath = filepath_utils:join([SpacePath, DirName]),
+    SpaceFilePath = filepath_utils:join([SpaceDirPath, FileName]),
+    DatasetId = establish_dataset_with_protection_flags(
+        ImportingProviderCtx, SpaceDirPath, ProtectionFlags
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:delete_file_tree_from_storage(
+        ImportingProviderSelector, ImportedStorageId, FileTreeSpec
+    ),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% both entries must have stayed in the space with their metadata intact
+    %% (the file's data itself is gone from the storage, so it is not read here)
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceDirPath,
+        with_posix_mode(StorageType, ?DEFAULT_DIR_PERMS, #{})
+    ),
+    storage_import_test_utils:assert_attrs(ImportingProviderCtx, SpaceFilePath,
+        with_posix_mode(StorageType, ?DEFAULT_FILE_PERMS, #{size => byte_size(Content)})
+    ),
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified,
+        <<"unmodified">> => RootUnmodified,
+        modified_hist => RootModified
+    }),
+
+    unset_dataset_protection_flags(ImportingProviderCtx, DatasetId, ProtectionFlags),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 3),
+
+    storage_import_test_utils:verify_imported_tree(TestCaseCtx, []),
+    %% the (emulated/real) directory + its child are deleted on both storage types
+    Deleted = storage_import_test_utils:expected_deleted_count(TestCaseCtx),
+    Scan1Created = storage_import_test_utils:expected_created_count(TestCaseCtx),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 3,
+        <<"created">> => 0,
+        <<"deleted">> => Deleted,
+        <<"unmodified">> => 1,
+        deleted_hist => Deleted,
+        <<"modifiedHourHist">> => RootModified,
+        <<"modifiedDayHist">> => RootModified,
+        <<"modifiedMinHist">> => {range, 0, RootModified},
+        %% over a three-scan run the initial import may age out of the 60 s Min window
+        <<"createdMinHist">> => {range, 0, Scan1Created}
+    }).
 
 
 %% --- not reimported ---
@@ -2091,6 +2686,52 @@ change_one_byte_of_storage_file(#storage_import_test_case_ctx{
     ),
     <<Prefix:Offset/binary, _:1/binary, Suffix/binary>> = CurrentContent,
     <<Prefix/binary, ChangedByte/binary, Suffix/binary>>.
+
+
+%% @private
+%% Establishes a dataset with the given protection flags on the entry at the
+%% given path, via the importing provider. The flags take effect (also on the
+%% entry's descendants, through the effective dataset) as soon as the call
+%% returns.
+-spec establish_dataset_with_protection_flags(
+    #provider_ctx{}, file_meta:path(), data_access_control:bitmask()
+) ->
+    dataset:id().
+establish_dataset_with_protection_flags(#provider_ctx{
+    node = Node,
+    session_id = SessionId
+}, Path, ProtectionFlags) ->
+    {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(
+        Node, SessionId, {path, Path}, ProtectionFlags
+    )),
+    DatasetId.
+
+
+%% @private
+-spec unset_dataset_protection_flags(
+    #provider_ctx{}, dataset:id(), data_access_control:bitmask()
+) ->
+    ok.
+unset_dataset_protection_flags(#provider_ctx{
+    node = Node,
+    session_id = SessionId
+}, DatasetId, ProtectionFlags) ->
+    ok = opt_datasets:update(Node, SessionId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags).
+
+
+%% @private
+%% @doc
+%% Builds an expected-attrs map (for assert_attrs/3) that carries the given POSIX
+%% mode ONLY on block storages. Object (flat) storages hold no per-object POSIX
+%% mode - imported entries take the storage's default mode, not ?DEFAULT_*_PERMS -
+%% and none of these tests chmod on S3 (the helper's chmod is a no-op there), so
+%% the mode is asserted on POSIX only while the remaining attrs (size, ...) are
+%% checked on both storage types.
+%% @end
+-spec with_posix_mode(posix | s3, file_meta:mode(), #{atom() => term()}) ->
+    #{atom() => term()}.
+with_posix_mode(posix, Mode, Attrs) -> Attrs#{mode => Mode};
+with_posix_mode(s3, _Mode, Attrs) -> Attrs.
 
 
 %%%===================================================================
