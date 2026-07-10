@@ -1798,7 +1798,7 @@ storage_req:
       name: ct_logs_storage_req.tar.gz
 
 storage_sync_links:
-  <<: *ct-job
+  <<: *ct-onenv-job
   key: SSL
   artifacts:
     - <<: *ct_logs
