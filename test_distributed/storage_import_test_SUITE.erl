@@ -34,7 +34,6 @@
 
     change_file_type4_test/1,
     recreate_file_deleted_by_sync_test/1,
-    sync_should_not_invalidate_file_after_replication/1,
     time_warp_between_scans_test/1,
     time_warp_during_scan_test/1
 ]).
@@ -54,7 +53,6 @@
 
     change_file_type4_test,
     recreate_file_deleted_by_sync_test,
-    sync_should_not_invalidate_file_after_replication,
     time_warp_between_scans_test,
     time_warp_during_scan_test
 ]).
@@ -100,9 +98,6 @@ change_file_type4_test(Config) ->
 
 recreate_file_deleted_by_sync_test(Config) ->
     storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
-
-sync_should_not_invalidate_file_after_replication(Config) ->
-    storage_import_test_base:sync_should_not_invalidate_file_after_replication(Config).
 
 time_warp_between_scans_test(Config) ->
     storage_import_test_base:time_warp_between_scans_test(Config).

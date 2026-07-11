@@ -25,13 +25,11 @@
 
 %% tests
 -export([
-    sync_should_not_reimport_deleted_but_still_opened_file/1,
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1
 ]).
 
 -define(TEST_CASES, [
-    sync_should_not_reimport_deleted_but_still_opened_file,
     create_delete_import2_test,
     create_subfiles_and_delete_before_import_is_finished_test
 ]).
@@ -41,9 +39,6 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
-    storage_import_s3_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).
 
 create_delete_import2_test(Config) ->
     storage_import_test_base:create_delete_import2_test(Config).

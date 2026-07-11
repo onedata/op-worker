@@ -67,7 +67,6 @@
     delete_opened_file_reimport_race_test/2,
 
     % tests of update
-    sync_should_not_reimport_deleted_but_still_opened_file/2,
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
 
@@ -77,19 +76,9 @@
 
     change_file_type4_test/1,
     recreate_file_deleted_by_sync_test/1,
-    sync_should_not_invalidate_file_after_replication/1,
     time_warp_between_scans_test/1,
     time_warp_during_scan_test/1
 ]).
-
--define(assertBlocks(Worker, SessionId, ExpectedDistribution, FileGuid),
-    ?assertEqual(lists:sort(ExpectedDistribution), begin
-        case opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)) of
-            {ok, __FileBlocks} -> lists:sort(__FileBlocks);
-            Error -> Error
-        end
-    end, ?ATTEMPTS)
-).
 
 -define(EXEC_ON_POSIX_ONLY(Function, StorageType),
     case StorageType of
@@ -742,58 +731,6 @@ delete_opened_file_reimport_race_test(Config, StorageType) ->
 %%% Tests of update
 %%%===================================================================
 
-sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-
-    StorageSpacePath = provider_storage_path(?SPACE_ID, <<"">>),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
-
-    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
-
-    % create first file
-    {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1),
-    {ok, H1} = lfm_proxy:open(W1, SessId, ?FILE_REF(G1), write),
-    {ok, _} = lfm_proxy:write(W1, H1, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(W1, H1),
-
-    % open file
-    ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(G1), read), ?ATTEMPTS),
-
-    % delete file
-    ok = lfm_proxy:unlink(W1, SessId, ?FILE_REF(G1)),
-
-    % there should be 1 file on storage
-    ?assertMatch({ok, [_]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    % there should be no files visible in the space
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"modified">> => 0,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 2,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"modifiedMinHist">> => 0,
-        <<"modifiedHourHist">> => 0,
-        <<"modifiedDayHist">> => 0,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
-
 create_delete_import2_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
@@ -1264,67 +1201,6 @@ recreate_file_deleted_by_sync_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W1, Handle2).
-
-sync_should_not_invalidate_file_after_replication(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-
-    {ok, FileGuid} = lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1),
-    {ok, Handle} = lfm_proxy:open(W2, SessId2, ?FILE_REF(FileGuid), write),
-    {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(W2, Handle),
-
-    %% Check if file was synchronized to W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    % replicate file to W1
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"modified">> => 2,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"modifiedMinHist">> => 2,
-        <<"modifiedHourHist">> => 2,
-        <<"modifiedDayHist">> => 2,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    % wait to ensure that file_location docs are synchronized
-    timer:sleep(timer:seconds(10)),
-
-    ?assertBlocks(W2, SessId2, [
-        #{
-            <<"blocks">> => [[0, 9]],
-            <<"providerId">> => ?GET_DOMAIN_BIN(W1),
-            <<"totalBlocksSize">> => 9
-        },
-        #{
-            <<"blocks">> => [[0, 9]],
-            <<"providerId">> => ?GET_DOMAIN_BIN(W2),
-            <<"totalBlocksSize">> => 9
-        }
-    ], FileGuid).
-
 
 time_warp_between_scans_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1939,8 +1815,7 @@ init_per_testcase(Case, Config)
 init_per_testcase(Case, Config)
     when Case =:= create_delete_import2_test
     orelse Case =:= recreate_file_deleted_by_sync_test
-    orelse Case =:= create_delete_race_test
-    orelse Case =:= sync_should_not_invalidate_file_after_replication ->
+    orelse Case =:= create_delete_race_test ->
 
     Config2 = [
         {update_config, #{

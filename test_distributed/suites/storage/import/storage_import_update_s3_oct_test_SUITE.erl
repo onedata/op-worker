@@ -62,10 +62,12 @@
 
     %% --- not reimported ---
     should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_reimport_deleted_but_still_opened_file_test/1,
     should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
     should_not_delete_dir_created_in_remote_provider_test/1,
     should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test/1,
-    should_not_sync_file_during_replication_test/1
+    should_not_sync_file_during_replication_test/1,
+    should_not_invalidate_file_after_replication_test/1
 ]).
 
 all() -> [
@@ -112,10 +114,12 @@ all() -> [
     %% --- not reimported ---
     %% TODO VFS-13687 - debug failing test
 %%    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test,
+    should_not_reimport_deleted_but_still_opened_file_test,
     should_not_delete_not_replicated_file_created_in_remote_provider_test,
     should_not_delete_dir_created_in_remote_provider_test,
     should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test,
-    should_not_sync_file_during_replication_test
+    should_not_sync_file_during_replication_test,
+    should_not_invalidate_file_after_replication_test
 ].
 
 -define(IMPORTING_PROVIDER_SELECTOR, krakow).
@@ -193,10 +197,12 @@ dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(_
 
 
 should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test(_Config) -> ?run_test().
+should_not_reimport_deleted_but_still_opened_file_test(_Config) -> ?run_test().
 should_not_delete_not_replicated_file_created_in_remote_provider_test(_Config) -> ?run_test().
 should_not_delete_dir_created_in_remote_provider_test(_Config) -> ?run_test().
 should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(_Config) -> ?run_test().
 should_not_sync_file_during_replication_test(_Config) -> ?run_test().
+should_not_invalidate_file_after_replication_test(_Config) -> ?run_test().
 
 
 %%===================================================================

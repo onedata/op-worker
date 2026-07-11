@@ -26,7 +26,6 @@
 
 %% tests
 -export([
-    sync_should_not_reimport_deleted_but_still_opened_file/2,
     create_subfiles_and_delete_before_import_is_finished_test/1,
 
     create_list_race_test/1
@@ -35,58 +34,6 @@
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-
-sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-
-    StorageSpacePath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
-    RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
-
-    % create first file
-    {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1),
-    {ok, H1} = lfm_proxy:open(W1, SessId, ?FILE_REF(G1), write),
-    {ok, _} = lfm_proxy:write(W1, H1, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(W1, H1),
-
-    % open file
-    ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(G1), read), ?ATTEMPTS),
-    % delete file
-    ok = lfm_proxy:unlink(W1, SessId, ?FILE_REF(G1)),
-    %ensure that space_dir mtime will change
-    timer:sleep(timer:seconds(1)),
-
-    % there should be 1 file on storage
-    ?assertMatch({ok, [_]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
-    storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
-    storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
-
-    % there should be no files visible in the space
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 0,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 1,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
 
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->

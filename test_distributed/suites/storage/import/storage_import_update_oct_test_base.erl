@@ -108,10 +108,12 @@
     %% --- not reimported ---
     should_not_reimport_directory_that_was_not_successfully_deleted_from_storage_test/1,
     should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test/1,
+    should_not_reimport_deleted_but_still_opened_file_test/1,
     should_not_delete_not_replicated_file_created_in_remote_provider_test/1,
     should_not_delete_dir_created_in_remote_provider_test/1,
     should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test/1,
-    should_not_sync_file_during_replication_test/1
+    should_not_sync_file_during_replication_test/1,
+    should_not_invalidate_file_after_replication_test/1
 ]).
 
 
@@ -148,7 +150,8 @@ init_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_su
 
 init_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= should_not_import_recreated_file_with_suffix_on_storage_test;
-    Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test
+    Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test;
+    Case =:= should_not_reimport_deleted_but_still_opened_file_test
 ->
     mock_opened_file_deletion_to_use_deletion_marker(TestSuiteCtx),
     init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
@@ -210,7 +213,8 @@ end_per_testcase(Case = force_stop_test, TestSuiteCtx = #storage_import_test_sui
 
 end_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= should_not_import_recreated_file_with_suffix_on_storage_test;
-    Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test
+    Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test;
+    Case =:= should_not_reimport_deleted_but_still_opened_file_test
 ->
     unmock_fslogic_delete(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
@@ -1291,9 +1295,9 @@ should_not_import_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
             node = ImportingProviderNode,
             session_id = ImportingProviderSessionId
         }
-    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
 
     #{
         file_name := FileName,
@@ -1327,9 +1331,9 @@ should_update_blocks_of_recreated_file_with_suffix_on_storage_test(SuiteCtx) ->
     TestCaseCtx = #storage_import_test_case_ctx{
         importing_provider_ctx = ImportingProviderCtx,
         non_importing_provider_ctx = NonImportingProviderCtx
-    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
 
     #{
         recreated_file_guid := RecreatedFileGuid,
@@ -1365,9 +1369,9 @@ should_not_import_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
             node = ImportingProviderNode,
             session_id = ImportingProviderSessionId
         }
-    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
 
     #{
         local_file_guid := LocalFileGuid,
@@ -1393,9 +1397,9 @@ should_update_replicated_file_with_suffix_on_storage_test(SuiteCtx) ->
     TestCaseCtx = #storage_import_test_case_ctx{
         importing_provider_ctx = ImportingProviderCtx,
         non_importing_provider_ctx = NonImportingProviderCtx
-    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
 
     #{
         remote_file_guid := RemoteFileGuid,
@@ -2321,6 +2325,87 @@ should_not_reimport_leftover_entry_test_base(TestCaseName, SuiteCtx, EntryType) 
     }).
 
 
+%% A file created and opened on the importing provider is deleted via LFM while
+%% still open: its storage file survives under the plain name, guarded by a
+%% deletion marker (forced via init_per_testcase's fslogic_delete mock - the
+%% natural behaviour on object storages, whose helpers cannot rename). The next
+%% scan must recognize the marker-guarded storage file as belonging to the
+%% already-deleted logical file and must NOT reimport it into the space.
+should_not_reimport_deleted_but_still_opened_file_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{
+        storage_type = StorageType,
+        importing_provider_selector = ImportingProviderSelector
+    } = SuiteCtx,
+    FileName = ?RAND_STR(),
+    Content = ?RAND_STR(),
+    StorageFileId = filepath_utils:join([<<"/">>, FileName]),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        imported_storage_id = ImportedStorageId,
+        space_path = SpacePath,
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    SpaceFilePath = filepath_utils:join([SpacePath, FileName]),
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    {ok, FileGuid} = lfm_proxy:create(
+        ImportingProviderNode, ImportingProviderSessionId, SpaceFilePath
+    ),
+    write_file_via_lfm(ImportingProviderNode, ImportingProviderSessionId, FileGuid, Content),
+    %% the still-open handle is what keeps the storage file alive (under the plain
+    %% name, guarded by a deletion marker) past the LFM deletion below
+    {ok, OpenHandle} = lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), read
+    ),
+    ok = lfm_proxy:unlink(ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid)),
+
+    %% the file is already gone from the space, yet its storage file is still there
+    ?assertMatch({ok, []}, lfm_proxy:get_children(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+    )),
+    ?assertMatch({ok, _}, storage_file_setup_utils:stat(
+        ImportingProviderSelector, ImportedStorageId, StorageFileId
+    )),
+
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the scan must not have reimported the marker-guarded storage file
+    ?assertMatch({ok, []}, lfm_proxy:get_children(
+        ImportingProviderNode, ImportingProviderSessionId, {path, SpacePath}, 0, 10
+    )),
+    %% the still-open handle still reads the original content (the storage file
+    %% was genuinely kept alive) - release it afterwards
+    ?assertEqual({ok, Content}, lfm_proxy:read(
+        ImportingProviderNode, OpenHandle, 0, byte_size(Content)
+    )),
+    ok = lfm_proxy:close(ImportingProviderNode, OpenHandle),
+
+    %% created => 0 / deleted => 0 is the crux: the deleted-but-open storage file,
+    %% skipped via its deletion marker, was neither reimported nor re-deleted. The
+    %% marker-guarded file is always "unmodified"; the space root, arranged via LFM
+    %% (create + delete bump its storage and logical mtimes together, possibly
+    %% within the same second), is racy on POSIX and deterministically "unmodified"
+    %% on the (mocked-statbuf) flat storage - see the "Mtime granularity and
+    %% root-verdict races" section of storage_import_test_utils.
+    {Modified, Unmodified, ModifiedHist} = case StorageType of
+        posix -> {{range, 0, 1}, {range, 1, 2}, {range, 0, 1}};
+        s3 -> {0, 2, 0}
+    end,
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => Modified,
+        <<"unmodified">> => Unmodified,
+        modified_hist => ModifiedHist
+    }).
+
+
 should_not_delete_not_replicated_file_created_in_remote_provider_test(SuiteCtx) ->
     should_not_delete_remote_entries_test_base(
         ?FUNCTION_NAME, SuiteCtx, #file_spec{content = ?RAND_STR()}
@@ -2353,9 +2438,9 @@ should_not_delete_not_replicated_file_in_dir_created_in_remote_provider_test(Sui
 should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTreeSpec) ->
     #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
 
-    TestCaseCtx = storage_import_test_utils:init_testcase(TestCaseName, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    TestCaseCtx = storage_import_test_utils:setup_and_verify_initial_import(
+        TestCaseName, undefined, SuiteCtx
+    ),
 
     RemoteEntries = create_file_tree_via_remote_provider(TestCaseCtx, RemoteFileTreeSpec),
 
@@ -2394,9 +2479,9 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
             node = NonImportingProviderNode,
             session_id = NonImportingProviderSessionId
         }
-    } = storage_import_test_utils:init_testcase(?FUNCTION_NAME, undefined, SuiteCtx),
-    storage_import_test_utils:await_initial_scan_finished(TestCaseCtx),
-    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{}),
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
 
     #object{guid = FileGuid} = create_file_tree_via_remote_provider(
         TestCaseCtx, #file_spec{content = Content}
@@ -2442,6 +2527,82 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
         {ok, #file_attr{size = ContentSize}},
         lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(FileGuid))
     ).
+
+
+%% A file created via the non-importing provider is fully replicated to the
+%% importing provider, materializing its storage file (a replica). A subsequent
+%% scan must recognize the replicated storage file as belonging to the
+%% already-known logical file and must NOT invalidate the freshly-written replica
+%% blocks - both providers must still hold the full replica afterwards.
+should_not_invalidate_file_after_replication_test(SuiteCtx) ->
+    #storage_import_test_suite_ctx{storage_type = StorageType} = SuiteCtx,
+    Content = ?RAND_STR(),
+    ContentSize = byte_size(Content),
+
+    TestCaseCtx = #storage_import_test_case_ctx{
+        importing_provider_ctx = #provider_ctx{
+            node = ImportingProviderNode,
+            session_id = ImportingProviderSessionId
+        },
+        non_importing_provider_ctx = #provider_ctx{
+            node = NonImportingProviderNode,
+            session_id = NonImportingProviderSessionId
+        }
+    } = storage_import_test_utils:setup_and_verify_initial_import(
+        ?FUNCTION_NAME, undefined, SuiteCtx
+    ),
+
+    #object{guid = FileGuid} = create_file_tree_via_remote_provider(
+        TestCaseCtx, #file_spec{content = Content}
+    ),
+
+    %% replicate the remotely-created file onto the importing provider's storage
+    %% by reading it there
+    {ok, ReadHandle} = ?assertMatch({ok, _}, lfm_proxy:open(
+        ImportingProviderNode, ImportingProviderSessionId, ?FILE_REF(FileGuid), read
+    ), ?ATTEMPTS),
+    ?assertEqual({ok, Content}, lfm_proxy:read(
+        ImportingProviderNode, ReadHandle, 0, ContentSize
+    ), ?ATTEMPTS),
+    ok = lfm_proxy:close(ImportingProviderNode, ReadHandle),
+    file_test_utils:await_distribution(
+        [ImportingProviderNode, NonImportingProviderNode], FileGuid, [
+            {ImportingProviderNode, ContentSize},
+            {NonImportingProviderNode, ContentSize}
+        ]
+    ),
+
+    storage_import_test_utils:ensure_mtime_progression(TestCaseCtx),
+    storage_import_test_utils:run_continuous_scan(TestCaseCtx, 2),
+
+    %% the scan must not have invalidated the replica - both providers still hold
+    %% the full file
+    file_test_utils:await_distribution(
+        [ImportingProviderNode, NonImportingProviderNode], FileGuid, [
+            {ImportingProviderNode, ContentSize},
+            {NonImportingProviderNode, ContentSize}
+        ]
+    ),
+    ?assertMatch(
+        {ok, #file_attr{size = ContentSize}},
+        lfm_proxy:stat(NonImportingProviderNode, NonImportingProviderSessionId, ?FILE_REF(FileGuid))
+    ),
+
+    %% created => 0 / deleted => 0 is the crux: the replicated storage file was
+    %% recognized as the already-known logical file, not reimported. The replica -
+    %% its blocks written to the storage after the remotely-stamped logical mtime -
+    %% is reliably "modified"; the space root follows the deterministic
+    %% root_scan_verdict/1 (its storage entry restamped by the replication after
+    %% the remote create).
+    {RootModified, RootUnmodified} = storage_import_test_utils:root_scan_verdict(StorageType),
+    storage_import_test_utils:assert_storage_import_monitoring_state(TestCaseCtx, #{
+        <<"scans">> => 2,
+        <<"created">> => 0,
+        <<"deleted">> => 0,
+        <<"modified">> => RootModified + 1,
+        <<"unmodified">> => RootUnmodified,
+        modified_hist => RootModified + 1
+    }).
 
 
 %%%===================================================================
