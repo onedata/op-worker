@@ -14,21 +14,16 @@
 
 -include("storage_import_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_suffix.hrl").
--include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("kernel/include/file.hrl").
 
 %% export for ct
 -export([init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
-    create_subfiles_and_delete_before_import_is_finished_test/1,
-
-    create_list_race_test/1
+    create_subfiles_and_delete_before_import_is_finished_test/1
 ]).
 
 %%%==================================================================
@@ -59,137 +54,6 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId,  {path, ?SPACE_TEST_DIR_PATH}), 10 * ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
-
-create_list_race_test(Config) ->
-    % this tests checks whether storage import works properly in case of create-list race
-    % description:
-    % storage import builds storage_sync_links tree for detecting deleted files by listing the storage using offset and limit
-    % it is possible that if other files are deleted in the meantime, file may be omitted and therefore missing
-    % in the storage_sync_links
-    % storage import must not delete such file
-    % storage_import_dir_batch_size is set in this test to 2
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
-    % create 3 files
-    FilesNum = 3,
-    FilePaths = [?SPACE_TEST_FILE_PATH(?TEST_FILE(N)) || N <- lists:seq(1, FilesNum)],
-    lists:foreach(fun(F) ->
-        {ok, FileGuid} = lfm_proxy:create(W1, SessId, F),
-        {ok, Handle} = lfm_proxy:open(W1, SessId, ?FILE_REF(FileGuid), write),
-        {ok, _} = lfm_proxy:write(W1, Handle, 0, ?TEST_DATA),
-        lfm_proxy:close(W1, Handle),
-        FileGuid
-    end, FilePaths),
-
-    storage_import_test_base:enable_initial_scan(Config, ?SPACE_ID),
-    storage_import_test_base:assertInitialScanFinished(W1, ?SPACE_ID),
-
-    TestPid = self(),
-    ok = test_utils:mock_new(W1, storage_driver),
-    ok = test_utils:mock_expect(W1, storage_driver, listobjects, fun(SDHandle, Marker, Offset, BatchSize) ->
-        Result = meck:passthrough([SDHandle, Marker, Offset, BatchSize]),
-        case SDHandle#sd_handle.file =:= <<"/">> of
-            true ->
-                % hold on storage import
-                TestPid ! {waiting, self(), Offset, Result},
-                receive continue -> ok end;
-            false ->
-                ok
-        end,
-        Result
-    end),
-
-    storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
-
-    ListedFiles = [FileToDeleteOnStorage, FileToDeleteByLFM] = receive
-        {waiting, Pid, 0, {ok, {_NextMarker, FilesAndStats}}} ->
-            % continue storage import
-            Pid ! continue,
-            [filename:basename(F) || {F, _} <- FilesAndStats]
-    end,
-
-    FileToDeleteByLFMPath = ?SPACE_TEST_FILE_PATH(FileToDeleteByLFM),
-    FileToDeleteOnStoragePath = storage_import_test_base:provider_storage_path(?SPACE_ID, FileToDeleteOnStorage),
-
-
-    receive
-        {waiting, Pid2, 2, _} ->
-            % delete 2 first files so that third will be placed in the first batch
-            ok = lfm_proxy:unlink(W1, SessId, {path, FileToDeleteByLFMPath}),
-            SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, FileToDeleteOnStoragePath, RDWRStorage),
-            ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
-            % continue storage import
-            Pid2 ! continue
-    end,
-
-    storage_import_test_base:assertSecondScanFinished(W1, ?SPACE_ID),
-    storage_import_test_base:disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 2,
-        <<"created">> => 0,
-        <<"deleted">> => 0, % no deleted files because FileToDeleteOnStorage deletion will be detected in next scan
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    [LeftFile] = FilePaths -- [?SPACE_TEST_FILE_PATH(F) || F <- ListedFiles],
-
-    % FileToDeleteOnStorage deletion is not detected yet
-    ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH(FileToDeleteOnStorage)}), ?ATTEMPTS),
-
-    LeftFilePath = ?SPACE_TEST_FILE_PATH(LeftFile),
-    ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, LeftFilePath}), ?ATTEMPTS),
-
-    {ok, Handle2} = lfm_proxy:open(W1, SessId, {path, LeftFilePath}, read),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle2),
-
-    ok = test_utils:mock_unload(W1, storage_driver),
-    storage_import_test_base:enable_continuous_scans(Config, ?SPACE_ID),
-    storage_import_test_base:assertScanFinished(W1, ?SPACE_ID, 3, ?ATTEMPTS),
-    storage_import_test_base:disable_continuous_scan(Config),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 3,
-        <<"created">> => 0,
-        <<"deleted">> => 1,
-        <<"failed">> => 0,
-        <<"createdMinHist">> => 0,
-        <<"createdHourHist">> => 0,
-        <<"createdDayHist">> => 0,
-        <<"deletedMinHist">> => 1,
-        <<"deletedHourHist">> => 1,
-        <<"deletedDayHist">> => 1,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID, ?ATTEMPTS),
-
-
-    % File2 deletion is finally detected
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH(FileToDeleteOnStorage)}),
-        ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH(FileToDeleteOnStorage)}),
-        ?ATTEMPTS),
-
-    {ok, Handle3} = lfm_proxy:open(W1, SessId, {path, LeftFilePath}, read),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle3),
-
-    {ok, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, LeftFilePath}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W2, Handle4).
 
 %===================================================================
 % SetUp and TearDown functions

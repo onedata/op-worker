@@ -32,7 +32,6 @@
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/data_access_control.hrl").
--include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -153,7 +152,7 @@ init_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test;
     Case =:= should_not_reimport_deleted_but_still_opened_file_test
 ->
-    mock_opened_file_deletion_to_use_deletion_marker(TestSuiteCtx),
+    storage_import_test_utils:mock_opened_file_deletion_to_use_deletion_marker(TestSuiteCtx),
     init_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 init_per_testcase(_Case, _TestSuiteCtx, Config) ->
@@ -216,7 +215,7 @@ end_per_testcase(Case, TestSuiteCtx, Config) when
     Case =:= should_update_blocks_of_recreated_file_with_suffix_on_storage_test;
     Case =:= should_not_reimport_deleted_but_still_opened_file_test
 ->
-    unmock_fslogic_delete(TestSuiteCtx),
+    storage_import_test_utils:unmock_fslogic_delete(TestSuiteCtx),
     end_per_testcase(?DEFAULT_CASE(Case), TestSuiteCtx, Config);
 
 end_per_testcase(Case, TestSuiteCtx, Config) when
@@ -2442,7 +2441,9 @@ should_not_delete_remote_entries_test_base(TestCaseName, SuiteCtx, RemoteFileTre
         TestCaseName, undefined, SuiteCtx
     ),
 
-    RemoteEntries = create_file_tree_via_remote_provider(TestCaseCtx, RemoteFileTreeSpec),
+    RemoteEntries = storage_import_test_utils:create_file_tree_via_remote_provider(
+        TestCaseCtx, RemoteFileTreeSpec
+    ),
 
     %% load-bearing - opens the deletion-detection gate: the remote entries can
     %% only be (wrongly) deleted by deletion detection, so without this call the
@@ -2483,7 +2484,7 @@ should_not_sync_file_during_replication_test(SuiteCtx) ->
         ?FUNCTION_NAME, undefined, SuiteCtx
     ),
 
-    #object{guid = FileGuid} = create_file_tree_via_remote_provider(
+    #object{guid = FileGuid} = storage_import_test_utils:create_file_tree_via_remote_provider(
         TestCaseCtx, #file_spec{content = Content}
     ),
 
@@ -2552,7 +2553,7 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
         ?FUNCTION_NAME, undefined, SuiteCtx
     ),
 
-    #object{guid = FileGuid} = create_file_tree_via_remote_provider(
+    #object{guid = FileGuid} = storage_import_test_utils:create_file_tree_via_remote_provider(
         TestCaseCtx, #file_spec{content = Content}
     ),
 
@@ -2608,63 +2609,6 @@ should_not_invalidate_file_after_replication_test(SuiteCtx) ->
 %%%===================================================================
 %%% Internal functions - shared test steps
 %%%===================================================================
-
-
-%% @private
-%% @doc
-%% Creates the given file tree in the space via the NON-importing (remote)
-%% provider - purely logically, so nothing materializes on the imported storage
-%% (a remotely-created file's data stays remote until replicated; a directory
-%% gets no storage counterpart until a file is written into it on the importing
-%% provider). Awaits the metadata propagation to the importing provider and
-%% returns the created tree with all names concretized.
-%% @end
--spec create_file_tree_via_remote_provider(
-    storage_import_test_utils:case_ctx(), onenv_file_test_utils:object_spec()
-) ->
-    onenv_file_test_utils:object().
-create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
-    suite_ctx = #storage_import_test_suite_ctx{
-        non_importing_provider_selector = NonImportingProviderSelector,
-        space_owner_selector = SpaceOwnerSelector
-    },
-    space_id = SpaceId,
-    space_path = SpacePath,
-    importing_provider_ctx = #provider_ctx{
-        node = ImportingProviderNode,
-        session_id = ImportingProviderSessionId
-    }
-}, FileTreeSpec) ->
-    Object = onenv_file_test_utils:create_file_tree(
-        oct_background:get_user_id(SpaceOwnerSelector),
-        space_dir:guid(SpaceId),
-        NonImportingProviderSelector,
-        FileTreeSpec
-    ),
-    lists:foreach(fun({PathSegments, _}) ->
-        ?assertMatch(
-            {ok, #file_attr{}},
-            lfm_proxy:stat(
-                ImportingProviderNode, ImportingProviderSessionId,
-                {path, filepath_utils:join([SpacePath | PathSegments])}
-            ),
-            ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
-        )
-    end, flatten_objects(Object)),
-    Object.
-
-
-%% @private
-%% Flattens a created file tree into a list of every node (the declared root
-%% included) tagged with its path segments relative to the tree's parent.
--spec flatten_objects(onenv_file_test_utils:object()) ->
-    [{[file_meta:name()], onenv_file_test_utils:object()}].
-flatten_objects(Object = #object{name = Name, children = Children}) ->
-    [{[Name], Object} | [
-        {[Name | DescendantSegments], Descendant}
-        || Child <- utils:ensure_defined(Children, []),
-           {DescendantSegments, Descendant} <- flatten_objects(Child)
-    ]].
 
 
 %% @private
@@ -3095,7 +3039,7 @@ assert_remote_entries_not_affected_by_scan(#storage_import_test_case_ctx{
                     NonImportingProviderNode, NonImportingProviderSessionId, {path, SpaceEntryPath}
                 ))
         end
-    end, flatten_objects(RemoteEntries)).
+    end, storage_import_test_utils:flatten_objects(RemoteEntries)).
 
 
 %% @private
@@ -3144,37 +3088,6 @@ assert_monitoring_state_after_single_file_modification(TestCaseCtx) ->
 %%%===================================================================
 %%% Internal functions - test case specific mocks
 %%%===================================================================
-
-
-%% @private
-%% @doc
-%% Forces the deletion-marker method of handling deletion of still-opened
-%% files: the file's storage file survives under its plain name (guarded by a
-%% deletion marker) until the last handle is released. Without the mock, on
-%% storages whose helper supports rename (e.g. POSIX) the storage file would
-%% instead be renamed away into a special directory, freeing its plain name -
-%% while the recreation scenarios specifically exercise the occupied-name
-%% (suffixed) layout. Torn down via unmock_fslogic_delete/1.
-%% @end
--spec mock_opened_file_deletion_to_use_deletion_marker(storage_import_test_utils:suite_ctx()) ->
-    ok.
-mock_opened_file_deletion_to_use_deletion_marker(#storage_import_test_suite_ctx{
-    importing_provider_selector = ProviderSelector
-}) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_new(Nodes, fslogic_delete),
-    ok = test_utils:mock_expect(Nodes, fslogic_delete, get_open_file_handling_method, fun(FileCtx) ->
-        {?SET_DELETION_MARKER, FileCtx}
-    end).
-
-
-%% @private
--spec unmock_fslogic_delete(storage_import_test_utils:suite_ctx()) -> ok.
-unmock_fslogic_delete(#storage_import_test_suite_ctx{
-    importing_provider_selector = ProviderSelector
-}) ->
-    Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    ok = test_utils:mock_unload(Nodes, fslogic_delete).
 
 
 %% @private

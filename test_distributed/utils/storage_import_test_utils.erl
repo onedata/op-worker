@@ -130,6 +130,7 @@
 -include("storage_import_oct_test.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -144,7 +145,9 @@
     setup_and_verify_initial_import/3, setup_and_verify_initial_import/4,
     gen_nested_tree_spec/2,
     create_file_tree_on_storage/3,
-    delete_file_tree_from_storage/3
+    create_file_tree_via_remote_provider/2,
+    delete_file_tree_from_storage/3,
+    flatten_objects/1
 ]).
 %% API - scan control
 -export([
@@ -178,6 +181,10 @@
 -export([
     mock_import_file_error/2, unmock_storage_import_engine/1,
     assert_monitoring_state_after_failed_import/1
+]).
+%% API - open-file deletion handling mock machinery
+-export([
+    mock_opened_file_deletion_to_use_deletion_marker/1, unmock_fslogic_delete/1
 ]).
 
 -type suite_ctx() :: #storage_import_test_suite_ctx{}.
@@ -387,6 +394,49 @@ create_file_tree_on_storage(ProviderSelector, StorageId, Spec) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Creates the given file tree in the space via the NON-importing (remote)
+%% provider - purely logically, so nothing materializes on the imported storage
+%% (a remotely-created file's data stays remote until replicated; a directory
+%% gets no storage counterpart until a file is written into it on the importing
+%% provider). Awaits the metadata propagation to the importing provider and
+%% returns the created tree with all names concretized.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_file_tree_via_remote_provider(case_ctx(), onenv_file_test_utils:object_spec()) ->
+    onenv_file_test_utils:object().
+create_file_tree_via_remote_provider(#storage_import_test_case_ctx{
+    suite_ctx = #storage_import_test_suite_ctx{
+        non_importing_provider_selector = NonImportingProviderSelector,
+        space_owner_selector = SpaceOwnerSelector
+    },
+    space_id = SpaceId,
+    space_path = SpacePath,
+    importing_provider_ctx = #provider_ctx{
+        node = ImportingProviderNode,
+        session_id = ImportingProviderSessionId
+    }
+}, FileTreeSpec) ->
+    Object = onenv_file_test_utils:create_file_tree(
+        oct_background:get_user_id(SpaceOwnerSelector),
+        space_dir:guid(SpaceId),
+        NonImportingProviderSelector,
+        FileTreeSpec
+    ),
+    lists:foreach(fun({PathSegments, _}) ->
+        ?assertMatch(
+            {ok, #file_attr{}},
+            lfm_proxy:stat(
+                ImportingProviderNode, ImportingProviderSessionId,
+                {path, filepath_utils:join([SpacePath | PathSegments])}
+            ),
+            ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS
+        )
+    end, flatten_objects(Object)),
+    Object.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Removes a declared file tree directly from the storage (bypassing the logical
 %% filesystem) - the inverse of create_file_tree_on_storage/3, used by continuous
 %% (update) scan tests to simulate whole (sub)trees disappearing from the storage.
@@ -406,6 +456,23 @@ delete_file_tree_from_storage(ProviderSelector, StorageId, Specs) when is_list(S
     end, Specs, ?SETUP_PARALLELISM);
 delete_file_tree_from_storage(ProviderSelector, StorageId, Spec) ->
     delete_node_from_storage(ProviderSelector, StorageId, <<"/">>, Spec).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flattens a created file tree (see e.g. create_file_tree_via_remote_provider/2)
+%% into a list of every node - the tree's root included - tagged with its path
+%% segments relative to the tree's parent.
+%% @end
+%%--------------------------------------------------------------------
+-spec flatten_objects(onenv_file_test_utils:object()) ->
+    [{[file_meta:name()], onenv_file_test_utils:object()}].
+flatten_objects(Object = #object{name = Name, children = Children}) ->
+    [{[Name], Object} | [
+        {[Name | DescendantSegments], Descendant}
+        || Child <- utils:ensure_defined(Children, []),
+           {DescendantSegments, Descendant} <- flatten_objects(Child)
+    ]].
 
 
 %%--------------------------------------------------------------------
@@ -726,13 +793,19 @@ verify_imported_tree(#storage_import_test_case_ctx{
     % per-node verification (which is RPC-heavy and may retry while data propagates
     % to the non-importing provider) can be parallelized with bounded concurrency
     AllNodes = flatten_nodes(SpacePath, TopLevelSpecs),
-    lists:foreach(fun(ProviderCtx) ->
+    % the importing provider has the tree locally once the scan is done, while the
+    % non-importing one receives it via dbsync, which may still be digesting the
+    % backlog of preceding tests - hence the more generous attempts budget
+    lists:foreach(fun({ProviderCtx, Attempts}) ->
         % the space root is not a declared node, so assert its children separately
-        assert_children(ProviderCtx, SpacePath, TopLevelSpecs),
+        assert_children(ProviderCtx, SpacePath, TopLevelSpecs, Attempts),
         lists_utils:pforeach(fun({Path, Spec}) ->
-            verify_node(ProviderCtx, Path, Spec)
+            verify_node(ProviderCtx, Path, Spec, Attempts)
         end, AllNodes, ?VERIFY_PARALLELISM)
-    end, [ImportingProviderCtx, NonImportingProviderCtx]).
+    end, [
+        {ImportingProviderCtx, ?ATTEMPTS},
+        {NonImportingProviderCtx, ?CROSS_PROVIDER_PROPAGATION_ATTEMPTS}
+    ]).
 
 
 %%--------------------------------------------------------------------
@@ -830,13 +903,19 @@ assert_attrs(ProviderCtx, Path, ExpectedAttrs, Attempts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec assert_file_content(#provider_ctx{}, file_meta:path(), binary()) -> ok.
-assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Content) ->
+assert_file_content(ProviderCtx, Path, Content) ->
+    assert_file_content(ProviderCtx, Path, Content, ?ATTEMPTS).
+
+
+%% @private
+-spec assert_file_content(#provider_ctx{}, file_meta:path(), binary(), non_neg_integer()) -> ok.
+assert_file_content(#provider_ctx{node = Node, session_id = SessId}, Path, Content, Attempts) ->
     {ok, Handle} = ?assertMatch(
-        {ok, _}, lfm_proxy:open(Node, SessId, {path, Path}, read), ?ATTEMPTS
+        {ok, _}, lfm_proxy:open(Node, SessId, {path, Path}, read), Attempts
     ),
     % read at least 1 byte, otherwise an empty file would not be checked at all
     ReadSize = max(byte_size(Content), 1),
-    ?assertEqual({ok, Content}, lfm_proxy:check_size_and_read(Node, Handle, 0, ReadSize), ?ATTEMPTS),
+    ?assertEqual({ok, Content}, lfm_proxy:check_size_and_read(Node, Handle, 0, ReadSize), Attempts),
     ok = lfm_proxy:close(Node, Handle).
 
 
@@ -1105,8 +1184,17 @@ mock_import_file_error(#storage_import_test_suite_ctx{
     ok = test_utils:mock_expect(Nodes, storage_import_engine, import_file_unsafe,
         fun(StorageFileCtx, Info) ->
             case storage_file_ctx:get_file_name_const(StorageFileCtx) of
-                ErroneousFile -> throw(test_error);
-                _ -> meck:passthrough([StorageFileCtx, Info])
+                ErroneousFile ->
+                    throw(test_error);
+                _ ->
+                    % not meck:passthrough - the storage_file_ctx call above may
+                    % itself hit a mock (the module is mocked suite-wide on object
+                    % storages) and such a nested mocked call erases the process-dict
+                    % current-call information that meck:passthrough relies on
+                    apply(
+                        meck_util:original_name(storage_import_engine), import_file_unsafe,
+                        [StorageFileCtx, Info]
+                    )
             end
         end
     ).
@@ -1122,6 +1210,36 @@ unmock_storage_import_engine(#storage_import_test_suite_ctx{
 }) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
     ok = test_utils:mock_unload(Nodes, storage_import_engine).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Forces the deletion-marker method of handling deletion of still-opened
+%% files: the file's storage file survives under its plain name (guarded by a
+%% deletion marker) until the last handle is released. Without the mock, on
+%% storages whose helper supports rename (e.g. POSIX) the storage file would
+%% instead be renamed away into a special directory, freeing its plain name -
+%% while the occupied-name scenarios specifically exercise the plain-named
+%% (marker-guarded) layout. Torn down via unmock_fslogic_delete/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_opened_file_deletion_to_use_deletion_marker(suite_ctx()) -> ok.
+mock_opened_file_deletion_to_use_deletion_marker(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_new(Nodes, fslogic_delete),
+    ok = test_utils:mock_expect(Nodes, fslogic_delete, get_open_file_handling_method, fun(FileCtx) ->
+        {?SET_DELETION_MARKER, FileCtx}
+    end).
+
+
+-spec unmock_fslogic_delete(suite_ctx()) -> ok.
+unmock_fslogic_delete(#storage_import_test_suite_ctx{
+    importing_provider_selector = ProviderSelector
+}) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    ok = test_utils:mock_unload(Nodes, fslogic_delete).
 
 
 %%--------------------------------------------------------------------
@@ -1389,13 +1507,16 @@ flatten_nodes(ParentPath, Specs) ->
 %% children is NOT done here - flatten_nodes/2 enumerates every node as a separate
 %% entry, so each is verified independently (and possibly in parallel).
 %% @end
--spec verify_node(#provider_ctx{}, file_meta:path(), onenv_file_test_utils:object_spec()) -> ok.
-verify_node(ProviderCtx, Path, #dir_spec{children = Children}) ->
-    assert_node_type(ProviderCtx, Path, ?DIRECTORY_TYPE),
-    assert_children(ProviderCtx, Path, Children);
-verify_node(ProviderCtx, Path, #file_spec{content = Content}) ->
-    assert_node_type(ProviderCtx, Path, ?REGULAR_FILE_TYPE),
-    assert_file_content(ProviderCtx, Path, Content).
+-spec verify_node(
+    #provider_ctx{}, file_meta:path(), onenv_file_test_utils:object_spec(), non_neg_integer()
+) ->
+    ok.
+verify_node(ProviderCtx, Path, #dir_spec{children = Children}, Attempts) ->
+    assert_node_type(ProviderCtx, Path, ?DIRECTORY_TYPE, Attempts),
+    assert_children(ProviderCtx, Path, Children, Attempts);
+verify_node(ProviderCtx, Path, #file_spec{content = Content}, Attempts) ->
+    assert_node_type(ProviderCtx, Path, ?REGULAR_FILE_TYPE, Attempts),
+    assert_file_content(ProviderCtx, Path, Content, Attempts).
 
 
 %% @private
@@ -1423,21 +1544,25 @@ file_attr_field(mtime, #file_attr{mtime = Value}) -> Value.
 
 
 %% @private
--spec assert_node_type(#provider_ctx{}, file_meta:path(), onedata_file:type()) -> ok.
-assert_node_type(#provider_ctx{node = Node, session_id = SessId}, Path, ExpectedType) ->
+-spec assert_node_type(#provider_ctx{}, file_meta:path(), onedata_file:type(), non_neg_integer()) ->
+    ok.
+assert_node_type(#provider_ctx{node = Node, session_id = SessId}, Path, ExpectedType, Attempts) ->
     ?assertMatch(
         {ok, #file_attr{type = ExpectedType}},
         lfm_proxy:stat(Node, SessId, {path, Path}),
-        ?ATTEMPTS
+        Attempts
     ),
     ok.
 
 
 %% @private
--spec assert_children(#provider_ctx{}, file_meta:path(), [onenv_file_test_utils:object_spec()]) -> ok.
-assert_children(#provider_ctx{node = Node, session_id = SessId}, ParentPath, ChildrenSpecs) ->
+-spec assert_children(
+    #provider_ctx{}, file_meta:path(), [onenv_file_test_utils:object_spec()], non_neg_integer()
+) ->
+    ok.
+assert_children(#provider_ctx{node = Node, session_id = SessId}, ParentPath, ChildrenSpecs, Attempts) ->
     ExpectedNames = lists:sort([spec_name(ChildSpec) || ChildSpec <- ChildrenSpecs]),
-    ?assertEqual(ExpectedNames, list_child_names(Node, SessId, ParentPath), ?ATTEMPTS),
+    ?assertEqual(ExpectedNames, list_child_names(Node, SessId, ParentPath), Attempts),
     ok.
 
 

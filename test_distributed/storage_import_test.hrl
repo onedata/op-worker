@@ -54,9 +54,6 @@
 -define(SPACE_TEST_FILE_IN_DIR_PATH3, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE3])).
 -define(TEST_DATA, <<"test_data">>).
 -define(TEST_DATA_SIZE, byte_size(?TEST_DATA)).
--define(TEST_DATA2, <<"test_data2">>).
--define(TEST_DATA_SIZE2, byte_size(?TEST_DATA2)).
--define(WRITE_TEXT, <<"overwrite_test_data">>).
 
 -define(MOUNT_GID, 1000).
 

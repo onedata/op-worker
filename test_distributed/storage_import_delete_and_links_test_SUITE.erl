@@ -11,7 +11,6 @@
 -module(storage_import_delete_and_links_test_SUITE).
 -author("Jakub Kudzia").
 
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
@@ -20,14 +19,10 @@
 
 %% tests
 -export([
-    create_delete_race_test/1,
-    create_list_race_test/1,
     symlink_is_ignored_by_initial_scan/1
 ]).
 
 -define(TEST_CASES, [
-    create_delete_race_test,
-    create_list_race_test,
     symlink_is_ignored_by_initial_scan
 ]).
 
@@ -36,12 +31,6 @@ all() -> ?ALL(?TEST_CASES).
 %%%==================================================================
 %%% Test functions
 %%%===================================================================
-
-create_delete_race_test(Config) ->
-    storage_import_test_base:create_delete_race_test(Config, ?POSIX_HELPER_NAME).
-
-create_list_race_test(Config) ->
-    storage_import_test_base:create_list_race_test(Config).
 
 symlink_is_ignored_by_initial_scan(Config) ->
     storage_import_test_base:symlink_is_ignored_by_initial_scan(Config).

@@ -11,7 +11,6 @@
 -module(storage_import_test_SUITE).
 -author("Jakub Kudzia").
 
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
@@ -22,39 +21,17 @@
 -export([
     % tests of import
     create_delete_import_test/1,
-    create_remote_file_import_conflict_test/1,
-    create_remote_dir_import_race_test/1,
-    create_remote_file_import_race_test/1,
-    create_file_import_race_test/1,
-    close_file_import_race_test/1,
-    delete_file_reimport_race_test/1,
-    remote_delete_file_reimport_race_test/1,
-    remote_delete_file_reimport_race2_test/1,
-    delete_opened_file_reimport_race_test/1,
 
     change_file_type4_test/1,
-    recreate_file_deleted_by_sync_test/1,
-    time_warp_between_scans_test/1,
-    time_warp_during_scan_test/1
+    recreate_file_deleted_by_sync_test/1
 ]).
 
 -define(TEST_CASES, [
     % tests of import
     create_delete_import_test,
-    create_remote_file_import_conflict_test,
-    create_remote_dir_import_race_test,
-    create_remote_file_import_race_test,
-    create_file_import_race_test,
-    close_file_import_race_test,
-    delete_file_reimport_race_test,
-    remote_delete_file_reimport_race_test,
-    remote_delete_file_reimport_race2_test,
-    delete_opened_file_reimport_race_test,
 
     change_file_type4_test,
-    recreate_file_deleted_by_sync_test,
-    time_warp_between_scans_test,
-    time_warp_during_scan_test
+    recreate_file_deleted_by_sync_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -66,44 +43,11 @@ all() -> ?ALL(?TEST_CASES).
 create_delete_import_test(Config) ->
     storage_import_test_base:create_delete_import_test(Config).
 
-create_remote_file_import_conflict_test(Config) ->
-    storage_import_test_base:create_remote_file_import_conflict_test(Config).
-
-create_remote_dir_import_race_test(Config) ->
-    storage_import_test_base:create_remote_dir_import_race_test(Config).
-
-create_remote_file_import_race_test(Config) ->
-    storage_import_test_base:create_remote_file_import_race_test(Config).
-
-create_file_import_race_test(Config) ->
-    storage_import_test_base:create_file_import_race_test(Config).
-
-close_file_import_race_test(Config) ->
-    storage_import_test_base:close_file_import_race_test(Config, ?POSIX_HELPER_NAME).
-
-delete_file_reimport_race_test(Config) ->
-    storage_import_test_base:delete_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
-
-remote_delete_file_reimport_race_test(Config) ->
-    storage_import_test_base:remote_delete_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
-
-remote_delete_file_reimport_race2_test(Config) ->
-    storage_import_test_base:remote_delete_file_reimport_race2_test(Config, ?POSIX_HELPER_NAME).
-
-delete_opened_file_reimport_race_test(Config) ->
-    storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
-
 change_file_type4_test(Config) ->
     storage_import_test_base:change_file_type4_test(Config).
 
 recreate_file_deleted_by_sync_test(Config) ->
     storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
-
-time_warp_between_scans_test(Config) ->
-    storage_import_test_base:time_warp_between_scans_test(Config).
-
-time_warp_during_scan_test(Config) ->
-    storage_import_test_base:time_warp_during_scan_test(Config).
 
 %===================================================================
 % SetUp and TearDown functions
