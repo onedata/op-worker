@@ -19,19 +19,11 @@
 
 %% tests
 -export([
-    % tests of import
-    create_delete_import_test/1,
-
-    change_file_type4_test/1,
-    recreate_file_deleted_by_sync_test/1
+    change_file_type4_test/1
 ]).
 
 -define(TEST_CASES, [
-    % tests of import
-    create_delete_import_test,
-
-    change_file_type4_test,
-    recreate_file_deleted_by_sync_test
+    change_file_type4_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -40,14 +32,8 @@ all() -> ?ALL(?TEST_CASES).
 %%% Test functions
 %%%===================================================================
 
-create_delete_import_test(Config) ->
-    storage_import_test_base:create_delete_import_test(Config).
-
 change_file_type4_test(Config) ->
     storage_import_test_base:change_file_type4_test(Config).
-
-recreate_file_deleted_by_sync_test(Config) ->
-    storage_import_test_base:recreate_file_deleted_by_sync_test(Config).
 
 %===================================================================
 % SetUp and TearDown functions

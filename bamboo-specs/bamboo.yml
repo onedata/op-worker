@@ -232,8 +232,6 @@ stages:
         - storage_import_race_posix_oct
         - storage_import_race_s3_oct
         - storage_import_s3
-        - storage_import_update
-        - storage_import_update_s3
         - storage_monitoring
         - storage_req
         - storage_sync_links
@@ -1785,20 +1783,6 @@ storage_import_s3:
     - <<: *ct_logs
       name: ct_logs_storage_import_s3.tar.gz
 
-storage_import_update:
-  <<: *ct-job
-  key: SIU
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_update.tar.gz
-
-storage_import_update_s3:
-  <<: *ct-job
-  key: SIUS3
-  artifacts:
-    - <<: *ct_logs
-      name: ct_logs_storage_import_update_s3.tar.gz
-
 storage_monitoring:
   <<: *ct-onenv-job
   key: STORMON
@@ -2154,8 +2138,6 @@ Coverage report:
     - artifact: ct_logs_storage_import_race_posix_oct.tar.gz
     - artifact: ct_logs_storage_import_race_s3_oct.tar.gz
     - artifact: ct_logs_storage_import_s3.tar.gz
-    - artifact: ct_logs_storage_import_update.tar.gz
-    - artifact: ct_logs_storage_import_update_s3.tar.gz
     - artifact: ct_logs_storage_monitoring.tar.gz
     - artifact: ct_logs_storage_req.tar.gz
     - artifact: ct_logs_storage_sync_links.tar.gz

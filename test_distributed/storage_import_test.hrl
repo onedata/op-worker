@@ -19,9 +19,6 @@
 
 
 %% defaults
--define(SCAN_INTERVAL, 10).
--define(DETECT_MODIFICATIONS, true).
--define(DETECT_DELETIONS, false).
 -define(SYNC_ACL, true).
 -define(MAX_DEPTH, 9999999999999999999999).
 

@@ -28,10 +28,13 @@
     empty_directory_deletion_test/1,
     non_empty_directory_deletion_test/1,
     import_continues_after_deletion_test/1,
+    recreate_file_deleted_by_sync_test/1,
+    imported_file_delete_recreate_lifecycle_test/1,
     simultaneous_deletion_and_modification_test/1,
     file_deletion_purges_metadata_test/1,
     nested_file_deletion_test/1,
-    bulk_deletion_test/1
+    bulk_deletion_test/1,
+    create_subfiles_and_delete_before_import_is_finished_test/1
 ]).
 
 all() -> [
@@ -40,7 +43,10 @@ all() -> [
     file_deletion_purges_metadata_test,
     nested_file_deletion_test,
     bulk_deletion_test,
+    create_subfiles_and_delete_before_import_is_finished_test,
     import_continues_after_deletion_test,
+    recreate_file_deleted_by_sync_test,
+    imported_file_delete_recreate_lifecycle_test,
     simultaneous_deletion_and_modification_test
 ].
 
@@ -61,10 +67,13 @@ all() -> [
 empty_directory_deletion_test(_Config) -> ?run_test().
 non_empty_directory_deletion_test(_Config) -> ?run_test().
 import_continues_after_deletion_test(_Config) -> ?run_test().
+recreate_file_deleted_by_sync_test(_Config) -> ?run_test().
+imported_file_delete_recreate_lifecycle_test(_Config) -> ?run_test().
 simultaneous_deletion_and_modification_test(_Config) -> ?run_test().
 file_deletion_purges_metadata_test(_Config) -> ?run_test().
 nested_file_deletion_test(_Config) -> ?run_test().
 bulk_deletion_test(_Config) -> ?run_test().
+create_subfiles_and_delete_before_import_is_finished_test(_Config) -> ?run_test().
 
 
 %%===================================================================

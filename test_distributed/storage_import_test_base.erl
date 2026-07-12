@@ -28,14 +28,11 @@
 
 %% util functions
 -export([
-    enable_initial_scan/2, enable_continuous_scans/2, enable_continuous_scans/3, disable_continuous_scan/1,
+    enable_initial_scan/2, disable_continuous_scan/1,
     assertInitialScanFinished/2, assertInitialScanFinished/3,
-    assertSecondScanFinished/2, assertScanFinished/3, assertScanFinished/4,
     assertNoScanInProgress/3,
-    parallel_assert/5,
     assert_monitoring_state/4,
     provider_storage_path/2, provider_storage_path/3, get_rdwr_storage/2,
-    create_nested_directory_tree/3, generate_nested_directory_tree_file_paths/2,
     clean_traverse_tasks/1,
     stop_scan/2,
     get_finished_scans_num/2
@@ -43,218 +40,19 @@
 
 % exported for RPC
 -export([
-    verify_file_deleted/4,
-    verify_file_deleted/5,
-    verify_file/5,
-    verify_file_in_dir/5,
-    verify_dir/5
+    verify_file_deleted/4
 ]).
 
 %% tests
 -export([
-    % tests of import
-    create_delete_import_test/1,
-
-    % tests of update
-    create_delete_import2_test/1,
-    create_subfiles_and_delete_before_import_is_finished_test/1,
-
     symlink_is_ignored_by_initial_scan/1,
-
-    change_file_type4_test/1,
-    recreate_file_deleted_by_sync_test/1
+    change_file_type4_test/1
 ]).
 
 %%%===================================================================
-%%% Tests of import
+%%% Tests
 %%%===================================================================
 
-
-create_delete_import_test(Config) ->
-    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
-    Attempts = 60,
-
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    StorageTestFilePath2 = provider_storage_path(?SPACE_ID, ?TEST_FILE1, false),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-
-    Size = byte_size(?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID, ?ATTEMPTS),
-
-    multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
-        ?assertMatch({ok, ?TEST_DATA},
-            begin
-                SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
-                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read) of
-                    {ok, Handle} ->
-                        try
-                            lfm_proxy:read(W, Handle, 0, Size)
-                        after
-                            lfm_proxy:close(W, Handle)
-                        end;
-                    OpenError ->
-                        OpenError
-                end
-            end, Attempts)
-    end),
-
-    Storage2 = get_supporting_storage(W2, ?SPACE_ID),
-    SDHandle2 = sd_test_utils:new_handle(W2, ?SPACE_ID, StorageTestFilePath2, Storage2),
-    ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE)),
-    ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE)),
-
-    SessIdW2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    ?assertMatch(ok, lfm_proxy:unlink(W2, ?ROOT_SESS_ID, ?FILE_REF(Guid))),
-    ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE), Attempts),
-    ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
-    ok.
-
-
-%%%===================================================================
-%%% Tests of update
-%%%===================================================================
-
-create_delete_import2_test(Config) ->
-    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
-    Attempts = 60,
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    StorageTestFilePath2 = provider_storage_path(?SPACE_ID, ?TEST_FILE1, false),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-
-    %% Create file on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS),
-    {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA),
-    Size = byte_size(?TEST_DATA),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    multi_provider_file_ops_test_base:verify_workers(Workers, fun(W) ->
-        ?assertMatch({ok, ?TEST_DATA},
-            begin
-                SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
-                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read) of
-                    {ok, Handle} ->
-                        try
-                            lfm_proxy:read(W, Handle, 0, Size)
-                        after
-                            lfm_proxy:close(W, Handle)
-                        end;
-                    OpenError ->
-                        OpenError
-                end
-            end, Attempts
-        )
-    end),
-
-    %% Create file on storage
-    Storage2 = get_supporting_storage(W2, ?SPACE_ID),
-    SDHandle2 = sd_test_utils:new_handle(W2, ?SPACE_ID, StorageTestFilePath2, Storage2),
-    ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE)),
-    ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE)),
-
-    SessIdW1 = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessIdW2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-
-    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, ?FILE_REF(Guid))),
-
-    ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
-    ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W2, SDHandle2, 0, ?TEST_DATA_SIZE), Attempts),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH1)),
-    {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessIdW2, ?FILE_REF(FileGuid), write)),
-    ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
-
-    {ok, FileHandle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessIdW1, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
-    ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, FileHandle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
-    ok = sd_test_utils:unlink(W1, SDHandle, Size),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:open(W2, SessIdW2, ?FILE_REF(FileGuid), read), ?ATTEMPTS).
-
-create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    %% Create dir on storage
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
-    ok = sd_test_utils:mkdir(W1, SDHandle, ?DEFAULT_DIR_PERMS),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    assertInitialScanFinished(W1, ?SPACE_ID),
-    %% Check if dir was imported
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"created">> => 1,
-        <<"modified">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"unmodified">> => 0,
-        <<"createdMinHist">> => 1,
-        <<"createdHourHist">> => 1,
-        <<"createdDayHist">> => 1,
-        <<"modifiedMinHist">> => 1,
-        <<"modifiedHourHist">> => 1,
-        <<"modifiedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0,
-        <<"queueLengthMinHist">> => 0,
-        <<"queueLengthHourHist">> => 0,
-        <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID),
-
-    %% Create nested tree structure
-    DirStructure = [10, 10, 10],
-    create_nested_directory_tree(W1, DirStructure, SDHandle),
-    enable_continuous_scans(Config, ?SPACE_ID),
-
-    ?assertEqual(true, rpc:call(W1, storage_import_monitoring, is_scan_in_progress, [?SPACE_ID]), ?ATTEMPTS),
-
-    ok = sd_test_utils:recursive_rm(W1, SDHandle),
-    ?assertMatch({error, ?ENOENT}, sd_test_utils:ls(W1, SDHandle, 0, 100)),
-    % Deleting may not be finished when 3rd scan starts so we need to wait for 4th scan
-    % to be sure that all files are deleted
-    assertScanFinished(W1, ?SPACE_ID, 4, 10 * ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS),
-    disable_continuous_scan(Config).
 
 symlink_is_ignored_by_initial_scan(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -346,68 +144,6 @@ change_file_type4_test(Config) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     ok = lfm_proxy:close(W2, Handle4).
 
-recreate_file_deleted_by_sync_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    RDWRStorage = get_rdwr_storage(Config, W1),
-    enable_initial_scan(Config, ?SPACE_ID),
-
-    {ok, FileGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1)),
-    {ok, FileHandle} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(FileGuid), write)),
-    ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
-    ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle)),
-    ok = lfm_proxy:close(W2, FileHandle),
-
-    %% Replicate file to W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W1, Handle1),
-
-    assertInitialScanFinished(W1, ?SPACE_ID),
-
-    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
-    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
-
-    % ensure that dir mtime will change
-    timer:sleep(timer:seconds(1)),
-
-    %% delete file on storage
-    ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
-
-    enable_continuous_scans(Config, ?SPACE_ID),
-    assertSecondScanFinished(W1, ?SPACE_ID),
-    disable_continuous_scan(Config),
-
-    %% Check if file disappeared
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-
-    % recreate file
-    {ok, FileGuid2} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1)),
-    {ok, FileHandle2} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(FileGuid2), write)),
-    ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle2, 0, ?TEST_DATA)),
-    ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle2)),
-    ok = lfm_proxy:close(W2, FileHandle2),
-
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
-    lfm_proxy:close(W1, Handle2).
-
 %%%===================================================================
 %%% Util functions
 %%%===================================================================
@@ -441,27 +177,6 @@ enable_initial_scan(Config, SpaceId) ->
     SyncAcl = maps:get(sync_acl, ImportConfig, ?SYNC_ACL),
     ?assertMatch(ok, rpc:call(W1, storage_import, set_or_configure_auto_mode,
         [SpaceId, #{max_depth => MaxDepth, sync_acl => SyncAcl}])).
-
-enable_continuous_scans(Config, SpaceId) ->
-    enable_continuous_scans(Config, SpaceId, #{}).
-
-enable_continuous_scans(Config, SpaceId, Opts) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    UpdateConfig = ?config(update_config, Config, #{}),
-    MaxDepth = maps:get(max_depth, UpdateConfig, ?MAX_DEPTH),
-    ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
-    DetectModifications = maps:get(detect_modifications, UpdateConfig, ?DETECT_MODIFICATIONS),
-    DetectDeletions = maps:get(detect_deletions, UpdateConfig, ?DETECT_DELETIONS),
-    SyncAcl = maps:get(sync_acl, UpdateConfig, ?SYNC_ACL),
-    DefaultOpts = #{
-        continuous_scan => true,
-        max_depth => MaxDepth,
-        scan_interval => ScanInterval,
-        detect_modifications => DetectModifications,
-        detect_deletions => DetectDeletions,
-        sync_acl => SyncAcl
-    },
-    ok = rpc:call(W1, storage_import, set_or_configure_auto_mode, [SpaceId, maps:merge(DefaultOpts, Opts)]).
 
 cleanup_storage_import_monitoring_model(Worker, SpaceId) ->
     rpc:call(Worker, storage_import_monitoring, delete, [SpaceId]).
@@ -619,11 +334,6 @@ get_rdwr_storage(Config, Worker) ->
 get_synced_storage(Config, Worker) ->
     maps:get(Worker, ?config(synced_storages, Config), undefined).
 
-get_supporting_storage(Worker, SpaceId) ->
-    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
-    {ok, Storage} = sd_test_utils:get_storage_record(Worker, StorageId),
-    Storage.
-
 provider_storage_path(SpaceId, File) ->
     provider_storage_path(SpaceId, File, true).
 
@@ -632,106 +342,12 @@ provider_storage_path(_SpaceId, File, _MountInRoot = true) ->
 provider_storage_path(SpaceId, FileName, _MountInRoot = false) ->
     filename:join([<<"/">>, SpaceId, FileName]).
 
-parallel_assert(M, F, A, List, Attempts) ->
-    lists:foreach(fun(N) ->
-        spawn_link(M, F, [N, self() | A])
-    end, List),
-
-    lists:foldl(fun(_, AccIn) ->
-        case sets:size(AccIn) of
-            0 -> ok;
-            _ ->
-                receive
-                    {finished, Ans} ->
-                        sets:del_element(Ans, AccIn)
-                after
-                    Attempts * timer:seconds(1) ->
-                        ct:pal("Left = ~tp", [lists:sort(sets:to_list(AccIn))]),
-                        Acc = lists:sort(sets:to_list(AccIn)),
-                        ?assertMatch(Acc, [])
-                end
-        end
-    end, sets:from_list([str_utils:to_binary(E) || E <- List]), List).
-
-
-verify_dir(N, Pid, W1, SessId, Attempts) ->
-    NBin = integer_to_binary(N),
-    DirPath = ?SPACE_TEST_DIR_PATH(NBin),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, DirPath}), Attempts),
-    Pid ! {finished, DirPath}.
-
-verify_file(FilePath, Pid, W1, SessId, Attempts) ->
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, FilePath}), Attempts),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, FilePath}, read), Attempts),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), Attempts),
-    lfm_proxy:close(W1, Handle1),
-    Pid ! {finished, FilePath}.
-
-verify_file_in_dir(N, Pid, W1, SessId, Attempts) ->
-    NBin = integer_to_binary(N),
-    FileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(NBin, NBin),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, FileInDirPath}), Attempts),
-    {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, FileInDirPath}, read), Attempts),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), Attempts),
-    lfm_proxy:close(W1, Handle1),
-    Pid ! {finished, NBin}.
-
-verify_file_deleted(FilePath, Pid, Worker, SessId, Attempts) ->
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), Attempts),
-    Pid ! {finished, FilePath}.
-
-generate_nested_directory_tree_file_paths([SubFilesNum], Root) ->
-    lists:map(fun(N) ->
-        filename:join([Root, integer_to_binary(N)])
-    end, lists:seq(1, SubFilesNum));
-generate_nested_directory_tree_file_paths([SubDirsNum | Rest], Root) ->
-    lists:flatmap(fun(N) ->
-        NBin = integer_to_binary(N),
-        DirPath = filename:join([Root, NBin]),
-        generate_nested_directory_tree_file_paths(Rest, DirPath)
-    end, lists:seq(1, SubDirsNum)).
-
-
-create_nested_directory_tree(Worker, [SubFilesNum], RootHandle) ->
-    ok = lists:foreach(fun(N) ->
-        ChildHandle = sd_test_utils:new_child_handle(RootHandle, integer_to_binary(N)),
-        ok = sd_test_utils:create_file(Worker, ChildHandle, ?DEFAULT_FILE_PERMS),
-        {ok, _} = sd_test_utils:write_file(Worker, ChildHandle, 0, ?TEST_DATA)
-    end, lists:seq(1, SubFilesNum));
-create_nested_directory_tree(Worker, [SubDirsNum | Rest], RootHandle) ->
-    ok = lists:foreach(fun(N) ->
-        ChildHandle = sd_test_utils:new_child_handle(RootHandle, integer_to_binary(N)),
-        ok = sd_test_utils:mkdir(Worker, ChildHandle, ?DEFAULT_DIR_PERMS),
-        ok = create_nested_directory_tree(Worker, Rest, ChildHandle)
-    end, lists:seq(1, SubDirsNum)).
-
 assertInitialScanFinished(Worker, SpaceId) ->
     assertInitialScanFinished(Worker, SpaceId, ?ATTEMPTS).
 
 assertInitialScanFinished(Worker, SpaceId, Attempts) ->
     ?assertEqual(true, try
         rpc:call(Worker, storage_import_monitoring, is_initial_scan_finished, [SpaceId])
-    catch
-        _:_ ->
-            error
-    end, Attempts).
-
-assertSecondScanFinished(Worker, SpaceId) ->
-    assertScanFinished(Worker, SpaceId, 2).
-
-assertScanFinished(Worker, SpaceId, ScanNo) ->
-    assertScanFinished(Worker, SpaceId, ScanNo, ?ATTEMPTS).
-
-assertScanFinished(Worker, SpaceId, ScanNo, Attempts) ->
-    ?assertEqual(true, try
-        rpc:call(Worker, storage_import_monitoring, is_scan_finished, [SpaceId, ScanNo])
     catch
         _:_ ->
             error
@@ -847,28 +463,6 @@ end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config),
     initializer:unmock_auth_manager(Config),
     initializer:unmock_provider_ids(?config(op_worker_nodes, Config)).
-
-init_per_testcase(Case, Config)
-    when Case =:= symlink_is_ignored_by_initial_scan
-    orelse Case =:= create_subfiles_and_delete_before_import_is_finished_test ->
-
-    Config2 = [
-        {update_config, #{
-            detect_deletions => true,
-            detect_modifications => false}} | Config
-    ],
-    init_per_testcase(default, Config2);
-
-init_per_testcase(Case, Config)
-    when Case =:= create_delete_import2_test
-    orelse Case =:= recreate_file_deleted_by_sync_test ->
-
-    Config2 = [
-        {update_config, #{
-            detect_deletions => true,
-            detect_modifications => true}} | Config
-    ],
-    init_per_testcase(default, Config2);
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
