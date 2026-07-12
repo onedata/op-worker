@@ -114,8 +114,7 @@ all() -> [
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test,
 
     %% --- not reimported ---
-    %% TODO VFS-13687 - debug failing test
-%%    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test,
+    should_not_reimport_file_that_was_not_successfully_deleted_from_storage_test,
     should_not_reimport_deleted_but_still_opened_file_test,
     should_not_delete_not_replicated_file_created_in_remote_provider_test,
     should_not_delete_dir_created_in_remote_provider_test,
